@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(OutOfSpace) {
 
         const TActorId edge = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         size_t size = 65536;
-        bool writeError = false;
+        size_t index = 0;
         std::vector<TLogoBlobID> success;
         while (size <= 10_MB) {
             Cerr << size << Endl;
@@ -34,17 +34,15 @@ Y_UNIT_TEST_SUITE(OutOfSpace) {
                 SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max()));
             });
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
-            // Fresh reservations change how many huge blobs fit before space runs out.
-            if (res->Get()->Status == NKikimrProto::OK) {
+            if (index < 17) {
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
                 success.push_back(id);
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::ERROR);
-                writeError = true;
             }
             size = size * 9 / 8;
+            ++index;
         }
-        UNIT_ASSERT_C(!success.empty(), "No blob was written before running out of space");
-        UNIT_ASSERT_C(writeError, "Disk did not run out of space");
 
         auto checkReadable = [&] {
             for (const TLogoBlobID& id : success) {

@@ -91,29 +91,25 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
 
     class TTxUpdateSchemaVersion : public TTxBase {
     public:
-        TTxUpdateSchemaVersion(bool initializeState)
-            : InitializeState(initializeState)
+        TTxUpdateSchemaVersion(bool setCompatibilityInfo)
+            : SetCompatibilityInfo(setCompatibilityInfo)
         {}
 
     public:
         bool Execute(TTransactionContext& txc) override {
-            if (InitializeState) {
+            if (SetCompatibilityInfo) {
                 TString currentCompatibilityInfo;
                 auto componentId = NKikimrConfig::TCompatibilityRule::BlobStorageController;
                 bool success = CompatibilityInfo.MakeStored(componentId).SerializeToString(&currentCompatibilityInfo);
                 Y_ABORT_UNLESS(success);
-                // Enable database space hysteresis only for new clusters; existing ones keep GREEN defaults.
-                NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(true).Update<Schema::State::CompatibilityInfo,
-                    Schema::State::DatabaseSpaceBlockColor, Schema::State::DatabaseSpaceUnblockColor>(
-                        currentCompatibilityInfo, NKikimrBlobStorage::TPDiskSpaceColor::YELLOW,
-                        NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW);
+                NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(true).Update<Schema::State::CompatibilityInfo>(currentCompatibilityInfo);
             }
             NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(true).Update<Schema::State::SchemaVersion>(Schema::CurrentSchemaVersion);
             return true;
         }
 
     private:
-        bool InitializeState = false;
+        bool SetCompatibilityInfo = false;
     };
 
     class TTxGenerateInstanceId : public TTxBase {

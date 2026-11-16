@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     ydb/core/audit
     ydb/library/actors/core
+    ydb/library/actors/interconnect/address
 )
 
 END()

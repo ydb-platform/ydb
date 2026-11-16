@@ -177,7 +177,18 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
         })
         .Deprecated("Pragma UseTypeV2 is deprecated. Use UseNativeYtTypes instead");
     REGISTER_SETTING(*this, UseNativeYtTypes);
-    REGISTER_SETTING(*this, UseNativeDescSort);
+    REGISTER_SETTING(*this, UseNativeDescSort)
+        .Validator([](const TYtSettings& settings, const TString&, bool value) {
+            if (value && !settings._AllowNativeDescSort.Get().GetOrElse(DEFAULT_ALLOW_NATIVE_DESC_SORT)) {
+                throw yexception() << "Native descending sort support is currently disabled";
+            }
+        });
+    REGISTER_SETTING(*this, _AllowNativeDescSort)
+        .Validator([](const TYtSettings& settings, const TString&, bool value) {
+            if (!value && settings.UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT)) {
+                throw yexception() << "Native descending sort support is currently disabled";
+            }
+        });
     REGISTER_SETTING(*this, UseIntermediateSchema).Deprecated();
     REGISTER_SETTING(*this, UseIntermediateStreams);
     REGISTER_SETTING(*this, StaticPool).IgnoreInFullReplay();

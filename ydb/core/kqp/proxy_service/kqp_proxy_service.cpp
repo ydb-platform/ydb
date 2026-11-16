@@ -11,8 +11,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/request_types.h>
 #include <ydb/core/base/statestorage.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
@@ -858,7 +858,7 @@ public:
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
         auto* proxyRequest = PendingRequests.FindPtr(requestId);
-        AFL_ENSURE(proxyRequest);
+        YDB_LOG_ENSURE(proxyRequest);
         auto& span = proxyRequest->Span;
         span = NWilson::TSpan(TComponentTracingLevels::TQueryProcessor::TopLevel,
             std::move(ev->TraceId), "Query Proxy", NWilson::EFlags::AUTO_END);
@@ -2322,8 +2322,8 @@ private:
         if (!FeatureFlags.GetEnableSharedReadingInStreamingQueries() || RowDispatcherService) {
             return;
         }
-        AFL_VERIFY(FederatedQuerySetup);
-        AFL_VERIFY(FeatureFlags.GetEnableStreamingQueries());
+        YDB_LOG_VERIFY(FederatedQuerySetup);
+        YDB_LOG_VERIFY(FeatureFlags.GetEnableStreamingQueries());
 
         const auto& pqGatewayFactory = FederatedQuerySetup->PqGatewayFactory;
         Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");

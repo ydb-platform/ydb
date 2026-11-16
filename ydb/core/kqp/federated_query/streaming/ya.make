@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/kqp/executer_actor
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/query_data
+    ydb/core/kqp/predictor
     ydb/core/kqp/script_executions/common
     ydb/core/protos
     ydb/library/actors/core

@@ -120,6 +120,7 @@ protected:
         if (config.HasDatabase()) {
             clientSettings.Database(config.GetDatabase());
         }
+        AFL_ENSURE(Driver);
         return NYdb::NTopic::TTopicClient(*Driver, clientSettings);
     }
 
@@ -193,6 +194,7 @@ protected:
         if (config.HasDatabase()) {
             clientSettings.Database(config.GetDatabase());
         }
+        AFL_ENSURE(Driver);
         return NYdb::NTopic::TTopicClient(*Driver, clientSettings);
     }
 };

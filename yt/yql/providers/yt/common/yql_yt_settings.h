@@ -355,6 +355,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseTypeV2;
     NCommon::TConfSetting<bool, Static> UseNativeYtTypes;
     NCommon::TConfSetting<bool, Static> UseNativeDescSort;
+    NCommon::TConfSetting<bool, Static> _AllowNativeDescSort;
     NCommon::TConfSetting<bool, Static> UseIntermediateSchema;
     NCommon::TConfSetting<bool, Static> UseIntermediateStreams;
     NCommon::TConfSetting<bool, Static> PassSqlFlagsForViewTranslation;

@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <limits>
 
 namespace NKikimr::NKqp {
 
@@ -40,6 +41,26 @@ public:
         TStringBuilder out;
         Print(*program, out);
         return out;
+    }
+
+    // The columns the first column read fetches, and those its program returns to compute.
+    TString PrintReadColumns() const {
+        const auto* read = FindCallable(*Ast.Root, "KqpBlockReadOlapTableRanges");
+        if (!read) {
+            read = FindCallable(*Ast.Root, "KqpReadOlapTableRanges");
+        }
+        if (!read) {
+            return {};
+        }
+        // (KqpBlockReadOlapTableRanges table ranges columns settings explainPrompt process)
+        const auto columns = PrintColumns(*read->GetChild(3));
+        const auto* extractMembers = FindInlined(*read->GetChild(6), "TKqpOlapExtractMembers");
+        return TStringBuilder() << "read " << columns << ", output " << (extractMembers ? PrintColumns(*extractMembers->GetChild(2)) : columns);
+    }
+
+    // Whether column shards compute an aggregate in the program of a read.
+    bool HasOlapAggregate() const {
+        return FindCallable(*Ast.Root, "TKqpOlapAgg");
     }
 
 private:
@@ -81,6 +102,45 @@ private:
         return nullptr;
     }
 
+    // `node` without its quotes, with a let reference replaced by its binding.
+    const NYql::TAstNode& Unwrap(const NYql::TAstNode& node) const {
+        if (const auto* let = node.IsAtom() && IsReference(node) ? Lets.FindPtr(node.GetContent()) : nullptr) {
+            return Unwrap(**let);
+        }
+        if (node.IsList() && node.GetChildrenCount() == 2 && IsAtom(*node.GetChild(0), "quote")) {
+            return Unwrap(*node.GetChild(1));
+        }
+        return node;
+    }
+
+    // The first `name` callable in `node`, following its let references.
+    const NYql::TAstNode* FindInlined(const NYql::TAstNode& node, TStringBuf name) const {
+        const auto& current = Unwrap(node);
+        if (!current.IsList()) {
+            return nullptr;
+        }
+        if (current.GetChildrenCount() > 0 && IsAtom(*current.GetChild(0), name)) {
+            return &current;
+        }
+        for (ui32 i = 0; i < current.GetChildrenCount(); ++i) {
+            if (const auto* found = FindInlined(*current.GetChild(i), name)) {
+                return found;
+            }
+        }
+        return nullptr;
+    }
+
+    // The columns of a quoted list, sorted, as the optimizers list them in different orders.
+    TString PrintColumns(const NYql::TAstNode& node) const {
+        const auto& list = Unwrap(node);
+        std::vector<TString> columns;
+        for (ui32 i = 0; i < list.GetChildrenCount(); ++i) {
+            columns.emplace_back(Unwrap(*list.GetChild(i)).GetContent());
+        }
+        std::sort(columns.begin(), columns.end());
+        return TStringBuilder() << "(" << JoinSeq(" ", columns) << ")";
+    }
+
     TString ArgumentName(TStringBuf argument) {
         return TStringBuilder() << "$" << Arguments.emplace(argument, Arguments.size()).first->second;
     }
@@ -101,8 +161,8 @@ private:
             Print(*node.GetChild(1), out);
             return;
         }
-        // The old optimizer drops the columns the program no longer needs from its output, the new one does not.
-        // This changes only which columns the read sends, not what the program computes.
+        // Both optimizers drop the columns compute does not need from the program output: the old one before the
+        // projections, the new one after them. PrintReadColumns compares the columns, so the program skips it.
         if (node.GetChildrenCount() == 3 && (IsAtom(*node.GetChild(0), "TKqpOlapExtractMembers") || IsAtom(*node.GetChild(0), "KqpOlapExtractMembers"))) {
             Print(*node.GetChild(1), out);
             return;
@@ -150,6 +210,8 @@ std::vector<TString> CanonicalRows(const TResultSet& resultSet) {
 
 struct TQueryOutcome {
     TString Program;
+    TString ReadColumns;
+    bool OlapAggregate = false;
     std::vector<TString> Rows;
 };
 
@@ -171,19 +233,25 @@ std::vector<TQueryOutcome> RunQueries(bool newRbo, const std::function<void(TKik
         auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx(), NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full))
             .ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), (newRbo ? "new" : "old") << " optimizer, " << query << ": " << result.GetIssues().ToString());
-        outcomes.push_back({TOlapProgramPrinter(TString{*result.GetStats()->GetAst()}).Print(withProjections), CanonicalRows(result.GetResultSet(0))});
+        TOlapProgramPrinter printer(TString{*result.GetStats()->GetAst()});
+        outcomes.push_back({printer.Print(withProjections), printer.PrintReadColumns(), printer.HasOlapAggregate(),
+                            CanonicalRows(result.GetResultSet(0))});
     }
     return outcomes;
 }
 
-// The new optimizer gives the column shard the same program as the old one, and the query returns the same rows.
-// The projections are compared only with `withProjections`: the new optimizer pushes some projections the old one does not.
+// The new optimizer gives the column shard the same program as the old one, the read fetches and returns the same
+// columns, an aggregate is pushed to column shards when the old one pushes it, and the query returns the same rows.
+// The projections are compared only with `withProjections`: the new optimizer pushes some projections the old one does
+// not.
 void CheckSameAsOldOptimizer(const std::function<void(TKikimrRunner&)>& prepare, const std::vector<TString>& queries,
                              bool withProjections = false) {
     const auto oldOutcomes = RunQueries(false, prepare, queries, withProjections);
     const auto newOutcomes = RunQueries(true, prepare, queries, withProjections);
     for (size_t i = 0; i < queries.size(); ++i) {
         UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].Program, oldOutcomes[i].Program, queries[i]);
+        UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].ReadColumns, oldOutcomes[i].ReadColumns, queries[i]);
+        UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].OlapAggregate, oldOutcomes[i].OlapAggregate, queries[i]);
         UNIT_ASSERT_VALUES_EQUAL_C(JoinSeq("\n", newOutcomes[i].Rows), JoinSeq("\n", oldOutcomes[i].Rows), queries[i]);
     }
 }
@@ -418,6 +486,91 @@ Y_UNIT_TEST_SUITE(KqpRboOlapCompat) {
             R"q(PRAGMA OptimizeSimpleILike; PRAGMA AnsiLike; PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true"; SELECT id FROM `/Root/foo` WHERE u_str ILIKE 'BAZ' ORDER BY id)q",
             R"q(PRAGMA OptimizeSimpleILike; PRAGMA AnsiLike; PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true"; SELECT id FROM `/Root/foo` WHERE u_str ILIKE '%nomatch%' ORDER BY id)q",
             R"q(PRAGMA OptimizeSimpleILike; PRAGMA AnsiLike; PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true"; SELECT id FROM `/Root/foo` WHERE u_str NOT ILIKE '%foo%' ORDER BY id)q",
+        });
+    }
+
+    // As in the old optimizer, column shards do not return the columns that only the program or the ranges need.
+    Y_UNIT_TEST(ReadColumnsSameAsOldOptimizer) {
+        CheckSameAsOldOptimizer([](TKikimrRunner& kikimr) {
+            ExecuteSchemeQueries(kikimr, {R"(
+                CREATE TABLE `/Root/foo` (
+                    id Int64 NOT NULL,
+                    level Int32,
+                    message String,
+                    payload JsonDocument,
+                    PRIMARY KEY (id)
+                )
+                PARTITION BY HASH(id)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )"});
+            using TRow = std::tuple<i64, std::optional<i32>, std::optional<std::string>, std::optional<std::string>>;
+            TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [id, level, message, payload] : std::vector<TRow>{
+                     {1, 1, "foo", R"({"a":"x"})"}, {2, 2, "bar", R"({"a":"y"})"}, {3, 3, "foobar", std::nullopt},
+                     {4, std::nullopt, std::nullopt, R"({"b":"z"})"}}) {
+                rows.AddListItem().BeginStruct().AddMember("id").Int64(id).AddMember("level").OptionalInt32(level)
+                    .AddMember("message").OptionalString(message).AddMember("payload").OptionalJsonDocument(payload).EndStruct();
+            }
+            rows.EndList();
+            const auto result = kikimr.GetTableClient().BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }, {
+            // Filter columns.
+            R"q(SELECT id FROM `/Root/foo` WHERE level > 1 ORDER BY id)q",
+            R"q(SELECT id, level FROM `/Root/foo` WHERE message LIKE "%foo%" ORDER BY id)q",
+            R"q(SELECT id FROM `/Root/foo` WHERE level > 1 ORDER BY id LIMIT 2)q",
+            // A filter column that the remaining compute filter reads too.
+            R"q(SELECT id FROM `/Root/foo` WHERE level > 1 AND message || "x" = "barx")q",
+            // No column but the row count.
+            R"q(SELECT COUNT(*) FROM `/Root/foo` WHERE level > 1)q",
+            R"q(SELECT 1 FROM `/Root/foo`)q",
+            R"q(SELECT 1 FROM `/Root/foo` WHERE level > 1)q",
+            R"q(SELECT 1 FROM `/Root/foo` WHERE level > 1 AND message LIKE "%foo%")q",
+            R"q(SELECT 1 FROM `/Root/foo` WHERE id = 2)q",
+            // A key column the ranges read.
+            R"q(SELECT message FROM `/Root/foo` WHERE id = 2)q",
+            // A filter column under a projection.
+            R"q(SELECT JSON_VALUE(payload, "$.a") AS a FROM `/Root/foo` WHERE level > 1 ORDER BY a)q",
+        }, /*withProjections=*/true);
+    }
+
+    // As in the old optimizer, column shards compute MIN and MAX of floating-point values, ignoring NaN, the sum of a
+    // Float column without keys and the sum of an Interval column.
+    Y_UNIT_TEST(FloatAggregatesSameAsOldOptimizer) {
+        CheckSameAsOldOptimizer([](TKikimrRunner& kikimr) {
+            ExecuteSchemeQueries(kikimr, {R"(
+                CREATE TABLE `/Root/foo` (
+                    id Uint64 NOT NULL, k Int32, f Float, d Double, g Float, iv Interval, v Int64,
+                    PRIMARY KEY (id)
+                )
+                PARTITION BY HASH(id)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )"});
+            // In Float, 2^24 + 1 rounds back to 2^24, so the Float sum depends on how it is computed.
+            const double nan = std::numeric_limits<double>::quiet_NaN();
+            TValueBuilder rows;
+            rows.BeginList();
+            for (ui64 id = 1; id <= 12; ++id) {
+                const double d = id <= 2 ? 1.0 : id <= 4 ? nan : id <= 6 ? 3.0 : 2.0;
+                rows.AddListItem().BeginStruct().AddMember("id").Uint64(id).AddMember("k").OptionalInt32(id % 2)
+                    .AddMember("f").OptionalFloat(id <= 2 ? 16777216.f : 1.f).AddMember("d").OptionalDouble(d)
+                    .AddMember("g").OptionalFloat(static_cast<float>(d)).AddMember("iv").OptionalInterval(id * 1000000)
+                    .AddMember("v").OptionalInt64(id).EndStruct();
+            }
+            rows.EndList();
+            const auto result = kikimr.GetTableClient().BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }, {
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SUM(f) AS s FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT MIN(d) AS mn, MAX(d) AS mx FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT k, MIN(d) AS mn, MAX(d) AS mx FROM `/Root/foo` GROUP BY k)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT MIN(g) AS mn, MAX(g) AS mx FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT k, MIN(g) AS mn, MAX(g) AS mx FROM `/Root/foo` GROUP BY k)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SUM(iv) AS s FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT k, SUM(iv) AS s FROM `/Root/foo` GROUP BY k)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT MIN(d) AS mn, SUM(v) AS s FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT k, MAX(g) AS mx, SUM(v) AS s FROM `/Root/foo` GROUP BY k)q",
         });
     }
 }

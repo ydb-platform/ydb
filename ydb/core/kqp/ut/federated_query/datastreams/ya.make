@@ -31,7 +31,7 @@ PEERDIR(
     library/cpp/protobuf/interop
     library/cpp/threading/local_executor
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/fq/libs/checkpoint_storage/events
     ydb/core/fq/libs/ydb
     ydb/core/kqp
@@ -57,7 +57,7 @@ PEERDIR(
     yql/essentials/udfs/common/yson2
 )
 
-ENV(YDB_FEATURE_FLAGS="enable_topic_deferred_publish")
+ENV(YDB_FEATURE_FLAGS="enable_topic_deferred_publish,enable_relative_paths")
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)

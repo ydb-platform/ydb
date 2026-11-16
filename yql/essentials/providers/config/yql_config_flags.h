@@ -44,7 +44,7 @@ public:
 protected:
     bool IsSettingAllowed(const TPosition& pos, TStringBuf name, TExprContext& ctx);
     bool ApplyFlag(const TPosition& pos, TStringBuf name, const TVector<TStringBuf>& args, TExprContext& ctx, bool fromInitialize = false);
-    void AddFlag(TStringBuf name, TStringBuf disableName, bool system, TFlagHandler handler);
+    void AddFlag(TStringBuf name, TStringBuf disableName, bool system, bool allowInProjectSettings, TFlagHandler handler);
     void InitFlags();
     bool ApplyProjectSettings(TExprContext& ctx);
 

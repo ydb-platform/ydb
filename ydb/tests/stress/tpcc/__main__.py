@@ -10,6 +10,7 @@ if __name__ == '__main__':
     parser.add_argument('--endpoint', default='grpc://localhost:2135', help="YDB endpoint")
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
     parser.add_argument('--duration', default=120, type=int, help='A duration of workload in seconds')
+    parser.add_argument('--warmup', default=30, type=int, help="Warmup duration in seconds (0 selects the CLI default)")
     parser.add_argument('--warehouses', default=100, type=int, help='Number of warehouses')
     parser.add_argument('--path', default='tpcc_workload', help='Table path prefix')
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
@@ -29,7 +30,7 @@ if __name__ == '__main__':
             level=logging.INFO
         )
 
-    workload = YdbTpccWorkload(args.endpoint, args.database, duration=args.duration, warehouses=args.warehouses, tables_prefix=args.path, tx_mode=args.tx_mode)
+    workload = YdbTpccWorkload(args.endpoint, args.database, duration=args.duration, warehouses=args.warehouses, tables_prefix=args.path, tx_mode=args.tx_mode, warmup=args.warmup)
     if args.phase == 'prepare':
         workload.import_data()
     elif args.phase == 'run':

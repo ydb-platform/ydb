@@ -2080,6 +2080,10 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
             auto completionObserver = runtime.AddObserver<TEvController::TEvDropReplicationResult>([&](auto& ev) {
                 controllerCompletion.Reset(ev.Release());
             });
+            THashMap<ui64, THashSet<TActorId>> completionSubscribers;
+            auto subscriptionObserver = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered>([&](const auto& ev) {
+                completionSubscribers[ev->Get()->Record.GetTxId()].insert(ev->Recipient);
+            });
             NKikimrReplication::TEvDropReplication ordinaryRequest;
             auto admissionObserver = runtime.AddObserver<TEvController::TEvDropReplication>([&](auto& ev) {
                 if (ev->Get()->Record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP) {
@@ -2169,7 +2173,10 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
                 UNIT_ASSERT(!drop.HasValue());
                 repeatedForce = repeatedSession.ExecuteSchemeQuery(query,
                                                                    NYdb::NTable::TExecSchemeQuerySettings().ClientTimeout(TDuration::Seconds(15)));
-                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+                // The ordinary DROP and both FORCE callers must subscribe before deletion can finish.
+                runtime.WaitFor("all DROP callers subscribed to the original transaction", [&] {
+                    return completionSubscribers[ordinaryRequest.GetOperationId().GetTxId()].size() == 3;
+                }, TDuration::Seconds(30));
                 UNIT_ASSERT(!repeatedForce.HasValue());
                 if (!replay) {
                     holdRequest = false;
@@ -2239,6 +2246,7 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
                 UNIT_ASSERT(!repeatedForce.HasValue());
             }
             completionObserver.Remove();
+            const auto dropTxId = controllerCompletion->Get<TEvController::TEvDropReplicationResult>()->Record.GetOperationId().GetTxId();
             runtime.Send(controllerCompletion.Release());
             const auto dropped = env.RunCall([&] { return drop.GetValueSync(); });
             UNIT_ASSERT_C(dropped.IsSuccess() || (replay
@@ -2252,10 +2260,12 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
                                   result.GetIssues().ToString());
                 }
             }
-            UNIT_ASSERT_C(WaitFor([&] {
-                runtime.SimulateSleep(TDuration::MilliSeconds(100));
-                return env.GetDescription("/Root/replication").GetSchemeStatus() == NKikimrScheme::StatusPathDoesNotExist;
-            }, 150, TDuration::Zero()), "FORCE DROP did not commit, recovery=" << ui32(recovery));
+            // A replay can lose client pipes before the original DROP has committed.
+            env.SendAsync(info.PathId.OwnerId, new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(dropTxId));
+            const auto completion = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(
+                env.GetSender(), TDuration::Seconds(30));
+            UNIT_ASSERT_C(completion, "FORCE DROP did not commit, recovery=" << ui32(recovery));
+            UNIT_ASSERT_VALUES_EQUAL(completion->Get()->Record.GetTxId(), dropTxId);
             UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
             if (destinationMode == EForceDropDestination::Cascade) {
                 UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
@@ -4123,11 +4133,14 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         TEnv env;
         const auto info = StartReplication(env);
         const auto controllerId = info.ControllerId;
+        const auto owner = [&] { return TPathId::FromProto(env.GetDescription("/Root/replica1")
+            .GetPathDescription().GetTable().GetReplicationConfig().GetOwnerPathId()); };
 
         const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
         const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
 
         AttachWorkers(env, controllerId, {worker});
+        UNIT_ASSERT_VALUES_EQUAL(owner(), info.PathId);
 
         const auto schema = MakeSchemaChange();
 
@@ -4141,9 +4154,11 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
 
         RequestConfigUpdate(env, info, 1006);
+        UNIT_ASSERT_VALUES_EQUAL(owner(), info.PathId);
 
         RestartController(env, controllerId);
         AttachWorkers(env, controllerId, {worker});
+        UNIT_ASSERT_VALUES_EQUAL(owner(), info.PathId);
         const auto replay = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
         UNIT_ASSERT(replay->Get()->Record.GetApplied());
 
@@ -6015,4 +6030,108 @@ Y_UNIT_TEST_SUITE(IndexBuild) {
     }
 
 }
+
+Y_UNIT_TEST_SUITE(DestinationCleanup) {
+    Y_UNIT_TEST_TWIN(DropReadonlyTableWithCdcAfterDropReplication, GlobalConsistency) {
+        TTestEnv env;
+        CreateSourceTable(env, "replica1");
+        auto client = CreateTableClient(env);
+        auto session = CreateTableSession(env, client);
+        const auto cdc = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/replica1` ADD CHANGEFEED restored_cdc
+            WITH (FORMAT = "JSON", MODE = "UPDATES");
+        )").GetValueSync();
+        UNIT_ASSERT_C(cdc.IsSuccess(), cdc.GetIssues().ToString());
+
+        // Model the metadata of an imported destination that retains a CDC stream.
+        const ui64 schemeShardId = env.GetSchemeshardId("/Root/replica1");
+        const ui64 txId = 100499;
+        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShardId);
+        auto& tx = *request->Record.AddTransaction();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        tx.SetInternal(true);
+        env.GetPathId("/Root/replica1").ToProto(tx.MutableAlterTable()->MutablePathId());
+        auto& config = *tx.MutableAlterTable()->MutableReplicationConfig();
+        config.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        config.SetConsistencyLevel(GlobalConsistency
+            ? NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
+            : NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
+        config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
+        const auto prepared = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            schemeShardId, std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL_C(prepared->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted,
+            prepared->Get()->Record.GetReason());
+        env.Send<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(schemeShardId,
+            new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(txId));
+
+        const auto info = StartReplication(
+            env, 1, "root@builtin", GlobalConsistency, false,
+            NKikimrSchemeOp::EIndexTypeGlobal, false, false);
+        WaitForPaused(env, info);
+        UNIT_ASSERT_C(WaitFor([&] {
+            return SourceStreamsReady(env, info, 1);
+        }), "Source stream setup did not finish before resuming replication");
+        const auto description = DescribeReplication(env, info);
+        CompleteDestinationImport(env, info, description->Get()->Record.GetTargets(0).GetId());
+
+        const auto resumed = session.ExecuteSchemeQuery(R"(
+            ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = "STANDBY");
+        )").GetValueSync();
+        UNIT_ASSERT_C(resumed.IsSuccess(), resumed.GetIssues().ToString());
+        const auto write = session.ExecuteDataQuery(
+            "UPSERT INTO `/Root/table1` (key, value) VALUES (1, 'delivered');",
+            NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        UNIT_ASSERT_C(WaitFor([&] {
+            const auto state = DescribeReplication(env, info)->Get()->Record.GetState();
+            UNIT_ASSERT_C(!state.HasError(), state.DebugString());
+            const auto read = session.ExecuteDataQuery(
+                "SELECT key FROM `/Root/replica1` WHERE key = 1 AND value = 'delivered';",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            if (read.GetStatus() == NYdb::EStatus::SCHEME_ERROR || read.GetStatus() == NYdb::EStatus::ABORTED) {
+                return false;
+            }
+            UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+            return read.GetResultSet(0).RowsCount() == 1;
+        }, 300), "Replication did not deliver the row to the destination with CDC");
+        const auto destinationId = env.GetPathId("/Root/replica1");
+
+        // KIKIMR-27737: ordinary DROP leaves the destination as a readonly replica.
+        const auto dropReplication = session.ExecuteSchemeQuery(
+            "DROP ASYNC REPLICATION `/Root/replication`;").GetValueSync();
+        UNIT_ASSERT_C(dropReplication.IsSuccess(), dropReplication.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), destinationId);
+        AssertDestinationMode(env, "/Root/replica1",
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        const auto destination = env.GetDescription("/Root/replica1");
+        UNIT_ASSERT_C(AnyOf(destination.GetPathDescription().GetUserAttributes(), [](const auto& attribute) {
+            return attribute.GetKey() == "__async_replica" && attribute.GetValue() == "true";
+        }), destination.DebugString());
+        for (const auto* path : {"/Root/replica1/restored_cdc", "/Root/replica1/restored_cdc/streamImpl"}) {
+            UNIT_ASSERT_VALUES_EQUAL_C(env.GetDescription(path).GetSchemeStatus(),
+                NKikimrScheme::StatusSuccess, path);
+        }
+
+        // The standalone CDC operation still rejects a readonly replica.
+        const auto dropCdc = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/replica1` DROP CHANGEFEED restored_cdc;
+        )").GetValueSync();
+        UNIT_ASSERT(!dropCdc.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(dropCdc.GetIssues().ToString(), "path is an async replica table");
+
+        // Exercise the user's SQL path, without InternalTransaction or CASCADE.
+        const auto dropTable = session.ExecuteSchemeQuery("DROP TABLE `/Root/replica1`;").GetValueSync();
+        UNIT_ASSERT_C(dropTable.IsSuccess(), dropTable.GetIssues().ToString());
+        for (const auto* path : {"/Root/replica1", "/Root/replica1/restored_cdc", "/Root/replica1/restored_cdc/streamImpl"}) {
+            const auto dropped = env.GetDescription(path);
+            UNIT_ASSERT_VALUES_EQUAL_C(dropped.GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist,
+                path << ": " << dropped.DebugString());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/table1").GetSchemeStatus(), NKikimrScheme::StatusSuccess);
+    }
+
+}
+
 } // NKikimr::NReplication::NController

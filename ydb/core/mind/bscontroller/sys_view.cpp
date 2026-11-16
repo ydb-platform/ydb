@@ -734,6 +734,10 @@ void TBlobStorageController::UpdateSystemViews() {
         }
 
         for (auto& [groupId, g] : state.Groups) {
+            g.SetBridgeSyncStatus(GetBridgeSyncStatus(groupId));
+            if (const auto timestamp = GetBridgeSyncLastProgressTimestamp(groupId)) {
+                g.SetBridgeSyncLastProgressTimestamp(timestamp->GetValue());
+            }
             if (const auto it = BridgeSyncState.find(groupId); it != BridgeSyncState.end() && it->second.ErrorCount) {
                 TBridgeSyncState& state = it->second;
                 g.SetBridgeSyncLastError(state.LastError);

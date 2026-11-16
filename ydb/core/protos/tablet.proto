@@ -226,6 +226,20 @@ message TIopsRecord {
     optional uint64 Iops = 3;
 }
 
+// Resource identified by name rather than by a dedicated field,
+// e.g. "rb/<queue>" for resource broker queues.
+message TNamedResource {
+    optional string Name = 1;
+    optional uint64 Value = 2;
+    // Whether the tablet can be moved without interrupting the work behind Value
+    // (e.g. all of its tasks still wait in a queue, none is running yet).
+    // Resources without such a distinction do not set it.
+    optional bool Transferable = 3 [default = true];
+    // Used by Hive only, in its own persisted metrics: the value is an estimate, carried over
+    // from the previous incarnation of the tablet, and is dropped at this time (ms) unless reported again.
+    optional uint64 EstimateDeadline = 4;
+}
+
 message TMetrics {
     optional uint64 CPU = 1;
     optional uint64 Memory = 2;
@@ -240,6 +254,7 @@ message TMetrics {
     repeated TIopsRecord GroupWriteIops = 11;
     optional uint64 ReadIops = 12;
     optional uint64 WriteIops = 13;
+    repeated TNamedResource NamedResources = 14;
 }
 
 message TEvTabletStop {

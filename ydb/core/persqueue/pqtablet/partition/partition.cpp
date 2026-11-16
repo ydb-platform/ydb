@@ -387,6 +387,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
     , WriteInitThrottledMs(TDuration::Minutes(1), 100)
+    , WriteInitSessions(TDuration::Seconds(1), 1000)
     , LastEmittedHeartbeat(TRowVersion::Min())
     , LastEmittedSchemaChange(TRowVersion::Min())
     , SamplingControl(samplingControl)
@@ -751,6 +752,9 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
     meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);
+    if (!LastEmittedHeartbeat.IsMin()) {
+        LastEmittedHeartbeat.ToProto(meta.MutableLastEmittedHeartbeat());
+    }
 
     if (IsSupportive()) {
         auto* counterData = meta.MutableCounterData();
@@ -996,7 +1000,7 @@ void TPartition::DestroyActor(const TActorContext& ctx)
 void TPartition::PassAway() {
     if (WriteSessionsQuoterNotified) {
         Send(MakeWriteSessionsQuoterId(), new TEvWriteSessionsQuoter::TEvRemove(
-            TopicName(), Partition.OriginalPartitionId, TabletGeneration));
+            Config.GetYdbDatabasePath(), TopicName(), Partition.OriginalPartitionId, TabletGeneration));
     }
     TBaseTabletActor<TPartition>::PassAway();
 }
@@ -1184,19 +1188,34 @@ TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
     if (readOffset >= static_cast<i64>(GetEndOffset())) {
         result.LastReadMessage.CreateTimestamp = now;
         result.LastReadMessage.WriteTimestamp = now;
-    } else if (userInfo.ReadOffset == -1) {
-        result.LastReadMessage = result.LastCommittedMessage;
-    } else if (userInfo.ReadWriteTimestamp) {
-        result.LastReadMessage.CreateTimestamp = userInfo.ReadCreateTimestamp;
-        result.LastReadMessage.WriteTimestamp = userInfo.ReadWriteTimestamp;
-    } else {
-        auto timestamp = GetWriteTimeEstimate(readOffset);
+    } else if (userInfo.ReadOffset == -1 || !userInfo.ReadWriteTimestamp) {
+        // No read since restart, or no cached read timestamps: readOffset is
+        // the first UNREAD message, estimate by its own write time.
+        auto timestamp = GetWriteTimeEstimate(readOffset, /*firstUnreadMessage=*/true);
+        if (timestamp == TInstant::Zero()) {
+            // No record for this offset (keyless gap): fall back to the
+            // committed message estimate, as callers expect a real write time.
+            timestamp = result.LastCommittedMessage.WriteTimestamp;
+            if (timestamp == TInstant::Zero()) {
+                // The committed estimate is unknown too (e.g. emptied
+                // partition): report "now" so the unsigned ReadLag below
+                // does not wrap to an epoch-scale value.
+                timestamp = now;
+            }
+        }
         result.LastReadMessage.CreateTimestamp = timestamp;
         result.LastReadMessage.WriteTimestamp = timestamp;
+    } else {
+        result.LastReadMessage.CreateTimestamp = userInfo.ReadCreateTimestamp;
+        result.LastReadMessage.WriteTimestamp = userInfo.ReadWriteTimestamp;
     }
 
     if (readOffset < (i64)GetEndOffset()) {
-        result.ReadLag = result.LastReadTimestamp - result.LastReadMessage.WriteTimestamp;
+        // The first unread message may be written after the last read
+        // activity: clamp so the unsigned lag does not wrap around.
+        result.ReadLag = result.LastReadTimestamp > result.LastReadMessage.WriteTimestamp
+            ? result.LastReadTimestamp - result.LastReadMessage.WriteTimestamp
+            : TDuration::Zero();
     }
     result.CommitedLag = now - result.LastCommittedMessage.WriteTimestamp;
     result.TotalLag = TDuration::MilliSeconds(userInfo.GetWriteLagMs()) + result.ReadLag + (now - result.LastReadTimestamp);
@@ -1560,7 +1579,7 @@ const std::deque<TDataKey>& GetContainer(const TPartitionBlobEncoder& zone, ui64
 }
 
 //zero means no such record
-TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
+TInstant TPartition::GetWriteTimeEstimate(ui64 offset, bool firstUnreadMessage) const {
     if (offset < GetStartOffset()) {
         offset = GetStartOffset();
     }
@@ -1605,9 +1624,12 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
                    offset < it->Key.GetOffset() ||
                    it->Key.GetOffset() == offset && it->Key.GetPartNo() > 0);
 
-    --it;
-    if (it != container.begin())
+    // Step back to the requested key: 2 steps for the next-to-commit offset
+    // (last committed message), 1 step for the first unread offset.
+    const ui64 stepsBack = firstUnreadMessage ? 1 : 2;
+    for (ui64 i = 0; i < stepsBack && it != container.begin(); ++i) {
         --it;
+    }
 
     return it->Timestamp;
 }
@@ -2621,6 +2643,9 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES, TotalPartitionWriteSpeedInMessages);
     const ui64 initThrottledMs = WriteInitThrottledMs.Update(now);
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_INIT_THROTTLED_MS, initThrottledMs);
+    const ui64 initSessions = WriteInitSessions.Update(now);
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_INIT_SESSIONS_USAGE, initSessions);
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_INIT_SESSIONS_LIMIT, AppData(ctx)->PQConfig.GetWriteSessionsInitRps());
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {
@@ -4536,6 +4561,8 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TMessag
         result = PreProcessRequest(msg.GetDeregisterMessageGroup(), affectedSourceIdsAndConsumers);
     } else if (msg.IsSplitMessageGroup()) {
         result = PreProcessRequest(msg.GetSplitMessageGroup(), affectedSourceIdsAndConsumers);
+    } else if (msg.IsEmitHeartbeat()) {
+        result = PreProcessRequest(msg.GetEmitHeartbeat(), affectedSourceIdsAndConsumers);
     } else {
         PQ_ENSURE(msg.IsOwnership());
     }
@@ -4565,6 +4592,8 @@ bool TPartition::ExecUserActionOrTransaction(TMessage& msg,
         ExecRequest(msg.GetDeregisterMessageGroup(), *Parameters);
     } else if (msg.IsSplitMessageGroup()) {
         ExecRequest(msg.GetSplitMessageGroup(), *Parameters);
+    } else if (msg.IsEmitHeartbeat()) {
+        ExecRequest(msg.GetEmitHeartbeat(), *Parameters, request);
     } else {
         PQ_ENSURE(msg.IsOwnership());
     }

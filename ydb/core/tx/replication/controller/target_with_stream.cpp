@@ -240,6 +240,12 @@ bool TTargetWithStream::CanDetachWithoutStream() const {
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
 
+    if (DstCreateRequest || (replication->GetState() == TReplication::EState::Removing
+        && GetDstState() == EDstState::Alter)) {
+        TTargetBase::Progress(ctx);
+        return;
+    }
+
     if (replication->GetState() == TReplication::EState::Removing
         && GetStreamState() == EStreamState::Removed)
     {

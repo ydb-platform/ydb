@@ -49,6 +49,8 @@ struct TEvPrivate {
         EvCancelDropStream,
         EvExpireWorkerLag,
 
+        EvSaveDstCreateRequest,
+        EvDstCreateRequestSaved,
         EvEnd,
     };
 
@@ -339,6 +341,16 @@ struct TEvPrivate {
         {
         }
     };
+
+    struct TEvSaveDstCreateRequest: TEventLocal<TEvSaveDstCreateRequest, EvSaveDstCreateRequest> {
+        ui64 ReplicationId;
+        ui64 TargetId;
+        TString ExpectedRequest;
+        TString Request;
+        TEvSaveDstCreateRequest(ui64 rid, ui64 tid, const TString& expected, const TString& request)
+            : ReplicationId(rid), TargetId(tid), ExpectedRequest(expected), Request(request) {}
+    };
+    struct TEvDstCreateRequestSaved: TEventLocal<TEvDstCreateRequestSaved, EvDstCreateRequestSaved> {};
 
 }; // TEvPrivate
 

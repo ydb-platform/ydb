@@ -81,6 +81,8 @@ public:
 
         virtual ~ITarget() = default;
 
+        TString DstCreateRequest; // Durable local CREATE until its destination id is saved.
+
         virtual ui64 GetId() const = 0;
         virtual ETargetKind GetKind() const = 0;
         virtual bool IsIndexBuild() const = 0;

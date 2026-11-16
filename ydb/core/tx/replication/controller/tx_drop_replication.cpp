@@ -129,8 +129,9 @@ public:
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );
 
-            if (record.GetCascade()) {
-                target->SetDstState(TReplication::EDstState::Removing);
+            if (record.GetCascade() || target->DstCreateRequest) {
+                target->SetDstState(record.GetCascade()
+                    ? TReplication::EDstState::Removing : TReplication::EDstState::Alter);
                 db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                     NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
                 );

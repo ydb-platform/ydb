@@ -89,6 +89,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvAlterDstResult, Handle);
         HFunc(TEvPrivate::TEvSchemaChangeDstAlterResult, Handle);
         HFunc(TEvPrivate::TEvSchemaChangeDstAlterTxId, Handle);
+        HFunc(TEvPrivate::TEvSaveDstCreateRequest, Handle);
         HFunc(TEvPrivate::TEvDropDstResult, Handle);
         HFunc(TEvPrivate::TEvResolveSecretResult, Handle);
         HFunc(TEvPrivate::TEvResolveResourceIdResult, Handle);

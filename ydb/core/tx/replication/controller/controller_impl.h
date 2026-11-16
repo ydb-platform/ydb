@@ -245,6 +245,8 @@ private:
     class TTxCompleteWorkerSet;
     class TTxSchemaChangeReport;
     class TTxSchemaChangeDstAlterTxId;
+    class TTxSaveDstCreateRequest;
+    void Handle(TEvPrivate::TEvSaveDstCreateRequest::TPtr& ev, const TActorContext& ctx);
     class TTxSchemaChangeDstAlterResult;
     class TTxResumeDeferredAlter;
 

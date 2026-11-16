@@ -4,6 +4,39 @@
 
 namespace NKikimr::NReplication::NController {
 
+class TController::TTxSaveDstCreateRequest: public TTxBase {
+    TEvPrivate::TEvSaveDstCreateRequest::TPtr Ev;
+    bool Saved = false;
+public:
+    TTxSaveDstCreateRequest(TController* self, TEvPrivate::TEvSaveDstCreateRequest::TPtr& ev)
+        : TTxBase("TxSaveDstCreateRequest", self), Ev(ev) {}
+    TTxType GetTxType() const override { return TXTYPE_CREATE_DST_RESULT; }
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        const auto* event = Ev->Get();
+        auto replication = Self->Find(event->ReplicationId);
+        auto* target = replication ? replication->FindTarget(event->TargetId) : nullptr;
+        if (!target || !target->IsExpectedDstCreator(Ev->Sender)
+            || target->DstCreateRequest != event->ExpectedRequest) {
+            return true;
+        }
+        target->DstCreateRequest = event->Request;
+        NIceDb::TNiceDb db(txc.DB);
+        db.Table<Schema::Targets>().Key(event->ReplicationId, event->TargetId).Update(
+            NIceDb::TUpdate<Schema::Targets::DstCreateRequest>(event->Request));
+        Saved = true;
+        return true;
+    }
+    void Complete(const TActorContext& ctx) override {
+        if (Saved) {
+            ctx.Send(Ev->Sender, new TEvPrivate::TEvDstCreateRequestSaved());
+        }
+    }
+};
+
+void TController::Handle(TEvPrivate::TEvSaveDstCreateRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxSaveDstCreateRequest(this, ev), ctx);
+}
+
 class TController::TTxCreateDstResult: public TTxBase {
     TEvPrivate::TEvCreateDstResult::TPtr Ev;
     TReplication::TPtr Replication;
@@ -54,7 +87,8 @@ public:
 
         const auto dstState = target->GetDstState();
         const bool expectsResult = dstState == TReplication::EDstState::Creating
-            || dstState == TReplication::EDstState::Alter;
+            || dstState == TReplication::EDstState::Alter
+            || dstState == TReplication::EDstState::Removing;
         if (!expectsResult) {
             YDB_LOG_WARN_CTX(ctx, "Dst state mismatch",
                 {"rid", rid},
@@ -66,7 +100,10 @@ public:
         if (Ev->Get()->IsSuccess()) {
             const bool wasAltering = dstState == TReplication::EDstState::Alter;
             target->SetDstPathId(Ev->Get()->DstPathId);
-            if (Replication->GetDesiredState() == TReplication::EState::Done) {
+            target->DstCreateRequest.clear();
+            if (Replication->GetState() == TReplication::EState::Removing) {
+                target->SetDstState(dstState);
+            } else if (Replication->GetDesiredState() == TReplication::EState::Done) {
                 target->SetDstState(TReplication::EDstState::Alter);
             } else if (Ev->Get()->WaitingImport) {
                 if (Replication->GetDesiredState() == TReplication::EState::Paused) {
@@ -112,6 +149,7 @@ public:
             NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
         );
         db.Table<Schema::Targets>().Key(rid, tid).Update(
+            NIceDb::TUpdate<Schema::Targets::DstCreateRequest>(target->DstCreateRequest),
             NIceDb::TUpdate<Schema::Targets::DstPathOwnerId>(target->GetDstPathId().OwnerId),
             NIceDb::TUpdate<Schema::Targets::DstPathLocalId>(target->GetDstPathId().LocalPathId),
             NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),

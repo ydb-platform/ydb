@@ -77,6 +77,10 @@ public:
     std::optional<TCdcAggregatorStreamSourcesDiff> ApplyPartitioningChange(const TCdcAggregatorStreamPartitioningChange& change);
 
 private:
+    THashMap<ui64, NPQ::THeartbeat> RegisterHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatBySourceDataShardId);
+    std::optional<NPQ::THeartbeat> UpdateCurrentHeartbeatIfNeeded();
+
+private:
     TCdcAggregatorStreamTopic Topic;
     TLastHeartbeats LastHeartbeatBySourceDataShardId;
     std::optional<NPQ::THeartbeat> CurrentHeartbeat;

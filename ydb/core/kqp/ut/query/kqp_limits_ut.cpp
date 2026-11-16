@@ -1099,16 +1099,10 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::TIMEOUT);
     }
 
-    /* Scenario:
-        - prepare and run query
-        - observe first EvState event from CA to Executer and replace it with EvAbortExecution
-        - track terminal states from distinct CAs
-        - wait for final event EvTxResponse from Executer
-        - expect it to happen strictly after terminal states from all CAs
-     */
-    Y_UNIT_TEST(WaitCAsStateOnAbort) {
+    // Abort on the first CA state; wait for all terminal states, or for timeout poison if they are dropped.
+    void CheckWaitCAsOnAbort(bool runtimeStats, bool dropTerminalStates) {
         auto kikimrSettings = TKikimrSettings().SetUseRealThreads(false);
-        kikimrSettings.AppConfig.MutableFeatureFlags()->SetEnableKqpRuntimeStats(true);
+        kikimrSettings.AppConfig.MutableFeatureFlags()->SetEnableKqpRuntimeStats(runtimeStats);
         TKikimrRunner kikimr(kikimrSettings);
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
@@ -1120,72 +1114,10 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
         auto dataQuery = prepareResult.GetQuery();
 
-        bool firstEvState = false;
-        THashSet<TActorId> finishedActors;
-        TActorId executerId;
-        ui32 actorCount = 3; // TODO: get number of actors properly.
-
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvState::EventType) {
-                const auto state = ev->Get<NYql::NDq::TEvDqCompute::TEvState>()->Record.GetState();
-                const bool terminal = state == NYql::NDqProto::COMPUTE_STATE_FINISHED
-                    || state == NYql::NDqProto::COMPUTE_STATE_FAILURE;
-                if (terminal) {
-                    finishedActors.insert(ev->Sender);
-                }
-                if (!firstEvState) {
-                    executerId = ev->Recipient;
-                    ev = new IEventHandle(ev->Recipient, ev->Sender,
-                            new NKikimr::NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::UNSPECIFIED, NYql::TIssues()));
-                    firstEvState = true;
-                }
-            } else if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType && ev->Sender == executerId) {
-                UNIT_ASSERT_C(finishedActors.size() == actorCount, "Executer sent response before waiting for CAs");
-            }
-
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-
-        auto settings = TExecDataQuerySettings().OperationTimeout(TDuration::MilliSeconds(500));
-        kikimr.RunInThreadPool([&] { return dataQuery.Execute(TTxControl::BeginTx().CommitTx(), settings).GetValueSync(); });
-
-        TDispatchOptions opts;
-        opts.FinalEvents.emplace_back([&](IEventHandle& ev) {
-            return ev.GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType
-                && ev.Sender == executerId && finishedActors.size() == actorCount;
-        });
-
-        UNIT_ASSERT(runtime.DispatchEvents(opts));
-    }
-
-    /* Scenario:
-        - prepare and run query
-        - observe first EvState event from CA to Executer and replace it with EvAbortExecution
-        - track terminal states from distinct CAs
-        - drop terminal EvState events from CAs
-        - wait for final event EvTxResponse from Executer after timeout poison
-        - expect it to happen strictly after terminal states from all CAs
-     */
-    Y_UNIT_TEST(WaitCAsTimeout) {
-        auto kikimrSettings = TKikimrSettings().SetUseRealThreads(false);
-        kikimrSettings.AppConfig.MutableFeatureFlags()->SetEnableKqpRuntimeStats(true);
-        TKikimrRunner kikimr(kikimrSettings);
-        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
-        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
-
-        auto prepareResult = kikimr.RunCall([&] { return session.PrepareDataQuery(Q_(R"(
-                SELECT COUNT(*) FROM `/Root/TwoShard`;
-            )")).GetValueSync();
-        });
-        UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
-        auto dataQuery = prepareResult.GetQuery();
-
-        bool firstEvState = false;
         bool timeoutPoison = false;
         THashSet<TActorId> finishedActors;
         TActorId executerId;
-        ui32 actorCount = 3; // TODO: get number of actors properly.
+        const ui32 actorCount = 3; // TODO: get number of actors properly.
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -1196,12 +1128,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 if (terminal) {
                     finishedActors.insert(ev->Sender);
                 }
-                if (!firstEvState) {
+                if (!executerId) {
                     executerId = ev->Recipient;
                     ev = new IEventHandle(ev->Recipient, ev->Sender,
                             new NKikimr::NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::UNSPECIFIED, NYql::TIssues()));
-                    firstEvState = true;
-                } else if (terminal) {
+                } else if (terminal && dropTerminalStates) {
                     return TTestActorRuntime::EEventAction::DROP;
                 }
             } else if (ev->GetTypeRewrite() == TEvents::TEvPoison::EventType && finishedActors.size() == actorCount &&
@@ -1209,7 +1140,10 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             {
                 timeoutPoison = true;
             } else if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType && ev->Sender == executerId) {
-                UNIT_ASSERT_C(timeoutPoison, "Executer sent response before waiting for CAs");
+                UNIT_ASSERT_VALUES_EQUAL_C(finishedActors.size(), actorCount, "Executer sent response before waiting for CAs");
+                if (dropTerminalStates) {
+                    UNIT_ASSERT_C(timeoutPoison, "Executer sent response before timeout poison");
+                }
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -1221,10 +1155,18 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         TDispatchOptions opts;
         opts.FinalEvents.emplace_back([&](IEventHandle& ev) {
             return ev.GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType
-                && ev.Sender == executerId && finishedActors.size() == actorCount && timeoutPoison;
+                && ev.Sender == executerId;
         });
 
         UNIT_ASSERT(runtime.DispatchEvents(opts));
+    }
+
+    Y_UNIT_TEST_TWIN(WaitCAsStateOnAbort, RuntimeStats) {
+        CheckWaitCAsOnAbort(RuntimeStats, false);
+    }
+
+    Y_UNIT_TEST_TWIN(WaitCAsTimeout, RuntimeStats) {
+        CheckWaitCAsOnAbort(RuntimeStats, true);
     }
 
     Y_UNIT_TEST(ReplySizeExceeded) {

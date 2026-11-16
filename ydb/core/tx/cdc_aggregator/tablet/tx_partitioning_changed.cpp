@@ -47,14 +47,14 @@ public:
             return true;
         }
 
-        if (!Self->Stream.IsConfigured()) {
+        if (!Self->CdcStream) {
             Result->Record.SetStatus(TResult::NOT_READY);
             Result->Record.SetError("Tracking is not configured");
             return true;
         }
 
-        TStreamChanges changes;
-        switch (Self->Stream.ChangePartitioning(parentDataShardId, childDataShardIds, changes)) {
+        TCdcAggregatorStreamChanges changes;
+        switch (Self->CdcStream->ReplaceSourceDataShard(parentDataShardId, childDataShardIds, changes)) {
             case ESourceOutcome::Success:
                 Result->Record.SetStatus(TResult::SUCCESS);
                 break;
@@ -65,7 +65,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistStreamChanges(db, changes);
+        Self->PersistCdcStreamChanges(db, changes);
 
         return true;
     }

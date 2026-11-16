@@ -49,7 +49,7 @@ STFUNC(TCdcAggregator::StateWork) {
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
             YDB_LOG_WARN("Unexpected event",
-                        {"eventType", ev->GetTypeRewrite()});
+                {"eventType", ev->GetTypeRewrite()});
         }
     }
 }
@@ -59,12 +59,21 @@ void TCdcAggregator::SwitchToWork(const TActorContext& ctx) {
     Become(&TThis::StateWork);
 }
 
-void TCdcAggregator::PersistStreamChanges(NIceDb::TNiceDb& db, const TStreamChanges& changes) {
-    for (const auto dataShardId : changes.ErasedSources) {
+void TCdcAggregator::PersistCdcStream(NIceDb::TNiceDb& db) {
+    db.Table<Schema::State>().Key(Schema::State::Id::Value).Update(
+        NIceDb::TUpdate<Schema::State::TrackingConfig>(SerializeCdcStreamTopic(CdcStream->GetTopic())));
+
+    for (const auto dataShardId : CdcStream->GetSourceDataShardIds()) {
+        db.Table<Schema::Sources>().Key(dataShardId).Update();
+    }
+}
+
+void TCdcAggregator::PersistCdcStreamChanges(NIceDb::TNiceDb& db, const TCdcAggregatorStreamChanges& changes) {
+    for (const auto dataShardId : changes.ErasedSourceDataShardIds) {
         db.Table<Schema::Sources>().Key(dataShardId).Delete();
     }
 
-    for (const auto dataShardId : changes.AddedSources) {
+    for (const auto dataShardId : changes.AddedSourceDataShardIds) {
         db.Table<Schema::Sources>().Key(dataShardId).Update();
     }
 }
@@ -83,12 +92,13 @@ void TCdcAggregator::Handle(TEvCdcAggregator::TEvDescribeTracking::TPtr& ev, con
     YDB_LOG_TRACE("Handle",
         {"ev", ev->Get()->ToString()});
 
-    TVector<ui64> sources(Stream.GetSources().begin(), Stream.GetSources().end());
-    std::sort(sources.begin(), sources.end());
-
     auto result = MakeHolder<TEvCdcAggregator::TEvDescribeTrackingResult>();
-    for (const auto dataShardId : sources) {
-        result->Record.AddSources()->SetDataShardId(dataShardId);
+    if (CdcStream) {
+        TVector<ui64> sources(CdcStream->GetSourceDataShardIds().begin(), CdcStream->GetSourceDataShardIds().end());
+        std::sort(sources.begin(), sources.end());
+        for (const auto dataShardId : sources) {
+            result->Record.AddSources()->SetDataShardId(dataShardId);
+        }
     }
     ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
 }

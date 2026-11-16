@@ -256,12 +256,15 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         env.RebootTablet();
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 3, 4}));
 
-        const auto sameResult = env.ConfigureTracking({1, 2});
+        const auto sameResult = env.ConfigureTracking({2, 3, 4});
         UNIT_ASSERT_C(sameResult.GetStatus() == TConfigureResult::SUCCESS, sameResult.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 3, 4}));
 
-        const auto otherResult = env.ConfigureTracking({1, 3});
-        UNIT_ASSERT_C(otherResult.GetStatus() == TConfigureResult::CONFLICT, otherResult.ShortDebugString());
+        const auto initialSourcesResult = env.ConfigureTracking({1, 2});
+        UNIT_ASSERT_C(initialSourcesResult.GetStatus() == TConfigureResult::CONFLICT, initialSourcesResult.ShortDebugString());
+
+        const auto otherPartitionsResult = env.ConfigureTracking({2, 3, 4}, 3);
+        UNIT_ASSERT_C(otherPartitionsResult.GetStatus() == TConfigureResult::CONFLICT, otherPartitionsResult.ShortDebugString());
     }
 }
 

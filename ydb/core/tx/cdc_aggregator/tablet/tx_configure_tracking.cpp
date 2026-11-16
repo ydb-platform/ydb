@@ -28,32 +28,26 @@ public:
         Result = MakeHolder<TEvCdcAggregator::TEvConfigureTrackingResult>();
         Result->Record.SetOrigin(Self->TabletID());
 
-        TTrackingConfig config;
+        TCdcStreamConfig config;
         TString error;
-        if (!ParseTrackingConfig(record.GetConfig(), config, error)) {
+        if (!ParseCdcStreamConfig(record.GetConfig(), config, error)) {
             Result->Record.SetStatus(TResult::BAD_REQUEST);
             Result->Record.SetError(error);
             return true;
         }
 
-        TStreamChanges changes;
-        switch (Self->Stream.Configure(config, changes)) {
-            case EConfigureOutcome::Success:
-                Result->Record.SetStatus(TResult::SUCCESS);
-                break;
-            case EConfigureOutcome::Conflict:
-                Result->Record.SetStatus(TResult::CONFLICT);
-                Result->Record.SetError(TStringBuilder() << "Tracking of stream " << Self->Stream.GetConfig().StreamPathId
-                    << " is already configured differently");
-                break;
+        if (!Self->CdcStream) {
+            Self->CdcStream.emplace(config);
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistCdcStream(db);
+            Result->Record.SetStatus(TResult::SUCCESS);
+        } else if (Self->CdcStream->IsSameConfig(config)) {
+            Result->Record.SetStatus(TResult::SUCCESS);
+        } else {
+            Result->Record.SetStatus(TResult::CONFLICT);
+            Result->Record.SetError(TStringBuilder() << "Tracking of stream " << Self->CdcStream->GetTopic().StreamPathId
+                << " is already configured differently");
         }
-
-        NIceDb::TNiceDb db(txc.DB);
-        if (changes.ConfigChanged) {
-            db.Table<Schema::State>().Key(Schema::State::Id::Value).Update(
-                NIceDb::TUpdate<Schema::State::TrackingConfig>(record.GetConfig().SerializeAsString()));
-        }
-        Self->PersistStreamChanges(db, changes);
 
         return true;
     }

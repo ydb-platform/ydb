@@ -1,12 +1,14 @@
 #pragma once
 
+#include "cdc_stream_state.h"
 #include "schema.h"
-#include "stream.h"
 
 #include <ydb/core/protos/counters_cdc_aggregator.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/library/services/services.pb.h>
+
+#include <optional>
 
 namespace NKikimr::NCdcAggregator {
 
@@ -39,7 +41,8 @@ private:
     void RunTxInit(const TActorContext& ctx);
     void SwitchToWork(const TActorContext& ctx);
 
-    void PersistStreamChanges(NIceDb::TNiceDb& db, const TStreamChanges& changes);
+    void PersistCdcStream(NIceDb::TNiceDb& db);
+    void PersistCdcStreamChanges(NIceDb::TNiceDb& db, const TCdcAggregatorStreamChanges& changes);
 
     void Handle(TEvCdcAggregator::TEvConfigureTracking::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCdcAggregator::TEvWriteHeartbeats::TPtr& ev, const TActorContext& ctx);
@@ -50,7 +53,7 @@ private:
     STFUNC(StateWork);
 
 private:
-    TStream Stream;
+    std::optional<TCdcAggregatorStreamState> CdcStream;
 };
 
 } // namespace NKikimr::NCdcAggregator

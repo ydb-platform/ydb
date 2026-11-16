@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    stream.cpp
+    cdc_stream_state.cpp
     tablet.cpp
     tx_configure_tracking.cpp
     tx_init.cpp

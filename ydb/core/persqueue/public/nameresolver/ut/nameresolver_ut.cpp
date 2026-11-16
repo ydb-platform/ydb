@@ -68,6 +68,7 @@ Y_UNIT_TEST_SUITE(TNameResolverTest) {
 Y_UNIT_TEST_F(AbsolutePathsWithDatabasePrefixAreCounted, TNameResolverFixture) {
     ActorSystemStub.AppData.Counters = new NMonitoring::TDynamicCounters();
     auto counter = GetServiceCounters(ActorSystemStub.AppData.Counters, "pqproxy|pathResolution")
+        ->GetSubgroup("database", TString{Database})
         ->GetCounter("AbsolutePathWithDatabasePrefix", true);
 
     for (const TStringBuf name : {"topic", "/Root/Db/topic", "//Root//Db//topic", "/Root/Db"}) {
@@ -91,6 +92,16 @@ Y_UNIT_TEST_F(AbsolutePathsWithDatabasePrefixAreCounted, TNameResolverFixture) {
     SetFcc(false);
     UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/topic")), "/Root/Db/topic");
     UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 4);
+
+    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName("/Root/OtherDb", "/topic")), "/Root/OtherDb/topic");
+    auto otherCounter = GetServiceCounters(ActorSystemStub.AppData.Counters, "pqproxy|pathResolution")
+        ->GetSubgroup("database", "/Root/OtherDb")
+        ->GetCounter("AbsolutePathWithDatabasePrefix", true);
+    UNIT_ASSERT_VALUES_EQUAL(otherCounter->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 4);
+
+    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName("Root/Db/", "/topic")), "/Root/Db/topic");
+    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 5);
 }
 
 Y_UNIT_TEST_F(FederationRootDbConvertsLegacyRt3, TNameResolverFixture) {

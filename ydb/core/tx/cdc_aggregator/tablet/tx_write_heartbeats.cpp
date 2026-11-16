@@ -55,17 +55,15 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         Self->CdcAggregatorStreamRepository.ApplyCdcAggregatorStreamHeartbeatsDiff(db, diff);
 
-        const auto& lastHeartbeats = Self->CdcAggregatorStream->GetLastHeartbeatBySourceDataShardId();
         for (const auto& [sourceDataShardId, _] : heartbeatBySourceDataShardId) {
             auto& result = *Result->Record.AddResults();
             result.SetSourceDataShardId(sourceDataShardId);
-            const auto lastHeartbeat = lastHeartbeats.find(sourceDataShardId);
-            if (lastHeartbeat == lastHeartbeats.end()) {
+            if (const auto* lastHeartbeat = diff.LastHeartbeatBySourceDataShardId.FindPtr(sourceDataShardId)) {
+                result.SetStatus(TResult::THeartbeatResult::SUCCESS);
+                lastHeartbeat->Version.ToProto(result.MutableWrittenVersion());
+            } else {
                 result.SetStatus(TResult::THeartbeatResult::UNKNOWN_SOURCE);
-                continue;
             }
-            result.SetStatus(TResult::THeartbeatResult::SUCCESS);
-            lastHeartbeat->second->Version.ToProto(result.MutableWrittenVersion());
         }
 
         if (const auto& currentHeartbeat = diff.CurrentHeartbeat) {

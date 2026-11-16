@@ -4,7 +4,6 @@
 
   - `zstd` — compression using the Zstandard algorithm with the default compression level (`3`).
   - `zstd-N` — compression using the Zstandard algorithm, `N` — compression level (`1` — `22`).
-- `--include-index-data BOOL`: Export index table data. By default, only index metadata is exported and indexes are built during import. This saves space and reduces export time, but can increase import time. When enabled, index table data is exported in full and can be loaded during import instead of being built. Default value: `false`.
 - `--encryption-algorithm ALGORITHM`: Encrypt exported data using the specified algorithm. Supported values: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`.
 - `--encryption-key-file PATH`: Path to the file containing the encryption key (only for encrypted exports). This file is binary and must contain the exact number of bytes corresponding to the key length in the selected encryption algorithm (16 bytes for `AES-128-GCM`, 32 bytes for `AES-256-GCM` and `ChaCha20-Poly1305`). The key can also be passed via the `YDB_ENCRYPTION_KEY` environment variable, in hexadecimal string representation.
 - `--format STRING`: Output result format. Valid values:

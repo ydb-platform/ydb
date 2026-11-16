@@ -304,7 +304,7 @@ TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents:
     if (evWrite.Record.HasLocks() && evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Rollback) {
         //FIXME #23784
         // YDB_LOG_VERIFY_DEBUG(!evWrite.Record.HasTxId(),
-               {"txId", evWrite.Record.GetTxId()});
+        //     {"txId", evWrite.Record.GetTxId()});
         // if (evWrite.Record.HasTxId()) {
         //     return TConclusionStatus::Fail("Rollback TEvWrite shouldn't have TxId");
         // }

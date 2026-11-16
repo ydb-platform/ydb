@@ -1253,7 +1253,54 @@ class TestAlterBackupRestore(BaseTestBackupInFiles):
         )
 
 
-class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
+class BasePermissionsBackupRestore(BaseTestBackupInFiles):
+    @staticmethod
+    def permissions_by_subject(permissions):
+        result = {}
+        for permission in permissions:
+            result.setdefault(permission.subject, set()).update(permission.permission_names)
+        return result
+
+    @staticmethod
+    def merge_permissions(*permissions):
+        result = {}
+        for entries in permissions:
+            for subject, names in entries.items():
+                result.setdefault(subject, set()).update(names)
+        return result
+
+    def assert_permissions(self, path, permissions, effective_permissions, interrupted=False, check_listing=False):
+        description = self.driver.scheme_client.describe_path(path)
+        assert description.owner == "eve"
+        assert self.permissions_by_subject(description.permissions) == permissions
+        assert self.permissions_by_subject(description.effective_permissions) == effective_permissions
+        assert description.interrupt_permission_inheritance == interrupted
+
+        if check_listing:
+            output = self.execute_ydb_cli_command(["scheme", "permissions", "list", path]).stdout
+            explicit_output, effective_output = output.split("Effective permissions:", 1)
+            owner_output, explicit_output = explicit_output.split("Permissions:", 1)
+            assert owner_output.strip() == "Owner: eve"
+            inheritance_marker = "Is permission inheritance interrupted: true"
+            assert (inheritance_marker in explicit_output) == interrupted
+            explicit_output = explicit_output.replace(inheritance_marker, "")
+
+            def parse_permissions(text):
+                lines = [line.strip() for line in text.splitlines() if line.strip()]
+                assert lines, "Missing permission list"
+                if lines == ["none"]:
+                    return {}
+                result = {}
+                for line in lines:
+                    subject, names = line.split(":", 1)
+                    result.setdefault(subject, set()).update(names.split(","))
+                return result
+
+            assert parse_permissions(explicit_output) == permissions
+            assert parse_permissions(effective_output) == effective_permissions
+
+
+class TestPermissionsBackupRestoreSingleTable(BasePermissionsBackupRestore):
     def test_single_table(self):
         self.driver.scheme_client.make_directory("/Root/folder")
 
@@ -1262,7 +1309,23 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
         # Create table and modify permissions on it
         self.create_users()
         create_table_with_data(session, "folder/table")
-        modify_permissions(self.driver.scheme_client, "folder/table")
+        inherited_permissions = self.permissions_by_subject(
+            self.driver.scheme_client.describe_path("/Root/folder").effective_permissions
+        )
+        permissions = {
+            "alice": {"ydb.generic.read", "ydb.generic.write"},
+            "bob": {"ydb.generic.read"},
+        }
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "grant", "folder/table", "alice",
+            "-p", "ydb.generic.read", "-p", "ydb.generic.write",
+        ])
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "grant", "/Root/folder/table", "bob", "-p", "ydb.generic.read",
+        ])
+        self.execute_ydb_cli_command(["scheme", "permissions", "chown", "folder/table", "eve"])
+        effective_permissions = self.merge_permissions(inherited_permissions, permissions)
+        self.assert_permissions("/Root/folder/table", permissions, effective_permissions, check_listing=True)
 
         # Backup table
         backup_files_dir = output_path(self.test_name, "test_single_table", "backup_files_dir")
@@ -1310,20 +1373,70 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
             are_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table"),
             is_(True)
         )
+        self.assert_permissions("/Root/restored/table", permissions, effective_permissions, check_listing=True)
 
 
-class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
+class TestPermissionsBackupRestoreFolderWithTable(BasePermissionsBackupRestore):
     def test_folder_with_table(self):
         # Create folder and modify permissions on it
         self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
-        modify_permissions(self.driver.scheme_client, "folder")
+        inherited_permissions = self.permissions_by_subject(
+            self.driver.scheme_client.describe_path("/Root").effective_permissions
+        )
+        folder_permissions = {
+            "alice": {"ydb.generic.read", "ydb.generic.write"},
+            "bob": {"ydb.generic.read"},
+        }
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "grant", "folder", "alice",
+            "-p", "ydb.generic.read", "-p", "ydb.generic.write",
+        ])
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "grant", "folder", "bob", "-p", "ydb.generic.read",
+        ])
+        self.execute_ydb_cli_command(["scheme", "permissions", "chown", "folder", "eve"])
+        folder_effective_permissions = self.merge_permissions(inherited_permissions, folder_permissions)
+        self.assert_permissions("/Root/folder", folder_permissions, folder_effective_permissions)
 
         session = self.driver.table_client.session().create()
 
         # Create table and modify permissions on it
         create_table_with_data(session, "folder/table")
-        modify_permissions(self.driver.scheme_client, "folder/table")
+        table_permissions = {"bob": {"ydb.generic.read", "ydb.generic.write"}}
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "grant", "folder/table", "bob",
+            "-p", "ydb.generic.read", "-p", "ydb.generic.write",
+        ])
+        self.execute_ydb_cli_command(["scheme", "permissions", "chown", "folder/table", "eve"])
+        self.assert_permissions(
+            "/Root/folder/table", table_permissions,
+            self.merge_permissions(folder_effective_permissions, table_permissions),
+        )
+
+        # Bob's import is complete: remove writes, then retain only metadata access.
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "revoke", "folder/table", "bob", "-p", "ydb.generic.write",
+        ])
+        table_permissions = {"bob": {"ydb.generic.read"}}
+        self.assert_permissions(
+            "/Root/folder/table", table_permissions,
+            self.merge_permissions(folder_effective_permissions, table_permissions),
+        )
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "set", "folder/table", "bob", "-p", "ydb.generic.list",
+        ])
+        table_permissions = {"bob": {"ydb.generic.list"}}
+        self.assert_permissions(
+            "/Root/folder/table", table_permissions,
+            self.merge_permissions(folder_effective_permissions, table_permissions),
+        )
+
+        # The folder still grants data access; isolate the archived table before backing it up.
+        self.execute_ydb_cli_command(["scheme", "permissions", "clear-inheritance", "folder/table"])
+        self.assert_permissions(
+            "/Root/folder/table", table_permissions, table_permissions, interrupted=True, check_listing=True,
+        )
 
         # Backup folder with table
         backup_files_dir = output_path(self.test_name, "test_folder_with_table", "backup_files_dir")
@@ -1367,6 +1480,20 @@ class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
             are_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/folder/table"),
             is_(True)
         )
+        self.assert_permissions("/Root/restored/folder", folder_permissions, folder_effective_permissions)
+        self.assert_permissions(
+            "/Root/restored/folder/table", table_permissions, table_permissions, interrupted=True,
+        )
+
+        # Return the restored table to the shared folder policy and discard its local exception.
+        self.execute_ydb_cli_command(["scheme", "permissions", "set-inheritance", "restored/folder/table"])
+        self.assert_permissions(
+            "/Root/restored/folder/table", table_permissions,
+            self.merge_permissions(folder_effective_permissions, table_permissions),
+        )
+        self.execute_ydb_cli_command(["scheme", "permissions", "clear", "restored/folder/table"])
+        self.assert_permissions("/Root/restored/folder/table", {}, folder_effective_permissions, check_listing=True)
+        self.assert_permissions("/Root/folder/table", table_permissions, table_permissions, interrupted=True)
 
 
 class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupInFiles):

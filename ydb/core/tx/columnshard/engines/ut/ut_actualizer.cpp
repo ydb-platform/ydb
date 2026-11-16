@@ -114,7 +114,7 @@ public:
 
     void SetTieringNeedActualization(const bool enabled) {
         const ui64 version = VersionedIndex.GetLastSchema()->GetVersion() + 1;
-        VersionedIndex.AddIndex(TSnapshot(version, 1), Cache->GetOrInsertIndexInfo(MakeTestIndexInfo(Cache, version, false, enabled)));
+        VersionedIndex.AddIndex(TSnapshot(version, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, version, false, enabled)));
         Actualizer->RefreshScheme(TAddExternalContext(TestStart, Portions));
     }
 

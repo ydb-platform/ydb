@@ -114,6 +114,10 @@ runs:
           --link-threads "${LINK_THREADS}"
           --no-dir-outputs
         )
+        if [ "${SUITE}" = "cpp_sdk" ]; then
+          # Large SDK test binaries can overflow 32-bit DWARF offsets with full debug info.
+          params+=(-DDEBUGINFO_LINES_ONLY)
+        fi
         if [ -n "${BAZEL_REMOTE_URI}" ]; then
           params+=(--bazel-remote-store --bazel-remote-base-uri "${BAZEL_REMOTE_URI}")
           params+=(--bazel-remote-username "${BAZEL_REMOTE_USERNAME}")

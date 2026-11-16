@@ -25,7 +25,7 @@ namespace {
         }
 
         for (const auto& item : exportInfo.Items) {
-            if (item.Issue) {
+            if (item.Issue && item.Issue != exportInfo.Issue) {
                 AddIssue(exprt, item.Issue);
             }
         }

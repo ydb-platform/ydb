@@ -561,6 +561,7 @@ namespace {
             bool success)
         {
             using namespace NKikimr::NWrappers::NExternalStorage;
+            Runtime().AuditLogBackends = CreateTestAuditLogBackends(AuditLines);
             Env();
             size_t attempts = 0;
             const TString fileName = operationMarker ? "export_complete.json" : "data_complete.json";
@@ -591,6 +592,10 @@ namespace {
                 const auto& entry = status.GetResponse().GetEntry();
                 UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
                 UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Injected marker upload failure");
+
+                const auto line = FindAuditLine(AuditLines, "operation=EXPORT END");
+                UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+                UNIT_ASSERT_STRING_CONTAINS(line, "reason=" + entry.GetIssues(0).message());
             }
         }
 
@@ -2237,6 +2242,7 @@ namespace {
     private:
         TPortManager PortManager;
         ui16 S3ServerPort = 0;
+        std::vector<std::string> AuditLines;
         TMaybe<TTestBasicRuntime> TestRuntime;
         TMaybe<TS3Mock::TSettings> S3ServerSettings;
         TMaybe<TS3Mock> S3ServerMock;

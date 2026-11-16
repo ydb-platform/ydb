@@ -969,6 +969,10 @@ private:
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         const auto& item = exportInfo.Items.at(itemIdx);
 
+        if (exportInfo.Issue.empty()) {
+            exportInfo.Issue = item.Issue;
+        }
+
         YDB_LOG_NOTICE(TStringBuilder() << "TExport::TTxProgress: " << marker << ", cancelling",
             {"info", exportInfo.ToString()},
             {"item", item.ToString(itemIdx)},

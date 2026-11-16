@@ -16,6 +16,12 @@ bool CheckPersQueueConfig(const NKikimrPQ::TPQTabletConfig& config, const bool s
         return false;
     }
 
+    if (config.HasDestinationTopicGuard() && config.GetDestinationTopicGuard().GetOwnerToken().empty()) {
+        if (error)
+            *error = "destination topic guard requires an owner token";
+        return false;
+    }
+
     const auto& partitionIds = config.GetPartitionIds();
     const auto& partitions = config.GetPartitions();
 

@@ -1,4 +1,5 @@
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/events/internal.h>
@@ -46,6 +47,27 @@ struct TConfigParams {
     ui64 Version = 0;
     TVector<TCreateConsumerParams> Consumers;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS;
+    TMaybe<NKikimrPQ::TMirrorPartitionConfig> MirrorFrom;
+    bool DestinationGuard = false;
+};
+
+NKikimrPQ::TPQTabletConfig MakePartitionConfig(const TConfigParams& config) {
+    auto result = MakeConfig(config.Version, config.Consumers, 1, config.MeteringMode);
+    if (config.MirrorFrom) {
+        result.MutablePartitionConfig()->MutableMirrorFrom()->CopyFrom(*config.MirrorFrom);
+    }
+    if (config.DestinationGuard) {
+        result.MutableDestinationTopicGuard()->SetOwnerToken("partition-test-owner");
+    }
+    return result;
+}
+
+class TIdleMirrorReaderFactory : public TPersQueueMirrorReaderFactory {
+    NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr> GetCredentialsProviderImpl(
+        const NKikimrPQ::TMirrorPartitionConfig::TCredentials&) const override
+    {
+        return NThreading::NewPromise<NYdb::TCredentialsProviderFactoryPtr>().GetFuture();
+    }
 };
 
 struct TCreatePartitionParams {
@@ -102,6 +124,14 @@ public:
 
     static ui64 GetCumulativeCounter(TPartition& partition, ui32 counter) {
         return partition.TabletCounters.Cumulative()[counter].Get();
+    }
+
+    static TString GetConfigKey(const TPartition& partition) {
+        return partition.GetKeyConfig();
+    }
+
+    static TActorId GetMirrorerActor(const TPartition& partition) {
+        return partition.Mirrorer ? partition.Mirrorer->Actor : TActorId{};
     }
 
     static void SetMirrorConsumerOffsets(TPartition& partition, bool enabled) {
@@ -384,7 +414,8 @@ protected:
     void SendReserveBytes(const ui64 cookie, const ui32 size, const TString& ownerCookie, const ui64 messageNo, bool lastRequest = false);
     void SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force = true);
     void SendWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data,
-                   bool ignoreQuotaDeadline = false, ui64 seqNo = 0, bool isDirectWrite = false, bool fromMirrorer = false);
+                   bool ignoreQuotaDeadline = false, ui64 seqNo = 0, bool isDirectWrite = false, bool fromMirrorer = false,
+                   const TActorId& sender = {});
     void SendGetWriteInfo(bool skipSrcIdInfo);
     void ShadowPartitionCountersTest(bool isFirstClass);
     void TestRestoreReadSessionActor(bool hasDataRequest);
@@ -439,6 +470,36 @@ protected:
         ui32 originalPartitionId,
         const TString& failCtx) const;
 
+    TPartition* CreateGuardedMirrorPartition(const TConfigParams& config) {
+        Ctx->Runtime->GetAppData(0).PersQueueMirrorReaderFactory = &MirrorFactory;
+        return CreatePartition({.Partition = TPartitionId{0}, .Config = config}, config);
+    }
+
+    TActorId CurrentMirrorer(const TPartition& partition, const TActorId& previous = {}) const {
+        const auto actor = TPartitionTestWrapper::GetMirrorerActor(partition);
+        UNIT_ASSERT(actor);
+        UNIT_ASSERT(actor != previous);
+        return actor;
+    }
+
+    void WaitGuardConfigWrite(const TPartition& partition) {
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
+        UNIT_ASSERT(event);
+        bool found = false;
+        for (const auto& write : event->Record.GetCmdWrite()) {
+            found |= write.GetKey() == TPartitionTestWrapper::GetConfigKey(partition);
+        }
+        UNIT_ASSERT(found);
+    }
+
+    void PersistGuardConfig(const TPartition& partition, const TConfigParams& config) {
+        SendChangePartitionConfig(config);
+        WaitGuardConfigWrite(partition);
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        WaitPartitionConfigChanged();
+    }
+
+    NHelpers::TIdleMirrorReaderFactory MirrorFactory;
     TMaybe<TTestContext> Ctx;
     TMaybe<TFinalizer> Finalizer;
 
@@ -512,10 +573,7 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
     TAutoPtr<TCounters> counters(new TCounters());
     TabletCounters.reset(counters->GetSecondTabletCounters().Release());
 
-    Config = MakeConfig(config.Version,
-                        config.Consumers,
-                        1,
-                        config.MeteringMode);
+    Config = MakePartitionConfig(config);
     Config.SetLocalDC(true);
 
     NPersQueue::TTopicNamesConverterFactory factory(Ctx->Runtime->GetAppData(0).PQConfig.GetTopicsAreFirstClassCitizen(), "/Root/PQ", "dc1");
@@ -857,7 +915,7 @@ void TPartitionFixture::SendReserveBytes(const ui64 cookie, const ui32 size, con
 
 void TPartitionFixture::SendWrite
         (const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data,
-        bool ignoreQuotaDeadline, ui64 seqNo, bool isDirectWrite, bool fromMirrorer
+        bool ignoreQuotaDeadline, ui64 seqNo, bool isDirectWrite, bool fromMirrorer, const TActorId& sender
 ) {
     TEvPQ::TEvWrite::TMsg msg;
     msg.SourceId = "SourceId";
@@ -881,7 +939,8 @@ void TPartitionFixture::SendWrite
 
     auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), isDirectWrite, std::nullopt, TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
     event->FromMirrorer = fromMirrorer;
-    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+    event->MirrorerActor = fromMirrorer ? sender : TActorId{};
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, sender ? sender : Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force)
@@ -968,16 +1027,13 @@ void TPartitionFixture::SendConfigResponse(const TConfigParams& config)
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto read = event->Record.AddReadResult();
-    if (config.Consumers.empty()) {
+    if (config.Consumers.empty() && !config.MirrorFrom && !config.DestinationGuard) {
         read->SetStatus(NKikimrProto::NODATA);
     } else {
         read->SetStatus(NKikimrProto::OK);
 
         TString out;
-        Y_ABORT_UNLESS(MakeConfig(config.Version,
-            config.Consumers,
-            1,
-            config.MeteringMode).SerializeToString(&out));
+        Y_ABORT_UNLESS(MakePartitionConfig(config).SerializeToString(&out));
 
         read->SetValue(out);
     }
@@ -1416,10 +1472,7 @@ void TPartitionFixture::AssertStaleMetaKvHasTxKey(
 
 void TPartitionFixture::SendChangePartitionConfig(const TConfigParams& config)
 {
-    auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, MakeConfig(config.Version,
-                                                                                        config.Consumers,
-                                                                                        1,
-                                                                                        config.MeteringMode));
+    auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, MakePartitionConfig(config));
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -3358,6 +3411,71 @@ Y_UNIT_TEST_F(DisabledReplicationAllowsMirroringWithoutConsumerOffsets, TPartiti
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 11);
 }
 
+NKikimrPQ::TMirrorPartitionConfig MakeGuardMirrorConfig() {
+    NKikimrPQ::TMirrorPartitionConfig result;
+    result.SetEndpoint("localhost");
+    result.SetEndpointPort(2135);
+    result.SetTopic("source-topic");
+    result.SetConsumer("mirror-consumer");
+    result.SetDatabase("/Root");
+    return result;
+}
+
+Y_UNIT_TEST_F(DestinationGuardAllowsOnlyCurrentMirrorerWrite, TPartitionFixture)
+{
+    const auto mirror = MakeGuardMirrorConfig();
+    auto* partition = CreateGuardedMirrorPartition({.Version = 1, .MirrorFrom = mirror, .DestinationGuard = true});
+    Ctx->Runtime->WaitFor("mirrorer initialized", [&] { return bool(TPartitionTestWrapper::GetMirrorerActor(*partition)); });
+    const auto mirrorer = CurrentMirrorer(*partition);
+
+    SendWrite(101, 0, "owner", Nothing(), "client", false, 1);
+    WaitErrorResponse({.Cookie = 101, .ErrorCode = NPersQueue::NErrorCode::PRECONDITION_FAILED});
+    SendWrite(102, 0, "", 0, "direct", false, 2, true);
+    WaitErrorResponse({.Cookie = 102, .ErrorCode = NPersQueue::NErrorCode::PRECONDITION_FAILED});
+    SendWrite(103, 0, "", 0, "wrong-actor", false, 3, false, true, Ctx->Edge);
+    WaitErrorResponse({.Cookie = 103, .ErrorCode = NPersQueue::NErrorCode::PRECONDITION_FAILED});
+
+    SendWrite(104, 0, "", 0, "mirrored", false, 4, false, true, mirrorer);
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 104, .Status = NMsgBusProxy::MSTATUS_OK});
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 1);
+}
+
+Y_UNIT_TEST_F(DestinationGuardRetiresHeldWriteAcrossStopAndAllowsResume, TPartitionFixture)
+{
+    const auto mirror = MakeGuardMirrorConfig();
+    auto* partition = CreateGuardedMirrorPartition({.Version = 1, .MirrorFrom = mirror, .DestinationGuard = true});
+    Ctx->Runtime->WaitFor("mirrorer initialized", [&] { return bool(TPartitionTestWrapper::GetMirrorerActor(*partition)); });
+    const auto stoppedMirrorer = CurrentMirrorer(*partition);
+    TAutoPtr<IEventHandle> delayed;
+    auto previousObserver = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->CastAsLocal<TEvPQ::TEvWrite>() && ev->Sender == stoppedMirrorer) {
+            delayed.Reset(ev.Release());
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+    SendWrite(105, 0, "", 0, "late", false, 5, false, true, stoppedMirrorer);
+    Ctx->Runtime->DispatchEvents();
+    UNIT_ASSERT(delayed);
+    Ctx->Runtime->SetObserverFunc(previousObserver);
+
+    PersistGuardConfig(*partition, {.Version = 2});
+    UNIT_ASSERT(!TPartitionTestWrapper::GetMirrorerActor(*partition));
+    Ctx->Runtime->Send(delayed.Release());
+    WaitErrorResponse({.Cookie = 105, .ErrorCode = NPersQueue::NErrorCode::PRECONDITION_FAILED});
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 0);
+
+    PersistGuardConfig(*partition, {.Version = 3, .MirrorFrom = mirror});
+    const auto resumedMirrorer = CurrentMirrorer(*partition, stoppedMirrorer);
+    SendWrite(106, 0, "", 0, "resumed", false, 6, false, true, resumedMirrorer);
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 106, .Status = NMsgBusProxy::MSTATUS_OK});
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 1);
+}
+
 Y_UNIT_TEST_F(WriteAssignsOffsetAfterMirroredOffset, TPartitionFixture)
 {
     auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
@@ -5070,6 +5188,28 @@ Y_UNIT_TEST_F(ShadowPartitionCountersRestore, TPartitionFixture) {
     wrapper.LoadMeta(countersProto);
     metaStep.Reset();
     initializer.Reset();
+}
+
+Y_UNIT_TEST_F(DestinationGuardRejectsPendingTransactionalImport, TPartitionTxTestHelper)
+{
+    Init({.EndOffset = 0});
+    SendChangePartitionConfig({.Version = 1, .DestinationGuard = true});
+    WaitGuardConfigWrite(Partition());
+
+    SendWrite(201, 0, "", 0, "client", false, 1, true);
+    auto tx = MakeAndSendWriteTx({{"src1", {1, 1}}});
+    WaitWriteInfoRequest(tx);
+    SendWriteInfoResponse(tx);
+    ExpectNoTxPredicateReply();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged();
+    WaitErrorResponse({.Cookie = 201, .ErrorCode = NPersQueue::NErrorCode::PRECONDITION_FAILED});
+    WaitTxPredicateFailure(tx);
+    SendTxRollback(tx);
+    WaitKvRequest();
+    SendKvResponse();
+    WaitRollbackDone(tx);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(Partition()), 0);
 }
 
 Y_UNIT_TEST_F(DataTxCalcPredicateOk, TPartitionTxTestHelper)

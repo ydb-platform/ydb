@@ -367,6 +367,13 @@ message TOffloadConfig {
 }
 
 message TPQTabletConfig {
+    message TDestinationTopicGuard {
+        optional string OwnerToken = 1;
+        optional bool CreatedByController = 2 [default = false];
+    }
+
+    optional TDestinationTopicGuard DestinationTopicGuard = 51;
+
     message TTopicId {
         // Id is the schemeshard PathId for FirstClass topics, or CM-provided OwnerId for federation topics.
         optional uint64 Id = 1;

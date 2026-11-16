@@ -1638,7 +1638,7 @@ void TPersQueue::FillBatchInfo(
 
 void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
-                                    bool fromMirrorer)
+                                    bool fromMirrorer, const TActorId& sender)
 {
     auto& pqConfig = AppData(ctx)->PQConfig;
 
@@ -1944,6 +1944,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked
         );
     event->FromMirrorer = fromMirrorer;
+    event->MirrorerActor = fromMirrorer ? sender : TActorId{};
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
@@ -2693,7 +2694,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     } else if (req.HasCmdGetClientOffset()) {
         HandleGetClientOffsetRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.CmdWriteSize()) {
-        HandleWriteRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, ev->Get()->FromMirrorer);
+        HandleWriteRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, ev->Get()->FromMirrorer, ev->Sender);
     } else if (req.HasCmdUpdateWriteTimestamp()) {
         HandleUpdateWriteTimestampRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdRead()) {

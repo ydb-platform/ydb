@@ -3,6 +3,8 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
 
+#include <optional>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql::NNodes;
@@ -229,8 +231,12 @@ struct TKeyMatch {
 
     // The part of the predicate the ranges enforce, null if none
     std::shared_ptr<TTreeNode> Consumed;
+    // The ranges as tuples over the used key prefix when every bound is a literal
+    std::optional<TVector<TVector<TPredicateRange>>> Tuples;
 };
 
 TKeyMatch MatchKey(const std::shared_ptr<TTreeNode>& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges);
+
+TString RangesToString(const TKeyMatch& match);
 
 } // namespace NKikimr::NKqp

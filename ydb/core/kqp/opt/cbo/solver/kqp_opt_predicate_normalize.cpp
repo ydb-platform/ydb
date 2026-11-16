@@ -1188,11 +1188,59 @@ struct TColumnConstraint {
     TString Attribute;
     bool IsPoint = true;
     size_t Ranges = 0;
+    TString ColumnType;
+    // The ranges when every bound is a literal, so they can be intersected and compared; a disjunction may repeat some
+    std::optional<TVector<TPredicateRange>> Values;
 };
 
 bool IsPointRange(const TPredicateRange& range) {
     return range.LeftBound && range.RightBound && range.LeftInclusive && range.RightInclusive && *range.LeftBound == *range.RightBound;
 }
+
+// Literal ranges of one column as leaves, for the helpers Normalize merges ranges with
+TVector<std::shared_ptr<TTreeNode>> AsRangeLeaves(const TVector<TPredicateRange>& ranges) {
+    TVector<std::shared_ptr<TTreeNode>> leaves;
+    leaves.reserve(ranges.size());
+    for (const auto& range : ranges) {
+        auto leaf = std::make_shared<TTreeNode>();
+        leaf->Operator = ELogicalOperator::Leaf;
+        leaf->Range = range;
+        leaves.push_back(std::move(leaf));
+    }
+    return leaves;
+}
+
+TVector<TPredicateRange> UnionRanges(const TVector<TPredicateRange>& ranges, const TString& columnType) {
+    if (ranges.empty()) {
+        return {};
+    }
+    auto leaves = AsRangeLeaves(ranges);
+    auto merged = UnionOverlappingDisjunctions(leaves, columnType);
+    return merged ? std::move(*merged) : TVector<TPredicateRange>{};
+}
+
+// The intersection of two unions of ranges is the union of their pairwise intersections
+TVector<TPredicateRange> IntersectRanges(const TVector<TPredicateRange>& left, const TVector<TPredicateRange>& right, const TString& columnType) {
+    TVector<TPredicateRange> result;
+    for (const auto& l : left) {
+        for (const auto& r : right) {
+            auto pair = AsRangeLeaves({l, r});
+            if (auto intersection = IntersectOverlappingConjunctions(pair, columnType)) {
+                result.push_back(std::move(*intersection));
+            }
+        }
+    }
+    return UnionRanges(result, columnType);
+}
+
+bool SameRange(const TPredicateRange& left, const TPredicateRange& right) {
+    return left.LeftBound == right.LeftBound && left.RightBound == right.RightBound
+        && (!left.LeftBound || left.LeftInclusive == right.LeftInclusive)
+        && (!left.RightBound || left.RightInclusive == right.RightInclusive);
+}
+
+// Tuples kept for counting distinct ranges; beyond this only the count bound is kept
+constexpr size_t MaxRangeTuples = 1000;
 
 std::optional<TColumnConstraint> ClassifyColumnConstraint(const TTreeNode& node) {
     if (node.Operator == ELogicalOperator::Leaf) {
@@ -1206,6 +1254,8 @@ std::optional<TColumnConstraint> ClassifyColumnConstraint(const TTreeNode& node)
                 .Attribute = node.Attribute,
                 .IsPoint = std::all_of(node.Ranges.begin(), node.Ranges.end(), IsPointRange),
                 .Ranges = node.Ranges.size(),
+                .ColumnType = node.ColumnType,
+                .Values = node.Ranges,
             };
         }
 
@@ -1218,7 +1268,11 @@ std::optional<TColumnConstraint> ClassifyColumnConstraint(const TTreeNode& node)
             return std::nullopt;
         }
 
-        return TColumnConstraint{.Attribute = node.Attribute, .IsPoint = node.Sign == EInequalityPredicateType::Equal, .Ranges = 1};
+        TColumnConstraint constraint{.Attribute = node.Attribute, .IsPoint = node.Sign == EInequalityPredicateType::Equal, .Ranges = 1, .ColumnType = node.ColumnType};
+        if (node.Kind == EPredicateKind::Comparison && (node.Range.LeftBound || node.Range.RightBound)) {
+            constraint.Values = TVector<TPredicateRange>{node.Range};
+        }
+        return constraint;
     }
 
     // A disjunction on one column, e.g. an IN list with parameters which Normalize does not merge
@@ -1227,6 +1281,7 @@ std::optional<TColumnConstraint> ClassifyColumnConstraint(const TTreeNode& node)
     }
 
     TColumnConstraint result;
+    result.Values.emplace();
     for (const auto& child : node.Children) {
 
         const auto constraint = ClassifyColumnConstraint(*child);
@@ -1237,6 +1292,12 @@ std::optional<TColumnConstraint> ClassifyColumnConstraint(const TTreeNode& node)
         result.Attribute = constraint->Attribute;
         result.IsPoint = result.IsPoint && constraint->IsPoint;
         result.Ranges += constraint->Ranges;
+        result.ColumnType = constraint->ColumnType;
+        if (result.Values && constraint->Values) {
+            result.Values->insert(result.Values->end(), constraint->Values->begin(), constraint->Values->end());
+        } else {
+            result.Values.reset();
+        }
     }
 
     return result;
@@ -1283,6 +1344,30 @@ TKeyMatch MatchDisjunction(const TTreeNode& node, const TVector<TString>& keyCol
         matches.push_back(std::move(match));
     }
 
+    // With literal bounds, disjuncts that give the same ranges on the common prefix are one range
+    std::optional<TVector<TVector<TPredicateRange>>> tuples;
+    if (!matches.empty() && std::all_of(matches.begin(), matches.end(), [](const TKeyMatch& m) { return m.Tuples.has_value(); })) {
+        tuples.emplace();
+        for (const auto& match : matches) {
+            for (const auto& tuple : *match.Tuples) {
+                TVector<TPredicateRange> prefix(tuple.begin(), tuple.begin() + std::min(tuple.size(), result.UsedPrefixLen));
+                const bool seen = std::any_of(tuples->begin(), tuples->end(), [&](const TVector<TPredicateRange>& other) {
+                    return std::equal(other.begin(), other.end(), prefix.begin(), prefix.end(), SameRange);
+                });
+                if (!seen) {
+                    tuples->push_back(std::move(prefix));
+                }
+            }
+            if (tuples->size() > MaxRangeTuples) {
+                tuples.reset();
+                break;
+            }
+        }
+        if (tuples) {
+            ranges = tuples->size();
+        }
+    }
+
     if (node.Children.empty() || (maxRanges && ranges > *maxRanges)) {
         return {};
     }
@@ -1295,6 +1380,7 @@ TKeyMatch MatchDisjunction(const TTreeNode& node, const TVector<TString>& keyCol
     }
 
     result.ExpectedMaxRanges = ranges;
+    result.Tuples = std::move(tuples);
     result.Consumed = MakeLogicalNode(ELogicalOperator::Or, std::move(consumed));
     return result;
 }
@@ -1313,6 +1399,7 @@ TKeyMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts,
     TVector<bool> consumed(conjuncts.size(), false);
     TVector<std::shared_ptr<TTreeNode>> consumedNodes;
     size_t ranges = 1;
+    std::optional<TVector<TVector<TPredicateRange>>> tuples = TVector<TVector<TPredicateRange>>{{}};
 
     for (const auto& keyColumn : keyColumns) {
         // The extractor intersects every predicate on the column
@@ -1342,11 +1429,36 @@ TKeyMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts,
             break;
         }
 
-        const size_t columnRanges = isPoint ? pointRanges : rangeRanges;
+        // With literal bounds the ranges on the column are intersected, otherwise only their number is bounded
+        std::optional<TVector<TPredicateRange>> columnValues;
+        if (std::all_of(onColumn.begin(), onColumn.end(), [&](size_t i) { return constraints[i]->Values.has_value(); })) {
+            const auto& columnType = constraints[onColumn.front()]->ColumnType;
+            columnValues = UnionRanges(*constraints[onColumn.front()]->Values, columnType);
+            for (size_t j = 1; j < onColumn.size(); ++j) {
+                columnValues = IntersectRanges(*columnValues, *constraints[onColumn[j]]->Values, columnType);
+            }
+        }
+
+        const size_t columnRanges = columnValues ? columnValues->size() : (isPoint ? pointRanges : rangeRanges);
         if (maxRanges && ranges * columnRanges > *maxRanges) {
             break;
         }
         ranges *= columnRanges;
+
+        if (tuples && columnValues && tuples->size() * columnValues->size() <= MaxRangeTuples) {
+            TVector<TVector<TPredicateRange>> extended;
+            extended.reserve(tuples->size() * columnValues->size());
+            for (const auto& tuple : *tuples) {
+                for (const auto& value : *columnValues) {
+                    auto next = tuple;
+                    next.push_back(value);
+                    extended.push_back(std::move(next));
+                }
+            }
+            tuples = std::move(extended);
+        } else {
+            tuples.reset();
+        }
 
         for (const auto i : onColumn) {
             consumed[i] = true;
@@ -1384,9 +1496,11 @@ TKeyMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts,
         consumedHasResidual = result.HasResidual;
         consumedNodes = {result.Consumed};
         ranges = result.ExpectedMaxRanges.GetOrElse(1);
+        tuples = result.Tuples;
     }
 
     result.ExpectedMaxRanges = ranges;
+    result.Tuples = std::move(tuples);
     result.HasResidual = consumedHasResidual || std::find(consumed.begin(), consumed.end(), false) != consumed.end();
     result.Consumed = MakeLogicalNode(ELogicalOperator::And, std::move(consumedNodes));
 
@@ -1407,6 +1521,30 @@ TKeyMatch MatchKey(const std::shared_ptr<TTreeNode>& node, const TVector<TString
     TVector<std::shared_ptr<TTreeNode>> conjuncts;
     FlattenConjuncts(node, conjuncts);
     return MatchConjunction(conjuncts, keyColumns, maxRanges);
+}
+
+TString RangesToString(const TKeyMatch& match) {
+    if (!match.Tuples) {
+        return match.UsedPrefixLen == 0 ? "none" : "not tracked (built by the extractor, a bound is not a literal, or too many)";
+    }
+    if (match.Tuples->empty()) {
+        return "empty";
+    }
+
+    constexpr size_t MaxPrinted = 10;
+    TStringBuilder out;
+    for (size_t i = 0; i < std::min(match.Tuples->size(), MaxPrinted); ++i) {
+        out << (i ? " u " : "") << "(";
+        const auto& tuple = (*match.Tuples)[i];
+        for (size_t j = 0; j < tuple.size(); ++j) {
+            out << (j ? ", " : "") << ToString(tuple[j]);
+        }
+        out << ")";
+    }
+    if (match.Tuples->size() > MaxPrinted) {
+        out << " u ... " << match.Tuples->size() - MaxPrinted << " more";
+    }
+    return out;
 }
 
 } // namespace NKikimr::NKqp

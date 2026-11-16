@@ -2,11 +2,8 @@
 #include "partition_util.h"
 
 #include <ydb/core/base/appdata.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/library/actors/core/log.h>
->>>>>>> 2ff1f3b9def (LOGBROKER-10406 Fixed bugs & add tests (#53523))
 
 namespace NKikimr::NPQ {
 

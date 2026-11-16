@@ -2,8 +2,6 @@
 
 #include <ydb/core/protos/cdc_aggregator.pb.h>
 
-#include <tuple>
-
 namespace NKikimr::NCdcAggregator {
 
 void TCdcAggregatorStreamRepository::InsertCdcAggregatorStream(NIceDb::TNiceDb& db, const TCdcAggregatorStream& stream) const {
@@ -15,7 +13,7 @@ void TCdcAggregatorStreamRepository::InsertCdcAggregatorStream(NIceDb::TNiceDb& 
     }
 }
 
-void TCdcAggregatorStreamRepository::ApplyCdcAggregatorStreamPartitioningChange(NIceDb::TNiceDb& db, const TCdcAggregatorStreamPartitioningChange& change, const TCdcAggregatorStreamSourcesDiff& diff) const {
+void TCdcAggregatorStreamRepository::ApplyCdcAggregatorStreamSourcesDiff(NIceDb::TNiceDb& db, const TCdcAggregatorStreamSourcesDiff& diff) const {
     for (const auto dataShardId : diff.Deleted) {
         db.Table<Schema::Sources>().Key(dataShardId).Delete();
     }
@@ -23,9 +21,10 @@ void TCdcAggregatorStreamRepository::ApplyCdcAggregatorStreamPartitioningChange(
     for (const auto dataShardId : diff.Inserted) {
         db.Table<Schema::Sources>().Key(dataShardId).Update();
     }
+}
 
-    const auto serializedParentDataShardIds = static_cast<TString>(NIceDb::TTypeValue(change.ParentDataShardIds));
-    db.Table<Schema::PartitioningChanges>().Key(std::make_tuple(serializedParentDataShardIds, change.OperationId)).Update(
+void TCdcAggregatorStreamRepository::InsertCdcAggregatorStreamPartitioningChange(NIceDb::TNiceDb& db, const TCdcAggregatorStreamPartitioningChange& change) const {
+    db.Table<Schema::PartitioningChanges>().Key(change.ParentDataShardId, change.OperationId).Update(
         NIceDb::TUpdate<Schema::PartitioningChanges::ChildDataShardIds>(change.ChildDataShardIds));
 }
 
@@ -81,9 +80,9 @@ std::optional<TCdcAggregatorStream::TPartitioningChanges> TCdcAggregatorStreamRe
 
     TCdcAggregatorStream::TPartitioningChanges changes;
     while (!rowset.EndOfSet()) {
-        auto parentDataShardIds = rowset.GetValue<Schema::PartitioningChanges::ParentDataShardIds>();
+        const auto parentDataShardId = rowset.GetValue<Schema::PartitioningChanges::ParentDataShardId>();
         const auto operationId = rowset.GetValue<Schema::PartitioningChanges::OperationId>();
-        changes.emplace(std::make_pair(std::move(parentDataShardIds), operationId), rowset.GetValue<Schema::PartitioningChanges::ChildDataShardIds>());
+        changes.emplace(std::make_pair(parentDataShardId, operationId), rowset.GetValue<Schema::PartitioningChanges::ChildDataShardIds>());
 
         if (!rowset.Next()) {
             return std::nullopt;

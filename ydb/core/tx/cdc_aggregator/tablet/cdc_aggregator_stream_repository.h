@@ -14,7 +14,8 @@ class TCdcAggregatorStreamRepository {
 
 public:
     void InsertCdcAggregatorStream(NIceDb::TNiceDb& db, const TCdcAggregatorStream& stream) const;
-    void ApplyCdcAggregatorStreamPartitioningChange(NIceDb::TNiceDb& db, const TCdcAggregatorStreamPartitioningChange& change, const TCdcAggregatorStreamSourcesDiff& diff) const;
+    void ApplyCdcAggregatorStreamSourcesDiff(NIceDb::TNiceDb& db, const TCdcAggregatorStreamSourcesDiff& diff) const;
+    void InsertCdcAggregatorStreamPartitioningChange(NIceDb::TNiceDb& db, const TCdcAggregatorStreamPartitioningChange& change) const;
     std::pair<bool, std::optional<TCdcAggregatorStream>> LoadCdcAggregatorStream(NIceDb::TNiceDb& db) const;
 
 private:

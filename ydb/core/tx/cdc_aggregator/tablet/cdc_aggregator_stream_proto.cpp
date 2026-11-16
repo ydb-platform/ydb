@@ -11,7 +11,7 @@ namespace NKikimr::NCdcAggregator {
 namespace {
 
 template <typename TProto>
-std::pair<std::optional<TCdcAggregatorStreamTopic>, TString> ParseTopicFields(const TProto& proto) {
+TParseResult<TCdcAggregatorStreamTopic> ParseTopicFields(const TProto& proto) {
     TCdcAggregatorStreamTopic topic;
     if (!proto.HasStreamPathId()) {
         return {std::nullopt, TString("Stream path id is not set")};
@@ -50,7 +50,7 @@ std::pair<std::optional<TCdcAggregatorStreamTopic>, TString> ParseTopicFields(co
 
 } // namespace
 
-std::pair<std::optional<TCdcAggregatorStreamConfig>, TString> TCdcAggregatorStreamProtoConverter::ParseConfig(const NKikimrCdcAggregator::TTrackingConfig& proto) const {
+TParseResult<TCdcAggregatorStreamConfig> TCdcAggregatorStreamProtoConverter::ParseConfig(const NKikimrCdcAggregator::TTrackingConfig& proto) const {
     auto [topic, error] = ParseTopicFields(proto);
     if (!topic) {
         return {std::nullopt, std::move(error)};
@@ -68,34 +68,29 @@ std::pair<std::optional<TCdcAggregatorStreamConfig>, TString> TCdcAggregatorStre
     return {TCdcAggregatorStreamConfig{.Topic = std::move(*topic), .SourceDataShardIds = std::move(sources)}, TString()};
 }
 
-std::pair<std::optional<TCdcAggregatorStreamTopic>, TString> TCdcAggregatorStreamProtoConverter::ParseTopic(const NKikimrCdcAggregator::TCdcAggregatorStreamTopic& proto) const {
+TParseResult<TCdcAggregatorStreamTopic> TCdcAggregatorStreamProtoConverter::ParseTopic(const NKikimrCdcAggregator::TCdcAggregatorStreamTopic& proto) const {
     return ParseTopicFields(proto);
 }
 
-std::pair<std::optional<TCdcAggregatorStreamPartitioningChange>, TString> TCdcAggregatorStreamProtoConverter::ParsePartitioningChange(const NKikimrCdcAggregator::TEvPartitioningChanged& proto) const {
+TParseResult<TCdcAggregatorStreamPartitioningChange> TCdcAggregatorStreamProtoConverter::ParsePartitioningChange(
+    const NKikimrCdcAggregator::TEvPartitioningChanged& proto) const
+{
     TCdcAggregatorStreamPartitioningChange change{
         .OperationId = proto.GetOperationId(),
-        .ParentDataShardIds = {proto.GetParentDataShardIds().begin(), proto.GetParentDataShardIds().end()},
+        .ParentDataShardId = proto.GetParentDataShardId(),
         .ChildDataShardIds = {proto.GetChildDataShardIds().begin(), proto.GetChildDataShardIds().end()},
     };
-    if (proto.HasParentDataShardId()) {
-        change.ParentDataShardIds.push_back(proto.GetParentDataShardId());
-    }
-    std::sort(change.ParentDataShardIds.begin(), change.ParentDataShardIds.end());
-    std::sort(change.ChildDataShardIds.begin(), change.ChildDataShardIds.end());
+    auto& children = change.ChildDataShardIds;
+    std::sort(children.begin(), children.end());
 
-    const auto& parents = change.ParentDataShardIds;
-    const auto& children = change.ChildDataShardIds;
     if (!change.OperationId
-        || parents.empty() || parents.front() == 0
-        || std::adjacent_find(parents.begin(), parents.end()) != parents.end()
+        || !change.ParentDataShardId
         || children.empty() || children.front() == 0
         || std::adjacent_find(children.begin(), children.end()) != children.end()
-        || std::any_of(parents.begin(), parents.end(), [&children](ui64 parentDataShardId)
+        || std::binary_search(children.begin(), children.end(), change.ParentDataShardId))
     {
-        return std::binary_search(children.begin(), children.end(), parentDataShardId);
-    })) {
-        return {std::nullopt, TStringBuilder() << "Invalid partitioning change " << change.OperationId};
+        return {std::nullopt, TStringBuilder() << "Invalid partitioning change " << change.OperationId
+            << " of DataShard " << change.ParentDataShardId};
     }
 
     return {std::move(change), TString()};

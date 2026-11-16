@@ -31,7 +31,7 @@ class TCdcAggregator::TTxConfigureTracking : public TTxBase {
 
 public:
     explicit TTxConfigureTracking(TCdcAggregator* self, TEvCdcAggregator::TEvConfigureTracking::TPtr& ev)
-        : TTxBase(self)
+        : TTxBase("TxConfigureTracking", self)
         , Ev(ev)
     {
     }
@@ -41,6 +41,10 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG("Execute",
+            {"ev", Ev->Get()->ToString()});
+
         const auto& record = Ev->Get()->Record;
         Result = MakeHolder<TEvCdcAggregator::TEvConfigureTrackingResult>();
         Result->Record.SetOrigin(Self->TabletID());
@@ -57,7 +61,6 @@ public:
             NIceDb::TNiceDb db(txc.DB);
             Self->CdcAggregatorStreamRepository.InsertCdcAggregatorStream(db, *Self->CdcAggregatorStream);
 
-            YDB_LOG_CREATE_CONTEXT({"tabletId", Self->TabletID()});
             YDB_LOG_INFO("Stream configured",
                 {"streamPathId", Self->CdcAggregatorStream->GetTopic().StreamPathId},
                 {"sources", Self->CdcAggregatorStream->GetSourceDataShardIds().size()});
@@ -75,8 +78,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_CREATE_CONTEXT({"tabletId", Self->TabletID()});
-        YDB_LOG_DEBUG("Reply",
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG("Complete",
             {"result", Result->ToString()});
 
         ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
@@ -84,9 +87,6 @@ public:
 };
 
 void TCdcAggregator::Handle(TEvCdcAggregator::TEvConfigureTracking::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_TRACE("Handle",
-        {"ev", ev->Get()->ToString()});
-
     Execute(new TTxConfigureTracking(this, ev), ctx);
 }
 

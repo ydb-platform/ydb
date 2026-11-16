@@ -50,11 +50,9 @@ THolder<TEvCdcAggregator::TEvWriteHeartbeats> MakeWriteHeartbeats(const TVector<
     return request;
 }
 
-THolder<TEvCdcAggregator::TEvPartitioningChanged> MakePartitioningChanged(const TVector<ui64>& parentDataShardIds, const TVector<ui64>& childDataShardIds, ui64 operationId = 77) {
+THolder<TEvCdcAggregator::TEvPartitioningChanged> MakePartitioningChanged(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds, ui64 operationId = 77) {
     auto request = MakeHolder<TEvCdcAggregator::TEvPartitioningChanged>();
-    for (const auto parentDataShardId : parentDataShardIds) {
-        request->Record.AddParentDataShardIds(parentDataShardId);
-    }
+    request->Record.SetParentDataShardId(parentDataShardId);
     for (const auto childDataShardId : childDataShardIds) {
         request->Record.AddChildDataShardIds(childDataShardId);
     }
@@ -117,13 +115,9 @@ public:
         return GrabResult<TEvCdcAggregator::TEvWriteHeartbeatsResult>()->Get()->Record;
     }
 
-    TPartitioningAck PartitioningChanged(const TVector<ui64>& parentDataShardIds, const TVector<ui64>& childDataShardIds, ui64 operationId = 77) {
-        SendRequest(MakePartitioningChanged(parentDataShardIds, childDataShardIds, operationId));
-        return GrabResult<TEvCdcAggregator::TEvPartitioningChangedAck>()->Get()->Record;
-    }
-
     TPartitioningAck PartitioningChanged(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds, ui64 operationId = 77) {
-        return PartitioningChanged(TVector<ui64>{parentDataShardId}, childDataShardIds, operationId);
+        SendRequest(MakePartitioningChanged(parentDataShardId, childDataShardIds, operationId));
+        return GrabResult<TEvCdcAggregator::TEvPartitioningChangedAck>()->Get()->Record;
     }
 
     TDescribeResult DescribeTracking() {
@@ -266,8 +260,10 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         UNIT_ASSERT_C(repeatedAck.GetStatus() == TPartitioningAck::SUCCESS, repeatedAck.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 3, 4}));
 
-        const auto mergeAck = env.PartitioningChanged({3, 4}, {5});
-        UNIT_ASSERT_C(mergeAck.GetStatus() == TPartitioningAck::SUCCESS, mergeAck.ShortDebugString());
+        const auto firstMergeAck = env.PartitioningChanged(3, {5}, 78);
+        UNIT_ASSERT_C(firstMergeAck.GetStatus() == TPartitioningAck::SUCCESS, firstMergeAck.ShortDebugString());
+        const auto secondMergeAck = env.PartitioningChanged(4, {5}, 78);
+        UNIT_ASSERT_C(secondMergeAck.GetStatus() == TPartitioningAck::SUCCESS, secondMergeAck.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 5}));
     }
 
@@ -305,48 +301,36 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 4, 5, 6}));
     }
 
-    Y_UNIT_TEST(AcceptsSingleParentPartitioningChange) {
-        TTestEnv env;
-        env.ConfigureTracking({1, 2});
-
-        const auto makeSingleParentRequest = [] {
-            auto request = MakePartitioningChanged({}, {3, 4});
-            request->Record.SetParentDataShardId(1);
-            return request;
-        };
-        env.SendRequest(makeSingleParentRequest());
-        const auto splitAck = env.GrabResult<TEvCdcAggregator::TEvPartitioningChangedAck>();
-        UNIT_ASSERT(splitAck->Get()->Record.GetStatus() == TPartitioningAck::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 3, 4}));
-
-        UNIT_ASSERT(env.PartitioningChanged(3, {5, 6}).GetStatus() == TPartitioningAck::SUCCESS);
-
-        for (const bool restart : {false, true}) {
-            if (restart) {
-                env.RebootTablet();
-            }
-            env.SendRequest(makeSingleParentRequest());
-            const auto repeatedAck = env.GrabResult<TEvCdcAggregator::TEvPartitioningChangedAck>();
-            UNIT_ASSERT(repeatedAck->Get()->Record.GetStatus() == TPartitioningAck::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 4, 5, 6}));
-        }
-    }
-
-    Y_UNIT_TEST(AcknowledgesAppliedMergeAfterChildSplits) {
+    Y_UNIT_TEST(ShouldAcknowledgeMergeRetryWhenMergedChildSplit) {
+        // given
         TTestEnv env;
         env.ConfigureTracking({1, 2, 3});
+        UNIT_ASSERT(env.PartitioningChanged(1, {4}).GetStatus() == TPartitioningAck::SUCCESS);
+        UNIT_ASSERT(env.PartitioningChanged(2, {4}).GetStatus() == TPartitioningAck::SUCCESS);
+        UNIT_ASSERT(env.PartitioningChanged(4, {5, 6}, 78).GetStatus() == TPartitioningAck::SUCCESS);
 
-        UNIT_ASSERT(env.PartitioningChanged({2, 1}, {4}).GetStatus() == TPartitioningAck::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({3, 4}));
-        UNIT_ASSERT(env.PartitioningChanged(4, {5, 6}).GetStatus() == TPartitioningAck::SUCCESS);
-        UNIT_ASSERT(env.PartitioningChanged({1, 2}, {4}).GetStatus() == TPartitioningAck::SUCCESS);
-        UNIT_ASSERT(env.PartitioningChanged(1, {4}).GetStatus() == TPartitioningAck::UNKNOWN_SOURCE);
+        // when
+        const auto retryAck = env.PartitioningChanged(2, {4});
+
+        // then
+        UNIT_ASSERT_C(retryAck.GetStatus() == TPartitioningAck::SUCCESS, retryAck.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({3, 5, 6}));
+    }
 
+    Y_UNIT_TEST(ShouldAcknowledgeMergeRetryWhenTabletRestarted) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2, 3});
+        UNIT_ASSERT(env.PartitioningChanged(1, {4}).GetStatus() == TPartitioningAck::SUCCESS);
+        UNIT_ASSERT(env.PartitioningChanged(2, {4}).GetStatus() == TPartitioningAck::SUCCESS);
+        UNIT_ASSERT(env.PartitioningChanged(4, {5, 6}, 78).GetStatus() == TPartitioningAck::SUCCESS);
         env.RebootTablet();
 
-        UNIT_ASSERT(env.PartitioningChanged({2, 1}, {4}).GetStatus() == TPartitioningAck::SUCCESS);
-        UNIT_ASSERT(env.PartitioningChanged(1, {4}).GetStatus() == TPartitioningAck::UNKNOWN_SOURCE);
+        // when
+        const auto retryAck = env.PartitioningChanged(1, {4});
+
+        // then
+        UNIT_ASSERT_C(retryAck.GetStatus() == TPartitioningAck::SUCCESS, retryAck.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({3, 5, 6}));
     }
 
@@ -374,36 +358,14 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 3, 4}));
     }
 
-    Y_UNIT_TEST(RejectsMergeWithUnknownParentWithoutChanges) {
-        TTestEnv env;
-        env.ConfigureTracking({1, 2});
-
-        UNIT_ASSERT(env.PartitioningChanged({1, 7}, {3}).GetStatus() == TPartitioningAck::UNKNOWN_SOURCE);
-        UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({1, 2}));
-
-        env.RebootTablet();
-
-        UNIT_ASSERT(env.PartitioningChanged({1, 7}, {3}).GetStatus() == TPartitioningAck::UNKNOWN_SOURCE);
-        UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({1, 2}));
-        UNIT_ASSERT(env.PartitioningChanged({2, 1}, {3}).GetStatus() == TPartitioningAck::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({3}));
-
-        env.RebootTablet();
-
-        UNIT_ASSERT(env.PartitioningChanged({1, 2}, {3}).GetStatus() == TPartitioningAck::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({3}));
-    }
-
     Y_UNIT_TEST(RejectsInvalidPartitioningChangeIdentity) {
         TTestEnv env;
         env.ConfigureTracking({1, 2});
 
-        UNIT_ASSERT(env.PartitioningChanged(TVector<ui64>{}, {3}).GetStatus() == TPartitioningAck::BAD_REQUEST);
-        UNIT_ASSERT(env.PartitioningChanged({1, 1}, {3}).GetStatus() == TPartitioningAck::BAD_REQUEST);
-        UNIT_ASSERT(env.PartitioningChanged({0, 1}, {3}).GetStatus() == TPartitioningAck::BAD_REQUEST);
-        UNIT_ASSERT(env.PartitioningChanged({1, 2}, {0, 3}).GetStatus() == TPartitioningAck::BAD_REQUEST);
-        UNIT_ASSERT(env.PartitioningChanged({1, 2}, {3, 3}).GetStatus() == TPartitioningAck::BAD_REQUEST);
-        UNIT_ASSERT(env.PartitioningChanged({1, 2}, {2, 3}).GetStatus() == TPartitioningAck::BAD_REQUEST);
+        UNIT_ASSERT(env.PartitioningChanged(0, {3}).GetStatus() == TPartitioningAck::BAD_REQUEST);
+        UNIT_ASSERT(env.PartitioningChanged(1, {0, 3}).GetStatus() == TPartitioningAck::BAD_REQUEST);
+        UNIT_ASSERT(env.PartitioningChanged(1, {3, 3}).GetStatus() == TPartitioningAck::BAD_REQUEST);
+        UNIT_ASSERT(env.PartitioningChanged(1, {1, 3}).GetStatus() == TPartitioningAck::BAD_REQUEST);
         UNIT_ASSERT(env.PartitioningChanged(1, {3}, 0).GetStatus() == TPartitioningAck::BAD_REQUEST);
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({1, 2}));
     }

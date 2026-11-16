@@ -38,13 +38,13 @@ struct TCdcAggregatorStreamSourcesDiff {
 
 struct TCdcAggregatorStreamPartitioningChange {
     ui64 OperationId = 0;
-    TVector<ui64> ParentDataShardIds;
+    ui64 ParentDataShardId = 0;
     TVector<ui64> ChildDataShardIds;
 };
 
 class TCdcAggregatorStream {
 public:
-    using TPartitioningChanges = TMap<std::pair<TVector<ui64>, ui64>, TVector<ui64>>;
+    using TPartitioningChanges = TMap<std::pair<ui64, ui64>, TVector<ui64>>;
 
     explicit TCdcAggregatorStream(const TCdcAggregatorStreamConfig& config);
     TCdcAggregatorStream(TCdcAggregatorStreamTopic topic, THashSet<ui64> sourceDataShardIds, TPartitioningChanges partitioningChanges);

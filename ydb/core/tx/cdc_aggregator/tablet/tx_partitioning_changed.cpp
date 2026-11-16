@@ -17,7 +17,7 @@ class TCdcAggregator::TTxPartitioningChanged : public TTxBase {
 
 public:
     explicit TTxPartitioningChanged(TCdcAggregator* self, TEvCdcAggregator::TEvPartitioningChanged::TPtr& ev)
-        : TTxBase(self)
+        : TTxBase("TxPartitioningChanged", self)
         , Ev(ev)
     {
     }
@@ -27,6 +27,10 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG("Execute",
+            {"ev", Ev->Get()->ToString()});
+
         const auto& record = Ev->Get()->Record;
         Result = MakeHolder<TEvCdcAggregator::TEvPartitioningChangedAck>();
         Result->Record.SetOrigin(Self->TabletID());
@@ -53,13 +57,13 @@ public:
 
         if (!diff->Deleted.empty()) {
             NIceDb::TNiceDb db(txc.DB);
-            Self->CdcAggregatorStreamRepository.ApplyCdcAggregatorStreamPartitioningChange(db, *change, *diff);
+            Self->CdcAggregatorStreamRepository.ApplyCdcAggregatorStreamSourcesDiff(db, *diff);
+            Self->CdcAggregatorStreamRepository.InsertCdcAggregatorStreamPartitioningChange(db, *change);
         }
 
-        YDB_LOG_CREATE_CONTEXT({"tabletId", Self->TabletID()});
         YDB_LOG_INFO("Partitioning change applied",
             {"operationId", change->OperationId},
-            {"parentDataShardIds", JoinSeq(",", change->ParentDataShardIds)},
+            {"parentDataShardId", change->ParentDataShardId},
             {"inserted", JoinSeq(",", diff->Inserted)},
             {"deleted", JoinSeq(",", diff->Deleted)});
 
@@ -69,8 +73,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_CREATE_CONTEXT({"tabletId", Self->TabletID()});
-        YDB_LOG_DEBUG("Reply",
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG("Complete",
             {"result", Result->ToString()});
 
         ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
@@ -78,9 +82,6 @@ public:
 };
 
 void TCdcAggregator::Handle(TEvCdcAggregator::TEvPartitioningChanged::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_TRACE("Handle",
-        {"ev", ev->Get()->ToString()});
-
     Execute(new TTxPartitioningChanged(this, ev), ctx);
 }
 

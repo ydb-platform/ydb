@@ -1,7 +1,5 @@
 #include "cdc_aggregator_stream.h"
 
-#include <algorithm>
-
 namespace NKikimr::NCdcAggregator {
 
 TCdcAggregatorStream::TCdcAggregatorStream(const TCdcAggregatorStreamConfig& config)
@@ -18,7 +16,7 @@ TCdcAggregatorStream::TCdcAggregatorStream(TCdcAggregatorStreamTopic topic, THas
 }
 
 std::optional<TCdcAggregatorStreamSourcesDiff> TCdcAggregatorStream::ApplyPartitioningChange(const TCdcAggregatorStreamPartitioningChange& change) {
-    auto key = std::make_pair(change.ParentDataShardIds, change.OperationId);
+    auto key = std::make_pair(change.ParentDataShardId, change.OperationId);
     if (const auto applied = PartitioningChanges.find(key); applied != PartitioningChanges.end()) {
         if (applied->second != change.ChildDataShardIds) {
             return std::nullopt;
@@ -26,17 +24,12 @@ std::optional<TCdcAggregatorStreamSourcesDiff> TCdcAggregatorStream::ApplyPartit
         return TCdcAggregatorStreamSourcesDiff{};
     }
 
-    if (!std::all_of(change.ParentDataShardIds.begin(), change.ParentDataShardIds.end(), [this](ui64 parentDataShardId) {
-        return SourceDataShardIds.contains(parentDataShardId);
-    })) {
+    if (!SourceDataShardIds.erase(change.ParentDataShardId)) {
         return std::nullopt;
     }
 
     TCdcAggregatorStreamSourcesDiff diff;
-    for (const auto parentDataShardId : change.ParentDataShardIds) {
-        SourceDataShardIds.erase(parentDataShardId);
-        diff.Deleted.insert(parentDataShardId);
-    }
+    diff.Deleted.insert(change.ParentDataShardId);
     for (const auto childDataShardId : change.ChildDataShardIds) {
         if (SourceDataShardIds.insert(childDataShardId).second) {
             diff.Inserted.insert(childDataShardId);

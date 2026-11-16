@@ -171,6 +171,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
 
 bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::TryCastWriteOperation(op);
+    const bool readOnlyAdmission = op->IsReadOnly() || op->HasFlag(TTxFlags::ReadOnlyPrepare);
 
     if (!op->IsReadOnly() && DataShard.IsDatabaseWriteBlocked(op.Get())) {
         const TString error = "Database is frozen for writes";
@@ -218,7 +219,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
     // Check if shard state is not appropriate for tx execution
     if (DataShard.GetState() != TShardState::Ready &&
         DataShard.GetState() != TShardState::Readonly &&
-        !(DataShard.GetState() == TShardState::Frozen && op->IsReadOnly()))
+        !(DataShard.GetState() == TShardState::Frozen && readOnlyAdmission))
     {
         TString err = TStringBuilder()
             << "Wrong shard state: " << (TShardState)DataShard.GetState()
@@ -255,7 +256,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         return true;
     }
 
-    if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
+    if (!readOnlyAdmission && DataShard.CheckChangesQueueOverflow()) {
         TString err = TStringBuilder()
                 << "Can't execute at blocked shard: " << " tablet id: " << DataShard.TabletID();
 
@@ -277,7 +278,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         return true;
     }
 
-    if (DataShard.IsReplicated() && !(op->IsReadOnly() || op->IsCommitWritesTx())) {
+    if (DataShard.IsReplicated() && !(readOnlyAdmission || op->IsCommitWritesTx())) {
         TString err = TStringBuilder()
             << "Can't execute write tx at replicated table:"
             << " tablet id: " << DataShard.TabletID();
@@ -300,6 +301,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
 }
 
 bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
+    const bool readOnlyAdmission = op->IsReadOnly() || op->HasFlag(TTxFlags::ReadOnlyPrepare);
+
     if (DataShard.GetState() == TShardState::SplitSrcWaitForNoTxInFlight ||
         DataShard.GetState() == TShardState::SplitSrcMakeSnapshot ||
         DataShard.GetState() == TShardState::SplitSrcSendingSnapshot ||
@@ -310,7 +313,7 @@ bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
 
     if (DataShard.GetState() != TShardState::Ready &&
         DataShard.GetState() != TShardState::Readonly &&
-        !(DataShard.GetState() == TShardState::Frozen && op->IsReadOnly()))
+        !(DataShard.GetState() == TShardState::Frozen && readOnlyAdmission))
     {
         return true;
     }
@@ -319,11 +322,11 @@ bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
         return true;
     }
 
-    if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
+    if (!readOnlyAdmission && DataShard.CheckChangesQueueOverflow()) {
         return true;
     }
 
-    if (DataShard.IsReplicated() && !(op->IsReadOnly() || op->IsCommitWritesTx())) {
+    if (DataShard.IsReplicated() && !(readOnlyAdmission || op->IsCommitWritesTx())) {
         return true;
     }
 

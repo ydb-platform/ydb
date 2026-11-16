@@ -195,6 +195,10 @@ namespace NKikimr {
             bool IsRestoring = false;
             bool MustRestoreFirst = false;
             bool TrustedPileResponded = false; // for reads without MustRestoreFirst, which have to get its answer
+            // the first failure of the whole subrequest in a trusted pile (for reads without MustRestoreFirst); it is
+            // the answer unless other piles have every blob asked for
+            NKikimrProto::EReplyStatus TrustedPileFailure = NKikimrProto::OK;
+            TString TrustedPileFailureReason;
             // Restoring a blob into a pile which lacks it is a write made on behalf of the original
             // request, so it is admitted the same way that request would be.
             NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
@@ -388,11 +392,16 @@ namespace NKikimr {
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetResult> ev,
                     const TBridgeInfo::TPile& pile, TRequestPayload& payload) {
+                const bool trusted = DataIsTrustedInPile(pile);
                 if (ev->Status != NKikimrProto::OK && std::holds_alternative<TGetState>(State) && !MustRestoreFirst &&
-                        !IsRestoring && !DataIsTrustedInPile(pile)) {
-                    // the pile not holding everything (e.g. one being synced) doesn't fail the read the trusted pile can
-                    // answer; its blobs are taken for failed ones, so their absence remains unproven, unless some pile
-                    // has them
+                        !IsRestoring && (!trusted || ev->Status != NKikimrProto::BLOCKED)) {
+                    // the failed pile doesn't fail the read other piles can answer: the blob found in any pile is there;
+                    // its blobs are taken for failed ones, so their absence remains unproven, unless some pile has them.
+                    // The failure of the trusted pile is remembered to be the answer when other piles lack something.
+                    if (trusted && TrustedPileFailure == NKikimrProto::OK) {
+                        TrustedPileFailure = ev->Status;
+                        TrustedPileFailureReason = ev->ErrorReason;
+                    }
                     auto& get = static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest);
                     auto res = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, get.QuerySize, self.GroupId);
                     for (ui32 i = 0; i < get.QuerySize; ++i) {
@@ -471,15 +480,16 @@ namespace NKikimr {
 
                 if (MustRestoreFirst) {
                     // we are going to restore data, so we have to collect answers from all piles
-                } else if (DataIsTrustedInPile(pile) && std::none_of(&ev->Responses[0], &ev->Responses[ev->ResponseSz],
-                        [](const auto& r) { return r.Status == NKikimrProto::NODATA; })) {
+                } else if (trusted && std::all_of(&ev->Responses[0], &ev->Responses[ev->ResponseSz],
+                        [](const auto& r) { return r.Status == NKikimrProto::OK; })) {
                     // this is response from synced pile having every blob asked for, we can fully trust it
                     return ev;
                 } else {
                     // the blob missing in the synced pile may be in other ones: the node knowing newer cluster state,
                     // where this pile is disconnected, writes to other piles only, while this node doesn't know it yet;
-                    // so the absence is reported only when all piles agree on it
-                    TrustedPileResponded |= DataIsTrustedInPile(pile);
+                    // so the absence is reported only when all piles agree on it; the same way, the blob this pile
+                    // failed to read may be read from another one
+                    TrustedPileResponded |= trusted;
                 }
 
                 if (!state.Responses) {
@@ -533,6 +543,11 @@ namespace NKikimr {
                         Y_DEBUG_ABORT("missing response from trusted pile");
                         return static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest).MakeErrorResponse(
                             NKikimrProto::ERROR, "failed to obtain response from trusted pile", self.GroupId);
+                    } else if (TrustedPileFailure != NKikimrProto::OK && std::any_of(&state.Responses[0],
+                            &state.Responses[state.NumResponses], [](const auto& r) { return r.Status != NKikimrProto::OK; })) {
+                        // other piles couldn't make up for the failed trusted one, so the request fails the way it did
+                        return static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest).MakeErrorResponse(
+                            TrustedPileFailure, TrustedPileFailureReason, self.GroupId);
                     }
                     return IssueNextRestoreGet(self); // nothing to restore, it makes the result
                 }

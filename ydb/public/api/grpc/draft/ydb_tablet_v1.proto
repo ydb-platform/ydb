@@ -31,4 +31,11 @@ service TabletService {
     // unexpected state, sometimes allowing them to get unstuck.
     rpc RestartTablet(RestartTabletRequest) returns (RestartTabletResponse);
 
+    // Start reassigning tablet channels belonging to a storage pool.
+    // Requires cluster administrator access. The x-ydb-database header is required
+    // and used to resolve Hive.
+    // Returns an asynchronous Operation. GetOperation and CancelOperation also require
+    // cluster administrator access. Operation state is lost when Hive restarts.
+    rpc ReassignTablets(ReassignTabletsRequest) returns (ReassignTabletsResponse);
+
 }

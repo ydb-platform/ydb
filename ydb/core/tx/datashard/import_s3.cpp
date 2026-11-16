@@ -323,13 +323,15 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             {"logPrefix", LogPrefix()});
 
         const auto* appData = AppData();
-        this->Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvSubmitTask(
+        auto submit = MakeHolder<TEvResourceBroker::TEvSubmitTask>(
             TStringBuilder() << "Restore { " << TxId << ":" << TabletId << " }",
-            {{ 1, 0 }},
+            TResourceValues{{ 1, 0 }},
             appData->DataShardConfig.GetRestoreTaskName(),
             appData->DataShardConfig.GetRestoreTaskPriority(),
             nullptr
-        ));
+        );
+        submit->SetOwner(TabletId);
+        this->Send(MakeResourceBrokerID(), submit.Release());
 
         this->Become(&TThis::StateAllocateResource);
     }

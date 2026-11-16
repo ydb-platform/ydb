@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/common
+    library/cpp/testing/gbenchmark
     yql/essentials/tools/purebench/gbenchmark
 )
 

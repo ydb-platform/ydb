@@ -56,6 +56,15 @@ Y_UNIT_TEST_SUITE(BridgeStaticSyncerLifetime) {
             env.Sim(TDuration::MilliSeconds(1));
         }
         UNIT_ASSERT_C(commit, "Static group synchronization did not reach its final commit");
+        const auto& pendingState = commit->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record
+            .GetUpdateBridgeGroupInfo().GetBridgeGroupInfo().GetBridgeGroupState();
+        const ui32 targetGroupId = NBridge::GetGroupPile(pendingState, TBridgePileId::FromPileIndex(1))->GetGroupId();
+        auto getProgressTimestamp = [&] {
+            return NBridgeTest::QueryGroupSystemView(env, targetGroupId).GetBridgeSyncLastProgressTimestamp();
+        };
+        const ui64 beforeCommit = getProgressTimestamp();
+        UNIT_ASSERT_GT(beforeCommit, 0);
+        UNIT_ASSERT_VALUES_EQUAL(getProgressTimestamp(), beforeCommit);
 
         const auto result = NBridgeTest::InvokeDistconf(env, [&](auto& request) {
             request.CopyFrom(commit->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record);
@@ -63,9 +72,12 @@ Y_UNIT_TEST_SUITE(BridgeStaticSyncerLifetime) {
         UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
             result.DebugString());
         env.Sim(TDuration::Seconds(1));
+        const ui64 committed = getProgressTimestamp();
+        UNIT_ASSERT_GT(committed, beforeCommit);
 
         NBridgeTest::SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
         env.Sim(TDuration::Seconds(1));
+        const ui64 beforeStaleReply = getProgressTimestamp();
 
         auto response = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
         response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
@@ -73,6 +85,7 @@ Y_UNIT_TEST_SUITE(BridgeStaticSyncerLifetime) {
         env.Runtime->Send(new IEventHandle(commit->Sender, {}, response.release(), 0, commit->Cookie),
             commit->Sender.NodeId());
         env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(getProgressTimestamp(), beforeStaleReply);
 
         env.FetchBaseConfig();
         env.Runtime->FilterFunction = nullptr;

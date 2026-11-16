@@ -16,6 +16,7 @@ struct TBucketKey {
     TString Topic = "/Root/topic";
     ui32 Partition = 0;
     ui32 Generation = 1;
+    TString Database = "/Root";
 };
 
 class TWriteSessionsQuoterTest : public NUnitTest::TBaseFixture {
@@ -54,7 +55,7 @@ void TWriteSessionsQuoterTest::SetUp(NUnitTest::TTestContext&) {
 void TWriteSessionsQuoterTest::Notify(const TBucketKey& key) {
     const auto edge = Runtime.AllocateEdgeActor();
     Runtime.Send(new IEventHandle(MakeWriteSessionsQuoterId(), edge,
-        new TEvQuoter::TEvNotify(key.Topic, key.Partition, key.Generation)));
+        new TEvQuoter::TEvNotify(key.Database, key.Topic, key.Partition, key.Generation)));
     TDispatchOptions options;
     options.FinalEvents.emplace_back([edge](IEventHandle& event) {
         return event.Sender == edge && event.GetTypeRewrite() == TEvQuoter::TEvNotify::EventType;
@@ -65,7 +66,7 @@ void TWriteSessionsQuoterTest::Notify(const TBucketKey& key) {
 
 void TWriteSessionsQuoterTest::Remove(const TBucketKey& key) {
     Runtime.Send(new IEventHandle(Quoter, Runtime.AllocateEdgeActor(),
-        new TEvQuoter::TEvRemove(key.Topic, key.Partition, key.Generation)));
+        new TEvQuoter::TEvRemove(key.Database, key.Topic, key.Partition, key.Generation)));
 }
 
 TActorId TWriteSessionsQuoterTest::Acquire(const TBucketKey& key) {
@@ -77,7 +78,7 @@ TActorId TWriteSessionsQuoterTest::Acquire(const TBucketKey& key) {
 void TWriteSessionsQuoterTest::AcquireFrom(const TActorId& actor, const TBucketKey& key) {
     // Deliver synchronously so negative assertions do not advance virtual time.
     Runtime.Send(new IEventHandle(Quoter, actor,
-        new TEvQuoter::TEvAcquireQuota(key.Topic, key.Partition, key.Generation)));
+        new TEvQuoter::TEvAcquireQuota(key.Database, key.Topic, key.Partition, key.Generation)));
 }
 
 void TWriteSessionsQuoterTest::ExpectReplies(const TActorId& actor, size_t count, ui32 eventType) {
@@ -127,6 +128,34 @@ Y_UNIT_TEST_F(LimitsInitialBurst, TWriteSessionsQuoterTest) {
 
 Y_UNIT_TEST_F(TopicsHaveIndependentQuota, TWriteSessionsQuoterTest) {
     CheckIndependentBucket({"/Root/other", 0, 1});
+}
+
+Y_UNIT_TEST_F(DatabasesHaveIndependentQuota, TWriteSessionsQuoterTest) {
+    CheckIndependentBucket({.Database = "/Other"});
+}
+
+Y_UNIT_TEST_F(RemovingDatabasePreservesOtherDatabaseBucketAndWaiters, TWriteSessionsQuoterTest) {
+    const TBucketKey other{.Database = "/Other"};
+    Notify();
+    ExpectDeclined(Acquire(other));
+    Notify(other);
+    ExpectReplies(Acquire(), 1);
+    ExpectReplies(Acquire(other), 1);
+    const auto firstWaiter = Acquire();
+    const auto otherWaiter = Acquire(other);
+
+    Remove();
+    ExpectDeclined(firstWaiter);
+    ExpectDeclined(Acquire());
+    ExpectReplies(otherWaiter, 0);
+    const auto nextWaiter = Acquire(other);
+    ExpectReplies(nextWaiter, 0);
+
+    AdvanceTime();
+    ExpectReplies(otherWaiter, 1);
+    ExpectReplies(nextWaiter, 0);
+    AdvanceTime();
+    ExpectReplies(nextWaiter, 1);
 }
 
 Y_UNIT_TEST_F(PartitionsHaveIndependentQuota, TWriteSessionsQuoterTest) {

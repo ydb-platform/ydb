@@ -375,6 +375,7 @@ class KikimrConfigGenerator(object):
         # disable kqp pattern cache on darwin platform to avoid using llvm versions of computational
         # nodes. These compute nodes are not properly tested and maintained on darwin platform.
         if sys.platform == "darwin":
+            self.yaml_config["table_service_config"]["enable_async_computation_pattern_compilation"] = False
             self.yaml_config["table_service_config"]["resource_manager"]["kqp_pattern_cache_compiled_capacity_bytes"] = 0
 
         # dirty hack for internal ydbd flavour

@@ -1191,6 +1191,9 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         // match ComputeIndexItemSuffix in the SchemeShard export path.
         int idx = exportChangefeeds ? Task.GetTable().GetTable().CdcStreamsSize() + 1 : 1;
         for (const auto& index : scheme->indexes()) {
+            if (index.has_global_async_index()) {
+                continue;
+            }
             const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
             if (!indexType) {
                 continue;

@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/host/kqp_transform.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 
 namespace NKikimr::NKqp {
 
@@ -136,45 +137,56 @@ protected:
     TIntrusivePtr<NOpt::TKqpOptimizeContext> OptimizeCtx;
 };
 
-class TKqpRBOExplainPreparedTransformer : public TKqpExplainPreparedTransformer {
+class TKqpRBOExplainPreparedTransformer : public TSyncTransformerBase {
 public:
-    TKqpRBOExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
-        TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
-        TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) :
-            TKqpExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx, optCtx)
-        {}
+    explicit TKqpRBOExplainPreparedTransformer(TIntrusivePtr<TKqlTransformContext> transformCtx)
+        : TransformCtx(std::move(transformCtx))
+    {}
 
-        void SetPlans(NYql::TExprNode::TPtr input, NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes::TKqpPhysicalQuery& query, const NYql::NNodes::TKqpPhysicalQuery& peepHoleOptimizedQuery,
-             TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& database,
-            const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config,
-            NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) override {
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        if (!TransformCtx->ExplainTransformerInput) {
+            ctx.IssueManager.RaiseIssue(TIssue("No input nodes for explain transformer"));
+            return TStatus::Error;
+        }
 
-        Y_UNUSED(query);
-        Y_UNUSED(peepHoleOptimizedQuery);
-        Y_UNUSED(pureTxResults);
-        Y_UNUSED(database);
-        Y_UNUSED(cluster);
-        Y_UNUSED(tablesData);
-        Y_UNUSED(config);
-        Y_UNUSED(typeCtx);
-        Y_UNUSED(optCtx);
+        output = input;
+        // RBO has already built its plans from operators. Unlike the legacy
+        // serializer, it does not substitute literal transaction results into
+        // them, so no prepared-query copy or transaction execution is needed.
+        auto& queryProto = *TransformCtx->QueryCtx->PreparingQuery->MutablePhysicalQuery();
+        auto* trace = TransformCtx->QueryCtx->CompileTrace.Get();
 
         // RBO's plan covers the whole query. Attach it to every physical
         // transaction so statistics are available before the final one runs.
         if (TransformCtx->PlanJson.has_value()) {
             YQL_CLOG(TRACE, CoreDq) << "Set query plan";
-            const auto& plan = TransformCtx->PlanJson.value();
-            NJsonWriter::TBuf txWriter;
-            txWriter.WriteJsonValue(&plan, true, PREC_NDIGITS, 17);
-            for (auto& txProto : *queryProto.MutableTransactions()) {
-                txProto.SetPlan(txWriter.Str());
+            auto& plan = TransformCtx->PlanJson.value();
+            {
+                TCompileTraceScope scope(trace, TCompileTraceLevels::Step, "Serialize transaction plans");
+                NJsonWriter::TBuf txWriter;
+                txWriter.WriteJsonValue(&plan, true, PREC_NDIGITS, 17);
+                for (auto& txProto : *queryProto.MutableTransactions()) {
+                    txProto.SetPlan(txWriter.Str());
+                }
             }
 
-            queryProto.SetQueryPlan(SerializeRBOExplainPlan(plan));
+            TCompileTraceScope scope(trace, TCompileTraceLevels::Step, "Serialize public query plan");
+            // The transaction plans retain the correlation metadata. The JSON
+            // tree has no remaining readers and can be consumed by EXPLAIN.
+            queryProto.SetQueryPlan(SerializeRBOExplainPlan(std::move(plan)));
         }
-        queryProto.SetQueryAst(KqpExprToPrettyString(*input, ctx));
+        {
+            TCompileTraceScope scope(trace, TCompileTraceLevels::Step, "Serialize query AST");
+            queryProto.SetQueryAst(KqpExprToPrettyString(*input, ctx));
+        }
+        return TStatus::Ok;
     }
 
+    void Rewind() override {
+    }
+
+private:
+    TIntrusivePtr<TKqlTransformContext> TransformCtx;
 };
 
 } // anonymous namespace
@@ -186,11 +198,9 @@ TAutoPtr<IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IK
     return new TKqpExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx, optimizeCtx);
 }
 
-TAutoPtr<IGraphTransformer> CreateKqpRBOExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
-    TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optimizeCtx)
+TAutoPtr<IGraphTransformer> CreateKqpRBOExplainPreparedTransformer(TIntrusivePtr<TKqlTransformContext> transformCtx)
 {
-    return new TKqpRBOExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx, optimizeCtx);
+    return new TKqpRBOExplainPreparedTransformer(std::move(transformCtx));
 }
 
 } // namespace NKikimr::NKqp

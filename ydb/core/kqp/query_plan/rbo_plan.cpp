@@ -1,5 +1,7 @@
 #include "query_plan.h"
 
+#include <ydb/core/protos/kqp_stats.pb.h>
+
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -309,7 +311,7 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
     meta["version"] = "0.2";
     meta["type"] = "query";
 
-    queryPlan["meta"] = meta;
+    queryPlan["meta"] = std::move(meta);
 
     // Correlation metadata is internal to ANALYZE, not part of the published plan.
     RemoveOperatorMetadata(txPlan["SimplifiedPlan"]);
@@ -317,16 +319,18 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
         RemoveOperatorMetadata(plan);
     }
 
-    queryPlan["SimplifiedPlan"] = txPlan.GetMapSafe().at("SimplifiedPlan");
+    queryPlan["SimplifiedPlan"] = std::move(txPlan.GetMapSafe().at("SimplifiedPlan"));
     txPlan.EraseValue("SimplifiedPlan");
 
     NJson::TJsonValue queryNode;
     queryNode["Node Type"] = "Query";
     queryNode["PlanNodeType"] = "Query";
-    queryNode["Plans"] = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    queryNode["Plans"] = txPlan.GetMapSafe().at("Plans");
+    queryNode["Plans"] = std::move(txPlan.GetMapSafe().at("Plans"));
+    if (txPlan.Has("Stats")) {
+        queryNode["Stats"] = std::move(txPlan["Stats"]);
+    }
 
-    queryPlan["Plan"] = queryNode;
+    queryPlan["Plan"] = std::move(queryNode);
 
     NJsonWriter::TBuf writer;
     writer.WriteJsonValue(&queryPlan, true, PREC_NDIGITS, 17);
@@ -334,9 +338,6 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
 }
 
 TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId) {
-    Y_UNUSED(queryStats);
-    Y_UNUSED(poolId);
-
     YQL_CLOG(TRACE, CoreDq) << "Serialize analyze plan";
 
 
@@ -387,7 +388,20 @@ TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKq
     applyStats(applyStats, txPlanJson);
 
     AddStatsToSimplifiedPlan(txPlanJson);
-    return SerializeRBOExplainPlan(txPlanJson);
+    auto& stats = txPlanJson["Stats"];
+    if (queryStats.HasCompilation()) {
+        const auto& compilation = queryStats.GetCompilation();
+        stats["Compilation"]["FromCache"] = compilation.GetFromCache();
+        stats["Compilation"]["DurationUs"] = compilation.GetDurationUs();
+        stats["Compilation"]["CpuTimeUs"] = compilation.GetCpuTimeUs();
+    }
+    stats["ProcessCpuTimeUs"] = queryStats.GetWorkerCpuTimeUs();
+    stats["TotalDurationUs"] = queryStats.GetDurationUs();
+    if (poolId) {
+        stats["QueuedTimeUs"] = queryStats.GetQueuedTimeUs();
+        stats["ResourcePoolId"] = poolId;
+    }
+    return SerializeRBOExplainPlan(std::move(txPlanJson));
 }
 
 } // namespace NKikimr::NKqp

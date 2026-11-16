@@ -8,6 +8,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/transform/yql_lazy_init.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
@@ -563,13 +564,27 @@ public:
         , Gateway(gateway)
         , SessionCtx(sessionCtx)
         , ExternalSourceFactory(externalSourceFactory)
-        , IntentDeterminationTransformer(CreateKiSinkIntentDeterminationTransformer(sessionCtx))
-        , TypeAnnotationTransformer(CreateKiSinkTypeAnnotationTransformer(gateway, sessionCtx, types))
-        , LogicalOptProposalTransformer(CreateKiLogicalOptProposalTransformer(sessionCtx, types))
-        , PhysicalOptProposalTransformer(CreateKiPhysicalOptProposalTransformer(sessionCtx))
-        , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
-        , DqTypeAnnTransformer(NDq::CreateDqTypeAnnotationTransformer())
-        , ConstraintsTransformer(CreateKiSinkConstraintsTransformer(sessionCtx))
+        , IntentDeterminationTransformer([sessionCtx] {
+            return THolder<IGraphTransformer>(CreateKiSinkIntentDeterminationTransformer(sessionCtx).Release());
+        })
+        , TypeAnnotationTransformer([gateway, sessionCtx, &types] {
+            return THolder<IGraphTransformer>(CreateKiSinkTypeAnnotationTransformer(gateway, sessionCtx, types).Release());
+        })
+        , LogicalOptProposalTransformer([sessionCtx, &types] {
+            return THolder<IGraphTransformer>(CreateKiLogicalOptProposalTransformer(sessionCtx, types).Release());
+        })
+        , PhysicalOptProposalTransformer([sessionCtx] {
+            return THolder<IGraphTransformer>(CreateKiPhysicalOptProposalTransformer(sessionCtx).Release());
+        })
+        , CallableExecutionTransformer([gateway, sessionCtx, queryExecutor] {
+            return THolder<IGraphTransformer>(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor).Release());
+        })
+        , DqTypeAnnTransformer([] {
+            return NDq::CreateDqTypeAnnotationTransformer();
+        })
+        , ConstraintsTransformer([sessionCtx] {
+            return THolder<IGraphTransformer>(CreateKiSinkConstraintsTransformer(sessionCtx).Release());
+        })
     {
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
@@ -1967,13 +1982,13 @@ private:
     // external object are not supported).
     THashSet<TString> ExternalWritePaths;
 
-    TAutoPtr<IGraphTransformer> IntentDeterminationTransformer;
-    TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
-    TAutoPtr<IGraphTransformer> LogicalOptProposalTransformer;
-    TAutoPtr<IGraphTransformer> PhysicalOptProposalTransformer;
-    TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
-    const THolder<TVisitorTransformerBase> DqTypeAnnTransformer;
-    const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
+    TLazyInitHolder<IGraphTransformer> IntentDeterminationTransformer;
+    TLazyInitHolder<IGraphTransformer> TypeAnnotationTransformer;
+    TLazyInitHolder<IGraphTransformer> LogicalOptProposalTransformer;
+    TLazyInitHolder<IGraphTransformer> PhysicalOptProposalTransformer;
+    TLazyInitHolder<IGraphTransformer> CallableExecutionTransformer;
+    const TLazyInitHolder<TVisitorTransformerBase> DqTypeAnnTransformer;
+    const TLazyInitHolder<IGraphTransformer> ConstraintsTransformer;
 };
 
 } // anonymous namespace

@@ -15,20 +15,76 @@ bool HasProperty(ui32 props, ui32 property) {
     return (props & property) == property;
 }
 
+void RenumberPlanNodes(NJson::TJsonValue& node, ui64& counter) {
+    node["PlanNodeId"] = counter++;
+    if (node.Has("Plans")) {
+        for (auto& child : node["Plans"].GetArraySafe()) {
+            RenumberPlanNodes(child, counter);
+        }
+    }
+}
+
+// Shared query inputs are separate transactions, not client result sets.
+// Keep references in the execution plan and expand their producers in the
+// simplified view, just as we do for Replicate ports within a single root.
+void ResolveMaterializedInputs(NJson::TJsonValue& node,
+    const THashMap<TString, NJson::TJsonValue>& inputs, ui64& counter, bool simplified)
+{
+    if (node.Has("Plans")) {
+        for (auto& child : node["Plans"].GetArraySafe()) {
+            ResolveMaterializedInputs(child, inputs, counter, simplified);
+        }
+    }
+    const auto resolve = [&](const TString& name) {
+        const auto input = inputs.find(name);
+        if (input == inputs.end()) {
+            return;
+        }
+        node["CTE Name"] = name;
+        if (simplified) {
+            auto producer = input->second;
+            // Plan nodes are occurrences; OperatorId still identifies the
+            // original producer for EXPLAIN ANALYZE statistics correlation.
+            RenumberPlanNodes(producer, counter);
+            node["Plans"].AppendValue(std::move(producer));
+        }
+    };
+    if (simplified && node.Has("Operators")) {
+        for (const auto& op : node["Operators"].GetArray()) {
+            if (op["Parameter"].IsString()) {
+                resolve(op["Parameter"].GetStringSafe());
+            }
+        }
+    } else if (!simplified && node.Has("Parameter")) {
+        resolve(node["Parameter"].GetStringSafe());
+    }
+}
+
 std::pair<NJson::TJsonValue, NJson::TJsonValue> BuildPlans(const TVector<TIntrusivePtr<TOpRoot>>& roots) {
     ui64 counter = 0;
     ui32 operatorIdx = 0;
     THashMap<IOperator*, ui32> operatorIds;
     TVector<NJson::TJsonValue> executionJsons;
     TVector<NJson::TJsonValue> explainJsons;
+    THashMap<TString, NJson::TJsonValue> materializedInputs;
 
     for (auto & rootPtr : roots) {
-        executionJsons.push_back(rootPtr->GetExecutionJson(counter, operatorIdx, operatorIds));
-        explainJsons.push_back(rootPtr->GetExplainJson(counter, operatorIds));
+        auto execution = rootPtr->GetExecutionJson(counter, operatorIdx, operatorIds);
+        auto explain = rootPtr->GetExplainJson(counter, operatorIds);
+        if (!materializedInputs.empty()) {
+            ResolveMaterializedInputs(execution, materializedInputs, counter, false);
+            ResolveMaterializedInputs(explain, materializedInputs, counter, true);
+        }
+        executionJsons.push_back(std::move(execution));
+        if (const auto& name = rootPtr->PlanProps.MaterializedResult) {
+            materializedInputs.emplace(*name, std::move(explain["Plans"].GetArraySafe().front()));
+        } else {
+            explainJsons.push_back(std::move(explain));
+        }
     }
 
     if (roots.size()==1) {
-        return std::make_pair(executionJsons[0], explainJsons[0]);
+        return std::make_pair(std::move(executionJsons[0]), std::move(explainJsons[0]));
     } else {
         NJson::TJsonValue execResult;
         execResult["PlanNodeId"] = counter++;
@@ -37,22 +93,27 @@ std::pair<NJson::TJsonValue, NJson::TJsonValue> BuildPlans(const TVector<TIntrus
 
         auto execList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
         for (auto & execJson : executionJsons) {
-            execList.AppendValue(execJson);
+            execList.AppendValue(std::move(execJson));
         }
-        execResult["Plans"] = execList;
+        execResult["Plans"] = std::move(execList);
 
         NJson::TJsonValue explainResult;
         explainResult["PlanNodeId"] = counter++;
         explainResult["PlanNodeType"] = "ResultSets";
         explainResult["Node Type"] = "ResultSets";
 
-        auto explainList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-        for (auto & explainJson : explainJsons) {
-            explainList.AppendValue(explainJson);
+        // A materialized input may leave only one externally visible root.
+        if (explainJsons.size() == 1) {
+            explainResult = std::move(explainJsons.front());
+        } else {
+            auto explainList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+            for (auto & explainJson : explainJsons) {
+                explainList.AppendValue(std::move(explainJson));
+            }
+            explainResult["Plans"] = std::move(explainList);
         }
-        explainResult["Plans"] = explainList;
 
-        return std::make_pair(execResult, explainResult);
+        return std::make_pair(std::move(execResult), std::move(explainResult));
     }
 }
 } // namespace
@@ -289,8 +350,8 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoo
     {
         TCompileTraceScope traceScope(trace, TCompileTraceLevels::Step, "Build plan JSON");
         auto [execJson, explainJson] = BuildPlans(roots);
-        rboCtx.ExecutionJson = execJson;
-        rboCtx.ExplainJson = explainJson;
+        rboCtx.ExecutionJson = std::move(execJson);
+        rboCtx.ExplainJson = std::move(explainJson);
     }
 
     return ConvertToPhysical(roots, rboCtx);

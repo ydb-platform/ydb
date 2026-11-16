@@ -387,6 +387,15 @@ private:
         YDB_LOG_INFO_CTX(*TlsActivationContext, "Subscribed for config changes");
     }
 
+    bool UseNativeFrontend(const TKqpQueryId& query) const {
+        // Native plans use text caching. The AST cache requires a translated
+        // legacy graph and must not force translation before native preparation.
+        return TableServiceConfig.GetEnableNewYqlParser() && TableServiceConfig.GetEnableNewRBO()
+            && !query.Settings.IsAnalyze && query.Settings.Syntax != Ydb::Query::Syntax::SYNTAX_PG
+            && IsIn({NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_SCAN,
+                NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY}, query.Settings.QueryType);
+    }
+
     void Handle(TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
         const auto& tenant = ev->Get()->Record.GetTenantName();
         auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
@@ -619,6 +628,8 @@ private:
             ev->Get()->Orbit,
             ev->Get()->Query ? ev->Get()->Query->UserSid : "");
 
+        const bool nativeFrontend = UseNativeFrontend(*request.Query) && !request.QueryAst
+            && !(request.PerStatementResult && TableServiceConfig.GetEnablePerStatementQueryExecution());
         TKqpCompileSettings compileSettings(
             request.KeepInCache,
             request.IsQueryActionPrepare,
@@ -626,7 +637,7 @@ private:
             request.Deadline,
             ev->Get()->Split
                 ? ECompileActorAction::SPLIT
-                : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
+                : (TableServiceConfig.GetEnableAstCache() && !nativeFrontend && !request.QueryAst)
                     ? ECompileActorAction::PARSE
                     : ECompileActorAction::COMPILE,
             request.IsWarmupCompilation);
@@ -679,6 +690,8 @@ private:
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "Get query plan");
             MarkSpawn(compileServiceSpan);
 
+            const bool nativeFrontend = !request.QueryAst
+                && UseNativeFrontend(request.Query ? *request.Query : *compileResult->Query);
             TKqpCompileSettings compileSettings(
                 true,
                 request.IsQueryActionPrepare,
@@ -686,7 +699,7 @@ private:
                 request.Deadline,
                 ev->Get()->Split
                     ? ECompileActorAction::SPLIT
-                : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
+                : (TableServiceConfig.GetEnableAstCache() && !nativeFrontend && !request.QueryAst)
                         ? ECompileActorAction::PARSE
                         : ECompileActorAction::COMPILE);
             auto query = request.Query ? *request.Query : *compileResult->Query;

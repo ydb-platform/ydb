@@ -91,7 +91,7 @@ NJson::TJsonValue GetExplainJsonRec(IOperator* op, TExplainJsonContext& ctx) {
         operatorJson["OperatorId"] = operatorId->second;
     }
     operatorList.AppendValue(std::move(operatorJson));
-    result["Operators"] = operatorList;
+    result["Operators"] = std::move(operatorList);
 
     auto getChildJson = [&](const auto& child, ui32 childIndex) {
         auto childJson = GetExplainJsonRec(child, ctx);
@@ -104,8 +104,8 @@ NJson::TJsonValue GetExplainJsonRec(IOperator* op, TExplainJsonContext& ctx) {
             connectionJson["PlanNodeId"] = ctx.NextNodeId();
 
             NJson::TJsonValue plans(NJson::EJsonValueType::JSON_ARRAY);
-            plans.AppendValue(childJson);
-            connectionJson["Plans"] = plans;
+            plans.AppendValue(std::move(childJson));
+            connectionJson["Plans"] = std::move(plans);
 
             return connectionJson;
         }
@@ -118,7 +118,7 @@ NJson::TJsonValue GetExplainJsonRec(IOperator* op, TExplainJsonContext& ctx) {
         for (ui32 i = 0; i < op->GetChildren().size(); ++ i) {
             plans.AppendValue(getChildJson(op->GetChildren()[i], i));
         }
-        result["Plans"] = plans;
+        result["Plans"] = std::move(plans);
     }
 
     return result;
@@ -134,6 +134,12 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
     result["PlanNodeId"] = nodeCounter++;
     result["PlanNodeType"] = "ResultSet";
     result["Node Type"] = "ResultSet";
+    if (PlanProps.MaterializedResult) {
+        result["PlanNodeType"] = "Materialize";
+        result["Node Type"] = "Precompute";
+        result["Parent Relationship"] = "InitPlan";
+        result["Subplan Name"] = "CTE " + *PlanProps.MaterializedResult;
+    }
 
     // Add the final stage
     NJson::TJsonValue finalStage;
@@ -145,6 +151,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
     // Then iterate through stage ids and output a plan node for each stage
 
     THashMap<int, TVector<IOperator*>> stageOpMap;
+    THashMap<int, std::set<TString>> stageParameters;
     std::set<int> stages;
 
     for (const auto& it : *this) {
@@ -155,6 +162,13 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
         }
 
         auto & stageOps = stageOpMap.at(stageId);
+
+        if (currOp->Kind == EOperator::EmptySource) {
+            const auto& input = CastOperator<TOpEmptySource>(*currOp).Input;
+            if (input && NYql::NNodes::TCoParameter::Match(input.Get())) {
+                stageParameters[stageId].insert(NYql::NNodes::TCoParameter(input).Name().StringValue());
+            }
+        }
 
         if (currOp->Kind != EOperator::EmptySource && !IsReplicateOperator(*currOp)) {
             // This map defines which operators can be correlated across execution and simplified plans.
@@ -175,7 +189,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
         if (!stages.contains(stageId)) {
             continue;
         }
-        auto ops = stageOpMap.at(stageId);
+        const auto& ops = stageOpMap.at(stageId);
         TString stageName;
 
         // First, build the list of operators in the stage
@@ -201,9 +215,19 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
 
         // Build a list of subplans - these are connection objects of input stages
         auto planList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+        if (const auto parameters = stageParameters.find(stageId); parameters != stageParameters.end()) {
+            for (const auto& parameter : parameters->second) {
+                NJson::TJsonValue source;
+                source["PlanNodeId"] = nodeCounter++;
+                source["Node Type"] = "Parameter";
+                source["Parameter"] = parameter;
+                planList.AppendValue(std::move(source));
+            }
+        }
         const auto& stageInputs = PlanProps.StageGraph.IncomingEdges(*graphStage);
         for (const auto* edge : stageInputs) {
-            planList.AppendValue(processedStages.at(edge->Id()));
+            // Each edge has one consumer, so its subtree can be transferred.
+            planList.AppendValue(std::move(processedStages.at(edge->Id())));
         }
         const auto& stageOutputs = PlanProps.StageGraph.OutgoingEdges(*graphStage);
 
@@ -212,10 +236,10 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
             finalStage["Node Type"] = stageName;
             finalStage["StageGuid"] = graphStage->Guid();
             if (ops.size()) {
-                finalStage["Operators"] = operatorList;
+                finalStage["Operators"] = std::move(operatorList);
             }
-            if (stageInputs.size()) {
-                finalStage["Plans"] = planList;
+            if (!planList.GetArraySafe().empty()) {
+                finalStage["Plans"] = std::move(planList);
             }
         }
 
@@ -234,10 +258,10 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
                     stage["StageGuid"] = graphStage->Guid();
 
                     if (ops.size()) {
-                        stage["Operators"] = operatorList;
+                        stage["Operators"] = std::move(operatorList);
                     }
-                    if (stageInputs.size()) {
-                        stage["Plans"] = planList;
+                    if (!planList.GetArraySafe().empty()) {
+                        stage["Plans"] = std::move(planList);
                     }
                     if (stageOutputs.size() > 1) {
                         cteName = TStringBuilder() << stageName << "_" << stageId;
@@ -254,8 +278,8 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
         }
     }
 
-    plans.AppendValue(finalStage);
-    result["Plans"] = plans;
+    plans.AppendValue(std::move(finalStage));
+    result["Plans"] = std::move(plans);
 
     return result;
 }
@@ -270,7 +294,7 @@ NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, const THashMap<IOpe
     NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
     TExplainJsonContext ctx{PlanProps, PlanProps.InfoUnitRegistry, nodeCounter, operatorIds, explainFlags};
     plans.AppendValue(GetExplainJsonRec(GetInput().Get(), ctx));
-    result["Plans"] = plans;
+    result["Plans"] = std::move(plans);
 
     return result;
 }

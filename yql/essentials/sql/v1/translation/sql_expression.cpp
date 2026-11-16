@@ -2246,7 +2246,7 @@ TNodeResult TSqlExpression::YqlXorSubExpr(
 
     if (alt.HasBlock3()) {
         Token(alt.GetBlock3().GetToken1());
-        return UnsupportedYqlSelect(Ctx_, "COMPACT");
+        Ctx_.IncrementMonCounter("sql_features", "IsCompactHint");
     }
 
     TNodeResult rhs = [&]() {
@@ -2263,9 +2263,12 @@ TNodeResult TSqlExpression::YqlXorSubExpr(
 
     TNodePtr expr;
     if (auto source = GetYqlSource(*rhs)) {
-        expr = BuildYqlInSubquery(std::move(source), std::move(lhs));
+        expr = BuildYqlInSubquery(std::move(source), std::move(lhs), alt.HasBlock3());
     } else {
         TNodePtr hints = BuildTuple(Ctx_.Pos(), {});
+        if (alt.HasBlock3()) {
+            hints = BuildTuple(Ctx_.Pos(), {BuildTuple(Ctx_.Pos(), {BuildQuotedAtom(Ctx_.Pos(), "isCompact")})});
+        }
         TVector<TNodePtr> args = {
             std::move(lhs),
             std::move(*rhs),

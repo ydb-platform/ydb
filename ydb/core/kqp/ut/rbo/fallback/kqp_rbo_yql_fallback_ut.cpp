@@ -218,8 +218,12 @@ void TestLegacyOptimizerWithStats(const TString& query, bool fallbackEnabled, bo
     }
 
     const auto countersAfter = GetNewRBOCompileCounters(kikimr);
-    UNIT_ASSERT_VALUES_EQUAL(countersAfter.first, countersBefore.first);
-    UNIT_ASSERT_VALUES_EQUAL(countersAfter.second, countersBefore.second + (fallbackEnabled ? 1 : 0));
+    // The native frontend supports this semi-join; sampling still selects the
+    // legacy optimizer in the host without an unsuccessful RBO attempt.
+    const bool native = fallbackEnabled
+        && kikimr.GetTestServer().GetSettings().AppConfig->GetTableServiceConfig().GetEnableNewYqlParser();
+    UNIT_ASSERT_VALUES_EQUAL(countersAfter.first, countersBefore.first + (native ? 1 : 0));
+    UNIT_ASSERT_VALUES_EQUAL(countersAfter.second, countersBefore.second + (fallbackEnabled && !native ? 1 : 0));
 }
 
 } // namespace
@@ -288,8 +292,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(planRoot.contains("Stats"), plan);
 
         const auto compileCountersAfter = GetNewRBOCompileCounters(kikimr);
-        UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.first, compileCountersBefore.first);
-        UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.second, compileCountersBefore.second + 1);
+        const bool native = kikimr.GetTestServer().GetSettings().AppConfig->GetTableServiceConfig().GetEnableNewYqlParser();
+        UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.first, compileCountersBefore.first + (native ? 1 : 0));
+        UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.second, compileCountersBefore.second + (native ? 0 : 1));
     }
 
     Y_UNIT_TEST(ReqJsonLogsActualOptimizer) {

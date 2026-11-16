@@ -102,6 +102,8 @@ struct TRequestOptions {
     std::unordered_map<TString, Ydb::TypedValue> Params;
     std::optional<TVector<NACLib::TSID>> GroupSIDs = std::nullopt;
     Ydb::Table::QueryStatsCollection_Mode StatsCollectionMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
+    bool TraceEnabled = true;
+    std::optional<ui8> TraceLevel = std::nullopt;
 };
 
 }   // namespace NKqpRun

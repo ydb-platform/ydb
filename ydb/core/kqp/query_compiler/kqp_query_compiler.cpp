@@ -368,16 +368,16 @@ void FillNothingData(const TDataExprType& dataType, Ydb::TypedValue& value) {
     auto slot = dataType.GetSlot();
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
-    YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
-        NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
-
     if (slot == EDataSlot::Decimal) {
         const auto& paramsDataType = *dataType.Cast<TDataExprParamsType>();
         auto precision = FromString<ui8>(paramsDataType.GetParamOne());
         auto scale = FromString<ui8>(paramsDataType.GetParamTwo());
+        YQL_ENSURE(NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(NKikimr::NScheme::TDecimalType(precision, scale))));
         value.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type()->set_precision(precision);
         value.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type()->set_scale(scale);
     } else {
+        YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
+            NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
         auto& protoType = *value.mutable_type();
         protoType.mutable_optional_type()->mutable_item()->set_type_id((Ydb::Type::PrimitiveTypeId)typeId);
     }
@@ -751,6 +751,22 @@ public:
     bool CompilePhysicalQuery(const TKqpPhysicalQuery& query, const TKiDataQueryBlocks& dataQueryBlocks,
         NKqpProto::TKqpPhyQuery& queryProto, TExprContext& ctx) final
     {
+        TQueryExecutionMetadata metadata;
+        for (const auto& block : dataQueryBlocks) {
+            metadata.HasUncommittedChangesRead |= TKiDataQueryBlockSettings::Parse(block).HasUncommittedChangesRead;
+            for (const auto& result : block.Results()) {
+                metadata.DiscardResults.push_back(result.Discard().Value() == "1");
+            }
+            for (auto& operation : TableOperationsToProto(block.Operations(), ctx)) {
+                metadata.TableOperations.push_back(std::move(operation));
+            }
+        }
+        return CompilePhysicalQuery(query, metadata, queryProto, ctx);
+    }
+
+    bool CompilePhysicalQuery(const TKqpPhysicalQuery& query, const TQueryExecutionMetadata& metadata,
+        NKqpProto::TKqpPhyQuery& queryProto, TExprContext& ctx) final
+    {
         TGuard<TScopedAlloc> allocGuard(Alloc);
 
         auto querySettings = TKqpPhyQuerySettings::Parse(query);
@@ -794,36 +810,19 @@ public:
         bool enableDiscardSelect = Config->GetEnableDiscardSelect();
 
         TDynBitMap resultDiscardFlags;
-        ui32 resultCount = 0;
-        for (const auto& queryBlock : dataQueryBlocks) {
-            auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
-            if (queryBlockSettings.HasUncommittedChangesRead) {
-                queryProto.SetHasUncommittedChangesRead(true);
-            }
-
-            if (enableDiscardSelect) {
-                for (const auto& kiResult : queryBlock.Results()) {
-                    if (kiResult.Maybe<TKiResult>()) {
-                        auto result = kiResult.Cast<TKiResult>();
-                        bool discard = result.Discard().Value() == "1";
-                        if (discard) {
-                            resultDiscardFlags.Set(resultCount);
-                        }
-                        ++resultCount;
-                    }
+        const ui32 resultCount = metadata.DiscardResults.size();
+        queryProto.SetHasUncommittedChangesRead(metadata.HasUncommittedChangesRead);
+        if (enableDiscardSelect) {
+            for (ui32 i = 0; i < resultCount; ++i) {
+                if (metadata.DiscardResults[i]) {
+                    resultDiscardFlags.Set(i);
                 }
             }
-
-            auto ops = TableOperationsToProto(queryBlock.Operations(), ctx);
-            for (auto& op : ops) {
-                const auto tableName = op.GetTable();
-                auto operation = static_cast<TYdbOperation>(op.GetOperation());
-
-                *queryProto.AddTableOps() = std::move(op);
-
-                const auto& desc = TablesData->GetTable(Cluster, tableName);
-                TableDescriptionToTableInfo(desc, operation, *queryProto.MutableTableInfos());
-            }
+        }
+        for (const auto& op : metadata.TableOperations) {
+            *queryProto.AddTableOps() = op;
+            const auto& desc = TablesData->GetTable(Cluster, op.GetTable());
+            TableDescriptionToTableInfo(desc, static_cast<TYdbOperation>(op.GetOperation()), *queryProto.MutableTableInfos());
         }
 
         THashSet<std::pair<ui32, ui32>> shouldCreateChannel;

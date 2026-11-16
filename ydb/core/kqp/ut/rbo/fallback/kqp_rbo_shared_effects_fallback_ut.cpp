@@ -1,21 +1,22 @@
 #include <ydb/core/kqp/ut/rbo/effects/kqp_effects_helpers.h>
+#include <ydb/core/kqp/ut/rbo/kqp_rbo_yql_query_helpers.h>
 
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-// Supported-syntax counterpart of the disabled RandomWithIndex test in kqp_effects_ut.cpp.
+// Compare shared-input materialization with legacy execution, with and without an index.
 Y_UNIT_TEST_SUITE(KqpRboSharedEffectsFallback) {
 
     Y_UNIT_TEST_QUAD(RandomWithIndexOn, NewRbo, UseSecondaryIndex) {
         // Both REPLACE statements must use the same generated rowKey. Independent
-        // evaluation by RBO used to break the link between the two tables, so the
-        // RBO variants require fallback and compare the persisted keys directly.
+        // evaluation would break the link between the two tables. Require native
+        // RBO compilation and compare the persisted keys directly.
         auto config = NewRboAppConfig();
         config.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
         config.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
-        config.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(NewRbo);
+        config.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -69,11 +70,13 @@ Y_UNIT_TEST_SUITE(KqpRboSharedEffectsFallback) {
                 REPLACE INTO `/Root/GlobalKeyToRows`
                 SELECT $globalKey AS globalKey, rowKey FROM $rowUpdates;
             )";
+            const auto before = NYqlTests::GetNewRBOCompileCounters(kikimr);
             auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             if constexpr (NewRbo) {
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Compilation with the new RBO failed");
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "shared non-repeatable input");
+                const auto after = NYqlTests::GetNewRBOCompileCounters(kikimr);
+                UNIT_ASSERT(after.first > before.first);
+                UNIT_ASSERT_VALUES_EQUAL(after.second, before.second);
             }
         }
 

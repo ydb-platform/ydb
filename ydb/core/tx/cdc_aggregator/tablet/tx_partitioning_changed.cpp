@@ -53,19 +53,16 @@ public:
             return true;
         }
 
-        const auto result = Self->CdcAggregatorStream->UpdateSources(parentDataShardId, childDataShardIds);
-        switch (result.Outcome) {
-            case ESourceOutcome::Success:
-                Result->Record.SetStatus(TResult::SUCCESS);
-                break;
-            case ESourceOutcome::UnknownSource:
-                Result->Record.SetStatus(TResult::UNKNOWN_SOURCE);
-                Result->Record.SetError(TStringBuilder() << "DataShard " << parentDataShardId << " is not a source");
-                break;
+        const auto diff = Self->CdcAggregatorStream->ApplyPartitioningChange(parentDataShardId, childDataShardIds);
+        if (!diff) {
+            Result->Record.SetStatus(TResult::UNKNOWN_SOURCE);
+            Result->Record.SetError(TStringBuilder() << "DataShard " << parentDataShardId << " is not a source");
+            return true;
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistCdcAggregatorStreamSourcesDiff(db, result.Diff);
+        Self->PersistCdcAggregatorStreamSourcesDiff(db, *diff);
+        Result->Record.SetStatus(TResult::SUCCESS);
 
         return true;
     }

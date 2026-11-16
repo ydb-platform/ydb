@@ -92,25 +92,27 @@ bool TCdcAggregatorStream::IsSameConfig(const TCdcAggregatorStreamConfig& config
         });
 }
 
-TCdcAggregatorStreamUpdateSourcesResult TCdcAggregatorStream::UpdateSources(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds) {
-    TCdcAggregatorStreamUpdateSourcesResult result;
+std::optional<TCdcAggregatorStreamSourcesDiff> TCdcAggregatorStream::ApplyPartitioningChange(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds) {
     if (!SourceDataShardIds.contains(parentDataShardId)) {
         const bool applied = std::all_of(childDataShardIds.begin(), childDataShardIds.end(), [this](ui64 childDataShardId) {
             return SourceDataShardIds.contains(childDataShardId);
         });
-        result.Outcome = applied ? ESourceOutcome::Success : ESourceOutcome::UnknownSource;
-        return result;
+        if (!applied) {
+            return std::nullopt;
+        }
+        return TCdcAggregatorStreamSourcesDiff{};
     }
 
+    TCdcAggregatorStreamSourcesDiff diff;
     SourceDataShardIds.erase(parentDataShardId);
-    result.Diff.Deleted.insert(parentDataShardId);
+    diff.Deleted.insert(parentDataShardId);
     for (const auto childDataShardId : childDataShardIds) {
         if (SourceDataShardIds.insert(childDataShardId).second) {
-            result.Diff.Inserted.insert(childDataShardId);
+            diff.Inserted.insert(childDataShardId);
         }
     }
 
-    return result;
+    return diff;
 }
 
 } // namespace NKikimr::NCdcAggregator

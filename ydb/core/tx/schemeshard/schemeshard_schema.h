@@ -142,7 +142,6 @@ struct Schema : NIceDb::Schema {
         struct IncrementalBackupConfig : Column<13, NScheme::NTypeIds::String> {};
         struct DetailedMetricsSettings : Column<15, NScheme::NTypeIds::String> {};
         struct MultiColumnStatistics : Column<16, NScheme::NTypeIds::String> {};
-        struct BackupSourceIndexes : Column<17, NScheme::NTypeIds::String> {}; // TTableDescription
 
         using TKey = TableKey<TabId>;
         using TColumns = TableColumns<
@@ -161,8 +160,7 @@ struct Schema : NIceDb::Schema {
             OwnerActorId,
             IncrementalBackupConfig,
             DetailedMetricsSettings,
-            MultiColumnStatistics,
-            BackupSourceIndexes
+            MultiColumnStatistics
         >;
     };
 
@@ -185,7 +183,6 @@ struct Schema : NIceDb::Schema {
         struct IncrementalBackupConfig : Column<14, NScheme::NTypeIds::String> {};
         struct DetailedMetricsSettings : Column<16, NScheme::NTypeIds::String> {};
         struct MultiColumnStatistics :          Column<17, NScheme::NTypeIds::String> {};
-        struct BackupSourceIndexes : Column<18, NScheme::NTypeIds::String> {}; // TTableDescription
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -205,8 +202,7 @@ struct Schema : NIceDb::Schema {
             OwnerActorId,
             IncrementalBackupConfig,
             DetailedMetricsSettings,
-            MultiColumnStatistics,
-            BackupSourceIndexes
+            MultiColumnStatistics
         >;
     };
 

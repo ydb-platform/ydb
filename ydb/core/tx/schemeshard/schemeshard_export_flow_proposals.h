@@ -7,8 +7,6 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-bool IsRebuildIndexReplacement(const TSchemeShard* ss, const TPathId& tablePathId, const TString& indexName);
-
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
     TSchemeShard* ss,
     TTxId txId,

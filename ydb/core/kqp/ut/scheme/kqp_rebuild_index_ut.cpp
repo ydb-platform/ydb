@@ -540,7 +540,7 @@ public:
         }
     }
 
-    void CheckSettings(TTokenizer tokenizer, bool lowercase,
+    TSettings::TAnalyzers CheckSettings(TTokenizer tokenizer, bool lowercase,
         std::optional<std::pair<i32, i32>> length = {}, size_t indexCount = 1)
     {
         auto result = Kikimr.RunCall([&] {
@@ -576,6 +576,7 @@ public:
             UNIT_ASSERT(!analyzers.FilterLengthMin);
             UNIT_ASSERT(!analyzers.FilterLengthMax);
         }
+        return analyzers;
     }
 
     void CheckTokens(const TString& expected) {
@@ -791,6 +792,80 @@ void TestFulltextRebuildParametersWithWrites(bool relevance, bool compact, bool 
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpRebuildIndex) {
+    Y_UNIT_TEST_QUAD(FulltextDisablesInheritedFilters, Relevance, Compact) {
+        TFulltextRebuildE2E test(Relevance, Compact);
+        using TTokenizer = TFulltextRebuildE2E::TTokenizer;
+        test.Create(true);
+        test.Rebuild("tokenizer=alphanumeric, use_filter_lowercase=true");
+        const TString tokens = R"([["a"];["blue"];["green"];["red"];["violet"]])";
+
+        for (const auto& [enable, disable] : {
+                std::pair{"use_filter_length=true, filter_length_min=4, filter_length_max=5", "use_filter_length=false"},
+                std::pair{"use_filter_ngram=true, filter_ngram_min_length=2, filter_ngram_max_length=3", "use_filter_ngram=false"},
+                std::pair{"use_filter_edge_ngram=true, filter_ngram_min_length=2, filter_ngram_max_length=3", "use_filter_edge_ngram=false"},
+                std::pair{"use_filter_snowball=true, language=english", "use_filter_snowball=false"}}) {
+            test.Rebuild(enable);
+            test.Rebuild(disable);
+            const auto analyzers = test.CheckSettings(TTokenizer::Alphanumeric, true);
+            UNIT_ASSERT(!analyzers.UseFilterNgram.value_or(false));
+            UNIT_ASSERT(!analyzers.UseFilterEdgeNgram.value_or(false));
+            UNIT_ASSERT(!analyzers.FilterNgramMinLength);
+            UNIT_ASSERT(!analyzers.FilterNgramMaxLength);
+            UNIT_ASSERT(!analyzers.UseFilterSnowball.value_or(false));
+            UNIT_ASSERT(!analyzers.UseFilterSuperLemmer.value_or(false));
+            UNIT_ASSERT(!analyzers.Language);
+            test.CheckTokens(tokens);
+            test.CheckSearch("RED", R"([[1u;["one"]];[2u;["two"]]])");
+        }
+
+        // Shared options must survive switching to the other filter that uses them.
+        test.Rebuild("use_filter_ngram=true, filter_ngram_min_length=2, filter_ngram_max_length=3");
+        test.Rebuild("use_filter_ngram=false, use_filter_edge_ngram=true");
+        auto analyzers = test.CheckSettings(TTokenizer::Alphanumeric, true);
+        UNIT_ASSERT(!analyzers.UseFilterNgram.value_or(false));
+        UNIT_ASSERT(analyzers.UseFilterEdgeNgram.value_or(false));
+        UNIT_ASSERT_VALUES_EQUAL(analyzers.FilterNgramMinLength.value_or(-1), 2);
+        UNIT_ASSERT_VALUES_EQUAL(analyzers.FilterNgramMaxLength.value_or(-1), 3);
+        test.Rebuild("use_filter_ngram=true, use_filter_edge_ngram=false");
+        test.Rebuild("use_filter_ngram=false");
+
+        // Only inherited options may be discarded; explicit contradictions remain errors.
+        test.Rebuild("use_filter_length=true, filter_length_min=4, filter_length_max=5");
+        test.RejectSettings("filter_length_min=4, use_filter_length=false",
+            "use_filter_length should be set with filter_length_min");
+        test.RejectSettings("use_filter_length=false, filter_length_max=5",
+            "use_filter_length should be set with filter_length_max");
+        test.Rebuild("use_filter_length=false");
+        test.RejectSettings("use_filter_ngram=false, filter_ngram_min_length=2",
+            "use_filter_ngram or use_filter_edge_ngram should be set with filter_ngram_min_length");
+        test.RejectSettings("filter_ngram_max_length=3, use_filter_edge_ngram=false",
+            "use_filter_ngram or use_filter_edge_ngram should be set with filter_ngram_max_length");
+        test.RejectSettings("use_filter_snowball=false, language=english",
+            "language setting is only supported with use_filter_snowball or use_filter_superlemmer");
+        test.Rebuild();
+        test.CheckTokens(tokens);
+        test.CheckSearch("RED", R"([[1u;["one"]];[2u;["two"]]])");
+
+        // The open-source SuperLemmer stub cannot tokenize rows; test its settings on an empty table.
+        test.Execute("DELETE FROM `/Root/TestTable`;");
+        test.Rebuild("use_filter_snowball=true, language=english");
+        test.Rebuild("use_filter_snowball=false, use_filter_superlemmer=true");
+        analyzers = test.CheckSettings(TTokenizer::Alphanumeric, true);
+        UNIT_ASSERT(!analyzers.UseFilterSnowball.value_or(false));
+        UNIT_ASSERT(analyzers.UseFilterSuperLemmer.value_or(false));
+        UNIT_ASSERT_VALUES_EQUAL(analyzers.Language.value_or(""), "english");
+        test.Rebuild("use_filter_snowball=true, use_filter_superlemmer=false");
+        analyzers = test.CheckSettings(TTokenizer::Alphanumeric, true);
+        UNIT_ASSERT(analyzers.UseFilterSnowball.value_or(false));
+        UNIT_ASSERT(!analyzers.UseFilterSuperLemmer.value_or(false));
+        UNIT_ASSERT_VALUES_EQUAL(analyzers.Language.value_or(""), "english");
+        test.Rebuild("use_filter_snowball=false, use_filter_superlemmer=true");
+        test.Rebuild("use_filter_superlemmer=false");
+        analyzers = test.CheckSettings(TTokenizer::Alphanumeric, true);
+        UNIT_ASSERT(!analyzers.UseFilterSuperLemmer.value_or(false));
+        UNIT_ASSERT(!analyzers.Language);
+    }
+
     Y_UNIT_TEST_QUAD(FulltextPlainParametersEndToEnd, InlineIndex, Compact) {
         TestFulltextRebuildParameters(false, Compact, InlineIndex);
     }

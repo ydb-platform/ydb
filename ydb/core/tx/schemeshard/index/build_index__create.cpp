@@ -418,6 +418,13 @@ private:
         if (buildInfo.IsRebuild) {
             const auto indexPath = TPath::Resolve(settings.source_path(), Self).Child(index.name());
             existingIndex = Self->Indexes.at(indexPath.Base()->PathId);
+            // Inherit keys and covered columns independently before deriving build settings.
+            if (index.index_columns().empty()) {
+                index.mutable_index_columns()->Assign(existingIndex->IndexKeys.begin(), existingIndex->IndexKeys.end());
+            }
+            if (index.data_columns().empty()) {
+                index.mutable_data_columns()->Assign(existingIndex->IndexDataColumns.begin(), existingIndex->IndexDataColumns.end());
+            }
             // Preserve fulltext settings and row-id mode, including for JSON indexes.
             if (const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(
                 &existingIndex->SpecializedIndexDescription)) {
@@ -431,18 +438,6 @@ private:
         buildInfo.IndexName = index.name();
         buildInfo.IndexColumns.assign(index.index_columns().begin(), index.index_columns().end());
         buildInfo.DataColumns.assign(index.data_columns().begin(), index.data_columns().end());
-        if (buildInfo.IsRebuild && (index.index_columns().empty() || index.data_columns().empty())) {
-            // Inherit columns from the existing index when they are not provided explicitly.
-            // Index columns and data columns are inherited independently: providing one must
-            // not silently drop the other (e.g. specifying index_columns without data_columns
-            // must preserve the existing data columns).
-            if (index.index_columns().empty()) {
-                buildInfo.IndexColumns.assign(existingIndex->IndexKeys.begin(), existingIndex->IndexKeys.end());
-            }
-            if (index.data_columns().empty()) {
-                buildInfo.DataColumns.assign(existingIndex->IndexDataColumns.begin(), existingIndex->IndexDataColumns.end());
-            }
-        }
 
         switch (index.type_case()) {
         case Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex:
@@ -591,12 +586,6 @@ private:
             return false;
         }
 
-        // Partition settings also depend on the effective keys (notably vector prefixes).
-        if (index.index_columns().empty()) {
-            for (const auto& column : buildInfo.IndexColumns) {
-                index.add_index_columns(column);
-            }
-        }
         Ydb::StatusIds::StatusCode status;
         if (!FillIndexTablePartitioning(buildInfo.ImplTableDescriptions, index, status, explain)) {
             return false;

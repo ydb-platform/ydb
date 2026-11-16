@@ -327,7 +327,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, TString, bool, TString, TString, TString> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, TString, bool, TString, TString> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -347,8 +347,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::IncrementalBackupConfig>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsRestore>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::DetailedMetricsSettings>(),
-            rowSet.template GetValueOrDefault<typename SchemaTable::MultiColumnStatistics>(),
-            rowSet.template GetValueOrDefault<typename SchemaTable::BackupSourceIndexes>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::MultiColumnStatistics>()
         );
     }
 
@@ -2007,13 +2006,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     bool parseOk = ParseFromStringNoSizeLimit(statisticsHolder, statistics);
                     Y_ABORT_UNLESS(parseOk);
                     tableInfo->MutableMultiColumnStatistics()->Swap(statisticsHolder.MutableMultiColumnStatistics());
-                }
-
-                if (const auto backupSourceIndexes = std::get<16>(rec)) {
-                    NKikimrSchemeOp::TTableDescription snapshot;
-                    bool parseOk = ParseFromStringNoSizeLimit(snapshot, backupSourceIndexes);
-                    Y_ABORT_UNLESS(parseOk);
-                    tableInfo->TableDescription.MutableBackupSourceIndexes()->Swap(snapshot.MutableBackupSourceIndexes());
                 }
 
                 if (const auto replicationConfig = std::get<9>(rec)) {

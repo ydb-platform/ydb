@@ -3386,6 +3386,7 @@ public:
                         return SyncError();
                     }
 
+                    Ydb::Table::FulltextIndexSettings* fulltextSettings = nullptr;
                     // Resolve the type from metadata; REBUILD does not change the index kind.
                     switch (existingIndex->Type) {
                         case NYql::TIndexDescription::EType::GlobalSync:
@@ -3402,11 +3403,11 @@ public:
                             break;
                         case NYql::TIndexDescription::EType::GlobalFulltextPlain:
                         case NYql::TIndexDescription::EType::GlobalFulltextCompact:
-                            add_index->mutable_global_fulltext_plain_index();
+                            fulltextSettings = add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings();
                             break;
                         case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
                         case NYql::TIndexDescription::EType::GlobalFulltextCompactRelevance:
-                            add_index->mutable_global_fulltext_relevance_index();
+                            fulltextSettings = add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings();
                             break;
                         case NYql::TIndexDescription::EType::GlobalJson:
                         case NYql::TIndexDescription::EType::GlobalJsonCompact:
@@ -3431,17 +3432,7 @@ public:
                         }
                     }
 
-                    Ydb::Table::FulltextIndexSettings* fulltextSettings = nullptr;
-                    if (add_index->has_global_fulltext_plain_index()) {
-                        fulltextSettings = add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings();
-                    } else if (add_index->has_global_fulltext_relevance_index()) {
-                        fulltextSettings = add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings();
-                    }
-                    if (fulltextSettings) {
-                        // Apply partial overrides to the existing column analyzer, preserving unset options.
-                        *fulltextSettings = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(
-                            existingIndex->SpecializedIndexDescription).GetSettings();
-                    }
+                    Ydb::Table::FulltextIndexSettings fulltextOverrides;
 
                     // Vector settings are merged with existing settings by SchemeShard.
                     for (size_t i = 0; i < listNode.Size(); ++i) {
@@ -3477,7 +3468,7 @@ public:
                                         *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings(),
                                         settingName, value.StringValue(), error);
                                 } else if (fulltextSettings) {
-                                    NKikimr::NFulltext::FillSetting(*fulltextSettings, settingName, value.StringValue(), error);
+                                    NKikimr::NFulltext::FillSetting(fulltextOverrides, settingName, value.StringValue(), error);
                                 } else {
                                     error = TStringBuilder() << "Unknown index setting: " << settingName;
                                 }
@@ -3486,6 +3477,37 @@ public:
                                     return SyncError();
                                 }
                             }
+                        }
+                    }
+
+                    if (!fulltextOverrides.columns().empty()) {
+                        *fulltextSettings = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(
+                            existingIndex->SpecializedIndexDescription).GetSettings();
+                        const auto& overrides = fulltextOverrides.columns(0).analyzers();
+                        auto& analyzers = *fulltextSettings->mutable_columns(0)->mutable_analyzers();
+                        analyzers.MergeFrom(overrides);
+
+                        // Disabled filters must not retain inherited options. Keep explicit
+                        // options so validation still rejects contradictory user settings.
+                        if (!analyzers.use_filter_length()) {
+                            if (!overrides.has_filter_length_min()) {
+                                analyzers.clear_filter_length_min();
+                            }
+                            if (!overrides.has_filter_length_max()) {
+                                analyzers.clear_filter_length_max();
+                            }
+                        }
+                        if (!analyzers.use_filter_ngram() && !analyzers.use_filter_edge_ngram()) {
+                            if (!overrides.has_filter_ngram_min_length()) {
+                                analyzers.clear_filter_ngram_min_length();
+                            }
+                            if (!overrides.has_filter_ngram_max_length()) {
+                                analyzers.clear_filter_ngram_max_length();
+                            }
+                        }
+                        if (!analyzers.use_filter_snowball() && !analyzers.use_filter_superlemmer()
+                            && !overrides.has_language()) {
+                            analyzers.clear_language();
                         }
                     }
 

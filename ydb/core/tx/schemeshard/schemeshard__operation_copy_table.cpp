@@ -696,18 +696,6 @@ public:
         PrepareScheme(&schema, name, srcTableInfo, context);
         schema.SetIsBackup(isBackup);
 
-        if (isBackup && omitFollowers) {
-            for (const auto& [indexName, indexPathId] : srcPath.Base()->GetChildren()) {
-                const auto indexPath = srcPath.Child(indexName);
-                if (indexPath.IsDeleted() || !indexPath.IsTableIndex()
-                    || context.SS->Indexes.at(indexPathId)->State != NKikimrSchemeOp::EIndexStateReady) {
-                    continue;
-                }
-                context.SS->DescribeTableIndex(indexPathId, indexName, true, false,
-                    *schema.AddBackupSourceIndexes());
-            }
-        }
-
         if (omitFollowers) {
             schema.MutablePartitionConfig()->AddFollowerGroups()->Clear();
         }
@@ -806,7 +794,7 @@ public:
         TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
         userAttrs->Attrs = srcPath.Base()->UserAttrs->Attrs;
 
-        dstPath.MaterializeLeaf(isBackup ? srcPath.Base()->Owner : owner, allocatedPathId);
+        dstPath.MaterializeLeaf(owner, allocatedPathId);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         TPathElement::TPtr newTable = dstPath.Base();
@@ -815,10 +803,6 @@ public:
         newTable->PathState = TPathElement::EPathState::EPathStateCreate;
         newTable->PathType = TPathElement::EPathType::EPathTypeTable;
         newTable->UserAttrs->AlterData = userAttrs;
-        if (isBackup) {
-            // Preserve snapshot permissions even if the source is replaced before export.
-            newTable->ACL = srcPath.Base()->ACL;
-        }
 
         srcPath.Base()->PathState = TPathElement::EPathState::EPathStateCopying;
         srcPath.Base()->LastTxId = OperationId.GetTxId();

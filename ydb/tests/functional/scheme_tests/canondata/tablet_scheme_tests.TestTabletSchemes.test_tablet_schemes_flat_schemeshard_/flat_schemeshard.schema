@@ -322,11 +322,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 17,
-                "ColumnName": "BackupSourceIndexes",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "TabId",
                 "ColumnType": "Uint64"
@@ -411,7 +406,6 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    17,
                     1,
                     2,
                     3,
@@ -3972,6 +3966,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "MultiColumnStatistics",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "OwnerPathId",
                 "ColumnType": "Uint64"
@@ -4050,22 +4049,13 @@
                 "ColumnId": 16,
                 "ColumnName": "DetailedMetricsSettings",
                 "ColumnType": "String"
-            },
-            {
-                "ColumnId": 17,
-                "ColumnName": "MultiColumnStatistics",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 18,
-                "ColumnName": "BackupSourceIndexes",
-                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -4081,9 +4071,7 @@
                     13,
                     14,
                     15,
-                    16,
-                    17,
-                    18
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

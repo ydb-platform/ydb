@@ -1,6 +1,5 @@
 #include "schemeshard_export_flow_proposals.h"
 
-#include "index/index_build_info.h"
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
 
@@ -73,16 +72,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     return propose;
 }
 
-bool IsRebuildIndexReplacement(const TSchemeShard* ss, const TPathId& tablePathId, const TString& indexName) {
-    if (const auto* lock = ss->LockedPaths.FindPtr(tablePathId)) {
-        if (const auto* buildId = ss->TxIdToIndexBuilds.FindPtr(*lock)) {
-            const auto& build = ss->IndexBuilds.at(*buildId);
-            return build->TablePathId == tablePathId && build->IsRebuild && build->RebuildIndexName == indexName;
-        }
-    }
-    return false;
-}
-
 static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const TPathId& pathId) {
     NKikimrSchemeOp::TDescribeOptions opts;
     opts.SetReturnPartitioningInfo(false);
@@ -93,16 +82,6 @@ static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const 
 
     auto desc = DescribePath(ss, TlsActivationContext->AsActorContext(), pathId, opts);
     auto record = desc->GetRecord();
-    if (record.GetPathDescription().HasTable()) {
-        auto& indexes = *record.MutablePathDescription()->MutableTable()->MutableTableIndexes();
-        for (auto it = indexes.begin(); it != indexes.end();) {
-            if (IsRebuildIndexReplacement(ss, pathId, it->GetName())) {
-                it = indexes.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
 
     return record.GetPathDescription();
 }
@@ -220,65 +199,24 @@ void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription
     }
 }
 
-static void RestoreIndexReadReplicas(NKikimrSchemeOp::TIndexDescription& index,
-    const NKikimrSchemeOp::TIndexDescription& source)
-{
-    // Both descriptions list implementation tables in child-name order.
-    for (size_t i = 0; i < index.IndexImplTableDescriptionsSize() && i < source.IndexImplTableDescriptionsSize(); ++i) {
-        auto& config = *index.MutableIndexImplTableDescriptions(i)->MutablePartitionConfig();
-        const auto& original = source.GetIndexImplTableDescriptions(i).GetPartitionConfig();
-        config.MutableFollowerGroups()->CopyFrom(original.GetFollowerGroups());
-        config.ClearFollowerCount();
-        config.ClearCrossDataCenterFollowerCount();
-        if (original.HasFollowerCount()) {
-            config.SetFollowerCount(original.GetFollowerCount());
-        }
-        if (original.HasCrossDataCenterFollowerCount()) {
-            config.SetCrossDataCenterFollowerCount(original.GetCrossDataCenterFollowerCount());
-        }
-    }
+void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc, const TPathId& exportItemPathId) {
+    auto copiedPath = GetDescription(ss, exportItemPathId);
+    const auto& copiedTable = copiedPath.GetTable();
+
+    *desc.MutableSplitBoundary() = copiedTable.GetSplitBoundary();
+    *desc.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
 }
 
 void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, const TPath& sourcePath, const TPath& exportItemPath) {
-    if (!exportItemPath.IsResolved() && (!sourcePath.IsResolved() || !sourcePath->IsColumnTable())) {
+    if (!sourcePath.IsResolved() || (!sourcePath->IsColumnTable() && !exportItemPath.IsResolved())) {
         return;
     }
 
-    auto sourceDescription = sourcePath.IsResolved()
-        ? GetDescription(ss, sourcePath.Base()->PathId) : NKikimrSchemeOp::TPathDescription();
-    const auto copiedDescription = exportItemPath.IsResolved()
-        ? GetDescription(ss, exportItemPath.Base()->PathId) : NKikimrSchemeOp::TPathDescription();
-    // Replacing an index can remove its original implementation tables after the snapshot is copied.
-    if (!sourceDescription.HasTable() && copiedDescription.HasTable()
-        && exportItemPath.Parent().IsTableIndex({}, false)) {
-        sourceDescription = copiedDescription;
-    }
+    auto sourceDescription = GetDescription(ss, sourcePath.Base()->PathId);
     if (sourceDescription.HasTable()) {
-        auto& table = *sourceDescription.MutableTable();
         FillSetValForSequences(
-            ss, table, exportItemPath.Base()->PathId);
-        const auto& copiedTable = copiedDescription.GetTable();
-        *table.MutableSplitBoundary() = copiedTable.GetSplitBoundary();
-        *table.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
-        for (auto& index : *table.MutableTableIndexes()) {
-            for (const auto& copiedIndex : copiedTable.GetTableIndexes()) {
-                if (index.GetName() == copiedIndex.GetName()) {
-                    auto originalIndex = index;
-                    // Materialized rows must retain their snapshot's analyzer and partitioning.
-                    index = copiedIndex;
-                    const auto& snapshot = ss->Tables.at(exportItemPath.Base()->PathId)->TableDescription;
-                    for (const auto& savedIndex : snapshot.GetBackupSourceIndexes()) {
-                        if (savedIndex.GetName() == index.GetName()) {
-                            originalIndex = savedIndex;
-                            break;
-                        }
-                    }
-                    // Older snapshots fall back to the source description.
-                    RestoreIndexReadReplicas(index, originalIndex);
-                    break;
-                }
-            }
-        }
+            ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+        FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
         for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
             auto cdcPathDesc =  GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
             for (const auto& child : cdcPathDesc.GetChildren()) {

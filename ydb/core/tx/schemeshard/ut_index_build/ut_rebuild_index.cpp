@@ -664,6 +664,82 @@ Y_UNIT_TEST_SUITE(RebuildIndexLifecycle) {
 
 #undef REBUILD_INDEX_TESTS
 
+    Y_UNIT_TEST(SchemaChangesDuringGlobalIndexRebuild) {
+        TRebuildTest test(EKind::Sync);
+        const auto source = DescribePrivatePath(test.Runtime, test.Table, true, true);
+        const TString split = TStringBuilder() << "SourceTabletId: "
+            << source.GetPathDescription().GetTablePartitions(0).GetDatashardId() << R"(
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 2 } } } }
+        )";
+        const TString alter = R"(
+            Name: "Table"
+            PartitionConfig { PartitioningPolicy { SizeToSplit: 33554432 } }
+        )";
+        auto checkIndex = [&](const TString& table, ui32 indexCount = 1) {
+            TestDescribeResult(DescribePath(test.Runtime, table), {NLs::IndexesCount(indexCount)});
+            const auto description = DescribePrivatePath(test.Runtime, table + "/idx");
+            TestDescribeResult(description, {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+            test.CheckMetadata(description.GetPathDescription().GetTableIndex());
+            UNIT_ASSERT_VALUES_EQUAL(ReadShards(test.Runtime, test.SchemeShard, table + "/idx/indexImplTable"),
+                test.SecondaryRows);
+        };
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> filling(test.Runtime);
+        Y_DEFER { filling.Stop().Unblock(); };
+        const ui64 buildId = test.Start();
+        test.Runtime.WaitFor("rebuild scan before schema changes", [&] { return !filling.empty(); });
+        TestCopyTable(test.Runtime, ++test.TxId, "/MyRoot", "Copy", test.Table, NKikimrScheme::StatusMultipleModifications);
+        TestMoveTable(test.Runtime, ++test.TxId, test.Table, "/MyRoot/Moved", {NKikimrScheme::StatusMultipleModifications});
+        TestMoveIndex(test.Runtime, ++test.TxId, test.Table, "idx", "Renamed", false,
+            {NKikimrScheme::StatusMultipleModifications});
+        TestSplitTable(test.Runtime, ++test.TxId, test.Table, split, {NKikimrScheme::StatusMultipleModifications});
+        TestAlterTable(test.Runtime, ++test.TxId, "/MyRoot", alter, {NKikimrScheme::StatusMultipleModifications});
+        TestDescribeResult(DescribePath(test.Runtime, "/MyRoot/Copy"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(test.Runtime, "/MyRoot/Moved"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(test.Runtime, test.Table + "/Renamed"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(test.Runtime, test.Table, true), {NLs::PartitionCount(1)});
+        test.CheckLive();
+        UNIT_ASSERT_VALUES_EQUAL(DescribePrivatePath(test.Runtime, test.Table, true, true)
+            .GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().GetSizeToSplit(),
+            source.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().GetSizeToSplit());
+        checkIndex(test.Table, 2);
+
+        filling.Stop().Unblock();
+        test.Wait(buildId, Ydb::Table::IndexBuildState::STATE_DONE);
+        test.CheckFinished(buildId, true);
+        TestForgetBuildIndex(test.Runtime, ++test.TxId, test.SchemeShard, "/MyRoot", buildId);
+        TestAlterTable(test.Runtime, ++test.TxId, "/MyRoot", alter);
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+        UNIT_ASSERT_VALUES_EQUAL(DescribePrivatePath(test.Runtime, test.Table, true, true)
+            .GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().GetSizeToSplit(), 33554432);
+        TestSplitTable(test.Runtime, ++test.TxId, test.Table, split);
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+        TestDescribeResult(DescribePath(test.Runtime, test.Table, true), {NLs::PartitionCount(2)});
+        checkIndex(test.Table);
+
+        // A second rebuild also works after changing the source shard layout.
+        const ui64 secondBuildId = test.Start();
+        test.Wait(secondBuildId, Ydb::Table::IndexBuildState::STATE_DONE);
+        test.CheckFinished(secondBuildId, true);
+        TestForgetBuildIndex(test.Runtime, ++test.TxId, test.SchemeShard, "/MyRoot", secondBuildId);
+        TestCopyTable(test.Runtime, ++test.TxId, "/MyRoot", "Copy", test.Table);
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+        checkIndex("/MyRoot/Copy");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(test.Runtime, test.SchemeShard, "/MyRoot/Copy"),
+            ReadShards(test.Runtime, test.SchemeShard, test.Table));
+        TestMoveTable(test.Runtime, ++test.TxId, "/MyRoot/Copy", "/MyRoot/Moved");
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+        TestDescribeResult(DescribePath(test.Runtime, "/MyRoot/Copy"), {NLs::PathNotExist});
+        checkIndex("/MyRoot/Moved");
+        TestMoveIndex(test.Runtime, ++test.TxId, "/MyRoot/Moved", "idx", "Renamed", false);
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+        TestDescribeResult(DescribePrivatePath(test.Runtime, "/MyRoot/Moved/idx"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(test.Runtime, "/MyRoot/Moved/Renamed"),
+            {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexStateReady), NLs::IndexKeys({"value"})});
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(test.Runtime, test.SchemeShard, "/MyRoot/Moved/Renamed/indexImplTable"),
+            test.SecondaryRows);
+    }
+
     Y_UNIT_TEST(CancelPreparingSecondary) {
         Cancellation(EKind::Sync, true);
     }

@@ -1062,9 +1062,6 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
     alterData->IsBackup = op.GetIsBackup();
     alterData->IsRestore = op.GetIsRestore();
-    if (alterData->IsBackup) {
-        alterData->TableDescriptionFull->MutableBackupSourceIndexes()->CopyFrom(op.GetBackupSourceIndexes());
-    }
 
     if (source && op.KeyColumnNamesSize() == 0)
         return alterData;

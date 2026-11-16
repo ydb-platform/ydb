@@ -145,9 +145,12 @@ struct TEvKqpExecuter {
     };
 };
 
+class IKqpStreamingQueryControllerFactory;
 struct TKqpFederatedQuerySetup;
 
 struct TExecuterMutableConfig : public TAtomicRefCount<TExecuterMutableConfig>{
+    // Set once by the proxy before sessions are created, including when FQ setup is absent.
+    std::shared_ptr<IKqpStreamingQueryControllerFactory> StreamingQueryControllerFactory;
     std::atomic<bool> EnableRowsDuplicationCheck = false;
     std::atomic<i32> RuntimeParameterSizeLimit = 0;
 

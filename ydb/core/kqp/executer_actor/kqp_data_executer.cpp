@@ -15,7 +15,6 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/reattach.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
-#include <ydb/core/kqp/federated_query/streaming_helper.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
@@ -1327,37 +1326,17 @@ private:
         }
     }
 
-    void CreateStreamingQueryController() {
-        if (!FederatedQuerySetup || !FederatedQuerySetup->StreamingQueryControllerFactory) {
-            return;
-        }
-
-        bool hasPqSources = false;
-        for (const auto& transaction : Request.Transactions) {
-            hasPqSources |= transaction.Body->GetHasPqSources();
-        }
-
-        StreamingQuery = FederatedQuerySetup->StreamingQueryControllerFactory->Create({
-            .ExecuterId = SelfId(),
-            .TxId = TxId,
-            .Database = Database,
-            .UserToken = UserToken,
-            .UserRequestContext = GetUserRequestContext(),
-            .KqpCounters = Counters->Counters->GetKqpCounters(),
-            .Graph = Request.QueryPhysicalGraph,
-            .SaveGraph = Request.SaveQueryPhysicalGraph,
-            .HasPqSources = hasPqSources,
-        });
-    }
-
     void StartStreamingQueryPrepare() {
+        TVector<std::shared_ptr<const TKqpPhyTxHolder>> transactions;
+        transactions.reserve(Request.Transactions.size());
         THashMap<TString, TString> secureParams;
         for (const auto& transaction : Request.Transactions) {
+            transactions.push_back(transaction.Body);
             for (const auto& stage : transaction.Body->GetStages()) {
                 TasksGraph.FillExternalSourceSecureParams(secureParams, stage);
             }
         }
-        StreamingQuery->StartPrepare(CollectPqSources(Request.Transactions, Database), std::move(secureParams));
+        StreamingQuery->StartPrepare(std::move(transactions), std::move(secureParams));
     }
 
 private:

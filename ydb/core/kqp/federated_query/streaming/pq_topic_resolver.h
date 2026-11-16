@@ -14,6 +14,17 @@ class TQueryPhysicalGraph;
 
 namespace NKikimr::NKqp {
 
+// Description of a single PQ topic source that needs to be resolved.
+struct TPqTopicResolverSource {
+    TString Cluster;
+    TString Endpoint;
+    TString Database;   // real YDB database path for the describe RPC
+    TString TopicPath;
+    TString TokenName;   // key in SecureParams to look up the auth token
+    bool UseSsl = false;
+    TString DatabaseForClusterConfig;   // raw "database" field from the proto (may be cluster alias)
+};
+
 // Creates a TKqpPqTopicResolver actor.
 //
 // The actor describes the supplied PQ sources in parallel using

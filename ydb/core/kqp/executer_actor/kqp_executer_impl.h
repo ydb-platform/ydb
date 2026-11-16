@@ -24,7 +24,6 @@
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
-#include <ydb/core/kqp/federated_query/streaming_helper.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -138,6 +137,7 @@ public:
         , StatsReportingSettings(MakeStatsReportingSettings(*userRequestContext, Request.ProgressStatsPeriod))
         , AsyncIoFactory(std::move(asyncIoFactory))
         , FederatedQuerySetup(federatedQuerySetup)
+        , StreamingQueryControllerFactory(executerConfig.MutableConfig->StreamingQueryControllerFactory)
         , GUCSettings(GUCSettings)
         , BufferActorId(bufferActorId)
         , TxManager(txManager)
@@ -2076,23 +2076,46 @@ protected:
         return !databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler);
     }
 
-    void ProcessStreamingQueryCounters() {
-        const auto context = TasksGraph.GetMeta().UserRequestContext;
-        if (!AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() || !context || context->StreamingQueryPath.empty()) {
+    void CreateStreamingQueryController() {
+        if (StreamingQuery || !StreamingQueryControllerFactory) {
             return;
         }
-        if (!StreamingQueryCounters) {
-            StreamingQueryCounters = MakeStreamingQueryCounters(Counters->Counters->GetKqpCounters(), context->StreamingQueryPath);
+
+        // Scan executers and executers without FQ setup only use streaming counters.
+        const bool enableGraphOperations = ExecType == EExecType::Data && FederatedQuerySetup.has_value();
+
+        bool hasPqSources = false;
+        for (const auto& transaction : Request.Transactions) {
+            hasPqSources |= enableGraphOperations && transaction.Body->GetHasPqSources();
         }
-        auto now = TInstant::Now();
-        if (!LastStreamingQueryUpdateCounters) {
-            LastStreamingQueryUpdateCounters = now + TDuration::Seconds(10);
+
+        StreamingQuery = StreamingQueryControllerFactory->Create({
+            .ExecuterId = SelfId(),
+            .TxId = TxId,
+            .Database = Database,
+            .UserToken = UserToken,
+            .UserRequestContext = GetUserRequestContext(),
+            .KqpCounters = Counters->Counters->GetKqpCounters(),
+            .Graph = Request.QueryPhysicalGraph,
+            .SaveGraph = Request.SaveQueryPhysicalGraph,
+            .HasPqSources = hasPqSources,
+            .EnableGraphOperations = enableGraphOperations,
+        });
+    }
+
+    void ProcessStreamingQueryCounters() {
+        if (!StreamingQuery) {
+            const auto& context = GetUserRequestContext();
+            if (!context || context->StreamingQueryPath.empty()) {
+                return;
+            }
+            CreateStreamingQueryController();
         }
-        if (LastStreamingQueryUpdateCounters + StreamingQueryUpdateCountersPeriod <= now) {
+        const auto now = TInstant::Now();
+        if (StreamingQuery && StreamingQuery->NeedsCountersUpdate(now)) {
             TAggExecStat stats;
             Stats->ExportAggExecStats(&stats);
-            StreamingQueryCounters->Update(stats);
-            LastStreamingQueryUpdateCounters = now;
+            StreamingQuery->UpdateCounters(stats, now);
         }
     }
 
@@ -2101,6 +2124,7 @@ protected:
     const TKqpStatsReportingSettings StatsReportingSettings;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const std::shared_ptr<IKqpStreamingQueryControllerFactory> StreamingQueryControllerFactory;
     const TGUCSettings::TPtr GUCSettings;
 
     TActorId BufferActorId;
@@ -2112,7 +2136,6 @@ protected:
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant LastProgressStats;
     std::optional<TMonotonic> LastCurrentQueryStatsReport;
-    TInstant LastStreamingQueryUpdateCounters;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;
     TMaybe<TInstant> CancelAt;
@@ -2184,7 +2207,6 @@ protected:
     std::unique_ptr<IKqpStreamingQueryController> StreamingQuery;
     TActorId StreamingQueryNodesManagerId;
     TActorId CheckpointCoordinatorId;
-    TIntrusivePtr<IStreamingQueryCounters> StreamingQueryCounters;
 
     bool NewRboEnabled = false;
 

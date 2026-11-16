@@ -1,5 +1,6 @@
 #include "physical_graph_rescaling.h"
 #include "pq_topic_resolver.h"
+#include "streaming_helper.h"
 #include "streaming_query_controller.h"
 
 #include <ydb/core/base/appdata.h>
@@ -25,6 +26,8 @@ namespace NKikimr::NKqp {
 namespace {
 
 using TSettings = IKqpStreamingQueryControllerFactory::TSettings;
+
+constexpr TDuration StreamingQueryUpdateCountersPeriod = TDuration::Seconds(1);
 
 FederatedQuery::StreamingDisposition MakeStreamingDisposition(
     const TUserRequestContext& context, NFq::TCheckpointCoordinatorSettings& settings) {
@@ -72,19 +75,39 @@ public:
     }
 
     bool NeedsPrepare() const override {
-        return AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart() && Settings.HasPqSources && Settings.Graph &&
-               PqGatewayFactory;
+        return Settings.EnableGraphOperations && AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart() &&
+               Settings.HasPqSources && Settings.Graph && PqGatewayFactory;
     }
 
-    void StartPrepare(TVector<TPqTopicResolverSource> sources, THashMap<TString, TString> secureParams) override {
+    void StartPrepare(TVector<std::shared_ptr<const TKqpPhyTxHolder>> transactions, THashMap<TString, TString> secureParams) override {
+        auto sources = CollectPqSources(transactions, Settings.Database);
         TActivationContext::RegisterWithSameMailbox(CreateKqpPqTopicResolver(Settings.ExecuterId, Settings.TxId, std::move(sources),
                                                         std::move(secureParams), PqGatewayFactory, MutableGraph()), Settings.ExecuterId);
     }
 
+    bool NeedsCountersUpdate(TInstant now) override {
+        const auto& context = Settings.UserRequestContext;
+        if (!AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() || !context || context->StreamingQueryPath.empty()) {
+            return false;
+        }
+        if (!StreamingQueryCounters) {
+            StreamingQueryCounters = MakeStreamingQueryCounters(Settings.KqpCounters, context->StreamingQueryPath);
+        }
+        if (!LastStreamingQueryUpdateCounters) {
+            LastStreamingQueryUpdateCounters = now + TDuration::Seconds(10);
+        }
+        return LastStreamingQueryUpdateCounters + StreamingQueryUpdateCountersPeriod <= now;
+    }
+
+    void UpdateCounters(const TAggExecStat& stats, TInstant now) override {
+        StreamingQueryCounters->Update(stats);
+        LastStreamingQueryUpdateCounters = now;
+    }
+
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> GetGraphToRestore(
         const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, ui32 usableThreadsPerNode) override {
-        if (!Settings.Graph) {
-            return nullptr;
+        if (!Settings.EnableGraphOperations || !Settings.Graph) {
+            return Settings.Graph;
         }
 
         if (Settings.HasPqSources && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
@@ -99,7 +122,8 @@ public:
 
     TStartedActors Start(std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> graph, const TKqpTasksGraph& tasksGraph) override {
         const auto& context = Settings.UserRequestContext;
-        const bool enabled = AppData()->FeatureFlags.GetEnableStreamingQueries() && graph && context && context->CheckpointId;
+        const bool enabled = Settings.EnableGraphOperations && (Settings.Graph || Settings.SaveGraph) &&
+                             AppData()->FeatureFlags.GetEnableStreamingQueries() && graph && context && context->CheckpointId;
         if (!enabled) {
             return {};
         }
@@ -180,6 +204,9 @@ public:
     }
 
     bool IsOwnEvent(const NActors::IEventHandle& ev) const override {
+        if (!Settings.EnableGraphOperations || (!Settings.Graph && !Settings.SaveGraph)) {
+            return false;
+        }
         switch (ev.GetTypeRewrite()) {
             case NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone::EventType:
             case NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues::EventType:
@@ -292,6 +319,8 @@ private:
     std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> PatchedGraph;
     bool RescalingChangedTaskCount = false;
     TStartedActors Actors;
+    TInstant LastStreamingQueryUpdateCounters;
+    TIntrusivePtr<IStreamingQueryCounters> StreamingQueryCounters;
 };
 
 class TStreamingQueryControllerFactory: public IKqpStreamingQueryControllerFactory {
@@ -304,7 +333,10 @@ public:
     }
 
     std::unique_ptr<IKqpStreamingQueryController> Create(TSettings settings) const override {
-        if (!settings.Graph && !settings.SaveGraph) {
+        const auto& context = settings.UserRequestContext;
+        const bool needsCounters = context && !context->StreamingQueryPath.empty();
+        const bool needsGraphOperations = settings.EnableGraphOperations && (settings.Graph || settings.SaveGraph);
+        if (!needsGraphOperations && !needsCounters) {
             return nullptr;
         }
         return std::make_unique<TStreamingQueryController>(std::move(settings), PqGatewayFactory, CheckpointProviderIntegrations);

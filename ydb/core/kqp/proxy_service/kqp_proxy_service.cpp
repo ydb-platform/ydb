@@ -339,16 +339,15 @@ public:
                 TString(NYql::PqProviderName),
                 CreatePqCheckpointProviderIntegration(TActivationContext::ActorSystem(), FederatedQuerySetup->PqGatewayFactory->CreatePqGateway(), *FederatedQuerySetup->Driver, FederatedQuerySetup->CredentialsFactory)
             );
-            FederatedQuerySetup->StreamingQueryControllerFactory = CreateStreamingQueryControllerFactory(
-                FederatedQuerySetup->PqGatewayFactory,
-                FederatedQuerySetup->CheckpointProviderIntegrations
-            );
         }
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, VectorIndexLevelsCache);
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
         LocalSessions = std::make_unique<TLocalSessionsRegistry>(AppData()->RandomProvider);
         ExecuterConfig = MakeIntrusive<TExecuterMutableConfig>();
+        ExecuterConfig->StreamingQueryControllerFactory = CreateStreamingQueryControllerFactory(
+            FederatedQuerySetup ? FederatedQuerySetup->PqGatewayFactory : nullptr,
+            FederatedQuerySetup ? FederatedQuerySetup->CheckpointProviderIntegrations : NFq::TCheckpointProviderIntegrations{});
         ExecuterConfig->ApplyFromTableServiceConfig(TableServiceConfig);
         RebuildKqpConfig();
         RebuildSharedServiceConfigs();

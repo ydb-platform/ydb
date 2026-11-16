@@ -31,7 +31,6 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/compute_actor
     ydb/core/kqp/executer_actor/shards_resolver
-    ydb/core/kqp/federated_query
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/gateway/local_rpc
     ydb/core/kqp/query_compiler

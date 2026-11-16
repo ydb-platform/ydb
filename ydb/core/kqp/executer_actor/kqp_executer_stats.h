@@ -5,6 +5,7 @@
 
 #include "kqp_tasks_graph.h"
 #include <ydb/core/kqp/common/kqp_current_query_stats.h>
+#include <ydb/core/kqp/common/kqp_execution_stats.h>
 
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -13,8 +14,6 @@
 
 namespace NKikimr {
 namespace NKqp {
-
-struct TAggExecStat;
 
 NYql::NDqProto::EDqStatsMode GetDqStatsMode(Ydb::Table::QueryStatsCollection::Mode mode);
 NYql::NDqProto::EDqStatsMode GetDqStatsModeShard(Ydb::Table::QueryStatsCollection::Mode mode);

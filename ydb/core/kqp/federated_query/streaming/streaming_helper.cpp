@@ -1,5 +1,7 @@
 #include "streaming_helper.h"
 
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 namespace NKikimr::NKqp {
@@ -64,10 +66,10 @@ private:
 // Collect PQ sources only from the transactions of the current executer.
 // Topics whose partition list was already fixed at compile time by a
 // __ydb_partition_id predicate are skipped — their ReadRanges are authoritative.
-TVector<TPqTopicResolverSource> CollectPqSources(const TVector<IKqpGateway::TPhysicalTxData>& transactions, const TString& database) {
+TVector<TPqTopicResolverSource> CollectPqSources(const TVector<std::shared_ptr<const TKqpPhyTxHolder>>& transactions, const TString& database) {
     TVector<TPqTopicResolverSource> result;
     for (const auto& tx : transactions) {
-        for (const auto& stage : tx.Body->GetStages()) {
+        for (const auto& stage : tx->GetStages()) {
             if (stage.SourcesSize() == 0) {
                 continue;
             }

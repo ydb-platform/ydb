@@ -3,8 +3,6 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/library/testlib/helpers.h>
 
-#include <atomic>
-
 namespace NKikimr::NPQ::NMLP {
 
 Y_UNIT_TEST_SUITE(TMLPDLQMoverTests) {
@@ -40,13 +38,6 @@ void MoveToDLQ(const TString& msg, bool shortDlqName = false, bool databasePrefi
 
     setup->Write("/Root/topic1", msg, 0);
 
-    std::atomic<bool> dlqMoved = false;
-    auto observer = runtime.AddObserver<TEvPQ::TEvMLPDLQMoverResponse>([&](auto& ev) {
-        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            dlqMoved.store(true);
-        }
-    });
-
     {
         CreateReaderActor(runtime, TReaderSettings{
             .DatabasePath = "/Root",
@@ -59,6 +50,21 @@ void MoveToDLQ(const TString& msg, bool shortDlqName = false, bool databasePrefi
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
     }
+
+    const auto dlqReader = runtime.AllocateEdgeActor();
+    runtime.Register(CreateReader(dlqReader, TReaderSettings{
+        .DatabasePath = "/Root",
+        .TopicName = dlq,
+        .Consumer = "mlp-consumer",
+        .WaitTime = TDuration::Seconds(30),
+    }));
+    const auto sourceTablet = GetTabletId(setup, "/Root", "/Root/topic1", 0);
+    const auto sourceState = runtime.AllocateEdgeActor();
+    const auto requestSourceState = [&] {
+        ForwardToTablet(runtime, sourceTablet, sourceState,
+            new TEvPQ::TEvGetMLPConsumerStateRequest("/Root/topic1", "mlp-consumer", 0));
+    };
+    requestSourceState();
 
     {
         CreateUnlockerActor(runtime, TUnlockerSettings{
@@ -78,14 +84,9 @@ void MoveToDLQ(const TString& msg, bool shortDlqName = false, bool databasePrefi
     }
 
 
-    runtime.WaitFor("DLQ move", [&] { return dlqMoved.load(); }, TDuration::Seconds(30));
     {
-        CreateReaderActor(runtime, TReaderSettings{
-            .DatabasePath = "/Root",
-            .TopicName = dlq,
-            .Consumer = "mlp-consumer",
-        });
-        auto response = GetReadResponse(runtime);
+        auto event = runtime.GrabEdgeEvent<TEvReadResponse>(dlqReader, TDuration::Seconds(35));
+        auto* response = event->Get();
         UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
@@ -94,8 +95,22 @@ void MoveToDLQ(const TString& msg, bool shortDlqName = false, bool databasePrefi
     }
 
     {
-        auto result = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 0);
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        runtime.GetActorSystem(0)->Schedule(deadline,
+            new IEventHandle(sourceState, TActorId(), new TEvents::TEvWakeup()));
+        TAutoPtr<IEventHandle> result;
+        do {
+            runtime.WaitForEdgeEvents([&](auto&, auto& event) {
+                result = event;
+                return true;
+            }, {sourceState});
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "Source message was not retired after DLQ delivery");
+            UNIT_ASSERT_VALUES_EQUAL(result->GetTypeRewrite(), TEvPQ::TEvGetMLPConsumerStateResponse::EventType);
+            if (!result->Get<TEvPQ::TEvGetMLPConsumerStateResponse>()->Messages.empty()) {
+                requestSourceState();
+            }
+        } while (!result->Get<TEvPQ::TEvGetMLPConsumerStateResponse>()->Messages.empty());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvPQ::TEvGetMLPConsumerStateResponse>()->Messages.size(), 0);
     }
 }
 

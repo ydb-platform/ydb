@@ -20,6 +20,7 @@ struct TRelativeDatabaseFixture {
     explicit TRelativeDatabaseFixture(const TString& database)
         : Server({}, {}, {}, false, nullptr, [&](auto& settings) {
             settings.FeatureFlags.SetEnableRelativePaths(true);
+            settings.FeatureFlags.SetForbidRequestsToStaticNodesWithoutDatabase(true);
             settings.StoragePoolTypes.clear();
             settings.AddStoragePool(PoolKind, database + ':' + PoolKind);
         })

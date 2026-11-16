@@ -501,7 +501,8 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
         }
     }
 
-    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"));
+    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"),
+        !UseMigrationProtocol && AppData(ctx)->FeatureFlags.GetEnableRelativePaths());
     if (!DiscoveryConverter->IsValid()) {
         CloseSession(
                 TStringBuilder() << "topic " << topic_path << " could not be recognized: " << DiscoveryConverter->GetReason(),

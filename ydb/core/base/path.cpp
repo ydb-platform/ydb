@@ -157,6 +157,13 @@ TString CanonizePath(const TVector<TString>& path) {
     return TString("/") + JoinPath(path);
 }
 
+TString PrependDomainIfNeeded(TStringBuf domainRoot, TStringBuf databasePath) {
+    if (databasePath.empty() || databasePath.StartsWith('/')) {
+        return TString{databasePath};
+    }
+    return TStringBuilder() << domainRoot << '/' << databasePath;
+}
+
 TString NormalizePath(const TString& database, const TString& path) {
     if (database == path) {
         return path;

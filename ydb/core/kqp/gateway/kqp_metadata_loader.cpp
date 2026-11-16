@@ -1331,7 +1331,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 useTlsStr.to_lower();
                                 bool useTls = useTlsStr == "true"sv;
 
-                                auto path = databaseName + "/" + *externalPath;
+                                auto path = CanonizePath(databaseName + "/" + *externalPath);
                                 auto locked = ptr.lock();
                                 if (!locked) {
                                     promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_COMPILE_ERROR, "Table metadata loader destroyed during external source metadata loading")));

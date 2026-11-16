@@ -1,9 +1,13 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_services/grpc_request_check_actor.h>
+#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -253,6 +257,10 @@ private:
 
 class TTestGrpcRequestContext : public NYdbGrpc::IRequestContextBase {
 public:
+    explicit TTestGrpcRequestContext(TMaybe<TString> database = Nothing())
+        : Database_(std::move(database))
+    {}
+
     const NProtoBuf::Message* GetRequest() const override {
         return &Request_;
     }
@@ -285,7 +293,10 @@ public:
         return {};
     }
 
-    TVector<TStringBuf> GetPeerMetaValues(TStringBuf) const override {
+    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
+        if (key == NYdb::YDB_DATABASE_HEADER && Database_) {
+            return {*Database_};
+        }
         return {};
     }
 
@@ -304,7 +315,8 @@ public:
     void AddTrailingMetadata(const TString&, const TString&) override {
     }
 
-    void UseDatabase(const TString&) override {
+    void UseDatabase(const TString& database) override {
+        UsedDatabase = database;
     }
 
     void SetNextReplyCallback(NYdbGrpc::IRequestContextBase::TOnNextReply&&) override {
@@ -343,6 +355,7 @@ public:
     }
 
 public:
+    TString UsedDatabase;
     ui32 ReplyCount = 0;
     ui32 ByteReplyCount = 0;
     ui32 ReplyUnauthenticatedCount = 0;
@@ -353,12 +366,17 @@ private:
     Ydb::Operations::CancelOperationRequest Request_;
     NYdbGrpc::TAuthState AuthState_{true};
     google::protobuf::Arena Arena_;
+    TMaybe<TString> Database_;
 };
 
 class TTestBiStreamContext
     : public NGRpcServer::IGRpcStreamingContext<Draft::Dummy::PingRequest, Draft::Dummy::PingResponse>
 {
 public:
+    explicit TTestBiStreamContext(TMaybe<TString> database = Nothing())
+        : Database_(std::move(database))
+    {}
+
     void Cancel() override {
     }
 
@@ -383,7 +401,10 @@ public:
         return "127.0.0.1";
     }
 
-    TVector<TStringBuf> GetPeerMetaValues(TStringBuf) const override {
+    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
+        if (key == NYdb::YDB_DATABASE_HEADER && Database_) {
+            return {*Database_};
+        }
         return {};
     }
 
@@ -391,7 +412,8 @@ public:
         return GRPC_COMPRESS_LEVEL_NONE;
     }
 
-    void UseDatabase(const TString&) override {
+    void UseDatabase(const TString& database) override {
+        UsedDatabase = database;
     }
 
     TString GetRpcMethodName() const override {
@@ -413,6 +435,7 @@ public:
     }
 
 public:
+    TString UsedDatabase;
     ui32 AttachCount = 0;
     ui32 FinishCount = 0;
     ui32 WriteAndFinishCount = 0;
@@ -420,6 +443,7 @@ public:
 
 private:
     mutable NYdbGrpc::TAuthState AuthState_{true};
+    TMaybe<TString> Database_;
 };
 
 using TTestGrpcRequest = NGRpcService::TGrpcRequestNoOperationCall<
@@ -436,10 +460,34 @@ public:
     }
 };
 
+class TRefreshTokenInvokerActor : public TActorBootstrapped<TRefreshTokenInvokerActor> {
+public:
+    TRefreshTokenInvokerActor(TIntrusivePtr<TTestBiStreamContext> ctx, TActorId replyTo)
+        : Ctx_(std::move(ctx))
+        , ReplyTo_(replyTo)
+    {}
+
+    void Bootstrap() {
+        NGRpcService::TEvBiStreamPingRequest request(Ctx_);
+        request.RefreshToken("token", TActivationContext::AsActorContext(), ReplyTo_);
+        PassAway();
+    }
+
+private:
+    TIntrusivePtr<TTestBiStreamContext> Ctx_;
+    TActorId ReplyTo_;
+};
+
 class TPublicProxyHandleMethods : public NGRpcService::TGRpcRequestProxyHandleMethods {
 public:
     using NGRpcService::TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError;
 };
+
+void InitializeDatabaseAppData(TAppData& appData, bool relativePathsEnabled) {
+    appData.DomainsInfo = new TDomainsInfo;
+    appData.DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("Root").Release());
+    appData.FeatureFlags.SetEnableRelativePaths(relativePathsEnabled);
+}
 
 NWilson::TFakeWilsonUploader* SetupFakeWilsonUploader(TTestActorRuntime& runtime) {
     auto* uploader = new NWilson::TFakeWilsonUploader;
@@ -615,6 +663,99 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckErrorReply) {
 
 Y_UNIT_TEST_SUITE(TGrpcRequestBaseTracing) {
 
+Y_UNIT_TEST_TWIN(RelativeDatabaseIsResolvedBeforeAliasing, relativePathsEnabled) {
+    TActorSystemStub actorSystem;
+    InitializeDatabaseAppData(actorSystem.AppData, relativePathsEnabled);
+    NKikimrConfig::TPathRewriteConfig config;
+    auto* rule = config.AddRules();
+    rule->SetSrc("/Root");
+    rule->SetDst("/Alias");
+    auto normalizer = std::make_shared<const NPathAliasing::TPathNormalizer>(config);
+    for (const auto& [database, expected] : TVector<std::pair<TMaybe<TString>, TMaybe<TString>>>{
+        {Nothing(), Nothing()}, {TString(), TString()},
+        {TString("mydb"), TString(relativePathsEnabled ? "/Alias/mydb" : "mydb")},
+        {TString("/Root/mydb"), TString("/Alias/mydb")},
+        {TString("Root/mydb"), TString(relativePathsEnabled ? "/Alias/Root/mydb" : "Root/mydb")},
+    }) {
+        auto ctx = MakeIntrusive<TTestGrpcRequestContext>(database);
+        TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+        request.InitializePathNormalization(normalizer);
+        UNIT_ASSERT(request.GetDatabaseName() == expected);
+        request.InitializePathNormalization(normalizer);
+        UNIT_ASSERT(request.GetDatabaseName() == expected);
+    }
+}
+
+Y_UNIT_TEST_TWIN(InternalDatabaseResolutionRespectsFlag, relativePathsEnabled) {
+    TTestActorRuntime runtime;
+    runtime.Initialize(TAppPrepare().Unwrap());
+    TActorSystemStub actorSystem;
+    InitializeDatabaseAppData(actorSystem.AppData, relativePathsEnabled);
+    const auto replyTo = runtime.AllocateEdgeActor();
+    auto request = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>("mydb", Nothing(), replyTo,
+        NGRpcService::TAuditMode::NonModifying(), "");
+    request->InitializePathNormalization(nullptr);
+    NGRpcService::TRefreshTokenGenericRequest refresh("", "/Root/mydb", "", {});
+    NGRpcService::TRefreshTokenGenericRequest emptyRefresh("", "", "", {});
+    const TString expected = relativePathsEnabled ? "/Root/mydb" : "mydb";
+    actorSystem.AppData.FeatureFlags.SetEnableRelativePaths(!relativePathsEnabled);
+    refresh.InitializePathNormalization(nullptr);
+    emptyRefresh.InitializePathNormalization(nullptr);
+    UNIT_ASSERT_VALUES_EQUAL(request->GetDatabaseName().GetRef(), expected);
+    // Refresh keeps the database selected by the original stream, even if the flag changed.
+    UNIT_ASSERT_VALUES_EQUAL(refresh.GetDatabaseName().GetRef(), "/Root/mydb");
+    UNIT_ASSERT(emptyRefresh.GetDatabaseName() == TMaybe<TString>(TString()));
+    request->UseDatabase("/Root/mydb");
+    UNIT_ASSERT_VALUES_EQUAL(request->GetDatabaseName().GetRef(), "/Root/mydb");
+    UNIT_ASSERT_VALUES_EQUAL(request->Database, "/Root/mydb");
+    runtime.Register(new TAuthAndCheckReplyActor(std::move(request), Ydb::StatusIds::SUCCESS));
+    TAutoPtr<IEventHandle> handle;
+    auto* result = runtime.GrabEdgeEvent<NGRpcService::TEvRequestAuthAndCheckResult>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(result->Database, "/Root/mydb");
+}
+
+Y_UNIT_TEST_TWIN(UseDatabasePreservesUnaryDatabaseHeaderPresence, relativePathsEnabled) {
+    for (const auto& database : TVector<TMaybe<TString>>{Nothing(), TString(), TString("mydb"), TString("/Root/mydb")}) {
+        TActorSystemStub actorSystem;
+        auto& appData = actorSystem.AppData;
+        InitializeDatabaseAppData(appData, relativePathsEnabled);
+        auto ctx = MakeIntrusive<TTestGrpcRequestContext>(database);
+        TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+        UNIT_ASSERT(request.GetDatabaseName() == database);
+        request.InitializePathNormalization(nullptr);
+        appData.DomainsInfo->Domain = TDomainsInfo::TDomain::ConstructEmptyDomain("Other");
+        appData.FeatureFlags.SetEnableRelativePaths(!relativePathsEnabled);
+        const auto expected = relativePathsEnabled && database && !database->empty() ? TMaybe<TString>(TString("/Root/mydb")) : database;
+        UNIT_ASSERT(request.GetDatabaseName() == expected);
+        request.UseDatabase("/Root/mydb");
+        request.InitializePathNormalization(nullptr);
+        UNIT_ASSERT(request.GetDatabaseName() == expected);
+        UNIT_ASSERT_VALUES_EQUAL(ctx->UsedDatabase, "/Root/mydb");
+    }
+}
+
+Y_UNIT_TEST(DatabaseResolutionWithoutDomainPreservesRawName) {
+    TActorSystemStub actorSystem;
+    auto& appData = actorSystem.AppData;
+    appData.FeatureFlags.SetEnableRelativePaths(true);
+    appData.DomainsInfo = new TDomainsInfo;
+    UNIT_ASSERT(!appData.DomainsInfo->Domain);
+    auto unaryCtx = MakeIntrusive<TTestGrpcRequestContext>(TString("mydb"));
+    TTestGrpcRequest unary(unaryCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+    auto bidiCtx = MakeIntrusive<TTestBiStreamContext>(TString("mydb"));
+    NGRpcService::TEvBiStreamPingRequest bidi(bidiCtx);
+    NGRpcService::TEvRequestAuthAndCheck internal("mydb", Nothing(), {},
+        NGRpcService::TAuditMode::NonModifying(), "");
+    unary.InitializePathNormalization(nullptr);
+    bidi.InitializePathNormalization(nullptr);
+    internal.InitializePathNormalization(nullptr);
+    UNIT_ASSERT_VALUES_EQUAL(unary.GetDatabaseName().GetRef(), "mydb");
+    UNIT_ASSERT_VALUES_EQUAL(bidi.GetDatabaseName().GetRef(), "mydb");
+    UNIT_ASSERT_VALUES_EQUAL(internal.GetDatabaseName().GetRef(), "mydb");
+}
+
 Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnFinalReply) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
@@ -789,6 +930,41 @@ Y_UNIT_TEST(RespHookDelaysGrpcRequestProxySpanUntilPass) {
 } // TGrpcRequestBaseTracing
 
 Y_UNIT_TEST_SUITE(TGrpcRequestBiStreamTracing) {
+
+Y_UNIT_TEST_TWIN(UseDatabasePreservesBidiDatabaseHeaderPresence, relativePathsEnabled) {
+    for (const auto& database : TVector<TMaybe<TString>>{Nothing(), TString(), TString("mydb"), TString("/Root/mydb")}) {
+        TActorSystemStub actorSystem;
+        auto& appData = actorSystem.AppData;
+        InitializeDatabaseAppData(appData, relativePathsEnabled);
+        auto ctx = MakeIntrusive<TTestBiStreamContext>(database);
+        NGRpcService::TEvBiStreamPingRequest request(ctx);
+        UNIT_ASSERT(request.GetDatabaseName() == database);
+        request.InitializePathNormalization(nullptr);
+        appData.DomainsInfo->Domain = TDomainsInfo::TDomain::ConstructEmptyDomain("Other");
+        appData.FeatureFlags.SetEnableRelativePaths(!relativePathsEnabled);
+        const auto expected = relativePathsEnabled && database && !database->empty() ? TMaybe<TString>(TString("/Root/mydb")) : database;
+        UNIT_ASSERT(request.GetDatabaseName() == expected);
+        request.UseDatabase("/Root/mydb");
+        request.InitializePathNormalization(nullptr);
+        UNIT_ASSERT(request.GetDatabaseName() == expected);
+        UNIT_ASSERT_VALUES_EQUAL(ctx->UsedDatabase, "/Root/mydb");
+    }
+}
+
+Y_UNIT_TEST(RefreshTokenPreservesBidiDatabase) {
+    TTestActorRuntime runtime;
+    runtime.Initialize(TAppPrepare().Unwrap());
+    auto ctx = MakeIntrusive<TTestBiStreamContext>(TString("Root/mydb"));
+    const TActorId refreshTokenReceiver = runtime.AllocateEdgeActor();
+    runtime.RegisterService(NGRpcService::CreateGRpcRequestProxyId(), refreshTokenReceiver);
+
+    runtime.Register(new TRefreshTokenInvokerActor(ctx, runtime.AllocateEdgeActor()));
+
+    TAutoPtr<IEventHandle> handle;
+    auto* refreshToken = runtime.GrabEdgeEvent<NGRpcService::TRefreshTokenGenericRequest>(handle);
+    UNIT_ASSERT(refreshToken);
+    UNIT_ASSERT_VALUES_EQUAL(refreshToken->GetDatabaseName().GetRef(), "/Root/mydb");
+}
 
 Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnValidationErrorReply) {
     TTestActorRuntime runtime;

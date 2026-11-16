@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/raw_socket/sock_impl.h>
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
@@ -174,12 +175,13 @@ inline EKafkaErrors ConvertErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode code) 
 }
 
 inline TString NormalizePath(const TString& database, const TString& path) {
-    return NKikimr::NormalizePath(database, path);
+    return NKikimr::HasAppData() && NKikimr::AppData()->FeatureFlags.GetEnableRelativePaths()
+        ? NKikimr::CanonizePath(NKikimr::PrependDomainIfNeeded(database, path)) : NKikimr::NormalizePath(database, path);
 }
 
 inline TString GetTopicNameWithoutDb(const TString& database, TString topic) {
     auto topicWithDb = NormalizePath(database, topic);
-    topic = topicWithDb.substr(database.size()+1);
+    topic = topicWithDb.StartsWith(database + '/') ? topicWithDb.substr(database.size() + 1) : topicWithDb;
     return topic;
 }
 

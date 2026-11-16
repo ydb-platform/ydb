@@ -84,6 +84,10 @@ TString GetDatabase(const NHttp::THttpIncomingRequest* request) {
 void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
     auto* request = event->Request.Get();
     TString database = ExtractHttpDatabaseParamFromUrl(request->URL, request->Method, request->Body, request->ContentType);
+    if (!database.empty() && HasAppData() && AppData()->FeatureFlags.GetEnableRelativePaths()
+        && AppData()->DomainsInfo && AppData()->DomainsInfo->Domain) {
+        database = PrependDomainIfNeeded("/" + AppData()->DomainsInfo->GetDomain()->Name, database);
+    }
     if (!database.empty() && event->PathNormalizer && *event->PathNormalizer) {
         database = (**event->PathNormalizer)(CanonizePath(database));
     }

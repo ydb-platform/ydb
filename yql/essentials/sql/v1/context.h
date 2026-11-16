@@ -178,6 +178,7 @@ public:
     bool UseUnordered(const TTableRef& table) const;
 
     bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
+    void SetRelativePathPrefix(const TString& value);
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
     TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;

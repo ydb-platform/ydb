@@ -21,8 +21,9 @@ public:
         rule->SetDst("/Root/missing-topic");
 
         Kikimr = std::make_unique<TKikimrRunner>(settings);
-        TopicClient = std::make_unique<TTopicClient>(Kikimr->GetDriver());
-        CreateTopic("topic");
+        const auto result = Kikimr->GetQueryClient().ExecuteQuery(
+            "CREATE TOPIC `/Root/topic` (CONSUMER consumer)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 };
 

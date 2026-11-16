@@ -405,6 +405,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             {"ev", ev->Get()->ToString()});
 
         PipeCache = ev->Get()->Services.LeaderPipeCache;
+        if (CreatingDstParent) {
+            CreatingDstParent = false;
+            TxId = ev->Get()->TxId;
+            return DescribeDstParent();
+        }
         if (SavedDstCreateRequest && !RenewDstCreate) {
             TxId = DstCreateRequest.GetTxId();
             return SendDstCreate();
@@ -445,6 +450,17 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void HandleDstParent(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         const auto& record = ev->Get()->GetRecord();
+        if (record.GetStatus() == NKikimrScheme::StatusPathDoesNotExist
+            && (!SavedDstCreateRequest || RenewDstCreate)) {
+            // Prepare missing directories before capturing the parent version:
+            // CREATE's automatic MkDirs would invalidate its own ApplyIf fence.
+            NKikimrSchemeOp::TModifyScheme tx;
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+            tx.SetWorkingDir(TxBody.GetWorkingDir());
+            tx.MutableMkDir()->SetName(TString(ExtractParent(TxBody.GetCreateTable().GetName())));
+            CreatingDstParent = true;
+            return ExecuteSchemeTx(tx);
+        }
         if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
             return Error(record.GetStatus(), record.GetReason());
         }
@@ -575,7 +591,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         switch (record.GetStatus()) {
         case NKikimrScheme::StatusAccepted:
-            if (!NeedToCheck) {
+            if (!NeedToCheck && !CreatingDstParent) {
                 DstPathId = TPathId(SchemeShardId, record.GetPathId());
             }
             Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
@@ -593,6 +609,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
             break;
         case NKikimrScheme::StatusAlreadyExists:
+            if (CreatingDstParent) {
+                return AllocateTxId();
+            }
             return DescribeDstPath();
         case NKikimrScheme::StatusPreconditionFailed:
             if (SavedDstCreateRequest) {
@@ -624,6 +643,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return;
         }
 
+        if (CreatingDstParent) {
+            return AllocateTxId();
+        }
         if (NeedToCheck || SavedDstCreateRequest) {
             DescribeDstPath();
         } else {
@@ -1022,6 +1044,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         const auto state = CurrentStateFunc();
         if (state == &TThis::StateDescribeDstParent) {
             DescribeDstParent();
+        } else if (CreatingDstParent && state == &TThis::StateExecuteSchemeTx) {
+            AllocateTxId();
         } else if (SavedDstCreateRequest && state == &TThis::StateExecuteSchemeTx) {
             SendDstCreate();
         } else if (state == &TThis::StateDescribeSrcPath) {
@@ -1145,6 +1169,7 @@ private:
     const bool InitialScan;
     const bool CreatePlaceholder;
     const TReplication::EState DesiredState;
+    bool CreatingDstParent = false;
     bool CheckExistingDst = false;
     TString SavedDstCreateRequest;
     NKikimrScheme::TEvModifySchemeTransaction DstCreateRequest;

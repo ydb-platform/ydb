@@ -456,6 +456,20 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::BAD_REQUEST, writeResult.ShortDebugString());
     }
 
+    Y_UNIT_TEST(ShouldReturnBadRequestWhenHeartbeatStepIsZero) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+
+        // when
+        const auto writeResult = env.WriteHeartbeats({{1, 0}});
+
+        // then
+        UNIT_ASSERT_C(writeResult.GetStatus() == TWriteResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.ResultsSize(), 1);
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::BAD_REQUEST, writeResult.ShortDebugString());
+    }
+
     Y_UNIT_TEST(ShouldKeepLastHeartbeatWhenOlderHeartbeatArrives) {
         // given
         TTestEnv env;

@@ -101,7 +101,12 @@ TParseResult<NPQ::THeartbeat> TCdcAggregatorStreamProtoConverter::ParseHeartbeat
         return {std::nullopt, TStringBuilder() << "Heartbeat of DataShard " << proto.GetSourceDataShardId() << " is not set"};
     }
 
-    return {NPQ::THeartbeat::Parse(proto.GetHeartbeat()), TString()};
+    auto heartbeat = NPQ::THeartbeat::Parse(proto.GetHeartbeat());
+    if (!heartbeat.Version.Step) {
+        return {std::nullopt, TStringBuilder() << "Heartbeat of DataShard " << proto.GetSourceDataShardId() << " has zero step"};
+    }
+
+    return {std::move(heartbeat), TString()};
 }
 
 TString TCdcAggregatorStreamProtoConverter::SerializeTopic(const TCdcAggregatorStreamTopic& topic) const {

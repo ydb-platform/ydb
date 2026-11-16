@@ -5766,7 +5766,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", EnableDataShardDirectPartImport, Ydb::StatusIds::CANCELLED);
     }
 
-    void ShouldFailOnInvalidCsv(const TString& csv, bool enableDataShardDirectPartImport) {
+    void ShouldFailOnInvalidCsv(const TString& csv, const TString& expectedError, bool enableDataShardDirectPartImport) {
         std::vector<std::string> auditLines;
         TTestBasicRuntime runtime;
         runtime.AuditLogBackends = CreateTestAuditLogBackends(auditLines);
@@ -5797,7 +5797,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         const auto result = TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
         const auto& entry = result.GetResponse().GetEntry();
         UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
-        UNIT_ASSERT(!entry.GetIssues(0).message().empty());
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), expectedError);
 
         runtime.WaitFor("import end audit record", [&] {
             return AnyOf(auditLines, [](const auto& line) { return line.find("operation=IMPORT END") != std::string::npos; });
@@ -5808,11 +5808,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnFileWithoutNewLines, EnableDataShardDirectPartImport) {
-        ShouldFailOnInvalidCsv("\"a1\",\"value1\"", EnableDataShardDirectPartImport);
+        ShouldFailOnInvalidCsv("\"a1\",\"value1\"",
+            "/data_00.csv: cannot process data: reached end of file", EnableDataShardDirectPartImport);
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnEmptyToken, EnableDataShardDirectPartImport) {
-        ShouldFailOnInvalidCsv("\"a1\",\n", EnableDataShardDirectPartImport);
+        ShouldFailOnInvalidCsv("\"a1\",\n",
+            "/data_00.csv: cannot process data: Empty token on line: \"a1\",", EnableDataShardDirectPartImport);
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnInvalidValue, EnableDataShardDirectPartImport) {

@@ -428,11 +428,19 @@ namespace NKikimr::NBsController {
             throw TExError() << "Destination PDisk is not stopped: " << destinationPDiskId;
         }
 
+        for (const auto& [id, srcSlot] : sourcePDisk->VSlotsOnPDisk) {
+            if (srcSlot->Group && srcSlot->Group->BridgePileId) {
+                const auto *pile = BridgeInfo->GetPileForNode(destinationPDiskId.NodeId);
+                if (!pile || pile->BridgePileId != srcSlot->Group->BridgePileId) {
+                    throw TExError() << "Can't move VDisk of GroupId# " << srcSlot->Group->ID << " to NodeId# "
+                        << destinationPDiskId.NodeId << " outside its pile";
+                }
+            }
+        }
+
         // Destination PDisk's GUID is not the same as source PDisk's GUID yet,
         // set it to the source PDisk's GUID, so that it can start.
         destinationPDisk->Guid = sourcePDisk->Guid;
-
-        std::unordered_set<TGroupId> changedGroups;
 
         for (const auto& [id, srcSlot] : sourcePDisk->VSlotsOnPDisk) {
             if (srcSlot->Group) {
@@ -445,22 +453,7 @@ namespace NKikimr::NBsController {
                 // Remove source slot from the group, so ConstructInplaceNewEntry can populate it with the new slot.
                 const ui32 orderNumber = group->Topology->GetOrderNumber(diskId);
                 group->VDisksInGroup[orderNumber] = nullptr;
-
-                if (changedGroups.insert(group->ID).second) {
-                    // VSlots "moving" requires generation change.
-                    // Need to only update group's generation once, since in some setups
-                    // one disk can have multiple vdisks of the same group.
-                    group->Generation++;
-                }
-
-                // Update all vslots in the group to the new generation.
-                auto it = group->VDisksInGroup.begin();
-                for (; it != group->VDisksInGroup.end(); ++it) {
-                    if ((*it)) {
-                        auto slot = VSlots.FindForUpdate((*it)->VSlotId);
-                        slot->GroupGeneration = group->Generation;
-                    }
-                }
+                GroupContentChanged.insert(group->ID);
 
                 // Create a new slot on the destination PDisk.
                 TVSlotInfo *dstSlot = VSlots.ConstructInplaceNewEntry(newSlotId, newSlotId, destinationPDisk,

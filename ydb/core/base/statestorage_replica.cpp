@@ -425,34 +425,35 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
 
         auto insIt = x.Followers.emplace(ev->Sender, TFollowerEntryInfo(followerId, follower, tablet, isCandidate));
         TFollowerEntryInfo &followerInfo = insIt.first->second;
+        bool hasChanges = insIt.second;
 
         if (insIt.second == false) { // already known
             Y_ABORT_UNLESS(insIt.first->second.FollowerSys == follower);
 
-            const bool hasChanges =
+            hasChanges =
                 (followerInfo.FollowerId != followerId)
                 || (followerInfo.FollowerTablet != tablet)
                 || (followerInfo.Candidate != isCandidate);
 
-            if (!hasChanges)
-                return;
-
-            followerInfo.FollowerId = followerId;
-            followerInfo.Candidate = isCandidate;
-            followerInfo.FollowerTablet = tablet;
+            if (hasChanges) {
+                followerInfo.FollowerId = followerId;
+                followerInfo.Candidate = isCandidate;
+                followerInfo.FollowerTablet = tablet;
+            }
         } else { // new entry
             auto indIt = FollowerIndex[follower.NodeId()].insert(std::make_pair(tabletId, 1));
             if (indIt.second == false)
                 ++indIt.first->second;
-
-            // and now send ping to detect lost unreg event and subscribe to session
-            Send(ev->Sender, // ping replica guardian, not tablet as follower could be promoted to leader
-                new TEvTablet::TEvPing(tabletId, 0),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                tabletId);
         }
 
-        if (x.CurrentGuardian)
+        // Acknowledge updates and retries as well as new registrations. The
+        // guardian also uses the ping to clear its missing-replica status.
+        Send(ev->Sender, // ping replica guardian, not tablet as follower could be promoted to leader
+            new TEvTablet::TEvPing(tabletId, 0),
+            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
+            tabletId);
+
+        if (hasChanges && x.CurrentGuardian)
             NotifyWithTabletInfo(x.CurrentGuardian, tabletId, 0, &x);
     }
 

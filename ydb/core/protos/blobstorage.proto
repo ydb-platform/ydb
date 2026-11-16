@@ -1103,6 +1103,13 @@ message TEvControllerUpdateSyncerState {
         optional uint64 BlobsDone = 13;
         optional uint64 BlobsTotal = 14;
         optional uint64 BlobsError = 15;
+
+        // what the stage has to copy, found by its blob scan, in blob bytes (see TSyncerDataStats)
+        optional uint64 BytesToCopy = 16;
+        optional uint64 BytesCopied = 17;
+        optional bool ScanFinished = 18;
+        // Metadata entries consumed by the merge scan, including blocks and barriers.
+        optional uint64 ScannedItems = 19;
     }
 
     repeated TSyncer Syncers = 1;
@@ -1184,6 +1191,15 @@ message TEvControllerNodeServiceSetUpdate {
     optional TYamlConfig YamlConfig = 10;
     repeated TSyncerInfo Syncers = 11; // start missing ones, terminate excessive ones; update group infos for changed ones
     optional bool UpdateSyncers = 12;
+    // the part of BridgeSyncTotalRateBytesPerSecond given to this node, 0 means no limit; when unset, it stays as it was,
+    // except for a Comprehensive reply without KeepBridgeSyncNodeRate, which comes from a BSC not supporting shares at all
+    optional uint64 BridgeSyncNodeRateBytesPerSecond = 13;
+    // BSC supports shares, but doesn't know this one yet, as nodes are still reporting their syncers
+    optional bool KeepBridgeSyncNodeRate = 14;
+    // the tablet generation of BSC, set in every message with syncers or a share; a message of a BSC that has moved to
+    // another node comes by another interconnect session, so it may arrive after those of the new instance, and then its
+    // syncers and share are ignored
+    optional uint32 ControllerGeneration = 15;
 }
 
 message TEvControllerConfigRequest {
@@ -1585,6 +1601,15 @@ message TEvControllerDistconfRequest {
         EnableDistconf = 0;
         DisableDistconf = 1;
         ValidateConfig = 2;
+        // check that bridged groups can get their parts in the pile being added (BridgePileId) without committing,
+        // taking into account static VDisks of StorageConfig being proposed
+        ValidateAddBridgePile = 3;
+        // check that parts of bridged groups in the pile being removed (BridgePileId) can be deleted without committing:
+        // every group having VDisks in the pile has to be bridged one
+        ValidateRemoveBridgePile = 4;
+        // check that pools and groups can be made ordinary ones without committing, when the bridged cluster is being
+        // rolled back
+        ValidateBridgeRollback = 5;
     }
 
     optional EOperation Operation = 1;
@@ -1596,6 +1621,7 @@ message TEvControllerDistconfRequest {
     optional bytes UserToken = 7 [(Ydb.sensitive) = true];
     optional google.protobuf.Any StorageConfig = 8; // TStorageConfig with this request that is going to be applied after operation
     optional bool DryRun = 9; // if set, perform validation without committing changes
+    optional uint32 BridgePileId = 10; // for ValidateAddBridgePile and ValidateRemoveBridgePile
 }
 
 message TEvControllerDistconfResponse {
@@ -1709,6 +1735,7 @@ message TEvInterpilePut {
         optional bool IsZeroEntry = 8;
         repeated TEvVPut.TExtraBlockCheck ExtraBlockChecks = 6;
         optional NActorsProto.TTraceId TraceId = 7;
+        optional uint32 WriteSourceOp = 10;
     }
 
     optional uint32 GroupId = 1;
@@ -1722,6 +1749,10 @@ message TEvInterpilePutResult {
     message TItem {
         optional NKikimrProto.EReplyStatus Status = 1;
         optional string ErrorReason = 2;
+        optional uint32 RacingGeneration = 3;
+        optional bool WrittenBeyondBarrier = 4;
+        optional uint32 StatusFlags = 5;
+        optional float ApproximateFreeSpaceShare = 6;
     }
 
     repeated TItem Items = 1;

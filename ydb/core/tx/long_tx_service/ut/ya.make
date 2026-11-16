@@ -4,6 +4,7 @@ SIZE(MEDIUM)
 
 SRCS(
     long_tx_service_ut.cpp
+    snapshots_exchange_ut.cpp
 )
 
 PEERDIR(

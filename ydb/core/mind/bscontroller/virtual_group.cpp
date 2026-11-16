@@ -128,6 +128,14 @@ namespace NKikimr::NBsController {
                 continue;
             } else if (group->VirtualGroupState) {
                 throw TExError() << "group is already virtual" << TErrorParams::GroupId(groupId);
+            } else if (group->IsBridgePileOnly()) {
+                // bridged group is decommitted as a whole through its bridge proxy group, single piles are not
+                throw TExError() << "can't decommit a pile of bridged group, decommit its bridge proxy group instead"
+                    << TErrorParams::GroupId(groupId);
+            } else if (group->BridgeGroupInfo && Self.IsBeingRolledBack()) {
+                // the group has to stay the inline pile with all its data until it is made ordinary one
+                throw TExError() << "bridged group can't be decommitted while the cluster is being rolled back"
+                    << TErrorParams::GroupId(groupId);
             }
 
             group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::PENDING;
@@ -170,7 +178,8 @@ namespace NKikimr::NBsController {
                 for (auto it = storagePoolGroups.lower_bound({group->StoragePoolId, Min<TGroupId>()});
                         it != storagePoolGroups.end() && it->first == group->StoragePoolId; ++it) {
                     if (const TGroupInfo *poolGroup = Groups.Find(it->second)) {
-                        numPhysicalGroups += poolGroup->IsPhysicalGroup();
+                        // piles of bridged groups are not visible on their own, data goes to their proxy groups
+                        numPhysicalGroups += poolGroup->IsPhysicalGroup() && !poolGroup->IsBridgePileOnly();
                     } else {
                         throw TExGroupNotFound(it->second.GetRawId())
                             << TErrorParams::BoxId(std::get<0>(group->StoragePoolId))
@@ -298,6 +307,13 @@ namespace NKikimr::NBsController {
                 if (group->VirtualGroupState != NKikimrBlobStorage::EVirtualGroupState::WORKING) {
                     throw TExError() << "virtual group is not in WORKING state" << TErrorParams::GroupId(groupId);
                 }
+                // bridged group keeps its VDisks in its piles, and the one decommitted completely would get VDisks
+                // allocated outside of any pile
+                if (group->BridgeGroupInfo || (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE &&
+                        StoragePools.Get().at(group->StoragePoolId).BridgeMode)) {
+                    throw TExError() << "recommissioning of groups in bridge mode is not supported"
+                        << TErrorParams::GroupId(groupId);
+                }
 
                 switch (group->DecommitStatus) {
                     case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
@@ -387,7 +403,8 @@ namespace NKikimr::NBsController {
                 group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
                     const auto& pools = State->StoragePools.Get();
                     if (const auto it = pools.find(group->StoragePoolId); it != pools.end()) {
-                        return TGroupGeometryInfo(group->Topology->GType, it->second.GetGroupGeometry());
+                        return TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                            State->GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
                     }
                     Y_DEBUG_ABORT();
                     return TGroupGeometryInfo();
@@ -901,7 +918,9 @@ namespace NKikimr::NBsController {
                 {"marker", "BSCVG15"},
                 {"groupId", group->ID.GetRawId()});
             Self->Execute(std::make_unique<TTxUpdateGroup>(this, [](TGroupInfo& group, TConfigState&) {
-                if (group.VDisksInGroup) {
+                // a group with data stays without its BlobDepot: an ordinary one keeps it on its VDisks, and a bridge
+                // proxy group, which has none, on its parts
+                if (group.VDisksInGroup || group.BridgeGroupInfo) {
                     group.VirtualGroupName = {};
                     group.VirtualGroupState = {};
                     group.HiveId = {};
@@ -1100,6 +1119,23 @@ namespace NKikimr::NBsController {
                 } else if (group->DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS) {
                     std::tie(Status, ErrorReason) = std::make_tuple(NKikimrProto::ERROR, "group is not being decommitted");
                 } else {
+                    if (group->BridgeGroupInfo) {
+                        // bridged group is decommitted as a whole: release piles along with their VDisks (except for
+                        // the inline one, which is the group itself) and turn this group into an ordinary virtual one
+                        const std::vector<TGroupId> pileGroupIds = TConfigState::GetBridgeParts(*group);
+                        group->BridgeGroupInfo.reset();
+                        group->BridgePileId = TBridgePileId();
+                        group->BridgeProxyGroupId.reset();
+
+                        // group entries are held by pointers, so deleting other groups keeps `group` valid
+                        for (const TGroupId pileGroupId : pileGroupIds) {
+                            if (const TGroupInfo *pileGroup = state.Groups.Find(pileGroupId)) {
+                                state.DeleteExistingGroupWithVSlots(*pileGroup);
+                            } else {
+                                Y_DEBUG_ABORT_S("pile group not found GroupId# " << groupId << " PileGroupId# " << pileGroupId);
+                            }
+                        }
+                    }
                     for (const TVSlotInfo *vslot : group->VDisksInGroup) {
                         state.DestroyVSlot(vslot->VSlotId);
                     }

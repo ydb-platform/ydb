@@ -99,7 +99,16 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Topic.Transaction", ERequestType::TOPIC_PROPOSE_TRANSACTION},
 
     {"Bridge.GetClusterState", ERequestType::BRIDGE_GETCLUSTERSTATE},
+    {"Bridge.ListPileSynchronization", ERequestType::BRIDGE_LISTPILESYNCHRONIZATION},
+    {"Bridge.ListDatabaseSynchronization", ERequestType::BRIDGE_LISTDATABASESYNCHRONIZATION},
+    {"Bridge.ListGroupSynchronization", ERequestType::BRIDGE_LISTGROUPSYNCHRONIZATION},
     {"Bridge.UpdateClusterState", ERequestType::BRIDGE_UPDATECLUSTERSTATE},
+    {"Bridge.ConvertToBridge", ERequestType::BRIDGE_CONVERTTOBRIDGE},
+    {"Bridge.AddPile", ERequestType::BRIDGE_ADDPILE},
+    {"Bridge.RemovePile", ERequestType::BRIDGE_REMOVEPILE},
+    {"Bridge.SetDatabaseBridgeMode", ERequestType::BRIDGE_SETDATABASEBRIDGEMODE},
+    {"Bridge.GetRollbackStatus", ERequestType::BRIDGE_GETROLLBACKSTATUS},
+    {"Bridge.Rollback", ERequestType::BRIDGE_ROLLBACK},
 };
 
 extern const THashSet<ERequestType> NoDefaultSamplingRequestTypes = {

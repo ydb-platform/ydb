@@ -597,9 +597,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
 
-            # https://github.com/ydb-platform/ydb/issues/5152
-            # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
-
         if generic_connector_config:
             if "query_service_config" not in self.yaml_config:
                 self.yaml_config["query_service_config"] = {}

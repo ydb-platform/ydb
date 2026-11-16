@@ -15,38 +15,6 @@
 
 namespace NKikimr::NKqp {
 
-NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
-    switch (type) {
-        case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
-            return NYql::EKikimrQueryType::YqlScript;
-
-        case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
-            return NYql::EKikimrQueryType::YqlScriptStreaming;
-
-        case NKikimrKqp::QUERY_TYPE_SQL_DML:
-        case NKikimrKqp::QUERY_TYPE_AST_DML:
-            return NYql::EKikimrQueryType::Dml;
-
-        case NKikimrKqp::QUERY_TYPE_SQL_DDL:
-            return NYql::EKikimrQueryType::Ddl;
-
-        case NKikimrKqp::QUERY_TYPE_AST_SCAN:
-        case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
-            return NYql::EKikimrQueryType::Scan;
-
-        case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
-        case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
-            return NYql::EKikimrQueryType::Query;
-
-        case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
-            return NYql::EKikimrQueryType::Script;
-
-        case NKikimrKqp::QUERY_TYPE_PREPARED_DML:
-        case NKikimrKqp::QUERY_TYPE_UNDEFINED:
-            YQL_ENSURE(false, "Unexpected query type: " << type);
-    }
-}
-
 TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(const NYql::TKikimrConfiguration& config) {
     // only options that should be specified for all types of queries
     // including views and etc..

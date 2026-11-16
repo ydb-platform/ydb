@@ -4,11 +4,11 @@
 
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/change_exchange/change_record.h>
+#include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/common/heartbeat.h>
 #include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/event.h>
-#include <ydb/library/actors/core/events.h>
 
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
@@ -25,7 +25,7 @@ class TCdcAggregatedHeartbeats {
     using TRecordInfo = NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo;
 
 public:
-    struct TEvRetryHeartbeat: public TEventLocal<TEvRetryHeartbeat, EventSpaceBegin(TEvents::ES_PRIVATE)> {
+    struct TEvRetryHeartbeat: public TEventLocal<TEvRetryHeartbeat, NChangeExchange::TEvChangeExchangePrivate::EvEnd> {
     };
 
     explicit TCdcAggregatedHeartbeats(THolder<IChangeRecordSerializer> serializer, ui64 sourceDataShardId);

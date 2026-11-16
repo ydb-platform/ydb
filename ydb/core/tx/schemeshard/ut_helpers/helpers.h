@@ -361,6 +361,10 @@ namespace NSchemeShardUT_Private {
 
     ////////// non-generic
 
+    // backup collection
+    void TestCreateLongIncrementalRestoreOp(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath,
+        const TString& scheme, const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusAccepted}});
+
     // cancel tx
     TEvSchemeShard::TEvCancelTx* CancelTxRequest(ui64 txId, ui64 targetTxId);
     void AsyncCancelTxTable(TTestActorRuntime& runtime, ui64 txId, ui64 targetTxId);

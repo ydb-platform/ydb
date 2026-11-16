@@ -1,4 +1,5 @@
 #include "dst_creator.h"
+#include "index_replication.h"
 #include "private_events.h"
 
 
@@ -27,6 +28,45 @@ namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(DstCreator) {
     using namespace NTestHelpers;
+
+    Y_UNIT_TEST_TWIN(PreservesExistingFulltextRowIdSequence, Compact) {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
+        flags.FeatureFlags.SetEnableCompactFulltextIndex(Compact);
+        TEnv env(flags, true, ERuntimeMode::Simulated);
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        auto sessionResult = env.RunCall([&] { return client.GetSession().GetValueSync(); });
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto create = env.RunCall([&] {
+            return session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/Source` (key Utf8 NOT NULL, value Utf8, PRIMARY KEY(key),
+                    INDEX idx GLOBAL USING fulltext_plain ON (value) WITH (tokenizer=standard));
+            )").GetValueSync();
+        });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        const auto source = env.GetDescription("/Root/Source").GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(source.SequencesSize(), 1);
+        env.GetRuntime().Register(CreateDstCreator(env.GetSender(), env.GetSchemeshardId("/Root/Source"),
+            env.GetYdbProxy(), "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Replica"));
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+        const auto replica = env.GetDescription("/Root/Replica").GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(replica.SequencesSize(), 1);
+        const auto& sequence = replica.GetSequences(0);
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetName(), NTableIndex::NFulltext::RowIdSequenceName);
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetDataType(), source.GetSequences(0).GetDataType());
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetMinValue(), source.GetSequences(0).GetMinValue());
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetMaxValue(), source.GetSequences(0).GetMaxValue());
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetIncrement(), source.GetSequences(0).GetIncrement());
+        const auto* rowId = FindIfPtr(replica.GetColumns(), [](const auto& column) {
+            return column.GetName() == NTableIndex::NFulltext::RowIdColumn;
+        });
+        UNIT_ASSERT(rowId);
+        UNIT_ASSERT_VALUES_EQUAL(rowId->GetType(), "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(rowId->GetDefaultFromSequence(), sequence.GetName());
+    }
 
     Y_UNIT_TEST(ReportsPendingSourceIndexAndClearsStatus) {
         TFeatureFlags flags;

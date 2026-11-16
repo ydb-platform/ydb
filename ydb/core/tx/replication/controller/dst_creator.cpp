@@ -408,26 +408,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         desc->SetName(pathPair.second);
 
         if (AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
-            // The SDK only preserves serial-column defaults. Preserve the
-            // synthetic fulltext document-id sequence as well.
-            for (const auto& column : NYdb::TProtoAccessor::GetProto(result.GetTableDescription()).columns()) {
-                if (column.name() != NTableIndex::NFulltext::RowIdColumn) {
-                    continue;
+            // Column conversion already copies the row-id default and its
+            // sequence. Only permission to create the system column is needed.
+            for (const auto& column : desc->GetColumns()) {
+                if (column.GetName() == NTableIndex::NFulltext::RowIdColumn) {
+                    desc->SetSystemColumnNamesAllowed(true);
+                    break;
                 }
-                desc->SetSystemColumnNamesAllowed(true);
-                if (!column.has_from_sequence()) {
-                    continue;
-                }
-                for (auto& destColumn : *desc->MutableColumns()) {
-                    if (destColumn.GetName() == column.name()) {
-                        destColumn.SetDefaultFromSequence(NTableIndex::NFulltext::RowIdSequenceName);
-                    }
-                }
-                auto* sequence = TxBody.MutableCreateIndexedTable()->AddSequenceDescription();
-                if (!FillSequenceDescription(*sequence, column.from_sequence(), status, error)) {
-                    return Error(NKikimrScheme::StatusSchemeError, error);
-                }
-                sequence->SetName(NTableIndex::NFulltext::RowIdSequenceName);
             }
         }
 

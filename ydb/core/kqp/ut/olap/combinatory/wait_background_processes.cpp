@@ -35,12 +35,19 @@ TBackgroundProcessesState WaitBackgroundProcesses(const TDuration timeout) {
     return state;
 }
 
+<<<<<<< HEAD
 TConclusionStatus TWaitBackgroundProcessesCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     const TBackgroundProcessesState state = WaitBackgroundProcesses(TDuration::Seconds(TimeoutSeconds));
 
     AFL_VERIFY(state.IsClean())
         ("error", TStringBuilder() << "WAIT_BACKGROUND_PROCESSES timeout after " << TimeoutSeconds << " seconds")
         ("ProcessScopeCount", state.ProcessScopeCount)("DataSourceCount", state.DataSourceCount);
+=======
+    YDB_LOG_VERIFY(processScopeCount == 0 && dataSourceCount == 0,
+        {"error", TStringBuilder() << "WAIT_BACKGROUND_PROCESSES timeout after " << TimeoutSeconds << " seconds"},
+        {"processScopeCount", processScopeCount},
+        {"dataSourceCount", dataSourceCount});
+>>>>>>> bdc49c403d1 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/kqp (#59329))
 
     Cerr << "WAIT_BACKGROUND_PROCESSES: All background processes completed successfully" << Endl;
     return TConclusionStatus::Success();

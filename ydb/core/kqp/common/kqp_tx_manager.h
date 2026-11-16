@@ -50,6 +50,15 @@ public:
     // Targets must exactly cover the removed shard's range (computed by the caller
     // from the partitionings) — a wrong target does not hold the transferred lock
     // and would break the commit.
+<<<<<<< HEAD
+=======
+    // The move is verified when both the removed shard and a target carry filled
+    // partitioning metadata: the target's partitioning version must be strictly
+    // newer and its borders must intersect the removed shard's range (YDB_LOG_ENSURE,
+    // fail closed). The border comparison uses the moved table's key schema stored
+    // by SetTableMeta (the table metadata must be stored); shards without filled
+    // metadata (e.g. a fresh EnsureShards-only target) are safely skipped.
+>>>>>>> bdc49c403d1 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/kqp (#59329))
     // Returns false when a transferred lock merged inconsistently with a lock already
     // stored on a target (a WriteSeqNum regression: the shard's uncommitted write chain
     // collapsed underneath the stored lock). The lock is marked invalidated and the

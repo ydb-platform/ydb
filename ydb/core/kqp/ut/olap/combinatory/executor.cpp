@@ -23,6 +23,7 @@ void TScriptExecutor::Execute(const TKikimrSettings& settings) {
     for (auto&& i : Commands) {
         i->Execute(kikimr);
     }
+<<<<<<< HEAD
     // The memory scopes and data sources of the last read are released by the scan and limiter actors after
     // the result has already reached the client, so the counters may lag behind the last command for a while
     // (up to seconds on a loaded sanitizer runner). Give that cleanup a bounded time before calling it a leak.
@@ -37,6 +38,12 @@ void TScriptExecutor::Execute(const TKikimrSettings& settings) {
     }
     AFL_VERIFY(state.ProcessScopeCount == 0)("count", state.ProcessScopeCount);
     AFL_VERIFY(state.DataSourceCount == 0)("count", state.DataSourceCount);
+=======
+    YDB_LOG_VERIFY(NColumnShard::TMonitoringObjectsCounter<NOlap::NGroupedMemoryManager::TProcessMemoryScope>::GetCounter().Val() == 0,
+        {"count", NColumnShard::TMonitoringObjectsCounter<NOlap::NGroupedMemoryManager::TProcessMemoryScope>::GetCounter().Val()});
+    YDB_LOG_VERIFY(NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val() == 0,
+        {"count", NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val()});
+>>>>>>> bdc49c403d1 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/kqp (#59329))
 }
 
 void TScriptExecutor::Execute() {

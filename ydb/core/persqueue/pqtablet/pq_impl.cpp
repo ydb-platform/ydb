@@ -2708,6 +2708,15 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         }
     }
 
+    if (req.HasCmdSetClientOffset()) {
+        const auto* consumer = GetConsumer(Config, req.GetCmdSetClientOffset().GetClientId());
+        if (consumer && consumer->GetDisableCommits()) {
+            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                       "Commits for consumer are disabled");
+            return;
+        }
+    }
+
     if (req.HasWriteId()) {
         HandleEventForSupportivePartition(responseCookie, ev, ev->Sender, ctx);
         return;

@@ -8,6 +8,7 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/grpc_request/grpc_request.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
@@ -1010,6 +1011,79 @@ Y_UNIT_TEST(DescribeTopicSmokeAndMissing) {
         auto result = DoActorRequest<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
             runtime, request, CreateDescribeTopicActor, request.path());
         AssertStatus(result, Ydb::StatusIds::SCHEME_ERROR);
+    }
+}
+
+Y_UNIT_TEST(DescribeDisableCommits) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_disable_commits";
+    auto createRequest = MakeCreateTopicRequest(path);
+    createRequest.add_consumers()->set_name("allowed");
+    auto createResult = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+        runtime, createRequest, CreateCreateTopicActor, path);
+    AssertStatus(createResult, Ydb::StatusIds::SUCCESS);
+
+    auto channel = grpc::CreateChannel(
+        "localhost:" + ToString(server->Server->GrpcPort), grpc::InsecureChannelCredentials());
+    auto pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
+
+    for (const std::optional<bool> disableCommits : {std::optional<bool>{}, {false}, {true}}) {
+        // The flag is read-only in the public API, so provide the internal config through scheme cache.
+        auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+            [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+                for (auto& entry : ev->Get()->Request->ResultSet) {
+                    if (!entry.PQGroupInfo) {
+                        continue;
+                    }
+                    auto copy = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>(*entry.PQGroupInfo);
+                    for (auto& consumer : *copy->Description.MutablePQTabletConfig()->MutableConsumers()) {
+                        if (consumer.GetName() == "user" && disableCommits.has_value()) {
+                            consumer.SetDisableCommits(*disableCommits);
+                        } else {
+                            consumer.ClearDisableCommits();
+                        }
+                    }
+                    entry.PQGroupInfo = copy;
+                }
+            });
+
+        const auto topic = DescribeTopic(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(topic.consumers_size(), 2);
+        for (const auto& consumer : topic.consumers()) {
+            UNIT_ASSERT_VALUES_EQUAL(consumer.disable_commits(),
+                consumer.name() == "user" && disableCommits.value_or(false));
+
+            Ydb::Topic::DescribeConsumerRequest request;
+            request.set_path(path);
+            request.set_consumer(consumer.name());
+            auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+                runtime, request, CreateDescribeConsumerActor, path);
+            AssertStatus(result, Ydb::StatusIds::SUCCESS);
+            const auto& describedConsumer = GetResult<Ydb::Topic::DescribeConsumerResult>(result).consumer();
+            UNIT_ASSERT_VALUES_EQUAL(describedConsumer.name(), consumer.name());
+            UNIT_ASSERT_VALUES_EQUAL(describedConsumer.disable_commits(), consumer.disable_commits());
+        }
+
+        auto future = NThreading::Async([&] {
+            grpc::ClientContext context;
+            context.AddMetadata("x-ydb-database", "/Root");
+            Ydb::PersQueue::V1::DescribeTopicRequest request;
+            request.set_path(path);
+            Ydb::PersQueue::V1::DescribeTopicResponse response;
+            const auto status = pqStub->DescribeTopic(&context, request, &response);
+            UNIT_ASSERT_C(status.ok(), status.error_message());
+            return response;
+        }, *server->Pool);
+        const auto response = static_cast<NKikimr::TTestActorRuntime&>(runtime).WaitFuture(std::move(future));
+        UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.DebugString());
+        Ydb::PersQueue::V1::DescribeTopicResult pqTopic;
+        UNIT_ASSERT(response.operation().result().UnpackTo(&pqTopic));
+        UNIT_ASSERT_VALUES_EQUAL(pqTopic.settings().read_rules_size(), 2);
+        for (const auto& rule : pqTopic.settings().read_rules()) {
+            UNIT_ASSERT_VALUES_EQUAL(rule.disable_commits(),
+                rule.consumer_name() == "user" && disableCommits.value_or(false));
+        }
     }
 }
 

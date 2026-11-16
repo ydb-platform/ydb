@@ -1217,6 +1217,9 @@ message TopicSettings {
         // Read quota for this consumer for a single partition, in messages per second.
         // Not set or zero value means no limit.
         optional int64 read_speed_messages_per_second = 12 [(Ydb.value) = ">= 0"];
+
+        // Whether commits are disabled for this consumer. Read-only, returned by Describe requests.
+        bool disable_commits = 13;
     }
 
     // List of consumer read rules for this topic.

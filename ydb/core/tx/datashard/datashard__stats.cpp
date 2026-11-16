@@ -202,14 +202,15 @@ private:
     }
 
     void ObtainResources() {
-        Send(MakeResourceBrokerID(),
-            new TEvResourceBroker::TEvSubmitTask(
-                /* task id */ 1,
-                /* task name */ TStringBuilder() << "build-stats-table-" << TableId << "-tablet-" << TabletId,
-                /* cpu & memory */ {{ 1, 0 }},
-                /* task type */ "datashard_build_stats",
-                /* priority */ 5,
-                /* cookie */ nullptr));
+        auto submit = MakeHolder<TEvResourceBroker::TEvSubmitTask>(
+            /* task id */ 1,
+            /* task name */ TStringBuilder() << "build-stats-table-" << TableId << "-tablet-" << TabletId,
+            /* cpu & memory */ TResourceValues{{ 1, 0 }},
+            /* task type */ "datashard_build_stats",
+            /* priority */ 5,
+            /* cookie */ nullptr);
+        submit->SetOwner(TabletId);
+        Send(MakeResourceBrokerID(), submit.Release());
 
         auto ev = WaitForSpecificEvent<TEvResourceBroker::TEvResourceAllocated>(&TTableStatsCoroBuilder::ProcessUnexpectedEvent);
         auto msg = ev->Get();

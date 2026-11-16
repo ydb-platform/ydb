@@ -1124,6 +1124,7 @@ private:
     bool ManageWriteTimestampEstimate = true;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteInitThrottledMs;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> WriteInitSessions;
     //ToDo - counters.
     THolder<TPercentileCounter> InputTimeLag;
     THolder<TMultiBucketCounter> SupportivePartitionTimeLag;

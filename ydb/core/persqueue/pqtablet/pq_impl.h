@@ -493,11 +493,6 @@ private:
                                  const TActorContext& ctx);
     void EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig& config) const;
 
-    void AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
-                           const NKikimrPQ::TPQTabletConfig& cfg,
-                           const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
-                           const NKikimrPQ::TPartitions& partitionsData,
-                           const TActorContext& ctx);
 
     void SendToPipe(ui64 tabletId,
                     TDistributedTransaction& tx,

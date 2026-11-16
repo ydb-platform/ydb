@@ -103,7 +103,11 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
             const ui32 arraySize = column.length();
             for (auto&& i : indexes) {
                 Y_ABORT_UNLESS(i < arraySize);
-                builderImpl.UnsafeAppend(column.GetView(i));
+                if (column.IsNull(i)) {
+                    builderImpl.UnsafeAppendNull();
+                } else {
+                    builderImpl.UnsafeAppend(column.GetView(i));
+                }
             }
         }
 

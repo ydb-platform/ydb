@@ -13,25 +13,25 @@ extern "C" void* UdfAllocateWithSize(ui64 size) {
 }
 
 extern "C" void UdfFreeWithSize(const void* memory, ui64 size) {
-    return YqlUdfGetSymbols()->UdfFreeWithSizeFunc(memory, size);
+    YqlUdfGetSymbols()->UdfFreeWithSizeFunc(memory, size);
 }
 
 extern "C" void* UdfArrowAllocate(ui64 size) {
     return YqlUdfGetSymbols()->UdfArrowAllocateFunc(size);
 }
 
-extern "C" void* UdfArrowReallocate(const void* memory, ui64 previousSize, ui64 size) {
-    return YqlUdfGetSymbols()->UdfArrowReallocateFunc(memory, previousSize, size);
+extern "C" void* UdfArrowReallocate(const void* memory, ui64 prevSize, ui64 size) {
+    return YqlUdfGetSymbols()->UdfArrowReallocateFunc(memory, prevSize, size);
 }
 
 extern "C" void UdfArrowFree(const void* memory, ui64 size) {
-    return YqlUdfGetSymbols()->UdfArrowFreeFunc(memory, size);
+    YqlUdfGetSymbols()->UdfArrowFreeFunc(memory, size);
 }
 
 extern "C" void UdfRegisterObject(NYql::NUdf::TBoxedValue* object) {
-    return YqlUdfGetSymbols()->UdfRegisterObject(object);
+    YqlUdfGetSymbols()->UdfRegisterObject(object);
 }
 
 extern "C" void UdfUnregisterObject(NYql::NUdf::TBoxedValue* object) {
-    return YqlUdfGetSymbols()->UdfUnregisterObject(object);
+    YqlUdfGetSymbols()->UdfUnregisterObject(object);
 }

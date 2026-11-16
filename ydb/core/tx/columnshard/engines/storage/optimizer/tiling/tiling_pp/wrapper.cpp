@@ -206,6 +206,10 @@ protected:
         Core.ModifyPortions(add, std::vector<TPortionInfo::TConstPtr>(remove.begin(), remove.end()));
     }
 
+    void DoAddLoadedPortions(const std::vector<TPortionInfo::TPtr>& add) override {
+        Core.AddLoadedPortions(add);
+    }
+
     bool DoUsesPullCompactionScheduling() const override {
         return true;
     }

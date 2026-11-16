@@ -1,6 +1,8 @@
 UNITTEST_FOR(yql/essentials/core)
 
 SRCS(
+    yql_project_settings_qstorage_ut.cpp
+    yql_project_settings_ut.cpp
     yql_column_order_ut.cpp
     yql_default_valid_value_ut.cpp
     yql_expr_constraint_ut.cpp

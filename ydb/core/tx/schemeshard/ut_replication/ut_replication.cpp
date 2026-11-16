@@ -1,6 +1,8 @@
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/ydb_convert/replication_description.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
@@ -1006,6 +1008,56 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
 
         TestDropReplication(runtime, ++txId, "/MyRoot", "Replication");
         env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(DescribeDuringDropAfterControllerShardDeletion) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {
+            NLs::PathExist,
+            NLs::ReplicationState(NKikimrReplication::TReplicationState::kStandBy),
+        });
+        // The controller shard is the only shard in the domain: the root
+        // schemeshard is fresh in this test and assigns local shard ids
+        // from 1, so the controller shard has local id 1. (In a tenant
+        // schemeshard this would never hold.)
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {NLs::ShardsInsideDomain(1)});
+
+        // Hold the drop's proposal to the coordinator so the drop cannot
+        // commit. The controller tablet is deleted before the commit: the
+        // drop queues the Hive deletion fire-and-forget, and schemeshard
+        // erases the controller shard from ShardInfos upon processing
+        // Hive's confirmation while the replication is still describable.
+        // This is the race the original crash happened on.
+        TBlockEvents<TEvTxProxy::TEvProposeTransaction> dropPropose(runtime);
+
+        const auto dropTxId = ++txId;
+        TestDropReplication(runtime, dropTxId, "/MyRoot", "Replication");
+        runtime.WaitFor("drop propose", [&] { return !dropPropose.empty(); });
+
+        // TEvNotifyShardDeleted is sent by the transaction that erases the
+        // shard from ShardInfos.
+        env.TestWaitShardDeletion(runtime, {1});
+
+        // The drop's proposal is withheld, so the drop is not committed
+        // yet: this describe crashed the whole schemeshard before the
+        // tolerant ShardInfos lookup was introduced.
+        const auto described = DescribePath(runtime, "/MyRoot/Replication");
+        TestDescribeResult(described, {
+            NLs::PathExist,
+            NLs::CheckPathState(NKikimrSchemeOp::EPathStateDrop),
+        });
+        UNIT_ASSERT(!described.GetPathDescription().GetReplicationDescription().HasControllerId());
+
+        dropPropose.Stop().Unblock();
+        env.TestWaitNotification(runtime, dropTxId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
     }
 

@@ -1945,6 +1945,10 @@ ui64 AsyncAlterAddStream(
     desc.MutableStreamDescription()->SetSchemaChanges(streamDesc.SchemaChanges);
     desc.MutableStreamDescription()->SetUserSIDs(streamDesc.UserSIDs);
     desc.MutableStreamDescription()->SetTraceIds(streamDesc.TraceIds);
+    desc.MutableStreamDescription()->SetCompression(streamDesc.Compression);
+    if (streamDesc.CompressionLevel) {
+        desc.MutableStreamDescription()->SetCompressionLevel(streamDesc.CompressionLevel);
+    }
     if (streamDesc.TopicPartitions) {
         desc.SetTopicPartitions(streamDesc.TopicPartitions);
     }

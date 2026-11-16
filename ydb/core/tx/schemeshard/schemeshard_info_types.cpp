@@ -2035,7 +2035,30 @@ bool TPartitionConfigMerger::VerifyCompactionPolicy(const NKikimrCompaction::TCo
         }
     }
 
-    return true;
+    // Check constructor preconditions before building a runtime policy.
+    for (size_t index = 0; index < policy.GenerationSize(); ++index) {
+        const auto& generation = policy.GetGeneration(index);
+        if (generation.GetGenerationId() != index) {
+            err = TStringBuilder()
+                << "Compaction generation " << index
+                << ": expected GenerationId " << index
+                << ", got " << generation.GetGenerationId();
+            return false;
+        }
+
+        // The runtime policy derives omitted sizes by dividing by CountToCompact.
+        if (generation.HasCountToCompact() && generation.GetCountToCompact() == 0 &&
+            (!generation.HasExtraCompactionExpMaxSize() || !generation.HasUpliftPartSize()))
+        {
+            err = TStringBuilder()
+                << "Compaction generation " << index
+                << ": CountToCompact must be nonzero when "
+                   "ExtraCompactionExpMaxSize or UpliftPartSize is omitted";
+            return false;
+        }
+    }
+
+    return NLocalDb::ValidateCompactionPolicy(NLocalDb::TCompactionPolicy(policy), err);
 }
 
 bool TPartitionConfigMerger::VerifyCommandOnFrozenTable(const NKikimrSchemeOp::TPartitionConfig &srcConfig, const NKikimrSchemeOp::TPartitionConfig &dstConfig)

@@ -38,6 +38,8 @@ message TCompactionPolicy {
         optional uint32 ExtraCompactionExpPercent = 12;
         optional uint64 ExtraCompactionExpMaxSize = 13;
         optional uint64 UpliftPartSize = 14;
+        // Family id of the storage tier. When omitted, the generation belongs to the default tier (family 0).
+        optional uint32 TierId = 15;
     }
 
     //NOTE: default values must be in sync with ydb/core/base/localdb.cpp, TShardPolicy

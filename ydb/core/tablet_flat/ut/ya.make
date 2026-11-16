@@ -40,6 +40,7 @@ SRCS(
     ut_stat.cpp
     ut_comp_gen.cpp
     ut_compaction.cpp
+    ut_compaction_levels.cpp
     ut_compaction_outputs.cpp
     ut_compaction_fulltext.cpp
     ut_compaction_multi.cpp
@@ -68,6 +69,7 @@ SRCS(
     ut_vacuum.cpp
     ut_versions.cpp
     ut_scan_delta.cpp
+    ut_scan_source.cpp
     ut_backup.cpp
 )
 

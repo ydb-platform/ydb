@@ -65,6 +65,13 @@ void TSqlQuery::AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node) {
 
 namespace {
 
+TMaybe<TIssue> ParseProjectPragmaName(const TString& fullName, TString& prefix, TString& name) {
+    const auto dot = fullName.find('.');
+    prefix = dot == TString::npos ? TString() : to_lower(fullName.substr(0, dot));
+    name = dot == TString::npos ? fullName : fullName.substr(dot + 1);
+    return NormalizeName({}, name);
+}
+
 bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
                                    const TRule_replication_settings_entry& in, TSqlExpression& ctx, bool create)
 {
@@ -2712,6 +2719,19 @@ bool TSqlQuery::AlterTableCompact(const TRule_alter_table_compact& node, TAlterT
 }
 
 namespace {
+const THashSet<TStringBuf> LexicalScopePragmas = {
+    "classicdivision",
+    "strictjoinkeytypes",
+    "disablestrictjoinkeytypes",
+    "checkedops",
+    "unicodeliterals",
+    "disableunicodeliterals",
+    "warnuntypedstringliterals",
+    "disablewarnuntypedstringliterals",
+    "simplepg",
+    "disablesimplepg",
+};
+
 #define CB_SIG TVector<TDeferredAtom>&values [[maybe_unused]], bool pragmaValueDefault [[maybe_unused]], TStringBuf pragma [[maybe_unused]], TSqlQuery &query [[maybe_unused]]
 
 using PragmaStatementCb = std::function<TMaybe<TNodePtr>(CB_SIG)>;
@@ -2719,6 +2739,7 @@ using PragmaStatementCb = std::function<TMaybe<TNodePtr>(CB_SIG)>;
 struct TPragmaDescr {
     TString CanonicalName;
     bool IsYqlSelectCompatible;
+    bool IsAllowedForProject;
     PragmaStatementCb Cb;
 };
 
@@ -2740,23 +2761,25 @@ THashMap<TString, TPragmaDescr>::value_type TableElemExt(TPragmaDescr pragma) {
     return {std::move(normalizedName), std::move(pragma)};
 }
 
-#define TABLE_ELEM(name, param, value, isYqlSelectCompatible) \
-    TableElemExt({                                            \
-        .CanonicalName = name,                                \
-        .IsYqlSelectCompatible = (isYqlSelectCompatible),     \
-        .Cb = SetCtxField((&TContext::param), (value)),       \
+#define TABLE_ELEM(name, param, value, isYqlSelectCompatible, isAllowedForProject) \
+    TableElemExt({                                                                 \
+        .CanonicalName = name,                                                     \
+        .IsYqlSelectCompatible = (isYqlSelectCompatible),                          \
+        .IsAllowedForProject = (isAllowedForProject),                              \
+        .Cb = SetCtxField((&TContext::param), (value)),                            \
     })
 
 // clang-format off
-#define PAIRED_TABLE_ELEM(name, param, isYqlSelectCompatible) \
-    TABLE_ELEM(name, param, true, (isYqlSelectCompatible)),   \
-    TABLE_ELEM("Disable" name, param, false, (isYqlSelectCompatible))
+#define PAIRED_TABLE_ELEM(name, param, isYqlSelectCompatible, isAllowedForProject) \
+    TABLE_ELEM(name, param, true, (isYqlSelectCompatible), (isAllowedForProject)), \
+    TABLE_ELEM("Disable" name, param, false, (isYqlSelectCompatible), (isAllowedForProject))
 // clang-format on
 
 THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "Udf",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if ((values.size() != 1 && values.size() != 2) || pragmaValueDefault) {
@@ -2784,6 +2807,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "PackageVersion",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 2 || pragmaValueDefault) {
@@ -2810,6 +2834,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "File",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() < 2U || values.size() > 3U || pragmaValueDefault) {
@@ -2823,6 +2848,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "FileOption",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() < 3U) {
@@ -2836,6 +2862,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "Folder",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() < 2U || values.size() > 3U || pragmaValueDefault) {
@@ -2848,6 +2875,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "UdfBridge",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (!values.empty() || pragmaValueDefault) {
@@ -2862,6 +2890,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "Library",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.empty()) {
@@ -2919,6 +2948,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "Package",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() < 2U || values.size() > 3U) {
@@ -2990,6 +3020,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "OverrideLibrary",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1U) {
@@ -3012,6 +3043,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "EquiJoin",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             return TNodePtr{};
         },
@@ -3019,6 +3051,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "RelativePathPrefix",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (ctx.Scoped->CurrService != KikimrProviderName) {
@@ -3045,6 +3078,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "TablePathPrefix",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             TString value;
@@ -3077,6 +3111,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "GroupByLimit",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.PragmaGroupByLimit)) {
@@ -3089,6 +3124,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "GroupByCubeLimit",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.PragmaGroupByCubeLimit)) {
@@ -3101,6 +3137,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "ResultRowsLimit",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.ResultRowsLimit)) {
@@ -3114,6 +3151,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "ResultSizeLimit",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.ResultSizeLimit)) {
@@ -3127,6 +3165,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "RuntimeLogLevel",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1 || !values[0].GetLiteral()) {
@@ -3147,6 +3186,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "Warning",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 2U || values.front().Empty() || values.back().Empty()) {
@@ -3184,6 +3224,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "Greetings",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() > 1) {
@@ -3206,6 +3247,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "WarningMsg",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1 || !values[0].GetLiteral()) {
@@ -3223,6 +3265,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "ErrorMsg",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1 || !values[0].GetLiteral()) {
@@ -3236,6 +3279,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "ClassicDivision",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.Scoped->PragmaClassicDivision)) {
@@ -3248,6 +3292,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "CheckedOps",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.Scoped->PragmaCheckedOps)) {
@@ -3260,6 +3305,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "DisableUnordered",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (!ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA, [](auto& out) {
@@ -3273,6 +3319,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "RotateJoinTree",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.RotateJoinTree)) {
@@ -3285,6 +3332,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "EnableSystemColumns",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.EnableSystemColumns)) {
@@ -3297,6 +3345,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "AnsiOrderByLimitInUnionAll",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             return TNodePtr{};
         },
@@ -3304,6 +3353,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "DisableAnsiOrderByLimitInUnionAll",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             query.Error() << "DisableAnsiOrderByLimitInUnionAll pragma is deprecated and no longer supported";
             return {};
@@ -3312,6 +3362,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "RegexUseRe2",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1U || !values.front().GetLiteral() || !TryFromString(*values.front().GetLiteral(), ctx.PragmaRegexUseRe2)) {
@@ -3324,6 +3375,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "PositionalUnionAll",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             ctx.PositionalUnionAll = true;
@@ -3335,6 +3387,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "PqReadBy",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1 || !values[0].GetLiteral()) {
@@ -3356,6 +3409,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "StrictJoinKeyTypes",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             ctx.Scoped->StrictJoinKeyTypes = true;
@@ -3365,6 +3419,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "DisableStrictJoinKeyTypes",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             ctx.Scoped->StrictJoinKeyTypes = false;
@@ -3374,6 +3429,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "UnicodeLiterals",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             ctx.Scoped->UnicodeLiterals = true;
@@ -3383,6 +3439,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "DisableUnicodeLiterals",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             ctx.Scoped->UnicodeLiterals = false;
@@ -3392,6 +3449,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "WarnUntypedStringLiterals",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             ctx.Scoped->WarnUntypedStringLiterals = true;
@@ -3401,6 +3459,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "DisableWarnUntypedStringLiterals",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             ctx.Scoped->WarnUntypedStringLiterals = false;
@@ -3410,6 +3469,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "SimplePg",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             ctx.Scoped->SimplePgByDefault = true;
@@ -3419,6 +3479,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "DisableSimplePg",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             ctx.Scoped->SimplePgByDefault = false;
@@ -3430,6 +3491,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "DataWatermarks",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (!ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA, [&](auto& out) {
@@ -3443,6 +3505,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "DisableFlexibleTypes",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (!ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA, [](auto& out) {
@@ -3458,6 +3521,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "FeatureR010",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (!ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA, [&](auto& out) {
@@ -3471,6 +3535,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "CostBasedOptimizer",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() == 1 && values[0].GetLiteral()) {
@@ -3487,6 +3552,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "CostBasedOptimizerVersion",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() == 1 && values[0].GetLiteral()) {
@@ -3507,6 +3573,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "DisableCompactNamedExprs",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (!ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA, [](auto& out) {
@@ -3522,6 +3589,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "Engine",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
 
@@ -3554,6 +3622,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "Layer",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
             if (values.size() != 1) {
@@ -3566,6 +3635,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "YqlSelect",
         .IsYqlSelectCompatible = true,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
 
@@ -3597,6 +3667,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt({
         .CanonicalName = "FailOnNonPersistableFlattenAndAggrExprs",
         .IsYqlSelectCompatible = false,
+        .IsAllowedForProject = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
 
@@ -3618,208 +3689,255 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     PAIRED_TABLE_ELEM(
         "AnsiInForEmptyOrNullableItemsCollections",
         AnsiInForEmptyOrNullableItemsCollections,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/true),
     PAIRED_TABLE_ELEM(
         "AnsiRankForNullableKeys",
         AnsiRankForNullableKeys,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/true),
     PAIRED_TABLE_ELEM(
         "JsonQueryReturnsJsonDocument",
         JsonQueryReturnsJsonDocument,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/true),
     PAIRED_TABLE_ELEM(
         "EmitAggApply",
         EmitAggApply,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "CompactGroupBy",
         CompactGroupBy,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "DirectRowDependsOn",
         DirectRowDependsOn,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
 
     // bool fields.
     TABLE_ELEM(
         "EvaluateExprCache",
         EvaluateExprCache,
         /*value=*/true,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     TABLE_ELEM(
         "RefSelect",
         PragmaRefSelect,
         /*value=*/true,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     TABLE_ELEM(
         "SampleSelect",
         PragmaSampleSelect,
         /*value=*/true,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     TABLE_ELEM(
         "AllowDotInAlias",
         PragmaAllowDotInAlias,
         /*value=*/true,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/true),
     TABLE_ELEM(
         "DirectRead",
         PragmaDirectRead,
         /*value=*/true,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     TABLE_ELEM(
         "AutoCommit",
         PragmaAutoCommit,
         /*value=*/true,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/true),
     TABLE_ELEM(
         "UseTablePrefixForEach",
         PragmaUseTablePrefixForEach,
         /*value=*/true,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/true),
     PAIRED_TABLE_ELEM(
         "SimpleColumns",
         SimpleColumns,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/true),
     PAIRED_TABLE_ELEM(
         "DebugPositions",
         DebugPositions,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "WindowNewPipeline",
         WindowNewPipeline,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "YqlSelectAllowUnnamedGroupByExpr",
         YqlSelectAllowUnnamedGroupByExpr,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "CoalesceJoinKeysOnQualifiedAll",
         CoalesceJoinKeysOnQualifiedAll,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "PullUpFlatMapOverJoin",
         PragmaPullUpFlatMapOverJoin,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "FilterPushdownOverJoinOptionalSide",
         FilterPushdownOverJoinOptionalSide,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     TABLE_ELEM(
         "AllowUnnamedColumns",
         WarnUnnamedColumns,
         /*value=*/false,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     TABLE_ELEM(
         "WarnUnnamedColumns",
         WarnUnnamedColumns,
         /*value=*/true,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     TABLE_ELEM(
         "DiscoveryMode",
         DiscoveryMode,
         /*value=*/true,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "ExceptIntersectBefore202503",
         ExceptIntersectBefore202503,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "RuntimeUserAttrs",
         RuntimeUserAttrs,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
 
     // TODO DqEngine/blockengine
     PAIRED_TABLE_ELEM(
         "AnsiOptionalAs",
         AnsiOptionalAs,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/true),
     PAIRED_TABLE_ELEM(
         "WarnOnAnsiAliasShadowing",
         WarnOnAnsiAliasShadowing,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/true),
     PAIRED_TABLE_ELEM(
         "OrderedColumns",
         OrderedColumns,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/true),
     PAIRED_TABLE_ELEM(
         "DeriveColumnOrder",
         DeriveColumnOrder,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     TABLE_ELEM(
         "BogousStarInGroupByOverJoin",
         BogousStarInGroupByOverJoin,
         /*value=*/true,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "UnorderedSubqueries",
         UnorderedSubqueries,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     TABLE_ELEM(
         "FlexibleTypes",
         FlexibleTypes,
         /*value=*/true,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "AnsiCurrentRow",
         AnsiCurrentRow,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/true),
     PAIRED_TABLE_ELEM(
         "UseBlocks",
         UseBlocks,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "EmitTableSource",
         EmitTableSource,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "AnsiLike",
         AnsiLike,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "UnorderedResult",
         UnorderedResult,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     TABLE_ELEM(
         "CompactNamedExprs",
         CompactNamedExprs,
         /*value=*/true,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "ValidateUnusedExprs",
         ValidateUnusedExprs,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "AnsiImplicitCrossJoin",
         AnsiImplicitCrossJoin,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/true),
     PAIRED_TABLE_ELEM(
         "DistinctOverWindow",
         DistinctOverWindow,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "SeqMode",
         SeqMode,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "EmitUnionMerge",
         EmitUnionMerge,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "DistinctOverKeys",
         DistinctOverKeys,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "GroupByExprAfterWhere",
         GroupByExprAfterWhere,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "FailOnGroupByExprOverride",
         FailOnGroupByExprOverride,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/false,
+        /*isAllowedForProject=*/false),
     PAIRED_TABLE_ELEM(
         "OptimizeSimpleILIKE",
         OptimizeSimpleIlike,
-        /*isYqlSelectCompatible=*/true),
+        /*isYqlSelectCompatible=*/true,
+        /*isAllowedForProject=*/false),
 };
 
 #undef PAIRED_TABLE_ELEM
@@ -3850,7 +3968,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
     }
 
     if (prefix.empty() && (normalizedPragma == "relativepathprefix" || normalizedPragma == "tablepathprefix")) {
-        const auto& activePragmas = Ctx_.Scoped->ActivePragmas;
+        const auto& activePragmas = Ctx_.Scoped->QueryPragmas;
         if (normalizedPragma == "relativepathprefix" && activePragmas.contains(std::make_pair(lowerPrefix, normalizedPragma))) {
             Error() << "RelativePathPrefix must be specified only once";
             Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
@@ -3862,8 +3980,12 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
             Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
             return {};
         }
+        if (Ctx_.Scoped->ActivePragmas.erase(std::make_pair(lowerPrefix, otherPragma)) && otherPragma == "relativepathprefix") {
+            Ctx_.ResetRelativePathPrefix();
+        }
     }
     Ctx_.Scoped->ActivePragmas.insert(std::make_pair(lowerPrefix, normalizedPragma));
+    Ctx_.Scoped->QueryPragmas.insert(std::make_pair(lowerPrefix, normalizedPragma));
 
     TVector<TDeferredAtom> values;
     TVector<const TRule_pragma_value*> pragmaValues;
@@ -3882,18 +4004,6 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
     }
 
     const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf" || normalizedPragma == "layer";
-    static const THashSet<TStringBuf> LexicalScopePragmas = {
-        "classicdivision",
-        "strictjoinkeytypes",
-        "disablestrictjoinkeytypes",
-        "checkedops",
-        "unicodeliterals",
-        "disableunicodeliterals",
-        "warnuntypedstringliterals",
-        "disablewarnuntypedstringliterals",
-        "simplepg",
-        "disablesimplepg",
-    };
     const bool hasLexicalScope = withConfigure || LexicalScopePragmas.contains(normalizedPragma);
     const bool withFileAlias = normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "library" || normalizedPragma == "udf";
     const bool allowTopLevelPragmas = TopLevel_ || AllowTopLevelPragmas_;
@@ -3942,6 +4052,33 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
         }
     }
 
+    return ApplyPragma(prefix, pragma, normalizedPragma, values, pragmaValueDefault, allowTopLevelPragmas, hasLexicalScope);
+}
+
+namespace {
+enum class EYsonPragma { Unknown,
+                         Fast,
+                         AutoConvert,
+                         Strict,
+                         DisableStrict,
+                         CastToString,
+                         DisableCastToString };
+EYsonPragma YsonPragmaKind(const TString& name) {
+    static const THashMap<TString, EYsonPragma> Pragmas = {
+        {"fast", EYsonPragma::Fast},
+        {"autoconvert", EYsonPragma::AutoConvert},
+        {"strict", EYsonPragma::Strict},
+        {"disablestrict", EYsonPragma::DisableStrict},
+        {"casttostring", EYsonPragma::CastToString},
+        {"disablecasttostring", EYsonPragma::DisableCastToString},
+    };
+    return Pragmas.Value(name, EYsonPragma::Unknown);
+}
+} // namespace
+
+TMaybe<TNodePtr> TSqlQuery::ApplyPragma(const TString& prefix, const TString& pragma, const TString& normalizedPragma,
+                                        TVector<TDeferredAtom>& values, bool pragmaValueDefault, bool allowTopLevelPragmas, bool hasLexicalScope, bool failOnUnknownPragma) {
+    const TString lowerPrefix = to_lower(prefix);
     if (prefix.empty()) {
         if (!allowTopLevelPragmas && !hasLexicalScope) {
             Error() << "This pragma '" << pragma << "' is not allowed to be used in actions or subqueries";
@@ -3997,28 +4134,32 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
                 }
             }
         } else {
+            if (!failOnUnknownPragma) {
+                return TNodePtr{};
+            }
             Error() << "Unknown pragma: " << pragma;
             Ctx_.IncrementMonCounter("sql_errors", "UnknownPragma");
             return {};
         }
     } else {
         if (lowerPrefix == "yson") {
+            const auto kind = YsonPragmaKind(normalizedPragma);
             if (!allowTopLevelPragmas) {
                 Error() << "This pragma '" << pragma << "' is not allowed to be used in actions";
                 Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             }
-            if (normalizedPragma == "fast") {
+            if (kind == EYsonPragma::Fast) {
                 if (!Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA, [](auto& out) {
                         out << "Use of deprecated yson.Fast pragma. It will be dropped soon";
                     })) {
                     return {};
                 }
                 return TNodePtr{};
-            } else if (normalizedPragma == "autoconvert") {
+            } else if (kind == EYsonPragma::AutoConvert) {
                 Ctx_.PragmaYsonAutoConvert = true;
                 return TNodePtr{};
-            } else if (normalizedPragma == "strict") {
+            } else if (kind == EYsonPragma::Strict) {
                 if (values.empty()) {
                     Ctx_.PragmaYsonStrict = true;
                     return TNodePtr{};
@@ -4028,7 +4169,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
                 Error() << "Expected 'true', 'false' or no parameter for: " << pragma;
                 Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
-            } else if (normalizedPragma == "disablestrict") {
+            } else if (kind == EYsonPragma::DisableStrict) {
                 if (values.empty()) {
                     Ctx_.PragmaYsonStrict = false;
                     return TNodePtr{};
@@ -4042,8 +4183,8 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
                 Error() << "Expected 'true', 'false' or no parameter for: " << pragma;
                 Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
-            } else if (normalizedPragma == "casttostring" || normalizedPragma == "disablecasttostring") {
-                const bool allow = normalizedPragma == "casttostring";
+            } else if (kind == EYsonPragma::CastToString || kind == EYsonPragma::DisableCastToString) {
+                const bool allow = kind == EYsonPragma::CastToString;
                 if (values.empty()) {
                     Ctx_.YsonCastToString = allow;
                     return TNodePtr{};
@@ -4057,6 +4198,9 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
                 Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             } else {
+                if (!failOnUnknownPragma) {
+                    return TNodePtr{};
+                }
                 Error() << "Unknown pragma: '" << pragma << "'";
                 Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
@@ -4064,6 +4208,9 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
 
         } else if (std::find(Providers.cbegin(), Providers.cend(), lowerPrefix) == Providers.cend()) {
             if (!Ctx_.HasCluster(prefix)) {
+                if (!failOnUnknownPragma) {
+                    return TNodePtr{};
+                }
                 Error() << "Unknown pragma prefix: " << prefix << ", please use cluster name or one of provider " << JoinRange(", ", Providers.cbegin(), Providers.cend());
                 Ctx_.IncrementMonCounter("sql_errors", "UnknownPragma");
                 return {};
@@ -4355,6 +4502,10 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
             return true;
         };
 
+        if (TopLevel_ && !ApplyProjectSettings(blocks)) {
+            return nullptr;
+        }
+
         size_t statementNumber = 0;
 
         const auto& stmtList = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
@@ -4413,6 +4564,82 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
     return result;
 }
 
+bool AcceptsSqlProjectSetting(const NYql::TProjectSettings::TPragma& pragma) {
+    if (!NSQLTranslation::IsTranslatorLevelPragma(pragma.Name)) {
+        return false;
+    }
+    TString prefix;
+    TString name;
+    if (ParseProjectPragmaName(pragma.Name, prefix, name)) {
+        return false;
+    }
+    if (prefix == "yson") {
+        return YsonPragmaKind(name) != EYsonPragma::Unknown;
+    }
+    if (!prefix.empty()) {
+        return false;
+    }
+    if (const auto* descr = PragmaDescrs.FindPtr(name)) {
+        return descr->IsAllowedForProject;
+    }
+    return name == "dqengine" || name == "blockengine";
+}
+
+NYql::TProjectSettings FilterScopedProjectSettings(const NYql::TProjectSettings& settings) {
+    NYql::TProjectSettings result;
+    for (const auto& pragma : settings.Pragmas) {
+        TString name = pragma.Name;
+        if (!NYql::NormalizeName({}, name) && LexicalScopePragmas.contains(name)) {
+            result.Pragmas.push_back(pragma);
+        }
+    }
+    return result;
+}
+
+bool TSqlQuery::ApplyProjectSettings(TVector<TNodePtr>& blocks) {
+    const auto projectSettings = Mode_ == NSQLTranslation::ESqlMode::LIBRARY || Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW
+                                     ? FilterScopedProjectSettings(Ctx_.Settings.ProjectSettings)
+                                     : Ctx_.Settings.ProjectSettings;
+    bool success = true;
+    for (const auto& pragma : projectSettings.Pragmas) {
+        if (!NSQLTranslation::IsTranslatorLevelPragma(pragma.Name)) {
+            continue;
+        }
+        TString prefix;
+        TString name;
+        if (auto error = ParseProjectPragmaName(pragma.Name, prefix, name)) {
+            if (Ctx_.Settings.StrictConfigValidation) {
+                Error() << error->GetMessage();
+                Ctx_.IncrementMonCounter("sql_errors", "NormalizePragmaError");
+                success = false;
+            }
+            continue;
+        }
+        if (prefix.empty()) {
+            if (const auto* descr = PragmaDescrs.FindPtr(name); descr && !descr->IsAllowedForProject) {
+                continue;
+            }
+        }
+        TVector<TDeferredAtom> values;
+        for (const auto& value : pragma.Value) {
+            values.emplace_back(Ctx_.Pos(), value);
+        }
+        const auto result = ApplyPragma(prefix, pragma.Name, name, values,
+                                        /*pragmaValueDefault=*/false, /*allowTopLevelPragmas=*/true, /*hasLexicalScope=*/true, Ctx_.Settings.StrictConfigValidation);
+        if (!result) {
+            success = false;
+            continue;
+        }
+        if (AcceptsSqlProjectSetting(pragma)) {
+            Ctx_.Scoped->ActivePragmas.emplace(prefix, name);
+        }
+        if (*result) {
+            AddStatementToBlocks(blocks, *result);
+        }
+    }
+    return success;
+}
+
 TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& statements) {
     if (Mode_ == NSQLTranslation::ESqlMode::QUERY) {
         // inject externally declared named expressions
@@ -4449,6 +4676,10 @@ TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_co
     Y_DEFER {
         Ctx_.PopCurrentBlocks();
     };
+
+    if (TopLevel_ && !ApplyProjectSettings(blocks)) {
+        return nullptr;
+    }
 
     size_t statementNumber = 0;
     for (const auto& statement : statements) {

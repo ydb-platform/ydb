@@ -32,7 +32,7 @@ public:
                 tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
                 tablet->ActualizeTabletStatistics(now);
                 Self->EnqueueUpdateMetrics(tablet);
-                    
+
                 if (tablet->IsLeader()) {
                     db.Table<Schema::Tablet>()
                         .Key(tabletId)
@@ -52,6 +52,7 @@ public:
             node->UpdateResourceTotalUsage(record);
             node->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
             node->ActualizeNodeStatistics(now);
+            Self->UpdateNodeCounters(*node);
             BLOG_TRACE("THive::TTxUpdateTabletMetrics UpdateResourceTotalUsage node "
                        << nodeId
                        << " value "

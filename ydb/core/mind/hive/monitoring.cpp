@@ -1001,6 +1001,7 @@ public:
         UpdateConfig(db, "NodeRestartsForPenalty", configUpdates);
         UpdateConfig(db, "TabletEventHistorySize", configUpdates);
         UpdateConfig(db, "NodeEventHistorySize", configUpdates);
+        UpdateConfig(db, "CountersExportMode", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1296,7 +1297,7 @@ public:
                     out << "<div class='col-sm-2' style='padding-top:5px'><select id='" << param << "' style='max-width:170px;margin-top:7px' onchange='edit(this);'>";
                     TString base = GetEnumValueCommonPrefix(enumfield);
                     for (int n = 0; n < enumfield->value_count(); ++n) {
-                        const google::protobuf::EnumValueDescriptor* enumdescr = enumfield->FindValueByNumber(n);
+                        const google::protobuf::EnumValueDescriptor* enumdescr = enumfield->value(n);
                         out << "<option value=" << enumdescr->number() << (enumvalue == enumdescr->number() ? " selected" : "") << ">"
                             << enumdescr->name().substr(base.size())
                             << "</option>";
@@ -1451,6 +1452,7 @@ public:
         ShowConfig(out, "NodeRestartsForPenalty");
         ShowConfig(out, "TabletEventHistorySize");
         ShowConfig(out, "NodeEventHistorySize");
+        ShowConfig(out, "CountersExportMode");
 
         out << "<div class='row' style='margin-top:40px'>";
         bool allowedMetricsLocalOverridden = !Self->TabletTypeAllowedMetrics.empty();

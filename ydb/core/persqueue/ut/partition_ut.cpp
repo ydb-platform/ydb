@@ -65,6 +65,7 @@ struct TCreatePartitionParams {
     // (FormHeadAndProceed empty-keys path).
     bool EmptyDataRangeOk = false;
     TMaybe<ui64> MirroredOffset;
+    TMaybe<TRowVersion> LastEmittedHeartbeat;
 };
 
 }
@@ -121,6 +122,14 @@ public:
 
     static TInstant GetWriteTimeEstimate(TPartition& partition, ui64 offset) {
         return partition.GetWriteTimeEstimate(offset);
+    }
+
+    static TConsumerSnapshot CreateSnapshot(TPartition& partition, TUserInfo& userInfo) {
+        return partition.CreateSnapshot(userInfo);
+    }
+
+    static TUserInfo& GetOrCreateUserInfo(TPartition& partition, const TString& user, const TActorContext& ctx) {
+        return partition.UsersInfoStorage->GetOrCreate(user, ctx);
     }
 
     static ui64 GetStartOffset(TPartition& partition) {
@@ -339,7 +348,7 @@ protected:
     void SendDiskStatusResponse(TMaybe<ui64>* cookie = nullptr);
     void WaitMetaReadRequest();
     void SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp,
-                              TMaybe<ui64> mirroredOffset = Nothing());
+                              TMaybe<ui64> mirroredOffset = Nothing(), TMaybe<TRowVersion> lastEmittedHeartbeat = Nothing());
     void WaitBlobReadRequest();
     void SendBlobReadResponse();
     void WaitInfoRangeRequest();
@@ -385,6 +394,9 @@ protected:
     void SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force = true);
     void SendWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data,
                    bool ignoreQuotaDeadline = false, ui64 seqNo = 0, bool isDirectWrite = false, bool fromMirrorer = false);
+    void SendEmitHeartbeat(ui64 cookie, const TRowVersion& version);
+    void WaitCmdWriteWithLastEmittedHeartbeat(TMaybe<TRowVersion> version);
+    void WaitEmitHeartbeatResult(ui64 cookie, const TRowVersion& version);
     void SendGetWriteInfo(bool skipSrcIdInfo);
     void ShadowPartitionCountersTest(bool isFirstClass);
     void TestRestoreReadSessionActor(bool hasDataRequest);
@@ -573,7 +585,7 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
 
         WaitMetaReadRequest();
         SendMetaReadResponse(params.Begin, params.End, params.PlanStep, params.TxId, params.EndWriteTimestamp,
-                             params.MirroredOffset);
+                             params.MirroredOffset, params.LastEmittedHeartbeat);
 
         WaitInfoRangeRequest();
         {
@@ -884,6 +896,60 @@ void TPartitionFixture::SendWrite
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
+void TPartitionFixture::SendEmitHeartbeat(ui64 cookie, const TRowVersion& version)
+{
+    SendEvent(new TEvPQ::TEvEmitHeartbeat(cookie, THeartbeat{version, "resolved"}));
+}
+
+void TPartitionFixture::WaitCmdWriteWithLastEmittedHeartbeat(TMaybe<TRowVersion> version)
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
+    UNIT_ASSERT(event != nullptr);
+    bool dataFound = false;
+    bool metaFound = false;
+    for (const auto& cmd : event->Record.GetCmdWrite()) {
+        const TString& key = cmd.GetKey();
+        UNIT_ASSERT(!key.empty());
+        if (key[0] == TKeyPrefix::TypeData) {
+            dataFound = true;
+        } else if (key[0] == TKeyPrefix::TypeMeta) {
+            NKikimrPQ::TPartitionMeta meta;
+            UNIT_ASSERT(meta.ParseFromString(cmd.GetValue()));
+            UNIT_ASSERT_VALUES_EQUAL(meta.HasLastEmittedHeartbeat(), version.Defined());
+            if (version) {
+                UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(meta.GetLastEmittedHeartbeat()), *version);
+            }
+            metaFound = true;
+        }
+    }
+    UNIT_ASSERT(dataFound);
+    UNIT_ASSERT(metaFound);
+}
+
+void TPartitionFixture::WaitEmitHeartbeatResult(ui64 cookie, const TRowVersion& version)
+{
+    while (true) {
+        TAutoPtr<IEventHandle> handle;
+        auto events =
+            Ctx->Runtime->GrabEdgeEvents<TEvPQ::TEvProxyResponse, TEvKeyValue::TEvRequest>(handle,
+                                                                                           TDuration::Seconds(5));
+        if (auto* request = std::get<TEvKeyValue::TEvRequest*>(events)) {
+            for (const auto& cmd : request->Record.GetCmdWrite()) {
+                UNIT_ASSERT(!cmd.GetKey().StartsWith(TKeyPrefix::TypeData));
+            }
+            SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        } else if (auto* response = std::get<TEvPQ::TEvProxyResponse*>(events)) {
+            UNIT_ASSERT_VALUES_EQUAL(response->Cookie, cookie);
+            UNIT_ASSERT_VALUES_EQUAL(response->Response->GetStatus(), NMsgBusProxy::MSTATUS_OK);
+            const auto& result = response->Response->GetPartitionResponse().GetCmdEmitHeartbeatResult();
+            UNIT_ASSERT_VALUES_EQUAL(TRowVersion(result.GetStep(), result.GetTxId()), version);
+            return;
+        } else {
+            UNIT_FAIL("No CmdEmitHeartbeatResult");
+        }
+    }
+}
+
 void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force)
 {
     auto event = MakeHolder<TEvPQ::TEvChangeOwner>(cookie, owner, pipeClient, Ctx->Edge, force, true);
@@ -1017,7 +1083,8 @@ void TPartitionFixture::WaitMetaReadRequest()
 }
 
 void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId,
-                                            TInstant endWriteTimestamp, TMaybe<ui64> mirroredOffset)
+                                            TInstant endWriteTimestamp, TMaybe<ui64> mirroredOffset,
+                                            TMaybe<TRowVersion> lastEmittedHeartbeat)
 {
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -1026,7 +1093,7 @@ void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> 
     // NKikimrPQ::TPartitionMeta
     //
     auto read = event->Record.AddReadResult();
-    if (endWriteTimestamp || mirroredOffset.Defined()) {
+    if (endWriteTimestamp || mirroredOffset.Defined() || lastEmittedHeartbeat.Defined()) {
         read->SetStatus(NKikimrProto::OK);
 
         NKikimrPQ::TPartitionMeta meta;
@@ -1035,6 +1102,9 @@ void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> 
         meta.SetEndWriteTimestamp(endWriteTimestamp.MilliSeconds());
         if (mirroredOffset.Defined()) {
             meta.SetMirroredOffset(*mirroredOffset);
+        }
+        if (lastEmittedHeartbeat.Defined()) {
+            lastEmittedHeartbeat->ToProto(meta.MutableLastEmittedHeartbeat());
         }
 
         TString out;
@@ -3389,6 +3459,56 @@ Y_UNIT_TEST_F(WriteAssignsOffsetAfterMirroredOffset, TPartitionFixture)
     encoder.MirroredOffset = 50;
     write(104, 40, 40);
     write(105, Nothing(), 50);
+}
+
+Y_UNIT_TEST_F(EmitHeartbeat, TPartitionFixture)
+{
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10});
+
+    SendEmitHeartbeat(1, TRowVersion(100, 0));
+    WaitCmdWriteWithLastEmittedHeartbeat(TRowVersion(100, 0));
+
+    SendEmitHeartbeat(2, TRowVersion(100, 0));
+    auto early = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(early == nullptr);
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitEmitHeartbeatResult(1, TRowVersion(100, 0));
+    WaitEmitHeartbeatResult(2, TRowVersion(100, 0));
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 11);
+
+    SendEmitHeartbeat(3, TRowVersion(100, 0));
+    WaitEmitHeartbeatResult(3, TRowVersion(100, 0));
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 11);
+}
+
+Y_UNIT_TEST_F(EmitHeartbeatAfterRestart, TPartitionFixture)
+{
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+        .LastEmittedHeartbeat = TRowVersion(100, 0)});
+
+    SendEmitHeartbeat(1, TRowVersion(90, 0));
+    WaitEmitHeartbeatResult(1, TRowVersion(100, 0));
+    SendEmitHeartbeat(2, TRowVersion(100, 0));
+    WaitEmitHeartbeatResult(2, TRowVersion(100, 0));
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 10);
+
+    SendEmitHeartbeat(3, TRowVersion(110, 0));
+    WaitCmdWriteWithLastEmittedHeartbeat(TRowVersion(110, 0));
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitEmitHeartbeatResult(3, TRowVersion(110, 0));
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 11);
+}
+
+Y_UNIT_TEST_F(WriteWithoutSourceHeartbeatsEmitsNoHeartbeat, TPartitionFixture)
+{
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10});
+
+    SendWrite(1, 0, "", Nothing(), "data", false, 1, true);
+    WaitCmdWriteWithLastEmittedHeartbeat(Nothing());
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 1, .Status = NMsgBusProxy::MSTATUS_OK, .SeqNo = 1});
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 11);
 }
 
 Y_UNIT_TEST_F(ReplicationDataSentOnlyForSessionStartAndChangedOffsets, TPartitionFixture)
@@ -9504,6 +9624,103 @@ Y_UNIT_TEST_F(GetWriteTimeEstimateFirstKeyWithPartNoDoesNotAbort, TPartitionFixt
 
     UNIT_ASSERT_VALUES_EQUAL(
         TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 272449), ts);
+}
+
+Y_UNIT_TEST_F(ReadLagEstimateUsesFirstUnreadMessage, TPartitionFixture) {
+    // LOGBROKER-10672: after partition restart the consumer has no read state
+    // (ReadOffset == -1, no actual timestamps), so the read lag is estimated
+    // from blob write times. The estimate must use the write time of the first
+    // UNREAD message, not of the message before it (the last read one).
+    // Otherwise a nearly-caught-up consumer in a low-traffic topic reports a
+    // multi-hour lag spike right after the restart.
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+
+    const TInstant oldTs = TInstant::Now() - TDuration::Hours(5);
+    const TInstant recentTs = TInstant::Now() - TDuration::Seconds(1);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 3);
+    AddBodyKeyToEncoder(cz, partitionId, 0, 100, oldTs);
+    AddBodyKeyToEncoder(cz, partitionId, 1, 100, oldTs);
+    AddBodyKeyToEncoder(cz, partitionId, 2, 100, recentTs);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 3, 3);
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 3u);
+
+    auto probe = [&](const TActorContext& ctx) {
+        auto& userInfo = TPartitionTestWrapper::GetOrCreateUserInfo(*partition, "consumer", ctx);
+        // Post-restart state: committed offset 2, one pending message at offset
+        // 2, no read performed yet, ReadTimestamp reset to now.
+        userInfo.Offset = 2;
+        userInfo.ReadTimestamp = TInstant::Now();
+        UNIT_ASSERT_VALUES_EQUAL(userInfo.GetReadOffset(), 2);
+
+        const auto snapshot = TPartitionTestWrapper::CreateSnapshot(*partition, userInfo);
+        // The only unread message was written ~1s ago; the reported read lag
+        // must be based on it, not on the 5-hour-old message before it.
+        UNIT_ASSERT_C(snapshot.ReadLag <= TDuration::Seconds(5),
+                      "ReadLag is " << snapshot.ReadLag.ToString());
+    };
+
+    Ctx->Runtime->Register(new TPartitionMethodTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+Y_UNIT_TEST_F(ReadLagClampsWhenFirstUnreadWrittenAfterLastRead, TPartitionFixture) {
+    // Live consumer (ReadOffset != -1, no cached read timestamps): the first
+    // unread message may be written after the last read activity. The lag must
+    // clamp to zero instead of wrapping around in the unsigned TDuration.
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+
+    const TInstant oldTs = TInstant::Now() - TDuration::Hours(5);
+    const TInstant recentTs = TInstant::Now() - TDuration::Seconds(1);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 3);
+    AddBodyKeyToEncoder(cz, partitionId, 0, 100, oldTs);
+    AddBodyKeyToEncoder(cz, partitionId, 1, 100, oldTs);
+    AddBodyKeyToEncoder(cz, partitionId, 2, 100, recentTs);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 3, 3);
+
+    auto probe = [&](const TActorContext& ctx) {
+        auto& userInfo = TPartitionTestWrapper::GetOrCreateUserInfo(*partition, "consumer", ctx);
+        // Read up to offset 2 long ago; the pending message 2 was written
+        // after that read, so the naive subtraction would go negative.
+        userInfo.Offset = 2;
+        userInfo.ReadOffset = 1; // GetReadOffset() == 2
+        userInfo.ReadTimestamp = TInstant::Now() - TDuration::Seconds(10);
+        UNIT_ASSERT_VALUES_EQUAL(userInfo.GetReadOffset(), 2);
+
+        const auto snapshot = TPartitionTestWrapper::CreateSnapshot(*partition, userInfo);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadLag, TDuration::Zero());
+    };
+
+    Ctx->Runtime->Register(new TPartitionMethodTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
 }
 
 Y_UNIT_TEST_F(GetClientOffsetSurvivesInitWithMetaButNoDataKeys, TPartitionFixture) {

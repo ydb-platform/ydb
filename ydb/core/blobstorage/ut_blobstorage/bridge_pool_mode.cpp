@@ -495,6 +495,8 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().unattributed_storage_pools(), 2);
         UNIT_ASSERT(overview.GetPiles().has_bridge_databases());
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().bridge_databases(), 0);
+        UNIT_ASSERT(overview.GetPiles().has_bridge_databases_by_sync_status());
+        UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().bridge_databases_by_sync_status().total(), 0);
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().cluster_state_generation(), QueryStorageConfig(env).GetClusterState().GetGeneration());
         UNIT_ASSERT(overview.GetPiles().has_observed_at());
         for (const auto& row : overview.GetPiles().piles()) {
@@ -638,6 +640,7 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         UNIT_ASSERT_VALUES_EQUAL(mixedOverview.GetPiles().unattributed_storage_pools(), 0);
         UNIT_ASSERT(mixedOverview.GetPiles().has_bridge_databases());
         UNIT_ASSERT_VALUES_EQUAL(mixedOverview.GetPiles().bridge_databases(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(mixedOverview.GetPiles().bridge_databases_by_sync_status().total(), 0);
         for (const auto& row : mixedOverview.GetPiles().piles()) {
             UNIT_ASSERT_VALUES_EQUAL(row.databases().total(), 1); // two groups and two pools, one storage owner
             UNIT_ASSERT_VALUES_EQUAL(row.databases().synced(), 1);
@@ -651,6 +654,7 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         const auto filteredOverview = QueryStorageDiagnostics(env, query);
         UNIT_ASSERT_C(filteredOverview.GetStatus() == Ydb::StatusIds::SUCCESS, filteredOverview.DebugString());
         UNIT_ASSERT(!filteredOverview.GetPiles().has_bridge_databases());
+        UNIT_ASSERT(!filteredOverview.GetPiles().has_bridge_databases_by_sync_status());
         for (const auto& row : filteredOverview.GetPiles().piles()) {
             UNIT_ASSERT(!row.has_bridge_databases());
             UNIT_ASSERT_VALUES_EQUAL(row.databases().total(), 1);
@@ -669,6 +673,7 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         UNIT_ASSERT_VALUES_EQUAL(separateOverview.GetPiles().unattributed_storage_pools(), 0);
         UNIT_ASSERT(separateOverview.GetPiles().has_bridge_databases());
         UNIT_ASSERT_VALUES_EQUAL(separateOverview.GetPiles().bridge_databases(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(separateOverview.GetPiles().bridge_databases_by_sync_status().synced(), 1);
         for (const auto& row : separateOverview.GetPiles().piles()) {
             UNIT_ASSERT(row.has_pile_name());
             UNIT_ASSERT_VALUES_EQUAL(row.databases().total(), row.pile_name() == "pile_2" ? 2 : 1);
@@ -800,6 +805,9 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         UNIT_ASSERT_C(overview.GetStatus() == Ydb::StatusIds::SUCCESS, overview.DebugString());
         UNIT_ASSERT(overview.GetPiles().has_bridge_databases());
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().bridge_databases(), 1);
+        UNIT_ASSERT(overview.GetPiles().has_bridge_databases_by_sync_status());
+        UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().bridge_databases_by_sync_status().total(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().bridge_databases_by_sync_status().synced(), 1);
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().unattributed_storage_pools(), 0);
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().piles_size(), 2);
         for (const auto& row : overview.GetPiles().piles()) {
@@ -809,10 +817,18 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
             UNIT_ASSERT_VALUES_EQUAL(row.bridge_databases().synced(), 1);
         }
 
+        query.SetPileName("pile_1");
+        const auto pileOnly = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(pileOnly.GetStatus() == Ydb::StatusIds::SUCCESS, pileOnly.DebugString());
+        UNIT_ASSERT(pileOnly.GetPiles().has_bridge_databases());
+        UNIT_ASSERT(!pileOnly.GetPiles().has_bridge_databases_by_sync_status());
+        query.ClearPileName();
+
         const auto checkFiltered = [&] {
             const auto response = QueryStorageDiagnostics(env, query);
             UNIT_ASSERT_C(response.GetStatus() == Ydb::StatusIds::SUCCESS, response.DebugString());
             UNIT_ASSERT(!response.GetPiles().has_bridge_databases());
+            UNIT_ASSERT(!response.GetPiles().has_bridge_databases_by_sync_status());
             for (const auto& row : response.GetPiles().piles()) {
                 UNIT_ASSERT(!row.has_bridge_databases());
             }
@@ -1004,6 +1020,12 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         CreateOrdinaryPool(env, 2, 4, 1);
         const auto groups = GetLogicalPoolGroups(env, 2);
         UNIT_ASSERT_VALUES_EQUAL(groups.size(), 4);
+        auto pool = ReadStoragePool(env, 2);
+        pool.MutableScopeId()->SetX1(1000);
+        pool.MutableScopeId()->SetX2(5);
+        NKikimrBlobStorage::TConfigRequest owner;
+        owner.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+        UNIT_ASSERT(env.Invoke(owner).GetSuccess());
         SetBridgeSyncMaxSyncers(env, 2);
 
         TSyncerTracker tracker;
@@ -1015,11 +1037,22 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         WaitUntil(env, [&] { return tracker.GetNumRunning() >= 2; }, "syncers running");
         env.Sim(TDuration::Seconds(5));
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumRunning(), 2);
+        NKikimrBridge::TStorageQuery query;
+        query.SetView(NKikimrBridge::TStorageQuery::PILES);
+        const auto syncing = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(syncing.GetStatus() == Ydb::StatusIds::SUCCESS, syncing.DebugString());
+        const auto& counts = syncing.GetPiles().bridge_databases_by_sync_status();
+        UNIT_ASSERT_VALUES_EQUAL(counts.total(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(counts.synced(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counts.syncing(), 1);
         tracker.RunUntil(env, 2, "groups fully bridged", [&] {
             return std::ranges::all_of(groups, [&](ui32 groupId) {
                 return IsFullyBridged(GetGroupInfo(env, groupId));
             });
         });
+        const auto synced = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(synced.GetStatus() == Ydb::StatusIds::SUCCESS, synced.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(synced.GetPiles().bridge_databases_by_sync_status().synced(), 1);
         env.Runtime->FilterFunction = {};
     }
 

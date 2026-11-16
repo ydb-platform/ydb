@@ -57,6 +57,8 @@ def ydb_configurator(ydb_cluster_configuration):
     config_generator = KikimrConfigGenerator(**ydb_cluster_configuration)
     config_generator.yaml_config['auth_config'] = {
         'domain_login_only': False,
+        # Authenticate dynamic nodes when they fetch their configuration from CMS.
+        'staff_api_user_token': config_generator.default_clusteradmin,
     }
     config_generator.yaml_config['domains_config']['disable_builtin_security'] = True
     security_config = config_generator.yaml_config['domains_config']['security_config']

@@ -5,7 +5,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/tx/cdc_aggregator/public/events.h>
-#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
@@ -17,8 +17,9 @@
 
 namespace NKikimr::NCdcAggregator {
 
-class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
+class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
     static constexpr ui32 MaxBatchSize = 1000;
+    static constexpr TDuration FlushPeriod = TDuration::MilliSeconds(100);
     static constexpr ui32 PipeRetryLimit = 3;
 
     struct TOrigin {
@@ -30,7 +31,6 @@ class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
         TCdcAggregatorHeartbeatDelivery CdcAggregatorHeartbeatDelivery{MaxBatchSize};
         THashMap<ui64, TOrigin> Origins;
         TActorId PipeClient;
-        bool FlushScheduled = false;
     };
 
     using EStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
@@ -115,24 +115,15 @@ class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
 
         const ui64 tabletId = msg->RecipientTabletId;
         auto& connection = CdcAggregatorConnections[tabletId];
-        auto& delivery = connection.CdcAggregatorHeartbeatDelivery;
         connection.Origins[msg->SourceDataShardId] = origin;
-        delivery.AddHeartbeat(msg->SourceDataShardId, msg->Heartbeat);
-
-        if (!connection.FlushScheduled && delivery.HasBatchToSend()) {
-            connection.FlushScheduled = true;
-            Send(SelfId(), new TEvents::TEvWakeup(tabletId));
-        }
+        connection.CdcAggregatorHeartbeatDelivery.AddHeartbeat(msg->SourceDataShardId, msg->Heartbeat);
     }
 
-    void Handle(TEvents::TEvWakeup::TPtr& ev) {
-        auto it = CdcAggregatorConnections.find(ev->Get()->Tag);
-        if (it == CdcAggregatorConnections.end()) {
-            return;
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        for (auto& [tabletId, connection] : CdcAggregatorConnections) {
+            SendHeartbeatBatch(tabletId, connection);
         }
-
-        it->second.FlushScheduled = false;
-        SendHeartbeatBatch(it->first, it->second);
+        Schedule(FlushPeriod, new TEvents::TEvWakeup());
     }
 
     void Handle(TEvCdcAggregator::TEvWriteHeartbeatsResult::TPtr& ev) {
@@ -148,7 +139,6 @@ class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
         auto& delivery = it->second.CdcAggregatorHeartbeatDelivery;
         auto [result, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseBatchResult(record);
         Reply(it->second, result ? delivery.CompleteBatch(*result) : delivery.FailBatch(error));
-        SendHeartbeatBatch(it->first, it->second);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
@@ -169,9 +159,9 @@ public:
         return NKikimrServices::TActivity::CDC_AGGREGATOR_SERVICE;
     }
 
-    TCdcAggregatorService()
-        : TActor(&TThis::StateWork)
-    {
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+        Schedule(FlushPeriod, new TEvents::TEvWakeup());
     }
 
     STFUNC(StateWork) {

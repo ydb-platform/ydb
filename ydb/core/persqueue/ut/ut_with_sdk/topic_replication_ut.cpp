@@ -503,7 +503,8 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         partition->MutableCmdSetClientOffset()->SetOffset(0);
         static_cast<NKikimr::TTestActorRuntime&>(runtime).SendToPipe(tabletId, edge, unknownConsumer.Release());
         auto unknownResponse = runtime.GrabEdgeEvent<TEvPersQueue::TEvResponse>(edge, TDuration::Seconds(10));
-        UNIT_ASSERT_VALUES_EQUAL(unknownResponse->Get()->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
+        UNIT_ASSERT_C(unknownResponse->Get()->Record.GetErrorCode() == NPersQueue::NErrorCode::BAD_REQUEST,
+            unknownResponse->Get()->Record.ShortDebugString());
         UNIT_ASSERT_STRING_CONTAINS(unknownResponse->Get()->Record.GetErrorReason(), "Commits for consumer are disabled");
 
         setAllowCommits(false);

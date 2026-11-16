@@ -1,11 +1,8 @@
 #include "partition.h"
 
 #include <ydb/core/base/appdata.h>
-<<<<<<< HEAD
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
-=======
 #include <ydb/core/persqueue/public/config.h>
->>>>>>> 2ff1f3b9def (LOGBROKER-10406 Fixed bugs & add tests (#53523))
 #include "partition_util.h"
 #include <util/string/escape.h>
 

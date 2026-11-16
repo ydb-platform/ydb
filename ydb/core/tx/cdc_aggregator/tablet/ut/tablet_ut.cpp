@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
     Y_UNIT_TEST(RejectsInvalidConfig) {
         TTestEnv env;
 
-        const auto noSourcesResult = env.ConfigureTracking({});
+        const auto noSourcesResult = env.ConfigureTracking(TVector<ui64>{});
         UNIT_ASSERT_C(noSourcesResult.GetStatus() == TConfigureResult::BAD_REQUEST, noSourcesResult.ShortDebugString());
 
         const auto duplicateResult = env.ConfigureTracking({1, 1});

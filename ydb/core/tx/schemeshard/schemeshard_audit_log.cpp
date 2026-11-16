@@ -109,11 +109,13 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
                                    const TString& peerName, const TString& userSID, const TString& sanitizedToken,
                                    ui64 txId, const TParts& additionalParts) {
     const auto generalStatus = GeneralStatus(status);
-    Y_VERIFY_S(generalStatus != "ERROR" || !reason.empty(),
-        "Scheme operation failed without a reason"
-            << ", operation: " << NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType())
-            << ", status: " << NKikimrScheme::EStatus_Name(status)
-            << ", txId: " << txId);
+    if (generalStatus == "ERROR" && reason.empty()) {
+        YDB_LOG_CRIT("Scheme operation failed without a reason",
+            {"operation", NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType())},
+            {"status", NKikimrScheme::EStatus_Name(status)},
+            {"txId", txId},
+        );
+    }
 
     auto logEntry = MakeAuditLogFragment(operation);
 

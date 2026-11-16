@@ -15,15 +15,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/scope.h>
 
 #include <optional>
-
-#if defined(_unix_)
-#include <csignal>
-#include <sys/resource.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#endif
 
 using namespace NYdb;
 using namespace NKikimr::Tests;
@@ -888,27 +882,63 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditLog) {
         }
     }
 
-#if defined(_unix_)
-    Y_UNIT_TEST(ErrorWithoutReasonAbortsWithAuditDisabled) {
-        const auto pid = fork();
-        UNIT_ASSERT_C(pid >= 0, "fork failed");
-        if (pid == 0) {
-            const rlimit limits = {0, 0};
-            setrlimit(RLIMIT_CORE, &limits);
-            signal(SIGABRT, SIG_DFL);
-            NAudit::AUDIT_LOG_ENABLED.store(false);
-            NKikimrSchemeOp::TModifyScheme operation;
-            operation.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
-            AuditLogModifySchemeOperation(operation, NKikimrScheme::StatusInvalidParameter, {},
-                nullptr, {}, {}, {}, 100, {});
-            _exit(0);
+    Y_UNIT_TEST_FLAG(ErrorWithoutReasonIsLogged, AuditEnabled) {
+        std::vector<std::string> logLines;
+        std::vector<std::string> auditLines;
+        TTestBasicRuntime runtime;
+        runtime.SetLogBackend(new Tests::TMemoryLogBackend(logLines));
+        if (AuditEnabled) {
+            runtime.AuditLogBackends = Tests::CreateTestAuditLogBackends(auditLines);
         }
-        int status = 0;
-        UNIT_ASSERT_VALUES_EQUAL(waitpid(pid, &status, 0), pid);
-        UNIT_ASSERT_C(WIFSIGNALED(status), status);
-        UNIT_ASSERT_VALUES_EQUAL(WTERMSIG(status), SIGABRT);
+        TSchemeShard* ss = nullptr;
+        auto factory = [&ss](const TActorId& tablet, TTabletStorageInfo* info) {
+            ss = new TSchemeShard(tablet, info);
+            return ss;
+        };
+        TTestEnv env(runtime, TTestEnvOptions(), factory);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_CRIT);
+        const auto auditWasEnabled = NAudit::AUDIT_LOG_ENABLED.exchange(AuditEnabled);
+        Y_DEFER {
+            NAudit::AUDIT_LOG_ENABLED.store(auditWasEnabled);
+        };
+        ui64 txId = 100;
+
+        NKikimrSchemeOp::TModifyScheme operation;
+        operation.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+        operation.SetWorkingDir("/MyRoot");
+        operation.MutableMkDir()->SetName("Dir");
+        runtime.RunCall([&] {
+            AuditLogModifySchemeOperation(operation, NKikimrScheme::StatusInvalidParameter, {},
+                ss, {}, {}, {}, txId, {});
+            return true;
+        });
+
+        const std::string message = "Scheme operation failed without a reason";
+        runtime.WaitFor("missing reason diagnostic", [&] {
+            return AnyOf(logLines, [&](const auto& line) { return line.find(message) != std::string::npos; });
+        }, TDuration::Seconds(10));
+        const auto diagnostic = Tests::FindAuditLine(logLines, message);
+        UNIT_ASSERT_STRING_CONTAINS(diagnostic, "FLAT_TX_SCHEMESHARD CRIT");
+        UNIT_ASSERT_STRING_CONTAINS(diagnostic, "ESchemeOpMkDir");
+        UNIT_ASSERT_STRING_CONTAINS(diagnostic, "StatusInvalidParameter");
+        UNIT_ASSERT_STRING_CONTAINS(diagnostic, "txId=100");
+
+        if (AuditEnabled) {
+            const std::string marker = "tx_id=" + std::to_string(txId);
+            runtime.WaitFor("scheme audit record without reason", [&] {
+                return AnyOf(auditLines, [&](const auto& line) { return line.find(marker) != std::string::npos; });
+            }, TDuration::Seconds(10));
+            const auto line = Tests::FindAuditLine(auditLines, marker);
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=StatusInvalidParameter");
+            UNIT_ASSERT(line.find("reason=") == std::string::npos);
+        } else {
+            UNIT_ASSERT(auditLines.empty());
+        }
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "AfterMissingReason");
+        env.TestWaitNotification(runtime, txId);
     }
-#endif
 }
 
 } // namespace NKikimr

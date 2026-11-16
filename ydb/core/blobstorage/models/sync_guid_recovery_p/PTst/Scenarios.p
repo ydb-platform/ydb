@@ -11,9 +11,11 @@ machine RollingWipeDriver {
       topology = config.Topology;
       announce eScenarioStarted;
       transport = new SurveyTransport(this);
-      storage = new TRecoveryStorage((Driver = this, Transport = transport, Fresh = scenario == FreshGroup, Topology = topology));
+      storage = new TRecoveryStorage((Driver = this, Transport = transport,
+        Fresh = scenario == FreshGroup || scenario == DegradedFreshGroup, Topology = topology));
     }
     on eAck do {
+      if (scenario == DegradedFreshGroup) { goto StoppingPeers; }
       if (scenario == FreshGroup) { goto ConfiguringReturn; }
       send storage, eStop, 0;
       goto Stopped;
@@ -31,6 +33,8 @@ machine RollingWipeDriver {
   state Erased { on eAck do { WriteBlock(); } }
   state Written {
     on eAck do {
+      // Commit while seven/eight peers are available; only then stop two peers.
+      if (scenario == DegradedRestart) { goto StoppingPeers; }
       wipeCount = DiskCount(topology) - 1;
       if (scenario == NoWipes || scenario == WipedWithWitnesses) { wipeCount = 0; }
       if (scenario == RetainedSource) { wipeCount = DiskCount(topology) - 2; }
@@ -38,6 +42,15 @@ machine RollingWipeDriver {
       goto Rolling;
     }
   }
+  state StoppingPeers {
+    entry { send storage, eStop, DiskCount(topology) - 1; }
+    on eAck do {
+      if (topology == Mirror3dc) { send storage, eStop, 5; }
+      else { send storage, eStop, 6; }
+      goto PeersStopped;
+    }
+  }
+  state PeersStopped { on eAck goto ConfiguringReturn; }
   state Rolling {
     entry {
       if (nextDisk > wipeCount) { goto ConfiguringReturn; }
@@ -66,7 +79,7 @@ machine RollingWipeDriver {
   state Returning {
     on eRecoveryReady do (result: TGuidRecovered) {
       assert result.Owner == 0;
-      if (scenario == FreshGroup || result.Outcome.Decision == Inconsistency) { Finish(); }
+      if (scenario == FreshGroup || scenario == DegradedFreshGroup || result.Outcome.Decision == Inconsistency) { Finish(); }
       send storage, eStartRound, 0;
       goto Synchronizing;
     }
@@ -92,3 +105,8 @@ machine TestMirror3dcNoWipes { start state Init { entry { new RollingWipeDriver(
 machine TestMirror3dcRetainedSource { start state Init { entry { new RollingWipeDriver((Scenario = RetainedSource, Topology = Mirror3dc)); raise halt; } } }
 machine TestMirror3dcWipedWithWitnesses { start state Init { entry { new RollingWipeDriver((Scenario = WipedWithWitnesses, Topology = Mirror3dc)); raise halt; } } }
 machine TestMirror3dcFreshGroup { start state Init { entry { new RollingWipeDriver((Scenario = FreshGroup, Topology = Mirror3dc)); raise halt; } } }
+
+machine TestDegradedRestart { start state Init { entry { new RollingWipeDriver((Scenario = DegradedRestart, Topology = Block4Plus2)); raise halt; } } }
+machine TestDegradedFreshGroup { start state Init { entry { new RollingWipeDriver((Scenario = DegradedFreshGroup, Topology = Block4Plus2)); raise halt; } } }
+machine TestMirror3dcDegradedRestart { start state Init { entry { new RollingWipeDriver((Scenario = DegradedRestart, Topology = Mirror3dc)); raise halt; } } }
+machine TestMirror3dcDegradedFreshGroup { start state Init { entry { new RollingWipeDriver((Scenario = DegradedFreshGroup, Topology = Mirror3dc)); raise halt; } } }

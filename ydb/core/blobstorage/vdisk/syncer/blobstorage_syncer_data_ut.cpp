@@ -1,12 +1,42 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include "blobstorage_syncer_data.h"
 #include "blobstorage_syncer_dataserdes.h"
+#include "guid_history.h"
 
 using namespace NKikimr;
 using namespace NSync;
 
 
 Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
+
+    Y_UNIT_TEST(GuidHistoryCoverageWithTwoUnavailablePeers) {
+        auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block, 1U, 8U);
+        const auto& top = info->GetTopology();
+        const auto self = info->GetVDiskId(0);
+        TBlobStorageGroupInfo::TGroupVDisks sources(&top, self);
+        sources |= TBlobStorageGroupInfo::TGroupVDisks(&top, info->GetVDiskId(1));
+        sources |= TBlobStorageGroupInfo::TGroupVDisks(&top, info->GetVDiskId(2));
+        UNIT_ASSERT(!NSyncer::HasGuidHistoryCoverage(*info, sources, self, false));
+        UNIT_ASSERT(NSyncer::HasGuidHistoryCoverage(*info, sources, self, true));
+        sources |= TBlobStorageGroupInfo::TGroupVDisks(&top, info->GetVDiskId(3));
+        UNIT_ASSERT(NSyncer::HasGuidHistoryCoverage(*info, sources, self, false));
+    }
+
+    Y_UNIT_TEST(GuidHistoryCoverageExcludesErasedSelf) {
+        auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3dc, 1U, 3U, 3U);
+        const auto& top = info->GetTopology();
+        const auto self = info->GetVDiskId(4);
+        TBlobStorageGroupInfo::TGroupVDisks sources(&top);
+        for (ui32 disk = 4; disk < 9; ++disk) {
+            sources |= TBlobStorageGroupInfo::TGroupVDisks(&top, info->GetVDiskId(disk));
+        }
+        // The only intersection with publication quorum {0,1,2,3,4} is self.
+        UNIT_ASSERT(top.GetQuorumChecker().CheckQuorumForGroup(sources));
+        UNIT_ASSERT(!NSyncer::HasGuidHistoryCoverage(*info, sources, self, false));
+        UNIT_ASSERT(NSyncer::HasGuidHistoryCoverage(*info, sources, self, true));
+        sources |= TBlobStorageGroupInfo::TGroupVDisks(&top, info->GetVDiskId(0));
+        UNIT_ASSERT(NSyncer::HasGuidHistoryCoverage(*info, sources, self, false));
+    }
 
     template<typename... TArgs>
     void SerDes(TArgs&&... args) {

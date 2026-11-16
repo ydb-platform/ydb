@@ -43,3 +43,20 @@ fun HasGroupQuorum(topology: ETopology, replies: set[int]): bool {
 fun HasFullSyncQuorum(topology: ETopology, sources: set[int]): bool {
   return HasGroupQuorum(topology, sources);
 }
+
+// No Final publication quorum may fit outside the observed history sources.
+fun HasGuidHistoryCoverage(topology: ETopology, sources: set[int], owner: int, hasLocalFinal: bool): bool {
+  var disk: int;
+  var missing: set[int];
+  while (disk < DiskCount(topology)) {
+    if (!(disk in sources) || (disk == owner && !hasLocalFinal)) { missing += (disk); }
+    disk = disk + 1;
+  }
+  return !HasGroupQuorum(topology, missing);
+}
+
+// StandardMode follows retained metadata, initialization, or completed LostData.
+fun HasCatchupQuorum(topology: ETopology, peers: set[int], owner: int): bool {
+  peers += (owner);
+  return HasGroupQuorum(topology, peers);
+}

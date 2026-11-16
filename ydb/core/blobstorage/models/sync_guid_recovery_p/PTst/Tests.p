@@ -55,3 +55,20 @@ test tcMirror3dcFreshGroup [main=TestMirror3dcFreshGroup]:
   assert NeverReinitializeExistingVDisk, PreservedIdentityRemainsRecoverable, ScenarioCompletes in
   { TestMirror3dcFreshGroup, RollingWipeDriver, TRecoveryStorage, SurveyTransport,
     TVDiskGuidRecoveryActor, TVDiskGuidProxy, TSyncerJobTask };
+
+test tcDegradedRestart [main=TestDegradedRestart]:
+  assert MetadataIsCompleteWhenSynced, NeverReinitializeExistingVDisk, PreservedIdentityRemainsRecoverable, ScenarioCompletes in
+  { TestDegradedRestart, RollingWipeDriver, TRecoveryStorage, SurveyTransport,
+    TVDiskGuidRecoveryActor, TVDiskGuidProxy, TSyncerJobTask };
+test tcDegradedFreshGroup [main=TestDegradedFreshGroup]:
+  assert MetadataIsCompleteWhenSynced, NeverReinitializeExistingVDisk, PreservedIdentityRemainsRecoverable, ScenarioCompletes in
+  { TestDegradedFreshGroup, RollingWipeDriver, TRecoveryStorage, SurveyTransport,
+    TVDiskGuidRecoveryActor, TVDiskGuidProxy, TSyncerJobTask };
+test tcMirror3dcDegradedRestart [main=TestMirror3dcDegradedRestart]:
+  assert MetadataIsCompleteWhenSynced, NeverReinitializeExistingVDisk, PreservedIdentityRemainsRecoverable, ScenarioCompletes in
+  { TestMirror3dcDegradedRestart, RollingWipeDriver, TRecoveryStorage, SurveyTransport,
+    TVDiskGuidRecoveryActor, TVDiskGuidProxy, TSyncerJobTask };
+test tcMirror3dcDegradedFreshGroup [main=TestMirror3dcDegradedFreshGroup]:
+  assert MetadataIsCompleteWhenSynced, NeverReinitializeExistingVDisk, PreservedIdentityRemainsRecoverable, ScenarioCompletes in
+  { TestMirror3dcDegradedFreshGroup, RollingWipeDriver, TRecoveryStorage, SurveyTransport,
+    TVDiskGuidRecoveryActor, TVDiskGuidProxy, TSyncerJobTask };

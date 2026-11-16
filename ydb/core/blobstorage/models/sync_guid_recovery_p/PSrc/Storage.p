@@ -106,7 +106,8 @@ machine TRecoveryStorage {
       disks[owner].Online = true;
       disks[owner].Ready = false;
       announce eGuidRecoveryStarted, (Owner = owner, Local = disks[owner].Local);
-      new TVDiskGuidRecoveryActor((Storage = this, Owner = owner, Local = disks[owner].Local, Topology = topology));
+      new TVDiskGuidRecoveryActor((Storage = this, Owner = owner, Local = disks[owner].Local,
+        Topology = topology, History = disks[owner].KnownGuids));
     }
     on eSurvey do (req: (Source: machine, Owner: int)) {
       var i: int;
@@ -116,7 +117,7 @@ machine TRecoveryStorage {
           new TVDiskGuidProxy((Transport = transport,
             Envelope = (Target = req.Source, Owner = req.Owner,
               Reply = (VDiskId = i, Info = disks[i].PeerGuidInfo[req.Owner],
-                RecoveredGuid = disks[i].KnownGuids[req.Owner]))));
+                RecoveredGuid = disks[i].KnownGuids[req.Owner], History = ReadHistory(i)))));
         }
         i = i + 1;
       }
@@ -143,6 +144,15 @@ machine TRecoveryStorage {
     on TEvSyncerCommit do (req: (Source: machine, Owner: int, Local: TLocalGuidInfo)) {
       disks[req.Owner].Local = req.Local;
       announce eLocalCommitted, (Owner = req.Owner, Local = req.Local);
+      send req.Source, TEvSyncerCommitDone;
+    }
+    on eCommitGuidHistory do (req: (Source: machine, Owner: int, History: seq[int])) {
+      var subject: int;
+      assert sizeof(req.History) == diskCount;
+      while (subject < diskCount) {
+        RememberGuid(req.Owner, subject, req.History[subject]);
+        subject = subject + 1;
+      }
       send req.Source, TEvSyncerCommitDone;
     }
     on TEvVDiskGuidRecovered do (result: TGuidRecovered) {
@@ -206,7 +216,7 @@ machine TRecoveryStorage {
         }
         i = i + 1;
       }
-      assert HasGroupQuorum(topology, roundPeers);
+      assert HasCatchupQuorum(topology, roundPeers, owner);
     }
     on TEvVSync do (req: TVSyncRequest) {
       var peer: TVDisk;
@@ -243,14 +253,34 @@ machine TRecoveryStorage {
       roundDone += (result.Peer);
       roundDone = CanonicalDisks(roundDone, diskCount);
       announce eSyncPeerDone, (Owner = result.Owner, Peer = result.Peer, Status = result.Status);
-      if (sizeof(roundDone) == sizeof(roundPeers)) {
+      if (!disks[roundOwner].Ready && HasCatchupQuorum(topology, roundDone, roundOwner)) {
         disks[roundOwner].Ready = true;
         send driver, eRoundFinished,
           (Owner = roundOwner, HullBlock = disks[roundOwner].HullBlock, Peers = sizeof(roundDone));
+      }
+      // Pending jobs still apply their data/cursors after the one-shot readiness notification.
+      if (sizeof(roundDone) == sizeof(roundPeers)) {
         roundPeers = default(set[int]);
         roundDone = default(set[int]);
       }
     }
+  }
+  fun ReadHistory(source: int): seq[int] {
+    var result: seq[int];
+    var subject: int;
+    result = disks[source].KnownGuids;
+    while (subject < diskCount) {
+      if (disks[source].PeerGuidInfo[subject].State == RemoteFinal) {
+        assert result[subject] == 0 || result[subject] == disks[source].PeerGuidInfo[subject].Guid;
+        result[subject] = disks[source].PeerGuidInfo[subject].Guid;
+      }
+      subject = subject + 1;
+    }
+    if (disks[source].Local.State == LocalFinal) {
+      assert result[source] == 0 || result[source] == disks[source].Local.Guid;
+      result[source] = disks[source].Local.Guid;
+    }
+    return result;
   }
   fun RememberGuid(owner: int, subject: int, guid: int) {
     if (guid == 0) { return; }

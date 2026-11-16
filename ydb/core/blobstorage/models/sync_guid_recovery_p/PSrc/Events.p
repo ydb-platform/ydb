@@ -10,7 +10,8 @@ enum EReplyStatus { OK, RESTART, ALREADY, NODATA }
 enum ESyncStatus { SyncDone, DisksSynced }
 enum EScenario {
   StaleMetadata, DelayedSelfGuid, FalseFirstRun,
-  NoWipes, RetainedSource, WipedWithWitnesses, FreshGroup
+  NoWipes, RetainedSource, WipedWithWitnesses, FreshGroup,
+  DegradedRestart, DegradedFreshGroup
 }
 type TSyncGuidInfo = (State: ESyncGuidState, Guid: int);
 type TLocalGuidInfo = (State: ELocalGuidState, Guid: int, DbBirthLsn: int);
@@ -20,7 +21,7 @@ type TVDisk = (Online: bool, Ready: bool, Local: TLocalGuidInfo,
   Incarnation: int, HullBlock: int, LogBlock: int, LogLsn: int,
   LogStartLsn: int, PeerGuidInfo: seq[TSyncGuidInfo], Cursors: seq[TSyncState],
   KnownGuids: seq[int]);
-type TGuidReply = (VDiskId: int, Info: TSyncGuidInfo, RecoveredGuid: int);
+type TGuidReply = (VDiskId: int, Info: TSyncGuidInfo, RecoveredGuid: int, History: seq[int]);
 type TGuidEnvelope = (Target: machine, Owner: int, Reply: TGuidReply);
 type TGuidRecovered = (Owner: int, Outcome: TDecision);
 type TVSyncRequest = (Job: machine, Owner: int, Peer: int, SyncState: TSyncState);
@@ -42,6 +43,7 @@ event ePublishGuid: (Source: machine, Owner: int, Info: TSyncGuidInfo);
 event TEvVDiskGuidWritten: set[int];
 event TEvSyncerCommit: (Source: machine, Owner: int, Local: TLocalGuidInfo);
 event TEvSyncerCommitDone;
+event eCommitGuidHistory: (Source: machine, Owner: int, History: seq[int]);
 event TEvVDiskGuidRecovered: TGuidRecovered;
 event TEvVSync: TVSyncRequest;
 event TEvVSyncResult: TVSyncResult;

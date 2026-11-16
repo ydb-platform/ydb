@@ -72,9 +72,9 @@ spec MetadataIsCompleteWhenSynced observes eSeed, eBlockCommitted, eRoundStarted
       completed += (result.Peer);
     }
     on eRoundFinished do (result: (Owner: int, HullBlock: int, Peers: int)) {
-      assert result.Owner == owner && sizeof(completed) == result.Peers && HasGroupQuorum(topology, completed);
+      assert result.Owner == owner && sizeof(completed) == result.Peers && HasCatchupQuorum(topology, completed, owner);
       assert result.HullBlock >= expected,
-        format("All {0} peers synced, but Hull Block generation {1} misses committed {2}",
+        format("Catch-up quorum completed {0} peer jobs, but Hull Block generation {1} misses committed {2}",
           result.Peers, result.HullBlock, expected);
     }
   }

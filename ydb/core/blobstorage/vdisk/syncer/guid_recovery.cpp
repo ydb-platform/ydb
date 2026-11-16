@@ -386,7 +386,10 @@ namespace NKikimr {
                     historicalGuid = LocallyRecoveredState.Guid;
                 }
                 if (historicalGuid != TVDiskEternalGuid()) {
-                    if (quorumDecision.State == TSyncVal::Final && quorumDecision.Guid != historicalGuid) {
+                    if ((quorumDecision.State == TSyncVal::Final
+                            || (quorumDecision.State == TSyncVal::InProgress
+                                && quorumDecision.FirstRunStep == EFirstRunStep::ACTION_WriteFinalToQuorum))
+                            && quorumDecision.Guid != historicalGuid) {
                         return TDecision::Inconsistency("Current GUID disagrees with durable GUID history");
                     }
                     if (quorumDecision.State != TSyncVal::Final) {
@@ -669,6 +672,7 @@ namespace NKikimr {
             EPhase Phase = PhaseNotSet;
             TActorId FirstRunActorId;
             const bool ReadOnly;
+            const bool HasLocalFinal;
 
 
             ////////////////////////////////////////////////////////////////////////
@@ -752,9 +756,9 @@ namespace NKikimr {
                     LegacySources |= TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology(), msg->VDiskId);
                 }
                 HistoryComplete = RestoreHistory
-                    && HasGuidHistoryQuorum(*GInfo, HistorySources, VCtx->ShortSelfVDisk);
+                    && HasGuidHistoryCoverage(*GInfo, HistorySources, VCtx->ShortSelfVDisk, HasLocalFinal);
                 const bool historyBlockedByLegacySources = RestoreHistory
-                    && !HasGuidHistoryQuorum(*GInfo, ~LegacySources, VCtx->ShortSelfVDisk);
+                    && !HasGuidHistoryCoverage(*GInfo, ~LegacySources, VCtx->ShortSelfVDisk, HasLocalFinal);
                 const bool canFinishSurvey = !RestoreHistory || HistoryComplete || historyBlockedByLegacySources;
                 if (DecisionMaker.GotQuorum() && canFinishSurvey) {
                     // kill actors that didn't respond
@@ -1025,6 +1029,7 @@ namespace NKikimr {
                 , LegacySources(&GInfo->GetTopology())
                 , Decision()
                 , ReadOnly(readOnly)
+                , HasLocalFinal(locallyRecoveredState.State == NKikimrBlobStorage::TLocalGuidInfo::Final)
             {}
         };
 

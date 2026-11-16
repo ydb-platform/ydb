@@ -6,11 +6,14 @@
 
 namespace NKikimr::NSyncer {
 
-// Reconstruct identity records from a surviving group quorum, excluding self.
-inline bool HasGuidHistoryQuorum(const TBlobStorageGroupInfo& info,
-        TBlobStorageGroupInfo::TGroupVDisks sources, const TVDiskIdShort& self) {
-    sources &= ~TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), self);
-    return info.GetTopology().GetQuorumChecker().CheckQuorumForGroup(sources);
+// History must intersect every possible Final publication quorum. Requiring a
+// publication quorum of readers would unnecessarily reduce the failure budget.
+inline bool HasGuidHistoryCoverage(const TBlobStorageGroupInfo& info,
+        TBlobStorageGroupInfo::TGroupVDisks sources, const TVDiskIdShort& self, bool hasLocalFinal) {
+    if (!hasLocalFinal) {
+        sources &= ~TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), self);
+    }
+    return !info.GetTopology().GetQuorumChecker().CheckQuorumForGroup(~sources);
 }
 
 // One Final observation per owner is sufficient to remember that the owner existed.

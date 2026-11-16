@@ -5,6 +5,7 @@
 #include "syncer_job_task.h"
 #include "syncer_job_actor.h"
 #include "syncer_merger.h"
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
 
@@ -228,6 +229,8 @@ namespace NKikimr {
         THashSet<ui32> StartupDataSyncPeers;
         THashSet<ui32> FullSyncRequested;
         bool StartupDataSyncDoneReported = false;
+        bool MetadataSyncComplete = false;
+        TBlobStorageGroupInfo::TGroupVDisks MetadataSynced;
         std::shared_ptr<TSjCtx> JobCtx;
 
         bool FullSyncGatherMode = false;
@@ -267,7 +270,18 @@ namespace NKikimr {
             SyncerContext->MonGroup.SyncerUnsyncedDisks() = unsyncedDisks;
         }
 
+        void UpdateMetadataSyncComplete() {
+            MetadataSyncComplete = GInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+                ? TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(*GInfo, MetadataSynced)
+                : GInfo->GetTopology().GetQuorumChecker().CheckQuorumForGroup(MetadataSynced);
+        }
+
         void Bootstrap(const TActorContext &ctx) {
+            // StandardMode follows retained identity, new initialization, or
+            // completed LostData recovery: local metadata is a valid source.
+            MetadataSynced |= TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology(),
+                SyncerContext->VCtx->ShortSelfVDisk);
+            UpdateMetadataSyncComplete();
             ui32 localRealm = SyncerContext->VCtx->ShortSelfVDisk.FailRealm;
             bool localRealmRecovering = GInfo->IsFailRealmRecovering(localRealm);
             // NodeWarden restarts a returning VDisk, so its new scheduler starts directly in R.
@@ -324,21 +338,22 @@ namespace NKikimr {
 
             const ui32 peerOrderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
             const bool fullSyncPending = FullSyncRequested.contains(peerOrderNumber);
-            TDuration interval = fullRecovery || fullSyncPending ? TDuration::Zero() : SyncTimeInterval;
+            const bool success = NSyncer::TPeerSyncState::Good(peerSyncState.LastSyncStatus);
+            TDuration interval = (fullRecovery || fullSyncPending) && success ? TDuration::Zero() : SyncTimeInterval;
+            if (fullRecovery && !success) {
+                FullSyncRequested.insert(peerOrderNumber);
+            }
             SyncerData->Neighbors->ApplyChanges(vDiskId, peerSyncState, interval);
             ActualizeUnsyncedDisksNum();
             const ui32 orderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
-            if (NSyncer::TPeerSyncState::Good(peerSyncState.LastSyncStatus)) {
-                StartupDataSyncPeers.erase(orderNumber);
-                TBlobStorageGroupInfo::TGroupVDisks synced(&GInfo->GetTopology());
-                for (const auto& peer : *SyncerData->Neighbors) {
-                    if (!peer.Myself && !StartupDataSyncPeers.contains(peer.OrderNumber)) {
-                        synced |= TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology(), peer.VDiskIdShort);
-                    }
-                }
-                if (StartupDataSyncPeers.empty() || GInfo->GetTopology().GetQuorumChecker().CheckQuorumForGroup(synced)) {
-                    ReportStartupDataSyncDone(ctx);
-                }
+            if (success && vDiskId.GroupGeneration == GInfo->GroupGeneration && !fullSyncPending) {
+                MetadataSynced |= TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology(), vDiskId);
+                UpdateMetadataSyncComplete();
+            }
+            // Broker lifetime covers all first attempts, including failures;
+            // successful metadata coverage is a separate readiness condition.
+            if (StartupDataSyncPeers.erase(orderNumber) && StartupDataSyncPeers.empty()) {
+                ReportStartupDataSyncDone(ctx);
             }
             SchedulerQueue.push(&(*SyncerData->Neighbors)[vDiskId]);
             Schedule(ctx);
@@ -490,7 +505,7 @@ namespace NKikimr {
         void Handle(TEvLocalStatus::TPtr &ev, const TActorContext &ctx) {
             std::unique_ptr<TEvLocalStatusResult> result(new TEvLocalStatusResult());
             // GUID recovery alone does not establish metadata coverage.
-            if (!StartupDataSyncDoneReported) {
+            if (!MetadataSyncComplete) {
                 result->Record.SetReplicated(false);
                 result->Record.SetDurabilityReplicated(false);
             }
@@ -533,6 +548,9 @@ namespace NKikimr {
             }
             GInfo = msg->NewInfo;
             JobCtx = TSjCtx::Create(SyncerContext, GInfo);
+            MetadataSynced = TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology(),
+                SyncerContext->VCtx->ShortSelfVDisk);
+            UpdateMetadataSyncComplete();
 
             // Running jobs finish first; queued peers can start full sync immediately.
             TVector<TVDiskInfoPtr> queued;
@@ -600,6 +618,7 @@ namespace NKikimr {
             , CommitterId(committerId)
             , NotifyId(notifyId)
             , Scheduled(false)
+            , MetadataSynced(&GInfo->GetTopology())
             , JobCtx(TSjCtx::Create(SyncerContext, GInfo))
         {}
     };

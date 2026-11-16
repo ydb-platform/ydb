@@ -61,6 +61,10 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
     }
 
+    const ui64 shadowTableId = self->GetShadowTableId(fullTableId);
+    const bool writeToTableShadow = request.GetWriteToTableShadow();
+    const ui32 writeTableId = writeToTableShadow && shadowTableId ? shadowTableId : localTableId;
+
     std::optional<NMiniKQL::TEngineHostCounters> engineHostCounters;
     std::optional<TDataShardUserDb> userDb;
     std::optional<TDataShardChangeGroupProvider> groupProvider;
@@ -141,53 +145,58 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             }
         }
 
-        TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(keyCells.GetCells(), tableInfo.UniqueIndexKeySize);
+        // FIXME: Both following blocks are duplicated with datashard_common_upload.cpp
+        if (!writeToTableShadow) {
+            TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(keyCells.GetCells(), tableInfo.UniqueIndexKeySize);
 
-        if (breakWriteConflicts) {
-            if (!self->BreakWriteConflicts(params.Txc->DB, fullTableId, uniqueKey, volatileDependencies)) {
-                pageFault = true;
-            }
-        }
-
-        if (auto collector = params.GetChangeCollector()) {
-            auto userCtx = NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_TTL).Build();
-            if (!volatileDependencies.empty()) {
-                if (!params.GlobalTxId) {
-                    throw TNeedGlobalTxId();
-                }
-
-                if (!collector->OnUpdateTx(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId, userCtx)) {
-                    pageFault = true;
-                }
-            } else {
-                if (!collector->OnUpdate(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion, userCtx)) {
+            if (breakWriteConflicts) {
+                if (!self->BreakWriteConflicts(params.Txc->DB, fullTableId, uniqueKey, volatileDependencies)) {
                     pageFault = true;
                 }
             }
-        }
 
-        if (pageFault) {
-            continue;
-        }
+            if (!pageFault) {
+                self->SysLocksTable().BreakLocks(fullTableId, uniqueKey);
+            }
 
-        self->SysLocksTable().BreakLocks(fullTableId, uniqueKey);
+            if (auto collector = params.GetChangeCollector()) {
+                auto userCtx = NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_TTL).Build();
+                if (!volatileDependencies.empty()) {
+                    if (!params.GlobalTxId) {
+                        throw TNeedGlobalTxId();
+                    }
+
+                    if (!collector->OnUpdateTx(fullTableId, writeTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId, userCtx)) {
+                        pageFault = true;
+                    }
+                } else {
+                    if (!collector->OnUpdate(fullTableId, writeTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion, userCtx)) {
+                        pageFault = true;
+                    }
+                }
+            }
+
+            if (pageFault) {
+                continue;
+            }
+        }
 
         if (!volatileDependencies.empty()) {
             if (!params.GlobalTxId) {
                 throw TNeedGlobalTxId();
             }
-            params.Txc->DB.UpdateTx(localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId);
-            self->UpdateHnswIndex(localTableId, NTable::ERowOp::Erase, keyCells.GetCells(), {}, params.Txc->DB, params.MvccVersion, params.GlobalTxId);
-            self->GetConflictsCache().GetTableCache(localTableId).AddUncommittedWrite(keyCells.GetCells(), params.GlobalTxId, params.Txc->DB);
+            params.Txc->DB.UpdateTx(writeTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId);
+            self->UpdateHnswIndex(writeTableId, NTable::ERowOp::Erase, keyCells.GetCells(), {}, params.Txc->DB, params.MvccVersion, params.GlobalTxId);
+            self->GetConflictsCache().GetTableCache(writeTableId).AddUncommittedWrite(keyCells.GetCells(), params.GlobalTxId, params.Txc->DB);
             if (!commitAdded && userDb) {
                 // Make sure we see our own changes on further iterations
                 userDb->AddCommitTxId(fullTableId, params.GlobalTxId);
                 commitAdded = true;
             }
         } else {
-            params.Txc->DB.Update(localTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion);
-            self->UpdateHnswIndex(localTableId, NTable::ERowOp::Erase, keyCells.GetCells(), {}, params.Txc->DB, params.MvccVersion);
-            self->GetConflictsCache().GetTableCache(localTableId).RemoveUncommittedWrites(keyCells.GetCells(), params.Txc->DB);
+            params.Txc->DB.Update(writeTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion);
+            self->UpdateHnswIndex(writeTableId, NTable::ERowOp::Erase, keyCells.GetCells(), {}, params.Txc->DB, params.MvccVersion);
+            self->GetConflictsCache().GetTableCache(writeTableId).RemoveUncommittedWrites(keyCells.GetCells(), params.Txc->DB);
         }
     }
 

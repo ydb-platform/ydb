@@ -1549,6 +1549,160 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
+    struct TLocalProtocolTest {
+        TTestBasicRuntime Runtime{1, false};
+        const ui64 HiveTablet = MakeDefaultHiveID();
+        NHive::TTestHive* LiveHive = nullptr;
+        TVector<NKikimrLocal::TEvPing> Pings;
+        ui32 Registrations = 0;
+        ui32 Syncs = 0;
+        ui32 Statuses = 0;
+        TTestActorRuntime::TEventObserverHolder RegistrationObserver;
+        TTestActorRuntime::TEventObserverHolder PingObserver;
+        TTestActorRuntime::TEventObserverHolder SyncObserver;
+        TTestActorRuntime::TEventObserverHolder StatusObserver;
+        TTestActorRuntime::TEventObserverHolder SystemUsageObserver;
+
+        explicit TLocalProtocolTest(bool legacyHive = false, bool legacyLocal = false)
+            : RegistrationObserver(Runtime.AddObserver<TEvLocal::TEvRegisterNode>([this, legacyLocal](auto& ev) {
+                UNIT_ASSERT(ev->Get()->Record.HasCapabilities());
+                if (legacyLocal) {
+                    ev->Get()->Record.ClearCapabilities();
+                }
+                ++Registrations;
+            }))
+            , PingObserver(Runtime.AddObserver<TEvLocal::TEvPing>([this, legacyHive](auto& ev) {
+                Pings.push_back(ev->Get()->Record);
+                if (legacyHive) {
+                    ev->Get()->Record.ClearHiveSettings();
+                    ev->Get()->Record.ClearCapabilities();
+                }
+            }))
+            , SyncObserver(Runtime.AddObserver<TEvLocal::TEvSyncTablets>([this](auto&) { ++Syncs; }))
+            , StatusObserver(Runtime.AddObserver<TEvLocal::TEvStatus>([this](auto& ev) {
+                if (ev->Get()->Record.GetStatus() == TEvLocal::TEvStatus::StatusOk) {
+                    ++Statuses;
+                }
+            }))
+            , SystemUsageObserver(Runtime.AddObserver<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse>([](auto& ev) {
+                ev.Reset();
+            }))
+        {
+            Setup(Runtime, true, 1);
+            CreateTestBootstrapper(Runtime, CreateTestTabletInfo(HiveTablet, TTabletTypes::Hive),
+                [this](const TActorId& tablet, TTabletStorageInfo* info) -> IActor* {
+                    LiveHive = new NHive::TTestHive(info, tablet);
+                    return LiveHive;
+                });
+            MakeSureTabletIsUp(Runtime, HiveTablet, 0);
+            WaitStatus(0);
+        }
+
+        void WaitStatus(ui32 previousStatuses) {
+            Runtime.WaitFor("Local protocol status", [&] {
+                return Statuses > previousStatuses && LiveHive->Node(Runtime.GetNodeId(0)).IsAlive();
+            }, TDuration::Seconds(30));
+        }
+
+        void Ping() {
+            const ui32 previousStatuses = Statuses;
+            Runtime.RunCall([&] {
+                LiveHive->Node(Runtime.GetNodeId(0)).Ping();
+                LiveHive->ProcessNodePingQueue();
+                return 0;
+            });
+            WaitStatus(previousStatuses);
+        }
+
+        void SendSettings() {
+            const ui32 previousStatuses = Statuses;
+            Runtime.RunCall([&] {
+                LiveHive->UpdateLocalSettings();
+                return 0;
+            });
+            WaitStatus(previousStatuses);
+        }
+
+        void Reconnect() {
+            const ui32 previousStatuses = Statuses;
+            const auto registrar = Runtime.GetLocalServiceId(MakeLocalRegistrarID(Runtime.GetNodeId(0), HiveTablet));
+            Runtime.Send(new IEventHandle(registrar, LiveHive->SelfId(),
+                new TEvLocal::TEvReconnect(HiveTablet, Pings.back().GetHiveGeneration())));
+            WaitStatus(previousStatuses);
+        }
+    };
+
+    Y_UNIT_TEST(TestLocalProtocolSettingsAndCapabilities) {
+        TLocalProtocolTest test;
+        UNIT_ASSERT(test.Pings.back().HasHiveSettings());
+        UNIT_ASSERT(test.Pings.back().HasCapabilities());
+        UNIT_ASSERT_VALUES_EQUAL(test.Registrations, 1);
+        UNIT_ASSERT_VALUES_EQUAL(test.Syncs, 1);
+
+        test.Ping();
+        UNIT_ASSERT(!test.Pings.back().HasHiveSettings());
+        UNIT_ASSERT(!test.Pings.back().HasCapabilities());
+
+        test.SendSettings();
+        UNIT_ASSERT(test.Pings.back().HasHiveSettings());
+        UNIT_ASSERT(!test.Pings.back().HasCapabilities());
+        UNIT_ASSERT_VALUES_EQUAL(test.Syncs, 1);
+        UNIT_ASSERT_VALUES_EQUAL(test.Registrations, 1);
+
+        test.Ping();
+        UNIT_ASSERT(!test.Pings.back().HasHiveSettings());
+        UNIT_ASSERT(!test.Pings.back().HasCapabilities());
+
+        test.Reconnect();
+        UNIT_ASSERT(test.Pings.back().HasHiveSettings());
+        UNIT_ASSERT(test.Pings.back().HasCapabilities());
+        UNIT_ASSERT_VALUES_EQUAL(test.Registrations, 2);
+        UNIT_ASSERT_VALUES_EQUAL(test.Syncs, 2);
+    }
+
+    Y_UNIT_TEST(TestLocalProtocolLegacyHive) {
+        TLocalProtocolTest test(true);
+        test.Ping();
+        test.Reconnect();
+        UNIT_ASSERT_VALUES_EQUAL(test.Registrations, 2);
+        UNIT_ASSERT_VALUES_EQUAL(test.Syncs, 2);
+    }
+
+    Y_UNIT_TEST(TestLocalProtocolLegacyLocal) {
+        TLocalProtocolTest test(false, true);
+        test.SendSettings();
+        test.Reconnect();
+        UNIT_ASSERT_VALUES_EQUAL(test.Registrations, 2);
+        UNIT_ASSERT_VALUES_EQUAL(test.Syncs, 2);
+    }
+
+    Y_UNIT_TEST(TestLocalProtocolQueuedSettings) {
+        TLocalProtocolTest test;
+        const size_t previousPings = test.Pings.size();
+        const ui32 previousStatuses = test.Statuses;
+        test.Runtime.RunCall([&] {
+            test.LiveHive->UpdateConfig([](auto& config) { config.SetMaxPingsInFlight(0); });
+            auto& node = test.LiveHive->Node(test.Runtime.GetNodeId(0));
+            node.BecomeConnecting();
+            node.Ping();
+            test.LiveHive->UpdateLocalSettings();
+            return 0;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(test.Pings.size(), previousPings);
+        test.Runtime.RunCall([&] {
+            test.LiveHive->UpdateConfig([](auto& config) { config.SetMaxPingsInFlight(1); });
+            test.LiveHive->ProcessNodePingQueue();
+            return 0;
+        });
+        test.WaitStatus(previousStatuses + 1);
+        UNIT_ASSERT_VALUES_EQUAL(test.Pings.size(), previousPings + 2);
+        UNIT_ASSERT(!test.Pings[previousPings].HasHiveSettings());
+        UNIT_ASSERT(!test.Pings[previousPings].HasCapabilities());
+        UNIT_ASSERT(test.Pings.back().HasHiveSettings());
+        UNIT_ASSERT(!test.Pings.back().HasCapabilities());
+        UNIT_ASSERT_VALUES_EQUAL(test.Syncs, 1);
+    }
+
     Y_UNIT_TEST(TestCreateTablet) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);

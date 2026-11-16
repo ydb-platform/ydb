@@ -104,6 +104,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     TActorId BootQueue;
     ui32 HiveGeneration;
+    NKikimrLocal::THiveCapabilities HiveCapabilities;
+    NKikimrLocal::THiveSettings HiveSettings;
 
     TActorId KnownHiveLeader;
 
@@ -253,10 +255,18 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
+    void UpdateSettings(const NKikimrLocal::THiveSettings& settings) {
+        // Replace the full snapshot. Apply individual settings here when added.
+        HiveSettings.CopyFrom(settings);
+    }
+
     void TryToRegister(const TActorContext &ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::TryToRegister");
 
         Y_DEBUG_ABORT_UNLESS(!HivePipeClient);
+
+        // A reconnect may reach an old Hive with no capability advertisement.
+        HiveCapabilities.Clear();
 
         // pipe client is in use for convenience, real info update come from EvPing
         NTabletPipe::TClientConfig pipeConfig;
@@ -269,6 +279,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         HivePipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, HiveId, pipeConfig));
 
         THolder<TEvLocal::TEvRegisterNode> request = MakeHolder<TEvLocal::TEvRegisterNode>(HiveId);
+        request->Record.MutableCapabilities();
         for (auto &domain: ServicedDomains) {
             *request->Record.AddServicedDomains() = NKikimrSubDomains::TDomainKey(domain);
         }
@@ -462,6 +473,17 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (!HivePipeClient) {
             TryToRegister(ctx);
             return;
+        }
+
+        if (hiveGen != HiveGeneration || sender != BootQueue) {
+            HiveCapabilities.Clear();
+        }
+        if (record.HasCapabilities()) {
+            HiveCapabilities.CopyFrom(record.GetCapabilities());
+        }
+        // Updates also apply while connected; an ordinary ping changes nothing.
+        if (record.HasHiveSettings()) {
+            UpdateSettings(record.GetHiveSettings());
         }
 
         if (!Connected) {

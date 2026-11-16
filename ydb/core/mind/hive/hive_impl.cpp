@@ -3683,17 +3683,16 @@ void THive::ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local) {
     Execute(CreateStartTablet(tabletId, local, 0));
 }
 
-void THive::QueuePing(const TActorId& local) {
-    NodePingQueue.push(local);
+void THive::QueuePing(TNodePing ping) {
+    NodePingQueue.push(std::move(ping));
 }
 
 void THive::ProcessNodePingQueue() {
     while (!NodePingQueue.empty() && NodePingsInProgress.size() < GetMaxPingsInFlight()) {
-        TActorId local = NodePingQueue.front();
-        TNodeId node = local.NodeId();
+        TNodePing ping = NodePingQueue.front();
         NodePingQueue.pop();
-        NodePingsInProgress.insert(node);
-        SendPing(local, node);
+        NodePingsInProgress.insert(ping.Local.NodeId());
+        SendPing(ping);
     }
 }
 
@@ -3702,14 +3701,33 @@ void THive::RemoveFromPingInProgress(TNodeId node) {
     ProcessNodePingQueue();
 }
 
-void THive::SendPing(const TActorId& local, TNodeId id) {
-    Send(local,
-         new TEvLocal::TEvPing(HiveId,
-                               HiveGeneration,
-                               false,
-                               GetLocalConfig()),
+void THive::FillLocalSettings(NKikimrLocal::THiveSettings* settings) const {
+    Y_UNUSED(settings);
+    // Select the relevant CurrentConfig fields here when settings are added.
+}
+
+void THive::SendPing(const TNodePing& nodePing) {
+    auto ping = MakeHolder<TEvLocal::TEvPing>(HiveId, HiveGeneration, false, GetLocalConfig());
+    if (nodePing.SendSettings) {
+        FillLocalSettings(ping->Record.MutableHiveSettings());
+    }
+    if (nodePing.SendCapabilities) {
+        ping->Record.MutableCapabilities();
+    }
+    Send(nodePing.Local,
+         ping.Release(),
          IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-         id);
+         nodePing.Local.NodeId());
+}
+
+void THive::UpdateLocalSettings() {
+    for (auto& [nodeId, node] : Nodes) {
+        // Include connecting nodes: their initial snapshot may already be in flight.
+        if (node.IsRegistered() && node.Local) {
+            node.Ping(true);
+        }
+    }
+    ProcessNodePingQueue();
 }
 
 void THive::SendReconnect(const TActorId& local) {

@@ -4011,8 +4011,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 permission_names: "ydb.generic.read"
               }
             }
-            interrupt_inheritance: %s
-        )", interruptInheritance ? "true" : "false");
+            %s
+        )", interruptInheritance ? "interrupt_inheritance: true" : "");
 
         const auto data = GenerateTestData(R"(
             columns {

@@ -855,8 +855,9 @@ void FillPermissionsFromAcl(
     for (const auto& permission : toGrant) {
         *to->mutable_actions()->Add()->mutable_grant() = permission;
     }
-    // The output describes the complete ACL state, so serialize false explicitly too.
-    to->set_interrupt_inheritance(acl.GetInterruptInheritance());
+    if (acl.GetInterruptInheritance()) {
+        to->set_interrupt_inheritance(true);
+    }
 }
 
 using namespace NACLib;

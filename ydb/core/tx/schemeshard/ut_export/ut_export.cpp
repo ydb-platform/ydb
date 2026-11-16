@@ -2280,8 +2280,8 @@ namespace {
                     permission_names: "ydb.generic.use"
                   }
                 }
-                interrupt_inheritance: %s
-            )", interruptInheritance ? "true" : "false")));
+                %s
+            )", interruptInheritance ? "interrupt_inheritance: true" : "")));
         }
 
         void TestSystemViewPermissions(bool interruptInheritance) {
@@ -2335,8 +2335,8 @@ namespace {
                     permission_names: "ydb.generic.use"
                   }
                 }
-                interrupt_inheritance: %s
-            )", interruptInheritance ? "true" : "false")));
+                %s
+            )", interruptInheritance ? "interrupt_inheritance: true" : "")));
         }
 
     private:

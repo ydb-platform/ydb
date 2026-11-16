@@ -10054,10 +10054,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
     }
 
-    ui64 GetCumulativeCounter(TTestActorRuntime& runtime, ui64 tabletId, NHive::ECumulativeCounters counter) {
-        return GetCounters(runtime, tabletId).GetTabletCounters().GetAppCounters().GetCumulativeCounters(counter).GetValue();
-    }
-
     bool WaitUntil(TTestBasicRuntime& runtime, const std::function<bool()>& condition) {
         bool done = condition();
         for (ui32 i = 0; i < 300 && !done; ++i) {
@@ -10396,7 +10392,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(blockStatus.front()->Sender.NodeId(), runtime.GetNodeId(0));
         UNIT_ASSERT_VALUES_EQUAL(ui32(test.TabletInfo(tabletId).GetVolatileState()), ui32(NKikimrHive::TABLET_VOLATILE_STATE_STARTING));
 
-        TBlockEvents<NHive::TEvPrivate::TEvProcessBootQueue> blockBootQueue(runtime);
+        const TActorId hiveActor = GetHiveActor(runtime, test.HiveTablet);
+        TBlockEvents<NHive::TEvPrivate::TEvProcessBootQueue> blockBootQueue(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() == hiveActor;
+        });
         test.Bridge.Promote(1);
         UNIT_ASSERT_C(WaitUntil(runtime, [&] {
             return !blockBootQueue.empty() && GetCumulativeCounter(runtime, test.HiveTablet, NHive::COUNTER_DRAIN_EXECUTED) != 0;

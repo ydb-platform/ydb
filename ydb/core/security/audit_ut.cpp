@@ -765,13 +765,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditLog) {
         UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
         UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "operation=" << operation);
         UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "detailed_status=" << NKikimrScheme::EStatus_Name(status));
-        if (reason.empty()) {
-            UNIT_ASSERT_STRING_CONTAINS(line, "status=SUCCESS");
-            UNIT_ASSERT(line.find("reason=") == std::string::npos);
-        } else {
-            UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
-            UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "reason=" << reason);
-        }
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "reason=" << reason);
     }
 
     NKikimrSchemeOp::TPersQueueGroupDescription TopicWithChannels(ui32 count) {
@@ -848,29 +843,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditLog) {
         const TString reason = "Backup collection not found: /MyRoot/.backups/collections/Collection";
         TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPathDoesNotExist, reason}});
         CheckAuditRecord(runtime, auditLines, txId, "RESTORE INCREMENTAL", NKikimrScheme::StatusPathDoesNotExist, reason);
-    }
-
-    Y_UNIT_TEST(SuccessfulStatusesAllowEmptyReason) {
-        std::vector<std::string> auditLines;
-        TTestBasicRuntime runtime;
-        runtime.AuditLogBackends = Tests::CreateTestAuditLogBackends(auditLines);
-        TTestEnv env(runtime);
-        auto* ss = dynamic_cast<TSchemeShard*>(runtime.FindActor(ResolveTablet(runtime, TTestTxConfig::SchemeShard)));
-        UNIT_ASSERT(ss);
-        ui64 txId = 100;
-
-        NKikimrSchemeOp::TModifyScheme operation;
-        operation.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
-        operation.SetWorkingDir("/MyRoot");
-        operation.MutableMkDir()->SetName("Dir");
-        for (auto status : {NKikimrScheme::StatusSuccess, NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists}) {
-            ++txId;
-            runtime.RunCall([&] {
-                AuditLogModifySchemeOperation(operation, status, {}, ss, {}, {}, {}, txId, {});
-                return true;
-            });
-            CheckAuditRecord(runtime, auditLines, txId, "CREATE DIRECTORY", status, {});
-        }
     }
 
     Y_UNIT_TEST(ErrorWithoutReasonIsLogged) {

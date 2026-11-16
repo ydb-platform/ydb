@@ -17,6 +17,7 @@
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
@@ -3984,6 +3985,38 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 }
 
 Y_UNIT_TEST_SUITE(TImportTests) {
+    Y_UNIT_TEST(ApiIssuesPreserveItemDiagnostics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        auto* ss = dynamic_cast<TSchemeShard*>(runtime.FindActor(ResolveTablet(runtime, TTestTxConfig::SchemeShard)));
+        UNIT_ASSERT(ss);
+
+        const auto check = [&](const TString& operationIssue, const TVector<TString>& itemIssues,
+                const TVector<TString>& expectedIssues) {
+            TImportInfo info(100, {}, TImportInfo::EKind::S3, Ydb::Import::ImportFromS3Settings(), {}, {});
+            info.State = TImportInfo::EState::Cancelled;
+            info.Issue = operationIssue;
+            for (const auto& issue : itemIssues) {
+                info.Items.emplace_back().Issue = issue;
+            }
+
+            NKikimrImport::TImport response;
+            ss->FromXxportInfo(response, info);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.IssuesSize(), expectedIssues.size(), response.DebugString());
+            for (size_t i = 0; i < expectedIssues.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(response.GetIssues(i).message(), expectedIssues[i]);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetIssues(i).severity(), ui32(NYql::TSeverityIds::S_ERROR));
+            }
+        };
+
+        check("AccessDenied", {"", "AccessDenied"}, {"AccessDenied"});
+        check("AccessDenied", {"AccessDenied", "AccessDenied", "SlowDown"},
+            {"AccessDenied", "AccessDenied", "SlowDown"});
+        check("Cancelled manually", {"AccessDenied"}, {"Cancelled manually", "AccessDenied"});
+        check("", {"AccessDenied", "AccessDenied"}, {"AccessDenied", "AccessDenied"});
+    }
+
     ui64 Run(TTestBasicRuntime& runtime, TTestEnv& env,
             THashMap<TString, TString>&& data, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
@@ -5798,6 +5831,18 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         const auto& entry = result.GetResponse().GetEntry();
         UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
         UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), expectedError);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard,
+            new TEvImport::TEvListImportsRequest("/MyRoot", 10, {}, "import/s3"));
+        TAutoPtr<IEventHandle> handle;
+        const auto list = runtime.GrabEdgeEvent<TEvImport::TEvListImportsResponse>(handle)->Record.GetResponse();
+        UNIT_ASSERT_VALUES_EQUAL(list.GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+        const auto& listed = list.GetEntries(0);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetId(), importId);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetStatus(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(listed.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetIssues(0).message(), entry.GetIssues(0).message());
 
         runtime.WaitFor("import end audit record", [&] {
             return AnyOf(auditLines, [](const auto& line) { return line.find("operation=IMPORT END") != std::string::npos; });

@@ -50,7 +50,7 @@ private:
         YDB_LOG_DEBUG_COMP(BLOB_CHECKER_WORKER, "Handle TEvAssimilateResult",
             {"marker", "BSW10"},
             {"groupId", GroupId},
-            {"event", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         TEvBlobStorage::TEvAssimilateResult* res = ev->Get();
         if (res->Status != NKikimrProto::OK) {

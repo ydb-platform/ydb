@@ -100,7 +100,7 @@ private:
     void HandleInit(const TEvChunkKeeperDiscoverResult::TPtr& ev) {
         YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvChunkKeeperDiscoverResult"),
             {"marker", "BSPFP02"},
-            {"event", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         RequestInFlight = false;
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
@@ -168,7 +168,7 @@ private:
     void Handle(const TEvChunkKeeperAllocateResult::TPtr& ev) {
         YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvChunkKeeperAllocateResult"),
             {"marker", "BSPFP04"},
-            {"event", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         RequestInFlight = false;
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
@@ -191,7 +191,7 @@ private:
     void Handle(const TEvChunkKeeperFreeResult::TPtr& ev) {
         YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvChunkKeeperFreeResult"),
             {"marker", "BSPFP05"},
-            {"event", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         RequestInFlight = false;
         Data.Chunks.erase(ev->Get()->ChunkIdx);
         CommitState();
@@ -201,7 +201,7 @@ private:
     void Handle(const NPDisk::TEvChunkWriteResult::TPtr& ev) {
         YDB_LOG_DEBUG(VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvChunkWriteResult"),
             {"marker", "BSPFP06"},
-            {"event", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.SyncLogCtx->VCtx, ev, TActivationContext::AsActorContext());
         RequestInFlight = false;
         ui32 chunkIdx = ev->Get()->ChunkIdx;
@@ -223,7 +223,7 @@ private:
     void Handle(const NPDisk::TEvChunkReadResult::TPtr& ev) {
         YDB_LOG_DEBUG(VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvChunkReadResult"),
             {"marker", "BSPFP07"},
-            {"event", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.SyncLogCtx->VCtx, ev, TActivationContext::AsActorContext());
         Y_ABORT_UNLESS(ActiveSnapshotRequest);
         ui32 chunkIdx = ev->Get()->ChunkIdx;

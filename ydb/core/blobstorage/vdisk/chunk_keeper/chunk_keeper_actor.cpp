@@ -306,7 +306,7 @@ private:
     void Handle(const NPDisk::TEvChunkReserveResult::TPtr& ev) {
         YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkReserveResult"),
             {"marker", "BSCK10"},
-            {"event", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.LogCtx->VCtx, ev, TActivationContext::AsActorContext());
 
         Y_VERIFY_S(ActiveRequest, VDISKP(Ctx.LogCtx->VCtx, "No ActiveRequest"
@@ -352,7 +352,7 @@ private:
     void HandleLogResultAllocate(const NPDisk::TEvLogResult::TPtr& ev) {
         YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult while processing" " allocation request"),
             {"marker", "BSCK11"},
-            {"event", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.LogCtx->VCtx, ev, TActivationContext::AsActorContext());
 
         Y_VERIFY_S(ActiveRequest, VDISKP(Ctx.LogCtx->VCtx, "No ActiveRequest while processing allocation request"));
@@ -426,7 +426,7 @@ private:
     void HandleLogResultFree(const NPDisk::TEvLogResult::TPtr& ev) {
         YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult while processing" " deallocation request"),
             {"marker", "BSCK14"},
-            {"event", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.LogCtx->VCtx, ev, TActivationContext::AsActorContext());
 
         Y_VERIFY_S(ActiveRequest, VDISKP(Ctx.LogCtx->VCtx, "No ActiveRequest while processing deallocation request"));
@@ -486,7 +486,7 @@ private:
     void HandleLogResultCutLog(const NPDisk::TEvLogResult::TPtr& ev) {
         YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult while processing cut log request"),
             {"marker", "BSCK17"},
-            {"event", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.LogCtx->VCtx, ev, TActivationContext::AsActorContext());
         ActiveRequest.reset();
 
@@ -638,7 +638,7 @@ private:
     void HandleError(const NPDisk::TEvLogResult::TPtr& ev) {
         YDB_LOG_NOTICE(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult in ErrorState"),
             {"marker", "BSCK02"},
-            {"event", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.LogCtx->VCtx, ev, TActivationContext::AsActorContext());
         Send(Ctx.LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::ChunkKeeper, Max<ui64>()));
         DeletionsInFlight.clear();

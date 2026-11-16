@@ -29,49 +29,26 @@ public:
             {"ev", Ev->Get()->ToString()});
 
         Result = MakeHolder<TEvCdcAggregator::TEvWriteHeartbeatsResult>();
-        Result->Record.SetOrigin(Self->TabletID());
-
         if (!Self->CdcAggregatorStream) {
+            Result->Record.SetOrigin(Self->TabletID());
             Result->Record.SetStatus(TResult::NOT_READY);
             Result->Record.SetError("Tracking is not configured");
             return true;
         }
 
-        THashMap<ui64, NPQ::THeartbeat> heartbeatBySourceDataShardId;
-        for (const auto& proto : Ev->Get()->Record.GetHeartbeats()) {
-            auto [heartbeat, error] = TCdcAggregatorStreamProtoConverter().ParseHeartbeat(proto);
-            if (!heartbeat) {
-                YDB_LOG_WARN("Invalid heartbeat",
-                    {"error", error});
-                auto& result = *Result->Record.AddResults();
-                result.SetSourceDataShardId(proto.GetSourceDataShardId());
-                result.SetStatus(TResult::THeartbeatResult::BAD_REQUEST);
-                continue;
-            }
-            heartbeatBySourceDataShardId[proto.GetSourceDataShardId()] = std::move(*heartbeat);
-        }
-
-        const auto diff = Self->CdcAggregatorStream->WriteHeartbeats(heartbeatBySourceDataShardId);
+        TCdcAggregatorStreamProtoConverter converter;
+        const auto batch = converter.ParseHeartbeatsBatch(Ev->Get()->Record);
+        const auto diff = Self->CdcAggregatorStream->WriteHeartbeats(batch.HeartbeatsBySourceDataShardId);
         NIceDb::TNiceDb db(txc.DB);
         Self->CdcAggregatorStreamRepository.ApplyCdcAggregatorStreamHeartbeatsDiff(db, diff);
-
-        for (const auto& [sourceDataShardId, _] : heartbeatBySourceDataShardId) {
-            auto& result = *Result->Record.AddResults();
-            result.SetSourceDataShardId(sourceDataShardId);
-            if (const auto* lastHeartbeat = diff.LastHeartbeatsBySourceDataShardId.FindPtr(sourceDataShardId)) {
-                result.SetStatus(TResult::THeartbeatResult::SUCCESS);
-                lastHeartbeat->Version.ToProto(result.MutableWrittenVersion());
-            } else {
-                result.SetStatus(TResult::THeartbeatResult::UNKNOWN_SOURCE);
-            }
-        }
+        Result->Record = converter.SerializeWriteHeartbeatsResult(batch, diff);
+        Result->Record.SetOrigin(Self->TabletID());
 
         if (const auto& currentHeartbeat = diff.CurrentHeartbeat) {
             YDB_LOG_DEBUG("Current heartbeat advanced",
                 {"version", currentHeartbeat->Version});
         }
 
-        Result->Record.SetStatus(TResult::SUCCESS);
         return true;
     }
 

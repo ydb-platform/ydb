@@ -96,17 +96,18 @@ TParseResult<TCdcAggregatorStreamPartitioningChange> TCdcAggregatorStreamProtoCo
     return {std::move(change), TString()};
 }
 
-TParseResult<NPQ::THeartbeat> TCdcAggregatorStreamProtoConverter::ParseHeartbeat(const NKikimrCdcAggregator::TEvWriteHeartbeats_TSourceHeartbeat& proto) const {
-    if (!proto.HasHeartbeat()) {
-        return {std::nullopt, TStringBuilder() << "Heartbeat of DataShard " << proto.GetSourceDataShardId() << " is not set"};
+TCdcAggregatorStreamHeartbeatsBatch TCdcAggregatorStreamProtoConverter::ParseHeartbeatsBatch(const NKikimrCdcAggregator::TEvWriteHeartbeats& proto) const {
+    TCdcAggregatorStreamHeartbeatsBatch batch;
+    for (const auto& sourceHeartbeat : proto.GetHeartbeats()) {
+        const ui64 sourceDataShardId = sourceHeartbeat.GetSourceDataShardId();
+        auto heartbeat = NPQ::THeartbeat::Parse(sourceHeartbeat.GetHeartbeat());
+        if (!heartbeat.Version.Step) {
+            batch.InvalidSourceDataShardIds.insert(sourceDataShardId);
+            continue;
+        }
+        batch.HeartbeatsBySourceDataShardId[sourceDataShardId] = std::move(heartbeat);
     }
-
-    auto heartbeat = NPQ::THeartbeat::Parse(proto.GetHeartbeat());
-    if (!heartbeat.Version.Step) {
-        return {std::nullopt, TStringBuilder() << "Heartbeat of DataShard " << proto.GetSourceDataShardId() << " has zero step"};
-    }
-
-    return {std::move(heartbeat), TString()};
+    return batch;
 }
 
 TString TCdcAggregatorStreamProtoConverter::SerializeTopic(const TCdcAggregatorStreamTopic& topic) const {
@@ -119,6 +120,31 @@ TString TCdcAggregatorStreamProtoConverter::SerializeTopic(const TCdcAggregatorS
         protoPartition.SetTabletId(partition.TabletId);
     }
     return proto.SerializeAsString();
+}
+
+NKikimrCdcAggregator::TEvWriteHeartbeatsResult TCdcAggregatorStreamProtoConverter::SerializeWriteHeartbeatsResult(
+    const TCdcAggregatorStreamHeartbeatsBatch& batch, const TCdcAggregatorStreamHeartbeatsDiff& diff) const
+{
+    using TResult = NKikimrCdcAggregator::TEvWriteHeartbeatsResult;
+
+    TResult proto;
+    proto.SetStatus(TResult::SUCCESS);
+    for (const auto& [sourceDataShardId, _] : batch.HeartbeatsBySourceDataShardId) {
+        auto& result = *proto.AddResults();
+        result.SetSourceDataShardId(sourceDataShardId);
+        if (const auto* lastHeartbeat = diff.LastHeartbeatsBySourceDataShardId.FindPtr(sourceDataShardId)) {
+            result.SetStatus(TResult::THeartbeatResult::SUCCESS);
+            lastHeartbeat->Version.ToProto(result.MutableWrittenVersion());
+        } else {
+            result.SetStatus(TResult::THeartbeatResult::UNKNOWN_SOURCE);
+        }
+    }
+    for (const auto sourceDataShardId : batch.InvalidSourceDataShardIds) {
+        auto& result = *proto.AddResults();
+        result.SetSourceDataShardId(sourceDataShardId);
+        result.SetStatus(TResult::THeartbeatResult::BAD_REQUEST);
+    }
+    return proto;
 }
 
 NKikimrCdcAggregator::TEvDescribeTrackingResult TCdcAggregatorStreamProtoConverter::SerializeDescribeTrackingResult(const TCdcAggregatorStream& stream) const {

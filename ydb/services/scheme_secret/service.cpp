@@ -227,6 +227,19 @@ IRetryPolicy<>::TPtr MakeLongRetryPolicy() {
     );
 }
 
+IRetryPolicy<>::TPtr ConvertEnumToRetryPolicy(ERetryPolicy policy) {
+    switch (policy) {
+        case ERetryPolicy::ShortRetries:
+            return MakeShortRetryPolicy();
+        case ERetryPolicy::LongRetries:
+            return MakeLongRetryPolicy();
+        case ERetryPolicy::NoRetries:
+            return IRetryPolicy<>::GetNoRetryPolicy();
+    }
+    Y_UNREACHABLE();
+}
+
+
 
 }  // anonymous namespace
 
@@ -582,18 +595,6 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
             errorStatus,
             { NYql::TIssue(MakeSchemeShardErrorMessage(status, secretName)) }));
     return true;
-}
-
-IRetryPolicy<>::TPtr ConvertEnumToRetryPolicy(ERetryPolicy policy) {
-    switch (policy) {
-        case ERetryPolicy::ShortRetries:
-            return MakeShortRetryPolicy();
-        case ERetryPolicy::LongRetries:
-            return MakeLongRetryPolicy();
-        case ERetryPolicy::NoRetries:
-            return IRetryPolicy<>::GetNoRetryPolicy();
-    }
-    Y_UNREACHABLE();
 }
 
 bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& requestId,

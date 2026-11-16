@@ -467,11 +467,11 @@ public:
             );
             break;
         default:
-            YDB_LOG_ERROR_CTX(context.Ctx, "Ignoring unexpected TEvPartitioningChangedAck",
+            YDB_LOG_ERROR_CTX(context.Ctx, "CdcAggregator rejected partitioning change, the stream heartbeat may stall",
                 {"tabletId", aggregatorTabletId},
                 {"result", record.ShortDebugString()},
             );
-            return false;
+            break;
         }
 
         if (!CdcAggregatorPartitioningChangesInProgress.erase(std::make_pair(aggregatorTabletId, parentDataShardId))) {

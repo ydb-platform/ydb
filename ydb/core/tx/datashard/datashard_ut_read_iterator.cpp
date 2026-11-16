@@ -12,6 +12,9 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
 #include <ydb/core/memory_controller/consumer_collection.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -24,6 +27,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
+#include <util/generic/scope.h>
 #include <util/system/env.h>
 #include <util/string/hex.h>
 #include <sys/resource.h>
@@ -4304,6 +4308,86 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
+    Y_UNIT_TEST(AdmittedReadDoesNotWaitForQuotaAfterPageFault) {
+        using namespace NKqp::NScheduler;
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+        serverSettings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableResourcePools(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableResourcePoolsScheduler(true);
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+        const auto schedulerId = NKqp::MakeKqpSchedulerServiceId(runtime.GetFirstNodeId());
+        runtime.Send(schedulerId, sender, new TEvAddDatabase("/Root"));
+        runtime.Send(schedulerId, sender, new TEvAddPool("/Root", "read_pool"));
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().ExecutorCacheSize(1));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)"));
+        SimulateSleep(runtime, TDuration::Seconds(1));
+        const auto shard = shards.at(0);
+        CompactTable(runtime, shard, tableId, false);
+        RebootTablet(runtime, shard, sender);
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        auto query = runtime.GetAppData().KqpComputeScheduler->GetReadQuery("/Root", "read_pool");
+        UNIT_ASSERT(query);
+        bool replied = false;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvReadResult>(
+            [&](TEvDataShard::TEvReadResult::TPtr&) { replied = true; });
+        TBlockEvents<NSharedCache::TEvRequest> pages(runtime);
+        bool retried = false;
+        auto retryObserver = runtime.AddObserver<TEvDataShard::TEvReadContinue>(
+            [&](TEvDataShard::TEvReadContinue::TPtr& ev) {
+                retried = true;
+                ev.Reset();
+            });
+        auto readSender = runtime.AllocateEdgeActor();
+        auto pipe = runtime.ConnectToPipe(shard, readSender, 0, NTabletPipe::TClientConfig());
+        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        request->Record.SetReadId(1);
+        request->Record.SetDatabaseId("/Root");
+        request->Record.SetPoolId("read_pool");
+        request->Record.SetMaxRows(1);
+        request->Record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+        request->Record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+        request->Record.MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
+        request->Record.AddColumns(1);
+        request->Record.AddColumns(2);
+        request->Ranges.emplace_back(TOwnedCellVec(), true, TOwnedCellVec(), true);
+        runtime.SendToPipe(pipe, readSender, request.release());
+
+        runtime.WaitFor("first read page fault", [&] { return !pages.empty() || replied || retried; });
+        UNIT_ASSERT(!replied);
+        UNIT_ASSERT(!retried);
+        UNIT_ASSERT_C(!pages.empty(), "The admitted operation must actually wait for a page");
+        UNIT_ASSERT_VALUES_EQUAL(query->CpuUsage.load(), 0u);
+
+        // Exhaust fair-share after admission. Completing this first operation
+        // must depend only on the page, with no new quota wait in the pipeline.
+        constexpr ui64 blockedUsage = 1'000'000;
+        query->CpuUsage += blockedUsage;
+        query->GetParent()->CpuUsage += blockedUsage;
+        Y_DEFER {
+            query->CpuUsage -= blockedUsage;
+            query->GetParent()->CpuUsage -= blockedUsage;
+        };
+        pages.Stop().Unblock();
+        runtime.WaitFor("resumed read or unexpected quota wait", [&] { return replied || retried; });
+        UNIT_ASSERT_C(!retried, "An admitted pipeline operation must not wait for quota after a restart");
+        UNIT_ASSERT(replied);
+        auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender, TDuration::Seconds(5));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->GetRowsCount(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(query->CpuUsage.load(), blockedUsage);
+    }
+
     Y_UNIT_TEST(CancelPageFaultedReadThenDropTable) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

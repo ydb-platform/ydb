@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:/home/aggregate.sql:21:42: Error: ydb/library/table_digest/aggregate.cpp:65: Unsupported Digest algorithm: Unknown
+	
+	                                         ^

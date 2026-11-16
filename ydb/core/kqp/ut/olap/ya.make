@@ -25,6 +25,8 @@ SRCS(
     column_defaults_ut.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(tiering_test_enums.h)
+
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common

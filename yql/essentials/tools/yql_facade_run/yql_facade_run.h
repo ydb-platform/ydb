@@ -123,6 +123,7 @@ public:
     NYql::TUserDataTable DataTable;
     TVector<TString> UdfsPaths;
     TString Params;
+    TProjectSettings ProjectSettings;
     TString YsonAttrs;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::Greedy;
     TCredentials::TPtr Credentials = MakeIntrusive<TCredentials>();

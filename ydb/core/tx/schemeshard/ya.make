@@ -48,7 +48,6 @@ RECURSE_FOR_TESTS(
     ut_olap
     ut_olap_reboots
     ut_partition_stats
-    ut_pq
     ut_pq_configure_bench
     ut_pq_reboots
     ut_reboots
@@ -79,6 +78,7 @@ RECURSE_FOR_TESTS(
     ut_system_names
     ut_sysview
     ut_sysview_reboots
+    ut_topic_common
     ut_topic_splitmerge
     ut_topic_set_boundaries
     ut_test_shard

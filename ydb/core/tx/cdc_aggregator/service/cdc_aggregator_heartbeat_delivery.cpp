@@ -38,14 +38,14 @@ void TCdcAggregatorHeartbeatDelivery::AddHeartbeat(ui64 sourceDataShardId, const
 }
 
 std::optional<TCdcAggregatorHeartbeatBatch> TCdcAggregatorHeartbeatDelivery::PrepareNextBatchIfPossible() {
-    if (!InFlight.empty() || PendingSourceIdQueue.empty()) {
+    if (!AwaitingReplySourceIds.empty() || PendingSourceIdQueue.empty()) {
         return std::nullopt;
     }
 
     TCdcAggregatorHeartbeatBatch batch;
     while (!PendingSourceIdQueue.empty() && batch.size() < MaxBatchSize) {
         TCdcAggregatorHeartbeatBatchItem item = PopOldestPending(PendingSourceIdQueue, PendingHeartbeatsBySourceId);
-        InFlight.push_back(item.SourceDataShardId);
+        AwaitingReplySourceIds.push_back(item.SourceDataShardId);
         batch.push_back(std::move(item));
     }
 
@@ -54,7 +54,7 @@ std::optional<TCdcAggregatorHeartbeatBatch> TCdcAggregatorHeartbeatDelivery::Pre
 
 TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::CompleteBatch(const THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>& tabletRepliesBySourceId) {
     TVector<TCdcAggregatorHeartbeatDeliveryReply> replies;
-    for (const ui64 sourceDataShardId : InFlight) {
+    for (const ui64 sourceDataShardId : AwaitingReplySourceIds) {
         if (const auto* reply = tabletRepliesBySourceId.FindPtr(sourceDataShardId)) {
             replies.push_back(*reply);
         } else {
@@ -62,17 +62,17 @@ TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::C
         }
     }
 
-    InFlight.clear();
+    AwaitingReplySourceIds.clear();
     return replies;
 }
 
 TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::FailBatch(const TString& error) {
-    if (InFlight.empty()) {
+    if (AwaitingReplySourceIds.empty()) {
         return {};
     }
 
     TVector<TCdcAggregatorHeartbeatDeliveryReply> replies;
-    for (const ui64 sourceDataShardId : InFlight) {
+    for (const ui64 sourceDataShardId : AwaitingReplySourceIds) {
         replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Retry, .Error = error});
     }
     for (const ui64 sourceDataShardId : PendingSourceIdQueue) {
@@ -81,7 +81,7 @@ TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::F
 
     PendingHeartbeatsBySourceId.clear();
     PendingSourceIdQueue.clear();
-    InFlight.clear();
+    AwaitingReplySourceIds.clear();
 
     return replies;
 }

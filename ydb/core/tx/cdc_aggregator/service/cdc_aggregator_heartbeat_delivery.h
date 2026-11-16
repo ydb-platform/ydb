@@ -41,7 +41,7 @@ public:
     TVector<TCdcAggregatorHeartbeatDeliveryReply> FailBatch(const TString& error);
 
     bool IsIdle() const {
-        return PendingHeartbeatsBySourceId.empty() && InFlight.empty();
+        return PendingHeartbeatsBySourceId.empty() && AwaitingReplySourceIds.empty();
     }
 
 private:
@@ -49,7 +49,7 @@ private:
 
     THashMap<ui64, NPQ::THeartbeat> PendingHeartbeatsBySourceId;
     TDeque<ui64> PendingSourceIdQueue;
-    TVector<ui64> InFlight;
+    TVector<ui64> AwaitingReplySourceIds;
 };
 
 } // namespace NKikimr::NCdcAggregator

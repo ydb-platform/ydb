@@ -253,3 +253,51 @@ def test_non_recursive_auto_proto_attaches_only_auto_peers(monkeypatch):
     monkeypatch.setattr(nots, "_is_real_file", lambda path: path == "$S/proto/custom/package.json")
     nots._PREPARE_DEPS_CONFIGURE(unit)
     assert peers == ["proto/auto", "proto/raw"]
+
+
+@pytest.mark.parametrize("runtime_flag", ["_WITH_NODEJS_BIN", "_WITH_BUN_BIN"])
+@pytest.mark.parametrize("entry_type", ["file", "directory"])
+@pytest.mark.parametrize("library_for", [False, True])
+def test_runtime_rejects_source_namespace_collision(monkeypatch, tmp_path, runtime_flag, entry_type, library_for):
+    source = tmp_path / "source"
+    source.mkdir()
+    entry = source / ".nots-runtime"
+    if entry_type == "file":
+        entry.write_text("user data")
+    else:
+        entry.mkdir()
+
+    errors = []
+    commands = []
+    values = {runtime_flag: "yes"}
+    if library_for:
+        values.update(TS_FOR="yes", TS_FOR_DIR=str(source))
+    unit = SimpleNamespace(
+        get=values.get,
+        path=lambda: str(tmp_path / "module") if library_for else str(source),
+        resolve=lambda path: path,
+        set=commands.append,
+    )
+    monkeypatch.setattr(nots.ymake, "report_configure_error", errors.append, raising=False)
+    nots._TS_RUNTIME_BIN_CONFIGURE(unit)
+    assert len(errors) == 1
+    assert ".nots-runtime is reserved" in errors[0]
+    assert commands == []
+
+
+def test_runtime_allows_output_symlink(monkeypatch, tmp_path):
+    output = tmp_path / "build-output"
+    output.mkdir()
+    (tmp_path / ".nots-runtime").symlink_to(output, target_is_directory=True)
+    commands = []
+    unit = SimpleNamespace(
+        get=lambda key: "yes" if key == "_WITH_NODEJS_BIN" else "",
+        path=lambda: str(tmp_path),
+        resolve=lambda path: path,
+        set=commands.append,
+    )
+    errors = []
+    monkeypatch.setattr(nots.ymake, "report_configure_error", errors.append, raising=False)
+    nots._TS_RUNTIME_BIN_CONFIGURE(unit)
+    assert not errors
+    assert commands

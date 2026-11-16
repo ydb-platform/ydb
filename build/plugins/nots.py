@@ -314,18 +314,29 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _TS_RUNTIME_BIN_CONFIGURE(unit: ymake.Unit) -> None:
+    if unit.get("_WITH_NODEJS_BIN") != "yes" and unit.get("_WITH_BUN_BIN") != "yes":
+        return
+
+    # Reserve the output namespace instead of merging runtime files with user sources.
+    for source_path in {unit.path(), _get_source_path(unit)}:
+        runtime_path = os.path.join(unit.resolve(source_path), ".nots-runtime")
+        # ya make exposes output directories as symlinks in the source tree.
+        if os.path.exists(runtime_path) and not os.path.islink(runtime_path):
+            ymake.report_configure_error(".nots-runtime is reserved for WITH_NODEJS_BIN/WITH_BUN_BIN outputs")
+            return
+
     if unit.get("_WITH_NODEJS_BIN") == "yes":
-        unit.set(["COPY_NODEJS_CMD", '$COPY_CMD $WITH_NODEJS_ROOT/node ${output:"node"}'])
+        unit.set(["COPY_NODEJS_CMD", '$COPY_CMD $WITH_NODEJS_ROOT/node ${output:".nots-runtime/node"}'])
         # Resource selection marks the target's requirement independently of the host.
         if unit.get("_TARGET_NEEDS_LIBATOMIC") == "yes":
             unit.set(
                 [
                     "COPY_LIBATOMIC_CMD",
-                    '$COPY_CMD $WITH_LIBATOMIC_1_2_0_RESOURCE_GLOBAL/libatomic.so.1 ${output:"libatomic.so.1"}',
+                    '$COPY_CMD $WITH_LIBATOMIC_1_2_0_RESOURCE_GLOBAL/libatomic.so.1 ${output:".nots-runtime/libatomic.so.1"}',
                 ]
             )
     if unit.get("_WITH_BUN_BIN") == "yes":
-        unit.set(["COPY_BUN_CMD", '$COPY_CMD $WITH_BUN_RESOURCE_GLOBAL/bun ${output:"bun"}'])
+        unit.set(["COPY_BUN_CMD", '$COPY_CMD $WITH_BUN_RESOURCE_GLOBAL/bun ${output:".nots-runtime/bun"}'])
 
 
 def _should_setup_build_env(unit: ymake.Unit) -> bool:

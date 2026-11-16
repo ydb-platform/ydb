@@ -198,11 +198,11 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
 
         auto [writeHeartbeatsResult, error] = ProtoConverter.ParseWriteHeartbeatsResult(record);
         if (writeHeartbeatsResult) {
-            it->second.CompleteBatch(*writeHeartbeatsResult, [this](const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
+            it->second.CompleteBatch(*writeHeartbeatsResult, [this](const auto& origin, const auto& reply) {
                 Reply(origin, reply);
             });
         } else {
-            it->second.FailBatch(error, [this](const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
+            it->second.FailBatch(error, [this](const auto& origin, const auto& reply) {
                 Reply(origin, reply);
             });
         }
@@ -218,7 +218,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             {"aggregator", tabletId},
             {"origins", it->second.GetOriginCount()},
             {"error", error});
-        it->second.ReplyToAllOrigins(TCdcAggregatorHeartbeatRetry{.Error = error}, [this](const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
+        it->second.ReplyToAllOrigins(TCdcAggregatorHeartbeatRetry{.Error = error}, [this](const auto& origin, const auto& reply) {
             Reply(origin, reply);
         });
         CdcAggregatorConnections.erase(it);

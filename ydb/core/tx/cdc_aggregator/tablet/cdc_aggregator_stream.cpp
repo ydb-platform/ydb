@@ -4,9 +4,9 @@ namespace NKikimr::NCdcAggregator {
 
 namespace {
 
-std::optional<NPQ::THeartbeat> FindMinLastHeartbeat(const TCdcAggregatorStream::TLastHeartbeats& lastHeartbeats) {
+std::optional<NPQ::THeartbeat> FindMinLastHeartbeat(const TCdcAggregatorStream::TLastHeartbeats& lastHeartbeatsBySourceDataShardId) {
     std::optional<NPQ::THeartbeat> minHeartbeat;
-    for (const auto& [_, lastHeartbeat] : lastHeartbeats) {
+    for (const auto& [_, lastHeartbeat] : lastHeartbeatsBySourceDataShardId) {
         if (!lastHeartbeat) {
             return std::nullopt;
         }
@@ -23,17 +23,17 @@ TCdcAggregatorStream::TCdcAggregatorStream(const TCdcAggregatorStreamConfig& con
     : Topic(config.Topic)
 {
     for (const auto sourceDataShardId : config.SourceDataShardIds) {
-        LastHeartbeats.emplace(sourceDataShardId, std::nullopt);
+        LastHeartbeatsBySourceDataShardId.emplace(sourceDataShardId, std::nullopt);
     }
 }
 
 TCdcAggregatorStream::TCdcAggregatorStream(
         TCdcAggregatorStreamTopic topic,
-        TLastHeartbeats lastHeartbeats,
+        TLastHeartbeats lastHeartbeatsBySourceDataShardId,
         std::optional<NPQ::THeartbeat> currentHeartbeat,
         TPartitioningChanges partitioningChanges)
     : Topic(std::move(topic))
-    , LastHeartbeats(std::move(lastHeartbeats))
+    , LastHeartbeatsBySourceDataShardId(std::move(lastHeartbeatsBySourceDataShardId))
     , CurrentHeartbeat(std::move(currentHeartbeat))
     , PartitioningChanges(std::move(partitioningChanges))
 {
@@ -41,7 +41,7 @@ TCdcAggregatorStream::TCdcAggregatorStream(
 
 TCdcAggregatorStreamHeartbeatsDiff TCdcAggregatorStream::WriteHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatBySourceDataShardId) {
     return {
-        .LastHeartbeats = RegisterHeartbeats(heartbeatBySourceDataShardId),
+        .LastHeartbeatsBySourceDataShardId = RegisterHeartbeats(heartbeatBySourceDataShardId),
         .CurrentHeartbeat = UpdateCurrentHeartbeatIfNeeded(),
     };
 }
@@ -49,8 +49,8 @@ TCdcAggregatorStreamHeartbeatsDiff TCdcAggregatorStream::WriteHeartbeats(const T
 THashMap<ui64, NPQ::THeartbeat> TCdcAggregatorStream::RegisterHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatBySourceDataShardId) {
     THashMap<ui64, NPQ::THeartbeat> lastHeartbeats;
     for (const auto& [sourceDataShardId, heartbeat] : heartbeatBySourceDataShardId) {
-        auto lastHeartbeat = LastHeartbeats.find(sourceDataShardId);
-        if (lastHeartbeat == LastHeartbeats.end()) {
+        auto lastHeartbeat = LastHeartbeatsBySourceDataShardId.find(sourceDataShardId);
+        if (lastHeartbeat == LastHeartbeatsBySourceDataShardId.end()) {
             continue;
         }
         if (!lastHeartbeat->second || lastHeartbeat->second->Version < heartbeat.Version) {
@@ -62,7 +62,7 @@ THashMap<ui64, NPQ::THeartbeat> TCdcAggregatorStream::RegisterHeartbeats(const T
 }
 
 std::optional<NPQ::THeartbeat> TCdcAggregatorStream::UpdateCurrentHeartbeatIfNeeded() {
-    auto minHeartbeat = FindMinLastHeartbeat(LastHeartbeats);
+    auto minHeartbeat = FindMinLastHeartbeat(LastHeartbeatsBySourceDataShardId);
     if (!minHeartbeat || (CurrentHeartbeat && minHeartbeat->Version <= CurrentHeartbeat->Version)) {
         return std::nullopt;
     }
@@ -79,14 +79,14 @@ std::optional<TCdcAggregatorStreamSourcesDiff> TCdcAggregatorStream::ApplyPartit
         return TCdcAggregatorStreamSourcesDiff{};
     }
 
-    if (!LastHeartbeats.erase(change.ParentDataShardId)) {
+    if (!LastHeartbeatsBySourceDataShardId.erase(change.ParentDataShardId)) {
         return std::nullopt;
     }
 
     TCdcAggregatorStreamSourcesDiff diff;
     diff.Deleted.insert(change.ParentDataShardId);
     for (const auto childDataShardId : change.ChildDataShardIds) {
-        if (LastHeartbeats.emplace(childDataShardId, std::nullopt).second) {
+        if (LastHeartbeatsBySourceDataShardId.emplace(childDataShardId, std::nullopt).second) {
             diff.Inserted.insert(childDataShardId);
         }
     }

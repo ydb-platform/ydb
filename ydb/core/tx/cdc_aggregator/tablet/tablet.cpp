@@ -65,7 +65,7 @@ void TCdcAggregator::Handle(TEvCdcAggregator::TEvDescribeTracking::TPtr& ev, con
 
     auto result = MakeHolder<TEvCdcAggregator::TEvDescribeTrackingResult>();
     if (CdcAggregatorStream) {
-        const auto& lastHeartbeats = CdcAggregatorStream->GetLastHeartbeats();
+        const auto& lastHeartbeats = CdcAggregatorStream->GetLastHeartbeatsBySourceDataShardId();
         TVector<ui64> sources;
         for (const auto& [dataShardId, _] : lastHeartbeats) {
             sources.push_back(dataShardId);

@@ -58,7 +58,7 @@ public:
         for (const auto& [sourceDataShardId, _] : heartbeatBySourceDataShardId) {
             auto& result = *Result->Record.AddResults();
             result.SetSourceDataShardId(sourceDataShardId);
-            if (const auto* lastHeartbeat = diff.LastHeartbeats.FindPtr(sourceDataShardId)) {
+            if (const auto* lastHeartbeat = diff.LastHeartbeatsBySourceDataShardId.FindPtr(sourceDataShardId)) {
                 result.SetStatus(TResult::THeartbeatResult::SUCCESS);
                 lastHeartbeat->Version.ToProto(result.MutableWrittenVersion());
             } else {

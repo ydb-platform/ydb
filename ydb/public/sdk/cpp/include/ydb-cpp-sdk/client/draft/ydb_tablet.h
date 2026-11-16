@@ -29,6 +29,9 @@ namespace NYdb::inline Dev::NTablet {
     public:
         struct TMetadata {
             std::uint64_t SelectedTablets = 0;
+            // Number of tablets processed. With Async(true), counts tablets marked
+            // for reassignment; actual reassignment happens on subsequent restarts.
+            // Ready() may be true before those restarts.
             std::uint64_t CompletedTablets = 0;
         };
 

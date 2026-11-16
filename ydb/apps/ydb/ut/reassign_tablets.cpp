@@ -2,11 +2,13 @@
 
 #include <ydb/public/api/grpc/draft/ydb_tablet_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_tablet.h>
 
 #include <library/cpp/json/json_reader.h>
 
 #include <atomic>
+#include <optional>
 
 namespace {
 
@@ -24,7 +26,7 @@ void CheckMetadata(TChecker& checker, grpc::ServerContext* context) {
     }
 }
 
-void SetOperation(Ydb::Operations::Operation& operation, bool ready = false) {
+void SetOperation(Ydb::Operations::Operation& operation, bool ready = false, ui64 completedTablets = 3) {
     operation.set_id(OperationId);
     operation.set_ready(ready);
     if (ready) {
@@ -32,7 +34,7 @@ void SetOperation(Ydb::Operations::Operation& operation, bool ready = false) {
     }
     Ydb::Tablet::ReassignTabletsMetadata metadata;
     metadata.set_selected_tablets(12);
-    metadata.set_completed_tablets(ready ? 12 : 3);
+    metadata.set_completed_tablets(completedTablets);
     operation.mutable_metadata()->PackFrom(metadata);
 }
 
@@ -65,19 +67,39 @@ public:
     std::atomic<size_t> GetCalls{0};
     std::atomic<size_t> CancelCalls{0};
     bool Ready = false;
+    ui64 CompletedTablets = 3;
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+    grpc::Status RpcStatus;
+    TString ExpectedOperationId = CanonicalOperationId;
+    std::optional<Ydb::Operations::Operation> Response;
 
     grpc::Status GetOperation(grpc::ServerContext* context, const Ydb::Operations::GetOperationRequest* request,
             Ydb::Operations::GetOperationResponse* response) override {
         ++GetCalls;
         CheckMetadata(*this, context);
-        CHECK_EXP(request->id() == CanonicalOperationId, "Incorrect operation ID: " << request->id());
+        CHECK_EXP(request->id() == ExpectedOperationId, "Incorrect operation ID: " << request->id());
+        if (!RpcStatus.ok()) {
+            return RpcStatus;
+        }
         auto& operation = *response->mutable_operation();
-        SetOperation(operation, Ready);
-        if (Status != Ydb::StatusIds::SUCCESS) {
+        if (Response) {
+            operation = *Response;
+            return grpc::Status::OK;
+        }
+        if (Status != Ydb::StatusIds::SUCCESS && Status != Ydb::StatusIds::CANCELLED) {
             operation.set_ready(true);
             operation.set_status(Status);
-            operation.add_issues()->set_message("Reassignment operation expired");
+            if (Status == Ydb::StatusIds::NOT_FOUND) {
+                operation.set_id(ExpectedOperationId);
+                operation.add_issues()->set_message("Reassignment operation expired");
+            } else {
+                operation.add_issues()->set_message("Operation request failed");
+            }
+        } else {
+            SetOperation(operation, Ready, CompletedTablets);
+            if (Ready) {
+                operation.set_status(Status);
+            }
         }
         return grpc::Status::OK;
     }
@@ -87,6 +109,8 @@ public:
         ++CancelCalls;
         CheckMetadata(*this, context);
         CHECK_EXP(request->id() == CanonicalOperationId, "Incorrect operation ID: " << request->id());
+        Ready = true;
+        Status = Ydb::StatusIds::CANCELLED;
         response->set_status(Ydb::StatusIds::SUCCESS);
         return grpc::Status::OK;
     }
@@ -221,6 +245,7 @@ Y_UNIT_TEST_SUITE(ReassignTabletsCli) {
         UNIT_ASSERT_STRING_CONTAINS(output, "false");
         auto& service = Service<TOperationService>();
         service.Ready = true;
+        service.CompletedTablets = 12;
         const auto completedOutput = Run({"operation", "get", OperationId});
         UNIT_ASSERT_STRING_CONTAINS(completedOutput, "true");
         UNIT_ASSERT_STRING_CONTAINS(completedOutput, "SUCCESS");
@@ -232,13 +257,101 @@ Y_UNIT_TEST_SUITE(ReassignTabletsCli) {
         service.Status = Ydb::StatusIds::NOT_FOUND;
         ExpectFail();
         TString error;
-        Run({"operation", "get", OperationId}, &error);
+        NJson::TJsonValue expired;
+        UNIT_ASSERT(NJson::ReadJsonTree(Run({"operation", "get", OperationId, "--format", "proto-json-base64"}, &error), &expired));
+        UNIT_ASSERT_VALUES_EQUAL(expired["id"].GetString(), CanonicalOperationId);
+        UNIT_ASSERT_VALUES_EQUAL(expired["status"].GetString(), "NOT_FOUND");
+        UNIT_ASSERT(!expired.Has("metadata"));
         UNIT_ASSERT_STRING_CONTAINS(error, "Reassignment operation expired");
         UNIT_ASSERT_VALUES_EQUAL(service.GetCalls.load(), 4);
     }
 
-    Y_UNIT_TEST_F(CancelUsesOperationId, TReassignTabletsFixture) {
+    Y_UNIT_TEST_F(CancelThenGetPreservesProgress, TReassignTabletsFixture) {
+        Reassign({"--storage-pool", "test-pool"});
         Run({"operation", "cancel", OperationId});
+        ExpectFail();
+        const auto output = Run({"operation", "get", OperationId});
+        UNIT_ASSERT_STRING_CONTAINS(output, CanonicalOperationId);
+        UNIT_ASSERT_STRING_CONTAINS(output, "true");
+        UNIT_ASSERT_STRING_CONTAINS(output, "CANCELLED");
+        UNIT_ASSERT_STRING_CONTAINS(output, "selected tablets");
+        UNIT_ASSERT_STRING_CONTAINS(output, "completed tablets");
+        UNIT_ASSERT_STRING_CONTAINS(output, "│ 12 ");
+        UNIT_ASSERT_STRING_CONTAINS(output, "│ 3 ");
+
+        ExpectFail();
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(Run({"operation", "get", OperationId, "--format", "proto-json-base64"}), &json));
+        UNIT_ASSERT_VALUES_EQUAL(json["id"].GetString(), OperationId);
+        UNIT_ASSERT(json["ready"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(json["status"].GetString(), "CANCELLED");
+        UNIT_ASSERT_VALUES_EQUAL(json["metadata"]["selectedTablets"].GetString(), "12");
+        UNIT_ASSERT_VALUES_EQUAL(json["metadata"]["completedTablets"].GetString(), "3");
+        UNIT_ASSERT_VALUES_EQUAL(Service<TTabletService>().Calls.load(), 1);
         UNIT_ASSERT_VALUES_EQUAL(Service<TOperationService>().CancelCalls.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Service<TOperationService>().GetCalls.load(), 2);
+    }
+
+    Y_UNIT_TEST_F(GetTransportErrorsDoNotPrintOperation, TReassignTabletsFixture) {
+        auto& service = Service<TOperationService>();
+        for (const auto code : {grpc::StatusCode::UNAVAILABLE, grpc::StatusCode::CANCELLED}) {
+            service.RpcStatus = grpc::Status(code, "Operation request failed");
+            ExpectFail();
+            TString error;
+            const auto output = Run({"operation", "get", OperationId, "--format", "proto-json-base64"}, &error);
+            UNIT_ASSERT(output.empty());
+            UNIT_ASSERT_STRING_CONTAINS(error, "Operation request failed");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(service.GetCalls.load(), 2);
+    }
+
+    Y_UNIT_TEST_F(FailedCompactionRetainsDetails, TReassignTabletsFixture) {
+        auto& service = Service<TOperationService>();
+        service.ExpectedOperationId = "ydb://compaction/13?txId=456";
+        auto& response = service.Response.emplace();
+        response.set_id(service.ExpectedOperationId);
+        response.set_ready(true);
+        response.add_issues()->set_message("Compaction stopped");
+        Ydb::Table::CompactMetadata metadata;
+        metadata.set_path("/test/table");
+        metadata.set_shards_total(12);
+        metadata.set_shards_done(3);
+        metadata.set_progress(25);
+
+        for (const auto status : {Ydb::StatusIds::CANCELLED, Ydb::StatusIds::ABORTED}) {
+            response.set_status(status);
+            response.mutable_metadata()->PackFrom(metadata);
+            const auto statusName = Ydb::StatusIds::StatusCode_Name(status);
+
+            ExpectFail();
+            TString error;
+            const auto output = Run({"operation", "get", service.ExpectedOperationId}, &error);
+            UNIT_ASSERT_STRING_CONTAINS(output, service.ExpectedOperationId);
+            UNIT_ASSERT_STRING_CONTAINS(output, statusName);
+            UNIT_ASSERT_STRING_CONTAINS(output, "/test/table");
+            UNIT_ASSERT_STRING_CONTAINS(error, "Compaction stopped");
+
+            ExpectFail();
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(Run({"operation", "get", service.ExpectedOperationId,
+                "--format", "proto-json-base64"}, &error), &json));
+            UNIT_ASSERT(json["ready"].GetBoolean());
+            UNIT_ASSERT_VALUES_EQUAL(json["status"].GetString(), statusName);
+            UNIT_ASSERT_VALUES_EQUAL(json["metadata"]["shardsTotal"].GetInteger(), 12);
+            UNIT_ASSERT_VALUES_EQUAL(json["metadata"]["shardsDone"].GetInteger(), 3);
+            UNIT_ASSERT_STRING_CONTAINS(error, "Compaction stopped");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(service.GetCalls.load(), 4);
+    }
+
+    Y_UNIT_TEST_F(GetRequestErrorsWithoutOperationDoNotPrintOperation, TReassignTabletsFixture) {
+        auto& service = Service<TOperationService>();
+        service.Status = Ydb::StatusIds::UNAUTHORIZED;
+        ExpectFail();
+        TString error;
+        const auto output = Run({"operation", "get", OperationId, "--format", "proto-json-base64"}, &error);
+        UNIT_ASSERT(output.empty());
+        UNIT_ASSERT_STRING_CONTAINS(error, "Operation request failed");
+        UNIT_ASSERT_VALUES_EQUAL(service.GetCalls.load(), 1);
     }
 }

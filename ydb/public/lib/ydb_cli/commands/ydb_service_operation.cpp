@@ -21,8 +21,12 @@ namespace {
     template <typename T>
     int GetOperation(NOperation::TOperationClient& client, const TOperationId& id, EDataFormat format) {
         T operation = client.Get<T>(id).GetValueSync();
+        // Failed or cancelled operations can still carry useful progress and issues.
+        // Print returned operations before throwing, while preserving the failure exit code.
+        if (!operation.Id().ToString().empty()) {
+            PrintOperation(operation, format);
+        }
         ThrowOnError(operation);
-        PrintOperation(operation, format);
         return EXIT_SUCCESS;
     }
 

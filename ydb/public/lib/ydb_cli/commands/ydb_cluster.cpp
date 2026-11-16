@@ -152,7 +152,8 @@ void TCommandClusterReassignTablets::Config(TConfig& config) {
         .RequiredArgument("N").DefaultValue(1).StoreResult(&MaxInFlight);
     config.Opts->AddLongOption("percent", "Percentage of matching tablets to reassign, starting with the oldest channel assignments.")
         .RequiredArgument("N").DefaultValue(100).StoreResult(&Percent);
-    config.Opts->AddLongOption("on-restart", "Mark channels for reassignment on a subsequent tablet restart.")
+    config.Opts->AddLongOption("on-restart", "Defer channel reassignment until subsequent tablet restarts. "
+        "Progress counts tablets marked for reassignment; the operation can complete before those restarts.")
         .NoArgument().StoreTrue(&OnRestart);
     AddOutputFormats(config, {EDataFormat::Pretty, EDataFormat::ProtoJsonBase64});
 }

@@ -138,6 +138,11 @@ def _host_resource_stats(
         nums = _numeric_series(vals)
         if nums:
             out[key] = _describe_distribution(nums)
+    host_signals = resources_overlay.get("host_resource_signals") or {}
+    for key, values in host_signals.items():
+        nums = _numeric_series(values)
+        if nums:
+            out[key] = _describe_distribution(nums)
     return out
 
 

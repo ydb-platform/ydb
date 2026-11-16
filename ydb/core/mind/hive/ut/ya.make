@@ -3,9 +3,7 @@ UNITTEST_FOR(ydb/core/mind/hive)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
-ENDIF()
+REQUIREMENTS(cpu:4)
 
 PEERDIR(
     library/cpp/getopt

@@ -25,7 +25,6 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
@@ -35,6 +34,8 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/library/aws_init/aws.h>
 #include <ydb/public/lib/value/value.h>
+
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/hook/hook.h>
@@ -435,13 +436,7 @@ namespace {
         }
 
         NKikimrExport::TListExportsResponse ListExports(ui64 pageSize = 10, const TString& pageToken = {}) {
-            AsyncSend(Runtime(), TTestTxConfig::SchemeShard,
-                new TEvExport::TEvListExportsRequest("/MyRoot", pageSize, pageToken, "export/s3"));
-            TAutoPtr<IEventHandle> handle;
-            auto ev = Runtime().GrabEdgeEvent<TEvExport::TEvListExportsResponse>(handle);
-            const auto& response = ev->Record.GetResponse();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::SUCCESS);
-            return response;
+            return TestListExports(Runtime(), "/MyRoot", pageSize, pageToken);
         }
 
         void CheckExportsHiddenWhileForgetting(bool cancelled) {
@@ -611,6 +606,7 @@ namespace {
                 const auto& entry = status.GetResponse().GetEntry();
                 UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
                 UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Injected marker upload failure");
+                UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
 
                 const auto list = ListExports();
                 UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
@@ -2217,7 +2213,7 @@ namespace {
             const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
             ui64 rows = 0;
             for (const ui64 shardId : sharding.GetColumnShards()) {
-                NTxUT::TShardReader reader(Runtime(), shardId, pathId, NKikimr::NOlap::TSnapshot(0, 0));
+                NTxUT::TShardReader reader(Runtime(), shardId, pathId, NOlap::TSnapshot(0, 0));
                 reader.SetReplyColumnIds({1});
                 const auto batch = reader.ReadAll();
                 UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -2349,37 +2345,6 @@ namespace {
 } // anonymous
 
 Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
-    Y_UNIT_TEST(ApiIssuesPreserveItemDiagnostics) {
-        Env();
-        auto* ss = dynamic_cast<TSchemeShard*>(Runtime().FindActor(ResolveTablet(Runtime(), TTestTxConfig::SchemeShard)));
-        UNIT_ASSERT(ss);
-
-        const auto check = [&](const TString& operationIssue, const TVector<TString>& itemIssues,
-                const TVector<TString>& expectedIssues) {
-            TExportInfo info(100, {}, TExportInfo::EKind::S3, Ydb::Export::ExportToS3Settings(), {}, {});
-            info.State = TExportInfo::EState::Cancelled;
-            info.Issue = operationIssue;
-            for (const auto& issue : itemIssues) {
-                info.Items.emplace_back().Issue = issue;
-            }
-
-            NKikimrExport::TExport response;
-            ss->FromXxportInfo(response, info);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::CANCELLED);
-            UNIT_ASSERT_VALUES_EQUAL_C(response.IssuesSize(), expectedIssues.size(), response.DebugString());
-            for (size_t i = 0; i < expectedIssues.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(response.GetIssues(i).message(), expectedIssues[i]);
-                UNIT_ASSERT_VALUES_EQUAL(response.GetIssues(i).severity(), ui32(NYql::TSeverityIds::S_ERROR));
-            }
-        };
-
-        check("AccessDenied", {"", "AccessDenied"}, {"AccessDenied"});
-        check("AccessDenied", {"AccessDenied", "AccessDenied", "SlowDown"},
-            {"AccessDenied", "AccessDenied", "SlowDown"});
-        check("Cancelled manually", {"AccessDenied"}, {"Cancelled manually", "AccessDenied"});
-        check("", {"AccessDenied", "AccessDenied"}, {"AccessDenied", "AccessDenied"});
-    }
-
     Y_UNIT_TEST(CompletionMarkerDestination) {
         struct TCase {
             TString Destination;
@@ -4977,6 +4942,21 @@ partitioning_settings {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).message(), "Cancelled manually");
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
+        const auto list = TestListExports(Runtime(), "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+        const auto& listed = list.GetEntries(0);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetId(), exportId);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetStatus(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(listed.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetIssues(0).message(), "Cancelled manually");
+
+        Runtime().WaitFor("export end audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) { return line.find("operation=EXPORT END") != std::string::npos; });
+        }, TDuration::Seconds(10));
 
         // Check audit record for export end
         //

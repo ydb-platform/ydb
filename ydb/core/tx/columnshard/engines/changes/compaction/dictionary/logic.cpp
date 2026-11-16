@@ -142,32 +142,32 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
 
         YDB_LOG_VERIFY(Iterators[inputIdx].MoveToPosition(inputRecordIdx));
         YDB_LOG_VERIFY(NArrow::SwitchType(Iterators[inputIdx].GetCurrentRecordsType(), [&](const auto type) {
-            const auto* arr = type.CastArray(Iterators[inputIdx].GetCurrentDataChunk().GetPositions().get());
-            if constexpr (type.IsIndexType()) {
-                if (arr->IsNull(Iterators[inputIdx].GetLocalPosition())) {
-                    EnsureDictionaryNullMarked(mask, maskSize);
-                    records.emplace_back(-1);
-                } else {
-                    const ui32 dictIdx = type.GetValue(*arr, Iterators[inputIdx].GetLocalPosition());
-                    YDB_LOG_VERIFY(inputIdx < RemapIndexes.size());
-                    YDB_LOG_VERIFY(dictIdx < RemapIndexes[inputIdx].size(),
-                        {"size", RemapIndexes[inputIdx].size()},
-                        {"idx", dictIdx});
-                    const ui32 finalValueIndex = RemapIndexes[inputIdx][dictIdx];
-                    if (finalValueIndex == NullIndex) {
+                const auto* arr = type.CastArray(Iterators[inputIdx].GetCurrentDataChunk().GetPositions().get());
+                if constexpr (type.IsIndexType()) {
+                    if (arr->IsNull(Iterators[inputIdx].GetLocalPosition())) {
+                        EnsureDictionaryNullMarked(mask, maskSize);
                         records.emplace_back(-1);
                     } else {
-                        records.emplace_back(finalValueIndex);
+                        const ui32 dictIdx = type.GetValue(*arr, Iterators[inputIdx].GetLocalPosition());
+                        YDB_LOG_VERIFY(inputIdx < RemapIndexes.size());
+                        YDB_LOG_VERIFY(dictIdx < RemapIndexes[inputIdx].size(),
+                        {"size", RemapIndexes[inputIdx].size()},
+                        {"idx", dictIdx});
+                        const ui32 finalValueIndex = RemapIndexes[inputIdx][dictIdx];
+                        if (finalValueIndex == NullIndex) {
+                            records.emplace_back(-1);
+                        } else {
+                            records.emplace_back(finalValueIndex);
+                        }
+                        YDB_LOG_VERIFY(finalValueIndex < mask.size());
+                        if (!mask[finalValueIndex]) {
+                            mask[finalValueIndex] = true;
+                            ++maskSize;
+                        }
                     }
-                    YDB_LOG_VERIFY(finalValueIndex < mask.size());
-                    if (!mask[finalValueIndex]) {
-                        mask[finalValueIndex] = true;
-                        ++maskSize;
-                    }
+                    return true;
                 }
-                return true;
-            }
-            return false;
+                return false;
         }),
             {"type", Iterators[inputIdx].GetCurrentDataChunk().GetDataType()->ToString()});
     }

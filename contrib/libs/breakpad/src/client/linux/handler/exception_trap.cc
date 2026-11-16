@@ -55,14 +55,19 @@ const ExceptionDescriptor& ExceptionTrap::getCurrentException() const noexcept {
 
 [[ noreturn ]] void ExceptionTrap::terminate() const noexcept(detail::can_catch_within_noexcept) {
     if(original_terminate_handler_ != nullptr) {
+#if defined(__cpp_exceptions)
         try {
             original_terminate_handler_();
         } catch (...) {} // suppress all exceptions to avoid terminate recursion
+#else
+        original_terminate_handler_();
+#endif
     }
     std::abort();
 }
 
 [[ noreturn ]] void ExceptionTrap::terminate_handler() noexcept(detail::can_catch_within_noexcept) {
+#if defined(__cpp_exceptions)
     try {
         const auto& e_ptr = std::current_exception(); // can throw bad_alloc
 
@@ -78,6 +83,7 @@ const ExceptionDescriptor& ExceptionTrap::getCurrentException() const noexcept {
     } catch (...) {
         getInstance().initializeOnce("Unknown", "Unknown");
     }
+#endif
 
     getInstance().terminate();
 }

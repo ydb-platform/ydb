@@ -8,6 +8,7 @@
 #include <ydb/core/protos/counters_coordinator.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/protos/counters_hive.pb.h>
+#include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/protos/counters_statistics_aggregator.pb.h>
 #include <ydb/core/protos/counters_tx_proxy.pb.h>
@@ -182,6 +183,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersParsedOpts) {
         CheckDeprecatedTxTypesHaveNoNames<NFlatTxCoordinator::ETxTypes_descriptor>();
         CheckDeprecatedTxTypesHaveNoNames<NDataShard::ETxTypes_descriptor>();
         CheckDeprecatedTxTypesHaveNoNames<NHive::ETxTypes_descriptor>();
+        CheckDeprecatedTxTypesHaveNoNames<NReplication::ETxTypes_descriptor>();
         CheckDeprecatedTxTypesHaveNoNames<NSchemeShard::ETxTypes_descriptor>();
         CheckDeprecatedTxTypesHaveNoNames<NStat::ETxTypes_descriptor>();
         CheckDeprecatedTxTypesHaveNoNames<NTxProxy::ETxTypes_descriptor>();
@@ -237,6 +239,14 @@ Y_UNIT_TEST_SUITE(TTabletCountersPublish) {
         UNIT_ASSERT(appGroup->FindCounter("DataShard/ScannedRows"));
         UNIT_ASSERT(!appGroup->FindHistogram("DataShard/TxProgressExecLatency"));
         UNIT_ASSERT(appGroup->FindHistogram("DataShard/ProposeQueueLatency"));
+
+        auto replicationGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TProtobufTabletCounters<NReplication::ESimpleCounters_descriptor, NReplication::ECumulativeCounters_descriptor,
+            NReplication::EPercentileCounters_descriptor, NReplication::ETxTypes_descriptor> replicationCounters;
+        NPrivate::TAggregatedTabletCounters replication(replicationGroup);
+        replication.Initialize(&replicationCounters);
+        UNIT_ASSERT(!replicationGroup->FindCounter("ReplicationController/TxPrepareAttachDst/RwCompleted"));
+        UNIT_ASSERT(replicationGroup->FindCounter("ReplicationController/TxIndexBuild/RwCompleted"));
     }
 }
 

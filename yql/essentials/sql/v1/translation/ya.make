@@ -73,6 +73,8 @@ SRCS(
     sql_values.cpp
     query.cpp
     object_processing.cpp
+    antlr_token.cpp
+    sql_call_param.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(match_recognize.h)

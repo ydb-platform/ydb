@@ -363,6 +363,10 @@ bool SplitQueryToStatements(const TLexers& lexers, const TParsers& parsers, cons
 
 class TTranslator: public NSQLTranslation::ITranslator {
 public:
+    bool AcceptsProjectSetting(const NYql::TProjectSettings::TPragma& pragma) const override {
+        return AcceptsSqlProjectSetting(pragma);
+    }
+
     TTranslator(TLexers lexers, TParsers parsers)
         : Lexers_(std::move(lexers))
         , Parsers_(std::move(parsers))

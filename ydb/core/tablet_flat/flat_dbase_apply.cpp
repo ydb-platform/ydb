@@ -593,6 +593,8 @@ bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrCompaction::TCo
 {
     auto *table = Table(tid);
     TIntrusiveConstPtr<TCompactionPolicy> policy(new TCompactionPolicy(proto));
+    TString err;
+    Y_ENSURE(NLocalDb::ValidateCompactionPolicy(*policy, err), "Invalid compaction policy: " << err);
     if (table->CompactionPolicy && *(table->CompactionPolicy) == *policy)
         return false;
     PreserveTable(tid);

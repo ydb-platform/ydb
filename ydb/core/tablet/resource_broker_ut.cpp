@@ -177,6 +177,46 @@ static void CheckConfigure(TTestActorRuntime &runtime, TActorId broker, TActorId
     UNIT_ASSERT_VALUES_EQUAL((int)rec.GetSuccess(), (int)success);
 }
 
+static void SubmitOwnedTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
+           ui64 id, ui64 cpu, const TString &type, ui64 tabletId, ui32 followerId = 0)
+{
+    auto event = MakeHolder<TEvResourceBroker::TEvSubmitTask>(id,
+                                                              "task-" + ToString(id),
+                                                              TResourceValues{{cpu, 0}},
+                                                              type,
+                                                              5,
+                                                              nullptr);
+    event->SetOwner(tabletId, followerId);
+    runtime.Send(new IEventHandle(broker, sender, event.Release()));
+}
+
+static THashMap<TString, TEvResourceBroker::TQueueUsage> GetQueueUsage(TTestActorRuntime &runtime, TActorId broker, TActorId sender)
+{
+    runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvQueueUsageRequest));
+    auto answer = runtime.GrabEdgeEvent<TEvResourceBroker::TEvQueueUsageResponse>(sender);
+    THashMap<TString, TEvResourceBroker::TQueueUsage> result;
+    for (auto &queue : answer->Get()->Queues) {
+        result[queue.Name] = queue;
+    }
+    return result;
+}
+
+// Formats usage as sorted "tablet.follower:waiting/running" entries.
+static TString FormatTabletUsage(const TEvResourceBroker::TQueueUsage &usage)
+{
+    TMap<std::pair<ui64, ui32>, std::pair<ui64, ui64>> sorted;
+    for (const auto &tablet : usage.Tablets) {
+        sorted[{tablet.TabletId, tablet.FollowerId}] = {tablet.Waiting, tablet.Running};
+    }
+    TStringBuilder result;
+    for (const auto &[key, value] : sorted) {
+        if (!result.empty())
+            result << " ";
+        result << key.first << "." << key.second << ":" << value.first << "/" << value.second;
+    }
+    return result;
+}
+
 static TIntrusivePtr<IResourceBroker> GetInstantResourceBroker(TTestActorRuntime &runtime, TActorId broker, TActorId sender) {
     runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvResourceBrokerRequest));
     auto answer = runtime.GrabEdgeEvent<TEvResourceBroker::TEvResourceBrokerResponse>(sender);
@@ -669,6 +709,98 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         WaitForResourceAllocation(runtime, 4);
         // Get resources for task-3.
         WaitForResourceAllocation(runtime, 3);
+    }
+
+    Y_UNIT_TEST(TestQueueUsage) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        SetupLogging(runtime);
+
+        auto now = Now();
+        runtime.UpdateCurrentTime(now);
+        TActorId sender1 = runtime.AllocateEdgeActor();
+        TActorId sender2 = runtime.AllocateEdgeActor();
+        TActorId sender3 = runtime.AllocateEdgeActor();
+
+        ::NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto config = MakeTestConfig();
+        for (auto &queue : *config.MutableQueues()) {
+            if (queue.GetName() == "queue_scan") {
+                queue.MutableLimit()->SetResource(0, 2);
+            }
+        }
+        auto broker = CreateResourceBrokerActor(config, counters);
+        auto brokerId = runtime.Register(broker);
+        WaitForBootstrap(runtime);
+
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            UNIT_ASSERT_VALUES_EQUAL(usage.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(usage["queue_scan"].Limit, 2);
+            UNIT_ASSERT_VALUES_EQUAL(usage["queue_default"].Limit, 400);
+            UNIT_ASSERT(usage["queue_scan"].Tablets.empty());
+        }
+
+        // Tablet 100 submits 3 scans, follower 1 of tablet 200 submits one more,
+        // and one task has no owner. Only 2 scans can run at a time.
+        SubmitOwnedTask(runtime, brokerId, sender1, 1, 1, "scan", 100);
+        SubmitOwnedTask(runtime, brokerId, sender1, 2, 1, "scan", 100);
+        SubmitOwnedTask(runtime, brokerId, sender1, 3, 1, "scan", 100);
+        SubmitOwnedTask(runtime, brokerId, sender2, 4, 1, "scan", 200, 1);
+        SubmitTask(runtime, brokerId, sender2, 5, 1, 0, "scan", 5);
+        // Owned task in another queue.
+        SubmitOwnedTask(runtime, brokerId, sender2, 6, 10, "compaction0", 200, 1);
+
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            UNIT_ASSERT_VALUES_EQUAL(FormatTabletUsage(usage["queue_scan"]), "100.0:1/2 200.1:1/0");
+            UNIT_ASSERT_VALUES_EQUAL(FormatTabletUsage(usage["queue_compaction0"]), "200.1:0/10");
+        }
+
+        // Finishing task-1 lets task-3 run.
+        now += TDuration::Seconds(1);
+        runtime.UpdateCurrentTime(now);
+        FinishTask(runtime, brokerId, sender1, 1);
+
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            UNIT_ASSERT_VALUES_EQUAL(FormatTabletUsage(usage["queue_scan"]), "100.0:0/2 200.1:1/0");
+        }
+
+        // Resubmitting an in-fly task makes it wait again.
+        UpdateTask(runtime, brokerId, sender2, 6, 10, 0, 5, "compaction0", true);
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            // Queue has nothing else running, so the task is started again immediately.
+            UNIT_ASSERT_VALUES_EQUAL(FormatTabletUsage(usage["queue_compaction0"]), "200.1:0/10");
+        }
+
+        // Tablet 100 dies: its tasks are removed, task-4 and task-5 start.
+        now += TDuration::Seconds(1);
+        runtime.UpdateCurrentTime(now);
+        runtime.Send(new IEventHandle(brokerId, sender1, new TEvResourceBroker::TEvNotifyActorDied));
+
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            UNIT_ASSERT_VALUES_EQUAL(FormatTabletUsage(usage["queue_scan"]), "200.1:0/1");
+        }
+
+        // Reconfiguration keeps usage consistent.
+        CheckConfigure(runtime, brokerId, sender3, config, true);
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            UNIT_ASSERT_VALUES_EQUAL(FormatTabletUsage(usage["queue_scan"]), "200.1:0/1");
+        }
+
+        now += TDuration::Seconds(1);
+        runtime.UpdateCurrentTime(now);
+        FinishTask(runtime, brokerId, sender2, 4);
+        FinishTask(runtime, brokerId, sender2, 6);
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            UNIT_ASSERT(usage["queue_scan"].Tablets.empty());
+            UNIT_ASSERT(usage["queue_compaction0"].Tablets.empty());
+        }
     }
 
     Y_UNIT_TEST(TestAutoTaskId) {

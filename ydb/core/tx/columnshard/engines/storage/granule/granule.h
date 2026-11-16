@@ -347,12 +347,13 @@ public:
     }
 
     void AddLoadedPortionsToOptimizer() {
-        auto g = OptimizerPlanner->StartModificationGuard();
+        std::vector<std::shared_ptr<TPortionInfo>> portions;
         for (auto&& [_, portion] : Portions) {
             if (!portion->HasRemoveSnapshot()) {
-                g.AddPortion(portion);
+                portions.emplace_back(portion);
             }
         }
+        OptimizerPlanner->AddLoadedPortions(portions);
     }
 
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;

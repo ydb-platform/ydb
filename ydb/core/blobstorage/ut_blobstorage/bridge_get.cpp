@@ -435,6 +435,129 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
     }
 
 
+    enum class EPileFailure { WholeRequest, EveryBlob };
+
+    // both piles are synchronized, and pile 0 fails the read, answering first: the blobs pile 1 has are read anyway, and
+    // the read lacking something in pile 1 fails the way pile 0 did
+    void CheckFailedPileIsMadeUpFor(EPileFailure failure) {
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
+        const auto pileGroups = NBridgeTest::GetPileGroups(env, groupId);
+
+        const TString data = "blob data";
+        const TLogoBlobID inBoth(100500, 1, 1, 0, data.size(), 0);
+        const TLogoBlobID inPile0(100500, 1, 2, 0, data.size(), 0);
+        auto put = [&](ui32 pile, const TLogoBlobID& id) {
+            const auto res = NBridgeTest::QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, pileGroups[pile],
+                1 + 8 * pile, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+        };
+        put(0, inBoth);
+        put(1, inBoth);
+        put(0, inPile0);
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+
+        // fail the answer of pile 0 and hold the answer of pile 1 until the one of pile 0 is delivered
+        auto read = [&](std::initializer_list<TLogoBlobID> ids) {
+            std::unique_ptr<IEventHandle> held;
+            ui32 heldNodeId = 0;
+            bool pile0Answered = false;
+            bool released = false;
+            std::unique_ptr<IEventHandle> result;
+            env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetRecipientRewrite() == edge) {
+                    result = std::move(ev);
+                    return false;
+                }
+                if (ev->GetTypeRewrite() != TEvBlobStorage::EvGetResult || !ev->HasEvent()) {
+                    return true;
+                }
+                if (IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite()); !actor ||
+                        !TypeName(*actor).Contains("TBridgedBlobStorageProxyActor")) {
+                    return true;
+                }
+                auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
+                if (msg->GroupId == pileGroups[0]) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(msg->Status, NKikimrProto::OK, msg->ToString());
+                    if (failure == EPileFailure::WholeRequest) {
+                        msg->Status = NKikimrProto::ERROR;
+                        msg->ErrorReason = "injected failure";
+                    }
+                    for (ui32 i = 0; i < msg->ResponseSz; ++i) {
+                        msg->Responses[i].Status = NKikimrProto::ERROR;
+                        msg->Responses[i].Buffer = {};
+                    }
+                    pile0Answered = true;
+                } else if (msg->GroupId == pileGroups[1] && !released) {
+                    held = std::move(ev);
+                    heldNodeId = nodeId;
+                    return false;
+                }
+                return true;
+            };
+            env.Runtime->WrapInActorContext(edge, [&] {
+                TArrayHolder<TEvBlobStorage::TEvGet::TQuery> q(new TEvBlobStorage::TEvGet::TQuery[ids.size()]);
+                ui32 i = 0;
+                for (const TLogoBlobID& id : ids) {
+                    q[i++].Set(id);
+                }
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(q, ids.size(), TInstant::Max(),
+                    NKikimrBlobStorage::FastRead));
+            });
+            NBridgeTest::WaitUntil(env, [&] { return held && pile0Answered; }, "answers of both piles",
+                TDuration::MilliSeconds(100), 300);
+            env.Sim(TDuration::MilliSeconds(100)); // let the answer of pile 0 be handled
+            UNIT_ASSERT_C(!result, "the read is answered without pile 1");
+            released = true;
+            env.Runtime->Send(held.release(), heldNodeId);
+            NBridgeTest::WaitUntil(env, [&] { return !!result; }, "result", TDuration::MilliSeconds(100), 300);
+            env.Runtime->FilterFunction = {};
+            return result;
+        };
+
+        {
+            auto result = read({inBoth});
+            auto *msg = result->Get<TEvBlobStorage::TEvGetResult>();
+            UNIT_ASSERT_VALUES_EQUAL_C(msg->Status, NKikimrProto::OK, msg->ToString());
+            UNIT_ASSERT_VALUES_EQUAL(msg->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(msg->Responses[0].Status, NKikimrProto::OK, msg->ToString());
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Buffer.ConvertToString(), data);
+        }
+
+        {
+            // pile 1 lacks the second blob, which is not the proof of its absence
+            auto result = read({inBoth, inPile0});
+            auto *msg = result->Get<TEvBlobStorage::TEvGetResult>();
+            if (failure == EPileFailure::WholeRequest) {
+                UNIT_ASSERT_VALUES_EQUAL_C(msg->Status, NKikimrProto::ERROR, msg->ToString());
+                UNIT_ASSERT_VALUES_EQUAL(msg->ErrorReason, "injected failure");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(msg->Status, NKikimrProto::OK, msg->ToString());
+                UNIT_ASSERT_VALUES_EQUAL(msg->ResponseSz, 2);
+                UNIT_ASSERT_VALUES_EQUAL_C(msg->Responses[0].Status, NKikimrProto::OK, msg->ToString());
+                UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Buffer.ConvertToString(), data);
+                UNIT_ASSERT_VALUES_EQUAL_C(msg->Responses[1].Status, NKikimrProto::ERROR, msg->ToString());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(FailedPileIsMadeUpFor) {
+        CheckFailedPileIsMadeUpFor(EPileFailure::WholeRequest);
+    }
+
+    Y_UNIT_TEST(FailedBlobsOfPileAreMadeUpFor) {
+        CheckFailedPileIsMadeUpFor(EPileFailure::EveryBlob);
+    }
+
+
     // the piles have different data of the same blob, as after a corruption; the reads comparing the answers of piles
     // fail rather than return either of them or stop the node
     Y_UNIT_TEST(DivergentPilesFailReads) {

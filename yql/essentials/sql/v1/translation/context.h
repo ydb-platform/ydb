@@ -59,6 +59,7 @@ struct TScopedState: public TThrRefBase {
     bool SimplePgByDefault = false;
     TNamedNodesMap NamedNodes;
     THashSet<std::pair</*prefix=*/TString, /*pragma=*/TString>> ActivePragmas;
+    THashSet<std::pair</*prefix=*/TString, /*pragma=*/TString>> QueryPragmas;
 
     struct TLocal {
         TVector<std::pair<TString, TDeferredAtom>> UsedClusters;
@@ -179,6 +180,7 @@ public:
 
     bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
     void SetRelativePathPrefix(const TString& value);
+    void ResetRelativePathPrefix();
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
     TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;

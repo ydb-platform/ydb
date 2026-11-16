@@ -4,6 +4,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/util/backoff.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/queue.h>
 #include <util/string/builder.h>
 
@@ -209,6 +210,12 @@ private:
 } // namespace
 
 void TSchemeShard::StartIndexShadowDataRepair(const TActorContext& ctx, TVector<TPathId>&& paths) {
+    EraseIf(paths, [this](const TPathId& pathId) {
+        const auto index = Indexes.find(PathsById.at(pathId)->ParentPathId);
+        return index == Indexes.end()
+            || index->second->Type != NKikimrSchemeOp::EIndexTypeGlobalUnique
+            || index->second->State != NKikimrSchemeOp::EIndexStateReady;
+    });
     if (!paths.empty()) {
         IndexShadowDataRepairerId = ctx.RegisterWithSameMailbox(
             new TIndexShadowDataRepairer(this, std::move(paths)));

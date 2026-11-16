@@ -432,7 +432,24 @@ Y_UNIT_TEST_SUITE(IndexShadowDataRepairTest) {
         test.CheckRows();
     }
 
-    Y_UNIT_TEST(RecoveredBuildFinishesBeforeRepair) {
+    Y_UNIT_TEST_FLAG(StartupSkipsUnaffectedIndexes, Unique) {
+        TRepairTest test;
+        test.BuildIndex("Index", Unique ? NKikimrSchemeOp::EIndexTypeGlobalUnique : NKikimrSchemeOp::EIndexTypeGlobal);
+        if (!Unique) {
+            test.PersistLegacyFlags();
+        }
+        unsigned repairWorkers = 0;
+        auto bootstraps = test.Runtime.AddObserver<TEvents::TEvBootstrap>([&](const auto& ev) {
+            if (test.Runtime.FindActorName(ev->Recipient).Contains("SHADOW_DATA_REPAIR")) {
+                ++repairWorkers;
+            }
+        });
+        test.Reboot();
+        test.Env.SimulateSleep(test.Runtime, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(repairWorkers, 0);
+    }
+
+    Y_UNIT_TEST(UnfinishedIndexIsRepairedOnNextRestart) {
         TRepairTest test;
         TBlockEvents<TEvDataShard::TEvValidateUniqueIndexRequest> validations(test.Runtime);
         const ui64 buildId = ++test.TxId;
@@ -440,6 +457,12 @@ Y_UNIT_TEST_SUITE(IndexShadowDataRepairTest) {
             TBuildIndexConfig{"Index", NKikimrSchemeOp::EIndexTypeGlobalUnique, {"value"}, {}, {}});
         test.Runtime.WaitFor("unique index validation", [&] { return !validations.empty(); });
         test.PersistLegacyFlags();
+        unsigned repairWorkers = 0;
+        auto bootstraps = test.Runtime.AddObserver<TEvents::TEvBootstrap>([&](const auto& ev) {
+            if (test.Runtime.FindActorName(ev->Recipient).Contains("SHADOW_DATA_REPAIR")) {
+                ++repairWorkers;
+            }
+        });
         unsigned repairRequests = 0;
         auto observer = test.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](const auto& ev) {
             if (ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpRepairIndexShadowData) {
@@ -448,13 +471,19 @@ Y_UNIT_TEST_SUITE(IndexShadowDataRepairTest) {
         });
         test.Reboot();
         test.Env.SimulateSleep(test.Runtime, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(repairWorkers, 0);
         UNIT_ASSERT_VALUES_EQUAL(repairRequests, 0);
         UNIT_ASSERT(test.Describe().GetPathDescription().GetTable().GetPartitionConfig().GetShadowData());
         UNIT_ASSERT_VALUES_UNEQUAL(TestGetBuildIndex(test.Runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId)
             .GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
         validations.Stop().Unblock();
         test.Env.TestWaitNotification(test.Runtime, buildId);
+        UNIT_ASSERT_VALUES_EQUAL(repairWorkers, 0);
+        UNIT_ASSERT_VALUES_EQUAL(repairRequests, 0);
+        // Legacy flags injected after preparation are picked up on the next startup.
+        test.Reboot();
         test.Wait();
+        UNIT_ASSERT_VALUES_EQUAL(repairWorkers, 1);
         UNIT_ASSERT(repairRequests > 0);
         CheckShardConfigs(test.ShardConfigs());
         test.CheckRows();

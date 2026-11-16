@@ -12,6 +12,15 @@ void DumpAppliedRule(const TString& name, const NYql::TExprNode::TPtr& input,
 
 bool IsKqpPureExpr(const NYql::NNodes::TExprBase& expr, bool checkDqSources = false, bool checkIndexReads = false);
 bool IsKqpCompletePureExpr(const NYql::NNodes::TExprBase& expr);
+
+// Whether a KQP count can be copied into a source or another stage without
+// changing its value. Physical precomputes are already shared values.
+bool IsKqpRepeatableExpr(const NYql::NNodes::TExprBase& expr);
+
+// Input row count for Take(Skip(input, skip), take), saturated at Uint64 max.
+// The counts must be repeatable because the overflow check reads them again.
+NYql::NNodes::TExprBase BuildKqpTakeSkipCount(const NYql::NNodes::TExprBase& take,
+    const NYql::NNodes::TExprBase& skip, NYql::TExprContext& ctx);
 bool IsKqpPureLambda(const NYql::NNodes::TCoLambda& lambda);
 bool IsKqpPureInputs(const NYql::NNodes::TExprList& inputs);
 

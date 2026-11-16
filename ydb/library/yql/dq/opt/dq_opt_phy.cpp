@@ -2021,22 +2021,6 @@ TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOpti
 }
 
 namespace {
-TExprBase BuildFinalCountStage(const TExprBase& node, const TDqCnUnionAll& input, TExprContext& ctx) {
-    const auto stream = Build<TCoArgument>(ctx, node.Pos()).Name("stream").Done();
-    const auto stage = Build<TDqStage>(ctx, node.Pos())
-        .Inputs().Add(input).Build()
-        .Program()
-            .Args({stream})
-            .Body(ctx.ReplaceNode(node.Ptr(), input.Ref(), stream.Ptr()))
-            .Build()
-        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
-        .Done();
-
-    return Build<TDqCnUnionAll>(ctx, node.Pos())
-        .Output().Stage(stage).Index().Build("0").Build()
-        .Done();
-}
-
 template <typename TBuilder>
 bool AddSortColumn(const TExprBase& key, const TExprBase& ascending, TExprContext& ctx, const TExprBase& node,
     const TCoLambda& sortKeySelector, TBuilder& sortColumnList, TVector<const TTypeAnnotationNode*>& sortKeyTypes)
@@ -2088,10 +2072,6 @@ TExprBase DqBuildTopStage(TExprBase node, TExprContext& ctx, IOptimizationContex
 
     if (!CanPushDqExpr(top.Count(), dqUnion) || !CanPushDqExpr(top.KeySelectorLambda(), dqUnion)) {
         return node;
-    }
-
-    if (!IsDqRepeatableExpr(top.Count())) {
-        return BuildFinalCountStage(node, dqUnion, ctx);
     }
 
     if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
@@ -2160,10 +2140,6 @@ TExprBase DqBuildTopSortStage(TExprBase node, TExprContext& ctx, IOptimizationCo
 
     if (!CanPushDqExpr(topSort.Count(), dqUnion) || !CanPushDqExpr(topSort.KeySelectorLambda(), dqUnion)) {
         return node;
-    }
-
-    if (!IsDqRepeatableExpr(topSort.Count())) {
-        return BuildFinalCountStage(node, dqUnion, ctx);
     }
 
     if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
@@ -2444,10 +2420,6 @@ TExprBase DqBuildTakeStage(TExprBase node, TExprContext& ctx, IOptimizationConte
         return node;
     }
 
-    if (!IsDqRepeatableExpr(take.Count())) {
-        return BuildFinalCountStage(node, dqUnion, ctx);
-    }
-
     if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
         return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTakeBase::idx_Input, std::move(connToPushableStage)));
     }
@@ -2514,12 +2486,6 @@ TExprBase DqBuildTakeSkipStage(TExprBase node, TExprContext& ctx, IOptimizationC
         return node;
     }
 
-    if (!IsDqRepeatableExpr(take.Count()) || !IsDqRepeatableExpr(skip.Count())) {
-        // A copied count in the input stage could disagree with the final
-        // Take/Skip. Keep both operators together and evaluate each count once.
-        return BuildFinalCountStage(node, dqUnion, ctx);
-    }
-
     if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
         return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTakeBase::idx_Input, std::move(connToPushableStage)));
     }
@@ -2528,7 +2494,28 @@ TExprBase DqBuildTakeSkipStage(TExprBase node, TExprContext& ctx, IOptimizationC
         .Args({"stream"})
         .Body<TCoTake>()
             .Input("stream")
-            .Count(BuildDqTakeSkipCount(take.Count(), skip.Count(), ctx))
+            .Count<TCoIf>()
+                .Predicate<TCoCmpGreater>()
+                    .Left(take.Count())
+                    .Right<TCoSub>()
+                        .Left<TCoUint64>()
+                            .Literal()
+                                .Value(ToString(Max<ui64>()), TNodeFlags::Default)
+                            .Build()
+                        .Build()
+                        .Right(skip.Count())
+                    .Build()
+                .Build()
+                .ThenValue<TCoUint64>()
+                    .Literal()
+                        .Value(ToString(Max<ui64>()), TNodeFlags::Default)
+                    .Build()
+                .Build()
+                .ElseValue<TCoAggrAdd>()
+                    .Left(take.Count())
+                    .Right(skip.Count())
+                .Build()
+            .Build()
         .Build()
         .Done();
 

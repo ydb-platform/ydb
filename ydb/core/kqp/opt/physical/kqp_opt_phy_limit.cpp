@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -14,6 +15,60 @@ namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NNodes;
+
+TExprBase KqpBuildFinalLimitStage(TExprBase node, TExprContext& ctx, const TParentsMap& parents,
+    bool allowStageMultiUsage)
+{
+    TMaybeNode<TDqCnUnionAll> input;
+    TMaybeNode<TExprBase> count;
+    TMaybeNode<TExprBase> skipCount;
+    TMaybeNode<TCoLambda> keySelector;
+    if (auto maybeTake = node.Maybe<TCoTakeBase>()) {
+        const auto take = maybeTake.Cast();
+        const auto maybeSkip = take.Input().Maybe<TCoSkip>();
+        input = (maybeSkip ? maybeSkip.Cast().Input() : take.Input()).Maybe<TDqCnUnionAll>();
+        count = take.Count();
+        if (maybeSkip) {
+            skipCount = maybeSkip.Cast().Count();
+        }
+    } else if (auto maybeTop = node.Maybe<TCoTopBase>()) {
+        const auto top = maybeTop.Cast();
+        input = top.Input().Maybe<TDqCnUnionAll>();
+        count = top.Count();
+        keySelector = top.KeySelectorLambda();
+    }
+
+    if (!input || !NYql::NDq::IsSingleConsumerConnection(input.Cast(), parents, allowStageMultiUsage)) {
+        return node;
+    }
+
+    if (!NYql::NDq::CanPushDqExpr(count.Cast(), input.Cast()) ||
+        (skipCount && !NYql::NDq::CanPushDqExpr(skipCount.Cast(), input.Cast())) ||
+        (keySelector && !NYql::NDq::CanPushDqExpr(keySelector.Cast(), input.Cast())))
+    {
+        return node;
+    }
+
+    if (IsKqpRepeatableExpr(count.Cast()) && (!skipCount || IsKqpRepeatableExpr(skipCount.Cast()))) {
+        return node;
+    }
+
+    // Partial and final limits must not evaluate a volatile count separately.
+    // Keep the original expressions together, including any shared descendants.
+    const auto stream = Build<TCoArgument>(ctx, node.Pos()).Name("stream").Done();
+    const auto stage = Build<TDqStage>(ctx, node.Pos())
+        .Inputs().Add(input.Cast()).Build()
+        .Program()
+            .Args({stream})
+            .Body(ctx.ReplaceNode(node.Ptr(), input.Cast().Ref(), stream.Ptr()))
+            .Build()
+        .Settings(NYql::NDq::TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output().Stage(stage).Index().Build("0").Build()
+        .Done();
+}
 
 TExprBase KqpApplyLimitToFullTextIndex(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     Y_UNUSED(kqpCtx);
@@ -43,7 +98,7 @@ TExprBase KqpApplyLimitToFullTextIndex(TExprBase node, TExprContext& ctx, const 
     }
 
     auto limit = take.Count();
-    if (!NYql::NDq::IsDqCompletePureExpr(limit) || !NYql::NDq::IsDqRepeatableExpr(limit)) {
+    if (!NYql::NDq::IsDqCompletePureExpr(limit) || !IsKqpRepeatableExpr(limit)) {
         return node;
     }
     limit = KqpPrecomputeCount(limit, ctx);
@@ -110,8 +165,8 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
         return node;
     }
 
-    if (!NYql::NDq::IsDqRepeatableExpr(take.Count()) ||
-        (maybeSkip && !NYql::NDq::IsDqRepeatableExpr(maybeSkip.Cast().Count())))
+    if (!IsKqpRepeatableExpr(take.Count()) ||
+        (maybeSkip && !IsKqpRepeatableExpr(maybeSkip.Cast().Count())))
     {
         // The source limit must agree with the final Take/Skip counts.
         return node;
@@ -133,7 +188,7 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
     settings.SequentialInFlight = 1;
 
     const auto limitValue = maybeSkip
-        ? NYql::NDq::BuildDqTakeSkipCount(take.Count(), maybeSkip.Cast().Count(), ctx)
+        ? BuildKqpTakeSkipCount(take.Count(), maybeSkip.Cast().Count(), ctx)
         : take.Count();
 
     YQL_CLOG(TRACE, ProviderKqp) << "-- set limit items value to " << limitValue.Ref().Dump();
@@ -182,8 +237,8 @@ TExprBase KqpApplyLimitToOlapReadTable(TExprBase node, TExprContext& ctx, const 
         return node;
     }
 
-    if (!NYql::NDq::IsDqRepeatableExpr(topSort.Count()) ||
-        (maybeSkip && !NYql::NDq::IsDqRepeatableExpr(maybeSkip.Cast().Count())))
+    if (!IsKqpRepeatableExpr(topSort.Count()) ||
+        (maybeSkip && !IsKqpRepeatableExpr(maybeSkip.Cast().Count())))
     {
         return node;
     }
@@ -213,7 +268,7 @@ TExprBase KqpApplyLimitToOlapReadTable(TExprBase node, TExprContext& ctx, const 
     }
 
     const auto limitValue = maybeSkip
-        ? NYql::NDq::BuildDqTakeSkipCount(topSort.Count(), maybeSkip.Cast().Count(), ctx)
+        ? BuildKqpTakeSkipCount(topSort.Count(), maybeSkip.Cast().Count(), ctx)
         : topSort.Count();
 
     YQL_CLOG(TRACE, ProviderKqp) << "-- set limit items value to " << limitValue.Ref().Dump();

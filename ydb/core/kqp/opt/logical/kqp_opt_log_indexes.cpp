@@ -2332,7 +2332,7 @@ TMaybeNode<TExprBase> KqpPushLimitOverFullText(const NYql::NNodes::TExprBase& no
         }
     }
 
-    if (!IsDqRepeatableExpr(topSort.Count())) {
+    if (!IsKqpRepeatableExpr(topSort.Count())) {
         return node;
     }
 

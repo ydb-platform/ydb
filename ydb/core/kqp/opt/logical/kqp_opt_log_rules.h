@@ -96,6 +96,9 @@ NYql::NNodes::TExprBase KqpApplyExtractMembersToReadTable(NYql::NNodes::TExprBas
 NYql::NNodes::TExprBase KqpApplyExtractMembersToReadOlapTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const NYql::TParentsMap& parentsMap, bool allowMultiUsage);
 
+NYql::NNodes::TExprBase KqpRewriteTakeSortToTopSort(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const NYql::TParentsMap& parents);
+
 NYql::NNodes::TExprBase KqpTopSortOverExtend(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const NYql::TParentsMap& parents);
 

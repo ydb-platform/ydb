@@ -36,15 +36,6 @@ inline bool IsDqCompletePureExpr(const NNodes::TExprBase& node, bool isPrecomput
     return node.Ref().IsComplete() && IsDqPureExpr(node, isPrecomputePure);
 }
 
-// Whether copying the expression into another stage preserves its value.
-// Existing physical precomputes are shared values, not repeated evaluations.
-bool IsDqRepeatableExpr(const NNodes::TExprBase& node);
-
-// The number of input rows needed by Take(Skip(input, skip), take), saturated
-// at the Uint64 maximum so an overflowing sum cannot truncate the input.
-// Both counts must be repeatable: the overflow check also reads their values.
-NNodes::TExprBase BuildDqTakeSkipCount(const NNodes::TExprBase& take, const NNodes::TExprBase& skip, TExprContext& ctx);
-
 bool IsDqSelfContainedExpr(const NNodes::TExprBase& node);
 bool IsDqDependsOnStage(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage);
 bool IsDqDependsOnOtherStage(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage);

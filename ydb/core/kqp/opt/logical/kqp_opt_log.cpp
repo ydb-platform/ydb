@@ -311,7 +311,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = DqRewriteTakeSortToTopSort(node, ctx, *getParents());
+        TExprBase output = KqpRewriteTakeSortToTopSort(node, ctx, *getParents());
         DumpAppliedRule("RewriteTakeSortToTopSort", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

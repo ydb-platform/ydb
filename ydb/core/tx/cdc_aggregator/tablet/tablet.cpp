@@ -59,26 +59,27 @@ void TCdcAggregator::SwitchToWork(const TActorContext& ctx) {
     Become(&TThis::StateWork);
 }
 
-void TCdcAggregator::Handle(TEvCdcAggregator::TEvWriteHeartbeats::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_TRACE("Handle",
-        {"ev", ev->Get()->ToString()});
-
-    auto result = MakeHolder<TEvCdcAggregator::TEvWriteHeartbeatsResult>();
-    result->Record.SetStatus(NKikimrCdcAggregator::TEvWriteHeartbeatsResult::NOT_READY);
-    result->Record.SetOrigin(TabletID());
-    ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
-}
-
 void TCdcAggregator::Handle(TEvCdcAggregator::TEvDescribeTracking::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE("Handle",
         {"ev", ev->Get()->ToString()});
 
     auto result = MakeHolder<TEvCdcAggregator::TEvDescribeTrackingResult>();
     if (CdcAggregatorStream) {
-        TVector<ui64> sources(CdcAggregatorStream->GetSourceDataShardIds().begin(), CdcAggregatorStream->GetSourceDataShardIds().end());
+        const auto& lastHeartbeats = CdcAggregatorStream->GetLastHeartbeatBySourceDataShardId();
+        TVector<ui64> sources;
+        for (const auto& [dataShardId, _] : lastHeartbeats) {
+            sources.push_back(dataShardId);
+        }
         std::sort(sources.begin(), sources.end());
         for (const auto dataShardId : sources) {
-            result->Record.AddSources()->SetDataShardId(dataShardId);
+            auto& source = *result->Record.AddSources();
+            source.SetDataShardId(dataShardId);
+            if (const auto& lastHeartbeat = lastHeartbeats.at(dataShardId)) {
+                lastHeartbeat->Version.ToProto(source.MutableLastHeartbeat());
+            }
+        }
+        if (const auto& currentHeartbeat = CdcAggregatorStream->GetCurrentHeartbeat()) {
+            currentHeartbeat->Version.ToProto(result->Record.MutableCurrentHeartbeat());
         }
     }
     ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);

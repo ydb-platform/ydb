@@ -181,9 +181,6 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         const auto configureResult = env.ConfigureTracking({2, 1});
         UNIT_ASSERT_C(configureResult.GetStatus() == TConfigureResult::SUCCESS, configureResult.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({1, 2}));
-
-        const auto writeResult = env.WriteHeartbeats({{1, 100}});
-        UNIT_ASSERT_C(writeResult.GetStatus() == TWriteResult::NOT_READY, writeResult.ShortDebugString());
     }
 
     Y_UNIT_TEST(ReturnsConflictWhenConfigDiffers) {
@@ -411,6 +408,140 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
 
         env.RebootTablet();
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 5}));
+    }
+
+    Y_UNIT_TEST(ShouldReturnWrittenVersionWhenSourceIsKnown) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+
+        // when
+        const auto writeResult = env.WriteHeartbeats({{1, 100}});
+
+        // then
+        UNIT_ASSERT_C(writeResult.GetStatus() == TWriteResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.ResultsSize(), 1);
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetResults(0).GetWrittenVersion().GetStep(), 100);
+    }
+
+    Y_UNIT_TEST(ShouldReturnUnknownSourceWhenSourceIsNotTracked) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+
+        // when
+        const auto writeResult = env.WriteHeartbeats({{3, 100}});
+
+        // then
+        UNIT_ASSERT_C(writeResult.GetStatus() == TWriteResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.ResultsSize(), 1);
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::UNKNOWN_SOURCE, writeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldReturnBadRequestWhenHeartbeatIsMissing) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        auto request = MakeWriteHeartbeats({{1, 100}});
+        request->Record.MutableHeartbeats(0)->ClearHeartbeat();
+
+        // when
+        env.SendRequest(std::move(request));
+        const auto writeResult = env.GrabResult<TEvCdcAggregator::TEvWriteHeartbeatsResult>()->Get()->Record;
+
+        // then
+        UNIT_ASSERT_C(writeResult.GetStatus() == TWriteResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.ResultsSize(), 1);
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::BAD_REQUEST, writeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldKeepLastHeartbeatWhenOlderHeartbeatArrives) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 200}});
+
+        // when
+        const auto writeResult = env.WriteHeartbeats({{1, 100}});
+
+        // then
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetResults(0).GetWrittenVersion().GetStep(), 200);
+        UNIT_ASSERT_VALUES_EQUAL(env.DescribeTracking().GetSources(0).GetLastHeartbeat().GetStep(), 200);
+    }
+
+    Y_UNIT_TEST(ShouldNotSetCurrentHeartbeatWhenSomeSourceHasNotReported) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+
+        // when
+        env.WriteHeartbeats({{1, 100}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_C(!describeResult.HasCurrentHeartbeat(), describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldSetCurrentHeartbeatToMinimumWhenAllSourcesReported) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 200}});
+
+        // when
+        env.WriteHeartbeats({{2, 100}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 100, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldIncludeChildrenWhenParentSplit) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 100}, {2, 200}});
+        env.PartitioningChanged(1, {3, 4});
+
+        // when
+        env.WriteHeartbeats({{3, 300}, {4, 400}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldNotMoveCurrentHeartbeatBackWhenChildReportsOlderVersion) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1});
+        env.WriteHeartbeats({{1, 200}});
+        env.PartitioningChanged(1, {2});
+
+        // when
+        env.WriteHeartbeats({{2, 150}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldKeepHeartbeatsWhenTabletRestarted) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 100}, {2, 200}});
+
+        // when
+        env.RebootTablet();
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 100, describeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetSources(0).GetLastHeartbeat().GetStep(), 100, describeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetSources(1).GetLastHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
     }
 }
 

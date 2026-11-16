@@ -96,6 +96,14 @@ TParseResult<TCdcAggregatorStreamPartitioningChange> TCdcAggregatorStreamProtoCo
     return {std::move(change), TString()};
 }
 
+TParseResult<NPQ::THeartbeat> TCdcAggregatorStreamProtoConverter::ParseHeartbeat(const NKikimrCdcAggregator::TEvWriteHeartbeats_TSourceHeartbeat& proto) const {
+    if (!proto.HasHeartbeat()) {
+        return {std::nullopt, TStringBuilder() << "Heartbeat of DataShard " << proto.GetSourceDataShardId() << " is not set"};
+    }
+
+    return {NPQ::THeartbeat::Parse(proto.GetHeartbeat()), TString()};
+}
+
 TString TCdcAggregatorStreamProtoConverter::SerializeTopic(const TCdcAggregatorStreamTopic& topic) const {
     NKikimrCdcAggregator::TCdcAggregatorStreamTopic proto;
     topic.StreamPathId.ToProto(proto.MutableStreamPathId());

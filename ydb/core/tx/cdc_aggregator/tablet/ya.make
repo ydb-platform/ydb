@@ -9,6 +9,7 @@ SRCS(
     tx_init.cpp
     tx_init_schema.cpp
     tx_partitioning_changed.cpp
+    tx_write_heartbeats.cpp
 )
 
 PEERDIR(

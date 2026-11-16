@@ -9,6 +9,7 @@ namespace NKikimrCdcAggregator {
     class TTrackingConfig;
     class TCdcAggregatorStreamTopic;
     class TEvPartitioningChanged;
+    class TEvWriteHeartbeats_TSourceHeartbeat;
 }
 
 namespace NKikimr::NCdcAggregator {
@@ -21,6 +22,7 @@ public:
     TParseResult<TCdcAggregatorStreamConfig> ParseConfig(const NKikimrCdcAggregator::TTrackingConfig& proto) const;
     TParseResult<TCdcAggregatorStreamTopic> ParseTopic(const NKikimrCdcAggregator::TCdcAggregatorStreamTopic& proto) const;
     TParseResult<TCdcAggregatorStreamPartitioningChange> ParsePartitioningChange(const NKikimrCdcAggregator::TEvPartitioningChanged& proto) const;
+    TParseResult<NPQ::THeartbeat> ParseHeartbeat(const NKikimrCdcAggregator::TEvWriteHeartbeats_TSourceHeartbeat& proto) const;
     TString SerializeTopic(const TCdcAggregatorStreamTopic& topic) const;
 };
 

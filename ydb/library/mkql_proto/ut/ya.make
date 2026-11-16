@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/library/mkql_proto)
 
 ALLOCATOR(J)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 SRCS(

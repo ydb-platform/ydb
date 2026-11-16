@@ -2444,23 +2444,23 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
             CheckAggregatePushdown(client, averages + suffix, true);
         }
 
-        // Storage sums Float in Double. Keep Float sums, including mixed
-        // aggregates, in compute so their state type and rounding are preserved.
+        // As in the old optimizer, column shards compute a Float sum without keys. With keys, they return it as Double,
+        // which compute reads as Float, so keep it in compute, with the aggregates next to it.
         for (const auto& fields : {"SUM(float_value)", "SUM(optional_float)", "SUM(float_value), AVG(unsigned_value)"}) {
             const TString query = TStringBuilder() << "SELECT " << fields
                 << ", COUNT(optional_unsigned) AS cnt FROM `/Root/numeric_aggregates`";
-            CheckAggregatePushdown(client, query, false);
+            CheckAggregatePushdown(client, query, true);
             CheckAggregatePushdown(client, query + " GROUP BY group_key ORDER BY cnt", false);
         }
 
-        // Column shards drop NaN in MIN and MAX, while compute orders it last.
-        // Keep floating-point MIN and MAX, including mixed aggregates, in compute.
+        // As in the old optimizer, column shards compute MIN and MAX of floating-point values. They ignore NaN, which
+        // compute orders above every other value; the data here has none.
         for (const auto& fields : {"MIN(float_value)", "MAX(double_value)", "MIN(optional_float), MAX(optional_float)",
                                    "MAX(double_value), AVG(unsigned_value)"}) {
             const TString query = TStringBuilder() << "SELECT " << fields
                 << ", COUNT(optional_unsigned) AS cnt FROM `/Root/numeric_aggregates`";
-            CheckAggregatePushdown(client, query, false);
-            CheckAggregatePushdown(client, query + " GROUP BY group_key ORDER BY cnt", false);
+            CheckAggregatePushdown(client, query, true);
+            CheckAggregatePushdown(client, query + " GROUP BY group_key ORDER BY cnt", true);
         }
     }
 
@@ -2609,9 +2609,35 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
 
         auto client = kikimr.GetTableClient();
 
-        // AVG(Int32) casts its input to Double with a YQL kernel in the read program.
-        CheckAggregatePushdown(client, "SELECT AVG(level) FROM `/Root/olapStore/olapTable`", false);
+        // Without scalar apply the read program cannot cast the input of AVG(Int32) to Double. As in the old
+        // optimizer, column shards sum the stored type and compute converts the sum.
+        CheckAggregatePushdown(client, "SELECT AVG(level) FROM `/Root/olapStore/olapTable`", true);
+        CheckAggregatePushdown(client, "SELECT AVG(level), SUM(level), COUNT(*) FROM `/Root/olapStore/olapTable`", true);
         CheckAggregatePushdown(client, "SELECT COUNT(*), SUM(level), MIN(level) FROM `/Root/olapStore/olapTable`", true);
+
+        // Without the cast, AVG sums the Float column itself. With keys, column shards return that sum as Double, which
+        // compute reads as Float, so keep it in compute.
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto created = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/floats` (
+                    id Uint64 NOT NULL, k Uint64, f Float,
+                    PRIMARY KEY (id)
+                ) PARTITION BY HASH(id) WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )").GetValueSync();
+            UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (ui64 id = 0; id < 10; ++id) {
+                rows.AddListItem().BeginStruct().AddMember("id").Uint64(id).AddMember("k").OptionalUint64(id % 2)
+                    .AddMember("f").OptionalFloat(1.5f * id).EndStruct();
+            }
+            rows.EndList();
+            const auto written = client.BulkUpsert("/Root/floats", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
+        }
+        CheckAggregatePushdown(client, "SELECT AVG(f) FROM `/Root/floats`", true);
+        CheckAggregatePushdown(client, "SELECT k, AVG(f) AS a FROM `/Root/floats` GROUP BY k ORDER BY k", false);
     }
 
     Y_UNIT_TEST(DoubleOutOfRangeInJson) {
@@ -3510,6 +3536,303 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
         UNIT_ASSERT_C(ast.Contains("x\"256161612562626225\""), ast);
         // CaseSensitive false is a quoted atom. A bare 'false is not how this printer emits it.
         UNIT_ASSERT_C(ast.Contains("'\"false\""), ast);
+    }
+
+    // As in the old optimizer, the column shard computes JSON_VALUE and JSON_EXISTS itself, with the native kernels
+    // that can use JSON indexes, and passes only the JSON_VALUE result into a KqpOlapApply.
+    Y_UNIT_TEST(PredicatePushdown_JsonUsesNativeKernels) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            const auto res = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/foo` (
+                    id Int64 NOT NULL,
+                    j Json,
+                    jd JsonDocument,
+                    PRIMARY KEY (id)
+                ) WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [id, json] : std::vector<std::pair<i64, std::optional<std::string>>>{
+                 {1, R"({"x": "v", "n": "5"})"}, {2, R"({"x": "w", "n": "1"})"}, {3, R"({"y": 1})"}, {4, std::nullopt}}) {
+            rows.AddListItem().BeginStruct().AddMember("id").Int64(id).AddMember("j").OptionalJson(json)
+                .AddMember("jd").OptionalJsonDocument(json).EndStruct();
+        }
+        rows.EndList();
+        const auto upsert = db.BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        struct TCase {
+            TString Predicate;
+            TString Expected;
+            // Callables the plan must have, and must not have. "(KqpOlapApply " is not KqpOlapApplyColumnArg.
+            std::vector<TString> Present;
+            std::vector<TString> Absent;
+        };
+
+        const std::vector<TCase> cases = {
+            {R"(JSON_VALUE(jd, "$.x") = "v")", "[[1]]", {"KqpOlapJsonValue"}, {"(KqpOlapApply ", "Json2."}},
+            {R"(JSON_VALUE(j, "$.x") = "v")", "[[1]]", {"KqpOlapJsonValue"}, {"(KqpOlapApply ", "Json2."}},
+            {R"(JSON_EXISTS(jd, "$.y"))", "[[3]]", {"KqpOlapJsonExists"}, {"(KqpOlapApply ", "Json2."}},
+            {R"(NOT JSON_EXISTS(jd, "$.x"))", "[[3]]", {"KqpOlapJsonExists"}, {"(KqpOlapApply ", "Json2."}},
+            {R"(JSON_VALUE(jd, "$.x") = "v" OR JSON_EXISTS(jd, "$.y"))", "[[1];[3]]", {"KqpOlapJsonValue", "KqpOlapJsonExists"},
+                {"(KqpOlapApply ", "Json2."}},
+            // KqpOlapApply gets the JSON_VALUE result, not the whole JSON column.
+            {R"(CAST(JSON_VALUE(jd, "$.n") AS Int32) > 1)", "[[1]]", {"(KqpOlapApply ", "KqpOlapJsonValue"}, {"Json2."}},
+            // With RETURNING the semantics differ from the native kernel, so the whole column goes to KqpOlapApply.
+            {R"(JSON_VALUE(jd, "$.x" RETURNING Utf8) = "v")", "[[1]]", {"(KqpOlapApply "}, {"KqpOlapJsonValue"}},
+        };
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "SELECT id FROM `/Root/foo` WHERE " + testCase.Predicate + " ORDER BY id;";
+            auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_C(ast.Contains("KqpOlapFilter"), query << ", AST: " << ast);
+            for (const auto& callable : testCase.Present) {
+                UNIT_ASSERT_C(ast.Contains(callable), query << ": no " << callable << ", AST: " << ast);
+            }
+            for (const auto& callable : testCase.Absent) {
+                UNIT_ASSERT_C(!ast.Contains(callable), query << ": unexpected " << callable << ", AST: " << ast);
+            }
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYson(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // As in the old optimizer, a simple ILIKE runs as a direct kernel of the column shard, not through KqpOlapApply,
+    // and OptEnableOlapFastAsciiIgnoreCase picks the fast contains kernel.
+    Y_UNIT_TEST(PredicatePushdown_SimpleILikeUsesDirectKernel) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            const auto res = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/foo` (
+                    id Int64 NOT NULL,
+                    str String,
+                    u_str Utf8,
+                    PRIMARY KEY (id)
+                ) WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [id, value] : std::vector<std::pair<i64, std::optional<std::string>>>{
+                 {1, "foobar"}, {2, "baz"}, {3, "fooqux"}, {4, std::nullopt}}) {
+            rows.AddListItem().BeginStruct().AddMember("id").Int64(id).AddMember("str").OptionalString(value)
+                .AddMember("u_str").OptionalUtf8(value).EndStruct();
+        }
+        rows.EndList();
+        const auto upsert = db.BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        struct TCase {
+            TString Pragmas;
+            TString Predicate;
+            TString Expected;
+            TString Kernel;
+        };
+
+        const TString like = "PRAGMA OptimizeSimpleILike; PRAGMA AnsiLike; ";
+        const TString fast = like + "PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = 'true'; ";
+        const std::vector<TCase> cases = {
+            {like, "str ILIKE '%FOO%'", "[[1];[3]]", "String._yql_AsciiContainsIgnoreCase"},
+            {like, "u_str ILIKE '%FOO%'", "[[1];[3]]", "String._yql_AsciiContainsIgnoreCase"},
+            {like, "u_str ILIKE 'FOO%'", "[[1];[3]]", "String._yql_AsciiStartsWithIgnoreCase"},
+            {like, "str ILIKE '%QUX'", "[[3]]", "String._yql_AsciiEndsWithIgnoreCase"},
+            {like, "u_str ILIKE 'BAZ'", "[[2]]", "String._yql_AsciiEqualsIgnoreCase"},
+            // The IgnoreCase callables take a NULL as no match, so NOT ILIKE keeps the NULL row, also without pushdown.
+            {like, "str NOT ILIKE '%FOO%'", "[[2];[4]]", "String._yql_AsciiContainsIgnoreCase"},
+            {fast, "str ILIKE '%FOO%'", "[[1];[3]]", "OlapKernels._yql_AsciiContainsIgnoreCase"},
+            {fast, "u_str ILIKE '%FOO%'", "[[1];[3]]", "OlapKernels._yql_AsciiContainsIgnoreCase"},
+        };
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = testCase.Pragmas + "SELECT id FROM `/Root/foo` WHERE " + testCase.Predicate + " ORDER BY id;";
+            auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_C(ast.Contains("KqpOlapUdf") && ast.Contains(testCase.Kernel), query << ", AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("(KqpOlapApply "), query << ", AST: " << ast);
+            if (testCase.Kernel.StartsWith("OlapKernels.")) {
+                UNIT_ASSERT_C(!ast.Contains("String._yql_AsciiContainsIgnoreCase"), query << ", AST: " << ast);
+            }
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYson(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // Pins the kernels each kind of predicate is pushed with, so that a change of the pushdown for some predicates
+    // keeps the plans of the others, and checks the rows against the same query without pushdown.
+    Y_UNIT_TEST(PredicatePushdown_KernelsByPredicate) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            const auto res = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/t` (
+                    id Int64 NOT NULL,
+                    i32 Int32,
+                    i64 Int64,
+                    d Double,
+                    s String,
+                    u Utf8,
+                    j Json,
+                    jd JsonDocument,
+                    ts Timestamp,
+                    PRIMARY KEY (id)
+                ) WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        struct TRow {
+            i64 Id;
+            std::optional<i32> I32;
+            std::optional<i64> I64;
+            std::optional<double> D;
+            std::optional<std::string> S;
+            std::optional<std::string> U;
+            std::optional<std::string> Json;
+            std::optional<TInstant> Ts;
+        };
+        const std::vector<TRow> tableRows = {
+            {1, 1, 10, 0.5, "a", "a", R"({"x": "v", "n": "5", "a.b": "v", "a": [{"b": "v"}]})", TInstant::ParseIso8601("2021-01-01T00:00:00Z")},
+            {2, 2, 3, 2.0, "abcx", "ABC", R"({"x": "w", "n": "1", "y": 1, "a": [{"b": "w"}]})", TInstant::ParseIso8601("2019-01-01T00:00:00Z")},
+            {3, std::nullopt, 7, 1.0, "xABC", "zabcz", R"({"x": "abc"})", std::nullopt},
+            {4, 3, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, TInstant::ParseIso8601("2022-01-01T00:00:00Z")},
+            {5, 0, 0, 3.0, "abc", "b", R"({"y": 2})", TInstant::ParseIso8601("2020-06-01T00:00:00Z")},
+        };
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& row : tableRows) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("id").Int64(row.Id)
+                .AddMember("i32").OptionalInt32(row.I32)
+                .AddMember("i64").OptionalInt64(row.I64)
+                .AddMember("d").OptionalDouble(row.D)
+                .AddMember("s").OptionalString(row.S)
+                .AddMember("u").OptionalUtf8(row.U)
+                .AddMember("j").OptionalJson(row.Json)
+                .AddMember("jd").OptionalJsonDocument(row.Json)
+                .AddMember("ts").OptionalTimestamp(row.Ts)
+                .EndStruct();
+        }
+        rows.EndList();
+        const auto upsert = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        // "(KqpOlapApply " is a call, unlike KqpOlapApplyColumnArg.
+        const std::vector<TString> kernels = {"KqpOlapFilter", "KqpOlapJsonValue", "KqpOlapJsonExists", "KqpOlapUdf", "(KqpOlapApply ", "Json2.",
+            "OlapKernels."};
+        struct TCase {
+            TString Pragmas;
+            TString Predicate;
+            // The kernels from the list above which the plan has.
+            std::vector<TString> Kernels;
+        };
+
+        const TString like = "PRAGMA OptimizeSimpleILike; PRAGMA AnsiLike; ";
+        const TString fast = like + "PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = 'true'; ";
+        const std::vector<TString> filter = {"KqpOlapFilter"};
+        const std::vector<TString> apply = {"KqpOlapFilter", "(KqpOlapApply "};
+        const std::vector<TCase> cases = {
+            {"", "i32 = 1", filter},
+            {"", "i32 > 1 AND s = 'a'", filter},
+            {"", "i32 = 1 OR u = 'a'u", filter},
+            {"", "NOT (i32 = 1)", filter},
+            {"", "i32 IN (1, 2, 3)", filter},
+            {"", "s LIKE 'ab%'", filter},
+            {"", "u LIKE '%ab%'", filter},
+            {"", "s ILIKE '%ab%'", apply},
+            {"", "COALESCE(i32, 0) > 1", apply},
+            {"", "IF(i32 > 1, i32, 0) = 2", apply},
+            {"", "i32 + 1 = 2", filter},
+            {"", "i64 * 2 > 10", filter},
+            {"", "d < 1.5", filter},
+            {"", "ts > Timestamp('2020-01-01T00:00:00Z')", filter},
+            {"", "s IS NULL", filter},
+            {"", "u IS NOT NULL", filter},
+            {"", "LENGTH(s) > 2", apply},
+            {"", "s || 'x' = 'ax'", {}},
+            {"", "StartsWith(u, 'a'u)", filter},
+            {"", "CAST(s AS Utf8) = 'a'u", apply},
+            {"", "i32 = 1 AND (s = 'a' OR NOT (u = 'b'u))", filter},
+            {"", "s = 'a' XOR i32 = 2", apply},
+            // The column shard computes JSON_VALUE and JSON_EXISTS itself, as in the old optimizer.
+            {"", R"(JSON_VALUE(j, "$.x") = "v")", {"KqpOlapFilter", "KqpOlapJsonValue"}},
+            {"", R"(JSON_VALUE(jd, "$.x") = "v")", {"KqpOlapFilter", "KqpOlapJsonValue"}},
+            {"", R"(JSON_VALUE(jd, "$.\"a.b\"") = "v")", {"KqpOlapFilter", "KqpOlapJsonValue"}},
+            {"", R"(JSON_VALUE(jd, "$.a[0].b") != "v")", {"KqpOlapFilter", "KqpOlapJsonValue"}},
+            {"", R"(JSON_EXISTS(j, "$.x"))", {"KqpOlapFilter", "KqpOlapJsonExists"}},
+            {"", R"(NOT JSON_EXISTS(jd, "$.x"))", {"KqpOlapFilter", "KqpOlapJsonExists"}},
+            {"", R"(JSON_VALUE(jd, "$.x") = "v" AND i32 = 1)", {"KqpOlapFilter", "KqpOlapJsonValue"}},
+            {"", R"(JSON_VALUE(jd, "$.x") = "v" OR JSON_EXISTS(jd, "$.y"))", {"KqpOlapFilter", "KqpOlapJsonValue", "KqpOlapJsonExists"}},
+            {"", R"(JSON_VALUE(jd, "$.x") LIKE "%v%")", {"KqpOlapFilter", "KqpOlapJsonValue"}},
+            // KqpOlapApply gets the JSON_VALUE result, not the whole JSON column.
+            {"", R"(CAST(JSON_VALUE(jd, "$.n") AS Int32) > 1)", {"KqpOlapFilter", "KqpOlapJsonValue", "(KqpOlapApply "}},
+            {"", R"(LENGTH(JSON_VALUE(j, "$.x")) > 1)", {"KqpOlapFilter", "KqpOlapJsonValue", "(KqpOlapApply "}},
+            {"", R"(COALESCE(JSON_VALUE(jd, "$.x"), "d") = "v")", {"KqpOlapFilter", "KqpOlapJsonValue", "(KqpOlapApply "}},
+            // RETURNING has other semantics than the native kernel, so the whole column goes to KqpOlapApply.
+            {"", R"(JSON_VALUE(jd, "$.x" RETURNING Int32) = 1)", {"KqpOlapFilter", "(KqpOlapApply ", "Json2."}},
+            // A simple ILIKE is a direct kernel, and the pragma picks the fast contains kernel.
+            {like, "s ILIKE '%abc%'", {"KqpOlapFilter", "KqpOlapUdf"}},
+            {like, "u ILIKE 'abc%'", {"KqpOlapFilter", "KqpOlapUdf"}},
+            {like, "s ILIKE '%abc'", {"KqpOlapFilter", "KqpOlapUdf"}},
+            {like, "u ILIKE 'abc'", {"KqpOlapFilter", "KqpOlapUdf"}},
+            {like, "s NOT ILIKE '%abc%'", {"KqpOlapFilter", "KqpOlapUdf"}},
+            {like, "u ILIKE '%abc%' AND i32 = 1", {"KqpOlapFilter", "KqpOlapUdf"}},
+            {like, R"(JSON_VALUE(jd, "$.x") ILIKE '%abc%')", {"KqpOlapFilter", "KqpOlapJsonValue", "KqpOlapUdf"}},
+            {fast, "s ILIKE '%abc%'", {"KqpOlapFilter", "KqpOlapUdf", "OlapKernels."}},
+            {fast, "u ILIKE '%abc%'", {"KqpOlapFilter", "KqpOlapUdf", "OlapKernels."}},
+        };
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const auto execute = [&](const TString& query) {
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return FormatResultSetYson(result.GetResultSet(0));
+        };
+        for (const auto& testCase : cases) {
+            const TString select = "SELECT id FROM `/Root/t` WHERE " + testCase.Predicate + " ORDER BY id;";
+            const TString query = testCase.Pragmas + select;
+            auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            for (const auto& kernel : kernels) {
+                const bool expected = std::find(testCase.Kernels.begin(), testCase.Kernels.end(), kernel) != testCase.Kernels.end();
+                UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains(kernel), expected, query << ": " << kernel << ", AST: " << ast);
+            }
+
+            const auto withoutPushdown = execute(testCase.Pragmas + "PRAGMA Kikimr.OptEnableOlapPushdown = 'false'; " + select);
+            CompareYson(withoutPushdown, execute(query));
+        }
     }
 
 }
@@ -4722,6 +5045,162 @@ Y_UNIT_TEST_SUITE(KqpRboOlapAggregations) {
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
             TString result = FormatResultSetYson(status.GetResultSet(0));
             CompareYson(result, R"([[[0.400000006;]]])");
+        }
+    }
+
+    // As in the old optimizer, PRAGMA OptEnableOlapProvideComputeSharding passes the keys of an aggregate to the column
+    // table read under it, so column shards send all rows of a key to one compute task.
+    Y_UNIT_TEST(AggregationProvidesComputeShardingKeys) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 300, true);
+        auto client = kikimr.GetTableClient();
+
+        const TString aggregates = R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)";
+        const TString sharding = R"(PRAGMA Kikimr.OptEnableOlapProvideComputeSharding = "true";)";
+        const std::vector<TString> queries = {
+            // An aggregate column shards compute.
+            "SELECT level, COUNT(*) AS c FROM `/Root/olapStore/olapTable` GROUP BY level ORDER BY level",
+            // A key range: the physical query builder rebuilds the read settings and must keep the keys.
+            "SELECT level, COUNT(*) AS c FROM `/Root/olapStore/olapTable` WHERE `timestamp` >= Timestamp(\"1970-01-01T00:00:01.000100Z\") "
+                "GROUP BY level ORDER BY level",
+            // An aggregate of an expression, which column shards do not compute.
+            "SELECT level, MAX(LENGTH(message)) AS m FROM `/Root/olapStore/olapTable` GROUP BY level ORDER BY level",
+        };
+
+        const auto getAst = [&](const TString& query) {
+            TStreamExecScanQuerySettings explainSettings;
+            explainSettings.Explain(true);
+            auto explain = client.StreamExecuteScanQuery(query, explainSettings).GetValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+            return TString{CollectStreamResult(explain).QueryStats->Getquery_ast()};
+        };
+        const auto getRows = [&](const TString& query) {
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            return StreamResultToYson(it);
+        };
+        for (const auto& query : queries) {
+            const auto ast = getAst(aggregates + sharding + query);
+            UNIT_ASSERT_C(ast.Contains("GroupByFieldNames"), query << ", AST: " << ast);
+            UNIT_ASSERT_C(!getAst(aggregates + query).Contains("GroupByFieldNames"), query);
+            CompareYson(getRows(aggregates + query), getRows(aggregates + sharding + query));
+        }
+    }
+
+    // As in the old optimizer, an aggregate computes identical aggregations once, so column shards compute one COUNT(*)
+    // for both COUNT(*) of a query.
+    Y_UNIT_TEST(AggregationComputesDuplicatesOnce) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 300, true);
+        auto client = kikimr.GetTableClient();
+
+        const TString aggregates = R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)";
+        struct TCase {
+            TString Query;
+            // The same rows, without duplicate aggregations.
+            TString Expected;
+            // The aggregation in the column shard program.
+            TString Aggregation;
+        };
+        const std::vector<TCase> cases = {
+            {"SELECT level, COUNT(*) AS c, COUNT(*) AS d FROM `/Root/olapStore/olapTable` GROUP BY level ORDER BY level",
+             "SELECT level, c, c AS d FROM (SELECT level, COUNT(*) AS c FROM `/Root/olapStore/olapTable` GROUP BY level) ORDER BY level",
+             R"('"count" '"*")"},
+            {"SELECT level, COUNT(*) AS c FROM `/Root/olapStore/olapTable` GROUP BY level HAVING COUNT(*) > 50 ORDER BY level",
+             "SELECT level, c FROM (SELECT level, COUNT(*) AS c FROM `/Root/olapStore/olapTable` GROUP BY level) WHERE c > 50 ORDER BY level",
+             R"('"count" '"*")"},
+            {"SELECT SUM(level) AS a, SUM(level) AS b, COUNT(level) AS c FROM `/Root/olapStore/olapTable`",
+             "SELECT a, a AS b, c FROM (SELECT SUM(level) AS a, COUNT(level) AS c FROM `/Root/olapStore/olapTable`)",
+             R"('"sum" '"level")"},
+        };
+
+        const auto getAst = [&](const TString& query) {
+            TStreamExecScanQuerySettings explainSettings;
+            explainSettings.Explain(true);
+            auto explain = client.StreamExecuteScanQuery(query, explainSettings).GetValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+            return TString{CollectStreamResult(explain).QueryStats->Getquery_ast()};
+        };
+        const auto getRows = [&](const TString& query) {
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            return StreamResultToYson(it);
+        };
+        const auto count = [](const TString& text, const TString& part) {
+            size_t result = 0;
+            for (auto pos = text.find(part); pos != TString::npos; pos = text.find(part, pos + part.size())) {
+                ++result;
+            }
+            return result;
+        };
+        for (const auto& [query, expected, aggregation] : cases) {
+            const auto ast = getAst(aggregates + query);
+            UNIT_ASSERT_C(ast.Contains("TKqpOlapAgg"), query << ", AST: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(count(ast, aggregation), 1, query << ", AST: " << ast);
+            const auto rows = getRows(expected);
+            CompareYson(rows, getRows(query));
+            CompareYson(rows, getRows(aggregates + query));
+        }
+    }
+
+    // With keys, column shards return the sum of a Float column as Double, while the plan reads it as Float: with debug
+    // checks the compute task aborts the process ("Bad datum type: array[float] expected, array[double] got"), without
+    // them the query returns wrong values. So SUM of Float with keys, and AVG of Float with keys when the read program
+    // cannot cast its input to Double, stay in compute.
+    Y_UNIT_TEST_TWIN(GroupedFloatSumsDoNotAbort, ScalarApply) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableOlapScalarApply(ScalarApply);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        {
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            const auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/floats` (
+                    id Uint64 NOT NULL, k Int32, f Float,
+                    PRIMARY KEY (id)
+                ) PARTITION BY HASH(id) WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            // In Float, 2^24 + 1 rounds back to 2^24, so a Float sum differs from a Double one.
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (ui64 id = 1; id <= 12; ++id) {
+                rows.AddListItem().BeginStruct().AddMember("id").Uint64(id).AddMember("k").OptionalInt32(id % 2)
+                    .AddMember("f").OptionalFloat(id <= 2 ? 16777216.f : 1.f).EndStruct();
+            }
+            rows.EndList();
+            const auto result = kikimr.GetTableClient().BulkUpsert("/Root/floats", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        const auto run = [&](const TString& query) {
+            const auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return std::make_pair(TString{*result.GetStats()->GetAst()}, FormatResultSetYson(result.GetResultSet(0)));
+        };
+        const TString pushdown = R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; )";
+        // The read program casts the input of AVG to Double only with scalar apply, and then column shards may sum it.
+        for (const auto& [query, pushed] : std::vector<std::pair<TString, bool>>{
+                 {"SELECT k, SUM(f) AS s FROM `/Root/floats` GROUP BY k ORDER BY k", false},
+                 {"SELECT k, AVG(f) AS a FROM `/Root/floats` GROUP BY k ORDER BY k", ScalarApply}}) {
+            const auto [ast, rows] = run(pushdown + query);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("TKqpOlapAgg"), pushed, query << ", AST: " << ast);
+            CompareYson(run(query).second, rows);
         }
     }
 }

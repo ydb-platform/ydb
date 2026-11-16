@@ -1312,7 +1312,7 @@
     ],
     "test.test[select_yql-column_ref_or_type-default.txt-Debug]": [
         {
-            "checksum": "497abeca8a5523d28af17af206ce4053",
+            "checksum": "9280bb0043900ca1184e07d75cf236a4",
             "size": 10742,
             "uri": "https://{canondata_backend}/1773845/c64331fbabc4115113182d66ef39ca53f27417a2/resource.tar.gz#test.test_select_yql-column_ref_or_type-default.txt-Debug_/opt.yql"
         }

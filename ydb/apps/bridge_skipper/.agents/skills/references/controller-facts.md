@@ -43,13 +43,15 @@ skipper on `:8080`, control UI on `:21999`). Mock and acceptance passes are not 
   ≤16 MiB; token single line, re-read before every Update and after UNAUTHORIZED; CA/cert/key read
   once, change needs restart), `http.listen` (default `127.0.0.1:8080`), `http.trusted_authorities`,
   `timing.*_seconds`, `health_endpoints_per_pile` (default 2, no upper bound), `logging.level`.
-- Timing defaults (`config.h:48-61`): `state_poll_interval` 1, `read_timeout` 5 (GetClusterState op =
-  client deadline), `round_interval` 10, `selfcheck_operation_timeout` 12 (client deadline op+2),
-  `evidence_ttl` 30, `confirm` 20, `bsc_warmup` 30, `mutation_operation_timeout` 25 (client op+2).
+- Timing defaults (`config.h:48-61`): `state_poll_interval` 1, `read_timeout` 1 (GetClusterState op =
+  client deadline), `round_interval` 1, `selfcheck_operation_timeout` 4 (client deadline op+2),
+  `evidence_ttl` 8, `confirm` 2, `bsc_warmup` 30, `mutation_operation_timeout` 25 (client op+2).
 - Validation invariants (`config.cpp:158-166`): `state_poll + read_timeout < evidence_ttl`;
   `selfcheck_op + 2 + round_interval < evidence_ttl`; `bsc_warmup >= 20`. Nothing ties `confirm` or
   the mutation timeouts to the TTL. The SelfCheck half-budget rule (BSC gets half the operation
-  timeout) is not enforced or documented.
+  timeout) is documented in the configuration example. The default budget targets
+  a committed steady-state failover within 20 s with usable failure evidence and
+  a surviving commit quorum; role warm-up and safety blockers can take longer.
 
 ## Controller loop (`runtime/skipper.cpp`)
 

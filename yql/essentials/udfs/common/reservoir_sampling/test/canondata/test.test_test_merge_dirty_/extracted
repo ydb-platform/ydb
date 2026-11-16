@@ -1,8 +1,0 @@
-<tmp_path>/program.sql:<main>: Error: Execution
-
-    <tmp_path>/program.sql:<main>:12:1: Error: Execution of node: Result
-    	SELECT $serialize($merge(ReservoirSampling::Create("abc", 123ul), ReservoirSampling::Create("abc", 123ul)));
-	^
-        <tmp_path>/program.sql:<main>:12:1: Error: ReservoirSampling: Got same resources as Merge() arguments
-        	SELECT $serialize($merge(ReservoirSampling::Create("abc", 123ul), ReservoirSampling::Create("abc", 123ul)));
-	^

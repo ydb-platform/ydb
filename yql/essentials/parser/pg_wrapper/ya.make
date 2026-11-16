@@ -163,6 +163,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    benchmark
     ut
     test
 )

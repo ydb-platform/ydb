@@ -79,9 +79,6 @@ public:
                 pileInfo.Drain = true;
                 db.Table<Schema::BridgePile>().Key(pileInfo.GetId()).Update<Schema::BridgePile::Drain>(true);
             }
-            if (pileInfo.Drain && !pileInfo.DrainActor) {
-                pileInfo.DrainActor = Self->StartHiveDrain(pileId, TDrainSettings{.DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN, .Forward = false});
-            }
         }
 
         for (auto* tablet : TabletsToRestart) {
@@ -96,6 +93,7 @@ public:
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("THive::TTxUpdatePiles::Complete",
             {"logPrefix", GetLogPrefix()});
+        Self->ProcessPileDrains();
     }
 
 };

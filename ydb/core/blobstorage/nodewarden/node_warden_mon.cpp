@@ -2,7 +2,7 @@
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 
-#include <ydb/core/blobstorage/bridge/syncer/syncer.h>
+#include <ydb/core/blobstorage/syncer/syncer.h>
 
 #include <ydb/core/util/format.h>
 

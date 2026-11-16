@@ -15,6 +15,7 @@
 #include <yql/essentials/providers/common/transform/yql_lazy_init.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -34,6 +35,51 @@
 namespace NYql {
 
 using namespace NNodes;
+
+namespace {
+
+constexpr size_t MaxOperationUdfsInPlan = 20;
+
+TExprNode::TListType CollectOperationExpressions(const TExprNode& node) {
+    TExprNode::TListType expressions;
+    if (auto maybeOp = TMaybeNode<TYtMap>(&node)) {
+        expressions.push_back(maybeOp.Cast().Mapper().Ptr());
+    } else if (auto maybeOp = TMaybeNode<TYtReduce>(&node)) {
+        expressions.push_back(maybeOp.Cast().Reducer().Ptr());
+    } else if (auto maybeOp = TMaybeNode<TYtMapReduce>(&node)) {
+        if (auto maybeLambda = maybeOp.Cast().Mapper().Maybe<TCoLambda>()) {
+            expressions.push_back(maybeLambda.Cast().Ptr());
+        }
+        expressions.push_back(maybeOp.Cast().Reducer().Ptr());
+    } else if (auto maybeOp = TMaybeNode<TYtFill>(&node)) {
+        expressions.push_back(maybeOp.Cast().Content().Ptr());
+    }
+
+    return expressions;
+}
+
+TSet<TString> CollectOperationUdfs(const TExprNode& node) {
+    TSet<TString> udfs;
+    for (const auto& expression : CollectOperationExpressions(node)) {
+        VisitExpr(expression, [&udfs](const TExprNode::TPtr& node) {
+            if (udfs.size() >= MaxOperationUdfsInPlan) {
+                return false;
+            }
+
+            if (TYtOutput::Match(node.Get()) || TYtReadTable::Match(node.Get())) {
+                return false;
+            }
+
+            if (auto name = NCommon::TryGetUdfName(*node)) {
+                udfs.insert(std::move(*name));
+            }
+            return true;
+        });
+    }
+    return udfs;
+}
+
+} // namespace
 
 class TYtDataSinkTrackableNodeProcessor : public TTrackableNodeProcessorBase {
 public:
@@ -609,6 +655,19 @@ public:
 
             NCommon::WriteStreams(writer, "Reducer", maybeOp.Cast().Reducer());
             writer.OnEndMap();
+        }
+
+        if (State_->Types->ShowLinksInPlan) {
+            const auto udfs = CollectOperationUdfs(node);
+            if (!udfs.empty()) {
+                writer.OnKeyedItem("Udfs");
+                writer.OnBeginList();
+                for (const auto& udf : udfs) {
+                    writer.OnListItem();
+                    writer.OnStringScalar(udf);
+                }
+                writer.OnEndList();
+            }
         }
     }
 

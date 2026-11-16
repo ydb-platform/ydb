@@ -675,6 +675,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
         }
 
         case NKqpProto::TKqpPhyTableOperation::kReadOlapRange: {
+            readSettings.RequireSortedRead = operation.GetReadOlapRange().GetRequireSortedRead();
             if (operation.GetReadOlapRange().GetReverse()) {
                 readSettings.SetSorting(ERequestSorting::DESC);
             } else if (operation.GetReadOlapRange().GetSorted()) {

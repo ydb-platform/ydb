@@ -271,6 +271,12 @@ protected:
     TIndex Index;
     THashMap<TLogoBlobID, ui32> RefCounts;
 
+    // Transient read ownership, independent of persistent index references.
+    THashMap<ui64, TVector<TLogoBlobID>> ReadBlobsByRequest;
+    THashMap<TLogoBlobID, ui64> ReadBlobRefCounts;
+    void AcquireReadBlobs(const TIntermediate& intermediate);
+    void ReleaseReadBlobs(ui64 requestUid);
+
     TMap<ui64, TSet<TLogoBlobID>> TrashForVacuum; // vacuum generation -> set of blobs
     TSet<TLogoBlobID> Trash;
     ui64 CompletedVacuumGeneration = 0;
@@ -867,6 +873,11 @@ public:
     ui32 GetRefCount(const TLogoBlobID& id) const {
         const auto it = RefCounts.find(id);
         return it != RefCounts.end() ? it->second : 0;
+    }
+
+    ui64 GetReadBlobRefCount(const TLogoBlobID& id) const {
+        const auto it = ReadBlobRefCounts.find(id);
+        return it != ReadBlobRefCounts.end() ? it->second : 0;
     }
 
     std::weak_ptr<TKeyValueStateLifetimeToken> GetLifetimeToken() const {

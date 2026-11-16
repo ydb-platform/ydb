@@ -1251,27 +1251,37 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
         << tracker->DebugStale(opts.NewPartitionGrace, opts.MaxLag));
     tracker->EnsureFresh(opts.NewPartitionGrace, opts.MaxLag);
 
+    Cerr << "Shutdown: joining sealed unlock thread" << Endl << Flush;
     sealedUnlockThread.Join();
 
     // Join writers first: Close and Write on one producer run on different threads.
+    Cerr << "Shutdown: stopping writers" << Endl << Flush;
     pauseWrites.store(true);
     writeWorkers.Join();
     for (auto& writer : writers) {
         Y_UNUSED(writer->Close(TDuration::Seconds(1)));
     }
     writers.clear();
+    Cerr << "Shutdown: writers closed" << Endl << Flush;
 
     commitWorkers.Stop.store(true);
     callbackShared->CommitQueue.CommitAllRandom();
     commitWorkers.Join();
+    Cerr << "Shutdown: commit workers stopped" << Endl << Flush;
     targetSessions.store(0);
     rewindWorkers.Join();
     readWorkers.Join();
+    Cerr << "Shutdown: closing read sessions" << Endl << Flush;
     sessions.CloseAll();
-    // wait=true deadlocks: in-flight session contexts keep CQ from shutting down.
+    Cerr << "Shutdown: cancelling driver" << Endl << Flush;
+    // wait=true here deadlocks: in-flight session contexts keep CQ from shutting down.
     driver.Stop(false);
+    Cerr << "Shutdown: stopping handlers" << Endl << Flush;
     // Stop the handlers pool before the stack frame that owns it is destroyed.
     handlersExecutor->Stop();
+    Cerr << "Shutdown: joining driver" << Endl << Flush;
+    driver.Stop(true);
+    Cerr << "Shutdown: driver stopped" << Endl << Flush;
 
     Cerr << "Stress finished partitions=" << partitionCount
         << " sessionsOpened=" << opened.load()

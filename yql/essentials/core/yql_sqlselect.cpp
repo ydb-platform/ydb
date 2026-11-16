@@ -55,6 +55,13 @@ TExprNode::TPtr ExpandYqlTraitsFactory(
         .Apply(traitsFactory)
             .With(0, std::move(listType))
             .With(1, std::move(extractor))
+            .Do([&](TExprNodeReplaceBuilder& parent) -> TExprNodeReplaceBuilder& {
+                for (ui32 index = 1; index < factory->ChildrenSize(); ++index) {
+                    parent.With(index + 1, factory->ChildPtr(index));
+                }
+
+                return parent;
+            })
         .Seal()
         .Build();
     // clang-format on
@@ -89,6 +96,19 @@ TExprNode::TPtr ExpandResultType(
     TExprNode::TPtr init = ctxExpr.Builder(traits->Pos())
         .Apply(traits->Child(1))
             .With(0, body)
+            .Do([&](TExprNodeReplaceBuilder& parent) -> TExprNodeReplaceBuilder& {
+                if (traits->Child(1)->Head().ChildrenSize() == 2) {
+                    parent.With(1, ctxExpr.Builder(traits->Pos())
+                        .Callable("InstanceOf")
+                            .Callable(0, "DataType")
+                                .Atom(0, "Uint32")
+                            .Seal()
+                        .Seal()
+                        .Build());
+                }
+
+                return parent;
+            })
         .Seal()
         .Build();
     // clang-format on

@@ -2,7 +2,7 @@
 #include "fetcher.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/resource_pools/resource_pool_classifier_settings.h>

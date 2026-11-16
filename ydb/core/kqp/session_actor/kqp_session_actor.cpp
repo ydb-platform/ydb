@@ -16,6 +16,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/gateway.h>
+#include <ydb/core/kqp/common/simple/mvcc_version.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -534,6 +535,10 @@ public:
         TTimerGuard timer(this);
         YQL_ENSURE(QueryState->GetDatabase() == Settings.Database,
                 "Wrong database, expected:" << Settings.Database << ", got: " << QueryState->GetDatabase());
+
+        if (!ValidateMvccVersion()) {
+            return;
+        }
 
         auto action = QueryState->GetAction();
 
@@ -1612,9 +1617,89 @@ public:
         return true;
     }
 
+    bool ValidateMvccVersion() {
+        const auto value = QueryState->RequestEv->GetMvccVersion();
+        if (!value) {
+            return true;
+        }
+        if (!QueryState->IsInternalCall()) {
+            ReplyQueryError(Ydb::StatusIds::BAD_REQUEST, "x-ydb-mvcc-version is only supported for internal calls");
+            return false;
+        }
+        const auto version = ParseMvccVersion(*value);
+        if (!version) {
+            ReplyQueryError(Ydb::StatusIds::BAD_REQUEST,
+                "Invalid x-ydb-mvcc-version: expected <step>:<txId> with unsigned 64-bit decimal components, "
+                "a finite step, and a nonzero version");
+            return false;
+        }
+        const auto action = QueryState->GetAction();
+        if (action != NKikimrKqp::QUERY_ACTION_EXECUTE && action != NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED) {
+            ReplyQueryError(Ydb::StatusIds::BAD_REQUEST, "x-ydb-mvcc-version is only supported for query execution");
+            return false;
+        }
+        switch (QueryState->GetType()) {
+            case NKikimrKqp::QUERY_TYPE_SQL_DML:
+            case NKikimrKqp::QUERY_TYPE_AST_DML:
+            case NKikimrKqp::QUERY_TYPE_PREPARED_DML:
+                if (!QueryState->HasTxControl()
+                    || (QueryState->GetTxControl().has_begin_tx()
+                        && !QueryState->GetTxControl().begin_tx().has_snapshot_read_only()))
+                {
+                    ReplyQueryError(Ydb::StatusIds::BAD_REQUEST,
+                        "x-ydb-mvcc-version requires a snapshot-read-only transaction");
+                    return false;
+                }
+                break;
+            default:
+                ReplyQueryError(Ydb::StatusIds::BAD_REQUEST,
+                    "x-ydb-mvcc-version is only supported for Table Service data queries");
+                return false;
+        }
+        QueryState->ExternalMvccVersion = *version;
+        return true;
+    }
+
+    bool ApplyMvccVersion() {
+        if (!QueryState->ExternalMvccVersion) {
+            return true;
+        }
+
+        auto& txCtx = *QueryState->TxCtx;
+        if (txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO) {
+            ReplyQueryError(Ydb::StatusIds::BAD_REQUEST,
+                "x-ydb-mvcc-version requires a snapshot-read-only transaction");
+            return false;
+        }
+        for (const auto& tx : QueryState->PreparedQuery->GetPhysicalQuery().GetTransactions()) {
+            if (tx.GetHasEffects() || tx.GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
+                ReplyQueryError(Ydb::StatusIds::BAD_REQUEST, "x-ydb-mvcc-version does not support writes");
+                return false;
+            }
+        }
+
+        const auto& version = *QueryState->ExternalMvccVersion;
+        const IKqpGateway::TKqpSnapshot snapshot(version.Step, version.TxId);
+        const bool continuing = QueryState->HasTxControl() && QueryState->GetTxControl().has_tx_id();
+        if (continuing || txCtx.GetSnapshot().IsValid()) {
+            if (!(txCtx.GetSnapshot() == snapshot)) {
+                ReplyQueryError(Ydb::StatusIds::BAD_REQUEST,
+                    "x-ydb-mvcc-version cannot change the snapshot of an existing transaction");
+                return false;
+            }
+        } else {
+            // Retention belongs to the caller; do not acquire a handle or a managing actor.
+            txCtx.SnapshotHandle.Snapshot = snapshot;
+        }
+        return true;
+    }
+
     bool PrepareQueryContext() {
         YQL_ENSURE(QueryState);
         if (!PrepareQueryTransaction()) {
+            return false;
+        }
+        if (!ApplyMvccVersion()) {
             return false;
         }
 
@@ -3092,6 +3177,17 @@ public:
 
                 default:
                     break;
+            }
+
+            if (status == Ydb::StatusIds::ABORTED && QueryState->ExternalMvccVersion) {
+                // A new attempt cannot restore a caller-owned snapshot that is no longer readable.
+                for (const auto& issue : issues) {
+                    WalkThroughIssues(issue, false, [&](const TIssue& nested, ui16) {
+                        if (nested.GetCode() == TIssuesIds::KIKIMR_PRECONDITION_FAILED) {
+                            status = Ydb::StatusIds::PRECONDITION_FAILED;
+                        }
+                    });
+                }
             }
 
             ReplyQueryError(status, "", MessageFromIssues(issues));

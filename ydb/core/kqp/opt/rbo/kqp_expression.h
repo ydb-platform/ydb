@@ -67,6 +67,9 @@ class TExpression {
     // Check if the expression is a literal of one
     bool IsLiteralOne() const;
 
+    // Recognize unsigned integer literals used for LIMIT and OFFSET.
+    std::optional<ui64> GetUnsignedLiteral() const;
+
     // Return the full lambda ExprNode of this expression
     TExprNode::TPtr GetLambda() const;
 

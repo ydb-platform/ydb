@@ -1,0 +1,104 @@
+import "ydb/core/protos/base.proto";
+import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/scheme/protos/pathid.proto";
+
+package NKikimrCdcAggregator;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TPartition {
+    optional uint32 PartitionId = 1;
+    optional fixed64 TabletId = 2;
+}
+
+message TTrackingConfig {
+    optional NKikimrProto.TPathID StreamPathId = 1;
+    repeated fixed64 SourceDataShardIds = 2;
+    repeated TPartition TargetPartitions = 3;
+    optional string StreamPath = 4;
+}
+
+message TEvConfigureTracking {
+    optional TTrackingConfig Config = 1;
+}
+
+message TEvConfigureTrackingResult {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        SUCCESS = 1;
+        BAD_REQUEST = 2;
+        CONFLICT = 3;
+    }
+
+    optional EStatus Status = 1;
+    optional string Error = 2;
+    optional fixed64 Origin = 3;
+}
+
+message TEvWriteHeartbeats {
+    message TSourceHeartbeat {
+        optional fixed64 SourceDataShardId = 1;
+        optional NKikimrPQ.THeartbeat Heartbeat = 2;
+    }
+
+    repeated TSourceHeartbeat Heartbeats = 1;
+}
+
+message TEvWriteHeartbeatsResult {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        SUCCESS = 1;
+        NOT_READY = 2;
+        BAD_REQUEST = 3;
+    }
+
+    message THeartbeatResult {
+        enum EStatus {
+            STATUS_UNSPECIFIED = 0;
+            SUCCESS = 1;
+            UNKNOWN_SOURCE = 2;
+            BAD_REQUEST = 3;
+        }
+
+        optional fixed64 SourceDataShardId = 1;
+        optional EStatus Status = 2;
+        optional NKikimrProto.TRowVersion WrittenVersion = 3;
+    }
+
+    optional EStatus Status = 1;
+    optional string Error = 2;
+    optional fixed64 Origin = 3;
+    repeated THeartbeatResult Results = 4;
+}
+
+message TEvPartitioningChanged {
+    optional fixed64 ParentDataShardId = 1;
+    repeated fixed64 ChildDataShardIds = 2;
+    optional uint64 OperationId = 3;
+}
+
+message TEvPartitioningChangedAck {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        SUCCESS = 1;
+        NOT_READY = 2;
+        UNKNOWN_SOURCE = 3;
+        BAD_REQUEST = 4;
+    }
+
+    optional EStatus Status = 1;
+    optional string Error = 2;
+    optional fixed64 Origin = 3;
+}
+
+message TEvDescribeTracking {
+}
+
+message TEvDescribeTrackingResult {
+    message TSource {
+        optional fixed64 DataShardId = 1;
+        optional NKikimrProto.TRowVersion LastHeartbeat = 2;
+    }
+
+    optional NKikimrProto.TRowVersion CurrentHeartbeat = 1;
+    repeated TSource Sources = 2;
+}

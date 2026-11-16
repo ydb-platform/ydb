@@ -1,5 +1,6 @@
 #include <ydb/apps/bridge_skipper/domain/health.h>
 #include <ydb/apps/bridge_skipper/domain/mutation.h>
+#include <ydb/apps/bridge_skipper/domain/policy.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 
 #include <library/cpp/testing/common/env.h>
@@ -90,6 +91,327 @@ void AssertVerdict(const THealthEvaluation& evaluation, const TString& pile, EPi
 } // namespace
 
 Y_UNIT_TEST_SUITE(BridgeSkipperHealth) {
+    Y_UNIT_TEST(FallbackEvidenceRedRequiresDecisiveVDiskReasons) {
+        for (unsigned mode = 0; mode != 5; ++mode) {
+            auto raw = Fixture("fallback_red");
+            if (mode == 0) {
+                raw.mutable_issue_log(2)->set_status(Ydb::Monitoring::StatusFlag::BLUE);
+                raw.mutable_issue_log(2)->set_message("Replication in progress");
+            } else if (mode == 1) {
+                raw.mutable_issue_log(1)->set_reason(0, "missing");
+            } else if (mode == 2) {
+                raw.mutable_issue_log(2)->set_status(Ydb::Monitoring::StatusFlag::GREY);
+            } else if (mode == 3) {
+                raw.mutable_issue_log(1)->clear_reason();
+            } else {
+                raw.mutable_issue_log(1)->set_type("BRIDGE_GROUP");
+            }
+            UNIT_ASSERT_C(ClassifySelfCheck(raw).Parts.at("b") == EPart::Incomplete, mode);
+        }
+        UNIT_ASSERT(Classify("fallback_red").Parts.at("b") == EPart::FallbackRed);
+    }
+
+    Y_UNIT_TEST(FreshFallbackFailureTakesPrecedenceOverRetainedSettledLoss) {
+        TScenario s;
+        s.Replies.SelfChecks.clear();
+        auto raw = Fixture("fallback_red");
+        raw.mutable_issue_log(1)->mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name("a");
+        s.AddSelfCheck("b", ClassifySelfCheck(raw));
+        s.AddConnectivity("b", false, true);
+        s.Now = TMonotonic::Seconds(101);
+        s.AddConnectivity("b", false, true);
+        s.Replies.Connectivity.back().Report.BindingInProgress = true;
+        for (const ui64 now : {101u, 103u}) {
+            s.Now = TMonotonic::Seconds(now);
+            s.Replies.SelfChecks.back().SentAt = s.Now;
+            s.Replies.Connectivity.back().Report.SentAt = s.Now;
+            const auto evaluation = s.Evaluate();
+            AssertVerdict(evaluation, "a", EPileVerdict::Failed);
+            UNIT_ASSERT(evaluation.Piles.at("a").FailureEvidence == EFailureEvidence::Fallback);
+            UNIT_ASSERT(evaluation.Piles.at("a").NewestEvidenceSentAt == s.Now);
+        }
+    }
+
+    Y_UNIT_TEST(RealPrimaryPdiskErrorEstablishesStorageFailureDespiteOwnNodeQuorum) {
+        const auto reply = Classify("real_fallback_primary_pdisk_error");
+        UNIT_ASSERT(reply.Mode == ESelfCheckMode::Fallback);
+        UNIT_ASSERT(reply.Parts.at("a") == EPart::FallbackRed);
+        UNIT_ASSERT_VALUES_EQUAL(reply.StorageFailures.size(), 1);
+        UNIT_ASSERT(reply.StorageFailures.contains("a"));
+        TScenario s;
+        s.Replies.SelfChecks.clear();
+        s.AddSelfCheck("b", reply);
+        s.AddConnectivity("a", true, true);
+        s.AddConnectivity("b", true, true);
+        const auto evaluation = s.Evaluate();
+        UNIT_ASSERT(!evaluation.BscAvailable);
+        AssertVerdict(evaluation, "a", EPileVerdict::Failed);
+        UNIT_ASSERT(evaluation.Piles.at("a").FailureEvidence == EFailureEvidence::Storage);
+        UNIT_ASSERT(evaluation.Piles.at("a").SelfQuorum);
+        UNIT_ASSERT(evaluation.Piles.at("a").FallbackRed);
+    }
+
+    Y_UNIT_TEST(StorageFailureRequiresCompletePhysicalDiskErrorReasons) {
+        for (unsigned invalid = 0; invalid != 19; ++invalid) {
+            auto raw = Fixture("real_fallback_primary_pdisk_error");
+            // These are the normalized recorded group, VDisk and PDisk. Keep
+            // mutations tied to the recording's causal graph, not loose notes.
+            UNIT_ASSERT_VALUES_EQUAL(raw.issue_log(4).id(), "issue5");
+            UNIT_ASSERT_VALUES_EQUAL(raw.issue_log(5).id(), "issue6");
+            UNIT_ASSERT_VALUES_EQUAL(raw.issue_log(8).id(), "issue9");
+            switch (invalid) {
+                case 0: // DeviceIoError exists, but is not a cause of the VDisk.
+                    raw.mutable_issue_log(5)->clear_reason();
+                    break;
+                case 1:
+                    raw.mutable_issue_log(5)->set_reason(0, "missing-pdisk");
+                    break;
+                case 2: {
+                    auto duplicate = raw.issue_log(8);
+                    *raw.add_issue_log() = duplicate;
+                    break;
+                }
+                case 3: {
+                    auto duplicate = raw.issue_log(4);
+                    *raw.add_issue_log() = duplicate;
+                    break;
+                }
+                case 4:
+                    raw.mutable_issue_log(8)->set_type("STORAGE_NODE");
+                    break;
+                case 5:
+                    raw.mutable_issue_log(8)->mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name("b");
+                    break;
+                case 6:
+                    raw.mutable_issue_log(8)->mutable_location()->mutable_storage()->mutable_node()->set_id(2);
+                    break;
+                case 7:
+                    raw.mutable_issue_log(8)->set_status(Ydb::Monitoring::StatusFlag::GREY);
+                    break;
+                case 8:
+                    raw.mutable_issue_log(8)->set_message("PDisk is not available");
+                    break;
+                case 9:
+                    raw.mutable_issue_log(8)->set_message("PDisk state is DeviceIoError ");
+                    break;
+                case 10:
+                case 11: {
+                    // One physical error cannot justify a group whose RED
+                    // threshold also needs transport loss or replication.
+                    auto other = raw.issue_log(5);
+                    other.set_id("other-vdisk");
+                    other.clear_reason();
+                    other.set_message(invalid == 10 ? "VDisk is not available" : "Replication in progress");
+                    if (invalid == 11) {
+                        other.set_status(Ydb::Monitoring::StatusFlag::BLUE);
+                    }
+                    *raw.add_issue_log() = other;
+                    raw.mutable_issue_log(4)->add_reason("other-vdisk");
+                    break;
+                }
+                case 12: {
+                    auto* truncated = raw.add_issue_log();
+                    truncated->set_id("truncated");
+                    truncated->set_type("HEALTHCHECK_STATUS");
+                    truncated->set_status(Ydb::Monitoring::StatusFlag::RED);
+                    break;
+                }
+                case 13:
+                    raw.mutable_issue_log(4)->set_status(Ydb::Monitoring::StatusFlag::GREY);
+                    break;
+                case 14:
+                    raw.mutable_issue_log(5)->mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->clear_pile();
+                    break;
+                case 15:
+                    raw.mutable_issue_log(5)->mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name("b");
+                    break;
+                case 16:
+                    raw.mutable_issue_log(5)->set_type("PDISK");
+                    break;
+                case 17:
+                    raw.mutable_issue_log(4)->clear_reason();
+                    break;
+                case 18:
+                    raw.mutable_issue_log(4)->set_type("BRIDGE_GROUP");
+                    break;
+            }
+            const auto classification = ClassifySelfCheck(raw);
+            if (invalid == 12) {
+                UNIT_ASSERT(classification.Truncated);
+            } else {
+                UNIT_ASSERT_C(classification.StorageFailures.empty(), invalid);
+            }
+            if (invalid == 10 || invalid == 11) {
+                UNIT_ASSERT(classification.Parts.at("a") == EPart::FallbackRed);
+            }
+            TScenario s;
+            s.Replies.SelfChecks.clear();
+            s.AddSelfCheck("b", classification);
+            s.AddConnectivity("a", true, true);
+            s.AddConnectivity("b", true, true);
+            const auto evaluation = s.Evaluate();
+            UNIT_ASSERT_C(evaluation.Piles.at("a").Verdict == EPileVerdict::Unknown, invalid);
+            UNIT_ASSERT_C(evaluation.Piles.at("a").SelfQuorum, invalid);
+        }
+    }
+
+    Y_UNIT_TEST(StorageFailureNeedsEveryCurrentOutsideFallbackReplyToAgree) {
+        for (const bool missing : {false, true}) {
+            TScenario s;
+            s.Cluster.Piles["c"] = EPileState::Synchronized;
+            s.Replies.SelfChecks.clear();
+            s.AddSelfCheck("b", Classify("real_fallback_primary_pdisk_error"));
+            auto raw = Fixture("fallback_red");
+            raw.mutable_issue_log(1)->mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name("a");
+            if (missing) {
+                raw.mutable_issue_log()->RemoveLast();
+                raw.mutable_issue_log()->RemoveLast();
+            }
+            s.AddSelfCheck("c", ClassifySelfCheck(raw));
+            s.AddConnectivity("a", true, true);
+            s.AddConnectivity("b", true, true);
+            AssertVerdict(s.Evaluate(), "a", EPileVerdict::Unknown);
+        }
+    }
+
+    Y_UNIT_TEST(StorageFailureDoesNotOverrideCurrentBscEvidence) {
+        TScenario s;
+        s.AddSelfCheck("b", Classify("real_fallback_primary_pdisk_error"));
+        s.AddConnectivity("a", true, true);
+        s.AddConnectivity("b", true, true);
+        const auto evaluation = s.Evaluate();
+        UNIT_ASSERT(evaluation.BscAvailable);
+        AssertVerdict(evaluation, "a", EPileVerdict::Healthy);
+    }
+
+    Y_UNIT_TEST(StorageFailureRequiresFreshCurrentAttributedEvidenceForTheBscHost) {
+        for (unsigned invalid = 0; invalid != 7; ++invalid) {
+            TScenario s;
+            s.Replies.SelfChecks.clear();
+            s.AddSelfCheck("b", Classify("real_fallback_primary_pdisk_error"));
+            s.AddConnectivity("a", true, true);
+            s.AddConnectivity("b", true, true);
+            switch (invalid) {
+                case 0: // Still within TTL, but before this generation was observed.
+                    s.Replies.SelfChecks.back().SentAt = TMonotonic::Seconds(99);
+                    break;
+                case 1:
+                    s.Replies.SelfChecks.back().SentAt = s.Now - s.Params.EvidenceTtl;
+                    break;
+                case 2:
+                    s.Replies.Endpoints.back().Identity = EEndpointIdentity::Mismatch;
+                    break;
+                case 3:
+                    s.Replies.Endpoints.back().Current = false;
+                    break;
+                case 4:
+                    s.Replies.SelfChecks.back().ResponderPile.reset();
+                    break;
+                case 5:
+                    s.Replies.SelfChecks.back().ResponderPile = "c";
+                    break;
+                case 6:
+                    s.Cluster.Piles["a"] = EPileState::Synchronized;
+                    s.Cluster.Piles["b"] = EPileState::Primary;
+                    break;
+            }
+            UNIT_ASSERT_C(s.Evaluate().Piles.at("a").Verdict == EPileVerdict::Unknown, invalid);
+        }
+    }
+
+    Y_UNIT_TEST(RecordedStorageFailureNeedsConfirmationAndAUsableSurvivor) {
+        for (const bool damagedCandidate : {false, true}) {
+            auto raw = Fixture("real_fallback_primary_pdisk_error");
+            if (damagedCandidate) {
+                // Keep the primary's physical-error proof, but give the
+                // survivor its own explicit RED group part in the same reply.
+                const auto candidateFailure = Fixture("fallback_red");
+                for (const auto& issue : candidateFailure.issue_log()) {
+                    *raw.add_issue_log() = issue;
+                }
+            }
+            TScenario s;
+            s.Replies.SelfChecks.clear();
+            s.AddSelfCheck("b", ClassifySelfCheck(raw));
+            s.AddConnectivity("a", true, true);
+            s.AddConnectivity("b", true, true);
+            for (auto& reply : s.Replies.Connectivity) {
+                reply.Report.BindingInProgress = true;
+            }
+            TConfirmations confirmations;
+            for (const ui64 now : {100u, 101u, 102u}) {
+                s.Refresh(now);
+                const auto health = s.Evaluate();
+                AssertVerdict(health, "a", EPileVerdict::Failed);
+                UNIT_ASSERT(health.Piles.at("a").SelfQuorum);
+                UNIT_ASSERT(health.Piles.at("a").FailureEvidence == EFailureEvidence::Storage);
+                confirmations.Update(s.Cluster, health.Piles, s.Now);
+                TViewSelection selection;
+                selection.View = s.Cluster;
+                const auto decision = Decide(selection, health, confirmations, {}, s.Replies.Endpoints,
+                    TDuration::Seconds(2));
+                if (now < 102) {
+                    UNIT_ASSERT(decision.Kind == EDecisionKind::Confirming);
+                    UNIT_ASSERT(!decision.Plan);
+                } else if (damagedCandidate) {
+                    UNIT_ASSERT(decision.Blocker == EBlockerReason::NoCandidate);
+                    UNIT_ASSERT(!decision.Plan);
+                } else {
+                    UNIT_ASSERT(decision.Kind == EDecisionKind::Ready);
+                    UNIT_ASSERT(decision.Plan);
+                    UNIT_ASSERT_VALUES_EQUAL(decision.Plan->ExpectedGeneration, s.Cluster.Generation);
+                    UNIT_ASSERT_VALUES_EQUAL(decision.Plan->Endpoint, "b:2135");
+                    const TExactUpdate expected = {{"a", EPileState::Disconnected}, {"b", EPileState::Primary}};
+                    UNIT_ASSERT(decision.Plan->Update == expected);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StorageFailureHonorsRoleWarmupAndEvidenceGaps) {
+        TScenario s;
+        s.Params.BscWarmup = TDuration::Seconds(20);
+        s.Replies.SelfChecks.clear();
+        s.AddSelfCheck("b", Classify("real_fallback_primary_pdisk_error"));
+        s.AddConnectivity("a", true, true);
+        s.AddConnectivity("b", true, true);
+        AssertVerdict(s.Evaluate(), "a", EPileVerdict::Failed);
+        // Changing PRIMARY/PROMOTED keeps a as BSC host but starts a new
+        // epoch: even a complete device-error reply must respect the warm-up.
+        s.Cluster.Piles["a"] = EPileState::Promoted;
+        s.Cluster.Piles["b"] = EPileState::Primary;
+        ++s.Cluster.Generation;
+        for (auto& reply : s.Replies.Connectivity) {
+            reply.Report.Generation = s.Cluster.Generation;
+        }
+        s.Refresh(101);
+        AssertVerdict(s.Evaluate(), "a", EPileVerdict::Unknown);
+        s.Refresh(120);
+        AssertVerdict(s.Evaluate(), "a", EPileVerdict::Unknown);
+        TConfirmations confirmations;
+        for (const ui64 now : {121u, 123u}) {
+            s.Refresh(now);
+            const auto health = s.Evaluate();
+            AssertVerdict(health, "a", EPileVerdict::Failed);
+            confirmations.Update(s.Cluster, health.Piles, s.Now);
+        }
+        UNIT_ASSERT(confirmations.IsConfirmed("a", TDuration::Seconds(2)));
+        s.Now = TMonotonic::Seconds(153); // the newest send is exactly one TTL old
+        auto health = s.Evaluate();
+        AssertVerdict(health, "a", EPileVerdict::Unknown);
+        confirmations.Update(s.Cluster, health.Piles, s.Now);
+        UNIT_ASSERT(!confirmations.IsConfirmed("a", TDuration::Seconds(2)));
+        s.Refresh(154);
+        health = s.Evaluate();
+        AssertVerdict(health, "a", EPileVerdict::Failed);
+        confirmations.Update(s.Cluster, health.Piles, s.Now);
+        UNIT_ASSERT(!confirmations.IsConfirmed("a", TDuration::Seconds(2)));
+        s.Refresh(156);
+        health = s.Evaluate();
+        confirmations.Update(s.Cluster, health.Piles, s.Now);
+        UNIT_ASSERT(confirmations.IsConfirmed("a", TDuration::Seconds(2)));
+    }
+
     Y_UNIT_TEST(ValidatedConnectivityKeepsQueriedEndpointForRouting) {
         for (const unsigned invalid : {0u, 1u, 2u, 3u}) {
             TScenario s;
@@ -259,6 +581,9 @@ Y_UNIT_TEST_SUITE(BridgeSkipperHealth) {
         UNIT_ASSERT(ClassifySelfCheck(raw).Parts.at("b") == EPart::RedPart);
         raw = Fixture("fallback_grey");
         *raw.add_issue_log() = Fixture("fallback_red").issue_log(1);
+        raw.mutable_issue_log(raw.issue_log_size() - 1)->set_reason(0, "red-disk");
+        *raw.add_issue_log() = Fixture("fallback_red").issue_log(2);
+        raw.mutable_issue_log(raw.issue_log_size() - 1)->set_id("red-disk");
         UNIT_ASSERT(ClassifySelfCheck(raw).Parts.at("b") == EPart::FallbackRed);
         raw = Fixture("blue_only");
         *raw.add_issue_log() = Fixture("blue_only").issue_log(1);

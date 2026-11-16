@@ -5,6 +5,7 @@
 #include "request.h"
 #include "utils.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/http_proxy/events.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -268,9 +269,10 @@ namespace NKikimr::NSqsTopic::V1 {
                 AddAttribute(result, attrName, NSQS::TLimits::MaxMessageSize);
             }
             if (const auto attrName = "MessageRetentionPeriod"sv; HasAttribute(attrName)) {
-                TDuration topicRetentionPeriod = TDuration::Seconds(pqTabletConfig.GetPartitionConfig().GetLifetimeSeconds());
-                TDuration availabilityPeriod = ConsumerConfig ? TDuration::MilliSeconds(ConsumerConfig->GetAvailabilityPeriodMs()) : TDuration::Zero();
-                TDuration duration = Max(topicRetentionPeriod, availabilityPeriod);
+                TDuration duration = TDuration::Seconds(pqTabletConfig.GetPartitionConfig().GetLifetimeSeconds());
+                if (ConsumerConfig && ConsumerConfig->HasAvailabilityPeriodMs()) {
+                    duration = TDuration::MilliSeconds(ConsumerConfig->GetAvailabilityPeriodMs());
+                }
                 AddAttribute(result, attrName, duration.Seconds());
             }
             if (const auto attrName = "ReceiveMessageWaitTimeSeconds"sv; HasAttribute(attrName)) {
@@ -299,9 +301,11 @@ namespace NKikimr::NSqsTopic::V1 {
                 if (HasDlq()) {
                     redrivePolicy["maxReceiveCount"] = ConsumerConfig->GetMaxProcessingAttempts();
                     if (const TString& dlq = ConsumerConfig->GetDeadLetterQueue(); !dlq.empty()) {
+                        const TString databasePrefix = QueueUrl_->Database + "/";
                         TRichQueueUrl dlqUrl{
                             .Database = QueueUrl_->Database,
-                            .TopicPath = dlq,
+                            .TopicPath = AppData()->FeatureFlags.GetEnableRelativePaths() && dlq.StartsWith(databasePrefix)
+                                ? dlq.substr(databasePrefix.size()) : dlq,
                             .Consumer = QueueUrl_->Consumer,
                             .Fifo = QueueUrl_->Fifo,
                         };

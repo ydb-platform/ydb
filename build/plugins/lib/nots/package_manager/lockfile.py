@@ -6,6 +6,7 @@ import re
 from urllib import parse as urlparse
 
 from .common_config import load_tier0_settings
+from .platform import package_supports_platform
 
 try:
     import ymakeyaml as yaml
@@ -203,14 +204,38 @@ class Lockfile(object):
         with open(path, "w") as f:
             yaml.dump(self.data, f, Dumper=yaml.CSafeDumper)
 
-    def get_packages_meta(self):
+    def get_packages_meta(self, platform=None, supported_architectures=None):
         """
         Extracts packages meta from lockfile.
         :rtype: list of LockfilePackageMeta
         """
-        packages = self.data.get("packages", {})
-        mapped = map(lambda x: _parse_package_meta(*x), packages.items())
+        selected = self._select_packages_for_platform(platform, supported_architectures)
+        mapped = map(lambda x: _parse_package_meta(*x), selected)
         return filter(lambda x: x is not None, mapped)
+
+    def _select_packages_for_platform(self, platform, supported_architectures):
+        packages = self.data.get("packages", {})
+        if not platform:
+            return packages.items()
+
+        optional_in_all_contexts = {}
+        for key, snapshot in self.data.get("snapshots", {}).items():
+            package_id = PnpmLockfileHelper.package_id_from_snapshot_id(key)
+            optional_in_all_contexts[package_id] = (
+                optional_in_all_contexts.get(package_id, True) and snapshot.get("optional") is True
+            )
+
+        # Generated TS_PROTO workspaces reuse the owner's tarballs with default pnpm settings.
+        return (
+            (key, metadata)
+            for key, metadata in packages.items()
+            if not optional_in_all_contexts.get(key)
+            or package_supports_platform(metadata, platform)
+            or (
+                supported_architectures is not None
+                and package_supports_platform(metadata, platform, supported_architectures)
+            )
+        )
 
     def update_tarball_resolutions(self, fn):
         """

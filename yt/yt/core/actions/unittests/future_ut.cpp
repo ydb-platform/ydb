@@ -7,6 +7,7 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/context_switch.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
+#include <yt/yt/core/concurrency/suspendable_invoker.h>
 
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/ref_counted_tracker.h>
@@ -1848,9 +1849,9 @@ TEST_F(TFutureTest, WithDeadlineOnSet)
     auto p = NewPromise<void>();
     p.Set();
     auto f1 = p.ToFuture();
-    auto f2 = f1.WithDeadline(TInstant::Now());
+    auto f2 = f1.WithDeadline(TInstant::Zero());
     EXPECT_TRUE(f1.GetOrCrash().IsOK());
-    EXPECT_TRUE(f2.GetOrCrash().IsOK());
+    EXPECT_EQ(NYT::EErrorCode::Timeout, f2.GetOrCrash().GetCode());
 }
 
 TEST_F(TFutureTest, WithDeadlineFail)
@@ -1861,6 +1862,102 @@ TEST_F(TFutureTest, WithDeadlineFail)
     auto f2 = f1.WithDeadline(deadline);
     EXPECT_EQ(NYT::EErrorCode::Timeout, f2.BlockingGet().GetCode());
     EXPECT_EQ(deadline, f2.BlockingGet().Attributes().Get<TInstant>("deadline"));
+}
+
+TEST_F(TFutureTest, WithDeadlineOnSetValue)
+{
+    auto future = MakeFuture(42);
+    auto deadline = TInstant::Zero();
+    auto result = future.WithDeadline(deadline);
+
+    EXPECT_EQ(NYT::EErrorCode::Timeout, result.GetOrCrash().GetCode());
+    EXPECT_EQ(deadline, result.GetOrCrash().Attributes().Get<TInstant>("deadline"));
+    EXPECT_EQ(42, future.GetOrCrash().ValueOrThrow());
+}
+
+TEST_F(TFutureTest, WithDeadlineWithError)
+{
+    auto deadline = TInstant::Zero();
+    auto result = OKFuture.WithDeadline(deadline, {
+        .Error = TError("Update timed out"),
+    });
+
+    const auto& error = result.GetOrCrash();
+    EXPECT_EQ("Update timed out", error.GetMessage());
+    ASSERT_EQ(1u, error.InnerErrors().size());
+    EXPECT_EQ(NYT::EErrorCode::Timeout, error.InnerErrors()[0].GetCode());
+    EXPECT_EQ(deadline, error.InnerErrors()[0].Attributes().Get<TInstant>("deadline"));
+}
+
+TEST_F(TFutureTest, WithDeadlineBeforeExpiry)
+{
+    auto future = MakeFuture(42);
+    auto result = future.WithDeadline(TInstant::Max());
+    EXPECT_EQ(future, result);
+    EXPECT_EQ(42, result.GetOrCrash().ValueOrThrow());
+}
+
+TEST_F(TFutureTest, WithDeadlinePreservesCompletedError)
+{
+    auto future = MakeFuture<int>(TError("Read failed").With("chunk_id", 42));
+    auto result = future.WithDeadline(TInstant::Zero(), {
+        .Error = TError("Read timed out"),
+    });
+
+    EXPECT_EQ(future, result);
+    EXPECT_EQ("Read failed", result.GetOrCrash().GetMessage());
+    EXPECT_EQ(42, result.GetOrCrash().Attributes().Get<int>("chunk_id"));
+}
+
+TEST_F(TFutureTest, WithDeadlineCancelsSynchronously)
+{
+    auto callerThreadId = std::this_thread::get_id();
+    auto promise = NewPromise<int>();
+    auto canceled = NewPromise<std::thread::id>();
+    promise.OnCanceled(BIND([canceled] (const TError& error) {
+        EXPECT_EQ(NYT::EErrorCode::Timeout, error.GetCode());
+        canceled.Set(std::this_thread::get_id());
+    }));
+
+    auto result = promise.ToFuture().WithDeadline(TInstant::Zero());
+    ASSERT_TRUE(result.IsSet());
+    EXPECT_EQ(NYT::EErrorCode::Timeout, result.GetOrCrash().GetCode());
+    EXPECT_TRUE(canceled.ToFuture().IsSet());
+
+    ASSERT_TRUE(canceled.ToFuture().BlockingWait(TDuration::Seconds(10)));
+    EXPECT_EQ(callerThreadId, canceled.GetOrCrash().ValueOrThrow());
+    EXPECT_TRUE(promise.IsCanceled());
+    promise.Set(42);
+    EXPECT_EQ(NYT::EErrorCode::Timeout, result.GetOrCrash().GetCode());
+}
+
+TEST_F(TFutureTest, WithDeadlineCancelsInInvoker)
+{
+    auto queue = New<TActionQueue>();
+    auto invoker = CreateSuspendableInvoker(queue->GetInvoker());
+    WaitUntilSet(invoker->Suspend());
+
+    auto promise = NewPromise<int>();
+    auto canceled = NewPromise<void>();
+    promise.OnCanceled(BIND([canceled, invoker] (const TError& error) {
+        EXPECT_EQ(NYT::EErrorCode::Timeout, error.GetCode());
+        EXPECT_EQ(invoker.Get(), GetCurrentInvoker());
+        canceled.Set();
+    }));
+
+    auto result = promise.ToFuture().WithDeadline(TInstant::Zero(), {
+        .Invoker = invoker,
+    });
+    ASSERT_TRUE(result.IsSet());
+    EXPECT_EQ(NYT::EErrorCode::Timeout, result.GetOrCrash().GetCode());
+    EXPECT_FALSE(promise.IsCanceled());
+    EXPECT_FALSE(canceled.ToFuture().IsSet());
+
+    invoker->Resume();
+    ASSERT_TRUE(canceled.ToFuture().BlockingWait(TDuration::Seconds(10)));
+    EXPECT_TRUE(promise.IsCanceled());
+    promise.Set(42);
+    EXPECT_EQ(NYT::EErrorCode::Timeout, result.GetOrCrash().GetCode());
 }
 
 TEST_F(TFutureTest, WithTimeoutSuccess)

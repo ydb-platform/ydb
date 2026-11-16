@@ -4,7 +4,7 @@ PRAGMA YqlSelect = 'force';
 SELECT
     Sum(l_extendedprice * l_discount) AS revenue
 FROM
-    `/Root/lineitem` as lineitem
+    `lineitem` as lineitem
 WHERE
     l_shipdate >= Date('1994-01-01')
     AND l_shipdate < DateTime::MakeDate(DateTime::ShiftYears(Date('1994-01-01'), 1))

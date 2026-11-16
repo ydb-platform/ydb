@@ -24,13 +24,13 @@ $inv = (
             stddev_samp(inv_quantity_on_hand) AS stdev,
             Avg(inv_quantity_on_hand) AS mean
         FROM
-            `/Root/test/ds/inventory`
+            `inventory`
         ,
-            `/Root/test/ds/item`
+            `item`
         ,
-            `/Root/test/ds/warehouse`
+            `warehouse`
         ,
-            `/Root/test/ds/date_dim`
+            `date_dim`
         WHERE
             inv_item_sk == i_item_sk
             AND inv_warehouse_sk == w_warehouse_sk
@@ -101,13 +101,13 @@ $inv = (
             STDDEV_SAMP(inv_quantity_on_hand) AS stdev,
             Avg(inv_quantity_on_hand) AS mean
         FROM
-            `/Root/test/ds/inventory`
+            `inventory`
         ,
-            `/Root/test/ds/item`
+            `item`
         ,
-            `/Root/test/ds/warehouse`
+            `warehouse`
         ,
-            `/Root/test/ds/date_dim`
+            `date_dim`
         WHERE
             inv_item_sk == i_item_sk
             AND inv_warehouse_sk == w_warehouse_sk

@@ -18,6 +18,7 @@ DATA(
     arcadia/ydb/apps/bridge_skipper/domain/ut/fixtures/bsc_red.pbtxt
     arcadia/ydb/apps/bridge_skipper/domain/ut/fixtures/fallback_grey.pbtxt
     arcadia/ydb/apps/bridge_skipper/domain/ut/fixtures/fallback_red.pbtxt
+    arcadia/ydb/apps/bridge_skipper/domain/ut/fixtures/real_fallback_primary_pdisk_error.pbtxt
     arcadia/ydb/apps/bridge_skipper/domain/ut/fixtures/stage2.pbtxt
     arcadia/ydb/apps/bridge_skipper/domain/ut/fixtures/truncated.pbtxt
     arcadia/ydb/apps/bridge_skipper/domain/ut/fixtures/unattributed.pbtxt

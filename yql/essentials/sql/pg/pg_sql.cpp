@@ -43,6 +43,7 @@ extern "C" {
 #include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
+#include <yql/essentials/core/sql_types/normalize_name.h>
 #include <yql/essentials/utils/log/log_level.h>
 #include <yql/essentials/utils/log/log.h>
 #include <util/string/builder.h>
@@ -294,6 +295,39 @@ TMaybe<TPgConst> GetValueNType(const A_Const* value) {
     }
 }
 
+enum class ESettingKind { Unknown,
+                          SearchPath,
+                          UseBlocks,
+                          EmitAggApply,
+                          UnorderedResult,
+                          DqEngine,
+                          BlockEngine,
+                          TablePathPrefix,
+                          CostBasedOptimizer,
+                          ApplicationName,
+                          Warning };
+
+struct TSettingDescr {
+    ESettingKind Kind = ESettingKind::Unknown;
+    bool IsAllowedForProject = false;
+};
+
+TSettingDescr SettingDescr(const TString& name) {
+    static const THashMap<TString, TSettingDescr> Settings = {
+        {"searchpath", {.Kind = ESettingKind::SearchPath, .IsAllowedForProject = false}},
+        {"useblocks", {.Kind = ESettingKind::UseBlocks, .IsAllowedForProject = false}},
+        {"emitaggapply", {.Kind = ESettingKind::EmitAggApply, .IsAllowedForProject = false}},
+        {"unorderedresult", {.Kind = ESettingKind::UnorderedResult, .IsAllowedForProject = false}},
+        {"dqengine", {.Kind = ESettingKind::DqEngine, .IsAllowedForProject = true}},
+        {"blockengine", {.Kind = ESettingKind::BlockEngine, .IsAllowedForProject = false}},
+        {"tablepathprefix", {.Kind = ESettingKind::TablePathPrefix, .IsAllowedForProject = true}},
+        {"costbasedoptimizer", {.Kind = ESettingKind::CostBasedOptimizer, .IsAllowedForProject = true}},
+        {"applicationname", {.Kind = ESettingKind::ApplicationName, .IsAllowedForProject = false}},
+        {"warning", {.Kind = ESettingKind::Warning, .IsAllowedForProject = true}},
+    };
+    return Settings.Value(name, TSettingDescr{});
+}
+
 class TConverter: public IPGParseEvents {
     friend class TLocationGuard;
 
@@ -347,8 +381,6 @@ public:
     using TViews = THashMap<TString, TView>;
 
     struct TState {
-        TMaybe<TString> ApplicationName;
-        TString CostBasedOptimizer;
         TVector<TAstNode*> Statements;
         ui32 ReadIndex = 0;
         TViews Views;
@@ -365,6 +397,7 @@ public:
         : AstParseResults_(astParseResults)
         , Settings_(settings)
         , WarningPolicy_(settings.IsReplay)
+        , ApplicationName_(settings.ApplicationName)
         , DqEngineEnabled_(Settings_.DqDefaultAuto->Allow())
         , BlockEngineEnabled_(Settings_.BlockDefaultAuto->Allow())
         , StmtParseInfo_(stmtParseInfo)
@@ -373,7 +406,6 @@ public:
     {
         Y_ENSURE(settings.Mode == NSQLTranslation::ESqlMode::QUERY || settings.Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW);
         Y_ENSURE(settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW || !perStatementResult);
-        State_.ApplicationName = Settings_.ApplicationName;
         AstParseResults_.push_back({});
         if (StmtParseInfo_) {
             StmtParseInfo_->push_back({});
@@ -445,10 +477,59 @@ public:
         auto configSource = L(A("DataSource"), QA(NYql::ConfigProviderName));
         State_.Statements.push_back(L(A("let"), A("world"), L(A(NYql::ConfigureName), A("world"), configSource,
                                                               QA("OrderedColumns"))));
+        if (UseBlocks_) {
+            AddExecutionFlag("UseBlocks", *UseBlocks_);
+        }
+        if (EmitAggApply_) {
+            AddExecutionFlag("PgEmitAggApply", *EmitAggApply_);
+        }
+    }
+
+    void AddExecutionFlag(TStringBuf name, bool enabled) {
+        auto configSource = L(A("DataSource"), QA(NYql::ConfigProviderName));
+        State_.Statements.push_back(L(A("let"), A("world"), L(A(NYql::ConfigureName), A("world"), configSource,
+                                                              QA(TString(enabled ? "" : "Disable") + name))));
+    }
+
+    bool ApplyProjectSettings() {
+        bool success = true;
+        for (const auto& pragma : Settings_.ProjectSettings.Pragmas) {
+            if (!NSQLTranslation::IsTranslatorLevelPragma(pragma.Name)) {
+                continue;
+            }
+            TString name = pragma.Name;
+            if (NYql::NormalizeName({}, name)) {
+                continue;
+            }
+            const auto descr = SettingDescr(name);
+            if (descr.Kind == ESettingKind::Unknown || !descr.IsAllowedForProject) {
+                continue;
+            }
+            VariableSetStmt statement{};
+            statement.kind = VAR_SET_VALUE;
+            statement.name = const_cast<char*>(pragma.Name.c_str());
+            TVector<A_Const> values(pragma.Value.size());
+            Y_DEFER {
+                list_free(statement.args);
+            };
+            for (size_t index = 0; index < values.size(); ++index) {
+                values[index].type = T_A_Const;
+                values[index].val.sval.type = T_String;
+                values[index].val.sval.sval = const_cast<char*>(pragma.Value[index].c_str());
+                statement.args = lappend(statement.args, &values[index]);
+            }
+            if (!ParseVariableSetStmt(&statement, /*isSetConfig=*/false, Settings_.StrictConfigValidation)) {
+                success = false;
+            }
+        }
+        return success;
     }
 
     TAstNode* ParseResult(const List* raw, const TMaybe<ui32> statementId = Nothing()) {
         PrepareStatements();
+        if (StatementId_ == 0 && !ApplyProjectSettings()) {
+            return nullptr;
+        }
 
         auto configSource = L(A("DataSource"), QA(NYql::ConfigProviderName));
         ui32 blockEnginePgmPos = State_.Statements.size();
@@ -493,9 +574,9 @@ public:
             State_.Statements.erase(State_.Statements.begin() + dqEnginePgmPos);
         }
 
-        if (State_.CostBasedOptimizer) {
+        if (CostBasedOptimizer_) {
             State_.Statements[costBasedOptimizerPos] = L(A("let"), A("world"), L(A(NYql::ConfigureName), A("world"), configSource,
-                                                                                 QA("CostBasedOptimizer"), QA(State_.CostBasedOptimizer)));
+                                                                                 QA("CostBasedOptimizer"), QA(CostBasedOptimizer_)));
         } else {
             State_.Statements.erase(State_.Statements.begin() + costBasedOptimizerPos);
         }
@@ -2339,14 +2420,16 @@ public:
     }
 
     [[nodiscard]]
-    TAstNode* ParseVariableSetStmt(const VariableSetStmt* value, bool isSetConfig = false) {
+    TAstNode* ParseVariableSetStmt(const VariableSetStmt* value, bool isSetConfig = false, bool failOnUnknownPragma = true) {
         if (value->kind != VAR_SET_VALUE) {
             AddError(TStringBuilder() << "VariableSetStmt, not supported kind: " << (int)value->kind);
             return nullptr;
         }
 
         auto name = to_lower(TString(value->name));
-        if (name == "search_path") {
+        auto normalizedName = name;
+        const auto kind = NYql::NormalizeName({}, normalizedName) ? ESettingKind::Unknown : SettingDescr(normalizedName).Kind;
+        if (kind == ESettingKind::SearchPath) {
             THashSet<TString> visitedValues;
             TVector<TString> values;
             for (int i = 0; i < ListLength(value->args); ++i) {
@@ -2371,7 +2454,7 @@ public:
                 return nullptr;
             }
             if (Settings_.GUCSettings) {
-                Settings_.GUCSettings->Set(name, rawStr, value->is_local);
+                Settings_.GUCSettings->Set("search_path", rawStr, value->is_local);
                 if (StmtParseInfo_) {
                     (*StmtParseInfo_)[StatementId_].KeepInCache = false;
                 }
@@ -2386,7 +2469,7 @@ public:
             }
         }
 
-        if (name == "useblocks" || name == "emitaggapply" || name == "unorderedresult") {
+        if (kind == ESettingKind::UseBlocks || kind == ESettingKind::EmitAggApply || kind == ESettingKind::UnorderedResult) {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -2395,18 +2478,18 @@ public:
             auto arg = ListNodeNth(value->args, 0);
             if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
                 TString rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
-                if (name == "unorderedresult") {
+                if (kind == ESettingKind::UnorderedResult) {
                     UnorderedResult_ = (rawStr == "true");
                 } else {
-                    auto configSource = L(A("DataSource"), QA(NYql::ConfigProviderName));
-                    State_.Statements.push_back(L(A("let"), A("world"), L(A(NYql::ConfigureName), A("world"), configSource,
-                                                                          QA(TString(rawStr == "true" ? "" : "Disable") + TString((name == "useblocks") ? "UseBlocks" : "PgEmitAggApply")))));
+                    const bool enabled = rawStr == "true";
+                    (kind == ESettingKind::UseBlocks ? UseBlocks_ : EmitAggApply_) = enabled;
+                    AddExecutionFlag(kind == ESettingKind::UseBlocks ? "UseBlocks" : "PgEmitAggApply", enabled);
                 }
             } else {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-        } else if (name == "dqengine" || name == "blockengine") {
+        } else if (kind == ESettingKind::DqEngine || kind == ESettingKind::BlockEngine) {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -2416,7 +2499,7 @@ public:
             if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
                 auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
                 auto str = to_lower(TString(rawStr));
-                const bool isDqEngine = name == "dqengine";
+                const bool isDqEngine = kind == ESettingKind::DqEngine;
                 auto& enable = isDqEngine ? DqEngineEnabled_ : BlockEngineEnabled_;
                 auto& force = isDqEngine ? DqEngineForce_ : BlockEngineForce_;
                 if (str == "auto") {
@@ -2469,7 +2552,7 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-        } else if (name == "tablepathprefix") {
+        } else if (kind == ESettingKind::TablePathPrefix) {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -2483,7 +2566,7 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-        } else if (name == "costbasedoptimizer") {
+        } else if (kind == ESettingKind::CostBasedOptimizer) {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -2498,12 +2581,12 @@ public:
                     return nullptr;
                 }
 
-                State_.CostBasedOptimizer = str;
+                CostBasedOptimizer_ = str;
             } else {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-        } else if (name == "applicationname") {
+        } else if (kind == ESettingKind::ApplicationName) {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -2512,12 +2595,12 @@ public:
             auto arg = ListNodeNth(value->args, 0);
             if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
                 auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
-                State_.ApplicationName = rawStr;
+                ApplicationName_ = rawStr;
             } else {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-        } else if (name == "warning") {
+        } else if (kind == ESettingKind::Warning) {
             if (auto x = EnsureIsAvailableOn(Settings_.LangVer, Settings_.BackportMode, NYql::NFeature::PgPragmaWarning); !x) {
                 AddError(TString::Join("VariableSetStmt, ", x.error()));
                 return nullptr;
@@ -2569,8 +2652,10 @@ public:
                 WarningPolicy_.AddRule(defaultRule);
             }
         } else {
-            AddError(TStringBuilder() << "VariableSetStmt, not supported name: " << value->name);
-            return nullptr;
+            if (failOnUnknownPragma) {
+                AddError(TStringBuilder() << "VariableSetStmt, not supported name: " << value->name);
+                return nullptr;
+            }
         }
 
         return State_.Statements.back();
@@ -4961,7 +5046,7 @@ public:
             auto sublink = CAST_NODE(SubLink, value->rexpr);
             auto subselect = CAST_NODE(SelectStmt, sublink->subselect);
             if (subselect->withClause && subselect->withClause->recursive) {
-                if (State_.ApplicationName && State_.ApplicationName->StartsWith("pgAdmin")) {
+                if (ApplicationName_ && ApplicationName_->StartsWith("pgAdmin")) {
                     if (!AddWarning(TIssuesIds::PG_COMPAT, "AEXPR_OP_ANY forced to false")) {
                         return nullptr;
                     }
@@ -5393,6 +5478,10 @@ private:
     TVector<TAstParseResult>& AstParseResults_;
     NSQLTranslation::TTranslationSettings Settings_;
     NYql::TWarningPolicy WarningPolicy_;
+    TMaybe<TString> ApplicationName_;
+    TString CostBasedOptimizer_;
+    TMaybe<bool> UseBlocks_;
+    TMaybe<bool> EmitAggApply_;
     bool DqEngineEnabled_ = false;
     bool DqEngineForce_ = false;
     bool BlockEngineEnabled_ = false;
@@ -6529,6 +6618,11 @@ std::unique_ptr<NYql::NPg::ISqlLanguageParser> CreateSqlLanguageParser() {
 
 class TTranslator: public NSQLTranslation::ITranslator {
 public:
+    bool AcceptsProjectSetting(const TProjectSettings::TPragma& pragma) const override {
+        TString name = pragma.Name;
+        return !NYql::NormalizeName({}, name) && SettingDescr(name).IsAllowedForProject;
+    }
+
     NSQLTranslation::ILexer::TPtr MakeLexer(const NSQLTranslation::TTranslationSettings& settings) final {
         Y_UNUSED(settings);
         ythrow yexception() << "Unsupported method";

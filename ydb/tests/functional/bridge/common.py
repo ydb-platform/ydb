@@ -14,6 +14,46 @@ from hamcrest import assert_that, is_, has_entries
 import copy
 import logging
 import time
+import yaml
+
+import ydb.public.api.protos.ydb_config_pb2 as config_pb2
+from ydb.tests.library.common.wait_for import wait_for
+
+
+def fetch_main_config(cluster):
+    """The main YAML config of the cluster (with its metadata section), as parsed dict."""
+    response = cluster.config_client.fetch_all_configs()
+    assert_that(response.operation.status == StatusIds.SUCCESS)
+    result = config_pb2.FetchConfigResult()
+    response.operation.result.Unpack(result)
+    assert_that(len(result.config) == 1)
+    return yaml.safe_load(result.config[0].config)
+
+
+def try_replace_main_config(cluster, change):
+    """Apply change() to the config section of the main YAML config and replace it; returns the operation."""
+    cfg = fetch_main_config(cluster)
+    cfg["metadata"]["version"] += 1
+    change(cfg["config"])
+    response = cluster.config_client.replace_config(yaml.dump(cfg))
+    return response.operation, cfg["metadata"]["version"]
+
+
+def replace_main_config(cluster, change, logger=logging.getLogger(__name__)):
+    """Replace the main YAML config and wait until every node has stored it; nodes pick it up when restarted."""
+    operation, expected_version = try_replace_main_config(cluster, change)
+    logger.debug("replace_config operation: %s", operation)
+    assert_that(operation.status == StatusIds.SUCCESS, str(operation))
+
+    def config_is_applied():
+        for node in cluster.nodes.values():
+            try:
+                if node.read_node_config()["metadata"]["version"] != expected_version:
+                    return False
+            except (KeyError, OSError, TypeError, yaml.YAMLError):
+                return False
+        return True
+    assert_that(wait_for(config_is_applied, timeout_seconds=60))
 
 
 def value_for(key, tablet_id):
@@ -46,6 +86,7 @@ class BridgeKiKiMRTest(object):
     use_config_store = True
     separate_node_configs = True
     nodes_count = 16
+    use_in_memory_pdisks = False
     pile_names = ("r1", "r2")
     bridge_rpc_timeout = 10
     cms_config = None
@@ -77,7 +118,7 @@ class BridgeKiKiMRTest(object):
         self.configurator = KikimrConfigGenerator(
             self.erasure,
             nodes=self.nodes_count,
-            use_in_memory_pdisks=False,
+            use_in_memory_pdisks=self.use_in_memory_pdisks,
             use_config_store=self.use_config_store,
             metadata_section=self.metadata_section,
             separate_node_configs=self.separate_node_configs,

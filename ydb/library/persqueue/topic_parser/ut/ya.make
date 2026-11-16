@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/library/persqueue/topic_parser)
 
-FORK_SUBTESTS()
-
 SIZE(SMALL)
 
 PEERDIR(

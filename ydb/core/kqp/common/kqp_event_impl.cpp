@@ -106,6 +106,10 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.SetRequestType(requestType.GetRef());
         }
 
+        if (auto mvccVersion = GetMvccVersion()) {
+            Record.MutableRequest()->SetMvccVersion(*mvccVersion);
+        }
+
         if (TxControl) {
             Record.MutableRequest()->MutableTxControl()->CopyFrom(*TxControl);
         }

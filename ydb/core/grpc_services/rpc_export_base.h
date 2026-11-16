@@ -36,7 +36,8 @@ struct TExportConv: public TOperationConv<NKikimrExport::TExport> {
         return operationId;
     }
 
-    static Ydb::Export::ExportToS3Settings ClearEncryptionKey(const Ydb::Export::ExportToS3Settings& settings) {
+    template <typename TSettings>
+    static TSettings ClearEncryptionKey(const TSettings& settings) {
         auto copy = settings;
         if (copy.encryption_settings().has_symmetric_key()) {
             copy.mutable_encryption_settings()->clear_symmetric_key();
@@ -64,7 +65,7 @@ struct TExportConv: public TOperationConv<NKikimrExport::TExport> {
             Fill<ExportToS3Metadata, ExportToS3Result>(operation, in, ClearEncryptionKey(in.GetExportToS3Settings()));
             break;
         case NKikimrExport::TExport::kExportToFsSettings:
-            Fill<ExportToFsMetadata, ExportToFsResult>(operation, in, in.GetExportToFsSettings());
+            Fill<ExportToFsMetadata, ExportToFsResult>(operation, in, ClearEncryptionKey(in.GetExportToFsSettings()));
             break;
         default:
             Y_DEBUG_ABORT("Unknown export kind");

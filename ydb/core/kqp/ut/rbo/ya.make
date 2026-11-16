@@ -59,6 +59,7 @@ END()
 
 RECURSE_FOR_TESTS(
     join_order
+    statistics
     effects
     olap
     basic

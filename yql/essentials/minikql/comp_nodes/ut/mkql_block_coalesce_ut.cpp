@@ -358,7 +358,7 @@ Y_UNIT_TEST(TestBooleanType) {
 
 // Test for Tagged types
 Y_UNIT_TEST(TestTaggedType) {
-    using TaggedIntType = TTagged<ui32, TTag::A>;
+    using TaggedIntType = TTagged<ui32, ETag::A>;
 
     // Test with mixed null/non-null left operands
     TestCoalesceKernel(

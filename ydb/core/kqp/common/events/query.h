@@ -253,6 +253,8 @@ public:
         return Record.GetRequestType();
     }
 
+    TMaybe<TString> GetMvccVersion() const;
+
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetUserToken() const {
         if (RequestCtx && RequestCtx->GetInternalToken()) {
             return RequestCtx->GetInternalToken();

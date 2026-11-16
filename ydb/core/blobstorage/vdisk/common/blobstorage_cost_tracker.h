@@ -425,7 +425,7 @@ public:
         CountRequest(cost);
     }
 
-    template<CDiskOperation TEvent>
+    template<CReadDiskOperation TEvent>
     void CountDefragRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
         GetDiskCostGroup<TEvent>().DefragDiskCost() += cost;

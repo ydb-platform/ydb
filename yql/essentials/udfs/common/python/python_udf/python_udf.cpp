@@ -82,9 +82,11 @@ public:
         }
 #endif
 
-        char executableVar[] = "executable"; // PySys_{Get,Set}Object take a non-const char* arg
-        TPyObjectPtr pyExecutableStr = PyRepr(GetExecPath().data());
-        Y_ABORT_UNLESS(PySys_SetObject(executableVar, pyExecutableStr.Get()) >= 0, "Can't set sys.executable");
+        {
+            char executableVar[] = "executable"; // PySys_{Get,Set}Object take a non-const char* arg
+            TPyObjectPtr pyExecutableStr = PyRepr(GetExecPath().data());
+            Y_ABORT_UNLESS(PySys_SetObject(executableVar, pyExecutableStr.Get()) >= 0, "Can't set sys.executable");
+        }
 
         if (Standalone_) {
             PyEval_InitThreads();

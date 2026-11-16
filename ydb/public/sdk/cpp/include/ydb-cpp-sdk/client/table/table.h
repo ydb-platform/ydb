@@ -13,6 +13,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 
+#include <cstdint>
 #include <memory>
 #include <variant>
 
@@ -128,6 +129,16 @@ struct TSequenceDescription {
         bool NextUsed;
     };
     std::optional<TSetVal> SetVal;
+    // Name of the sequence: serial columns use `_serial_column_<column>` by default, while
+    // sequences provisioned for index columns have their own names.
+    std::string Name;
+    std::optional<int64_t> MinValue;
+    std::optional<int64_t> MaxValue;
+    std::optional<int64_t> StartValue;
+    std::optional<uint64_t> Cache;
+    std::optional<int64_t> Increment;
+    std::optional<bool> Cycle;
+    std::optional<TType> DataType;
 };
 
 struct TTableColumn {
@@ -1080,6 +1091,7 @@ public:
     const std::string& GetName() const;
     std::optional<std::string> GetData() const;
     std::optional<EColumnFamilyCompression> GetCompression() const;
+    std::optional<std::int32_t> GetCompressionLevel() const;
     std::optional<EColumnFamilyCacheMode> GetCacheMode() const;
     std::optional<bool> GetKeepInMemory() const;
 
@@ -1325,6 +1337,7 @@ public:
 
     TColumnFamilyBuilder& SetData(const std::string& media);
     TColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression);
+    TColumnFamilyBuilder& SetCompressionLevel(std::int32_t level);
     TColumnFamilyBuilder& SetCacheMode(EColumnFamilyCacheMode cacheMode);
     TColumnFamilyBuilder& SetKeepInMemory(bool enabled);
 
@@ -1389,6 +1402,11 @@ public:
 
     TTableColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TTableColumnFamilyBuilder& SetCompressionLevel(std::int32_t level) {
+        Builder_.SetCompressionLevel(level);
         return *this;
     }
 
@@ -2065,6 +2083,11 @@ public:
 
     TAlterColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TAlterColumnFamilyBuilder& SetCompressionLevel(std::int32_t level) {
+        Builder_.SetCompressionLevel(level);
         return *this;
     }
 

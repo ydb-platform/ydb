@@ -14,6 +14,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     compile_controller_ut.cpp
     dinode_client_ut.cpp
+    service_module_load_ut.cpp
     chunk_read_ut.cpp
 )
 

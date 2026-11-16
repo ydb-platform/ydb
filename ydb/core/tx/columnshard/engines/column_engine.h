@@ -212,6 +212,7 @@ public:
     virtual std::vector<TSelectedPortionInfo> Select(TInternalPathId pathId, const NReader::TReadDescription& readDescription,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual bool ArePortionsLoaded(const TInternalPathId pathId, const TPKRangesFilter& ranges) const = 0;
+    virtual bool ArePortionsLoadedFrom(const TInternalPathId pathId, const NArrow::TSimpleRow& key) const = 0;
     // nullopt: every table of the shard
     virtual bool AreAllPortionsLoaded(const std::optional<TInternalPathId> pathId) const = 0;
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(

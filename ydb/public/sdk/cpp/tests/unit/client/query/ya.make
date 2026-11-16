@@ -7,8 +7,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-FORK_SUBTESTS()
-
 SRCS(
    client_session_ut.cpp
    deferred_session_creation_ut.cpp

@@ -34,12 +34,13 @@ namespace NKikimr::NStorage {
         // the payload is sent with the key of the bridge feature level the config requires; older versions don't know the
         // keys of the levels they don't support, so they treat such peer as not bridge-capable one and neither connect,
         // nor take its configuration
-        static constexpr std::array<TStringBuf, 5> DistconfKeys{
+        static constexpr std::array<TStringBuf, 6> DistconfKeys{
             "distconf",
             "distconf-pile-list-changed", // BridgeFeatureLevelPileList
             "distconf-pile-ops", // BridgeFeatureLevelPileOps
             "distconf-non-uniform-storage", // BridgeFeatureLevelNonUniformStorage
             "distconf-pile-overrides", // BridgeFeatureLevelPileOverrides
+            "distconf-rollback", // BridgeFeatureLevelRollback
         };
         static_assert(DistconfKeys.size() == BridgeFeatureLevel + 1);
 

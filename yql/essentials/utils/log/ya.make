@@ -7,6 +7,8 @@ SRCS(
     log.cpp
     profile.cpp
     tls_backend.cpp
+    log_component.cpp
+    log_level.cpp
 )
 
 PEERDIR(

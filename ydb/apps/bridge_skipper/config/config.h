@@ -45,16 +45,19 @@ struct THttpConfig {
     TVector<TString> TrustedAuthorities;
 };
 
+// Keep stale positive evidence and failure confirmation inside the normal
+// 20-second failover budget. Safety blockers and post-role-change BSC warm-up
+// can intentionally take longer; no wall-clock deadline authorizes a mutation.
 struct TTimingConfig {
     TDuration StatePollInterval = TDuration::Seconds(1);
-    TDuration ReadTimeout = TDuration::Seconds(5);
-    TDuration RoundInterval = TDuration::Seconds(10);
-    TDuration SelfCheckOperationTimeout = TDuration::Seconds(12);
+    TDuration ReadTimeout = TDuration::Seconds(1);
+    TDuration RoundInterval = TDuration::Seconds(1);
+    TDuration SelfCheckOperationTimeout = TDuration::Seconds(4);
     // Not configurable: the SelfCheck and update client deadlines are their
     // operation timeouts + 2 s. GetClusterState uses ReadTimeout for both.
-    TDuration SelfCheckClientTimeout = TDuration::Seconds(14);
-    TDuration EvidenceTtl = TDuration::Seconds(30);
-    TDuration Confirm = TDuration::Seconds(20);
+    TDuration SelfCheckClientTimeout = TDuration::Seconds(6);
+    TDuration EvidenceTtl = TDuration::Seconds(8);
+    TDuration Confirm = TDuration::Seconds(2);
     TDuration BscWarmup = TDuration::Seconds(30);
     TDuration MutationOperationTimeout = TDuration::Seconds(25);
     TDuration MutationClientTimeout = TDuration::Seconds(27);

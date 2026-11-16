@@ -445,6 +445,31 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         UNIT_ASSERT_LT(TInstant::Now() - started, TDuration::Seconds(5));
     }
 
+    Y_UNIT_TEST(ReadyPartitionIsNotBlockedByEmptyPartitionPastMaxWait) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        EnableFetchLogs(*setup);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        setup->CreateTopic("topic1", "dc1", 2);
+        setup->Write("/Root/topic1", "ready", 0);
+
+        auto ev = Fetch(
+            runtime,
+            MakeSettings({
+                {"/Root/topic1", 0, 0, 1_KB},
+                {"/Root/topic1", 1, 0, 1_KB},
+            }, /*maxWaitTimeMs=*/200, /*totalMaxBytes=*/100),
+            TDuration::Seconds(2));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::SUCCESS, ev->Message);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 2);
+        AssertErrorCode(ev->Response.GetPartResult(0), ::NPersQueue::NErrorCode::OK);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.GetPartResult(0).GetReadResult().GetMaxOffset(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.GetPartResult(0).GetReadResult().ResultSize(), 1);
+        AssertErrorCode(ev->Response.GetPartResult(1), ::NPersQueue::NErrorCode::READ_NOT_DONE);
+    }
+
     Y_UNIT_TEST(MultiPartitionSameTopic) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
         EnableFetchLogs(*setup);

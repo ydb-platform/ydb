@@ -12,6 +12,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/public/pqdata_transaction_compat.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
 #include <ydb/core/persqueue/pqtablet/partition/autopartitioning_manager.h>
@@ -385,6 +386,8 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , NumChannels(numChannels)
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
+    , WriteInitThrottledMs(TDuration::Minutes(1), 100)
+    , WriteInitSessions(TDuration::Seconds(1), 1000)
     , LastEmittedHeartbeat(TRowVersion::Min())
     , LastEmittedSchemaChange(TRowVersion::Min())
     , SamplingControl(samplingControl)
@@ -731,7 +734,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 
     AutopartitioningManager->CleanUp();
 
-    if (AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob()) {
+    // HandlePendingRequests does not run retention while the database is out of space.
+    if (AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob() || WaitingForSubDomainQuota()) {
         ProcessTxsAndUserActs(ctx);
     }
 }
@@ -748,6 +752,9 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
     meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);
+    if (!LastEmittedHeartbeat.IsMin()) {
+        LastEmittedHeartbeat.ToProto(meta.MutableLastEmittedHeartbeat());
+    }
 
     if (IsSupportive()) {
         auto* counterData = meta.MutableCounterData();
@@ -988,6 +995,14 @@ void TPartition::DestroyActor(const TActorContext& ctx)
     }
 
     Die(ctx);
+}
+
+void TPartition::PassAway() {
+    if (WriteSessionsQuoterNotified) {
+        Send(MakeWriteSessionsQuoterId(), new TEvWriteSessionsQuoter::TEvRemove(
+            Config.GetYdbDatabasePath(), TopicName(), Partition.OriginalPartitionId, TabletGeneration));
+    }
+    TBaseTabletActor<TPartition>::PassAway();
 }
 
 void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
@@ -2608,6 +2623,11 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
 
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES, TotalPartitionWriteSpeed);
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES, TotalPartitionWriteSpeedInMessages);
+    const ui64 initThrottledMs = WriteInitThrottledMs.Update(now);
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_INIT_THROTTLED_MS, initThrottledMs);
+    const ui64 initSessions = WriteInitSessions.Update(now);
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_INIT_SESSIONS_USAGE, initSessions);
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_INIT_SESSIONS_LIMIT, AppData(ctx)->PQConfig.GetWriteSessionsInitRps());
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {
@@ -4523,6 +4543,8 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TMessag
         result = PreProcessRequest(msg.GetDeregisterMessageGroup(), affectedSourceIdsAndConsumers);
     } else if (msg.IsSplitMessageGroup()) {
         result = PreProcessRequest(msg.GetSplitMessageGroup(), affectedSourceIdsAndConsumers);
+    } else if (msg.IsEmitHeartbeat()) {
+        result = PreProcessRequest(msg.GetEmitHeartbeat(), affectedSourceIdsAndConsumers);
     } else {
         PQ_ENSURE(msg.IsOwnership());
     }
@@ -4552,6 +4574,8 @@ bool TPartition::ExecUserActionOrTransaction(TMessage& msg,
         ExecRequest(msg.GetDeregisterMessageGroup(), *Parameters);
     } else if (msg.IsSplitMessageGroup()) {
         ExecRequest(msg.GetSplitMessageGroup(), *Parameters);
+    } else if (msg.IsEmitHeartbeat()) {
+        ExecRequest(msg.GetEmitHeartbeat(), *Parameters, request);
     } else {
         PQ_ENSURE(msg.IsOwnership());
     }
@@ -4579,6 +4603,17 @@ TPartition::EProcessResult TPartition::PreProcessUserAct(TEvPQ::TEvSetClientInfo
     }
 
     return EProcessResult::Continue;
+}
+
+ECumulativeCounters TPartition::UserActCounter(TEvPQ::TEvSetClientInfo::ESetClientInfoType type, bool ok) {
+    switch (type) {
+    case TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION:
+        return ok ? COUNTER_PQ_CREATE_SESSION_OK : COUNTER_PQ_CREATE_SESSION_ERROR;
+    case TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION:
+        return ok ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_DELETE_SESSION_ERROR;
+    default:
+        return ok ? COUNTER_PQ_SET_CLIENT_OFFSET_OK : COUNTER_PQ_SET_CLIENT_OFFSET_ERROR;
+    }
 }
 
 void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
@@ -4637,7 +4672,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
             && (act.Type != TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION || !userInfo.Session.empty()) //but allow DropSession request when session is already dropped - for idempotence
             || (act.ClientId != CLIENTID_WITHOUT_CONSUMER && act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && !userInfo.Session.empty()
                  && (act.Generation < userInfo.Generation || act.Generation == userInfo.Generation && act.Step <= userInfo.Step))) { //old generation request
-        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+        TabletCounters.Cumulative()[UserActCounter(act.Type, false)].Increment(1);
 
         ScheduleReplyError(act,
                            NPersQueue::NErrorCode::WRONG_COOKIE,
@@ -4824,8 +4859,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             SendReadingFinished(user);
         }
 
-        auto counter = createSession ? COUNTER_PQ_CREATE_SESSION_OK : (dropSession ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_SET_CLIENT_OFFSET_OK);
-        TabletCounters.Cumulative()[counter].Increment(1);
+        TabletCounters.Cumulative()[UserActCounter(act.Type, true)].Increment(1);
         auto *userInfoFull = UsersInfoStorage->GetIfExists(userInfo.User);
         if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET &&
                 userInfoFull && userInfo.Offset > userInfoFull->GetReadOffset() &&

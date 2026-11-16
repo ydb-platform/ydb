@@ -6,7 +6,10 @@ ADDINCL(
     yql/essentials/udfs/common/python/main_py3/include
 )
 
-SRCS(GLOBAL main.cpp)
+SRCS(
+    GLOBAL main.cpp
+    include/main.cpp
+)
 
 BUILDWITH_CYTHON_C(main.pyx --embed=RunPythonImpl)
 

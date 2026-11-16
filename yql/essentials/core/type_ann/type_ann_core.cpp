@@ -16970,6 +16970,8 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     ColumnOrderFunctions["AssumeSorted"] = ColumnOrderFunctions["Unordered"] =
         ColumnOrderFunctions["UnorderedSubquery"] = ColumnOrderFunctions["AssumeUniq"] = &OrderFromFirst;
 
+    ExtFunctions["YqlFlattenBy"] = &YqlFlattenWrapper;
+    ExtFunctions["YqlFlattenColumns"] = &YqlFlattenWrapper;
     ExtFunctions["YqlSelect"] = &SqlSelectWrapper;
     ExtFunctions["YqlSetItem"] = &SqlSetItemWrapper;
     ExtFunctions["YqlResultItem"] = &SqlResultItemWrapper;

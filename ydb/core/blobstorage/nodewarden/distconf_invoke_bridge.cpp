@@ -1,5 +1,7 @@
 #include "distconf_invoke.h"
 
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
+
 #include <ydb/core/protos/bridge.pb.h>
 
 namespace NKikimr::NStorage {
@@ -345,6 +347,85 @@ namespace NKikimr::NStorage {
         });
     }
 
+    void TInvokeRequestHandlerActor::RollbackBridge(const TQuery::TRollbackBridge& cmd) {
+        RunCommonChecks();
+        NeedBridgeMode();
+
+        const auto& config = *Self->StorageConfig;
+        const auto& details = config.GetClusterStateDetails();
+        using TOperation = NKikimrBridge::TClusterStateDetails::TPendingPileOperation;
+        if (!Self->SelfManagementEnabled) {
+            throw TExError() << "Self-management must be enabled to roll the bridged cluster back";
+        } else if (NBridge::IsRollbackPending(details)) {
+            return Finish(TResult::OK, std::nullopt); // being rolled back already, see the rollback status
+        } else if (details.HasPendingPileOperation()) {
+            throw TExError() << "Operation on pile is in progress";
+        } else if (details.PileSyncStateSize()) {
+            throw TExError() << "Piles are being synchronized";
+        }
+
+        // the original (implicit) pile has to be the only one, holding all the data
+        const auto registry = Self->GetConfigPileRegistry(config);
+        Y_ABORT_UNLESS(registry); // the node runs with BridgeConfig
+        const auto pileId = TBridgePileId::FromProto(&*registry, &NKikimrBridge::TPileRegistry::GetImplicitPileId);
+        if (!pileId) {
+            throw TExError() << "Cluster has no original pile: it has been bridged with several piles from the very"
+                " beginning, or the original pile has been removed";
+        }
+        for (size_t i = 0; i < registry->PilesSize(); ++i) {
+            if (const auto& pile = registry->GetPiles(i); pile.HasName() && i != pileId.GetPileIndex()) {
+                throw TExError() << "Pile '" << pile.GetName() << "' has to be removed from the cluster and dropped from"
+                    " BridgeConfig first";
+            }
+        }
+        const auto& clusterState = config.GetClusterState();
+        if (NBridge::GetPileState(clusterState, pileId) != NKikimrBridge::TClusterState::SYNCHRONIZED ||
+                TBridgePileId::FromProto(&clusterState, &NKikimrBridge::TClusterState::GetPrimaryPile) != pileId) {
+            throw TExError() << "The original pile has to be the SYNCHRONIZED primary one";
+        } else if (const auto& name = registry->GetPiles(pileId.GetPileIndex()).GetName();
+                HasStoragePoolPileOverrides(config.GetBlobStorageConfig(), name)) {
+            // the groups of the ordinary cluster follow the settings of their pools only, while Console keeps the base
+            // settings of its pools, and static groups follow the self-management config
+            throw TExError() << "Storage pool pile overrides for the original pile '" << name << "' have to be removed"
+                " from the configuration first";
+        }
+
+        // static groups become ordinary ones right away, BSC does the same to its groups afterwards
+        NKikimrBlobStorage::TStorageConfig proposed = config;
+        if (auto error = MakeStaticGroupsOrdinary(&proposed, pileId)) {
+            throw TExError() << "Can't roll the bridged cluster back: " << *error;
+        }
+        auto *mutableDetails = proposed.MutableClusterStateDetails();
+        mutableDetails->ClearBscConversionPending(); // BSC makes its groups ordinary ones instead of converting them
+        mutableDetails->ClearBscConversionId();
+        auto *op = mutableDetails->MutablePendingPileOperation();
+        pileId.CopyToProto(op, &TOperation::SetBridgePileId);
+        op->SetKind(TOperation::ROLLBACK);
+        op->SetOperationId(proposed.GetGeneration() + 1); // the generation of the config being proposed
+        // nodes of older versions don't expect groups to lose their bridge state, and the cluster state to go away
+        auto *mutableRegistry = mutableDetails->MutablePileRegistry();
+        *mutableRegistry = *registry; // it may be implied by BridgeConfig for the cluster bridged by older versions
+        mutableRegistry->SetRequiredFeatureLevel(Max<ui32>(mutableRegistry->GetRequiredFeatureLevel(),
+            BridgeFeatureLevelRollback));
+
+        THashSet<ui32> requiredNodeIds;
+        for (const auto& node : config.GetAllNodes()) {
+            requiredNodeIds.insert(node.GetNodeId());
+        }
+        const bool skipBscValidation = cmd.GetSkipBscValidation();
+        RequireBridgeCapability(BridgeFeatureLevelRollback, std::move(requiredNodeIds), {},
+                [this, proposed = std::move(proposed), pileId, skipBscValidation]() mutable {
+            ProposedStorageConfig = std::move(proposed);
+            if (skipBscValidation) {
+                return StartProposition(&ProposedStorageConfig);
+            }
+            // BSC checks whether it can make its groups ordinary ones before anything is committed
+            BridgePileOpPileId = pileId;
+            ControllerOp = EControllerOp::BRIDGE_ROLLBACK;
+            ConnectToController();
+        });
+    }
+
     void TInvokeRequestHandlerActor::RequireBridgeCapability(ui32 minFeatureLevel, THashSet<ui32> requiredNodeIds,
             THashSet<ui32> ignoredNodeIds, std::function<void()> callback) {
         // every required static node must positively report its capability, as the one being temporarily disconnected
@@ -418,15 +499,22 @@ namespace NKikimr::NStorage {
         });
     }
 
-    void TInvokeRequestHandlerActor::NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& /*cmd*/) {
+    void TInvokeRequestHandlerActor::NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& cmd) {
         RunCommonChecks();
 
-        if (!Self->StorageConfig->GetClusterStateDetails().GetBscConversionPending()) {
+        const auto& details = Self->StorageConfig->GetClusterStateDetails();
+        if (!details.GetBscConversionPending()) {
             return Finish(TResult::OK, std::nullopt); // already cleared
+        } else if (cmd.GetBscConversionId() != details.GetBscConversionId()) {
+            // late notification of the conversion the cluster has been rolled back from, BSC performs the current one
+            // afterwards; BSC of older version reports no identity, but it can't take part in the conversion started by
+            // this version (which requires every node to support it), as it has 0 then
+            return Finish(TResult::OK, std::nullopt);
         }
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         config.MutableClusterStateDetails()->ClearBscConversionPending();
+        config.MutableClusterStateDetails()->ClearBscConversionId();
         StartProposition(&config);
     }
 
@@ -528,6 +616,11 @@ namespace NKikimr::NStorage {
             // BSC has deleted parts of its groups in the pile, static ones go away now
             if (auto error = RemoveBridgePileFromConfig(&config, NBridge::GetPendingPileOperationPileId(details))) {
                 throw TExError() << "Can't remove pile from the cluster: " << *error;
+            }
+        } else if (op.GetKind() == NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ROLLBACK) {
+            // BSC has made its pools and groups ordinary ones, the cluster state goes away now
+            if (auto error = RemoveClusterStateAfterRollback(&config)) {
+                throw TExError() << "Can't remove the cluster state: " << *error;
             }
         } else {
             mutableDetails->ClearPendingPileOperation();

@@ -39,6 +39,8 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
     static constexpr ui32 MaxBatchSize = 1000;
     static constexpr TDuration TimerPeriod = TDuration::MilliSeconds(100);
     static constexpr ui32 PipeRetryLimit = 3;
+    static constexpr TDuration BatchTimeout = TDuration::Seconds(30);
+    static constexpr TDuration IdleTimeout = TDuration::Minutes(1);
 
     struct TOrigin {
         TActorId Sender;
@@ -49,6 +51,9 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         TCdcAggregatorHeartbeatDelivery CdcAggregatorHeartbeatDelivery{MaxBatchSize};
         THashMap<ui64, TOrigin> Origins;
         TActorId PipeClient;
+        ui64 BatchCookie = 0;
+        TMonotonic BatchDeadline;
+        TMonotonic LastActivity;
     };
 
     using EStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
@@ -67,6 +72,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         }
 
         auto& connection = CdcAggregatorConnections[msg.RecipientTabletId];
+        connection.LastActivity = TActivationContext::Monotonic();
         connection.Origins[msg.SourceDataShardId] = origin;
         connection.CdcAggregatorHeartbeatDelivery.AddHeartbeat(msg.SourceDataShardId, msg.Heartbeat);
     }
@@ -85,22 +91,42 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             }
 
             auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeBatch(delivery.TakeBatch());
+            connection.BatchCookie = ++LastBatchCookie;
+            connection.BatchDeadline = TActivationContext::Monotonic() + BatchTimeout;
             YDB_LOG_DEBUG("Send batch",
                 {"aggregator", tabletId},
+                {"batchCookie", connection.BatchCookie},
                 {"heartbeats", ev->Record.HeartbeatsSize()});
-            NTabletPipe::SendData(SelfId(), connection.PipeClient, ev.Release());
+            NTabletPipe::SendData(SelfId(), connection.PipeClient, ev.Release(), connection.BatchCookie);
         }
     }
 
-    void ApplyHeartbeatBatchResult(const NKikimrCdcAggregator::TEvWriteHeartbeatsResult& record) {
+    void RemoveExpiredCdcAggregatorConnections() {
+        const auto now = TActivationContext::Monotonic();
+        for (auto it = CdcAggregatorConnections.begin(); it != CdcAggregatorConnections.end();) {
+            const auto current = it++;
+            auto& connection = current->second;
+            if (connection.BatchCookie && now >= connection.BatchDeadline) {
+                NTabletPipe::CloseClient(SelfId(), connection.PipeClient);
+                DropCdcAggregatorConnection(current->first, connection.PipeClient, "Heartbeat batch timed out");
+            } else if (connection.CdcAggregatorHeartbeatDelivery.IsIdle() && now - connection.LastActivity >= IdleTimeout) {
+                NTabletPipe::CloseClient(SelfId(), connection.PipeClient);
+                CdcAggregatorConnections.erase(current);
+            }
+        }
+    }
+
+    void ApplyHeartbeatBatchResult(const NKikimrCdcAggregator::TEvWriteHeartbeatsResult& record, ui64 cookie) {
         YDB_LOG_DEBUG("Apply batch result",
             {"record", record.ShortDebugString()});
 
         auto it = CdcAggregatorConnections.find(record.GetOrigin());
-        if (it == CdcAggregatorConnections.end()) {
+        if (it == CdcAggregatorConnections.end() || !it->second.BatchCookie || it->second.BatchCookie != cookie) {
             return;
         }
 
+        it->second.BatchCookie = 0;
+        it->second.LastActivity = TActivationContext::Monotonic();
         auto& delivery = it->second.CdcAggregatorHeartbeatDelivery;
         auto [result, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseBatchResult(record);
         ReplyToOrigins(it->second, result ? delivery.CompleteBatch(*result) : delivery.FailBatch(error));
@@ -143,7 +169,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
     }
 
     void Handle(TEvCdcAggregator::TEvWriteHeartbeatsResult::TPtr& ev) {
-        ApplyHeartbeatBatchResult(ev->Get()->Record);
+        ApplyHeartbeatBatchResult(ev->Get()->Record, ev->Cookie);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
@@ -158,6 +184,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
     }
 
     void HandleTimerFired() {
+        RemoveExpiredCdcAggregatorConnections();
         SendHeartbeatBatches();
         Schedule(TimerPeriod, new TEvPrivate::TEvTimerFired());
     }
@@ -192,6 +219,7 @@ public:
 
 private:
     THashMap<ui64, TCdcAggregatorConnection> CdcAggregatorConnections;
+    ui64 LastBatchCookie = 0;
 };
 
 IActor* CreateCdcAggregatorService() {

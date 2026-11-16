@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/tx/cdc_aggregator/service)
 
 PEERDIR(
     ydb/core/testlib/default
+    ydb/core/tx/cdc_aggregator/tablet
 )
 
 SRCS(

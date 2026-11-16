@@ -1,7 +1,8 @@
 LIBRARY()
 
 SRCS(
-    heartbeat_queue.cpp
+    cdc_aggregator_heartbeat_delivery.cpp
+    cdc_aggregator_heartbeat_delivery_proto.cpp
     service.cpp
 )
 

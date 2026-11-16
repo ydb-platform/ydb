@@ -8,7 +8,7 @@ from ydb.apps.dstool.lib import dstool_cmd_cluster_balance as balance
 @pytest.fixture
 def strategy():
     args = SimpleNamespace(
-        group_ids=None, storage_pool=None, only_from_overpopulated_pdisks=False,
+        group_ids=None, storage_pool=None, pdisk_type=None, only_from_overpopulated_pdisks=False,
         max_donors_per_pdisk=0, max_replicating_pdisks=None,
         prefer_less_occupied_rack=False, with_attention_to_replication=False,
         dry_run=False, quiet=True,
@@ -44,6 +44,25 @@ def response_to(node, index=0):
     item.From.NodeId, item.From.PDiskId = 1, 1
     item.To.NodeId, item.To.PDiskId = node, 1
     return response
+
+
+@pytest.mark.parametrize('pdisk_type, nodes', [(None, {1, 2, 3}), ('ROT', {1}), ('SSD', {2}), ('NVME', {3})])
+def test_pdisk_type_selection(strategy, pdisk_type, nodes):
+    strategy.args.pdisk_type = pdisk_type
+    for pdisk, media_type in zip(strategy.cluster_info.base_config.PDisk, ('ROT', 'SSD', 'NVME')):
+        pdisk.Type = balance.common.EPDiskType.Value(media_type)
+    strategy = balance.VSlotBalancingStrategy(strategy.args, strategy.cluster_info, strategy.groups_info)
+    strategy.calculate_extra_info()
+    candidates, _ = strategy.list_candidate_vslots()
+    assert {vslot.VSlotId.NodeId for vslot in candidates} == nodes
+    assert strategy.histo == balance.Counter(strategy.cluster_info.pdisk_usage[node, 1] for node in nodes)
+
+    # Each group in this fixture resides on PDisks of one Type; GroupId equals NodeId.
+    strategy.args.pdisk_type = None
+    strategy.args.group_ids = nodes
+    by_group_ids = balance.VSlotBalancingStrategy(strategy.args, strategy.cluster_info, strategy.groups_info)
+    by_group_ids.calculate_extra_info()
+    assert by_group_ids.list_candidate_vslots()[0] == candidates
 
 
 @pytest.fixture

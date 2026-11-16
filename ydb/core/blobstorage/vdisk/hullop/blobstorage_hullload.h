@@ -128,7 +128,8 @@ namespace NKikimr {
         }
 
         void SendRead(const TDiskPart& part, const TActorContext &ctx) {
-            auto msg = std::make_unique<NPDisk::TEvChunkRead>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
+            std::unique_ptr<NPDisk::TEvChunkRead> msg =
+                std::make_unique<NPDisk::TEvChunkRead>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
                 part.ChunkIdx, part.Offset, part.Size, NPriRead::HullLoad, nullptr);
             msg->RawSectors = UseRawSectorReads(*PDiskCtx); // opened here rather than in the PDisk completion thread
             PendingRead = part;

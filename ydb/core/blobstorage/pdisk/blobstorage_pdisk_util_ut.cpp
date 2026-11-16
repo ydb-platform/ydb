@@ -520,7 +520,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         for (ui32 i = 0; i < sectors.Size(); ++i) {
             memset(sectors[i].Begin(), 13 + i, sectors[i].Size());
             sectors[i].SetCanary();
-            auto *footer = sectors[i].GetDataFooter();
+            TDataSectorFooter *footer = sectors[i].GetDataFooter();
             footer->SetVersionAndEncryption(enableSectorEncryption);
             footer->Nonce = i + 1;
             const ui8 *data = sectors[i].Begin();
@@ -555,7 +555,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
             TDiskFormat format = {};
             format.Clear(encrypt);
             format.ChunkKey = 0x0123456789ABCDEFull;
-            const auto ctx = std::make_shared<const TFormatContext>(format, encrypt);
+            const std::shared_ptr<const TFormatContext> ctx = std::make_shared<const TFormatContext>(format, encrypt);
             const TChunkIdx chunkIdx = 5;
             const ui64 chunkNonce = 1000;
             const TLogoBlobID blobId(1, 2, 3, 0, 100, 0, 1);

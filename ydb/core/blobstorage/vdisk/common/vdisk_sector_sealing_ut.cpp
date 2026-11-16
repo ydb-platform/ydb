@@ -73,12 +73,12 @@ Y_UNIT_TEST_SUITE(TVDiskSectorSealing) {
             return NPDisk::TEvChunkWrite(1, 1, chunkIdx, 0,
                 MakeIntrusive<NPDisk::TEvChunkWrite::TNonOwningParts>(parts, 1u), nullptr, true, 0);
         };
-        auto unknown = make(TFixture::ChunkIdx + 1);
+        NPDisk::TEvChunkWrite unknown = make(TFixture::ChunkIdx + 1);
         UNIT_ASSERT(!PrepareChunkWriteSectors(unknown, *f.PDiskCtx));
         UNIT_ASSERT(!unknown.PreformattedSectors);
 
         f.PDiskCtx->EnableSectorPreparation = TControlWrapper(0, 0, 1);
-        auto off = make(TFixture::ChunkIdx);
+        NPDisk::TEvChunkWrite off = make(TFixture::ChunkIdx);
         UNIT_ASSERT(!PrepareChunkWriteSectors(off, *f.PDiskCtx));
         UNIT_ASSERT(!off.PreformattedSectors);
     }

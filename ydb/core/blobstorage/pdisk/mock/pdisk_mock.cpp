@@ -228,7 +228,7 @@ struct TPDiskMockState::TImpl {
     }
 
     ui32 UnlockChunks(ui8 lockOwner) {
-        auto node = LockedChunks.extract(lockOwner);
+        std::map<ui8, std::set<ui32>>::node_type node = LockedChunks.extract(lockOwner);
         if (!node) {
             return 0;
         }
@@ -1522,7 +1522,7 @@ public:
     }
 
     void Handle(NPDisk::TEvChangeExpectedSlotCount::TPtr ev) {
-        const auto *msg = ev->Get();
+        const NPDisk::TEvChangeExpectedSlotCount *msg = ev->Get();
         Impl.ExpectedSlotCount = msg->ExpectedSlotCount;
         Impl.SlotSizeInUnits = msg->SlotSizeInUnits;
         for (auto& [ownerId, owner] : Impl.Owners) { // as PDisk does: the owners' weights follow the slot size
@@ -1533,7 +1533,7 @@ public:
 
     void Handle(NPDisk::TEvAskForCutLog::TPtr ev) {
         // As TPDisk::SendCutLog, a forced cut for a live owner; the mock has no log chunks, so the whole log goes.
-        const auto *msg = ev->Get();
+        const NPDisk::TEvAskForCutLog *msg = ev->Get();
         if (const auto it = Impl.Owners.find(msg->Owner); it != Impl.Owners.end()) {
             const TImpl::TOwner& owner = it->second;
             if (!owner.Slain && owner.CutLogId && !owner.Log.empty()) {
@@ -1566,7 +1566,7 @@ public:
     }
 
     void Handle(NPDisk::TEvChunkLock::TPtr ev) {
-        const auto *msg = ev->Get();
+        const NPDisk::TEvChunkLock *msg = ev->Get();
         TString error = "incorrect LockFrom in query";
         const std::optional<ui8> lockOwner = msg->LockFrom != NPDisk::TEvChunkLock::ELockFrom::COUNT
             ? FindLockOwner(*msg, &error)

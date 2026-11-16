@@ -68,11 +68,11 @@ TChunkWrite::TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender
 }
 
 void TChunkWrite::AbortPiece(TActorSystem *actorSystem) {
-    AtomicSet(PieceAborted, 1);
+    PieceAborted.store(true);
     if (PreformattedSectors && PreformattedPieceCount) {
         // counted with the pieces in flight; the last one to finish answers with the error
-        AtomicSet(PreformattedPieceFailed, 1);
-        if (AtomicDecrement(PreformattedPiecesInFlight) == 0) {
+        PreformattedPieceFailed.store(true);
+        if (PreformattedPiecesInFlight.fetch_sub(1) == 1) {
             ReplyAborted(actorSystem);
         }
     } else if (AtomicDecrement(Pieces) == 0 && Completion) {
@@ -83,7 +83,7 @@ void TChunkWrite::AbortPiece(TActorSystem *actorSystem) {
 void TChunkWrite::PieceDone(TActorSystem *actorSystem) {
     Y_VERIFY(!PreformattedSectors); // counted by their own completions
     // The last piece hands Completion to the device; until then it is here and answers if a piece was dropped.
-    if (AtomicDecrement(Pieces) == 0 && AtomicGet(PieceAborted) && Completion) {
+    if (AtomicDecrement(Pieces) == 0 && PieceAborted.load() && Completion) {
         ReplyAborted(actorSystem);
     }
 }

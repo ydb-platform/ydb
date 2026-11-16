@@ -5,10 +5,10 @@
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_params.h>
 
-#include <util/generic/hash.h>
 #include <util/system/spinlock.h>
 
 #include <optional>
+#include <unordered_map>
 
 
 namespace NKikimr {
@@ -33,19 +33,19 @@ namespace NKikimr {
             if (chunks.size() != nonces.size()) {
                 return; // plain data chunks: no nonces
             }
-            auto guard = Guard(Lock);
+            TGuard<TAdaptiveLock> guard(Lock);
             for (size_t i = 0; i < chunks.size(); ++i) {
                 Nonces[chunks[i]] = nonces[i];
             }
         }
 
         void Forget(ui32 chunkIdx) {
-            auto guard = Guard(Lock);
+            TGuard<TAdaptiveLock> guard(Lock);
             Nonces.erase(chunkIdx);
         }
 
         std::optional<ui64> Get(ui32 chunkIdx) const {
-            auto guard = Guard(Lock);
+            TGuard<TAdaptiveLock> guard(Lock);
             if (const auto it = Nonces.find(chunkIdx); it != Nonces.end()) {
                 return it->second;
             }
@@ -54,7 +54,7 @@ namespace NKikimr {
 
     private:
         TAdaptiveLock Lock;
-        THashMap<ui32, ui64> Nonces;
+        std::unordered_map<ui32, ui64> Nonces;
     };
 
     ////////////////////////////////////////////////////////////////////////////

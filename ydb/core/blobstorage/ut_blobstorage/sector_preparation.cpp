@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(VDiskSectorPreparation) {
 
         env.CreateBoxAndPool(1, 1, 0, NKikimrBlobStorage::EPDiskType::NVME);
         env.Sim(TDuration::Minutes(1));
-        auto groups = env.GetGroups();
+        std::vector<ui32> groups = env.GetGroups();
         UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
         const TIntrusivePtr<TBlobStorageGroupInfo> info = env.GetGroupInfo(groups.front());
         env.Sim(TDuration::Minutes(5));
@@ -34,7 +34,8 @@ Y_UNIT_TEST_SUITE(VDiskSectorPreparation) {
                 env.Runtime->WrapInActorContext(edge, [&] {
                     SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvPut(id, TRope(data), TInstant::Max()));
                 });
-                const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+                const TAutoPtr<TEventHandle<TEvBlobStorage::TEvPutResult>> res =
+                    env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
                 UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
                 blobs.push_back(id);
             }
@@ -44,7 +45,8 @@ Y_UNIT_TEST_SUITE(VDiskSectorPreparation) {
             for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
                 const TActorId actorId = info->GetActorId(i);
                 const TActorId sender = env.Runtime->AllocateEdgeActor(actorId.NodeId(), __FILE__, __LINE__);
-                auto ev = std::make_unique<IEventHandle>(actorId, sender, TEvCompactVDisk::Create(EHullDbType::LogoBlobs));
+                std::unique_ptr<IEventHandle> ev =
+                    std::make_unique<IEventHandle>(actorId, sender, TEvCompactVDisk::Create(EHullDbType::LogoBlobs));
                 ev->Rewrite(TEvBlobStorage::EvForwardToSkeleton, actorId);
                 env.Runtime->Send(ev.release(), actorId.NodeId());
                 env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(sender);
@@ -57,10 +59,11 @@ Y_UNIT_TEST_SUITE(VDiskSectorPreparation) {
                     SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
                         NKikimrBlobStorage::FastRead));
                 });
-                const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+                const TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res =
+                    env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
                 UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
                 UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
-                const auto& response = res->Get()->Responses[0];
+                const TEvBlobStorage::TEvGetResult::TResponse& response = res->Get()->Responses[0];
                 UNIT_ASSERT_VALUES_EQUAL_C(response.Status, NKikimrProto::OK, id);
                 UNIT_ASSERT_C(response.Buffer.ConvertToString() == FastGenDataForLZ4(id.BlobSize(), id.Step()), id);
             }
@@ -104,11 +107,11 @@ Y_UNIT_TEST_SUITE(VDiskSectorPreparation) {
         }
         env.Sim(TDuration::Minutes(1));
         edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        const auto before = served();
+        const std::pair<ui64, ui64> before = served();
         write(1000);
         compactAll();
         readAll();
-        const auto after = served();
+        const std::pair<ui64, ui64> after = served();
         UNIT_ASSERT_C(after.first > before.first, "no sealed write after the restart");
         UNIT_ASSERT_C(after.second > before.second, "no raw sector read after the restart");
     }

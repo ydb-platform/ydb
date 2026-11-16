@@ -8,6 +8,8 @@
 
 #include <util/generic/queue.h>
 
+#include <map>
+
 namespace NKikimr {
 
     template<typename TValue>
@@ -100,7 +102,7 @@ namespace NKikimr {
             ui32 Size;
             TLogoBlobID BlobId;
         };
-        TMap<void *, TActiveRequest> ActiveRequests;
+        std::map<void *, TActiveRequest> ActiveRequests;
         ui64 NextRequestCookie = 1;
 
         struct TCompareReadItem {

@@ -798,8 +798,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         const ui32 payloadSize = format->GetSectorPayloadSize();
         const ui32 sectorSize = format->GetSectorSize();
         UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->AppendBlockSize, payloadSize);
-        const auto owner = vdisk.PDiskParams->Owner;
-        const auto ownerRound = vdisk.PDiskParams->OwnerRound;
+        const NPDisk::TOwner owner = vdisk.PDiskParams->Owner;
+        const NPDisk::TOwnerRound ownerRound = vdisk.PDiskParams->OwnerRound;
 
         vdisk.ReserveChunk(2);
         const TSet<TChunkIdx> reserved = vdisk.Chunks[EChunkState::RESERVED];
@@ -826,16 +826,16 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         };
         auto preformattedWrite = [&](TChunkIdx chunkIdx, ui32 writeOffset, ui64 firstSectorNonce, TRcBuf buf) {
             const size_t size = buf.size();
-            auto ev = new NPDisk::TEvChunkWrite(owner, ownerRound, chunkIdx, writeOffset,
+            NPDisk::TEvChunkWrite *ev = new NPDisk::TEvChunkWrite(owner, ownerRound, chunkIdx, writeOffset,
                 new NPDisk::TEvChunkWrite::TRopeAlignedParts(TRope(std::move(buf)), size), nullptr, false, 0);
             ev->PreformattedSectors = true;
             ev->FirstSectorNonce = firstSectorNonce;
             return ev;
         };
         auto rawRead = [&](TChunkIdx chunkIdx, ui64 chunkNonce) {
-            auto ev = new NPDisk::TEvChunkRead(owner, ownerRound, chunkIdx, offset, payload.size(), 0, nullptr);
+            NPDisk::TEvChunkRead *ev = new NPDisk::TEvChunkRead(owner, ownerRound, chunkIdx, offset, payload.size(), 0, nullptr);
             ev->RawSectors = true;
-            auto res = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(ev, NKikimrProto::OK);
+            THolder<NPDisk::TEvChunkReadResult> res = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(ev, NKikimrProto::OK);
             UNIT_ASSERT(res->RawSectors);
             UNIT_ASSERT_VALUES_EQUAL(res->ChunkNonce, chunkNonce);
             UNIT_ASSERT_VALUES_EQUAL(res->Offset, firstSector * sectorSize);
@@ -862,7 +862,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             preformattedWrite(sealedChunk, offset, sealedNonce + firstSector, sealed), NKikimrProto::OK);
         UNIT_ASSERT(rawRead(sealedChunk, sealedNonce) == sealedBytes);
         {
-            const auto res = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+            const THolder<NPDisk::TEvChunkReadResult> res = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
                 new NPDisk::TEvChunkRead(owner, ownerRound, sealedChunk, offset + 123, payload.size() - 173, 0,
                     nullptr),
                 NKikimrProto::OK);
@@ -909,8 +909,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         const NPDisk::TFormatContextPtr format = vdisk.FormatContext;
         const ui32 payloadSize = format->GetSectorPayloadSize();
         const ui32 sectorSize = format->GetSectorSize();
-        const auto owner = vdisk.PDiskParams->Owner;
-        const auto ownerRound = vdisk.PDiskParams->OwnerRound;
+        const NPDisk::TOwner owner = vdisk.PDiskParams->Owner;
+        const NPDisk::TOwnerRound ownerRound = vdisk.PDiskParams->OwnerRound;
         vdisk.ReserveChunk();
         const TChunkIdx chunkIdx = *vdisk.Chunks[EChunkState::RESERVED].begin();
         const ui64 chunkNonce = vdisk.ChunkNonces.at(chunkIdx);
@@ -945,7 +945,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         // (where exactly the stop falls is up to timing; WritePiecesAccounting covers the cases one by one)
         TSet<ui64> answered;
         while (answered.size() < writes) {
-            const auto res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+            const THolder<NPDisk::TEvChunkWriteResult> res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
             const ui64 cookie = reinterpret_cast<ui64>(res->Cookie);
             UNIT_ASSERT_C(cookie >= 1 && cookie <= writes, cookie);
             UNIT_ASSERT_C(answered.insert(cookie).second, "write# " << cookie << " answered twice");
@@ -978,7 +978,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 nullptr, 0, HPNow(), 4096, 0, [] {}, NPDisk::TReqId(), NWilson::TSpan());
             if (preformatted) {
                 res.Write->PreformattedPieceCount = pieces;
-                AtomicSet(res.Write->PreformattedPiecesInFlight, pieces);
+                res.Write->PreformattedPiecesInFlight.store(pieces);
             }
             for (ui32 i = 0; i < pieces; ++i) {
                 res.Pieces.emplace_back(new NPDisk::TChunkWritePiece(res.Write, i * 4096, 4096, NWilson::TSpan()));
@@ -1010,7 +1010,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         // 4: preformatted, the rest dropped while the first piece is still on the device
         TWrite w4 = makeWrite(4, true, 3);
-        auto *inFlight = pieceSent(w4);
+        NPDisk::TCompletionChunkWritePreformattedPiece *inFlight = pieceSent(w4);
         w4.Pieces[1]->Abort(actorSystem);
         w4.Pieces[2]->Abort(actorSystem);
         inFlight->Exec(actorSystem);
@@ -1029,7 +1029,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             {1, NKikimrProto::CORRUPTED}, {3, NKikimrProto::CORRUPTED}, {4, NKikimrProto::CORRUPTED},
             {5, NKikimrProto::OK}, {6, NKikimrProto::CORRUPTED}};
         for (const auto& [cookie, status] : expected) {
-            const auto res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+            const THolder<NPDisk::TEvChunkWriteResult> res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
             UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<ui64>(res->Cookie), cookie);
             UNIT_ASSERT_VALUES_EQUAL_C(res->Status, status, cookie);
         }

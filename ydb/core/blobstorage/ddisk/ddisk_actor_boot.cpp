@@ -327,7 +327,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::CreatePersistentBuffer() {
-        auto format = NPDisk::MakeDiskFormatCopy(*DiskFormat);
+        NPDisk::TDiskFormatPtr format = NPDisk::MakeDiskFormatCopy(*DiskFormat);
         if (PersistentBufferUniqueId == 0) {
             PersistentBufferUniqueId = RandomNumber<ui64>();
         }

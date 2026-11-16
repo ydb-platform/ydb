@@ -201,11 +201,11 @@ public:
 private:
     void Done(TActorSystem *actorSystem, bool failed) {
         if (failed) {
-            AtomicSet(Write->PreformattedPieceFailed, 1);
+            Write->PreformattedPieceFailed.store(true);
         }
-        if (AtomicDecrement(Write->PreformattedPiecesInFlight) == 0) {
+        if (Write->PreformattedPiecesInFlight.fetch_sub(1) == 1) {
             TCompletionChunkWrite *completion = Write->Completion.Release();
-            if (AtomicGet(Write->PreformattedPieceFailed)) {
+            if (Write->PreformattedPieceFailed.load()) {
                 completion->ErrorReason = failed && !ErrorReason.empty()
                     ? ErrorReason
                     : TString("a piece of the preformatted write failed");

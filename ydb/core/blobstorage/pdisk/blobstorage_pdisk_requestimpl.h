@@ -10,6 +10,8 @@
 #include "blobstorage_pdisk_impl_metadata.h"
 
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
+
+#include <atomic>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/library/schlab/schine/job_kind.h>
@@ -570,8 +572,8 @@ public:
     bool PreformattedSectors = false; // see TEvChunkWrite::PreformattedSectors
     ui64 FirstSectorNonce = 0;
     // A preformatted write goes to the device in pieces; Completion runs when the last one is done.
-    TAtomic PreformattedPiecesInFlight = 0;
-    TAtomic PreformattedPieceFailed = 0;
+    std::atomic<ui32> PreformattedPiecesInFlight = 0;
+    std::atomic<bool> PreformattedPieceFailed = false;
     ui32 PreformattedPieceCount = 0; // set when the write is cut into pieces
     ui32 PreformattedPiecesSubmitted = 0; // in the PDisk thread
 
@@ -600,7 +602,7 @@ public:
     // piece is answered once, with an error, when the last of its pieces is done or dropped.
     void AbortPiece(TActorSystem *actorSystem); // a piece dropped unsent, when the PDisk stops
     void PieceDone(TActorSystem *actorSystem); // a piece of an ordinary write was executed
-    TAtomic PieceAborted = 0;
+    std::atomic<bool> PieceAborted = false;
 
 private:
     void ReplyAborted(TActorSystem *actorSystem);

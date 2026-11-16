@@ -191,7 +191,8 @@ namespace NKikimr {
             TRope rope(std::move(SectorBuffer));
             rope.EraseBack(rope.size() - rawSize);
             NPDisk::TEvChunkWrite::TPartsPtr parts(new NPDisk::TEvChunkWrite::TRopeAlignedParts(std::move(rope), rawSize));
-            auto ev = std::make_unique<NPDisk::TEvChunkWrite>(Owner, OwnerRound, ChunkIdx, offsetInChunk, parts,
+            std::unique_ptr<NPDisk::TEvChunkWrite> ev =
+                std::make_unique<NPDisk::TEvChunkWrite>(Owner, OwnerRound, ChunkIdx, offsetInChunk, parts,
                 nullptr, true, Priority, TWriteSource::HullWriteSst, true);
             ev->PreformattedSectors = true;
             ev->FirstSectorNonce = ChunkNonce + firstSectorIdx;

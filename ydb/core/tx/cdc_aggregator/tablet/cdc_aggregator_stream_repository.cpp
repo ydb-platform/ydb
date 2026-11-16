@@ -79,9 +79,9 @@ std::optional<TCdcAggregatorStream::TPartitioningChanges> TCdcAggregatorStreamRe
 
     TCdcAggregatorStream::TPartitioningChanges changes;
     while (!rowset.EndOfSet()) {
-        const auto parentDataShardId = rowset.GetValue<Schema::PartitioningChanges::ParentDataShardId>();
+        const auto firstParentDataShardId = rowset.GetValue<Schema::PartitioningChanges::FirstParentDataShardId>();
         const auto operationId = rowset.GetValue<Schema::PartitioningChanges::OperationId>();
-        changes.emplace(std::make_pair(parentDataShardId, operationId), TCdcAggregatorStreamPartitioningChange{
+        changes.emplace(std::make_pair(firstParentDataShardId, operationId), TCdcAggregatorStreamPartitioningChange{
             .OperationId = operationId,
             .ParentDataShardIds = rowset.GetValue<Schema::PartitioningChanges::ParentDataShardIds>(),
             .ChildDataShardIds = rowset.GetValue<Schema::PartitioningChanges::ChildDataShardIds>(),

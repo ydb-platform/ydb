@@ -91,9 +91,10 @@ std::pair<std::optional<TCdcAggregatorStreamPartitioningChange>, TString> TCdcAg
         || std::adjacent_find(parents.begin(), parents.end()) != parents.end()
         || children.empty() || children.front() == 0
         || std::adjacent_find(children.begin(), children.end()) != children.end()
-        || std::any_of(parents.begin(), parents.end(), [&children](ui64 parentDataShardId) {
-            return std::binary_search(children.begin(), children.end(), parentDataShardId);
-        })) {
+        || std::any_of(parents.begin(), parents.end(), [&children](ui64 parentDataShardId)
+    {
+        return std::binary_search(children.begin(), children.end(), parentDataShardId);
+    })) {
         return {std::nullopt, TStringBuilder() << "Invalid partitioning change " << change.OperationId};
     }
 

@@ -6,9 +6,9 @@
 #include <utility>
 
 namespace NKikimrCdcAggregator {
-class TTrackingConfig;
-class TCdcAggregatorStreamTopic;
-class TEvPartitioningChanged;
+    class TTrackingConfig;
+    class TCdcAggregatorStreamTopic;
+    class TEvPartitioningChanged;
 }
 
 namespace NKikimr::NCdcAggregator {

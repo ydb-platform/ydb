@@ -24,6 +24,7 @@ RECURSE_FOR_TESTS(
     stream_lookup
     runtime
     sysview
+    digest
     tli
     topics
     tx

@@ -39,7 +39,7 @@ struct TCdcAggregatorStreamSourcesDiff {
 };
 
 struct TCdcAggregatorStreamHeartbeatsDiff {
-    THashMap<ui64, NPQ::THeartbeat> LastHeartbeatBySourceDataShardId;
+    THashMap<ui64, NPQ::THeartbeat> LastHeartbeats;
     std::optional<NPQ::THeartbeat> CurrentHeartbeat;
 };
 
@@ -57,7 +57,7 @@ public:
     explicit TCdcAggregatorStream(const TCdcAggregatorStreamConfig& config);
     TCdcAggregatorStream(
         TCdcAggregatorStreamTopic topic,
-        TLastHeartbeats lastHeartbeatBySourceDataShardId,
+        TLastHeartbeats lastHeartbeats,
         std::optional<NPQ::THeartbeat> currentHeartbeat,
         TPartitioningChanges partitioningChanges);
 
@@ -65,8 +65,8 @@ public:
         return Topic;
     }
 
-    const TLastHeartbeats& GetLastHeartbeatBySourceDataShardId() const {
-        return LastHeartbeatBySourceDataShardId;
+    const TLastHeartbeats& GetLastHeartbeats() const {
+        return LastHeartbeats;
     }
 
     const std::optional<NPQ::THeartbeat>& GetCurrentHeartbeat() const {
@@ -82,7 +82,7 @@ private:
 
 private:
     TCdcAggregatorStreamTopic Topic;
-    TLastHeartbeats LastHeartbeatBySourceDataShardId;
+    TLastHeartbeats LastHeartbeats;
     std::optional<NPQ::THeartbeat> CurrentHeartbeat;
     TPartitioningChanges PartitioningChanges;
 };

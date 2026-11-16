@@ -13,7 +13,7 @@ namespace NKikimr::NCdcAggregator {
 namespace {
 
 bool IsSameConfig(const TCdcAggregatorStream& stream, const TCdcAggregatorStreamConfig& config) {
-    const auto& sources = stream.GetLastHeartbeatBySourceDataShardId();
+    const auto& sources = stream.GetLastHeartbeats();
     return stream.GetTopic() == config.Topic
         && sources.size() == config.SourceDataShardIds.size()
         && std::all_of(config.SourceDataShardIds.begin(), config.SourceDataShardIds.end(), [&sources](ui64 sourceDataShardId) {
@@ -63,7 +63,7 @@ public:
 
             YDB_LOG_INFO("Stream configured",
                 {"streamPathId", Self->CdcAggregatorStream->GetTopic().StreamPathId},
-                {"sources", Self->CdcAggregatorStream->GetLastHeartbeatBySourceDataShardId().size()});
+                {"sources", Self->CdcAggregatorStream->GetLastHeartbeats().size()});
 
             Result->Record.SetStatus(TResult::SUCCESS);
         } else if (IsSameConfig(*Self->CdcAggregatorStream, *config)) {

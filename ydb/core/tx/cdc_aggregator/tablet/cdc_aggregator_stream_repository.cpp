@@ -8,7 +8,7 @@ void TCdcAggregatorStreamRepository::InsertCdcAggregatorStream(NIceDb::TNiceDb& 
     db.Table<Schema::State>().Key(Schema::State::Id::Value).Update(
         NIceDb::TUpdate<Schema::State::TrackingConfig>(Converter.SerializeTopic(stream.GetTopic())));
 
-    for (const auto& [dataShardId, _] : stream.GetLastHeartbeatBySourceDataShardId()) {
+    for (const auto& [dataShardId, _] : stream.GetLastHeartbeats()) {
         db.Table<Schema::Sources>().Key(dataShardId).Update();
     }
 }
@@ -24,7 +24,7 @@ void TCdcAggregatorStreamRepository::ApplyCdcAggregatorStreamSourcesDiff(NIceDb:
 }
 
 void TCdcAggregatorStreamRepository::ApplyCdcAggregatorStreamHeartbeatsDiff(NIceDb::TNiceDb& db, const TCdcAggregatorStreamHeartbeatsDiff& diff) const {
-    for (const auto& [dataShardId, heartbeat] : diff.LastHeartbeatBySourceDataShardId) {
+    for (const auto& [dataShardId, heartbeat] : diff.LastHeartbeats) {
         db.Table<Schema::Sources>().Key(dataShardId).Update(
             NIceDb::TUpdate<Schema::Sources::LastHeartbeatStep>(heartbeat.Version.Step),
             NIceDb::TUpdate<Schema::Sources::LastHeartbeatTxId>(heartbeat.Version.TxId),

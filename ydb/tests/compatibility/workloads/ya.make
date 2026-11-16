@@ -14,6 +14,7 @@ TEST_SRCS(
     test_statistics.py
     test_compact.py
     test_in_memory.py
+    test_snapshot_retention.py
 )
 
 SIZE(LARGE)
@@ -29,6 +30,8 @@ PEERDIR(
     ydb/tests/library
     ydb/tests/datashard/lib
     ydb/tests/library/compatibility
+    ydb/tests/library/snapshot_retention
+    ydb/tests/stress/snapshot_retention/workload
 )
 
 END()

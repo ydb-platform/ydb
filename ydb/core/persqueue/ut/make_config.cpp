@@ -7,6 +7,12 @@
 
 namespace NKikimr::NPQ::NHelpers {
 
+NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr> TIdleMirrorReaderFactory::GetCredentialsProviderImpl(
+    const NKikimrPQ::TMirrorPartitionConfig::TCredentials&) const
+{
+    return NThreading::NewPromise<NYdb::TCredentialsProviderFactoryPtr>().GetFuture();
+}
+
 NKikimrPQ::TPQTabletConfig MakeConfig(const TMakeConfigParams& params)
 {
     NKikimrPQ::TPQTabletConfig config;
@@ -17,6 +23,9 @@ NKikimrPQ::TPQTabletConfig MakeConfig(const TMakeConfigParams& params)
         auto* consumer = config.AddConsumers();
         consumer->SetName(c.Consumer);
         consumer->SetGeneration(c.Generation);
+        if (c.Type) {
+            consumer->SetType(*c.Type);
+        }
     }
 
     for (const auto& e : params.AllPartitions) {

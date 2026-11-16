@@ -74,6 +74,8 @@ struct TUserInfoBase {
     TActorId ReadSessionActor;
 
     std::optional<TString> CommittedMetadata = std::nullopt;
+    ui64 OffsetRevision = 0;
+    std::optional<NKikimrPQ::TVersionedConsumerOffset> ReplicatedOffset = std::nullopt;
 };
 
 struct TUserInfo: public TUserInfoBase, public TAtomicRefCount<TUserInfo> {

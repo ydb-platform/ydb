@@ -321,6 +321,7 @@ message TEvCheckMessageDeduplicationResponse {
 
 message TReplicationDataPayload {
     map<string, uint64> OffsetsByConsumers = 1;
+    map<string, TVersionedConsumerOffset> VersionedOffsetsByConsumers = 2;
 }
 
 message TEvReplicationData {

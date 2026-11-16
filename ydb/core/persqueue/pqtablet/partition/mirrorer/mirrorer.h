@@ -96,6 +96,7 @@ private:
     void ScheduleConsumerCreation(const TActorContext& ctx);
     void StartInit(const TActorContext& ctx);
     void RetryWrite(const TActorContext& ctx);
+    void SetDestinationConsumers(const TVector<TString>& consumers);
 
     void ProcessNextReaderEvent(TEvPQ::TEvReaderEventArrived::TPtr& ev, const TActorContext& ctx);
     void DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup=false);
@@ -118,6 +119,7 @@ public:
         bool isLocalDC,
         ui64 endOffset,
         const NKikimrPQ::TMirrorPartitionConfig& config,
+        const TVector<TString>& destinationConsumers,
         const TTabletCountersBase& counters
     );
     void Bootstrap(const TActorContext& ctx);
@@ -140,7 +142,8 @@ public:
     void RequestSourcePartitionStatus();
     void TryUpdateWriteTimetsamp(const TActorContext &ctx);
     void AddMessagesToQueue(
-        std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>&& messages
+        std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>&& messages,
+        const TActorContext& ctx
     );
     void StartWaitNextReaderEvent(const TActorContext& ctx);
 
@@ -190,8 +193,11 @@ private:
     ui64 ReadFuturesInFlight = 0;
     TInstant LastReadEventTime;
 
+    THashSet<TString> DestinationConsumers;
     y_absl::flat_hash_map<TString, ui64> OffsetsByConsumers;
     y_absl::flat_hash_map<TString, ui64> ReplicatedOffsetsByConsumers;
+    y_absl::flat_hash_map<TString, NKikimrPQ::TVersionedConsumerOffset> VersionedOffsetsByConsumers;
+    THashSet<TString> MissingVersionedOffsetDiagnostics;
     TInstant LastReplicationDataTimestamp;
     TMaybe<ui64> MirroredOffsetToSend;
 };

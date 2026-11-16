@@ -302,6 +302,34 @@ TReadSessionEvent::TDataReceivedEvent MakeReplicationDataEvent(
     return TReadSessionEvent::TDataReceivedEvent({}, std::move(messages), partition);
 }
 
+using TVersionedOffsetEntry = std::pair<TString, NKikimrPQ::TVersionedConsumerOffset>;
+
+TVersionedOffsetEntry MakeVersionedOffsetEntry(
+    const TString& consumer, ui64 consumerOffset, ui64 readRuleGeneration, ui64 offsetRevision)
+{
+    NKikimrPQ::TVersionedConsumerOffset offset;
+    offset.SetOffset(consumerOffset);
+    offset.SetReadRuleGeneration(readRuleGeneration);
+    offset.SetOffsetRevision(offsetRevision);
+    return {consumer, offset};
+}
+
+TReadSessionEvent::TDataReceivedEvent MakeVersionedReplicationDataEvent(
+    const TIntrusivePtr<TMockPartitionSession>& partition,
+    const TVector<TVersionedOffsetEntry>& offsets)
+{
+    NKikimrPQ::TReplicationDataPayload payload;
+    for (const auto& [consumer, offset] : offsets) {
+        (*payload.MutableOffsetsByConsumers())[consumer] = offset.GetOffset();
+        (*payload.MutableVersionedOffsetsByConsumers())[consumer] = offset;
+    }
+    auto message = MakeCompressed(partition, 0, payload.SerializeAsString());
+    message.GetMessageMeta()->Fields.emplace_back("_ydb_service_replication_message", "true");
+    std::vector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> messages;
+    messages.push_back(std::move(message));
+    return TReadSessionEvent::TDataReceivedEvent({}, std::move(messages), partition);
+}
+
 THolder<TEvPersQueue::TEvResponse> MakeWriteResponse(
     ui64 offset,
     ui64 cookie,
@@ -350,10 +378,12 @@ struct TEnvOptions {
     TMaybe<ui32> RewindCommitDelaySeconds;
     bool EnableSplitMerge = true;
     bool MirrorConsumerOffsets = false;
+    bool MirrorVersionedConsumerOffsets = false;
     bool PendingCredentials = false;
     bool ThrowOnCreateSession = false;
     bool ThrowOnCredentials = false;
     bool ThrowOnCommit = false;
+    TVector<TString> DestinationConsumers = {"consumer", "eligible", "future", "available-consumer", "future-consumer"};
 };
 
 struct TMirrorerEnv {
@@ -433,6 +463,7 @@ struct TMirrorerEnv {
         auto converter = MakeTopicConverter();
         auto mirrorConfig = MakeMirrorConfig();
         mirrorConfig.SetMirrorConsumerOffsets(options.MirrorConsumerOffsets);
+        mirrorConfig.SetMirrorVersionedConsumerOffsets(options.MirrorVersionedConsumerOffsets);
         Mirrorer = Runtime.Register(CreateMirrorer(
             TabletId,
             Tablet,
@@ -442,6 +473,7 @@ struct TMirrorerEnv {
             options.LocalDC,
             options.EndOffset,
             mirrorConfig,
+            options.DestinationConsumers,
             Counters
         ));
         Runtime.EnableScheduleForActor(Mirrorer);
@@ -515,13 +547,45 @@ struct TMirrorerEnv {
         Dispatch();
     }
 
+    void ExpectVersionedReplicationData(size_t count, const TVector<TVersionedOffsetEntry>& expected) const {
+        UNIT_ASSERT_VALUES_EQUAL(CapturedReplicationData.size(), count);
+        const auto& payload = *CapturedReplicationData.back();
+        UNIT_ASSERT_VALUES_EQUAL(payload.VersionedOffsetsByConsumers.size(), expected.size());
+        UNIT_ASSERT_VALUES_EQUAL(payload.OffsetsByConsumers.size(), expected.size());
+        for (const auto& [consumer, offset] : expected) {
+            const auto& actual = payload.VersionedOffsetsByConsumers.at(consumer);
+            UNIT_ASSERT_VALUES_EQUAL(actual.GetOffset(), offset.GetOffset());
+            UNIT_ASSERT_VALUES_EQUAL(actual.GetReadRuleGeneration(), offset.GetReadRuleGeneration());
+            UNIT_ASSERT_VALUES_EQUAL(actual.GetOffsetRevision(), offset.GetOffsetRevision());
+            UNIT_ASSERT_VALUES_EQUAL(payload.OffsetsByConsumers.at(consumer), offset.GetOffset());
+        }
+    }
+
+    void PushVersionedReplicationData(const TVector<TVersionedOffsetEntry>& offsets) {
+        Factory.Session(0).PushEvent(MakeVersionedReplicationDataEvent(
+            Factory.Session(0).Partition, offsets));
+        Dispatch();
+    }
+
+    void PushVersionedReplicationData(
+        ui64 consumerOffset, ui64 readRuleGeneration, ui64 offsetRevision,
+        const TString& consumer = "consumer")
+    {
+        PushVersionedReplicationData({
+            MakeVersionedOffsetEntry(consumer, consumerOffset, readRuleGeneration, offsetRevision)});
+    }
+
     void SendPersistDone(ui64 endOffset) {
         Runtime.Send(new IEventHandle(Mirrorer, Partition, new TEvPQ::TEvPersistDone(endOffset)), 0, true);
         Dispatch();
     }
 
-    void SendChangeConfig(const NKikimrPQ::TMirrorPartitionConfig& mirrorFrom) {
+    void SendChangeConfig(const NKikimrPQ::TMirrorPartitionConfig& mirrorFrom,
+                          const TVector<TString>& destinationConsumers = {}) {
         NKikimrPQ::TPQTabletConfig config;
+        for (const auto& consumer : destinationConsumers) {
+            config.AddConsumers()->SetName(consumer);
+        }
         *config.MutablePartitionConfig()->MutableMirrorFrom() = mirrorFrom;
         Runtime.Send(new IEventHandle(
             Mirrorer,
@@ -785,6 +849,103 @@ Y_UNIT_TEST(ReplicationDataSendsConsumerOffsetsWithoutAck) {
     env.PushReplicationData(9);
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 3);
     UNIT_ASSERT(env.CapturedRequests.empty());
+}
+
+Y_UNIT_TEST(VersionedReplicationDataWaitsForFullOffsetAndOrdersByRevision) {
+    TMirrorerEnv env({.EndOffset = 10, .MirrorVersionedConsumerOffsets = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 10, 10);
+
+    env.PushVersionedReplicationData(11, 7, 0);
+    env.PushVersionedReplicationData(12, 7, 1);
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
+    env.PushVersionedReplicationData(10, 7, 2);
+    env.ExpectVersionedReplicationData(1, {MakeVersionedOffsetEntry("consumer", 10, 7, 2)});
+
+    env.PushVersionedReplicationData(11, 7, 3);
+    env.PushVersionedReplicationData(11, 7, 4);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1u);
+    env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 10));
+    env.Dispatch();
+    env.AckWrite(10);
+    env.SendPersistDone(11);
+    env.ExpectVersionedReplicationData(2, {MakeVersionedOffsetEntry("consumer", 11, 7, 4)});
+
+    // Ready tuples can be replayed; the destination owns durable deduplication.
+    env.PushVersionedReplicationData(11, 7, 4);
+    env.ExpectVersionedReplicationData(3, {MakeVersionedOffsetEntry("consumer", 11, 7, 4)});
+    UNIT_ASSERT_VALUES_EQUAL(env.ErrorCount, 0u);
+}
+
+Y_UNIT_TEST(VersionedReplicationDataSafelySendsMultiplePendingConsumers) {
+    TMirrorerEnv env({.EndOffset = 10, .RewindCommitDelaySeconds = 0,
+        .MirrorVersionedConsumerOffsets = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 10, 100);
+
+    env.PushVersionedReplicationData(5, 7, 0);
+    env.ExpectVersionedReplicationData(1, {MakeVersionedOffsetEntry("consumer", 5, 7, 0)});
+    env.PushVersionedReplicationData({
+        MakeVersionedOffsetEntry("consumer", 5, 7, 0),
+        MakeVersionedOffsetEntry("eligible", 10, 8, 0),
+        MakeVersionedOffsetEntry("future", 11, 9, 0),
+    });
+    env.ExpectVersionedReplicationData(2, {
+        MakeVersionedOffsetEntry("consumer", 5, 7, 0), MakeVersionedOffsetEntry("eligible", 10, 8, 0)});
+
+    // Committing the source's empty tail does not advance the destination's retained range.
+    env.Factory.Session(0).PushEvent(TReadSessionEvent::TPartitionSessionStatusEvent(
+        env.Factory.Session(0).Partition, 10, 100, 100, TInstant::MilliSeconds(2000)));
+    env.Dispatch();
+    UNIT_ASSERT_VALUES_EQUAL(env.Factory.CommitPromises.size(), 1u);
+    env.Factory.CommitPromises[0].SetValue(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}));
+    env.Dispatch();
+    env.ExpectVersionedReplicationData(3, {});
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->MirroredOffset.GetOrElse(0), 100u);
+
+    env.SendPersistDone(11);
+    env.ExpectVersionedReplicationData(4, {MakeVersionedOffsetEntry("future", 11, 9, 0)});
+}
+
+Y_UNIT_TEST(VersionedReplicationDataKeepsOnlyConfiguredConsumers) {
+    TMirrorerEnv env({.EndOffset = 10, .MirrorVersionedConsumerOffsets = true,
+        .DestinationConsumers = {"consumer"}});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 10, 10);
+
+    env.PushVersionedReplicationData({
+        MakeVersionedOffsetEntry("consumer", 5, 7, 0),
+        MakeVersionedOffsetEntry("unknown", 6, 7, 0),
+    });
+    env.ExpectVersionedReplicationData(1, {MakeVersionedOffsetEntry("consumer", 5, 7, 0)});
+
+    auto mirror = MakeMirrorConfig();
+    mirror.SetMirrorVersionedConsumerOffsets(true);
+    env.SendChangeConfig(mirror, {"other"});
+    env.Advance(TDuration::Seconds(1));
+    env.WaitSessions(2);
+    env.StartSession(1, 10, 10);
+    env.Factory.Session(1).PushEvent(MakeVersionedReplicationDataEvent(
+        env.Factory.Session(1).Partition, {
+            MakeVersionedOffsetEntry("consumer", 7, 7, 0),
+            MakeVersionedOffsetEntry("other", 8, 7, 0),
+            MakeVersionedOffsetEntry("unknown", 9, 7, 0),
+        }));
+    env.Dispatch();
+    env.ExpectVersionedReplicationData(2, {MakeVersionedOffsetEntry("other", 8, 7, 0)});
+}
+
+Y_UNIT_TEST(VersionedReplicationDataRejectsLegacyOnlyPayloadAndSupportsBaseline) {
+    TMirrorerEnv env({.MirrorVersionedConsumerOffsets = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 0);
+
+    env.PushReplicationData(0);
+    UNIT_ASSERT_VALUES_EQUAL(env.ErrorCount, 1u);
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
+
+    env.PushVersionedReplicationData({{"consumer", {}}});
+    env.ExpectVersionedReplicationData(1, {MakeVersionedOffsetEntry("consumer", 0, 0, 0)});
 }
 
 Y_UNIT_TEST(PersistDoneAdvancesConsumerOffsetsWithoutMessages) {

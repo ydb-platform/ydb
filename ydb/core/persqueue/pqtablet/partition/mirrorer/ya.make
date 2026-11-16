@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/persqueue/common
     ydb/core/persqueue/common/proxy
     ydb/core/persqueue/pqtablet/common
+    ydb/core/persqueue/public
     ydb/core/persqueue/public/write_meta
     ydb/public/sdk/cpp/src/client/topic/common
 )

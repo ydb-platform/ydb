@@ -7347,13 +7347,17 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             return settings;
         }
 
-        explicit THnswLifecycleFixture(bool follower = false, ui32 indexCount = 1, bool sameColumn = true, bool annotate = true)
+        explicit THnswLifecycleFixture(bool follower = false, ui32 indexCount = 1, bool sameColumn = true,
+                bool annotate = true, bool shadow = false, ui64 minRows = 1)
             : Helper(Configure(Ports), 1, follower)
         {
             TVector<TShardedTableOptions::TColumn> columns = {{"key", "Uint32", true, false}, {"label", "Uint32", false, false},
                                                              {"emb", "String", false, false}};
             if (indexCount > 1 && !sameColumn) { columns.push_back({"emb2", "String", false, false}); }
             Helper.CreateCustomTable("hnsw-lifecycle", columns, annotate, {}, [&](auto& table) {
+                if (shadow) {
+                    table.MutablePartitionConfig()->SetShadowData(true);
+                }
                 auto first = table.GetTableIndexes(0);
                 table.ClearTableIndexes();
                 for (ui32 i = 0; i < indexCount; ++i) {
@@ -7363,6 +7367,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
                     index->SetLocalPathId(Max<ui64>() - 1 - i);
                     index->MutableHnswIndexDescription()->SetEmbeddingColumnId(sameColumn ? 3 : 3 + i % 2);
                     index->MutableHnswIndexDescription()->MutableSettings()->mutable_settings()->set_m(16 + i);
+                    index->MutableHnswIndexDescription()->MutableSettings()->mutable_settings()->set_min_rows(minRows);
                 }
             });
             ExecSQL(Helper.Server, Helper.Sender, R"(
@@ -7395,18 +7400,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             settings.set_min_rows(1);
             settings.set_delta_rows(1000);
             return settings;
-        }
-
-        void AnnotatePublication(NKikimrSchemeOp::TTableDescription& alter,
-                const Ydb::Table::VectorIndexSettings& settings) const {
-            alter.MutablePartitionConfig()->SetShadowData(false);
-            auto* index = alter.AddTableIndexes();
-            index->SetName("hnsw0");
-            index->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
-            index->SetPathOwnerId(alter.GetPathId().GetOwnerId());
-            index->SetLocalPathId(Max<ui64>() - 1);
-            index->MutableHnswIndexDescription()->SetEmbeddingColumnId(3);
-            *index->MutableHnswIndexDescription()->MutableSettings()->mutable_settings() = settings;
         }
 
         std::shared_ptr<THnswIndex> Index() {
@@ -8360,11 +8353,22 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
     }
 
 
-    Y_UNIT_TEST_TWIN(HnswSchemaFinalizationRequestsBackgroundBuild, BelowMinRows) {
-        THnswLifecycleFixture fixture(false, 1, true, false);
+    Y_UNIT_TEST_QUAD(HnswSchemaFinalizationRequestsBackgroundBuild, BelowMinRows, Reboot) {
+        THnswLifecycleFixture fixture(false, 1, true, true, true, BelowMinRows ? 100 : 1);
         UNIT_ASSERT(!fixture.Index());
         auto& runtime = *fixture.Helper.Server->GetRuntime();
-        ui32 annotations = 0;
+        if (Reboot) {
+            RebootTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId, fixture.Helper.Sender);
+            fixture.Helper.Tables.at("hnsw-lifecycle").ClientId = {};
+        }
+        const auto& table = *fixture.Shard()->GetUserTables().begin()->second;
+        UNIT_ASSERT(table.ShadowTid);
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.begin()->second.VectorColumnTag, 3u);
+        const auto localTid = table.LocalTid;
+        const auto indexId = table.HnswIndexes.begin()->first;
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetHnswBuildToken(localTid), 0u);
+        ui32 publications = 0;
         auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
                 auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
@@ -8372,13 +8376,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
                     NKikimrTxDataShard::TFlatSchemeTransaction tx;
                     UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
                     if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
-                        auto settings = fixture.Settings();
-                        if (BelowMinRows) {
-                            settings.set_min_rows(100);
-                        }
-                        fixture.AnnotatePublication(*tx.MutableAlterTable(), settings);
+                        UNIT_ASSERT_VALUES_EQUAL(tx.GetAlterTable().TableIndexesSize(), 0);
+                        tx.MutableAlterTable()->MutablePartitionConfig()->SetShadowData(false);
                         UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
-                        ++annotations;
+                        ++publications;
                     }
                 }
             }
@@ -8388,8 +8389,34 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
             "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;"), "SUCCESS");
         runtime.SetObserverFunc(observer);
-        UNIT_ASSERT(annotations);
+        UNIT_ASSERT(publications);
         if (BelowMinRows) {
+            runtime.WaitFor("below-minimum publication scan", [&] {
+                const auto stats = fixture.Shard()->GetHnswIndexStats(localTid, indexId);
+                return stats && !stats->Building && fixture.Shard()->GetHnswBuildToken(localTid);
+            });
+            const auto token = fixture.Shard()->GetHnswBuildToken(localTid);
+            UNIT_ASSERT(!fixture.Index());
+            // A normal full-config alter may still contain ShadowData=false.
+            // It must not reset a below-minimum entry after publication.
+            auto refresh = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() != TEvDataShard::TEvProposeTransaction::EventType) {
+                    return;
+                }
+                auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
+                        tx.MutableAlterTable()->MutablePartitionConfig()->SetShadowData(false);
+                        UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                    }
+                }
+            });
+            UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
+                "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN another String;"), "SUCCESS");
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetHnswBuildToken(localTid), token);
             UNIT_ASSERT(!fixture.Index());
             UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 2u);
         } else {
@@ -8399,7 +8426,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
     }
 
     Y_UNIT_TEST(HnswBackgroundPublicationBuildDoesNotBlockWrites) {
-        THnswLifecycleFixture fixture(false, 1, true, false);
+        THnswLifecycleFixture fixture(false, 1, true, true, true);
         auto& runtime = *fixture.Helper.Server->GetRuntime();
         auto* shard = fixture.Shard();
         const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
@@ -8416,7 +8443,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
                     NKikimrTxDataShard::TFlatSchemeTransaction tx;
                     UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
                     if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
-                        fixture.AnnotatePublication(*tx.MutableAlterTable(), fixture.Settings());
+                        UNIT_ASSERT_VALUES_EQUAL(tx.GetAlterTable().TableIndexesSize(), 0);
+                        tx.MutableAlterTable()->MutablePartitionConfig()->SetShadowData(false);
                         UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
                     }
                 }

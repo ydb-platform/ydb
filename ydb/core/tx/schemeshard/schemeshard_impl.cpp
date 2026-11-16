@@ -8406,6 +8406,59 @@ void TSchemeShard::FillSeqNo(NKikimrTxColumnShard::TSchemaTxBody& tx, TMessageSe
     tx.MutableSeqNo()->SetRound(seqNo.Round);
 }
 
+namespace {
+
+// The owning index is the source of truth for posting-table settings and the
+// embedding column. Use the assigned table column id, including during creation.
+void FillHnswPostingTableDescription(const TSchemeShard& ss, TPathId tableId,
+        bool pendingIndex, NKikimrSchemeOp::TTableDescription* tableDescr) {
+    const auto& path = ss.PathsById.at(tableId);
+    if (path->Name != NTableIndex::NKMeans::PostingTable) {
+        return;
+    }
+    const auto indexIt = ss.Indexes.find(path->ParentPathId);
+    if (indexIt == ss.Indexes.end()) {
+        return;
+    }
+    const auto index = pendingIndex && indexIt->second->AlterData
+        ? indexIt->second->AlterData : indexIt->second;
+    if (index->Type != NKikimrSchemeOp::EIndexTypeGlobalHnsw || index->IndexKeys.empty()) {
+        return;
+    }
+    const auto* hnsw = std::get_if<NKikimrSchemeOp::THnswIndexDescription>(
+        &index->SpecializedIndexDescription);
+    if (!hnsw) {
+        return;
+    }
+    const auto& table = ss.Tables.at(tableId);
+    for (const auto& [columnId, column] : table->Columns) {
+        if (column.Name != index->IndexKeys.back() || column.IsDropped()) {
+            continue;
+        }
+        NKikimrSchemeOp::TIndexDescription* description = nullptr;
+        for (auto& candidate : *tableDescr->MutableTableIndexes()) {
+            if (candidate.GetPathOwnerId() == path->ParentPathId.OwnerId
+                    && candidate.GetLocalPathId() == path->ParentPathId.LocalPathId) {
+                description = &candidate;
+                break;
+            }
+        }
+        if (!description) {
+            description = tableDescr->AddTableIndexes();
+        }
+        description->SetName(ss.PathsById.at(path->ParentPathId)->Name);
+        description->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+        description->SetPathOwnerId(path->ParentPathId.OwnerId);
+        description->SetLocalPathId(path->ParentPathId.LocalPathId);
+        description->SetSchemaVersion(index->AlterVersion);
+        *description->MutableHnswIndexDescription() = *hnsw;
+        description->MutableHnswIndexDescription()->SetEmbeddingColumnId(columnId);
+        break;
+    }
+}
+
+} // namespace
+
 TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, TMessageSeqNo seqNo) const {
     Y_VERIFY_S(Tables.contains(pathId), "Unknown table " << pathId);
     Y_VERIFY_S(PathsById.contains(pathId), "Unknown path " << pathId);
@@ -8493,15 +8546,8 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
         proto->MutableDetailedMetricsSettings()->MutableConfigured()->CopyFrom(tableInfo->GetDetailedMetricsSettings());
     }
 
-    // Forwarded only for the alter that publishes a vector index posting table,
-    // so the shard can build its in-memory HNSW index (see FinalizeIndexImplTable).
-    if (alterData->TableDescriptionFull.Defined()) {
-        for (const auto& index : alterData->TableDescriptionFull->GetTableIndexes()) {
-            if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
-                *proto->AddTableIndexes() = index;
-            }
-        }
-    }
+    // Refresh derived metadata when index settings have been resolved or changed.
+    FillHnswPostingTableDescription(*this, pathId, true, proto);
 
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
@@ -8594,36 +8640,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
     }
     tableDescr->CopyFrom(tinfo->TableDescription);
 
-    // Creation, copying and splitting use SchemeShard metadata rather than
-    // a source tablet's schema. Recover posting-table settings from the owning
-    // index; new tables need the pending index version before publication.
-    if (pinfo->Name == NTableIndex::NKMeans::PostingTable) {
-        const auto indexIt = Indexes.find(pinfo->ParentPathId);
-        const auto indexInfo = indexIt != Indexes.end()
-            ? (newTable && indexIt->second->AlterData ? indexIt->second->AlterData : indexIt->second)
-            : TTableIndexInfo::TPtr{};
-        if (indexInfo && indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalHnsw
-                && indexInfo->State == NKikimrSchemeOp::EIndexStateReady
-                && !indexInfo->IndexKeys.empty()) {
-            const auto& index = *indexInfo;
-            const auto& embedding = index.IndexKeys.back();
-            for (const auto& [columnId, column] : tinfo->Columns) {
-                if (column.Name != embedding || column.IsDropped()) {
-                    continue;
-                }
-                auto* description = tableDescr->AddTableIndexes();
-                description->SetName(PathsById.at(pinfo->ParentPathId)->Name);
-                description->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
-                description->SetPathOwnerId(pinfo->ParentPathId.OwnerId);
-                description->SetLocalPathId(pinfo->ParentPathId.LocalPathId);
-                description->SetSchemaVersion(index.AlterVersion);
-                auto* hnsw = description->MutableHnswIndexDescription();
-                *hnsw = std::get<NKikimrSchemeOp::THnswIndexDescription>(index.SpecializedIndexDescription);
-                hnsw->SetEmbeddingColumnId(columnId);
-                break;
-            }
-        }
-    }
+    FillHnswPostingTableDescription(*this, tableId, newTable, tableDescr);
 
     if (rangeBegin.empty()) {
         // First partition starts with <NULL, NULL, ..., NULL> key

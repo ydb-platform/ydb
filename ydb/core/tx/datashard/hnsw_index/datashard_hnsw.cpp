@@ -231,7 +231,9 @@ namespace NKikimr::NDataShard {
         auto* scan = new THnswSnapshotScan(*request.Table, entry.VectorColumnTag, entry.Settings,
                                            HnswCacheMemoryTracker, entry.MemoryOwner, bool(entry.Index), entry.CancelBuild, std::move(request.Finish));
         entry.ScanId = Executor()->QueueScan(request.LocalTid, scan, 0, NTabletFlatExecutor::TScanOptions().SetReadPrio(NTabletFlatExecutor::TScanOptions::EReadPrio::Low).SetReadAhead(0, 512_KB).SetSnapshotRowVersion(request.BaseVersion));
-        if (request.Control) { request.Control->ScanId = entry.ScanId; }
+        if (request.Control) {
+            request.Control->ScanId = entry.ScanId;
+        }
     }
 
     class TDataShard::TTxRebuildHnswIndex: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -249,7 +251,7 @@ namespace NKikimr::NDataShard {
             for (const auto& [_, candidate] : Self->TableInfos) {
                 if (candidate->LocalTid == LocalTid) { table = candidate; break; }
             }
-            if (!table) { return true; }
+            if (!table || table->ShadowTid) { return true; }
             const auto* metadata = table->HnswIndexes.FindPtr(IndexId);
             if (!metadata || !metadata->VectorColumnTag || !table->Columns.contains(metadata->VectorColumnTag)
                     || metadata->Settings.vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT) { return true; }
@@ -940,6 +942,7 @@ namespace NKikimr::NDataShard {
     void TDataShard::ScheduleHnswInitialBuilds() {
         if (!AppData()->FeatureFlags.GetEnableHnswIndex() || IsFollower() || State != TShardState::Ready) { return; }
         for (const auto& [_, table] : TableInfos) {
+            if (table->ShadowTid) { continue; }
             for (const auto& [indexId, metadata] : table->HnswIndexes) {
                 // Reconciliation erases changed definitions. Existing entries
                 // retain their thresholds, disabled state and retry budgets.

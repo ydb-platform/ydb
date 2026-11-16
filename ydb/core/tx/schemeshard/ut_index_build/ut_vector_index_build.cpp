@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -144,6 +145,95 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.DebugString(),
             Enabled ? "not available yet" : "EnableHnswIndex");
         TestDescribeResult(DescribePath(runtime, "/MyRoot/HnswApiTable"), {NLs::IndexesCount(0)});
+    }
+
+    Y_UNIT_TEST_TWIN(HnswPostingMetadataIsPresentDuringCreation, Pending) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        // Public HNSW creation stays rejected until SQL support lands. Start
+        // from a supported vector-index schema to test the internal serializer.
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "PostingMetadata"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "custom_embedding" Type: "String" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "idx" Type: EIndexTypeGlobalVectorKmeansTree
+                KeyColumnNames: ["custom_embedding"]
+                DataColumnNames: ["custom_embedding"]
+                VectorIndexKmeansTreeDescription { Settings {
+                    settings { metric: DISTANCE_COSINE vector_type: VECTOR_TYPE_FLOAT vector_dimension: 2 }
+                    clusters: 2 levels: 1
+                } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto indexPath = DescribePath(runtime, "/MyRoot/PostingMetadata/idx", true, true, true);
+        const auto postingPath = DescribePath(runtime, "/MyRoot/PostingMetadata/idx/indexImplPostingTable", true, true, true);
+        const auto levelPath = DescribePath(runtime, "/MyRoot/PostingMetadata/idx/indexImplLevelTable", true, true, true);
+        const TPathId indexId(TTestTxConfig::SchemeShard, indexPath.GetPathDescription().GetSelf().GetPathId());
+        const TPathId postingId(TTestTxConfig::SchemeShard, postingPath.GetPathDescription().GetSelf().GetPathId());
+        const TPathId levelId(TTestTxConfig::SchemeShard, levelPath.GetPathDescription().GetSelf().GetPathId());
+        auto* ss = dynamic_cast<TSchemeShard*>(runtime.FindActor(ResolveTablet(runtime, TTestTxConfig::SchemeShard)));
+        UNIT_ASSERT(ss);
+        runtime.RunCall([&] {
+            NKikimrSchemeOp::TTableDescription original;
+            ss->FillTableDescription(postingId, 0, 1, &original);
+            UNIT_ASSERT_VALUES_EQUAL(original.TableIndexesSize(), 0);
+            auto index = ss->Indexes.at(indexId);
+            if (Pending) {
+                index = index->CreateNextVersion();
+            }
+            index->Type = NKikimrSchemeOp::EIndexTypeGlobalHnsw;
+            index->State = NKikimrSchemeOp::EIndexStateWriteOnly;
+            auto& hnsw = index->SpecializedIndexDescription.emplace<NKikimrSchemeOp::THnswIndexDescription>();
+            auto& settings = *hnsw.MutableSettings();
+            settings.set_clusters(2);
+            settings.set_levels(1);
+            auto* vector = settings.mutable_settings();
+            vector->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            vector->set_vector_dimension(2);
+            vector->set_m(8);
+            vector->set_ef_construction(64);
+            const auto table = ss->Tables.at(postingId);
+            const auto embeddingId = table->GetColumnIdByNameSlow("custom_embedding");
+            UNIT_ASSERT(embeddingId);
+            NKikimrSchemeOp::TTableDescription creation;
+            ss->FillTableDescription(postingId, 0, 1, &creation);
+            UNIT_ASSERT_VALUES_EQUAL(creation.TableIndexesSize(), 1);
+            const auto& metadata = creation.GetTableIndexes(0);
+            UNIT_ASSERT_VALUES_EQUAL(TPathId(metadata.GetPathOwnerId(), metadata.GetLocalPathId()), indexId);
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetHnswIndexDescription().GetEmbeddingColumnId(), embeddingId);
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetHnswIndexDescription().GetSettings().SerializeAsString(), settings.SerializeAsString());
+            NDataShard::TUserTable persisted(1, creation, 2);
+            UNIT_ASSERT_VALUES_EQUAL(persisted.HnswIndexes.at(indexId).VectorColumnTag, embeddingId);
+
+            // Publication uses current index metadata, without settings or an
+            // embedding-column name passed in the Apply/Alter request.
+            vector->set_vector_dimension(4);
+            table->AlterData = new TTableInfo::TAlterTableInfo();
+            table->AlterData->AlterVersion = table->AlterVersion + 1;
+            table->AlterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
+            table->AlterData->PartitionConfigFull().CopyFrom(table->PartitionConfig());
+            table->AlterData->PartitionConfigFull().SetShadowData(false);
+            UNIT_ASSERT_VALUES_EQUAL(table->AlterData->TableDescriptionFull->TableIndexesSize(), 0);
+            NKikimrTxDataShard::TFlatSchemeTransaction publication;
+            UNIT_ASSERT(publication.ParseFromString(ss->FillAlterTableTxBody(postingId,
+                table->GetPartitions().front()->ShardIdx, {})));
+            UNIT_ASSERT_VALUES_EQUAL(publication.GetAlterTable().TableIndexesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(publication.GetAlterTable().GetTableIndexes(0)
+                .GetHnswIndexDescription().GetSettings().SerializeAsString(), settings.SerializeAsString());
+            table->AlterData = nullptr;
+
+            NKikimrSchemeOp::TTableDescription level;
+            ss->FillTableDescription(levelId, 0, 1, &level);
+            UNIT_ASSERT_VALUES_EQUAL(level.TableIndexesSize(), 0);
+            return true;
+        });
     }
 
     Y_UNIT_TEST(VectorPrimaryKeyEmbeddingClusteredBuild) {

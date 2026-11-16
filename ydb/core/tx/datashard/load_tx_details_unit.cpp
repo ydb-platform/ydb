@@ -1,6 +1,7 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/tx/datashard/hnsw_index/hnsw_index_build_unit.h>
 
 namespace NKikimr {
@@ -47,8 +48,14 @@ EExecutionStatus TLoadTxDetailsUnit::Execute(TOperation::TPtr op,
     if (!Pipeline.LoadTxDetails(txc, ctx, tx, tx->GetUserCtx()))
         return EExecutionStatus::Restart;
 
-    if (tx->IsSchemeTx()) {
-        AddHnswIndexBuildToExecutionPlan(*tx);
+    if (tx->IsSchemeTx() && AppData()->FeatureFlags.GetEnableHnswIndex()
+            && tx->GetSchemeTx().HasAlterTable()) {
+        const auto& alter = tx->GetSchemeTx().GetAlterTable();
+        const auto tableId = alter.HasPathId() ? alter.GetPathId().GetLocalId() : alter.GetId_Deprecated();
+        const auto table = DataShard.GetUserTables().find(tableId);
+        if (table != DataShard.GetUserTables().end() && table->second->ShadowTid) {
+            AddHnswIndexBuildToExecutionPlan(*tx, !table->second->HnswIndexes.empty());
+        }
     }
 
     return EExecutionStatus::Executed;

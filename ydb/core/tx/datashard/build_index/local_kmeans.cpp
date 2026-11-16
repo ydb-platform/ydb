@@ -757,7 +757,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         }
 
         if (request.GetK() == 0) {
-            badRequest("Should be requested at least one cluster");
+            badRequest("At least one cluster should be requested");
         }
 
         const auto parentFrom = request.GetParentFrom();

@@ -230,6 +230,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             auto alterIndex = outTx.MutableAlterTableIndex();
             alterIndex->SetName(index.LeafName());
             alterIndex->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
+            if (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                *alterIndex->MutableHnswIndexDescription() = indexDesc.GetHnswIndexDescription();
+            }
             // Update key columns and data columns (may change during rebuild, e.g. non-prefixed to prefixed)
             *alterIndex->MutableKeyColumnNames() = indexDesc.GetKeyColumnNames();
             *alterIndex->MutableDataColumnNames() = indexDesc.GetDataColumnNames();

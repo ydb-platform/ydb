@@ -26,15 +26,15 @@ bool IsHnswPostingTablePublication(const NKikimrTxDataShard::TFlatSchemeTransact
     }
     const auto& alter = schemeTx.GetAlterTable();
     return alter.GetPartitionConfig().HasShadowData()
-        && !alter.GetPartitionConfig().GetShadowData()
-        && FindHnswIndexDescription(alter);
+        && !alter.GetPartitionConfig().GetShadowData();
 }
 
 } // namespace
 
-void AddHnswIndexBuildToExecutionPlan(TActiveTransaction& tx) {
+void AddHnswIndexBuildToExecutionPlan(TActiveTransaction& tx, bool hasHnswMetadata) {
     if (!AppData()->FeatureFlags.GetEnableHnswIndex()
-            || !IsHnswPostingTablePublication(tx.GetSchemeTx())) {
+            || !IsHnswPostingTablePublication(tx.GetSchemeTx())
+            || (!hasHnswMetadata && !FindHnswIndexDescription(tx.GetSchemeTx().GetAlterTable()))) {
         return;
     }
 
@@ -70,49 +70,41 @@ public:
             return EExecutionStatus::Executed;
         }
         const auto& alter = tx->GetSchemeTx().GetAlterTable();
-        const auto* description = FindHnswIndexDescription(alter);
-        const auto& hnsw = description->GetHnswIndexDescription();
         // CompletedOperations releases the transaction body before Complete().
-        // Keep requests separate for operations sharing this execution unit.
-        PendingRequests[op->GetTxId()] = {
-            alter.HasPathId() ? alter.GetPathId().GetLocalId() : alter.GetId_Deprecated(),
-            TPathId(description->GetPathOwnerId(), description->GetLocalPathId()),
-            hnsw.GetEmbeddingColumnId(), hnsw.GetSettings().settings()};
+        // The settings and column ids already belong to the persisted user table.
+        PendingTables[op->GetTxId()] = alter.HasPathId()
+            ? alter.GetPathId().GetLocalId() : alter.GetId_Deprecated();
         return EExecutionStatus::DelayComplete;
     }
 
     void Complete(TOperation::TPtr op, const TActorContext&) override {
-        const auto pending = PendingRequests.find(op->GetTxId());
-        if (pending == PendingRequests.end()) {
+        const auto pending = PendingTables.find(op->GetTxId());
+        if (pending == PendingTables.end()) {
             return;
         }
-        auto request = std::move(pending->second);
-        PendingRequests.erase(pending);
+        const auto tableId = pending->second;
+        PendingTables.erase(pending);
         if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
             return;
         }
-        const auto table = DataShard.GetUserTables().find(request.TableId);
-        if (table == DataShard.GetUserTables().end()) {
+        const auto table = DataShard.GetUserTables().find(tableId);
+        if (table == DataShard.GetUserTables().end() || table->second->ShadowTid) {
             return;
         }
         const auto localTid = table->second->LocalTid;
-        const auto* entry = DataShard.FindHnswIndexEntry(localTid, request.IndexId);
-        if (entry && !entry->Building && !entry->Index) {
-            // Publishing shadow data supersedes an earlier below-threshold scan.
-            DataShard.DeferHnswIndexBuild(localTid, TDuration::Zero(), request.IndexId);
+        for (const auto& [indexId, metadata] : table->second->HnswIndexes) {
+            const auto* entry = DataShard.FindHnswIndexEntry(localTid, indexId);
+            if (entry && !entry->Building && !entry->Index) {
+                // Publishing shadow data supersedes an earlier below-threshold scan.
+                DataShard.DeferHnswIndexBuild(localTid, TDuration::Zero(), indexId);
+            }
+            DataShard.RequestHnswIndexBuild(localTid, metadata.VectorColumnTag,
+                metadata.Settings, indexId);
         }
-        DataShard.RequestHnswIndexBuild(localTid, request.VectorColumnTag,
-            request.Settings, request.IndexId);
     }
 
 private:
-    struct TBuildRequest {
-        ui64 TableId;
-        TPathId IndexId;
-        ui32 VectorColumnTag;
-        Ydb::Table::VectorIndexSettings Settings;
-    };
-    THashMap<ui64, TBuildRequest> PendingRequests;
+    THashMap<ui64, ui64> PendingTables;
 };
 
 THolder<TExecutionUnit> CreateBuildHnswIndexUnit(TDataShard& dataShard, TPipeline& pipeline) {

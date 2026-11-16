@@ -1,4 +1,5 @@
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
 
@@ -28,10 +29,11 @@ public:
     }
 
     void AddBlobStorageIndex(bool inheritPortionStorage = false) {
-        *Schema.AddIndexes() =
-            NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(IndexId, "pk_max",
-                                                     NOlap::NBlobOperations::TGlobal::DefaultStorageId, inheritPortionStorage, PkColumnId))
-                .SerializeToProto();
+        *Schema.AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(
+            std::make_shared<NOlap::NIndexes::NMinMax::TIndexMeta>(IndexId, "pk_min_max", NOlap::NBlobOperations::TGlobal::DefaultStorageId,
+                inheritPortionStorage, PkColumnId,
+                NOlap::NIndexes::TReadDataExtractorContainer(std::make_shared<NOlap::NIndexes::TDefaultDataExtractor>())))
+                                  .SerializeToProto();
     }
 
     auto BuildPortion() {

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "cdc_aggregator_stream.h"
 #include "cdc_aggregator_stream_repository.h"
 #include "schema.h"
 

@@ -101,9 +101,13 @@ public:
         return ev;
     }
 
-    TConfigureResult ConfigureTracking(const TVector<ui64>& sourceDataShardIds, ui32 partitionCount = 2) {
-        SendRequest(MakeConfigureTracking(sourceDataShardIds, partitionCount));
+    TConfigureResult ConfigureTracking(THolder<TEvCdcAggregator::TEvConfigureTracking> request) {
+        SendRequest(std::move(request));
         return GrabResult<TEvCdcAggregator::TEvConfigureTrackingResult>()->Get()->Record;
+    }
+
+    TConfigureResult ConfigureTracking(const TVector<ui64>& sourceDataShardIds, ui32 partitionCount = 2) {
+        return ConfigureTracking(MakeConfigureTracking(sourceDataShardIds, partitionCount));
     }
 
     TWriteResult WriteHeartbeats(const TVector<std::pair<ui64, ui64>>& heartbeats) {
@@ -213,6 +217,37 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>());
     }
 
+    Y_UNIT_TEST(RejectsInvalidStreamTopic) {
+        TTestEnv env;
+
+        auto noPathIdRequest = MakeConfigureTracking({1}, 2);
+        noPathIdRequest->Record.MutableConfig()->ClearStreamPathId();
+        const auto noPathIdResult = env.ConfigureTracking(std::move(noPathIdRequest));
+        UNIT_ASSERT_C(noPathIdResult.GetStatus() == TConfigureResult::BAD_REQUEST, noPathIdResult.ShortDebugString());
+
+        auto zeroPathIdRequest = MakeConfigureTracking({1}, 2);
+        TPathId(0, 2).ToProto(zeroPathIdRequest->Record.MutableConfig()->MutableStreamPathId());
+        const auto zeroPathIdResult = env.ConfigureTracking(std::move(zeroPathIdRequest));
+        UNIT_ASSERT_C(zeroPathIdResult.GetStatus() == TConfigureResult::BAD_REQUEST, zeroPathIdResult.ShortDebugString());
+
+        auto noStreamPathRequest = MakeConfigureTracking({1}, 2);
+        noStreamPathRequest->Record.MutableConfig()->ClearStreamPath();
+        const auto noStreamPathResult = env.ConfigureTracking(std::move(noStreamPathRequest));
+        UNIT_ASSERT_C(noStreamPathResult.GetStatus() == TConfigureResult::BAD_REQUEST, noStreamPathResult.ShortDebugString());
+
+        auto noTabletRequest = MakeConfigureTracking({1}, 2);
+        noTabletRequest->Record.MutableConfig()->MutableTargetPartitions(0)->SetTabletId(0);
+        const auto noTabletResult = env.ConfigureTracking(std::move(noTabletRequest));
+        UNIT_ASSERT_C(noTabletResult.GetStatus() == TConfigureResult::BAD_REQUEST, noTabletResult.ShortDebugString());
+
+        auto duplicatePartitionRequest = MakeConfigureTracking({1}, 2);
+        duplicatePartitionRequest->Record.MutableConfig()->MutableTargetPartitions(1)->SetPartitionId(0);
+        const auto duplicatePartitionResult = env.ConfigureTracking(std::move(duplicatePartitionRequest));
+        UNIT_ASSERT_C(duplicatePartitionResult.GetStatus() == TConfigureResult::BAD_REQUEST, duplicatePartitionResult.ShortDebugString());
+
+        UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>());
+    }
+
     Y_UNIT_TEST(ReplacesParentWithChildren) {
         TTestEnv env;
         env.ConfigureTracking({1, 2});
@@ -239,6 +274,9 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         const auto unknownAck = env.PartitioningChanged(7, {8});
         UNIT_ASSERT_C(unknownAck.GetStatus() == TPartitioningAck::UNKNOWN_SOURCE, unknownAck.ShortDebugString());
 
+        const auto partlyKnownAck = env.PartitioningChanged(7, {1, 8});
+        UNIT_ASSERT_C(partlyKnownAck.GetStatus() == TPartitioningAck::UNKNOWN_SOURCE, partlyKnownAck.ShortDebugString());
+
         const auto selfAck = env.PartitioningChanged(1, {1, 3});
         UNIT_ASSERT_C(selfAck.GetStatus() == TPartitioningAck::BAD_REQUEST, selfAck.ShortDebugString());
 
@@ -250,8 +288,11 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
 
     Y_UNIT_TEST(KeepsSourcesAfterRestart) {
         TTestEnv env;
-        env.ConfigureTracking({1, 2});
-        env.PartitioningChanged(1, {3, 4});
+
+        const auto configureResult = env.ConfigureTracking({1, 2});
+        UNIT_ASSERT_C(configureResult.GetStatus() == TConfigureResult::SUCCESS, configureResult.ShortDebugString());
+        const auto splitAck = env.PartitioningChanged(1, {3, 4});
+        UNIT_ASSERT_C(splitAck.GetStatus() == TPartitioningAck::SUCCESS, splitAck.ShortDebugString());
 
         env.RebootTablet();
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 3, 4}));
@@ -265,6 +306,27 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
 
         const auto otherPartitionsResult = env.ConfigureTracking({2, 3, 4}, 3);
         UNIT_ASSERT_C(otherPartitionsResult.GetStatus() == TConfigureResult::CONFLICT, otherPartitionsResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(KeepsSourcesAcrossRestartsBetweenSplitAndMerge) {
+        TTestEnv env;
+
+        const auto configureResult = env.ConfigureTracking({1, 2});
+        UNIT_ASSERT_C(configureResult.GetStatus() == TConfigureResult::SUCCESS, configureResult.ShortDebugString());
+        const auto splitAck = env.PartitioningChanged(1, {3, 4});
+        UNIT_ASSERT_C(splitAck.GetStatus() == TPartitioningAck::SUCCESS, splitAck.ShortDebugString());
+
+        env.RebootTablet();
+        const auto firstMergeAck = env.PartitioningChanged(3, {5});
+        UNIT_ASSERT_C(firstMergeAck.GetStatus() == TPartitioningAck::SUCCESS, firstMergeAck.ShortDebugString());
+
+        env.RebootTablet();
+        UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 4, 5}));
+        const auto secondMergeAck = env.PartitioningChanged(4, {5});
+        UNIT_ASSERT_C(secondMergeAck.GetStatus() == TPartitioningAck::SUCCESS, secondMergeAck.ShortDebugString());
+
+        env.RebootTablet();
+        UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 5}));
     }
 }
 

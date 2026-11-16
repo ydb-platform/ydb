@@ -26,7 +26,7 @@ std::pair<bool, std::optional<TCdcAggregatorStream>> TCdcAggregatorStreamReposit
     if (!state.IsReady()) {
         return {false, std::nullopt};
     }
-    if (!state.IsValid()) {
+    if (!state.IsValid() || !state.HaveValue<Schema::State::TrackingConfig>()) {
         return {true, std::nullopt};
     }
 
@@ -35,7 +35,7 @@ std::pair<bool, std::optional<TCdcAggregatorStream>> TCdcAggregatorStreamReposit
         return {false, std::nullopt};
     }
 
-    NKikimrCdcAggregator::TTrackingConfig proto;
+    NKikimrCdcAggregator::TTrackingState proto;
     Y_ENSURE(proto.ParseFromString(state.GetValue<Schema::State::TrackingConfig>()), "Malformed tracking config");
     auto [topic, error] = Converter.ParseTopic(proto);
     Y_ENSURE(topic, "Invalid tracking config: " << error);

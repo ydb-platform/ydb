@@ -26,7 +26,8 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
     if (newVersion >= LastSchemaVersion) {
         LastSchemaVersion = newVersion;
         // SchemeNeedActualization: on makes the current schema the target, switching it off stops the actualization;
-        // off in both versions leaves alone a target set by ALTER TABLE ... COMPACT WITH (CASCADE = true)
+        // off in both versions leaves alone a target set by ALTER TABLE ... COMPACT WITH (CASCADE = true): the portions
+        // already rewritten to it are not rewritten again, the others get the new schema (see TSchemeActualizer)
         if (needActualization) {
             SetSchemeNeedActualization(true);
         } else if (previousNeedActualization) {

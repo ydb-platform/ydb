@@ -294,13 +294,14 @@ public:
             }
         }
 
-        if (Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().GetAlterSchema().HasOptions()) {
-            // ALTER TABLE ... COMPACT WITH (CASCADE = true) rewrites the portions to the current schema;
-            // SCHEME_NEED_ACTUALIZATION drives the same rewrite and could switch it off midway
+        if (Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().GetAlterSchema().GetOptions().GetSchemeNeedActualization()) {
+            // ALTER TABLE ... COMPACT WITH (CASCADE = true) rewrites the portions older than the schema current at the
+            // request; SCHEME_NEED_ACTUALIZATION drives the same rewrite from the schema it is set on and would widen
+            // it to the portions already rewritten. The other options are unrelated and stay allowed.
             auto* compaction = context.SS->InProgressForcedCompactionsByTable.FindPtr(path.Base()->PathId);
             if (compaction && (*compaction)->Cascade) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "Table options cannot be altered while a cascade compaction of the table is in progress");
+                    "SCHEME_NEED_ACTUALIZATION cannot be set while a cascade compaction of the table is in progress");
                 return result;
             }
         }

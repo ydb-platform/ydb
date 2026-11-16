@@ -3874,8 +3874,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // While a cascade compaction is in progress (its result is blocked) the table options cannot be altered:
-        // SCHEME_NEED_ACTUALIZATION could switch the rewrite off midway. Other schema changes stay allowed.
+        // While a cascade compaction is in progress (its result is blocked) SCHEME_NEED_ACTUALIZATION cannot be set:
+        // it would widen the rewrite to the portions already rewritten. Other options and schema changes stay allowed.
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true);
         const ui64 compactionId = txId;
@@ -3884,6 +3884,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             Name: "ColumnTable"
             AlterSchema { Options { SchemeNeedActualization: true } }
         )", {NKikimrScheme::StatusPreconditionFailed});
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { Options { SchemeNeedActualization: false ScanReaderPolicyName: "SIMPLE" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
             AlterSchema { AddColumns { Name: "extra" Type: "Uint64" } }

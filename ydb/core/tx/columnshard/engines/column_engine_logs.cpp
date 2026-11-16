@@ -874,11 +874,9 @@ bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TT
 }
 
 void TColumnEngineForLogs::SetSchemeNeedActualization(const bool value) {
-    // off falls back to the option of the current schema: the end or the stop of a CASCADE compaction must not switch
-    // off a rewrite asked for by SCHEME_NEED_ACTUALIZATION (the schemeshard refuses the combination, but an ALTER in
-    // flight or a lost stop can still produce it)
-    auto& vIndex = MutableVersionedIndex();
-    vIndex.SetSchemeNeedActualization(value || vIndex.GetLastSchema()->GetIndexInfo().GetSchemeNeedActualization());
+    // the CASCADE compaction and the SCHEME_NEED_ACTUALIZATION option are exclusive (the schemeshard refuses the
+    // combination): off is off, whatever the option of the current schema says
+    MutableVersionedIndex().SetSchemeNeedActualization(value);
     StartActualization({});
     for (auto&& i : GranulesStorage->GetTables()) {
         i.second->RefreshScheme();

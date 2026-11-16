@@ -14,7 +14,8 @@ private:
     THashMap<TRWAddress, THashSet<ui64>> PortionsToActualizeScheme;
     // handed to rewrite tasks: not finished until the rewrite replaces (or returns) them
     THashSet<ui64> PortionsInFlight;
-    std::shared_ptr<ISnapshotSchema> TargetSchema;
+    // every portion with an older schema version is rewritten (with the newest schema at the time of the rewrite)
+    std::shared_ptr<ISnapshotSchema> CriticalSchema;
     const TInternalPathId PathId;
     const TVersionedIndex& VersionedIndex;
 

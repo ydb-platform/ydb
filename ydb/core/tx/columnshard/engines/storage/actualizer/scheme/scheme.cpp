@@ -13,21 +13,24 @@ namespace NKikimr::NOlap::NActualizer {
 
 std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualizationInfo> TSchemeActualizer::BuildActualizationInfo(
     const TPortionInfo& portion) const {
-    YDB_LOG_VERIFY(TargetSchema);
+    YDB_LOG_VERIFY(CriticalSchema);
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
     auto portionSchema = portion.GetSchema(VersionedIndex);
-    if (portionSchema->GetVersion() < TargetSchema->GetVersion()) {
-        auto storagesWrite = TargetSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
+    if (portionSchema->GetVersion() < CriticalSchema->GetVersion()) {
+        // rewritten with the newest schema, not with the critical one: a schema change meanwhile moves the portions
+        // still to be rewritten to the new schema, while the already rewritten ones are not rewritten again
+        const auto writeSchema = VersionedIndex.GetLastSchema();
+        auto storagesWrite = writeSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
         auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
         TRWAddress address(std::move(storagesRead), std::move(storagesWrite));
-        return TFullActualizationInfo(std::move(address), TargetSchema);
+        return TFullActualizationInfo(std::move(address), writeSchema);
     }
     return {};
 }
 
 void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& addContext) {
     PortionsInFlight.erase(info.GetPortionId());
-    if (!TargetSchema) {
+    if (!CriticalSchema) {
         TSchemeGlobalCounters::OnEmptyTargetSchema();
         return;
     }
@@ -144,12 +147,12 @@ void TSchemeActualizer::DoExtractTasks(
 }
 
 void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
-    TargetSchema = VersionedIndex.GetLastCriticalSchema();
+    CriticalSchema = VersionedIndex.GetLastCriticalSchema();
     NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(-1 * PortionsInfo.size());
     PortionsInfo.clear();
     PortionsToActualizeScheme.clear();
     PortionsInFlight.clear();
-    if (!TargetSchema) {
+    if (!CriticalSchema) {
         // SchemeNeedActualization set back to false: the actualization stops
         TSchemeGlobalCounters::OnRefreshEmpty();
     } else {

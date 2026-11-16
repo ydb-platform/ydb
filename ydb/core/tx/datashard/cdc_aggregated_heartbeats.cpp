@@ -97,7 +97,7 @@ TVector<ui64> TCdcAggregatedHeartbeats::HandleHeartbeatEvent(TAutoPtr<IEventHand
     }
 
     switch (ev->GetTypeRewrite()) {
-    case TEvents::TEvWakeup::EventType:
+    case TEvRetryHeartbeat::EventType:
         Send(TDuration::Zero());
         break;
     case TEvWriteHeartbeatResult::EventType: {
@@ -164,7 +164,7 @@ void TCdcAggregatedHeartbeats::Send(TDuration delay) {
     const auto& ctx = TActivationContext::AsActorContext();
     if (delay) {
         TActivationContext::Schedule(delay, new IEventHandle(ctx.SelfID, ctx.SelfID,
-            new TEvents::TEvWakeup()));
+            new TEvRetryHeartbeat()));
         return;
     }
 

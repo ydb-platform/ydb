@@ -765,7 +765,7 @@ public:
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvGone, Handle);
             fFunc(NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult::EventType, HandleHeartbeatEvent);
             fFunc(TEvents::TEvUndelivered::EventType, HandleHeartbeatEvent);
-            fFunc(TEvents::TEvWakeup::EventType, HandleHeartbeatEvent);
+            fFunc(TCdcAggregatedHeartbeats::TEvRetryHeartbeat::EventType, HandleHeartbeatEvent);
             HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }

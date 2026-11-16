@@ -6435,9 +6435,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         THolder<IEventHandle> retryEvent;
         TTestActorRuntimeBase::TScheduledEventFilter previousFilter;
         previousFilter = runtime.SetScheduledEventFilter([&](auto& actorRuntime, auto& event, auto delay, auto& deadline) {
-            if (event->Sender == senderId
-                && (event->GetTypeRewrite() == TEvWriteHeartbeat::EventType
-                    || event->GetTypeRewrite() == TEvents::TEvWakeup::EventType)) {
+            if (event->Sender == senderId) {
                 UNIT_ASSERT(!retryEvent);
                 retryEvent.Reset(event.Release());
                 return true;
@@ -6467,6 +6465,29 @@ Y_UNIT_TEST_SUITE(Cdc) {
             retryHeartbeat(result.Release());
         }
         retryHeartbeat(new TEvents::TEvUndelivered(TEvWriteHeartbeat::EventType, TEvents::TEvUndelivered::ReasonActorUnknown));
+
+        for (const bool resolveTopic : {false, true}) {
+            answerHeartbeat(new TEvWriteHeartbeatResult());
+            WaitFor(runtime, [&]{ return bool(retryEvent); }, "retry before schema resolve");
+
+            TBlockEvents<TEvTxProxySchemeCache::TEvNavigateKeySetResult> navigates(runtime, [&](const auto& ev) {
+                return ev->GetRecipientRewrite() == senderId;
+            });
+            runtime.Send(new IEventHandle(senderId, edgeActor, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(0)), 0, true);
+            WaitFor(runtime, [&]{ return !navigates.empty(); }, "stream schema resolve");
+            if (resolveTopic) {
+                navigates.Unblock(1);
+                WaitFor(runtime, [&]{ return !navigates.empty(); }, "topic schema resolve");
+            }
+
+            const auto pendingNavigates = navigates.size();
+            runtime.Send(retryEvent.Release(), 0, true);
+            WaitFor(runtime, [&]{ return !heartbeats.empty() || navigates.size() > pendingNavigates; }, "heartbeat retry during schema resolve");
+            UNIT_ASSERT_C(!heartbeats.empty(), "Heartbeat retry was consumed during " << (resolveTopic ? "topic" : "stream") << " schema resolve");
+
+            navigates.Stop().Unblock();
+            SimulateSleep(server, TDuration::MilliSeconds(1));
+        }
 
         auto rejected = MakeHolder<TEvWriteHeartbeatResult>();
         rejected->Status = TEvWriteHeartbeatResult::EStatus::Rejected;

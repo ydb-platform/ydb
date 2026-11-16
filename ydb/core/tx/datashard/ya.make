@@ -10,6 +10,8 @@ SRCS(
     datashard_direct_transaction.h
     datashard_failpoints.h
     datashard_impl.h
+    hnsw_index/datashard_hnsw.cpp
+    hnsw_index/hnsw_index_build_actor.cpp
     datashard_kqp.h
     datashard_locks_db.h
     datashard_outreadset.h
@@ -32,9 +34,14 @@ SRCS(
     read_iterator.h
     read_table_scan.h
     setup_sys_locks.h
+    build_index/table_range_reader.h
+    build_index/vector_resolve_actor.h
+    build_index/delta_kmeans.cpp
     build_index/filter_kmeans.cpp
     build_index/fulltext.cpp
     build_index/fulltext_dict.cpp
+    build_index/table_range_reader.cpp
+    build_index/vector_resolve_actor.cpp
     build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
     build_index/secondary_index.cpp
@@ -458,6 +465,7 @@ PEERDIR(
     library/cpp/monlib/service/pages
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
+    library/cpp/streams/zstd
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base
@@ -467,6 +475,8 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/formats
     ydb/core/io_formats/ydb_dump
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
@@ -476,6 +486,7 @@ PEERDIR(
     ydb/core/tx/datashard/snapshot_retention
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/locks
+    ydb/core/tx/datashard/hnsw_index
     ydb/core/tx/sequenceproxy/public
     ydb/core/util
     ydb/core/wrappers
@@ -524,7 +535,12 @@ ENDIF()
 
 END()
 
+RECURSE(
+    hnsw_index
+)
+
 RECURSE_FOR_TESTS(
+    hnsw_index/ut
     build_index/ut
     snapshot_retention
     ut_bloom_filter
@@ -536,9 +552,11 @@ RECURSE_FOR_TESTS(
     ut_disk_quotas
     ut_direct_restore
     ut_erase_rows
+    ut_erase_rows_proxy
     ut_export
     ut_external_blobs
     ut_followers
+    ut_hnsw_index
     ut_incremental_backup
     ut_incremental_restore_scan
     ut_import_s3_engine

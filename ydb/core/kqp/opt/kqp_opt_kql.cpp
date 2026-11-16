@@ -202,7 +202,7 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithDefaultLiteralColumns(const
         YQL_ENSURE(colType);
 
         TExprBase memberValue = literalExpr;
-        if (colType->IsOptionalOrNull()) {
+        if (colType->IsOptionalOrNull() && !colMeta->DefaultFromLiteral.type().has_optional_type()) {
             memberValue = Build<TCoJust>(ctx, pos)
                 .Input(literalExpr)
                 .Done();

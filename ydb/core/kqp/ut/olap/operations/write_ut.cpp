@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>

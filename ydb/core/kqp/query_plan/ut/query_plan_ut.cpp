@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/query_plan/query_plan.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -17,6 +18,74 @@ NJson::TJsonValue ParsePlan(const TString& text) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpQueryPlanSerialization) {
+    Y_UNIT_TEST(RboAnalyzePopulatesEverySharedJoinOccurrence) {
+        const TString txPlan = R"({
+            "SimplifiedPlan": {
+                "Operators": [{"OperatorId": 1, "Name": "Aggregate"}],
+                "Plans": [
+                    {"Operators": [{"OperatorId": 7, "Name": "Join"}]},
+                    {"Operators": [{"OperatorId": 7, "Name": "Join"}]}
+                ]
+            },
+            "Plans": [{
+                "StageGuid": "stage",
+                "Operators": [
+                    {"OperatorId": 1, "Name": "Aggregate"},
+                    {"OperatorId": 7, "Name": "Join", "RuntimeStatsType": "Join"}
+                ],
+                "Stats": {
+                    "OutputRows": {"Sum": 3}, "CpuTimeUs": {"Max": 7000},
+                    "Operator": [{"Type": "Join", "Id": "0", "Rows": {"Sum": 17}, "Bytes": {"Sum": 170}}]
+                }
+            }]
+        })";
+        NKqpProto::TKqpStatsQuery queryStats;
+        const auto plan = ParsePlan(SerializeRBOAnalyzePlan({txPlan}, queryStats));
+        const auto& simplified = plan["SimplifiedPlan"];
+        for (const auto& branch : simplified["Plans"].GetArraySafe()) {
+            const auto& join = branch["Operators"][0];
+            UNIT_ASSERT_VALUES_EQUAL(join["A-Rows"].GetDoubleSafe(), 17);
+            UNIT_ASSERT_VALUES_EQUAL(join["A-Size"].GetDoubleSafe(), 170);
+            UNIT_ASSERT(!join.Has("A-SelfCpu"));
+            UNIT_ASSERT(!join.Has("A-Cpu"));
+        }
+        const auto& aggregate = simplified["Operators"][0];
+        UNIT_ASSERT_VALUES_EQUAL(aggregate["A-Rows"].GetDoubleSafe(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(aggregate["A-Cpu"].GetDoubleSafe(), 7);
+    }
+
+    Y_UNIT_TEST_TWIN(RboAnalyzePreservesZeroJoinRows, RuntimeCounter) {
+        const TString txPlan = R"({
+            "SimplifiedPlan": {"Operators": [{"OperatorId": 7, "Name": "Join"}]},
+            "Plans": [{
+                "StageGuid": "stage", "PlanNodeId": 1,
+                "Operators": [{"OperatorId": 7, "Name": "Join", "RuntimeStatsType": "Join"}]
+            }]
+        })";
+        NYql::NDqProto::TDqExecutionStats execution;
+        auto* stage = execution.AddStages();
+        stage->SetStageGuid("stage");
+        stage->SetStageId(1);
+        stage->MutableOutputRows()->SetSum(RuntimeCounter ? 17 : 0);
+        if (RuntimeCounter) {
+            // The zero operator counter takes precedence over stage output.
+            (*stage->MutableOperatorJoin())["0"].MutableRows()->SetSum(0);
+        }
+        NKqpProto::TKqpStatsQuery queryStats;
+        const auto plan = ParsePlan(SerializeRBOAnalyzePlan(
+            {AddExecStatsToTxPlan(txPlan, execution, true)}, queryStats));
+        const auto& join = plan["SimplifiedPlan"]["Operators"][0];
+        UNIT_ASSERT_VALUES_EQUAL(join["A-Rows"].GetDoubleSafe(), 0);
+        UNIT_ASSERT(!join.Has("A-Size"));
+
+        // Do not invent a zero when neither source supplied a row metric.
+        stage->ClearOutputRows();
+        stage->ClearOperatorJoin();
+        const auto missing = ParsePlan(SerializeRBOAnalyzePlan(
+            {AddExecStatsToTxPlan(txPlan, execution, true)}, queryStats));
+        UNIT_ASSERT(!missing["SimplifiedPlan"]["Operators"][0].Has("A-Rows"));
+    }
+
     Y_UNIT_TEST(OptimizerStatsArePreserved) {
         NJson::TJsonValue optimizerStats(NJson::JSON_MAP);
         optimizerStats["JoinsCount"] = ui64(3);

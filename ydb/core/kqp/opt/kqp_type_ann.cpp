@@ -1996,6 +1996,21 @@ TStatus AnnotateSequencer(const TExprNode::TPtr& node, TExprContext& ctx, const 
 
     TVector<const TItemExprType *> seqRowTypeItems = rowType->GetItems();
     for (auto &column : columnsToGenerate) {
+        const auto* columnMeta = table->Metadata->Columns.FindPtr(column);
+        if (!columnMeta) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                TStringBuilder() << "Cannot generate a default value for unknown column: " << column
+                    << " in table: " << table->Metadata->Name));
+            return TStatus::Error;
+        }
+
+        if (columnMeta->NotNull && columnMeta->IsDefaultFromLiteral() && columnMeta->DefaultFromLiteral.value().has_null_flag_value()) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE,
+                TStringBuilder() << "NULL value violates not null constraint for column: " << column
+                    << " in table: " << table->Metadata->Name));
+            return TStatus::Error;
+        }
+
         auto columnType = table->GetColumnType(column);
         YQL_ENSURE(columnType);
         seqRowTypeItems.push_back(

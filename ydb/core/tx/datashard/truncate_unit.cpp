@@ -71,6 +71,9 @@ EExecutionStatus TTruncateUnit::Execute(
     DataShard.GetConflictsCache().GetTableCache(localTid).RemoveAllUncommittedWrites(txc.DB);
 
     txc.DB.Truncate(localTid);
+    if (!DataShard.GetUserTables().at(tableId)->HnswIndexes.empty()) {
+        txc.DB.OnCommit([self = &DataShard, localTid] { self->InvalidateHnswTable(localTid); });
+    }
 
     // Retained points can exist below the old low watermark. Record their
     // destruction too, so a registry entry cannot make them readable again.

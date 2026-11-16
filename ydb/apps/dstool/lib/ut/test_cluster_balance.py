@@ -290,3 +290,39 @@ def test_donor_weight_uses_its_pdisk_capacity_model(
     usage = balance.common.build_pdisk_usage_map(base_config, count_donors=count_donors)
     assert usage[1, 1] == 6
     assert usage[3, 1] == 1 + (2 if count_donors else 0)
+
+
+@pytest.mark.parametrize(
+    'usage, limit, weight, expected_node',
+    [
+        (10, 10, 1, 3),
+        (11, 10, 1, 3),
+        (9, 10, 1, 2),
+        (9, 10, 2, 3),
+        (8, 10, 2, 2),
+        (10, 0, 1, 2),
+    ],
+)
+def test_group_slots_skips_targets_without_capacity(strategy, monkeypatch, usage, limit, weight, expected_node):
+    strategy.args.allow_same_node = False
+    info = strategy.cluster_info
+    info.pdisk_usage[2, 1] = 0
+    info.pdisk_usage_w_donors[2, 1] = usage
+    info.expected_slot_count_map[2, 1] = limit
+    info.group_map[1] = SimpleNamespace(GroupSizeInUnits=weight)
+    group_strategy = balance.GroupVSlotsBalancingStrategy(strategy.args, info, strategy.groups_info)
+    group_strategy.pdisk_groups_usage = {(1, 1): 4, (2, 1): 0, (3, 1): 1}
+    group_strategy.ideal_distribution = 2
+    group_strategy.max_vdisks_per_pdisk = 4
+    group_strategy.group_pdisks = {1: {(1, 1)}}
+    group_strategy.group_nodes = {1: {1}}
+    requests = []
+
+    def invoke(request):
+        requests.append(request)
+        return response_to(expected_node)
+
+    monkeypatch.setattr(balance.common, 'invoke_bsc_request', invoke)
+    assert group_strategy.reassign_vslot(info.base_config.VSlot[0], False)
+    assert len(requests) == 1
+    assert requests[0].Command[0].ReassignGroupDisk.TargetPDiskId.NodeId == expected_node

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+from threading import Event, Lock
 import time
 import urllib.error
 import urllib.request
@@ -414,6 +415,137 @@ class TestSkipperFailoverLatency(RealSkipperCluster):
         sends = [record for record in records if record.get("event") == "mutation_sent"]
         assert len(sends) == 1, sends
         assert int(sends[0]["expected_generation"]) == generation, sends
+
+    def test_default_failover_restores_loaded_writes_within_20_seconds(self):
+        self.create_data()
+        self.query("r2", "CREATE TABLE `/Root/rto_load` (id Uint64, value Utf8, PRIMARY KEY(id));", scheme=True)
+        driver = ydb.Driver(ydb.DriverConfig(
+            endpoint="grpc://" + self.pile_nodes["r2"][0].endpoint, database="/Root", disable_discovery=True))
+        self.cleanup.callback(self.stop_driver, driver)
+        driver.wait(timeout=15)
+        stop = Event()
+        lock = Lock()
+        workers = 4
+        acknowledgements = {}
+        successful = []
+        worker_counts = [0] * workers
+        last_success = [None] * workers
+        last_errors = [None] * workers
+        statement = ("DECLARE $id AS Uint64; DECLARE $value AS Utf8; "
+                     "UPSERT INTO `/Root/rto_load` (id,value) VALUES ($id,$value);")
+
+        def settings():
+            return (ydb.BaseRequestSettings().with_operation_timeout(1.5)
+                    .with_cancel_after(1.5).with_timeout(2))
+
+        def write(worker):
+            session = query = None
+            serial = 0
+            while not stop.is_set():
+                started = time.monotonic()
+                try:
+                    if session is None:
+                        session = driver.table_client.session().create(settings=settings())
+                    if query is None:
+                        query = session.prepare(statement, settings=settings())
+                    serial += 1
+                    key = (worker + 1) * 1_000_000_000 + serial
+                    value = "writer-%d-row-%d-%s" % (worker, serial, "x" * 256)
+                    sent = time.monotonic()
+                    session.transaction(ydb.SerializableReadWrite()).execute(
+                        query, {"$id": key, "$value": value}, commit_tx=True, settings=settings())
+                    finished = time.monotonic()
+                    with lock:
+                        acknowledgements[key] = value
+                        successful.append((sent, finished))
+                        worker_counts[worker] += 1
+                        last_success[worker] = finished
+                except (ydb.Error, grpc.RpcError) as error:
+                    with lock:
+                        last_errors[worker] = str(error)[:500]
+                    if isinstance(error, (ydb.BadSession, ydb.SessionExpired, ydb.SessionBusy)):
+                        session = query = None
+                # Maintain continuous, moderate load instead of saturating the server.
+                stop.wait(max(0, 0.05 - (time.monotonic() - started)))
+
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = []
+
+            def load_ready(require_fresh=False):
+                for future in futures:
+                    if future.done():
+                        future.result()
+                        raise AssertionError("Load writer stopped unexpectedly")
+                with lock:
+                    now = time.monotonic()
+                    return (all(count >= 4 for count in worker_counts)
+                            and (not require_fresh or all(at is not None and now - at <= 2 for at in last_success)))
+
+            def first_ack_after(boundary):
+                load_ready()
+                with lock:
+                    return min((record for record in successful if record[0] >= boundary),
+                               key=lambda record: record[1], default=None)
+
+            try:
+                futures.extend(executor.submit(write, worker) for worker in range(workers))
+                eventually(load_ready, "writes from every load worker", timeout=15)
+                # The load stays active throughout Skipper's healthy warm-up and the fault.
+                before = self.start_skipper()
+                self.skipper.mode("auto")
+                generation = int(before["view"]["generation"])
+                primary = self.pile_nodes["r1"]
+                for node in primary:
+                    self.cleanup.callback(lambda node=node: node.unfreeze() if node.is_alive() else None)
+                eventually(lambda: load_ready(require_fresh=True), "fresh writes from every worker before the fault", timeout=5)
+                started = time.monotonic()
+                with ThreadPoolExecutor(max_workers=len(primary)) as freezer:
+                    list(freezer.map(lambda node: node.freeze(), primary))
+                expected = {"r1": "DISCONNECTED", "r2": "PRIMARY"}
+                state = self.wait_snapshot(
+                    lambda state: state["view"] and {
+                        pile["name"]: pile["state"] for pile in state["view"]["piles"]} == expected,
+                    "committed failover under write load", timeout=60)
+                committed = time.monotonic()
+                attempt = state["last_mutation"]
+                assert int(state["view"]["generation"]) > generation, state
+                assert int(attempt["expected_generation"]) == generation, attempt
+                assert attempt["update"] == expected, attempt
+                # Only a newly sent, post-commit write proves recovery; an old in-flight
+                # success during fault propagation cannot satisfy this check. Allow
+                # recovery before asserting its timestamp so an RTO regression still
+                # verifies every acknowledged row on the surviving pile.
+                elapsed = None
+                recovery_error = None
+                try:
+                    first = eventually(lambda: first_ack_after(committed), "acknowledged post-failover write",
+                                       timeout=max(0, 60 - (time.monotonic() - started)))
+                    elapsed = first[1] - started
+                    self.logger.info("Skipper restored loaded writes after %.3f seconds", elapsed)
+                except AssertionError as error:
+                    recovery_error = error
+                # Keep observing after recovery to catch a repeated mutation.
+                time.sleep(3)
+            finally:
+                stop.set()
+
+        for future in futures:
+            future.result()
+        assert all(worker_counts), worker_counts
+        keys = sorted(acknowledgements)
+        for offset in range(0, len(keys), 500):
+            expected_rows = {key: acknowledgements[key] for key in keys[offset:offset + 500]}
+            result = self.query("r2", "SELECT id,value FROM `/Root/rto_load` WHERE id IN (%s)" %
+                                ",".join("%du" % key for key in expected_rows))
+            assert {row.id: row.value for row in result[0].rows} == expected_rows
+        self.check_data("r2")
+        self.write_after_fault("r2")
+        records = [json.loads(line) for line in (self.skipper.directory / "skipper.log").read_text().splitlines()]
+        sends = [record for record in records if record.get("event") == "mutation_sent"]
+        assert len(sends) == 1, sends
+        assert int(sends[0]["expected_generation"]) == generation, sends
+        assert recovery_error is None, recovery_error
+        assert elapsed <= 20, (elapsed, last_errors, state)
 
 
 class TestSkipperLiveStorageFailure(RealSkipperCluster):

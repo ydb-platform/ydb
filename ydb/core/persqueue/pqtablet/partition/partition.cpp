@@ -387,6 +387,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
     , WriteInitThrottledMs(TDuration::Minutes(1), 100)
+    , WriteInitSessions(TDuration::Seconds(1), 1000)
     , LastEmittedHeartbeat(TRowVersion::Min())
     , LastEmittedSchemaChange(TRowVersion::Min())
     , SamplingControl(samplingControl)
@@ -996,7 +997,7 @@ void TPartition::DestroyActor(const TActorContext& ctx)
 void TPartition::PassAway() {
     if (WriteSessionsQuoterNotified) {
         Send(MakeWriteSessionsQuoterId(), new TEvWriteSessionsQuoter::TEvRemove(
-            TopicName(), Partition.OriginalPartitionId, TabletGeneration));
+            Config.GetYdbDatabasePath(), TopicName(), Partition.OriginalPartitionId, TabletGeneration));
     }
     TBaseTabletActor<TPartition>::PassAway();
 }
@@ -2621,6 +2622,9 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES, TotalPartitionWriteSpeedInMessages);
     const ui64 initThrottledMs = WriteInitThrottledMs.Update(now);
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_INIT_THROTTLED_MS, initThrottledMs);
+    const ui64 initSessions = WriteInitSessions.Update(now);
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_INIT_SESSIONS_USAGE, initSessions);
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_INIT_SESSIONS_LIMIT, AppData(ctx)->PQConfig.GetWriteSessionsInitRps());
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {

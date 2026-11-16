@@ -1690,7 +1690,7 @@ Y_UNIT_TEST(SystemColumnPrefixesArePassedToProvider) {
     NSQLTranslation::TTranslationSettings settings;
     settings.ExtraSystemColumnPrefixes = {"__ydb_row_id", "__internal_"};
     const auto result = SqlToYqlWithMode("CHECKSUM TABLE plato.Input;", NSQLTranslation::ESqlMode::QUERY,
-                                         10, "kikimr", EDebugOutput::None, false, settings);
+                                         10, "kikimr", EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
     const auto ast = GetPrettyPrint(result);
     UNIT_ASSERT_STRING_CONTAINS(ast, "KiChecksumTable!");

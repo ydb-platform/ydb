@@ -452,7 +452,8 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
         }
     }
 
-    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"));
+    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"),
+        Protocol == EProtocol::Topic && AppData(ctx)->FeatureFlags.GetEnableRelativePaths());
     if (!DiscoveryConverter->IsValid()) {
         CloseSession(
                 TStringBuilder() << "topic " << topic_path << " could not be recognized: " << DiscoveryConverter->GetReason(),
@@ -708,6 +709,7 @@ void TWriteSessionActor<Protocol>::DiscoverPartition(const NActors::TActorContex
         ctx.Send(
             NPQ::MakeWriteSessionsQuoterId(),
             new TEvWriteSessionsQuoter::TEvAcquireQuota(
+                InitialPQTabletConfig.GetYdbDatabasePath(),
                 FullConverter->GetClientsideName(),
                 PreferedPartition,
                 *ExpectedGeneration),

@@ -719,11 +719,11 @@ TString SerializeTxPlans(
     return AddSimplifiedPlan(resultPlan, false, optimizerStats);
 }
 
-void FillAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqStatsAggr& aggr, const TString& name) {
+void FillAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqStatsAggr& aggr, const TString& name, bool keepZero = false) {
     auto min = aggr.GetMin();
     auto max = aggr.GetMax();
     auto sum = aggr.GetSum();
-    if (min || max || sum) { // do not fill empty metrics
+    if (keepZero || min || max || sum) {
         auto& aggrStat = node.InsertValue(name, NJson::JSON_MAP);
         aggrStat["Min"] = min;
         aggrStat["Max"] = max;
@@ -954,7 +954,9 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     FillAggrStat(stats, (*stat)->GetInputBytes(), "InputBytes");
                 }
                 if ((*stat)->HasOutputRows()) {
-                    FillAggrStat(stats, (*stat)->GetOutputRows(), "OutputRows");
+                    // A reported zero is distinct from a missing row counter
+                    // when RBO correlates operators with execution statistics.
+                    FillAggrStat(stats, (*stat)->GetOutputRows(), "OutputRows", newRboEnabled);
                 }
                 if ((*stat)->HasOutputBytes()) {
                     FillAggrStat(stats, (*stat)->GetOutputBytes(), "OutputBytes");
@@ -1132,7 +1134,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                             FillAggrStat(operatorInfo, op.GetBytes(), "Bytes");
                         }
                         if (op.HasRows()) {
-                            FillAggrStat(operatorInfo, op.GetRows(), "Rows");
+                            FillAggrStat(operatorInfo, op.GetRows(), "Rows", newRboEnabled);
                         }
                     }
                     for (auto& [id, op] : (*stat)->GetOperatorFilter()) {
@@ -1143,7 +1145,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                             FillAggrStat(operatorInfo, op.GetBytes(), "Bytes");
                         }
                         if (op.HasRows()) {
-                            FillAggrStat(operatorInfo, op.GetRows(), "Rows");
+                            FillAggrStat(operatorInfo, op.GetRows(), "Rows", newRboEnabled);
                         }
                     }
                     for (auto& [id, op] : (*stat)->GetOperatorAggregation()) {
@@ -1154,7 +1156,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                             FillAggrStat(operatorInfo, op.GetBytes(), "Bytes");
                         }
                         if (op.HasRows()) {
-                            FillAggrStat(operatorInfo, op.GetRows(), "Rows");
+                            FillAggrStat(operatorInfo, op.GetRows(), "Rows", newRboEnabled);
                         }
                     }
                 }

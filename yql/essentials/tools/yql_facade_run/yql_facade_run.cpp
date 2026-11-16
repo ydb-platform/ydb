@@ -719,8 +719,11 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     }
 
     TModulesTable modules;
+    const auto projectSettings = RunOptions_.QPlayerContext.CanRead()
+                                     ? ProjectSettingsFromQContext(RunOptions_.QPlayerContext)
+                                     : TProjectSettings{};
     const auto& mounts = RunOptions_.MountConfig ? RunOptions_.DataTable : defaultMounts;
-    if (!CompileLibraries(translators, mounts, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
+    if (!CompileLibraries(translators, mounts, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate, projectSettings)) {
         *RunOptions_.ErrStream << "Errors on compile libraries:" << Endl;
         ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
         return -1;
@@ -730,6 +733,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     // Optimize libraries attached by the program independently of mounted libraries.
     moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
                                                        ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
+    moduleResolver->SetProjectSettings(std::make_shared<const TProjectSettings>(projectSettings));
 
     TExprContext::TFreezeGuard freezeGuard(ctx);
 

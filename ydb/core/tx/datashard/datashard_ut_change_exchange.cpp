@@ -1150,6 +1150,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
         };
     }
 
+    TCdcStream WithZstdCompression(i32 level, TCdcStream streamDesc) {
+        streamDesc.Compression = NKikimrSchemeOp::ECdcStreamCompressionZstd;
+        streamDesc.CompressionLevel = level;
+        return streamDesc;
+    }
+
     TCdcStream NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream", bool userSIDs = true, bool traceIds = true) {
         return TCdcStream{
             .Name = name,
@@ -1883,6 +1889,98 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{},"key":[3]})",
             R"({"erase":{},"key":[1]})",
         });
+    }
+
+    Y_UNIT_TEST(KeysOnlyLogZstd) {
+        TopicRunner::Read(SimpleTable(),
+            WithZstdCompression(7, KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson)), {R"(
+                UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);
+            )"}, {
+                R"({"update":{},"key":[1]})",
+            });
+    }
+
+    Y_UNIT_TEST(LargeBinaryPayloadZstd) {
+        const auto table = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "String", false, false},
+            });
+        TTestTopicEnv env(table,
+            WithZstdCompression(7, Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        auto& client = env.GetClient();
+        for (const TString consumer : {"compressed", "decompressed"}) {
+            auto result = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
+                .BeginAddConsumer(consumer).EndAddConsumer()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TString binary;
+        binary.reserve(256_KB);
+        for (ui32 repeat = 0; repeat < 1024; ++repeat) {
+            for (ui32 value = 0; value < 256; ++value) {
+                binary.push_back(static_cast<char>(value));
+            }
+        }
+        const TString encoded = Base64Encode(binary);
+
+        ExecSQL(env.GetServer(), env.GetEdgeActor(), Sprintf(R"(
+            $value = Unwrap(String::Base64Decode("%s"));
+            UPSERT INTO `/Root/Table` (key, value) VALUES (1, $value);
+        )", encoded.c_str()), true);
+
+        auto readOne = [&](const TString& consumer, bool decompress, auto&& callback) {
+            auto reader = client.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
+                .AppendTopics(std::string{"/Root/Table/Stream"})
+                .ConsumerName(consumer)
+                .Decompress(decompress));
+
+            while (true) {
+                auto event = reader->GetEvent(true);
+                UNIT_ASSERT(event);
+
+                if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    callback(*data);
+                    break;
+                } else if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                    start->Confirm();
+                } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                    stop->Confirm();
+                } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                    UNIT_FAIL("Topic read session closed before receiving the CDC message");
+                }
+            }
+
+            reader->Close(TDuration::Zero());
+        };
+
+        size_t compressedSize = 0;
+        readOne("compressed", false, [&](const auto& event) {
+            const auto& messages = event.GetCompressedMessages();
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(messages[0].GetCodec(), NYdb::NTopic::ECodec::ZSTD);
+            compressedSize = messages[0].GetData().size();
+        });
+
+        TString decompressed;
+        readOne("decompressed", true, [&](const auto& event) {
+            const auto& messages = event.GetMessages();
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+            decompressed = messages[0].GetData();
+        });
+
+        constexpr size_t MinCompressionRatio = 4;
+        UNIT_ASSERT_GT(compressedSize, 0);
+        UNIT_ASSERT_C(compressedSize * MinCompressionRatio <= decompressed.size(), TStringBuilder()
+            << "Expected at least " << MinCompressionRatio << ":1 compression ratio"
+            << ", compressed size: " << compressedSize
+            << ", uncompressed size: " << decompressed.size());
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(decompressed, &json));
+        UNIT_ASSERT_VALUES_EQUAL(json["key"][0].GetUInteger(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Base64Decode(json["update"]["value"].GetString()), binary);
     }
 
     Y_UNIT_TEST_TRIPLET(UuidExchange, PqRunner, YdsRunner, TopicRunner) {
@@ -7106,7 +7204,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         WaitTxNotification(server, edgeActor, AsyncSetEnableFilterByKey(server, "/Root", "Table", true));
     }
 
-    Y_UNIT_TEST(SchemaChangesColumnFamilies) {
+    Y_UNIT_TEST_TWIN(SchemaChangesColumnFamilies, Zstd) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
@@ -7114,6 +7212,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         );
 
         auto& runtime = *server->GetRuntime();
+        runtime.GetAppData().FeatureFlags.SetEnableRowTableZstdCompression(Zstd);
         const auto edgeActor = runtime.AllocateEdgeActor();
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
@@ -7123,7 +7222,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
         WaitTxNotification(server, edgeActor, AsyncSetColumnFamily(server, "/Root", "Table", "value",
-            {.Name = "archive", .ColumnCodec = NKikimrSchemeOp::ColumnCodecLZ4, .DataPoolKind = "hdd"}));
+            {.Name = "archive",
+                .ColumnCodec = Zstd ? NKikimrSchemeOp::ColumnCodecZSTD : NKikimrSchemeOp::ColumnCodecLZ4,
+                .ColumnCodecLevel = Zstd ? TMaybe<i32>(7) : TMaybe<i32>(),
+                .DataPoolKind = "hdd"}));
         ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);");
         const auto shards = GetTableShards(server, edgeActor, "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
@@ -7171,10 +7273,16 @@ Y_UNIT_TEST_SUITE(Cdc) {
         AssertColumn(added, "value", "Uint32", "archive");
         UNIT_ASSERT_VALUES_EQUAL(added["columnFamilies"].GetMap().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(added["columnFamilies"]["default"]["compression"].GetString(), "off");
-        AssertFamily(added, "archive", "lz4", "regular");
+        AssertFamily(added, "archive", Zstd ? "zstd" : "lz4", "regular");
+        if (Zstd) {
+            UNIT_ASSERT_VALUES_EQUAL(added["columnFamilies"]["archive"]["compressionLevel"].GetInteger(), 7);
+        } else {
+            UNIT_ASSERT(!added["columnFamilies"]["archive"].Has("compressionLevel"));
+        }
 
         const auto& modified = tableAt(3);
         AssertFamily(modified, "archive", "off", "regular");
+        UNIT_ASSERT(!modified["columnFamilies"]["archive"].Has("compressionLevel"));
         AssertColumn(modified, "value", "Uint32", "archive");
 
         const auto& empty = tableAt(4);
@@ -7193,6 +7301,44 @@ Y_UNIT_TEST_SUITE(Cdc) {
         const auto& droppedColumn = tableAt(11);
         UNIT_ASSERT(!droppedColumn["columns"].Has("extra"));
         AssertFamily(droppedColumn, "empty", "lz4", "regular");
+    }
+
+    Y_UNIT_TEST(SchemaChangesColumnFamilyCompressionLevel) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+        auto& runtime = *server->GetRuntime();
+        runtime.GetAppData().FeatureFlags.SetEnableRowTableZstdCompression(true);
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable()
+            .Families({{.Name = "default", .ColumnCodec = NKikimrSchemeOp::ColumnCodecZSTD}}));
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithSchemaChanges(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        // The effective default is already 1, so specifying it does not change the schema.
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "default", .ColumnCodecLevel = 1}));
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "default", .ColumnCodecLevel = 0}));
+        const auto shards = GetTableShards(server, edgeActor, "/Root/Table");
+        RebootTablet(runtime, shards.at(0), edgeActor);
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "default", .ColumnCodecLevel = 7}));
+
+        const auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"tableChanges":"***","ts":"***"})",
+        });
+        for (size_t index = 0; index < records.size(); ++index) {
+            const auto& table = records[index]["tableChanges"][0]["table"];
+            AssertFamily(table, "default", "zstd", "regular");
+            UNIT_ASSERT_VALUES_EQUAL(table["columnFamilies"]["default"]["compressionLevel"].GetUIntegerRobust(),
+                index == 0 ? 0 : 7);
+        }
     }
 
     Y_UNIT_TEST(SchemaChangesCompositePrimaryKey) {

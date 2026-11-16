@@ -58,7 +58,7 @@ class RetentionClusterTest(unittest.TestCase):
         cls.target_node = cls.cluster.nodes[cls.target_node_index]
         cls.driver = pinned_driver(cls.cluster, node=cls.owner_node, database=cls.database)
         cls.addClassCleanup(cls.driver.stop)
-        configure_retention_hive(cls.cluster)
+        cls.hive_id = configure_retention_hive(cls.cluster)
 
     def setUp(self):
         self.table_prefix = f"retention_{uuid.uuid4().hex[:12]}"
@@ -66,7 +66,7 @@ class RetentionClusterTest(unittest.TestCase):
         self.addCleanup(self.workload.close)
         self.workload.create_tables()
         self.workload.write_generation(0)
-        self.monitor = SnapshotRetentionMonitor(self.cluster, self.driver, self.database)
+        self.monitor = SnapshotRetentionMonitor(self.cluster, self.driver, self.database, hive_id=self.hive_id)
         self.addCleanup(self.monitor.close)
         self._place_target_tablets()
 
@@ -532,6 +532,7 @@ class TestSnapshotRetentionNodeFailures(RetentionClusterTest):
         settings = ydb.BaseRequestSettings().with_timeout(50).with_operation_timeout(45)
         session = driver.table_client.session().create(settings=settings)
         try:
+            session.transaction().execute("SELECT 1;", commit_tx=True, settings=settings)
             return session_owner_node_id(session.session_id)
         finally:
             session.delete(settings=settings)
@@ -554,13 +555,17 @@ class TestSnapshotRetentionNodeFailures(RetentionClusterTest):
             cls.addClassCleanup(driver.stop)
             # Harness slot indices are not NodeBroker ids. Monitoring and Hive
             # must use the runtime id, as must the placement/owner assertions.
-            slot.node_id = cls._runtime_node_id(driver)
+            slot.node_id = SnapshotRetentionMonitor._wait(
+                "compute node accepting queries", lambda: cls._runtime_node_id(driver), timeout=90,
+            )
             drivers.append(driver)
         if len({slot.node_id for slot in slots}) != 3:
             raise AssertionError("The node-failure fixture requires three distinct compute nodes")
         cls.owner_node, cls.target_node, cls.peer_node = slots
         cls.driver, cls.target_driver, cls.peer_driver = drivers
-        configure_retention_hive(cls.cluster)
+        # Resolve before any node fault; a replacement monitor must not need
+        # another tenant SchemeShard lookup while that tablet is recovering.
+        cls.hive_id = configure_retention_hive(cls.cluster, database=cls.database)
 
     def setUp(self):
         super().setUp()
@@ -572,13 +577,23 @@ class TestSnapshotRetentionNodeFailures(RetentionClusterTest):
                 if observer is not peer:
                     self.monitor.wait_remote_node(observer.node_id, peer.node_id)
 
-    def _restore_node(self, node, driver):
+    def _restore_node(self, node):
         if node.is_alive():
             return
         node.start()
+        driver = pinned_driver(self.cluster, node=node, database=self.database)
+        cls = type(self)
+        cls.addClassCleanup(driver.stop)
         node.node_id = self.monitor._wait(
-            "restarted compute node accepting sessions", lambda: self._runtime_node_id(driver), timeout=90,
+            "restarted compute node accepting queries", lambda: self._runtime_node_id(driver), timeout=90,
         )
+        if node is self.owner_node:
+            cls.driver = driver
+        elif node is self.target_node:
+            cls.target_driver = driver
+        else:
+            assert node is self.peer_node
+            cls.peer_driver = driver
 
     def _held_before_node_failure(self):
         snapshot = self._hold()
@@ -601,12 +616,12 @@ class TestSnapshotRetentionNodeFailures(RetentionClusterTest):
 
     def test_datashard_node_restart_preserves_held_snapshot(self):
         snapshot = self._held_before_node_failure()
-        self.addCleanup(self._restore_node, self.target_node, self.target_driver)
+        self.addCleanup(self._restore_node, self.target_node)
         # KiKiMRNode.kill() starts the process again immediately. The base
         # daemon operation lets this test control the actual process restart.
         daemon.Daemon.kill(self.target_node)
         self.assertFalse(self.target_node.is_alive())
-        self._restore_node(self.target_node, self.target_driver)
+        self._restore_node(self.target_node)
         self._place_target_tablets()
         self.monitor.wait_remote_node(self.target_node.node_id, self.owner_node.node_id)
         self.monitor.wait_registry_count(1, node_ids=[self.target_node.node_id])
@@ -635,7 +650,7 @@ class TestSnapshotRetentionNodeFailures(RetentionClusterTest):
                 f"held snapshot {version} propagated to node {node_id}",
                 lambda node_id=node_id: remote_version in self.monitor.snapshot_state(node_id)["remote_snapshots"],
             )
-        self.addCleanup(self._restore_node, self.owner_node, self.driver)
+        self.addCleanup(self._restore_node, self.owner_node)
         daemon.Daemon.kill(self.owner_node)
         self.assertFalse(self.owner_node.is_alive())
         # The process is already dead: do not turn this into a normal release
@@ -643,7 +658,7 @@ class TestSnapshotRetentionNodeFailures(RetentionClusterTest):
         snapshot.abandon()
         self.workload = SnapshotRetentionWorkload(self.target_driver, self.database, self.table_prefix)
         self.addCleanup(self.workload.close)
-        self.monitor = SnapshotRetentionMonitor(self.cluster, self.target_driver, self.database)
+        self.monitor = SnapshotRetentionMonitor(self.cluster, self.target_driver, self.database, hive_id=self.hive_id)
         self.addCleanup(self.monitor.close)
         for node_id in survivor_ids:
             state = self.monitor.wait_remote_node(node_id, owner_id, present=False, timeout=90)
@@ -676,7 +691,7 @@ class TestSnapshotRetentionNodeFailures(RetentionClusterTest):
             for path in (self.workload.target_path, self.workload.index_path)
             for tablet in self.monitor.wait_tablets(path)
         ]
-        self.addCleanup(self._restore_node, self.peer_node, self.peer_driver)
+        self.addCleanup(self._restore_node, self.peer_node)
         daemon.Daemon.kill(self.peer_node)
         self.assertFalse(self.peer_node.is_alive())
         self.workload.write_generation(1)

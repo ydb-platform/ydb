@@ -92,10 +92,27 @@ def pinned_driver(cluster, *, node=None, database="/Root"):
     return driver
 
 
-def configure_retention_hive(cluster):
-    """Keep test tablets on their explicitly selected nodes."""
+def _database_hive_id(cluster, database):
+    database = database.rstrip("/")
+    if database == "/Root":
+        return DEFAULT_HIVE_ID
+    result = cluster.client.describe(database, "")
+    assert result.Status == MessageBusStatus.MSTATUS_OK, result
+    assert result.SchemeStatus == SchemeStatus.StatusSuccess, result
+    assert result.HasField("PathDescription"), result
+    assert result.PathDescription.HasField("DomainDescription"), result
+    domain = result.PathDescription.DomainDescription
+    hive_id = domain.ProcessingParams.Hive or domain.SharedHive
+    assert hive_id, result
+    return hive_id
+
+
+def configure_retention_hive(cluster, database="/Root"):
+    """Keep test tablets on their explicitly selected nodes and return their Hive."""
+    hive_id = _database_hive_id(cluster, database)
     node = cluster.nodes[1]
-    HiveClient(node.host, node.mon_port).set_min_scatter_to_balance(101)
+    HiveClient(node.host, node.mon_port, hive_id=hive_id).set_min_scatter_to_balance(101)
+    return hive_id
 
 
 class _MonitoringNotReady(Exception):
@@ -151,13 +168,14 @@ class _PreSections(HTMLParser):
 
 
 class SnapshotRetentionMonitor:
-    def __init__(self, cluster, driver, database):
+    def __init__(self, cluster, driver, database, *, hive_id=None):
         self.cluster = cluster
         self.driver = driver
         self.database = database.rstrip("/")
+        self._hive_id = _database_hive_id(cluster, self.database) if hive_id is None else hive_id
         node = next(iter(cluster.nodes.values()))
         self.base_url = f"http://{node.host}:{node.mon_port}"
-        self._swagger = SwaggerClient(node.host, node.mon_port, http_timeout=10)
+        self._swagger = SwaggerClient(node.host, node.mon_port, hive_id=self._hive_id, http_timeout=10)
         self._pool = ydb.QuerySessionPool(driver)
 
     def close(self):
@@ -518,7 +536,7 @@ class SnapshotRetentionMonitor:
             response = requests.post(
                 self.base_url + "/tablets/app",
                 params={
-                    "TabletID": DEFAULT_HIVE_ID,
+                    "TabletID": self._hive_id,
                     "page": "MoveTablet",
                     "tablet": tablet_id,
                     "node": node_id,

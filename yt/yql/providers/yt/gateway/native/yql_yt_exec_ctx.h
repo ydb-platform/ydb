@@ -7,6 +7,7 @@
 #include <yt/yql/providers/yt/gateway/lib/query_cache.h>
 #include <yt/yql/providers/yt/gateway/lib/user_files.h>
 
+#include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <yt/yql/providers/yt/lib/url_mapper/yql_yt_url_mapper.h>
@@ -75,14 +76,15 @@ protected:
     void FillRichPathForInput(NYT::TRichYPath& path, const TYtPathInfo& pathInfo, const TString& newPath, bool localChainTest) override;
     bool IsLocalChainTest() const override;
 
-    NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& op, const TMaybe<ui32>& publicId) {
+    NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& op, const TMaybe<ui32>& publicId,
+        bool enableProgressDataStatistics) {
         if (const auto& opTracker = Session_->OpTracker_) {
             return opTracker->MakeOperationWaiter(op, publicId, YtServer_, Cluster_, Session_->ProgressWriter_, Session_->StatWriter_,
                 [self = TIntrusivePtr<TExecContextBase>(this)] (NYT::TOperationId opId) {
                     if (self->QueryCacheItem) {
                         self->QueryCacheItem->SetOperationId(opId);
                     }
-                }, false);
+                }, false, enableProgressDataStatistics);
         }
         return NThreading::MakeErrorFuture<void>(std::make_exception_ptr(yexception() << "Cannot run operations in session without operation tracker"));
     }
@@ -268,11 +270,13 @@ public:
             // opFactory factory may contain locked resources. Explicitly wait preparation before destroying it
             op->GetPreparedFuture().GetValueSync();
 
+            const bool enableProgressDataStatistics =
+                self->Options_.Config()->EnableProgressDataStatistics.Get().GetOrElse(DEFAULT_ENABLE_PROGRESS_DATA_STATISTICS);
             NThreading::TFuture<void> res;
             if constexpr (WithState) {
-                res = self->TExecContextBase::MakeOperationWaiter(op, self->Options_.PublicId());
+                res = self->TExecContextBase::MakeOperationWaiter(op, self->Options_.PublicId(), enableProgressDataStatistics);
             } else {
-                res = self->TExecContextBase::MakeOperationWaiter(op, Nothing());
+                res = self->TExecContextBase::MakeOperationWaiter(op, Nothing(), enableProgressDataStatistics);
             }
             return res.Apply([queue = self->Session_->Queue_, unlock = lock.DeferRelease()](const auto& f) {
                 if (f.HasException()) {
@@ -327,7 +331,8 @@ protected:
         if (!testRun && !Hidden && settings->QueryCacheReportProgress.Get().GetOrElse(false)) {
             if constexpr (NPrivate::THasPublicId<TOptions>::value) {
                 if (auto publicId = Options_.PublicId()) {
-                    QueryCacheItem->SetProgressData(Session_->OpTracker_, publicId, Session_->ProgressWriter_, Session_->StatWriter_);
+                    QueryCacheItem->SetProgressData(Session_->OpTracker_, publicId, Session_->ProgressWriter_, Session_->StatWriter_,
+                        settings->EnableProgressDataStatistics.Get().GetOrElse(DEFAULT_ENABLE_PROGRESS_DATA_STATISTICS));
                 }
             }
         }

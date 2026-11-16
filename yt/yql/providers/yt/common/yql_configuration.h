@@ -140,6 +140,8 @@ constexpr bool DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER = false;
 
 constexpr bool DEFAULT_REPORT_EQUIJOIN_STATS = true;
 
+constexpr bool DEFAULT_ENABLE_PROGRESS_DATA_STATISTICS = false;
+
 constexpr ERuntimeClusterSelectionMode DEFAULT_RUNTIME_CLUSTER_SELECTION = NYql::ERuntimeClusterSelectionMode::Disable;
 
 constexpr bool DEFAULT_ALLOW_REMOTE_CLUSTER_INPUT = false;

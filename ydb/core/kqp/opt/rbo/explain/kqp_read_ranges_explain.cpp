@@ -261,10 +261,17 @@ TString QuoteText(TStringBuf text) {
     size_t begin = 0;
     for (size_t i = 0; i < text.size(); ++i) {
         const char c = text[i];
-        if (c != '"' && c != '\\' && static_cast<unsigned char>(c) >= 0x20 && c != 0x7f) continue;
+        if (c != '"' && c != '\\' && static_cast<unsigned char>(c) >= 0x20 && c != 0x7f) {
+            continue;
+        }
+
         result << text.SubStr(begin, i - begin);
-        if (c == '"' || c == '\\') result << '\\' << c;
-        else result << EscapeC(TStringBuf(&c, 1));
+        if (c == '"' || c == '\\') {
+            result << '\\' << c;
+        } else {
+            result << EscapeC(TStringBuf(&c, 1));
+        }
+
         RequireRange(result.size() <= MaxRangeEvaluationBytes);
         begin = i + 1;
     }
@@ -1220,8 +1227,7 @@ std::optional<TString> DescribeRangesStructure(const TExprNode::TPtr& ranges, co
     return TRangesDescriber(keyColumns, explain).Describe(ranges);
 }
 
-// Interpret finite range algebra; leave unsupported types and general expressions to the formatter.
-
+// Numeric helpers for formatting literal bounds and symbolic comparisons.
 bool IsIntegerSlot(EDataSlot slot) {
     return slot >= EDataSlot::Int8 && slot <= EDataSlot::Uint64;
 }

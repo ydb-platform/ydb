@@ -152,13 +152,15 @@ using TValuePtr = std::shared_ptr<const TValue>;
 struct TLimits {
     // Coarse safety fuel for visits, variable-sized iteration and range
     // primitives. These counters are not execution-time estimates.
-    size_t Work = 16 * 1024;
+    // Leave room for 256-point inputs, but stop large operator chains early.
+    size_t Work = 8 * 1024;
     size_t Bytes = 256 * 1024;   // Whole inputs to string/byte primitives, including early exits.
 
     // Cumulative allocator requests, including temporary storage and shared_ptr
     // control blocks. No refunds. Excludes fixed session setup, the caller's AST
     // and the system allocator's metadata; this is not a total RSS limit.
-    size_t Memory = 8 * 1024 * 1024;
+    // Also bounds repeated copies/comparisons of wide, cached range operands.
+    size_t Memory = 2 * 1024 * 1024;
 
     // These shape limits also have internal hard caps.
     size_t Depth = 64;

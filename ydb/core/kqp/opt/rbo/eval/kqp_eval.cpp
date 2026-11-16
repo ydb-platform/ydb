@@ -245,6 +245,7 @@ private:
 
     // Decode the supported literal/type forms without executing arbitrary code.
     TResult<TScalar> Literal(const TExprNode& node, size_t depth);
+    TResult<TScalar> DataLiteral(const TExprNode& node, EDataSlot slot);
     TResult<std::optional<TScalar>> NextPrefix(const TScalar& value);
     TResult<TKeyType> KeyType(const TExprNode& node, size_t depth);
     TResult<TKeyType> BoundaryKeyType(const TExprNode& node, size_t depth);
@@ -293,6 +294,14 @@ private:
 
 TResult<TScalar> TInterpreter::Literal(const TExprNode& node, size_t depth) {
     Budget.Visit(node, depth);
+    // Data constructors dominate range bounds. Decode them directly instead of
+    // checking every optional wrapper and nonconstant callable for each key.
+    if (node.IsCallable()) {
+        if (const auto slot = NUdf::FindDataSlot(node.Content())) {
+            return DataLiteral(node, *slot);
+        }
+    }
+
     if (node.IsCallable("Parameter") || node.Type() == TExprNode::Argument ||
         node.IsCallable({"RandomNumber", "Random", "CurrentUtcTimestamp", "Now"})) {
         return TError{EError::NonConstant};
@@ -345,8 +354,11 @@ TResult<TScalar> TInterpreter::Literal(const TExprNode& node, size_t depth) {
         return TError{EError::InvalidInput};
     }
 
-    const auto slot = NUdf::FindDataSlot(node.Content());
-    if (!slot || !Supported(*slot)) {
+    return TError{EError::Unsupported};
+}
+
+TResult<TScalar> TInterpreter::DataLiteral(const TExprNode& node, EDataSlot slot) {
+    if (!Supported(slot)) {
         return TError{EError::Unsupported};
     }
 
@@ -356,13 +368,13 @@ TResult<TScalar> TInterpreter::Literal(const TExprNode& node, size_t depth) {
 
     const auto text = node.Head().Content();
     Budget.Literal(text.size());
-    TScalar result{.Slot = *slot};
-    if (*slot == EDataSlot::String || *slot == EDataSlot::Utf8 || *slot == EDataSlot::Uuid) {
-        if (*slot == EDataSlot::Uuid && text.size() != 16) {
+    TScalar result{.Slot = slot};
+    if (slot == EDataSlot::String || slot == EDataSlot::Utf8 || slot == EDataSlot::Uuid) {
+        if (slot == EDataSlot::Uuid && text.size() != 16) {
             return TError{EError::InvalidInput};
         }
 
-        if (*slot == EDataSlot::Utf8 && !NYql::IsUtf8(std::string_view(text.data(), text.size()))) {
+        if (slot == EDataSlot::Utf8 && !NYql::IsUtf8(std::string_view(text.data(), text.size()))) {
             return TError{EError::InvalidInput};
         }
 
@@ -376,7 +388,7 @@ TResult<TScalar> TInterpreter::Literal(const TExprNode& node, size_t depth) {
         return TError{EError::Unsupported};
     }
 
-    auto dataResult = ParseNumericLiteral(*slot, text);
+    auto dataResult = ParseNumericLiteral(slot, text);
     if (const auto* error = dataResult.GetError()) {
         return *error;
     }
@@ -384,12 +396,12 @@ TResult<TScalar> TInterpreter::Literal(const TExprNode& node, size_t depth) {
     result.Data = *dataResult.GetValue();
     // Interval validity is independent of discrete range endpoint arithmetic:
     // adding intervals to IntegerLimits would also change RangeFinalize.
-    if ((*slot == EDataSlot::Interval && !NUdf::IsValidLayoutValue<NUdf::TInterval>(result.Data.Get<i64>())) ||
-        (*slot == EDataSlot::Interval64 && !NUdf::IsValidLayoutValue<NUdf::TInterval64>(result.Data.Get<i64>()))) {
+    if ((slot == EDataSlot::Interval && !NUdf::IsValidLayoutValue<NUdf::TInterval>(result.Data.Get<i64>())) ||
+        (slot == EDataSlot::Interval64 && !NUdf::IsValidLayoutValue<NUdf::TInterval64>(result.Data.Get<i64>()))) {
         return TError{EError::InvalidInput};
     }
 
-    if (const auto limits = IntegerLimits(*slot)) {
+    if (const auto limits = IntegerLimits(slot)) {
         const auto value = *Integer(result);
         if (value < limits->first || value > limits->second) {
             return TError{EError::InvalidInput};
@@ -804,7 +816,15 @@ TResult<TBoundary> TInterpreter::Boundary(const TExprNode& node, bool left, size
         const auto& item = *node.Child(i);
         bool infinite = false;
         TScalar scalar;
-        if (item.IsCallable("Nothing") && item.ChildrenSize() == 1) {
+        // Present values are the common case in large literal range lists.
+        if (item.IsCallable("Just") && item.ChildrenSize() == 1) {
+            auto valueResult = Literal(item.Head(), depth + 1);
+            if (const auto* error = valueResult.GetError()) {
+                return *error;
+            }
+
+            scalar = std::move(*valueResult.GetValue());
+        } else if (item.IsCallable("Nothing") && item.ChildrenSize() == 1) {
             if (!item.Head().IsCallable("OptionalType")) {
                 return TError{EError::Unsupported};
             }
@@ -840,16 +860,7 @@ TResult<TBoundary> TInterpreter::Boundary(const TExprNode& node, bool left, size
                 scalar = TScalar{.Null = true, .Slot = target.Slot};
             }
         } else {
-            if (!item.IsCallable("Just") || item.ChildrenSize() != 1) {
-                return TError{EError::Unsupported};
-            }
-
-            auto valueResult = Literal(item.Head(), depth + 1);
-            if (const auto* error = valueResult.GetError()) {
-                return *error;
-            }
-
-            scalar = std::move(*valueResult.GetValue());
+            return TError{EError::Unsupported};
         }
         if (infinity && !infinite) {
             return TError{EError::InvalidInput};

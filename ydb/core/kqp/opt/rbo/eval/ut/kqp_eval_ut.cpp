@@ -144,6 +144,109 @@ void CompareRuntime(const TVector<TInputRange>& a, const TVector<TInputRange>& b
         }
     }
 }
+
+// Synthetic NULL marker, outside the generated finite key values [-5, 5].
+// std::nullopt denotes an absent outer optional (infinity) instead.
+constexpr i64 NullKey = -999;
+
+TString NullableRangeText(const TVector<TInputRange>& input) {
+    TStringBuilder text;
+    text << "(AsRange";
+    for (const auto& range : input) {
+        text << " '(";
+        for (const auto* bound : {&range.Left, &range.Right}) {
+            text << " '(";
+            for (const auto& value : bound->Values) {
+                if (!value) {
+                    text << "(Nothing (OptionalType (OptionalType (DataType 'Int64)))) ";
+                } else if (*value == NullKey) {
+                    text << "(Just (Nothing (OptionalType (DataType 'Int64)))) ";
+                } else {
+                    text << "(Just (Just (Int64 '" << *value << "))) ";
+                }
+            }
+            text << "(Int32 '" << int(bound->Included) << "))";
+        }
+        text << ')';
+    }
+    return text << ')';
+}
+
+NMiniKQL::TRuntimeNode NullableRuntimeRanges(NMiniKQL::TProgramBuilder& pb, const TVector<TInputRange>& input) {
+    using namespace NMiniKQL;
+    auto* key = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i64>::Id));
+    auto* outer = pb.NewOptionalType(key);
+    TRuntimeNode::TList ranges;
+    for (const auto& range : input) {
+        TRuntimeNode::TList sides;
+        for (const auto* bound : {&range.Left, &range.Right}) {
+            TRuntimeNode::TList values;
+            for (const auto& value : bound->Values) {
+                if (!value) {
+                    values.push_back(pb.NewEmptyOptional(outer));
+                } else if (*value == NullKey) {
+                    values.push_back(pb.NewOptional(pb.NewEmptyOptional(key)));
+                } else {
+                    values.push_back(pb.NewOptional(pb.NewOptional(pb.NewDataLiteral<i64>(*value))));
+                }
+            }
+            values.push_back(pb.NewDataLiteral<i32>(bound->Included));
+            sides.push_back(pb.NewTuple(values));
+        }
+        ranges.push_back(pb.NewTuple(sides));
+    }
+    return pb.RangeCreate(pb.AsList(ranges));
+}
+
+void CompareNullable(const TVector<TInputRange>& a, const TVector<TInputRange>& b, TStringBuf op, bool finalize) {
+    using namespace NMiniKQL;
+    TSetup<false> setup(GetBuiltinFactory());
+    auto& pb = *setup.PgmBuilder;
+    auto ra = NullableRuntimeRanges(pb, a);
+    auto rb = NullableRuntimeRanges(pb, b);
+    auto program = op == "RangeUnion" ? pb.RangeUnion({ra, rb})
+        : op == "RangeIntersect" ? pb.RangeIntersect({ra, rb})
+        : pb.RangeMultiply({pb.NewDataLiteral<ui64>(256), ra, rb});
+    TString expression = TStringBuilder() << '(' << op << (op == "RangeMultiply" ? " (Uint64 '256) " : " ")
+        << NullableRangeText(a) << ' ' << NullableRangeText(b) << ')';
+    if (finalize) {
+        expression = "(RangeFinalize " + expression + ')';
+        program = pb.RangeFinalize(program);
+    }
+    auto graph = setup.BuildGraph(program);
+    const auto expected = graph->GetValue();
+    TExprContext ctx;
+    TSession session;
+    const auto value = Value(session, Compile(expression, ctx));
+    const auto* actual = value->GetRanges();
+    UNIT_ASSERT_VALUES_EQUAL_C(actual->Items.size(), expected.GetListLength(), expression);
+    auto it = expected.GetListIterator();
+    NUdf::TUnboxedValue item;
+    for (const auto& range : actual->Items) {
+        UNIT_ASSERT(it.Next(item));
+        for (size_t side = 0; side < 2; ++side) {
+            const auto& bound = side ? range.Right : range.Left;
+            const auto eb = item.GetElement(side);
+            for (size_t i = 0; i < actual->Width; ++i) {
+                const auto ev = eb.GetElement(finalize ? i : 2 * i + 1);
+                UNIT_ASSERT_VALUES_EQUAL_C(bool(ev), !bound.Components[i].Inf, expression);
+                if (ev) {
+                    const auto key = ev.GetOptionalValue();
+                    UNIT_ASSERT_VALUES_EQUAL_C(!bool(key), bound.Components[i].Value.Null, expression);
+                    if (key) {
+                        UNIT_ASSERT_VALUES_EQUAL_C(key.Get<i64>(), bound.Components[i].Value.Data.Get<i64>(), expression);
+                    }
+                }
+                if (!finalize) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(eb.GetElement(2 * i).Get<i32>(), bound.Components[i].Inf, expression);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(eb.GetElement(finalize ? actual->Width : 2 * actual->Width).Get<i32>(),
+                finalize ? int(bool(bound.Included)) : bound.Included, expression);
+        }
+    }
+}
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(KqpBoundedEvaluation) {
@@ -433,6 +536,21 @@ Y_UNIT_TEST(ShapeAndByteGuardrails) {
     }
 }
 
+Y_UNIT_TEST(WideCachedOperandsStopOnMemory) {
+    TExprContext ctx;
+    TBound bound{TVector<std::optional<i64>>(64, 1), true};
+    const auto point = Compile(RangeText({{bound, bound}}), ctx);
+    // Reusing one node makes AST visits cheap, but every intersection still
+    // compares and copies wide bounds. Cumulative allocation must stop it.
+    const auto expression = ctx.NewCallable(point->Pos(), "RangeIntersect", TExprNode::TListType(4096, point));
+    TSession session;
+    const auto saved = Value(session, point);
+    Error(session.Evaluate(expression), EError::BudgetExceeded, EResource::Memory);
+    UNIT_ASSERT(session.GetUsage().Work < TLimits{}.Work);
+    UNIT_ASSERT(session.GetUsage().Memory <= TLimits{}.Memory);
+    UNIT_ASSERT_VALUES_EQUAL(saved->GetRanges()->Items.front().Left.Components.size(), 64);
+}
+
 Y_UNIT_TEST(EmptyValuesAndRepeatedFailedAttempts) {
     TExprContext ctx;
     for (TStringBuf op : {"RangeUnion", "RangeIntersect", "RangeFinalize"}) {
@@ -604,5 +722,39 @@ Y_UNIT_TEST(DifferentialPointsAndTouchingBounds) {
         CompareRuntime(a, b, op, true);
     }
 }
+
+Y_UNIT_TEST(NullableDifferentialAlgebra) {
+    ui64 state = 0xbadc0ffee;
+    const auto next = [&]() {
+        state = state * 6364136223846793005ULL + 1;
+        return state >> 32;
+    };
+    for (size_t trial = 0; trial < 100; ++trial) {
+        const size_t width = 1 + trial % 4;
+        const auto input = [&]() {
+            TVector<TInputRange> ranges;
+            for (size_t r = 0; r < 1 + trial % 7; ++r) {
+                TInputRange range;
+                for (auto* bound : {&range.Left, &range.Right}) {
+                    const size_t finite = next() % (width + 1);
+                    for (size_t c = 0; c < width; ++c) {
+                        bound->Values.push_back(c >= finite ? std::nullopt
+                            : std::optional<i64>(next() % 3 == 0 ? NullKey : i64(next() % 11) - 5));
+                    }
+                    bound->Included = next() % 2;
+                }
+                ranges.push_back(range);
+            }
+            return ranges;
+        };
+        auto a = input();
+        auto b = input();
+        for (TStringBuf op : {"RangeUnion", "RangeIntersect", "RangeMultiply"}) {
+            CompareNullable(a, b, op, false);
+            CompareNullable(a, b, op, true);
+        }
+    }
+}
+
 }   // Y_UNIT_TEST_SUITE(KqpBoundedEvaluation)
 }   // namespace NKikimr::NKqp::NEval

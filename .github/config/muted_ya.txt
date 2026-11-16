@@ -1,10 +1,6 @@
-ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
-ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
 ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.TestStaticServiceSetReplacesObsoletePDiskOnSamePath
 ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.TestStaticServiceSetReusesObsoletePDiskIdWithNewGuid
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.Mirror3dcReadsFromRestoredRealmAfterSourceDisconnection
-ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3of4
-ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.CutLogAppendsDoNotFragmentDiskIndex
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.SyncLogDuplicateFreeChunkRealPDiskWithoutRestart
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.SyncLogUsesMemAndDiskLimits
@@ -44,7 +40,6 @@ ydb/public/sdk/cpp/tests/integration/topic TxUsageTable.WriteToTopic_Demo_26
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
 ydb/services/metadata/secret/ut Secret.Simple
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectReadNotCached
-ydb/services/persqueue_v1/ut TPersQueueTest.PreferredCluster_DisabledRemoteClusterAndWriteSessionsWithDifferentPreferredClusterAndLaterRemoteClusterEnabled_SessionWithMismatchedClusterDiesAfterPreferredClusterEnabledAndOtherSessionsAlive
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootBalancerOnlyCombinedStress
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootBothTabletsCombinedStress
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootTabletOnlyCombinedStress
@@ -65,8 +60,6 @@ ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedClust
 ydb/tests/compatibility/topics test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/datashard/set_column_constraint/concurrency py3test.[test_set_not_null_concurrency.py */*] chunk
-ydb/tests/datashard/truncate/concurrency py3test.[test_truncate_table_concurrency.py */*] chunk
-ydb/tests/datashard/truncate/concurrency test_truncate_table_concurrency.py.TestTruncateTableConcurrency.test_truncate_with_concurrent_rw_operations
 ydb/tests/fq/multi_plane py3test.[test_dispatch.py] chunk
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping_with_row_dispatcher
@@ -99,22 +92,12 @@ ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_precompute_recovery[True]
 ydb/tests/fq/yds test_delete_read_rules_after_abort_by_system.py.TestDeleteReadRulesAfterAbortBySystem.test_delete_read_rules_after_abort_by_system
 ydb/tests/fq/yds test_kill_pq_bill.py.TestKillPqBill.test_do_not_bill_pq[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_3_sessions
-ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_start_new_query
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start_with_filter
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[1-no_shared]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/api py3test.[test_public_api.py] chunk
-ydb/tests/functional/bridge test_pile_ops.py.TestBridgePileOps.test_convert_add_switch_remove
-ydb/tests/functional/bridge test_three_piles.py.TestBridgeThreePiles.test_discovery
-ydb/tests/functional/config test_config_migration.py.TestConfigMigrationFromV1.test_migration_from_v1_to_v2_to_v1_to_v2
-ydb/tests/functional/config test_config_migration.py.TestConfigMigrationFromV1WithCustomDomain.test_migration_with_custom_domain_full_cycle
-ydb/tests/functional/config test_config_migration.py.TestConfigMigrationFromV2.test_migration_from_v2_to_v1_to_v2_to_v1
-ydb/tests/functional/config test_config_migration.py.TestConfigMigrationFromV2WithCustomDomain.test_migration_from_v2_with_custom_domain
-ydb/tests/functional/config test_config_migration.py.TestConfigMigrationWithMixedDiskTypes.test_mixed_disk_types_extracted_during_migration
-ydb/tests/functional/config test_config_migration.py.TestConfigMigrationWithSecurityConfig.test_security_config_preserved_during_migration
-ydb/tests/functional/config test_config_migration.py.TestConfigMigrationWithStoragePoolTypes.test_storage_pool_types_extracted_during_migration
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_list_fallback_to_legacy_api
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_list_legacy_api
@@ -122,7 +105,6 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snap
 ydb/tests/functional/mirror3dc test_mirror3dc.py.TestMirror3dc.test_exclude_two_dcs_check_state
 ydb/tests/functional/mvp/meta py3test.[test_support_links.py] chunk
 ydb/tests/functional/mvp/meta test_support_links.py.test_meta_support_links_requires_cluster_parameter_for_node_and_host
-ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
 ydb/tests/functional/rename test_rename.py.test_client_gets_retriable_errors_when_rename[replace_table-create_indexed_async_table-True]
 ydb/tests/functional/restarts test_restarts.py.TestRestartClusterBlock42.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok
 ydb/tests/functional/restarts test_restarts.py.TestRestartMultipleBlock42.test_tablets_are_successfully_started_after_few_killed_nodes
@@ -135,9 +117,15 @@ ydb/tests/functional/sqs/migration/compatibility/cloud ydb.tests.functional.sqs.
 ydb/tests/functional/sqs/migration/finished/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/statistics test_restarts.py.test_basic
 ydb/tests/functional/tenants test_system_views.py.TestQueryMetricsOneHourRestart.test_case
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[16]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[72]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[10]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[11]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[12]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[13]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[16]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[17]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[18]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[19]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[1]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[20]

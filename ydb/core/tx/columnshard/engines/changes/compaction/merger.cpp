@@ -320,13 +320,13 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
                 const auto fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchema, *resultFiltered, columnId);
                 if (!firstFill) {
                     firstFill = fill;
-                } else if (NArrow::ScalarCompareNullable(fill, *firstFill) != 0) {
+                } else if (!NArrow::ScalarEqualsNullable(fill, *firstFill)) {
                     differs = true;
                     break;
                 }
             }
             const auto resultFill = ISnapshotSchema::GetAbsentColumnFill(*resultFiltered, *resultFiltered, columnId);
-            if (firstFill && NArrow::ScalarCompareNullable(*firstFill, resultFill) != 0) {
+            if (firstFill && !NArrow::ScalarEqualsNullable(*firstFill, resultFill)) {
                 differs = true;
             }
             if (differs) {
@@ -366,12 +366,10 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             }
             const auto fill = ISnapshotSchema::GetAbsentColumnFill(*PortionSchemas[batchIdx], *resultFiltered, columnId);
             const auto resultFill = ISnapshotSchema::GetAbsentColumnFill(*resultFiltered, *resultFiltered, columnId);
-            // Plain and sparsed mergers fill an empty input themselves. Dictionary and sub-columns
-            // mergers write NULL for an empty input, so a non-null fill has to be passed as data.
             const TString& mergerClass = commonContext.GetLoader()->GetAccessorConstructor().GetClassName();
             const bool mergerFillsEmptyInput = mergerClass == NArrow::NAccessor::TGlobalConst::PlainDataAccessorName ||
                                                mergerClass == NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
-            if (NArrow::ScalarCompareNullable(fill, resultFill) == 0 && (mergerFillsEmptyInput || !fill)) {
+            if (NArrow::ScalarEqualsNullable(fill, resultFill) && (mergerFillsEmptyInput || !fill)) {
                 continue;
             }
             const ui32 rows = Batches[batchIdx]->num_rows();

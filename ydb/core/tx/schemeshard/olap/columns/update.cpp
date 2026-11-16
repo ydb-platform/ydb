@@ -189,8 +189,6 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         }
         CreatedDefaultValue = DefaultValue;
     } else {
-        // Present and empty: this column was born without a default. A later SET DEFAULT must not
-        // be read back as the creation default.
         CreatedDefaultValue = NOlap::TColumnDefaultScalarValue();
     }
     return true;
@@ -218,8 +216,6 @@ void TOlapColumnBase::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescrip
         created.AlignToColumnType(arrowType);
         CreatedDefaultValue = std::move(created);
     } else if (DefaultValue.GetValue()) {
-        // Schemas stored before CreatedDefaultValue existed keep the configured default as the
-        // creation fill. Columns born without a default persist an empty CreatedDefaultValue.
         CreatedDefaultValue = DefaultValue;
     }
     if (columnSchema.HasColumnFamilyId()) {

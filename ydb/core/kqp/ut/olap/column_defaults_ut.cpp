@@ -214,27 +214,35 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         TKikimrRunner kikimr(DefaultsSettings());
         auto db = kikimr.GetQueryClient();
         auto table = kikimr.GetTableClient();
-        ExecScheme(db, R"(
-            CREATE TABLE `/Root/DefBulk` (
-                Key Uint32 NOT NULL,
-                Value Utf8 DEFAULT 'bulk',
-                PRIMARY KEY (Key)
-            ) WITH (STORE = COLUMN);
-        )");
-        {
+        const char* columns = R"(
+            Key Uint32 NOT NULL,
+            Value Utf8 DEFAULT 'bulk',
+            PRIMARY KEY (Key)
+        )";
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/DsDefBulk` (" << columns << ");");
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/CsDefBulk` (" << columns << ") WITH (STORE = COLUMN);");
+        const auto omitted = []() {
             TValueBuilder rows;
             rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(1).EndStruct().EndList();
-            auto result = table.BulkUpsert("/Root/DefBulk", rows.Build()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return rows.Build();
+        };
+        for (const char* path : {"/Root/DsDefBulk", "/Root/CsDefBulk"}) {
+            auto result = table.BulkUpsert(path, omitted()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns");
         }
-        {
+        const auto explicitNull = []() {
             TValueBuilder rows;
             rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(2).AddMember("Value").EmptyOptional(EPrimitiveType::Utf8).EndStruct().EndList();
-            auto result = table.BulkUpsert("/Root/DefBulk", rows.Build()).ExtractValueSync();
+            return rows.Build();
+        };
+        for (const char* path : {"/Root/DsDefBulk", "/Root/CsDefBulk"}) {
+            auto result = table.BulkUpsert(path, explicitNull()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-        CompareYson(R"([[["bulk"]]])", SelectYson(db, "SELECT Value FROM `/Root/DefBulk` WHERE Key = 1;"));
-        CompareYson(R"([[#]])", SelectYson(db, "SELECT Value FROM `/Root/DefBulk` WHERE Key = 2;"));
+        CompareYson(SelectYson(db, "SELECT Value FROM `/Root/DsDefBulk` WHERE Key = 2;"),
+            SelectYson(db, "SELECT Value FROM `/Root/CsDefBulk` WHERE Key = 2;"));
+        CompareYson(R"([[#]])", SelectYson(db, "SELECT Value FROM `/Root/CsDefBulk` WHERE Key = 2;"));
     }
 
     Y_UNIT_TEST(PrimaryKeyStringDefaultRejected) {
@@ -388,9 +396,9 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         }
         {
             auto result = table.BulkUpsert("/Root/CsBulkNn", omittedKey()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing not null columns");
         }
-        CompareYson(R"([[4u]])", SelectYson(db, "SELECT Value FROM `/Root/CsBulkNn` WHERE Key = 1;"));
     }
 
     Y_UNIT_TEST(ShowCreatePrintsSqlDefault) {
@@ -433,6 +441,132 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         const auto yson = FormatResultSetYson(result.GetResultSet(0));
         UNIT_ASSERT_STRING_CONTAINS(yson, "DEFAULT_VALUE");
         UNIT_ASSERT(!yson.Contains("DEFAULT 5"));
+    }
+
+    Y_UNIT_TEST(ShowCreateBytesDefaultWhenFlagOff) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/CsBytes` (
+                Key Uint32 NOT NULL,
+                Name String DEFAULT 'aba',
+                Doc JsonDocument DEFAULT JsonDocument('[2]'),
+                PRIMARY KEY (Key)
+            ) WITH (STORE = COLUMN);
+        )");
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableCsDefaultValues(false);
+        auto result = db.GetSession().GetValueSync().GetSession().ExecuteQuery(
+            "SHOW CREATE TABLE `/Root/CsBytes`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto yson = FormatResultSetYson(result.GetResultSet(0));
+        UNIT_ASSERT_STRING_CONTAINS(yson, "DEFAULT 'aba'");
+        UNIT_ASSERT_STRING_CONTAINS(yson, "JsonDocument(");
+    }
+
+    Y_UNIT_TEST(NanDefaultSurvivesSetDefault) {
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        controller->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        controller->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        const char* columns = R"(
+            Key Uint64 NOT NULL,
+            Value Double DEFAULT Double('nan'),
+            PRIMARY KEY (Key)
+        )";
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/DsNan` (" << columns << ");");
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/CsNan` (" << columns << R"()
+            PARTITION BY HASH(Key)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )");
+        ExecScheme(db,
+            "ALTER OBJECT `/Root/CsNan` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`);");
+        const auto writeBoth = [&](const TString& sql) {
+            ExecDml(db, "INSERT INTO `/Root/DsNan` " + sql);
+            ExecDml(db, "INSERT INTO `/Root/CsNan` " + sql);
+        };
+        writeBoth("(Key) VALUES (1)");
+        writeBoth("(Key, Value) VALUES (2, 1.0)");
+        ExecScheme(db, "ALTER TABLE `/Root/DsNan` ALTER COLUMN Value SET DEFAULT 5.0;");
+        ExecScheme(db, "ALTER TABLE `/Root/CsNan` ALTER COLUMN Value SET DEFAULT 5.0;");
+        UNIT_ASSERT(TOneCompactionCommand().Execute(kikimr).IsSuccess());
+        const TString query = "SELECT Key, Value FROM $T ORDER BY Key";
+        TString ds = query;
+        TString cs = query;
+        SubstGlobal(ds, "$T", "`/Root/DsNan`");
+        SubstGlobal(cs, "$T", "`/Root/CsNan`");
+        CompareYson(SelectYson(db, ds), SelectYson(db, cs));
+    }
+
+    Y_UNIT_TEST(NanDefaultSurvivesActualization) {
+        auto cs = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        const char* columns = R"(
+            Key Uint64 NOT NULL,
+            Value Double DEFAULT Double('nan'),
+            PRIMARY KEY (Key)
+        )";
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/DsNanAct` (" << columns << ");");
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/CsNanAct` (" << columns << R"()
+            PARTITION BY HASH(Key)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )");
+        ExecScheme(db,
+            "ALTER OBJECT `/Root/CsNanAct` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`);");
+        for (ui64 key = 1; key <= 3; ++key) {
+            ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/DsNanAct` (Key) VALUES (" << key << ");");
+            ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/CsNanAct` (Key) VALUES (" << key << ");");
+        }
+        UNIT_ASSERT(cs->WaitCompactions(TDuration::Seconds(20)));
+        ExecScheme(db, "ALTER TABLE `/Root/DsNanAct` ALTER COLUMN Value SET DEFAULT 5.0;");
+        ExecScheme(db, "ALTER TABLE `/Root/CsNanAct` ALTER COLUMN Value SET DEFAULT 5.0;");
+        ExecScheme(db, "ALTER OBJECT `/Root/CsNanAct` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        const auto actualized = cs->GetActualizationsCount().Val();
+        cs->WaitActualization(TDuration::Seconds(30), true);
+        UNIT_ASSERT_C(cs->GetActualizationsCount().Val() > actualized, "SET DEFAULT did not actualize portions");
+        CompareYson(SelectYson(db, "SELECT Value FROM `/Root/DsNanAct` WHERE Key = 1;"),
+            SelectYson(db, "SELECT Value FROM `/Root/CsNanAct` WHERE Key = 1;"));
+    }
+
+    Y_UNIT_TEST(TableStoreDefaultMustMatchPreset) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        ExecScheme(db, R"(
+            CREATE TABLESTORE `/Root/PresetStore` (
+                Key Uint64 NOT NULL,
+                Value Uint32,
+                PRIMARY KEY (Key)
+            )
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )");
+        ExpectSchemeError(db, R"(
+            CREATE TABLE `/Root/PresetStore/Mismatch` (
+                Key Uint64 NOT NULL,
+                Value Uint32 DEFAULT 5,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(Key)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )", "does not match schema preset");
+        ExecScheme(db, R"(
+            CREATE TABLESTORE `/Root/PresetStoreDef` (
+                Key Uint64 NOT NULL,
+                Value Uint32 DEFAULT 5,
+                PRIMARY KEY (Key)
+            )
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )");
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/PresetStoreDef/Match` (
+                Key Uint64 NOT NULL,
+                Value Uint32 DEFAULT 5,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(Key)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )");
     }
 
     Y_UNIT_TEST(InvalidJsonDefaultRejected) {
@@ -751,8 +885,6 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         TKikimrRunner kikimr(DefaultsSettings());
         auto db = kikimr.GetQueryClient();
         CreateDocTables(db);
-        // Separate inserts, so tiling++ has several portions to compact. One statement is one portion
-        // and WaitCompactions never sees a compaction start.
         for (ui64 key = 1; key <= 3; ++key) {
             ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/DsDoc` (Key) VALUES (" << key << ");");
             ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/CsDoc` (Key) VALUES (" << key << ");");
@@ -933,6 +1065,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         auto settings = DefaultsSettings();
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(3000);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferVolumeBytes(32_MB);
+        settings.AppConfig.MutableColumnShardConfig()->SetBulkUpsertRequireAllColumns(false);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
         auto table = kikimr.GetTableClient();
@@ -940,7 +1073,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
             ExecScheme(db, TStringBuilder() << R"(
                 CREATE TABLE `/Root/)" << name << R"(` (
                     Key Uint32 NOT NULL,
-                    Value Utf8 DEFAULT 'bulk',
+                    Value Utf8,
                     PRIMARY KEY (Key)
                 )
                 PARTITION BY HASH(Key)
@@ -982,10 +1115,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         SubstGlobal(par, "$T", "`/Root/CsBufPar`");
         const auto seqRows = SelectYson(db, seq);
         CompareYson(seqRows, SelectYson(db, par));
-        UNIT_ASSERT_STRING_CONTAINS(seqRows, "[\"x\"]");
-        UNIT_ASSERT_STRING_CONTAINS(seqRows, "[\"bulk\"]");
-        CompareYson(R"([[2u;["x"]]])", SelectYson(db, "SELECT Key, Value FROM `/Root/CsBufSeq` WHERE Key = 2;"));
-        CompareYson(R"([[3u;["bulk"]]])", SelectYson(db, "SELECT Key, Value FROM `/Root/CsBufSeq` WHERE Key = 3;"));
+        CompareYson(R"([[1u;#];[2u;["x"]];[3u;#]])", seqRows);
     }
 
 }

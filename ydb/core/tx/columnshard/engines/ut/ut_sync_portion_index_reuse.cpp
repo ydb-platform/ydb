@@ -238,7 +238,6 @@ bool PortionHasColumn(const TWritePortionInfoWithBlobsResult& portion, const ui3
     return false;
 }
 
-// nullopt means the column is not stored. An engaged nullopt-inside means a stored NULL.
 std::optional<std::vector<std::optional<ui64>>> ReadStoredUint64Column(
     TWritePortionInfoWithBlobsResult& portion, const ISnapshotSchema::TPtr& schema, const ui32 columnId) {
     if (!PortionHasColumn(portion, columnId)) {
@@ -435,7 +434,6 @@ Y_UNIT_TEST_SUITE(TSyncPortionIndexReuseTests) {
         UNIT_ASSERT_VALUES_EQUAL(GetInplaceIndexData(*syncResult, BloomIndexId), BloomIndexMarker);
     }
 
-    // A column missing from the portion is written only when its historical fill differs from the target fill.
     Y_UNIT_TEST(AbsentColumnMaterializedOnlyWhenFillDiffers) {
         const auto source = MakeTestSchema(1, {});
         const auto sameFill = MakeSchemaWithExtraColumn(2, 5, 5);

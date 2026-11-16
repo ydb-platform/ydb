@@ -10,6 +10,7 @@
 #include <util/string/cast.h>
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/dom/yson.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -317,34 +318,46 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromTypedValue(const 
                 scalar = std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(std::string(value.bytes_value())));
                 break;
             case Ydb::Type::DATE:
-                if (valueCase != Ydb::Value::kUint32Value || value.uint32_value() > Max<ui16>()) {
-                    return invalidLiteral;
+                if (valueCase != Ydb::Value::kUint32Value || value.uint32_value() >= NUdf::MAX_DATE) {
+                    return TConclusionStatus::Fail("Invalid Date default");
                 }
                 scalar = std::make_shared<arrow::UInt16Scalar>(static_cast<ui16>(value.uint32_value()));
                 break;
             case Ydb::Type::DATETIME:
-                if (valueCase != Ydb::Value::kUint32Value) {
-                    return invalidLiteral;
+                if (valueCase != Ydb::Value::kUint32Value || value.uint32_value() >= NUdf::MAX_DATETIME) {
+                    return TConclusionStatus::Fail("Invalid Datetime default");
                 }
                 scalar = std::make_shared<arrow::UInt32Scalar>(value.uint32_value());
                 break;
             case Ydb::Type::DATE32:
-                if (valueCase != Ydb::Value::kInt32Value) {
-                    return invalidLiteral;
+                if (valueCase != Ydb::Value::kInt32Value || value.int32_value() < NUdf::MIN_DATE32 || value.int32_value() > NUdf::MAX_DATE32) {
+                    return TConclusionStatus::Fail("Invalid Date32 default");
                 }
                 scalar = std::make_shared<arrow::Int32Scalar>(value.int32_value());
                 break;
             case Ydb::Type::DATETIME64:
+                if (valueCase != Ydb::Value::kInt64Value || value.int64_value() < NUdf::MIN_DATETIME64 ||
+                    value.int64_value() > NUdf::MAX_DATETIME64) {
+                    return TConclusionStatus::Fail("Invalid Datetime64 default");
+                }
+                scalar = std::make_shared<arrow::Int64Scalar>(value.int64_value());
+                break;
             case Ydb::Type::TIMESTAMP64:
+                if (valueCase != Ydb::Value::kInt64Value || value.int64_value() < NUdf::MIN_TIMESTAMP64 ||
+                    value.int64_value() > NUdf::MAX_TIMESTAMP64) {
+                    return TConclusionStatus::Fail("Invalid Timestamp64 default");
+                }
+                scalar = std::make_shared<arrow::Int64Scalar>(value.int64_value());
+                break;
             case Ydb::Type::INTERVAL64:
-                if (valueCase != Ydb::Value::kInt64Value) {
-                    return invalidLiteral;
+                if (valueCase != Ydb::Value::kInt64Value || std::abs(value.int64_value()) > NUdf::MAX_INTERVAL64) {
+                    return TConclusionStatus::Fail("Invalid Interval64 default");
                 }
                 scalar = std::make_shared<arrow::Int64Scalar>(value.int64_value());
                 break;
             case Ydb::Type::INTERVAL:
-                if (valueCase != Ydb::Value::kInt64Value) {
-                    return invalidLiteral;
+                if (valueCase != Ydb::Value::kInt64Value || static_cast<ui64>(std::abs(value.int64_value())) >= NUdf::MAX_TIMESTAMP) {
+                    return TConclusionStatus::Fail("Invalid Interval default");
                 }
                 scalar = std::make_shared<arrow::DurationScalar>(value.int64_value(), arrow::duration(arrow::TimeUnit::MICRO));
                 break;
@@ -355,8 +368,8 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromTypedValue(const 
                 scalar = fixedSizeBinary();
                 break;
             case Ydb::Type::TIMESTAMP:
-                if (valueCase != Ydb::Value::kUint64Value) {
-                    return invalidLiteral;
+                if (valueCase != Ydb::Value::kUint64Value || value.uint64_value() >= NUdf::MAX_TIMESTAMP) {
+                    return TConclusionStatus::Fail("Invalid Timestamp default");
                 }
                 scalar = std::make_shared<arrow::TimestampScalar>(value.uint64_value(), arrow::timestamp(arrow::TimeUnit::MICRO));
                 break;

@@ -300,8 +300,6 @@ bool TSchemaDiffView::IsCorrectToIgnorePreviouse(const TIndexInfo& indexInfo) co
             return false;
         }
         if (i.second->HasCreatedDefaultValue()) {
-            // A column added without a DEFAULT stores an empty CreatedDefaultValue and no DefaultValue.
-            // Both fills are NULL, so schema GC may still drop this version.
             NKikimrColumnShardColumnDefaults::TColumnDefault writeDefault;
             if (i.second->HasDefaultValue()) {
                 writeDefault = i.second->GetDefaultValue();

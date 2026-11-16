@@ -43,6 +43,15 @@ bool SqlColumnDefaultsEnabled() {
     return HasAppData() && AppData()->FeatureFlags.GetEnableCsDefaultValues();
 }
 
+bool CanFormatLegacyDefault(const NKikimrColumnShardColumnDefaults::TColumnDefault& defaultValue) {
+    if (!defaultValue.HasScalar()) {
+        return false;
+    }
+    const auto valueCase = defaultValue.GetScalar().GetValueCase();
+    return valueCase != NKikimrColumnShardColumnDefaults::TScalar::kBytes
+        && valueCase != NKikimrColumnShardColumnDefaults::TScalar::VALUE_NOT_SET;
+}
+
 namespace {
     const ui64 defaultSizeToSplit = 2ul << 30; // 2048 Mb
 
@@ -1825,7 +1834,9 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
         Stream << " NOT NULL";
     }
 
-    if (SqlColumnDefaultsEnabled() && olapColumnDesc.HasDefaultValue() && olapColumnDesc.GetDefaultValue().HasScalar()) {
+    const bool hasDefault = olapColumnDesc.HasDefaultValue() && olapColumnDesc.GetDefaultValue().HasScalar();
+    const bool legacyDefault = hasDefault && !SqlColumnDefaultsEnabled() && CanFormatLegacyDefault(olapColumnDesc.GetDefaultValue());
+    if (hasDefault && !legacyDefault) {
         NOlap::TColumnDefaultScalarValue scalar;
         if (scalar.DeserializeFromProto(olapColumnDesc.GetDefaultValue()).IsFail() || !scalar.GetValue()) {
             ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported default value");
@@ -2053,7 +2064,7 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
     TStringStream paramsStr;
     TString del = "";
 
-    if (!SqlColumnDefaultsEnabled() && columnDesc.HasDefaultValue()) {
+    if (!SqlColumnDefaultsEnabled() && columnDesc.HasDefaultValue() && CanFormatLegacyDefault(columnDesc.GetDefaultValue())) {
         auto defaultValue = ValueToString(columnDesc.GetDefaultValue());
         if (defaultValue) {
             EscapeName("DEFAULT_VALUE", paramsStr);

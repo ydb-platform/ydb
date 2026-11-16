@@ -21,7 +21,7 @@ void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor
             if (idx < portionSchemas.size() && portionSchemas[idx] && Context.GetSchemaInfo()) {
                 fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchemas[idx], *Context.GetSchemaInfo(), Context.GetColumnId());
             }
-            if (NArrow::ScalarCompareNullable(fill, Context.GetDefaultValue()) != 0) {
+            if (!NArrow::ScalarEqualsNullable(fill, Context.GetDefaultValue())) {
                 const auto& containers = mergingContext.GetInputContainers();
                 const ui32 rows = idx < containers.size() && containers[idx] ? containers[idx]->num_rows() : 0;
                 if (rows) {

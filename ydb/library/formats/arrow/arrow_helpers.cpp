@@ -15,6 +15,7 @@
 #include <type_traits>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compare.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
@@ -481,6 +482,13 @@ int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::sh
         return 0;
     }
     return ScalarCompare(*x, *y);
+}
+
+bool ScalarEqualsNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    if (!x || !y) {
+        return !x && !y;
+    }
+    return x->Equals(*y, arrow::EqualOptions::Defaults().nans_equal(true));
 }
 
 bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs) {

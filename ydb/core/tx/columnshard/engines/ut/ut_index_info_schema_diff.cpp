@@ -1,4 +1,5 @@
 #include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_diff.h>
@@ -9,6 +10,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/hash.h>
 #include <util/string/join.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 namespace NKikimr::NOlap::NTest {
 
@@ -319,7 +321,6 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         CheckDiffsBuildSchemas(history);
     }
 
-    // CreatedDefaultValue is copied through schema diffs and is the fill for portions older than the column.
     Y_UNIT_TEST(CreatedDefaultSurvivesSetDefault) {
         TSchemaHistory history;
         history.NextVersion().AddColumn(4, "with_default", NScheme::NTypeIds::Uint64).SetDefault(4, 42).SetCreatedDefault(4, 42);
@@ -349,7 +350,6 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::UInt64Scalar&>(*created->GetValue()).value, 42);
     }
 
-    // One input whose own default matches itself still differs from the result after SET DEFAULT.
     Y_UNIT_TEST(DifferentDefaultsIncludeSingleInput) {
         TSchemaHistory history;
         history.NextVersion().AddColumn(4, "with_default", NScheme::NTypeIds::Uint64).SetDefault(4, 42).SetCreatedDefault(4, 42);
@@ -373,7 +373,6 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         UNIT_ASSERT(!ISnapshotSchema::GetColumnsWithDifferentDefaults(onlyCurrent, current).contains(4));
     }
 
-    // A version that only adds a column can be dropped when its creation fill equals the write default.
     Y_UNIT_TEST(CreatedDefaultBlocksSchemaGc) {
         TSchemaHistory mismatched;
         mismatched.NextVersion().AddColumn(4, "with_default", NScheme::NTypeIds::Uint64).SetDefault(4, 7).SetCreatedDefault(4, 5);
@@ -488,6 +487,31 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         history.NextVersion().AddMaxIndex(10, "max_ts", KeyColumnId).SetCompression(3, NKikimrSchemeOp::ColumnCodecZSTD);
         history.NextVersion().SetDefaultCompression(NKikimrSchemeOp::ColumnCodecZSTD).AddColumn(5, "a_first", NScheme::NTypeIds::Uint64);
         CheckMergedDiffBuildsSchema(history);
+    }
+
+    Y_UNIT_TEST(TemporalDefaultRejectsOutOfRange) {
+        auto parse = [](Ydb::Type::PrimitiveTypeId typeId, NScheme::TTypeId schemeType, auto setValue) {
+            Ydb::TypedValue typed;
+            typed.mutable_type()->set_type_id(typeId);
+            setValue(*typed.mutable_value());
+            TColumnDefaultScalarValue scalar;
+            return scalar.ParseFromTypedValue(typed, NScheme::TTypeInfo(schemeType));
+        };
+        UNIT_ASSERT(parse(Ydb::Type::DATE, NScheme::NTypeIds::Date, [](Ydb::Value& value) {
+            value.set_uint32_value(0);
+        }).IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::DATE, NScheme::NTypeIds::Date, [](Ydb::Value& value) {
+            value.set_uint32_value(65535);
+        }).GetErrorMessage(), "Invalid Date");
+        UNIT_ASSERT(parse(Ydb::Type::DATE, NScheme::NTypeIds::Date, [](Ydb::Value& value) {
+            value.set_uint32_value(NYql::NUdf::MAX_DATE - 1);
+        }).IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::DATETIME, NScheme::NTypeIds::Datetime, [](Ydb::Value& value) {
+            value.set_uint32_value(NYql::NUdf::MAX_DATETIME);
+        }).GetErrorMessage(), "Invalid Datetime");
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::TIMESTAMP, NScheme::NTypeIds::Timestamp, [](Ydb::Value& value) {
+            value.set_uint64_value(NYql::NUdf::MAX_TIMESTAMP);
+        }).GetErrorMessage(), "Invalid Timestamp");
     }
 }
 

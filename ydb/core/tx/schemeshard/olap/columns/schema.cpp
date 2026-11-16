@@ -1,7 +1,9 @@
 #include "schema.h"
-#include <ydb/library/accessor/validator.h>
-#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
+#include <ydb/library/accessor/validator.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -212,6 +214,29 @@ bool TOlapColumnsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTab
         if (typeInfo != col->GetType()) {
             errors.AddError("Type '" + TypeName(typeInfo) + "' specified for column '" + colName + "' does not match schema preset type '" + TypeName(col->GetType()) + "'");
             return false;
+        }
+
+        if (colProto.HasDefaultValue()) {
+            std::shared_ptr<arrow::Scalar> requested;
+            if (colProto.GetDefaultValue().HasScalar()) {
+                NOlap::TColumnDefaultScalarValue parsed;
+                auto conclusion = parsed.DeserializeFromProto(colProto.GetDefaultValue());
+                if (conclusion.IsFail()) {
+                    errors.AddError("Default value for column '" + colName + "' does not match schema preset");
+                    return false;
+                }
+                const auto arrowType = NArrow::GetArrowType(col->GetType());
+                if (!arrowType.ok()) {
+                    errors.AddError(arrowType.status().ToString());
+                    return false;
+                }
+                parsed.AlignToColumnType(*arrowType);
+                requested = parsed.GetValue();
+            }
+            if (!NArrow::ScalarEqualsNullable(requested, col->GetDefaultValue().GetValue())) {
+                errors.AddError("Default value for column '" + colName + "' does not match schema preset");
+                return false;
+            }
         }
     }
 

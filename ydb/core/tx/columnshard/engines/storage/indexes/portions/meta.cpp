@@ -27,8 +27,6 @@ TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> TIndexByC
                 {"indexId", GetIndexId()});
             const auto fill = indexInfo.GetColumnExternalDefaultValueVerified(i);
             if (fill) {
-                // A portion written without this column reads it as the schema default. Index the same
-                // constant: an all-zero index would skip rows that are equal to the default.
                 const auto loader = indexInfo.GetColumnLoaderVerified(i);
                 const auto& features = indexInfo.GetColumnFeaturesVerified(i);
                 auto array = NArrow::TThreadSimpleArraysCache::Get(features.GetArrowField()->type(), fill, recordsCount);
@@ -44,7 +42,6 @@ TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> TIndexByC
                 columnReaders.emplace_back(constChunks, loader);
                 continue;
             }
-            // Absent column with an empty fill is read as NULL. An all-zero index skips every value.
             TString indexData(1, '\0');
             return std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>(
                 { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) });

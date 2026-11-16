@@ -123,7 +123,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         } else {
             const auto fromFill = ISnapshotSchema::GetAbsentColumnFill(*from, *to, i);
             const auto toFill = ISnapshotSchema::GetAbsentColumnFill(*to, *to, i);
-            if (NArrow::ScalarCompareNullable(fromFill, toFill) != 0) {
+            if (!NArrow::ScalarEqualsNullable(fromFill, toFill)) {
                 const auto& features = to->GetIndexInfo().GetColumnFeaturesVerified(i);
                 auto loader = to->GetColumnLoaderVerified(i);
                 const ui32 rows = source.PortionInfo.GetPortionInfo().GetRecordsCount();

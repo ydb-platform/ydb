@@ -19,6 +19,7 @@
 #include <ydb/core/tx/tx_proxy/upload_rows_counters.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.pb.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -379,14 +380,6 @@ private:
             allColumnsLeft.erase(name);
         }
 
-        if (HasAppData() && AppDataVerified().FeatureFlags.GetEnableCsDefaultValues() && entry.ColumnTableInfo) {
-            for (const auto& col : entry.ColumnTableInfo->Description.GetSchema().GetColumns()) {
-                if (col.HasDefaultValue()) {
-                    allColumnsLeft.erase(col.GetName());
-                }
-            }
-        }
-
         if (!allColumnsLeft.empty()) {
             return TConclusionStatus::Fail(Sprintf("All columns are required during BulkUpsert for column table. Missing columns: %s", JoinSeq(", ", allColumnsLeft).c_str()));
         }
@@ -461,6 +454,9 @@ private:
                     if (accessor->HasInternalConversion()) {
                         HasInternalConversion.emplace(name);
                     }
+                }
+                if (colInfo.HasDefaultValue() && colInfo.GetDefaultValue().HasScalar()) {
+                    defaultColumnsLeft.insert(name);
                 }
             }
         }
@@ -657,15 +653,6 @@ private:
 
         if (!keyColumnsLeft.empty()) {
             return TConclusionStatus::Fail(Sprintf("Missing key columns: %s", JoinSeq(", ", keyColumnsLeft).c_str()));
-        }
-
-        if (isColumnTable && HasAppData() && AppDataVerified().FeatureFlags.GetEnableCsDefaultValues() && entry.ColumnTableInfo) {
-            for (const auto& col : entry.ColumnTableInfo->Description.GetSchema().GetColumns()) {
-                if (col.HasDefaultValue()) {
-                    defaultColumnsLeft.erase(col.GetName());
-                    notNullColumnsLeft.erase(col.GetName());
-                }
-            }
         }
 
         if (!notNullColumnsLeft.empty() && UpsertIfExists) {

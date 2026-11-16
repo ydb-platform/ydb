@@ -282,57 +282,14 @@ namespace {
         return dropGroupSettings;
     }
 
-    TCreateTableStoreSettings ParseCreateTableStoreSettings(
-        TKiCreateTable create, const TTableSettings& settings, const TVector<TColumnFamily>& columnFamilies) {
+    TCreateTableStoreSettings ParseCreateTableStoreSettings(TKiCreateTable create, const TKikimrTableMetadata& meta) {
         TCreateTableStoreSettings out;
         out.TableStore = TString(create.Table());
-        out.ShardsCount = settings.MinPartitions ? *settings.MinPartitions : 0;
-
-        for (auto atom : create.PrimaryKey()) {
-            out.KeyColumnNames.emplace_back(atom.Value());
-        }
-
-        for (auto item : create.Columns()) {
-            auto columnTuple = item.Cast<TExprList>();
-            auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
-            auto typeNode = columnTuple.Item(1);
-
-            auto columnName = TString(nameNode.Value());
-            auto columnType = typeNode.Ref().GetTypeAnn();
-            YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
-
-            const auto type = columnType->Cast<TTypeExprType>()->GetType();
-            TKikimrColumnMetadata columnMeta;
-            columnMeta.Name = columnName;
-            if (ETypeAnnotationKind::Pg == type->GetKind()) {
-                const auto pgType = type->Cast<TPgExprType>();
-                columnMeta.Type = TString("pg") += pgType->GetName();
-                columnMeta.NotNull = false;
-            } else {
-                const auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
-                const auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
-                const auto dataType = actualType->Cast<TDataExprType>();
-                columnMeta.Type = dataType->GetName();
-                columnMeta.NotNull = notNull;
-            }
-
-            if (columnTuple.Size() > 3) {
-                auto families = columnTuple.Item(3).Cast<TCoAtomList>();
-                for (auto family : families) {
-                    columnMeta.Families.push_back(TString(family.Value()));
-                }
-            }
-
-            out.ColumnOrder.push_back(columnName);
-            out.Columns.insert(std::make_pair(columnName, columnMeta));
-        }
-#if 0 // TODO
-        for (const auto& index : create.Indexes()) {
-            TIndexDescription indexDesc;
-            out.Indexes.push_back(indexDesc);
-        }
-#endif
-        out.ColumnFamilies = columnFamilies;
+        out.ShardsCount = meta.TableSettings.MinPartitions ? *meta.TableSettings.MinPartitions : 0;
+        out.Columns = meta.Columns;
+        out.ColumnOrder = meta.ColumnOrder;
+        out.KeyColumnNames = meta.KeyColumnNames;
+        out.ColumnFamilies = meta.ColumnFamilies;
         return out;
     }
 
@@ -1970,8 +1927,7 @@ public:
                             TStringBuilder() << "TABLESTORE with not COLUMN store"));
                         return SyncError();
                     }
-                    future = Gateway->CreateTableStore(cluster, ParseCreateTableStoreSettings(maybeCreate.Cast(), table.Metadata->TableSettings,
-                                                                    table.Metadata->ColumnFamilies), existingOk);
+                    future = Gateway->CreateTableStore(cluster, ParseCreateTableStoreSettings(maybeCreate.Cast(), *table.Metadata), existingOk);
                     break;
                 }
                 case ETableType::Table:
@@ -2180,8 +2136,6 @@ public:
                                 } else if (constraint.Name().Value() == "not_null") {
                                     hasNotNull = true;
                                     if (table.Metadata->IsOlap()) {
-                                        // Column tables fill the new column from its creation default.
-                                        // A DataShard column-build scan is not used.
                                         continue;
                                     }
                                     if (columnBuild == nullptr) {

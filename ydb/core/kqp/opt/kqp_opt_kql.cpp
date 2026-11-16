@@ -85,8 +85,6 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKi
             if (column.IsDefaultFromExpression() && !column.DefaultExpression->Stored) {
                 continue;
             }
-            // An omitted OLAP default column stays absent and is filled on read.
-            // An explicit value must still be written.
             if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && column.IsDefaultFromLiteral() && !inputColumnsSet.contains(name)) {
                 continue;
             }
@@ -123,8 +121,6 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKi
                 .Done();
         } else if (const auto* column = tableDesc.Metadata->Columns.FindPtr(name);
             tableDesc.Metadata->Kind == EKikimrTableKind::Olap && column && column->IsDefaultFromLiteral()) {
-            // RETURNING rebuilds the write row. An omitted OLAP literal must be the default,
-            // otherwise the statement stores NULL and returns NULL.
             TExprBase literalExpr = BuildYqlLiteralFromTypedValue(column->DefaultFromLiteral, pos, ctx);
             const auto* colType = tableDesc.GetColumnType(name);
             YQL_ENSURE(colType);
@@ -465,8 +461,6 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
 
         for (const auto& colAtom : autoIncrement) {
             const auto* colMeta = table.Metadata->Columns.FindPtr(TString(colAtom.Value()));
-            // An omitted OLAP data column stays absent and is filled on read. A key is the row
-            // identity and the shard hash, so its literal must be in the row before routing.
             const bool olapLiteral = table.Metadata->Kind == EKikimrTableKind::Olap && colMeta && colMeta->IsDefaultFromLiteral()
                 && !isKeyColumn(colAtom.Value());
             if (olapLiteral) {

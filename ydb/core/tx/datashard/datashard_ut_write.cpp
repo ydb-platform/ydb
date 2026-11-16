@@ -1827,6 +1827,19 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         CheckReadLocksPrepareOnCdcQueueOverflow(false, true);
     }
 
+    NKikimrDataEvents::TEvWriteResult WriteUnderLock(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
+        ui64 lockTxId, ui64 lockNodeId, ui64 key, ui64 value)
+    {
+        auto request = MakeWriteRequestOneKeyValue(std::nullopt,
+            NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            tableId, columns, key, value);
+        request->SetLockId(lockTxId, lockNodeId);
+        return Write(runtime, sender, shard, std::move(request));
+    }
+
     enum class EReadOnlyPrepareLocks {
         None,
         Empty,
@@ -1852,8 +1865,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
         std::optional<NKikimrDataEvents::TLock> txLock;
         if (locksKind == EReadOnlyPrepareLocks::RollbackWrites) {
-            const auto buffered = UncommittedWrite(runtime, sender, shard, tableId,
-                tableOptions.Columns_, lockTxId, runtime.GetNodeId(0), 2, 20, 0, 0);
+            const auto buffered = WriteUnderLock(runtime, sender, shard, tableId,
+                tableOptions.Columns_, lockTxId, runtime.GetNodeId(0), 2, 20);
             UNIT_ASSERT_VALUES_EQUAL(buffered.GetTxLocks().size(), 1u);
             txLock = buffered.GetTxLocks(0);
             UNIT_ASSERT(txLock->GetHasWrites());
@@ -2049,8 +2062,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UpsertOneKeyValue(runtime, sender, sourceShard, sourceTableId, tableOptions.Columns_,
                 1, 99, 101, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         } else {
-            const auto buffered = UncommittedWrite(runtime, sender, sourceShard, sourceTableId,
-                tableOptions.Columns_, lockTxId, runtime.GetNodeId(0), 2, 20, 0, 0);
+            const auto buffered = WriteUnderLock(runtime, sender, sourceShard, sourceTableId,
+                tableOptions.Columns_, lockTxId, runtime.GetNodeId(0), 2, 20);
             UNIT_ASSERT_VALUES_EQUAL(buffered.GetTxLocks().size(), 1u);
             UNIT_ASSERT(buffered.GetTxLocks(0).GetHasWrites());
             UNIT_ASSERT_VALUES_EQUAL(buffered.GetTxLocks(0).GetCounter(), readLock.GetCounter());
@@ -2304,7 +2317,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const ui64 lockTxId = 1234567890001;
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
         const auto buffered =
-            UncommittedWrite(runtime, sender, shard, tableId, tableOptions.Columns_, lockTxId, runtime.GetNodeId(0), 2, 20, 0, 0);
+            WriteUnderLock(runtime, sender, shard, tableId, tableOptions.Columns_, lockTxId, runtime.GetNodeId(0), 2, 20);
         UNIT_ASSERT_VALUES_EQUAL(buffered.GetTxLocks().size(), 1u);
         auto requestLock = buffered.GetTxLocks(0);
         UNIT_ASSERT(requestLock.GetHasWrites());
@@ -2414,7 +2427,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         NLongTxService::TLockHandle readLockHandle(readLockTxId, runtime.GetActorSystem(0));
         NLongTxService::TLockHandle writeLockHandle(writeLockTxId, runtime.GetActorSystem(0));
         const auto buffered =
-            UncommittedWrite(runtime, sender, shard, tableId, tableOptions.Columns_, writeLockTxId, runtime.GetNodeId(0), 2, 20, 0, 0);
+            WriteUnderLock(runtime, sender, shard, tableId, tableOptions.Columns_, writeLockTxId, runtime.GetNodeId(0), 2, 20);
         UNIT_ASSERT_VALUES_EQUAL(buffered.GetTxLocks().size(), 1u);
         UNIT_ASSERT(buffered.GetTxLocks(0).GetHasWrites());
 
@@ -2554,8 +2567,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         const ui64 lockTxId = 1234567890001;
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
-        const auto buffered = UncommittedWrite(runtime, sender, shard, tableId, tableOptions.Columns_,
-            lockTxId, runtime.GetNodeId(0), 2, 20, 0, 0);
+        const auto buffered = WriteUnderLock(runtime, sender, shard, tableId, tableOptions.Columns_,
+            lockTxId, runtime.GetNodeId(0), 2, 20);
         UNIT_ASSERT_VALUES_EQUAL(buffered.GetTxLocks().size(), 1u);
         const auto& writeLock = buffered.GetTxLocks(0);
         UNIT_ASSERT(writeLock.GetHasWrites());

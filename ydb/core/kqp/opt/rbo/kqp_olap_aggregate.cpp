@@ -22,25 +22,29 @@ const TDataExprType* GetDataType(const TTypeAnnotationNode* type) {
     return itemType->GetKind() == ETypeAnnotationKind::Data ? itemType->Cast<TDataExprType>() : nullptr;
 }
 
-// Whether column shards compute `aggFunction` over a column of `type` the way compute does.
-bool IsOlapAggregateType(const TString& aggFunction, const TTypeAnnotationNode* type) {
+// Whether column shards compute `aggFunction` over a column of `type`, as the old optimizer pushes it. As there,
+// MIN and MAX of floating-point values ignore NaN, whereas compute orders it above every other value.
+bool IsOlapAggregateType(const TString& aggFunction, const TTypeAnnotationNode* type, bool hasKeys,
+                         bool castAverageInput) {
     const auto* dataType = GetDataType(type);
     // Column shards do not aggregate decimals.
     if (!dataType || IsDataTypeDecimal(dataType->GetSlot())) {
         return false;
     }
     const auto slot = dataType->GetSlot();
-    // Storage widens Float sums to Double, whereas compute accumulates in Float.
-    // Keep SUM(Float) in compute to preserve both its type and its rounding.
-    if (aggFunction == "sum" && slot == EDataSlot::Float) {
+    // With keys, column shards return the sum of a Float column as Double, which compute reads as Float. AVG sums the
+    // column too, unless the read program casts it to Double. The old optimizer pushes both and returns wrong values
+    // or fails, so keep them in compute.
+    const bool sumsFloat =
+        slot == EDataSlot::Float && (aggFunction == "sum" || (aggFunction == "avg" && !castAverageInput));
+    if (sumsFloat && hasKeys) {
         return false;
     }
-    // Compute orders NaN above every other value, whereas column shards compare
-    // with `<` and may drop it. Keep MIN and MAX of floating-point values in compute.
-    if ((aggFunction == "min" || aggFunction == "max") && IsDataTypeFloat(slot)) {
-        return false;
+    if (aggFunction == "sum") {
+        return IsDataTypeNumeric(slot) || slot == EDataSlot::Interval;
     }
-    if (aggFunction == "sum" || aggFunction == "avg") {
+    // AVG of Interval does not compile with the old optimizer.
+    if (aggFunction == "avg") {
         return IsDataTypeNumeric(slot);
     }
     return true;
@@ -115,14 +119,15 @@ bool IsOlapAverageCast(const TTypeAnnotationNode& columnType) {
     return RemoveOptionality(columnType).Cast<TDataExprType>()->GetSlot() != EDataSlot::Double;
 }
 
-
-std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, TExprContext& ctx) {
+std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, bool castAverageInput,
+                                                 TExprContext& ctx) {
     const auto& aggregations = aggregate.GetAggregationTraits();
     if (aggregate.IsDistinctAll() || aggregations.Keys().Empty()) {
         return std::nullopt;
     }
 
     TOlapAggregate result;
+    result.CastAverageInput = castAverageInput;
     auto* input = aggregate.GetInput().Get();
     if (input->Kind == EOperator::Map) {
         result.Map = CastOperator<TOpMap>(input);
@@ -160,7 +165,8 @@ std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, 
             return std::nullopt;
         }
         if (const auto column = ResolveReadColumn(traits.Input, read, result.Map)) {
-            if (!IsOlapAggregateType(traits.AggFunction, read.GetIUType(*column, ctx))) {
+            if (!IsOlapAggregateType(traits.AggFunction, read.GetIUType(*column, ctx), !result.Keys.empty(),
+                                     castAverageInput)) {
                 return std::nullopt;
             }
             result.Aggregations.push_back({output, traits.AggFunction, *column});

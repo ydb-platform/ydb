@@ -1118,6 +1118,80 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         CompareYson(R"([[1u;#];[2u;["x"]];[3u;#]])", seqRows);
     }
 
+    Y_UNIT_TEST(DefaultNullMatchesRowTable) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        const char* columns = R"(
+            Key Uint32 NOT NULL,
+            Value Uint32 DEFAULT NULL,
+            PRIMARY KEY (Key)
+        )";
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/DsNull` (" << columns << ");");
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/CsNull` (" << columns << ") WITH (STORE = COLUMN);");
+        for (const char* side : {"Ds", "Cs"}) {
+            ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/" << side << "Null` (Key) VALUES (1);");
+            ExecScheme(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "Null` ADD COLUMN Extra Uint32 DEFAULT NULL;");
+            ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/" << side << "Null` (Key) VALUES (2);");
+        }
+        CompareYson(SelectYson(db, "SELECT Value, Extra FROM `/Root/DsNull` ORDER BY Key;"),
+            SelectYson(db, "SELECT Value, Extra FROM `/Root/CsNull` ORDER BY Key;"));
+        CompareYson(R"([[#;#];[#;#]])", SelectYson(db, "SELECT Value, Extra FROM `/Root/CsNull` ORDER BY Key;"));
+
+        const char* required = R"(
+            Key Uint32 NOT NULL,
+            Value Uint32 NOT NULL DEFAULT NULL,
+            PRIMARY KEY (Key)
+        )";
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/DsNullNn` (" << required << ");");
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/CsNullNn` (" << required << ") WITH (STORE = COLUMN);");
+        for (const char* side : {"Ds", "Cs"}) {
+            ExpectDmlError(db, TStringBuilder() << "INSERT INTO `/Root/" << side << "NullNn` (Key) VALUES (1);",
+                "Missing not null column");
+            ExpectSchemeError(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "NullNn` ADD COLUMN Extra Uint32 NOT NULL DEFAULT NULL;",
+                "Cannot add not null column without default value");
+        }
+    }
+
+    Y_UNIT_TEST(SetDefaultNullMatchesRowTable) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        const char* columns = R"(
+            Key Uint32 NOT NULL,
+            Value Uint32 DEFAULT 5,
+            PRIMARY KEY (Key)
+        )";
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/DsSetNull` (" << columns << ");");
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/CsSetNull` (" << columns << ") WITH (STORE = COLUMN);");
+        for (const char* side : {"Ds", "Cs"}) {
+            ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/" << side << "SetNull` (Key) VALUES (1);");
+            ExecScheme(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "SetNull` ALTER COLUMN Value SET DEFAULT NULL;");
+            ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/" << side << "SetNull` (Key) VALUES (2);");
+        }
+        CompareYson(SelectYson(db, "SELECT Key, Value FROM `/Root/DsSetNull` ORDER BY Key;"),
+            SelectYson(db, "SELECT Key, Value FROM `/Root/CsSetNull` ORDER BY Key;"));
+        CompareYson(R"([[1u;[5u]];[2u;#]])", SelectYson(db, "SELECT Key, Value FROM `/Root/CsSetNull` ORDER BY Key;"));
+    }
+
+    Y_UNIT_TEST(NullablePrimaryKeyDefault) {
+        auto settings = DefaultsSettings();
+        settings.AppConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+        const char* columns = R"(
+            Key Uint32 DEFAULT 4,
+            Name Utf8,
+            PRIMARY KEY (Key)
+        )";
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/DsNullPk` (" << columns << ");");
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/CsNullPk` (" << columns << ") WITH (STORE = COLUMN);");
+        ExecDml(db, "INSERT INTO `/Root/DsNullPk` (Name) VALUES ('a');");
+        ExecDml(db, "INSERT INTO `/Root/CsNullPk` (Name) VALUES ('a');");
+        const auto rows = SelectYson(db, "SELECT Key, Name FROM `/Root/CsNullPk`;");
+        CompareYson(SelectYson(db, "SELECT Key, Name FROM `/Root/DsNullPk`;"), rows);
+        UNIT_ASSERT_STRING_CONTAINS(rows, "4");
+        UNIT_ASSERT_STRING_CONTAINS(rows, "a");
+    }
+
 }
 
 } // namespace NKikimr::NKqp

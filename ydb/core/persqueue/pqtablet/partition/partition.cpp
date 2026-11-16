@@ -185,14 +185,6 @@ bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const 
          GetStartOffset() == GetEndOffset());
 }
 
-struct TMirrorerInfo {
-    TMirrorerInfo(const TActorId& actor)
-    : Actor(actor) {
-    }
-
-    TActorId Actor;
-};
-
 const TString& TPartition::TopicName() const {
     return TopicConverter->GetClientsideName();
 }
@@ -2021,6 +2013,13 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
     if (!CanWrite()) {
         tx.Predicate = false;
         tx.Message = TStringBuilder() << "Partition " << Partition << " is inactive. Writing is not possible";
+        tx.WriteInfoApplied = true;
+        return EProcessResult::Continue;
+    }
+
+    if (Config.HasDestinationTopicGuard()) {
+        tx.Predicate = false;
+        tx.Message = "Transactional write import is forbidden on a destination-guarded topic";
         tx.WriteInfoApplied = true;
         return EProcessResult::Continue;
     }

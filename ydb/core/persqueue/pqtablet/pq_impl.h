@@ -170,7 +170,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat, public TLogPrefix {
 
     void HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                             const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
-                            bool fromMirrorer = false);
+                            bool fromMirrorer = false, const TActorId& sender = {});
 
 #define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,\

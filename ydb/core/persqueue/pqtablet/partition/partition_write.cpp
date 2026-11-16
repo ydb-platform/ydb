@@ -753,6 +753,13 @@ bool TPartition::ShouldUseDeduplicationQueue() const {
         || (replicatedPartition && AppData()->FeatureFlags.GetEnableDstTopicReplicationDisabled()));
 }
 
+bool TPartition::DestinationWriteAllowed(const TActorId& mirrorerActor) const {
+    if (mirrorerActor && (!Mirrorer || mirrorerActor != Mirrorer->Actor)) {
+        return false;
+    }
+    return !Config.HasDestinationTopicGuard() || bool(mirrorerActor);
+}
+
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     LOG_D("Received TPartition::TEvWrite");
 
@@ -771,6 +778,12 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
 
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
                    "Topic replication is temporarily disabled");
+        return;
+    }
+
+    if (!DestinationWriteAllowed(ev->Get()->MirrorerActor)) {
+        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::PRECONDITION_FAILED,
+                   "Write is not allowed by the destination topic guard");
         return;
     }
 
@@ -887,7 +900,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         size += msg.Data.size();
         TString sourceId = msg.SourceId;
         bool needToChangeOffset = msg.PartNo + 1 == msg.TotalParts;
-        EmplacePendingRequest(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg), ev->Get()->InitialSeqNo}, NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.Partition.WriteMessage"), ctx);
+        EmplacePendingRequest(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg), ev->Get()->InitialSeqNo, false, false, ev->Get()->MirrorerActor}, NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.Partition.WriteMessage"), ctx);
         PendingRequests.back().Span.Attribute("source_id", std::move(sourceId));
         if (KVWriteInProgress) { // We are currently writing previous blob
             PendingRequests.back().WaitPreviousWriteSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(PendingRequests.back().Span.GetTraceId()), "Topic.Partition.WaitPreviousWrite");
@@ -1165,6 +1178,13 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p,
         ScheduleReplyError(p.Cookie, false,
                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
                            "Disk is full");
+        return EProcessResult::ContinueDrop;
+    }
+
+    if (!DestinationWriteAllowed(p.MirrorerActor)) {
+        WriteInflightSize -= p.Msg.Data.size();
+        ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::PRECONDITION_FAILED,
+                           "Write is not allowed by the destination topic guard");
         return EProcessResult::ContinueDrop;
     }
 

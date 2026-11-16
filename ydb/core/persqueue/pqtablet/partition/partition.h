@@ -45,7 +45,13 @@ TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant t
 
 
 class TKeyLevel;
-struct TMirrorerInfo;
+struct TMirrorerInfo {
+    TMirrorerInfo(const TActorId& actor)
+    : Actor(actor) {
+    }
+
+    TActorId Actor;
+};
 
 enum class ECommitState {
     Pending,
@@ -205,6 +211,7 @@ private:
     bool IsActive() const;
     bool CanWrite() const;
     bool CanEnqueue() const;
+    bool DestinationWriteAllowed(const TActorId& mirrorerActor) const;
 
     bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
     void SendInfoToAutopartitioningManager(const TWriteMsg& p);

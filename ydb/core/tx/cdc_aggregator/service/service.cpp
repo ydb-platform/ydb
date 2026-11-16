@@ -187,7 +187,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         }
     }
 
-    void ApplyHeartbeatBatchResult(const NKikimrCdcAggregator::TEvWriteHeartbeatsResult& record, ui64 cookie) {
+    void ApplyWriteHeartbeatsResult(const NKikimrCdcAggregator::TEvWriteHeartbeatsResult& record, ui64 cookie) {
         YDB_LOG_DEBUG("Apply batch result",
             {"record", record.ShortDebugString()});
 
@@ -229,7 +229,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
     }
 
     void Handle(TEvCdcAggregator::TEvWriteHeartbeatsResult::TPtr& ev) {
-        ApplyHeartbeatBatchResult(ev->Get()->Record, ev->Cookie);
+        ApplyWriteHeartbeatsResult(ev->Get()->Record, ev->Cookie);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {

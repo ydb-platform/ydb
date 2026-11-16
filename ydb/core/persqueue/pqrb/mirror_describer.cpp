@@ -61,12 +61,12 @@ void TMirrorDescriber::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr&
         Config,
         tabletConfig.GetPartitionConfig().GetMirrorFrom()
     );
-    const bool equalContext = Database == tabletConfig.GetYdbDatabasePath() && TopicPath == tabletConfig.GetTopicPath();
+    const bool equalPathsContext = Database == tabletConfig.GetYdbDatabasePath() && TopicPath == tabletConfig.GetTopicPath();
     LOG_D(
         "Got new config, equal with",
-        {"previous", equalConfigs && equalContext}
+        {"previous", equalConfigs && equalPathsContext}
     );
-    if (!equalConfigs || !equalContext) {
+    if (!equalConfigs || !equalPathsContext) {
         Config = tabletConfig.GetPartitionConfig().GetMirrorFrom();
         Database = tabletConfig.GetYdbDatabasePath();
         TopicPath = tabletConfig.GetTopicPath();
@@ -169,36 +169,9 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     PQ_ENSURE(factory);
-    if (MirrorCredentialsNeedResolution(Config.GetCredentials())) {
-        CredentialsInitializer = ctx.Register(CreateMirrorCredentialsInitializer(
-            SelfId(), DescribeGeneration, Config.GetCredentials(), Database, TopicPath, factory
-        ));
-        CredentialsRequestInFlight = true;
-        return;
-    }
-
-    auto future = factory->GetCredentialsProvider(Config.GetCredentials());
-    future.Subscribe(
-        [
-            actorSystem = ctx.ActorSystem(),
-            selfId = SelfId(),
-            generation = DescribeGeneration
-        ](const NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr>& result) {
-            THolder<TEvPQ::TEvCredentialsCreated> ev;
-            if (result.HasException()) {
-                TString error;
-                try {
-                    result.TryRethrow();
-                } catch(...) {
-                    error = CurrentExceptionMessage();
-                }
-                ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(error);
-            } else {
-                ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(result.GetValue());
-            }
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release(), 0, generation));
-        }
-    );
+    CredentialsInitializer = ctx.Register(CreateMirrorCredentialsInitializer(
+        SelfId(), DescribeGeneration, Config.GetCredentials(), Database, TopicPath, factory
+    ));
     CredentialsRequestInFlight = true;
 }
 

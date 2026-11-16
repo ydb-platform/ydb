@@ -28,7 +28,7 @@ class TMirrorCredentialsInitializer
     }
 
     void StartProviderFactory() {
-        auto future = Factory->GetCredentialsProvider(ResolvedCredentials);
+        auto future = Factory->GetCredentialsProvider(Credentials);
         future.Subscribe([
             actorSystem = ActorContext().ActorSystem(),
             selfId = SelfId()
@@ -100,8 +100,7 @@ class TMirrorCredentialsInitializer
             return ReplyError("Cannot resolve mirror credentials secret: empty or invalid response");
         }
 
-        ResolvedCredentials = Credentials;
-        if (!SetMirrorCredentialsSecretValue(ResolvedCredentials, description.SecretValues.front())) {
+        if (!SetMirrorCredentialsSecretValue(Credentials, description.SecretValues.front())) {
             return ReplyError("Cannot resolve mirror credentials secret: unsupported credentials type");
         }
         StartProviderFactory();
@@ -140,6 +139,11 @@ public:
     void Bootstrap() {
         Become(&TThis::StateWork);
 
+        if (!MirrorCredentialsNeedResolution(Credentials)) {
+            StartProviderFactory();
+            return;
+        }
+
         const auto secretName = GetMirrorCredentialsSecretName(Credentials);
         if (secretName.empty()) {
             return ReplyError("Cannot resolve mirror credentials secret: empty secret name");
@@ -172,11 +176,10 @@ public:
 private:
     const NActors::TActorId Parent;
     const ui64 Cookie;
-    const NKikimrPQ::TMirrorPartitionConfig::TCredentials Credentials;
+    NKikimrPQ::TMirrorPartitionConfig::TCredentials Credentials;
     const TString Database;
     const TString TopicPath;
     const IPersQueueMirrorReaderFactory* Factory;
-    NKikimrPQ::TMirrorPartitionConfig::TCredentials ResolvedCredentials;
 };
 
 } // namespace

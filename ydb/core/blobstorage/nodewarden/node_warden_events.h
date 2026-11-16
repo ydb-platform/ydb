@@ -203,4 +203,52 @@ namespace NKikimr::NStorage {
         {}
     };
 
+    // the bridge proxy tells that the part of HOT_STANDBY pile has missed a write, so it needs to be reconciled
+    struct TEvNodeWardenStandbyDirty
+        : TEventLocal<TEvNodeWardenStandbyDirty, TEvBlobStorage::EvNodeWardenStandbyDirty>
+    {
+        const TGroupId TargetGroupId;
+        const bool Data; // a blob write may have been lost, not just garbage collection
+
+        TEvNodeWardenStandbyDirty(TGroupId targetGroupId, bool data)
+            : TargetGroupId(targetGroupId)
+            , Data(data)
+        {}
+    };
+
+    // the bridge proxy of the group tells it has started (or stopped), so that it gets the seals of the parts promoted
+    // from HOT_STANDBY
+    struct TEvNodeWardenRegisterBridgeProxy
+        : TEventLocal<TEvNodeWardenRegisterBridgeProxy, TEvBlobStorage::EvNodeWardenRegisterBridgeProxy>
+    {
+        const TGroupId GroupId;
+        const bool Registered;
+
+        TEvNodeWardenRegisterBridgeProxy(TGroupId groupId, bool registered)
+            : GroupId(groupId)
+            , Registered(registered)
+        {}
+    };
+
+    // the bridge proxy answers with TEvNodeWardenStandbySealed (with the same cookie) once it has the group generation
+    // given and holds no background writes to the part, having reported every one it has lost with
+    // TEvNodeWardenStandbyDirty
+    struct TEvNodeWardenStandbySeal
+        : TEventLocal<TEvNodeWardenStandbySeal, TEvBlobStorage::EvNodeWardenStandbySeal>
+    {
+        const TGroupId TargetGroupId;
+        const ui32 BridgeProxyGroupGeneration;
+        const bool Flush; // the copies of the client writes that are over are reported lost instead of being waited for
+
+        TEvNodeWardenStandbySeal(TGroupId targetGroupId, ui32 bridgeProxyGroupGeneration, bool flush)
+            : TargetGroupId(targetGroupId)
+            , BridgeProxyGroupGeneration(bridgeProxyGroupGeneration)
+            , Flush(flush)
+        {}
+    };
+
+    struct TEvNodeWardenStandbySealed
+        : TEventLocal<TEvNodeWardenStandbySealed, TEvBlobStorage::EvNodeWardenStandbySealed>
+    {};
+
 } // NKikimr::NStorage

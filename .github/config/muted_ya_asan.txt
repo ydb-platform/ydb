@@ -15,6 +15,7 @@ ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnFromMultiUseNamedExpression
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnThroughSecondaryIndex
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
+ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap-UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression-EnableCompileTimeDefaults

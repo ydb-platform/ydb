@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
         UNIT_ASSERT(delivery.IsIdle());
     }
 
-    Y_UNIT_TEST(SendsHeartbeatAddedInFlightInNextBatch) {
+    Y_UNIT_TEST(SendsHeartbeatAddedWhileAwaitingReplyInNextBatch) {
         TCdcAggregatorHeartbeatDelivery delivery(100);
         delivery.AddHeartbeat(1, MakeHeartbeat(100));
         delivery.PrepareNextBatchIfPossible().value();
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
         UNIT_ASSERT(delivery.IsIdle());
     }
 
-    Y_UNIT_TEST(IgnoresFailureWithoutBatchInFlight) {
+    Y_UNIT_TEST(IgnoresFailureWithoutBatchAwaitingReply) {
         TCdcAggregatorHeartbeatDelivery delivery(100);
         delivery.AddHeartbeat(1, MakeHeartbeat(100));
 

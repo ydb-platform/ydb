@@ -90,7 +90,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
                 connection.PipeClient = Register(NTabletPipe::CreateClient(SelfId(), tabletId, config));
             }
 
-            auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeBatch(delivery.TakeBatch());
+            auto ev = CdcAggregatorHeartbeatDeliveryProtoConverter.SerializeBatch(delivery.TakeBatch());
             connection.BatchCookie = ++LastBatchCookie;
             connection.BatchDeadline = TActivationContext::Monotonic() + BatchTimeout;
             YDB_LOG_DEBUG("Send batch",
@@ -128,7 +128,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         it->second.BatchCookie = 0;
         it->second.LastActivity = TActivationContext::Monotonic();
         auto& delivery = it->second.CdcAggregatorHeartbeatDelivery;
-        auto [result, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseBatchResult(record);
+        auto [result, error] = CdcAggregatorHeartbeatDeliveryProtoConverter.ParseBatchResult(record);
         ReplyToOrigins(it->second, result ? delivery.CompleteBatch(*result) : delivery.FailBatch(error));
     }
 
@@ -190,7 +190,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
     }
 
     void Reply(const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
-        auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeReply(reply);
+        auto ev = CdcAggregatorHeartbeatDeliveryProtoConverter.SerializeReply(reply);
         YDB_LOG_TRACE("Reply",
             {"ev", ev->ToString()},
             {"recipient", origin.Sender});
@@ -218,6 +218,7 @@ public:
     }
 
 private:
+    TCdcAggregatorHeartbeatDeliveryProtoConverter CdcAggregatorHeartbeatDeliveryProtoConverter;
     THashMap<ui64, TCdcAggregatorConnection> CdcAggregatorConnections;
     ui64 LastBatchCookie = 0;
 };

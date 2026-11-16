@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/fq/libs/checkpoint_storage/proto/graph_description.pb.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 
@@ -170,7 +171,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             UNIT_ASSERT_VALUES_EQUAL(info.WriterIdentity, publicationWriter);
             UNIT_ASSERT_VALUES_EQUAL(info.Destinations.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(
-                info.Destinations[0].TopicPath, TStringBuilder() << (LocalTopics ? TEST_DATABASE : YDB_DATABASE) << "/" << outputTopicName);
+                info.Destinations[0].TopicPath, CanonizePath(TStringBuilder() << (LocalTopics ? TEST_DATABASE : YDB_DATABASE) << "/" << outputTopicName));
         }
 
         Sleep(TDuration::Seconds(1));

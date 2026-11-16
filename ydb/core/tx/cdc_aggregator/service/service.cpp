@@ -196,14 +196,15 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             return;
         }
 
-        const auto sendReply = [this](const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
-            Reply(origin, reply);
-        };
         auto [writeHeartbeatsResult, error] = ProtoConverter.ParseWriteHeartbeatsResult(record);
         if (writeHeartbeatsResult) {
-            it->second.CompleteBatch(*writeHeartbeatsResult, sendReply);
+            it->second.CompleteBatch(*writeHeartbeatsResult, [this](const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
+                Reply(origin, reply);
+            });
         } else {
-            it->second.FailBatch(error, sendReply);
+            it->second.FailBatch(error, [this](const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
+                Reply(origin, reply);
+            });
         }
     }
 

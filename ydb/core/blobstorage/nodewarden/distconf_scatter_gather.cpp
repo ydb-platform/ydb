@@ -37,11 +37,7 @@ namespace NKikimr::NStorage {
         TScatterTask& task = it->second;
         if (task.Request.HasProposeStorageConfig()) {
             const auto& proposed = task.Request.GetProposeStorageConfig().GetConfig();
-            auto error = ValidateStateStorageSelections(proposed);
-            if (!error && ConflictsWithCommittedMetadata(proposed)) {
-                error = "Proposed storage configuration conflicts with stored committed metadata";
-            }
-            if (error) {
+            if (auto error = ValidateIncomingStorageConfig(proposed)) {
                 YDB_LOG_ERROR("Proposed storage configuration rejected", {"error", *error});
                 auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                 SelfNode.Serialize(status->MutableNodeId());

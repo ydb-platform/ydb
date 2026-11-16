@@ -188,32 +188,33 @@ EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, 
 }
 
 
+TString ValidateStateStorageSelections(const NKikimrConfig::TDomainsConfig& domains) {
+    for (const auto& config : domains.GetStateStorage()) {
+        if (TString error = ValidateStateStorageConfigSelection(config)) {
+            return TStringBuilder() << "StateStorage " << error;
+        }
+    }
+#define VALIDATE_SELECTION(NAME) \
+    if (domains.HasExplicit##NAME##Config()) { \
+        if (TString error = ValidateStateStorageConfigSelection(domains.GetExplicit##NAME##Config())) { \
+            return TStringBuilder() << #NAME << ' ' << error; \
+        } \
+    }
+    VALIDATE_SELECTION(StateStorage)
+    VALIDATE_SELECTION(StateStorageBoard)
+    VALIDATE_SELECTION(SchemeBoard)
+#undef VALIDATE_SELECTION
+    return {};
+}
+
 EValidationResult ValidateStateStorageConfig(const NKikimrConfig::TAppConfig& proposed, std::vector<TString>& msg) {
     if (proposed.GetSelfManagementConfig().GetEnabled()) {
         // Self-management may generate omitted sections, but supplied selections
         // must still be valid before they can reach the state storage proxy.
-        const auto validate = [&](const char* name, const auto& config) {
-            if (TString error = ValidateStateStorageConfigSelection(config)) {
-                msg.push_back(TStringBuilder() << name << ' ' << error);
-                return false;
-            }
-            return true;
-        };
-        const auto& domains = proposed.GetDomainsConfig();
-        for (const auto& config : domains.GetStateStorage()) {
-            if (!validate("StateStorage", config)) {
-                return EValidationResult::Error;
-            }
+        if (TString error = ValidateStateStorageSelections(proposed.GetDomainsConfig())) {
+            msg.push_back(std::move(error));
+            return EValidationResult::Error;
         }
-#define VALIDATE_SELECTION(NAME) \
-        if (domains.HasExplicit##NAME##Config() && \
-                !validate(#NAME, domains.GetExplicit##NAME##Config())) { \
-            return EValidationResult::Error; \
-        }
-        VALIDATE_SELECTION(StateStorage)
-        VALIDATE_SELECTION(StateStorageBoard)
-        VALIDATE_SELECTION(SchemeBoard)
-#undef VALIDATE_SELECTION
         return EValidationResult::Ok;
     }
     if (!proposed.HasDomainsConfig()) {

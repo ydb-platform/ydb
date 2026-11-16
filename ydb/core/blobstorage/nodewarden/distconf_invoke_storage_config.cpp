@@ -86,6 +86,39 @@ namespace NKikimr::NStorage {
         }
     }
 
+    std::optional<TString> TInvokeRequestHandlerActor::ValidateStateStorageYaml(
+            const NKikimrBlobStorage::TStorageConfig& config) {
+        try {
+            std::vector<TString> yamls;
+            if (config.HasConfigComposite()) {
+                TString main, fetched;
+                if (auto error = DecomposeConfig(config.GetConfigComposite(), &main, nullptr, &fetched)) {
+                    return error;
+                }
+                yamls.push_back(std::move(main));
+                if (fetched) {
+                    yamls.push_back(std::move(fetched));
+                }
+            }
+            if (config.HasCompressedStorageYaml()) {
+                TStringInput input(config.GetCompressedStorageYaml());
+                yamls.push_back(TZstdDecompress(&input).ReadAll());
+            }
+            for (const TString& yaml : yamls) {
+                auto doc = NFyaml::TDocument::Parse(yaml);
+                NYamlConfig::ResolveUniqueDocs(doc, [](NYamlConfig::TDocumentConfig&& resolved) {
+                    const auto app = NYamlConfig::YamlToProto(resolved.second, true, true);
+                    if (TString error = NConfig::ValidateStateStorageSelections(app.GetDomainsConfig())) {
+                        ythrow yexception() << error;
+                    }
+                });
+            }
+        } catch (const std::exception& ex) {
+            return ex.what();
+        }
+        return std::nullopt;
+    }
+
     void TInvokeRequestHandlerActor::FetchStorageConfig(const TQuery::TFetchStorageConfig& request) {
         RunCommonChecks();
 

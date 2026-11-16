@@ -472,7 +472,8 @@ namespace NKikimr::NStorage {
         THashMap<TString, TCacheItem> Cache;
         std::set<std::tuple<TString, TActorId>> CacheSubscriptions;
 
-        bool ConflictsWithCommittedMetadata(const NKikimrBlobStorage::TStorageConfig& config) const;
+        std::optional<TString> ValidateIncomingStorageConfig(const NKikimrBlobStorage::TStorageConfig& config,
+            bool initialBase = false) const;
 
         friend void ::Out<ERootState>(IOutputStream&, ERootState);
 
@@ -596,6 +597,7 @@ namespace NKikimr::NStorage {
             bool IsDistconfDisabledQuorum = false;
             std::optional<NKikimrBlobStorage::TStorageConfig> RecoveredConfig;
             bool RequiresGenerationAdvance = false;
+            bool RequiresStateStorageRepair = false;
             bool RequiresRecoveryProposition = false;
             std::optional<NKikimrBlobStorage::TStorageConfig> PropositionBase;
             std::optional<NKikimrBlobStorage::TStorageConfig> ConfigToPropose;
@@ -603,7 +605,8 @@ namespace NKikimr::NStorage {
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
             std::optional<TString> selfAssemblyUUID, bool dryRun = false, bool allowConflictingGenerationAdvance = false,
-            const NKikimrBlobStorage::TStorageConfig *collectionQuorumConfig = nullptr);
+            const NKikimrBlobStorage::TStorageConfig *collectionQuorumConfig = nullptr,
+            bool allowInvalidStateStorageHistory = false);
 
         void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
         bool IsBelowKnownAppliedConfig(const NKikimrBlobStorage::TStorageConfig& config) const;

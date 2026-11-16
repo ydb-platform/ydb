@@ -350,7 +350,8 @@ namespace NKikimr::NStorage {
 
     TDistributedConfigKeeper::TProcessCollectConfigsResult TDistributedConfigKeeper::ProcessCollectConfigs(
             TEvGather::TCollectConfigs *res, std::optional<TString> selfAssemblyUUID, bool dryRun,
-            bool allowConflictingGenerationAdvance, const NKikimrBlobStorage::TStorageConfig *collectionQuorumConfig) {
+            bool allowConflictingGenerationAdvance, const NKikimrBlobStorage::TStorageConfig *collectionQuorumConfig,
+            bool allowInvalidStateStorageHistory) {
         if (res->GetMetadataOnly()) {
             return {.ErrorReason = "Configuration bodies are required for recovery"};
         }
@@ -692,6 +693,15 @@ namespace NKikimr::NStorage {
 
         if (const auto *config = recoveryProposal ?: persistedConfig) {
             if (auto error = ValidateStateStorageSelections(*config)) {
+                // An explicit operator update may use a committed history entry as
+                // its predecessor without ever installing its invalid selections.
+                if (allowInvalidStateStorageHistory && !recoveryProposal && config->GetGeneration()
+                    && !persistentConfigs.at(TStorageConfigMeta(*config)).HavingDisksCommitted.empty()
+                    && !ValidateConfig(*config)) {
+                    return {.RecoveredConfig = *config,
+                            .RequiresGenerationAdvance = true,
+                            .RequiresStateStorageRepair = true};
+                }
                 return {.ErrorReason = TStringBuilder() << "Invalid recovered state storage configuration: " << *error};
             }
         }
@@ -1416,12 +1426,8 @@ namespace NKikimr::NStorage {
                                                      bool onlyOutdated) {
         const ui32 rootNodeId = GetRootNodeId();
         if (committedStorageConfig) {
-            if (auto error = ValidateStateStorageSelections(*committedStorageConfig)) {
+            if (auto error = ValidateIncomingStorageConfig(*committedStorageConfig)) {
                 YDB_LOG_ERROR("Storage configuration propagation rejected", {"error", *error},
-                    {"generation", committedStorageConfig->GetGeneration()});
-                committedStorageConfig = nullptr;
-            } else if (ConflictsWithCommittedMetadata(*committedStorageConfig)) {
-                YDB_LOG_ERROR("Storage configuration propagation conflicts with stored committed metadata",
                     {"generation", committedStorageConfig->GetGeneration()});
                 committedStorageConfig = nullptr;
             }
@@ -1496,11 +1502,8 @@ namespace NKikimr::NStorage {
             UpdateFingerprint(configToPropose);
         }
 
-        if (auto error = ValidateStateStorageSelections(*configToPropose)) {
+        if (auto error = ValidateIncomingStorageConfig(*configToPropose)) {
             return error;
-        }
-        if (ConflictsWithCommittedMetadata(*configToPropose)) {
-            return "Proposed storage configuration conflicts with stored committed metadata";
         }
 
         YDB_LOG_INFO("StartProposition",

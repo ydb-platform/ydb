@@ -5832,6 +5832,178 @@ selector_config: []
         CheckNewReplaceAfterLegacyFork(true, 1);
     }
 
+    void CheckOperatorStateStorageRepair(bool bridged) {
+        TCommitConfirmationFixture fixture;
+        fixture.State.RequiredRootNodeId = 1;
+        auto& runtime = fixture.Runtime;
+        auto& bridge = runtime.GetAppDataBridgeConfig();
+        if (bridged) {
+            MakeInlinePile(fixture.Config);
+            bridge.AddPiles()->SetName("pile0");
+            for (auto& node : *fixture.Config.MutableAllNodes()) {
+                node.MutableLocation()->SetBridgePileName("pile0");
+            }
+        }
+        for (NKikimrConfig::TStateStorageConfig *section : {
+                fixture.Config.MutableStateStorageConfig(), fixture.Config.MutableStateStorageBoardConfig(),
+                fixture.Config.MutableSchemeBoardConfig()}) {
+            auto *group = bridged ? section->AddRingGroups() : section->MutableRing();
+            group->SetNToSelect(1);
+            group->AddNode(1);
+            if (bridged) {
+                TBridgePileId::FromPileIndex(0).CopyToProto(group,
+                    &NKikimrConfig::TStateStorageConfig::TRing::SetBridgePileId);
+            }
+        }
+        const auto makeYaml = [&](ui32 nToSelect, ui64 version) {
+            TStringBuilder yaml;
+            yaml << fixture.MakeReplacementYaml(version);
+            if (bridged) {
+                yaml << "  bridge_config: {piles: [{name: pile0}]}\n";
+            }
+            yaml << "  domains_config:\n";
+            for (const char *section : {"explicit_state_storage_config", "explicit_state_storage_board_config",
+                    "explicit_scheme_board_config"}) {
+                yaml << "    " << section << ":\n      ssid: 1\n";
+                if (bridged) {
+                    yaml << "      ring_groups:\n      - {nto_select: " << nToSelect << ", node: [1], bridge_pile_id: 1}\n";
+                } else {
+                    yaml << "      ring: {nto_select: " << nToSelect << ", node: [1]}\n";
+                }
+            }
+            yaml << "selector_config: []\n";
+            return TString(yaml);
+        };
+        UNIT_ASSERT(!NStorage::TDistributedConfigKeeper::UpdateConfigComposite(fixture.Config, makeYaml(1, 0), makeYaml(1, 1)));
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        auto bad = fixture.Config;
+        bad.SetGeneration(2);
+        for (NKikimrConfig::TStateStorageConfig *section : {
+                bad.MutableStateStorageConfig(), bad.MutableStateStorageBoardConfig(), bad.MutableSchemeBoardConfig()}) {
+            auto *group = bridged ? section->MutableRingGroups(0) : section->MutableRing();
+            group->SetNToSelect(2);
+        }
+        UNIT_ASSERT(!NStorage::TDistributedConfigKeeper::UpdateConfigComposite(bad, makeYaml(2, 0), makeYaml(2, 1)));
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&bad);
+        for (ui32 nodeId : {1u, 2u, 3u}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(bad);
+        }
+
+        ui32 writes = 0;
+        ui32 invalidHandoffs = 0;
+        bool failReads = false;
+        TActorId edge;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (edge && CaptureInvokeResult(*ev, edge, response)) {
+                return false;
+            }
+            writes += ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType;
+            if (ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                invalidHandoffs += NStorage::ValidateStateStorageSelections(*ev->Get<TEvNodeWardenStorageConfig>()->Config).has_value();
+            }
+            if (failReads && ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadata::EventType) {
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new NStorage::TEvNodeWardenReadMetadataResult(std::nullopt,
+                        NPDisk::EPDiskMetadataOutcome::ERROR, {}), 0, ev->Cookie), nodeId);
+                return false;
+            }
+            return true;
+        };
+        fixture.Start(true, bridged ? &bridge : nullptr);
+
+        const auto update = [&](const NKikimrBlobStorage::TStorageConfig& replacement) {
+            edge = runtime.AllocateEdgeActor(1);
+            response.reset();
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            request->Record.MutableUpdateConfig()->MutableConfig()->CopyFrom(replacement);
+            runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+            UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }, TDuration::Seconds(35)));
+            return *response;
+        };
+        auto corrected = fixture.Config;
+        UNIT_ASSERT(!NStorage::TDistributedConfigKeeper::UpdateConfigComposite(corrected, makeYaml(1, 1), makeYaml(1, 2)));
+        failReads = true;
+        auto result = update(corrected);
+        UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM, result.DebugString());
+        failReads = false;
+
+        auto conflicting = bad;
+        conflicting.SetSelfAssemblyUUID("conflicting-history");
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&conflicting);
+        fixture.Metadata(3).MutableCommittedStorageConfig()->CopyFrom(conflicting);
+        result = update(corrected);
+        UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM, result.DebugString());
+        fixture.Metadata(3).MutableCommittedStorageConfig()->CopyFrom(bad);
+
+        auto invalid = corrected;
+        (bridged ? invalid.MutableStateStorageConfig()->MutableRingGroups(0)
+                 : invalid.MutableStateStorageConfig()->MutableRing())->SetNToSelect(2);
+        result = update(invalid);
+        UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR, result.DebugString());
+        invalid = corrected;
+        invalid.SetConfigComposite(bad.GetConfigComposite());
+        result = update(invalid);
+        UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR, result.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetErrorReason(), "State storage YAML validation failed");
+        invalid.SetConfigComposite("malformed");
+        result = update(invalid);
+        UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR, result.DebugString());
+        invalid = corrected;
+        UNIT_ASSERT(!NStorage::TDistributedConfigKeeper::UpdateConfigComposite(invalid, "config: [", TString("")));
+        result = update(invalid);
+        UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR, result.DebugString());
+        invalid = corrected;
+        invalid.SetCompressedStorageYaml("malformed");
+        result = update(invalid);
+        UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR, result.DebugString());
+        invalid = corrected;
+        invalid.MutableStateStorageConfig()->Clear();
+        result = update(invalid);
+        UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR, result.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writes, 0);
+        for (ui32 nodeId : {1u, 2u, 3u}) {
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint(), bad.GetFingerprint());
+        }
+
+        result = update(corrected);
+        UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, result.DebugString());
+        const auto repaired = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(repaired.GetGeneration(), 3);
+        UNIT_ASSERT(!NStorage::ValidateStateStorageSelections(repaired));
+        CheckDurableConfigConverges(fixture, repaired);
+        UNIT_ASSERT(writes);
+        UNIT_ASSERT_VALUES_EQUAL(invalidHandoffs, 0);
+        TString yaml;
+        UNIT_ASSERT(!NStorage::DecomposeConfig(repaired.GetConfigComposite(), &yaml, nullptr, nullptr));
+        UNIT_ASSERT_VALUES_EQUAL(yaml, makeYaml(1, 1));
+
+        // The same YAML admission check protects ordinary updates after recovery.
+        auto invalidUpdate = repaired;
+        invalidUpdate.SetGeneration(repaired.GetGeneration() + 1);
+        UNIT_ASSERT(!NStorage::ValidateStateStorageSelections(invalidUpdate));
+        UNIT_ASSERT(!NStorage::TDistributedConfigKeeper::UpdateConfigComposite(invalidUpdate, makeYaml(2, 2), makeYaml(2, 3)));
+        const ui32 writesBeforeInvalidUpdate = writes;
+        result = update(invalidUpdate);
+        UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR, result.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetErrorReason(), "State storage YAML validation failed");
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig().GetFingerprint(),
+            repaired.GetFingerprint());
+        for (ui32 nodeId : {1u, 2u, 3u}) {
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint(), repaired.GetFingerprint());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(writes, writesBeforeInvalidUpdate);
+    }
+
+    Y_UNIT_TEST(OperatorRepairsRejectedStateStorageConfig) {
+        CheckOperatorStateStorageRepair(false);
+    }
+
+    Y_UNIT_TEST(OperatorRepairsRejectedBridgedStateStorageConfig) {
+        CheckOperatorStateStorageRepair(true);
+    }
+
     Y_UNIT_TEST(ReplaceFencesLateRefillReply) {
         TCommitConfirmationFixture fixture;
         fixture.Metadata(3).Clear();

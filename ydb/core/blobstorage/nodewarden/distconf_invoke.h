@@ -249,7 +249,9 @@ namespace NKikimr::NStorage {
 
         void AdvanceGeneration();
         void QueryConfig(const TQuery::TQueryConfig& request);
-        void CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback, bool allowConflictingGenerationAdvance = false);
+        void CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback, bool allowConflictingGenerationAdvance = false,
+            bool allowInvalidStateStorageHistory = false);
+        static std::optional<TString> ValidateStateStorageYaml(const NKikimrBlobStorage::TStorageConfig& config);
         void StartRecoveryProposition(TProcessCollectConfigsResult& result);
         void CollectBridgeConfig(const NKikimrBlobStorage::TStorageConfig& config, std::function<void()> callback);
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev = true,

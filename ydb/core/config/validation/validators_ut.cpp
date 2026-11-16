@@ -473,6 +473,7 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
     }
 
     Y_UNIT_TEST(SelectionBoundsForEveryConfigurationSection) {
+        const char* sectionNames[] = {"StateStorage", "StateStorage", "StateStorageBoard", "SchemeBoard"};
         for (bool selfManagement : {false, true}) {
             for (ui32 section : xrange<ui32>(4)) {
                 for (bool ringGroups : {false, true}) {
@@ -506,6 +507,7 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
                         std::vector<TString> errors;
                         UNIT_ASSERT_EQUAL(ValidateConfig(app, errors), EValidationResult::Error);
                         UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+                        UNIT_ASSERT_STRING_CONTAINS(errors[0], TStringBuilder() << sectionNames[section] << ' ');
                         UNIT_ASSERT_STRING_CONTAINS(errors[0],
                             TStringBuilder() << "NToSelect# " << nToSelect << " must be in [1, 3]");
                     }
@@ -514,6 +516,46 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
                     UNIT_ASSERT_C(ValidateConfig(app, errors) == EValidationResult::Ok, errors.empty() ? "" : errors[0]);
                 }
             }
+        }
+    }
+
+    Y_UNIT_TEST(SelfManagementRejectsRingGroupsWithoutRings) {
+        for (bool ringGroups : {false, true}) {
+            NKikimrConfig::TAppConfig proposed;
+            proposed.MutableSelfManagementConfig()->SetEnabled(true);
+            auto* config = proposed.MutableDomainsConfig()->MutableExplicitStateStorageConfig();
+            auto* group = ringGroups ? config->AddRingGroups() : config->MutableRing();
+            group->SetNToSelect(1);
+
+            std::vector<TString> errors;
+            UNIT_ASSERT_EQUAL(ValidateConfig(proposed, errors), EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(errors[0], TStringBuilder() << "StateStorage "
+                << (ringGroups ? "RingGroups[0]" : "Ring") << " has no configured rings");
+        }
+    }
+
+    Y_UNIT_TEST(SelfManagementRejectsEmptyStateStorageSections) {
+        NKikimrConfig::TAppConfig omitted;
+        omitted.MutableSelfManagementConfig()->SetEnabled(true);
+        std::vector<TString> errors;
+        UNIT_ASSERT_EQUAL(ValidateConfig(omitted, errors), EValidationResult::Ok);
+        UNIT_ASSERT(errors.empty());
+
+        const char* sectionNames[] = {"StateStorage", "StateStorageBoard", "SchemeBoard"};
+        for (ui32 section : xrange<ui32>(3)) {
+            auto proposed = omitted;
+            auto* domains = proposed.MutableDomainsConfig();
+            auto* config = section == 0 ? domains->MutableExplicitStateStorageConfig()
+                : section == 1 ? domains->MutableExplicitStateStorageBoardConfig()
+                : domains->MutableExplicitSchemeBoardConfig();
+            config->Clear();
+
+            errors.clear();
+            UNIT_ASSERT_EQUAL(ValidateConfig(proposed, errors), EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(errors[0], TStringBuilder() << sectionNames[section]
+                << " configuration has no Ring or RingGroups");
         }
     }
 

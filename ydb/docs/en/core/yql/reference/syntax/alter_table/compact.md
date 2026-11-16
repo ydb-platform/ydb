@@ -34,6 +34,9 @@ The following parameters can be specified in the `WITH` block:
 * Running the command requires the same permissions as other `ALTER TABLE` actions. Concurrent table schema changes are not blocked.
 * Forced compaction also materializes borrowed data. As a result, the total data volume in the database may increase. The borrowing mechanism is used, for example, to implement [CoW](https://en.wikipedia.org/wiki/Copy-on-write) [table copying](../../../../reference/ydb-cli/tools-copy.md), so when compacting copied tables, their volume may eventually increase by the size of the original table.
 
+* If a temporary export copy still references parts of the source row-oriented table, forced compaction may skip some of its partitions. The shard returns `LOANED` and counts toward operation progress without rewriting its parts. An operation can therefore report `SUCCESS` and 100% progress even if some parts were not rewritten.
+* To rewrite the source table's parts, wait for its exports to finish and verify that the temporary copies have released their references. Schedule compaction so it can finish before the next export of that table.
+
 ## Examples {#examples}
 
 Run compaction of only the main table:

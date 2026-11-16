@@ -1156,6 +1156,7 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(BackupBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableBackupBackupCollection)
     GENERIC_HELPERS(BackupIncrementalBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableBackupIncrementalBackupCollection)
     GENERIC_HELPERS(RestoreBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableRestoreBackupCollection)
+    GENERIC_HELPERS(CreateLongIncrementalRestoreOp, NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp, &NKikimrSchemeOp::TModifyScheme::MutableRestoreBackupCollection)
 
     // sysview
     GENERIC_HELPERS(CreateSysView, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView, &NKikimrSchemeOp::TModifyScheme::MutableCreateSysView)
@@ -1188,15 +1189,6 @@ namespace NSchemeShardUT_Private {
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
-
-    // backup collection
-    void TestCreateLongIncrementalRestoreOp(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath,
-            const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
-        auto* request = InternalTransaction(RestoreBackupCollectionRequest(txId, parentPath, scheme));
-        request->Record.MutableTransaction(0)->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
-        TestModificationResults(runtime, txId, expectedResults);
-    }
 
     // external table
     void AsyncCreateExternalTableOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme) {

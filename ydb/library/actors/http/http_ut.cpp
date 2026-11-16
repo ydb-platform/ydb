@@ -1025,6 +1025,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
             const auto direction = metric.Labels.Find("direction");
             UNIT_ASSERT(name && direction);
             UNIT_ASSERT_VALUES_EQUAL(name->Value(), "time_ms");
+            UNIT_ASSERT(metric.Opts.MemOnly);
             directions.insert(TString(direction->Value()));
             const auto* histogram = (*metric.Values)[0].GetValue().AsHistogram();
             ui64 requests = 0;

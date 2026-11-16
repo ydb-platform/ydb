@@ -95,17 +95,16 @@ bool TValidatedWriteTx::IsReadOnlyPrepare(const TSysLocks& sysLocks) const {
     }
 
     const auto& sendingShards = KqpLocks->GetSendingShards();
-    if (std::find(sendingShards.begin(), sendingShards.end(), sysLocks.SelfShardId()) == sendingShards.end()) {
+    if (std::find(sendingShards.begin(), sendingShards.end(), TabletId) == sendingShards.end()) {
         return false;
     }
     const auto& receivingShards = KqpLocks->GetReceivingShards();
-    if (std::find(receivingShards.begin(), receivingShards.end(), sysLocks.SelfShardId()) != receivingShards.end()) {
+    if (std::find(receivingShards.begin(), receivingShards.end(), TabletId) != receivingShards.end()) {
         return false;
     }
 
-    const bool allowAncestorLocks = AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
     for (const auto& lockProto : KqpLocks->GetLocks()) {
-        if (lockProto.GetDataShard() != sysLocks.SelfShardId() && !allowAncestorLocks) {
+        if (lockProto.GetDataShard() != TabletId) {
             return false;
         }
         const auto lock = sysLocks.GetRawLock(lockProto.GetLockId());

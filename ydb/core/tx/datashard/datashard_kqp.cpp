@@ -76,13 +76,9 @@ TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto) {
 }
 
 // returns list of broken locks
-<<<<<<< HEAD
-TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks, ui64 tabletId)
-=======
 TVector<NKikimrDataEvents::TLock> ValidateLocks(
     const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks,
-    bool allowAncestorLocks, bool requireReadOnlyLocks)
->>>>>>> 850659aae81 (feat datashard : allow read-only prepares on CDC overflow (#58063))
+    ui64 tabletId, bool requireReadOnlyLocks)
 {
     TVector<NKikimrDataEvents::TLock> brokenLocks;
 
@@ -91,100 +87,19 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(
     }
 
     for (auto& lockProto : txLocks.GetLocks()) {
-<<<<<<< HEAD
         if (lockProto.GetDataShard() != tabletId) {
             continue;
-=======
+        }
+
         if (requireReadOnlyLocks) {
             const auto lock = sysLocks.GetRawLock(lockProto.GetLockId());
             if (lock && lock->IsWriteLock()) {
                 YDB_LOG_TRACE("ValidateLocks: read-only lock has writes",
                     {"lockId", lockProto.GetLockId()},
-                    {"shardId", selfShardId});
+                    {"shardId", tabletId});
                 brokenLocks.emplace_back(lockProto);
                 continue;
             }
-        }
-        ui32 ourGeneration = 0;
-        ui64 ourCounter = 0;
-        bool writeSeqNumMismatch = false;
-        if (lockProto.GetDataShard() == selfShardId) {
-            auto lockKey = MakeLockKey(lockProto, selfShardId);
-            auto lock = sysLocks.GetLock(lockKey);
-            ourGeneration = lock.Generation;
-            ourCounter = lock.Counter;
-            if (lock.WriteSeqNumKnown) {
-                // The echoed write seq nums must exactly match the lock's.
-                if (lockProto.WriteSeqNumsSize() > 1) {
-                    writeSeqNumMismatch = true;
-                } else if (lockProto.WriteSeqNumsSize() == 1) {
-                    const auto& writeSeqNum = lockProto.GetWriteSeqNums(0);
-                    writeSeqNumMismatch = writeSeqNum.GetWriterIndex() != lock.WriterIndex
-                        || writeSeqNum.GetWriteSeqNum() != lock.WriteSeqNum;
-                    if (writeSeqNumMismatch) {
-                        YDB_LOG_TRACE("ValidateLocks: writeSeqNum mismatch",
-                            {"lockId", lockProto.GetLockId()},
-                            {"shardId", lockProto.GetDataShard()},
-                            {"protoWriterIndex", writeSeqNum.GetWriterIndex()},
-                            {"protoWriteSeqNum", writeSeqNum.GetWriteSeqNum()},
-                            {"ourWriterIndex", lock.WriterIndex},
-                            {"ourWriteSeqNum", lock.WriteSeqNum});
-                    }
-                } else {
-                    writeSeqNumMismatch = lock.WriteSeqNum != 0;
-                }
-            }
-        } else {
-            if (!allowAncestorLocks) {
-                continue;
-            }
-
-            auto lockInfo = sysLocks.GetRawLock(lockProto.GetLockId());
-            if (!lockInfo || lockInfo->IsBroken()) {
-                YDB_LOG_TRACE("ValidateLocks: broken ancestor lock (main lock not found or broken)",
-                    {"lockId", lockProto.GetLockId()},
-                    {"shardId", lockProto.GetDataShard()});
-                brokenLocks.emplace_back(lockProto);
-                continue;
-            }
-
-            const TPathId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
-            if (!lockInfo->GetReadTables().contains(tableId)
-                && !lockInfo->GetWriteTables().contains(tableId)) {
-                 YDB_LOG_TRACE("ValidateLocks: broken ancestor lock (lock is not set for table)",
-                     {"lockId", lockProto.GetLockId()},
-                     {"shardId", lockProto.GetDataShard()},
-                     {"tableId", tableId});
-                 brokenLocks.emplace_back(lockProto);
-                 continue;
-             }
-
-            auto it = lockInfo->GetAncestorLocks().find(lockProto.GetDataShard());
-            if (it == lockInfo->GetAncestorLocks().end()) {
-                YDB_LOG_TRACE("ValidateLocks: broken ancestor lock (ancestor lock not found)",
-                    {"lockId", lockProto.GetLockId()},
-                    {"shardId", lockProto.GetDataShard()});
-                brokenLocks.emplace_back(lockProto);
-                continue;
-            }
-            const auto& ancestorLock = it->second;
-
-            ourGeneration = ancestorLock.Generation;
-            ourCounter = ancestorLock.Counter;
-
-            writeSeqNumMismatch = static_cast<size_t>(lockProto.GetWriteSeqNums().size())
-                != ancestorLock.WriteSeqNumStates.size();
-            if (!writeSeqNumMismatch) {
-                for (const auto& wsn : lockProto.GetWriteSeqNums()) {
-                    auto it = ancestorLock.WriteSeqNumStates.find(wsn.GetWriterIndex());
-                    if (it == ancestorLock.WriteSeqNumStates.end()
-                        || it->second.WriteSeqNum != wsn.GetWriteSeqNum()) {
-                        writeSeqNumMismatch = true;
-                        break;
-                    }
-                }
-            }
->>>>>>> 850659aae81 (feat datashard : allow read-only prepares on CDC overflow (#58063))
         }
 
         auto lockKey = MakeLockKey(lockProto);
@@ -247,24 +162,16 @@ void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLock
 }
 
 
-<<<<<<< HEAD
-std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets) {
-=======
 std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(
-    TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
+    ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
     bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets,
-    bool allowAncestorLocks, bool requireReadOnlyLocks)
+    bool requireReadOnlyLocks)
 {
->>>>>>> 850659aae81 (feat datashard : allow read-only prepares on CDC overflow (#58063))
     if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
         return {true, {}};
     }
 
-<<<<<<< HEAD
-    auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
-=======
-    auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, allowAncestorLocks, requireReadOnlyLocks);
->>>>>>> 850659aae81 (feat datashard : allow read-only prepares on CDC overflow (#58063))
+    auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin, requireReadOnlyLocks);
 
     if (!brokenLocks.empty()) {
         return {false, std::move(brokenLocks)};
@@ -309,16 +216,12 @@ bool KqpLocksIsArbiter(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLoc
     return KqpLocksHasArbiter(kqpLocks) && kqpLocks->GetArbiterShard() == tabletId;
 }
 
-<<<<<<< HEAD
-std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets, TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets) {
-=======
 std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(
-    TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
+    ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
     bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets,
     TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets,
-    bool allowAncestorLocks, bool requireReadOnlyLocks)
+    bool requireReadOnlyLocks)
 {
->>>>>>> 850659aae81 (feat datashard : allow read-only prepares on CDC overflow (#58063))
     if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
         return {true, {}};
     }
@@ -339,11 +242,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(
     bool sendLocks = SendLocks(*kqpLocks, origin);
     if (sendLocks) {
         // Note: it is possible to have no locks
-<<<<<<< HEAD
-        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
-=======
-        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, allowAncestorLocks, requireReadOnlyLocks);
->>>>>>> 850659aae81 (feat datashard : allow read-only prepares on CDC overflow (#58063))
+        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin, requireReadOnlyLocks);
 
         if (!brokenLocks.empty()) {
             return {false, std::move(brokenLocks)};
@@ -465,28 +364,17 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(
     return {true, {}};
 }
 
-<<<<<<< HEAD
-void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, TSysLocks& sysLocks, ui64 tabletId)
-=======
 void KqpFillOutReadSets(
     TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks,
-    bool useGenericReadSets, TSysLocks& sysLocks, bool allowAncestorLocks, bool requireReadOnlyLocks)
->>>>>>> 850659aae81 (feat datashard : allow read-only prepares on CDC overflow (#58063))
+    bool useGenericReadSets, TSysLocks& sysLocks, ui64 tabletId, bool requireReadOnlyLocks)
 {
     TMap<std::pair<ui64, ui64>, NKikimrTxDataShard::TKqpReadset> readsetData;
 
     NKikimrTx::TReadSetData::EDecision decision = NKikimrTx::TReadSetData::DECISION_COMMIT;
     TMap<std::pair<ui64, ui64>, NKikimrTx::TReadSetData> genericData;
 
-<<<<<<< HEAD
     if (SendLocks(kqpLocks, tabletId) && !kqpLocks.GetReceivingShards().empty()) {
-        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, tabletId);
-=======
-    const ui64 selfShardId = sysLocks.SelfShardId();
-
-    if (SendLocks(kqpLocks, selfShardId) && !kqpLocks.GetReceivingShards().empty()) {
-        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, allowAncestorLocks, requireReadOnlyLocks);
->>>>>>> 850659aae81 (feat datashard : allow read-only prepares on CDC overflow (#58063))
+        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, tabletId, requireReadOnlyLocks);
 
         NKikimrTxDataShard::TKqpValidateLocksResult validateLocksResult;
         validateLocksResult.SetSuccess(brokenLocks.empty());

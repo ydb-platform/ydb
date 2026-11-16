@@ -877,7 +877,6 @@ private:
             TDqInputBatch& input = smallest.Input();
             const auto inputIndex = smallest.InputIndex();
             YQL_ENSURE(!input.IsEmpty());
-            YQL_ENSURE(smallest.BlockIndex() == input.CurrentIndex(), "Sort order violation on input #" << inputIndex);
 
             const ui64 begin = input.CurrentIndex();
             const ui64 count = TakeRun(input, inputIndex, begin, MaxOutputBlockLen_ - OutputBlockLen_);

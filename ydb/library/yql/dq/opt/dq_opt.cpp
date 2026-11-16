@@ -6,6 +6,8 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <yql/essentials/core/dq_integration/yql_dq_optimization.h>
 
+#include <util/string/cast.h>
+
 using namespace NYql::NNodes;
 
 namespace NYql::NDq {
@@ -128,6 +130,40 @@ bool IsDqPureExpr(const TExprBase& node, bool isPrecomputePure) {
     }
 
     return !FindNode(node.Ptr(), predicate);
+}
+
+bool IsDqRepeatableExpr(const TExprBase& node) {
+    return !FindNode(node.Ptr(), [](const TExprNode::TPtr& expr) {
+        return !TDqPhyPrecompute::Match(expr.Get());
+    }, [](const TExprNode::TPtr& expr) {
+        // Opaque functions may keep state even when their arguments are pure.
+        return TCoNonDeterministicBase::Match(expr.Get()) || expr->IsCallable({"Udf", "ScriptUdf", "SqlCall"});
+    });
+}
+
+TExprBase BuildDqTakeSkipCount(const TExprBase& take, const TExprBase& skip, TExprContext& ctx) {
+    if (take.Maybe<TCoUint64>() && skip.Maybe<TCoUint64>()) {
+        const ui64 takeCount = FromString<ui64>(take.Cast<TCoUint64>().Literal().Value());
+        const ui64 skipCount = FromString<ui64>(skip.Cast<TCoUint64>().Literal().Value());
+        const ui64 total = takeCount > Max<ui64>() - skipCount ? Max<ui64>() : takeCount + skipCount;
+        return Build<TCoUint64>(ctx, take.Pos()).Literal().Build(ToString(total)).Done();
+    }
+
+    const auto max = Build<TCoUint64>(ctx, take.Pos()).Literal().Build(ToString(Max<ui64>())).Done();
+    return Build<TCoIf>(ctx, take.Pos())
+        .Predicate<TCoCmpGreater>()
+            .Left(take)
+            .Right<TCoSub>()
+                .Left(max)
+                .Right(skip)
+                .Build()
+            .Build()
+        .ThenValue(max)
+        .ElseValue<TCoAggrAdd>()
+            .Left(take)
+            .Right(skip)
+            .Build()
+        .Done();
 }
 
 bool IsDqSelfContainedExpr(const TExprBase& node) {

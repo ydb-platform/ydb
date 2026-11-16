@@ -2590,11 +2590,7 @@ private:
 
             const auto& queries = Settings->GetQuerySettings();
             const auto& expr = queries.GetQuery();
-            if (AnyOf(queries.GetQueries(), [](const auto& query) { return query.empty(); })) {
-                RuntimeError("Expected non-empty query", NYql::NDqProto::StatusIds::BAD_REQUEST);
-                return false;
-            }
-            if (expr.empty() && queries.GetPatternQueries().empty()) {
+            if (queries.GetHasEmptyQuery() || (expr.empty() && queries.GetPatternQueries().empty())) {
                 RuntimeError("Expected non-empty query", NYql::NDqProto::StatusIds::BAD_REQUEST);
                 return false;
             }
@@ -2990,6 +2986,7 @@ public:
         , IndexDescription(Settings->GetIndexDescription())
         , Database(Settings->GetDatabase())
         , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId << ". ")
+        , Snapshot(Settings->GetSnapshot().GetStep(), Settings->GetSnapshot().GetTxId())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , PipeCacheId(NKikimr::MakePipePerNodeCacheID(false))
         , PrefixCells(TIndexTableImplReader::ParsePrefixCells(Settings))
@@ -3010,12 +3007,6 @@ public:
 
         if (Settings->HasLimit() && Settings->GetLimit() > 0) {
             Limit = Settings->GetLimit();
-        }
-
-        if (Settings->HasSnapshot()) {
-            Snapshot = IKqpGateway::TKqpSnapshot(
-                Settings->GetSnapshot().GetStep(),
-                Settings->GetSnapshot().GetTxId());
         }
 
         if (Settings->HasLockTxId()) {

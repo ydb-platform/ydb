@@ -184,6 +184,44 @@ Y_UNIT_TEST_SUITE(ScanLimit) {
     Y_UNIT_TEST(SimpleReaderConflictingPortionsKeepOrderAndLimit) {
         CheckConflictingPortionsKeepOrderAndLimit("SIMPLE");
     }
+
+    Y_UNIT_TEST_TWIN(LimitOffsetCounts, TrivialReader) {
+        TKikimrRunner kikimr(MakeSettings(TrivialReader ? "TRIVIAL" : "SIMPLE"));
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        PrepareTable(session, 3);
+
+        for (bool descending : {false, true}) {
+            const TString select = TStringBuilder() << "SELECT id FROM `/Root/KV` ORDER BY id"
+                << (descending ? " DESC" : "");
+            for (const TString& count : {TString("18446744073709551614ul"), TString("$limit")}) {
+                const TString query = "DECLARE $limit AS Uint64; " + select + " LIMIT " + count + " OFFSET 2;";
+                const auto params = TParamsBuilder().AddParam("$limit").Uint64(Max<ui64>()).Build().Build();
+                const auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                CompareYson(descending ? "[[0u]]" : "[[2u]]", FormatResultSetYson(result.GetResultSet(0)), query);
+            }
+
+            const TString query = R"sql(
+                DECLARE $seed AS Bool;
+                $offset = IF(Random($seed) < 0.5, 0ul, 1ul);
+            )sql" + select + " LIMIT 1 OFFSET $offset;";
+            const auto params = TParamsBuilder().AddParam("$seed").Bool(true).Build().Build();
+            const auto explain = session.ExecuteQuery(query, TTxControl::NoTx(), params,
+                TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+            UNIT_ASSERT(explain.GetStats() && explain.GetStats()->GetPlan());
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*explain.GetStats()->GetPlan(), &plan, true);
+            UNIT_ASSERT_C(FindPlanNodes(plan, "ReadLimit").empty(), *explain.GetStats()->GetPlan());
+            for (ui32 iteration = 0; iteration < 64; ++iteration) {
+                const auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
+            }
+        }
+    }
 }
 
 }   // namespace NKikimr::NKqp

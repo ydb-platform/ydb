@@ -2214,6 +2214,69 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 //        )");
     }
 
+    Y_UNIT_TEST(VolatileOffsetDoesNotTruncateInput) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        for (const TString& query : {
+            TString("CREATE TABLE `/Root/LimitRows` (Id Uint64 NOT NULL, Value Utf8, PRIMARY KEY (Id));"),
+            TString(R"sql(UPSERT INTO `/Root/LimitRows` (Id, Value) VALUES (1ul, "a"u), (2ul, "b"u), (3ul, "c"u);)sql")})
+        {
+            const auto setup = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(setup.GetStatus(), EStatus::SUCCESS, setup.GetIssues().ToString());
+        }
+
+        // Cover the read limit, the generic Take/Skip stages, and Take/Skip/Sort.
+        for (const TString& order : {TString(), TString("ORDER BY Id DESC"), TString("ORDER BY Value DESC")}) {
+            const TString query = TStringBuilder() << R"sql(
+                DECLARE $seed AS Bool;
+                $offset = IF(Random($seed) < 0.5, 0ul, 1ul);
+                SELECT Id FROM `/Root/LimitRows`
+            )sql" << order << " LIMIT 1 OFFSET $offset;";
+            const auto params = TParamsBuilder().AddParam("$seed").Bool(true).Build().Build();
+            const auto explain = db.ExecuteQuery(query, NQuery::TTxControl::NoTx(), params,
+                NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+            UNIT_ASSERT(explain.GetStats() && explain.GetStats()->GetPlan());
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*explain.GetStats()->GetPlan(), &plan, true);
+            TItemsLimitsExtractor limits;
+            plan.Scan(limits);
+            limits.HasRead("/Root/LimitRows");
+            UNIT_ASSERT_C(!limits.LimitsPerTable.contains("/Root/LimitRows"), *explain.GetStats()->GetPlan());
+
+            for (ui32 iteration = 0; iteration < 64; ++iteration) {
+                const auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                // Either legal offset leaves at least two input rows. Internal
+                // copies of OFFSET must never disagree and produce an empty page.
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSet(0).RowsCount(), 1, query);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(LimitOffsetOverflowDoesNotTruncateInput) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        for (const TString& query : {
+            TString("CREATE TABLE `/Root/LimitRows` (Id Uint64 NOT NULL, Value Utf8, PRIMARY KEY (Id));"),
+            TString(R"sql(UPSERT INTO `/Root/LimitRows` (Id, Value) VALUES (1ul, "a"u), (2ul, "b"u), (3ul, "c"u);)sql")})
+        {
+            const auto setup = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(setup.GetStatus(), EStatus::SUCCESS, setup.GetIssues().ToString());
+        }
+
+        for (const TString& order : {TString("ORDER BY Id"), TString("ORDER BY Value")}) {
+            for (const TString& count : {TString("18446744073709551614ul"), TString("$limit")}) {
+                const TString query = TStringBuilder() << "DECLARE $limit AS Uint64; SELECT Id FROM `/Root/LimitRows` "
+                    << order << " LIMIT " << count << " OFFSET 2;";
+                const auto params = TParamsBuilder().AddParam("$limit").Uint64(Max<ui64>()).Build().Build();
+                const auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson("[[3u]]", FormatResultSetYson(result.GetResultSet(0)), query);
+            }
+        }
+    }
+
     Y_UNIT_TEST(OnlineRO_Consistent) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();

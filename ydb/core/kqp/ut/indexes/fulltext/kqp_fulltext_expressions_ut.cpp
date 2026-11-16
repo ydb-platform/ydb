@@ -13,14 +13,19 @@ struct TExpressionTestOptions {
     bool EdgeNgram = false;
     bool Relevance = false;
     bool Empty = false;
+    bool RowId = false;
     const char* Tokenizer = "standard";
 };
 
-TKikimrRunner ExpressionKikimr(bool compact) {
+TKikimrRunner ExpressionKikimr(bool compact, bool rowId) {
     NKikimrConfig::TFeatureFlags flags;
     flags.SetEnableFulltextIndex(true);
     flags.SetEnableCompactFulltextIndex(compact);
     flags.SetEnableFulltextIndexPrefix(true);
+    if (rowId) {
+        flags.SetEnableAddUniqueIndex(true);
+        flags.SetEnableFulltextIndexRowId(true);
+    }
     return Kikimr(std::move(flags));
 }
 
@@ -31,7 +36,7 @@ struct TExpressionFixture {
 
     explicit TExpressionFixture(TExpressionTestOptions options)
         : Options(options)
-        , Runner(ExpressionKikimr(options.Compact))
+        , Runner(ExpressionKikimr(options.Compact, options.RowId))
         , Db(Runner.GetQueryClient())
     {
         const TString ngramSettings = Options.Ngram || Options.EdgeNgram
@@ -385,6 +390,27 @@ Y_UNIT_TEST_QUAD(OrderedScalarSubquery, Compact, Score) {
     fixture.ExpectError(query, "Expected non-empty query", fixture.Parameters("alpha", "beta", true, 4, 5));
 }
 
+Y_UNIT_TEST_QUAD(ScalarSubqueryCardinalityKeepsOrdinarySemantics, Compact, Score) {
+    TExpressionFixture fixture({.Compact = Compact, .Relevance = Score});
+    fixture.Execute("UPSERT INTO `/Root/Patterns` (Id, Pattern) VALUES (2ul, \"alpha\");");
+    const TString setup = R"sql(
+        $search = (SELECT Pattern FROM `/Root/Patterns` WHERE Id >= $lo AND Id < $hi);
+    )sql";
+    const TString controlQuery = fixture.Declarations() + setup + "SELECT COALESCE($search, $other) AS Search;";
+    const TString query = fixture.Query("COALESCE($search, $other)", setup, Score);
+    // Ordinary YQL scalar expressions take the first row. Use equal values so
+    // the multiple-row case tests cardinality without depending on row order.
+    for (ui64 hi : {1ul, 2ul, 3ul}) {
+        const auto params = fixture.Parameters("alpha", "beta", true, 1, hi);
+        const auto control = fixture.Db.ExecuteQuery(controlQuery, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(control.GetStatus(), NYdb::EStatus::SUCCESS, control.GetIssues().ToString());
+        NYdb::TResultSetParser parser(control.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(TString(parser.ColumnParser("Search").GetUtf8()), hi == 1 ? "beta" : "alpha");
+        fixture.ExpectIds(query, hi == 1 ? TVector<ui64>{2, 5} : TVector<ui64>{1, 3, 5}, params);
+    }
+}
+
 Y_UNIT_TEST_QUAD(PrecomputeExecutionModes, Compact, Score) {
     for (bool utf8 : {false, true}) {
         TExpressionFixture fixture({.Compact = Compact, .Utf8 = utf8, .Prefixed = Compact || !Score,
@@ -526,6 +552,74 @@ Y_UNIT_TEST_QUAD(PrecomputeReadsTransactionLocalChanges, Compact, Score) {
     fixture.ExpectIds(query, {1, 5});
 }
 
+Y_UNIT_TEST_QUAD(PrecomputeAndFulltextReadKeepTransactionSnapshot, Compact, Score) {
+    TExpressionFixture fixture({.Compact = Compact, .Relevance = Score});
+    const TString query = fixture.Query("COALESCE($search, $other)", R"sql(
+        $search = (SELECT Pattern FROM `/Root/Patterns` WHERE Id = $lo);
+    )sql", Score);
+    auto session = fixture.Db.GetSession().GetValueSync().GetSession();
+    const auto first = session.ExecuteQuery(query,
+        NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRO()),
+        fixture.Parameters()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(first.GetStatus(), NYdb::EStatus::SUCCESS, first.GetIssues().ToString());
+    TExpressionFixture::CheckIds(first.GetResultSet(0), {1, 3, 5}, query);
+    UNIT_ASSERT(first.GetTransaction());
+    auto tx = *first.GetTransaction();
+
+    fixture.Execute(R"sql(
+        UPSERT INTO `/Root/Patterns` (Id, Pattern) VALUES (1ul, "beta");
+        UPSERT INTO `/Root/Docs` (Id, Text) VALUES (1ul, "beta");
+    )sql");
+    fixture.ExpectIds(query, {1, 2, 5});
+
+    const auto second = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::Tx(tx).CommitTx(),
+        fixture.Parameters()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(second.GetStatus(), NYdb::EStatus::SUCCESS, second.GetIssues().ToString());
+    TExpressionFixture::CheckIds(second.GetResultSet(0), {1, 3, 5}, query);
+}
+
+Y_UNIT_TEST_QUAD(ComputedSearchOverCompositeKeyAndMultiplePartitions, Compact, Score) {
+    TExpressionFixture fixture({.Compact = Compact, .Relevance = Score, .RowId = true});
+    fixture.Execute(Sprintf(R"sql(
+        CREATE TABLE `/Root/PartitionedDocs` (
+            Category Utf8 NOT NULL,
+            Id Uint64 NOT NULL,
+            Text Utf8,
+            PRIMARY KEY (Category, Id),
+            INDEX fulltext_idx GLOBAL USING %s ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true)
+        ) WITH (PARTITION_AT_KEYS = (("m"u)));
+    )sql", Score ? "fulltext_relevance" : "fulltext_plain"));
+    fixture.Execute(R"sql(
+        UPSERT INTO `/Root/PartitionedDocs` (Category, Id, Text) VALUES
+            ("a"u, 1ul, "alpha"u), ("a"u, 2ul, "beta"u),
+            ("z"u, 1ul, "alpha"u), ("z"u, 2ul, "alpha beta"u);
+    )sql");
+    const TString predicate = Score ? "FulltextScore(Text, $search) > 0" : "FulltextMatch(Text, $search)";
+    const TString query = fixture.Declarations() + R"sql(
+        $search = COALESCE((SELECT Pattern FROM `/Root/Patterns` WHERE Id = $lo), $other);
+        SELECT Category, Id FROM `/Root/PartitionedDocs` VIEW fulltext_idx WHERE
+    )sql" + predicate + " ORDER BY Category, Id;";
+    const auto expect = [&](const TString& statement, ui64 patternId,
+                            const TVector<std::pair<TString, ui64>>& expected) {
+        const auto result = fixture.Db.ExecuteQuery(statement, NYdb::NQuery::TTxControl::NoTx(),
+            fixture.Parameters("alpha", "absent", true, patternId)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        NYdb::TResultSetParser parser(result.GetResultSet(0));
+        TVector<std::pair<TString, ui64>> actual;
+        while (parser.TryNextRow()) {
+            actual.emplace_back(TString(parser.ColumnParser("Category").GetUtf8()), parser.ColumnParser("Id").GetUint64());
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, statement);
+    };
+    expect(query, 1, {{"a", 1}, {"z", 1}, {"z", 2}});
+    expect(query, 2, {{"a", 2}, {"z", 2}});
+    expect(query, 20, {});
+    expect(fixture.Declarations() + "$search = IF($choose, $q, $other); "
+        "SELECT Category, Id FROM `/Root/PartitionedDocs` VIEW fulltext_idx "
+        "WHERE Category = \"z\"u AND Id = 1ul AND " + predicate + ";", 1, {{"z", 1}});
+}
+
 Y_UNIT_TEST_QUAD(RowsetExpressions, Compact, Score) {
     for (bool utf8 : {false, true}) {
         TExpressionFixture fixture({.Compact = Compact, .Utf8 = utf8, .Prefixed = Compact || !Score, .FilterScope = true, .Relevance = Score});
@@ -582,6 +676,24 @@ Y_UNIT_TEST_TWIN(MultipleSearchExpressions, Compact) {
         ORDER BY Id;
     )sql";
     fixture.ExpectError(mixedEmpty, "Expected non-empty query");
+
+    for (const auto& queries : TVector<TVector<TString>>{
+            {"$q", "$first"}, {"$first", "$q", "$other"},
+            {"$q", "$first", "$other"}, {"$q", "$other", "$first"}}) {
+        TString predicates;
+        for (const auto& expression : queries) {
+            if (!predicates.empty()) {
+                predicates += " AND ";
+            }
+            predicates += "FulltextMatch(Text, " + expression + ")";
+        }
+        const TString query = fixture.Declarations()
+            + "$first = IF($choose, \"\", $q); SELECT Id FROM `/Root/Docs` VIEW fulltext_idx "
+              "WHERE Scope = $scope AND " + predicates + " ORDER BY Id;";
+        fixture.ExpectError(query, "Expected non-empty query");
+        fixture.ExpectIds(query, queries.size() == 2 ? TVector<ui64>{1, 5} : TVector<ui64>{5},
+            fixture.Parameters("alpha", "beta", false));
+    }
 }
 
 Y_UNIT_TEST_TWIN(DependentSearchExpressionsSharePrecompute, Compact) {
@@ -921,6 +1033,28 @@ Y_UNIT_TEST_QUAD(RelevancePrecomputeOrderingAndLimits, Compact, Utf8) {
     }
 }
 
+Y_UNIT_TEST_TWIN(PrefixedRelevanceComputedLimitAndOffset, Utf8) {
+    TExpressionFixture fixture({.Compact = true, .Utf8 = Utf8, .Prefixed = true, .Relevance = true});
+    fixture.Execute(R"sql(
+        UPSERT INTO `/Root/Docs` (Id, Text) VALUES
+            (1ul, "alpha alpha filler"), (2ul, "beta beta filler"),
+            (3ul, "alpha alpha alpha"), (5ul, "alpha beta filler");
+    )sql");
+    for (const TString& expression : {TString("$q"), TString("$search")}) {
+        const TString score = "FulltextScore(Text, " + expression + ", 0.5 AS B)";
+        const TString query = fixture.Declarations() + R"sql(
+            $search = COALESCE((SELECT Pattern FROM `/Root/Patterns` WHERE Id = $lo), $other);
+            $limit = (SELECT COUNT(*) FROM `/Root/Patterns` WHERE Id < $hi);
+        )sql" + "SELECT Id, " + score + " AS Score FROM `/Root/Docs` VIEW fulltext_idx "
+            "WHERE Scope = $scope AND " + score + " > 0 ORDER BY Score DESC ";
+        fixture.ExpectIds(query + "LIMIT $hi OFFSET ($lo - 1ul);", {1, 5});
+        fixture.ExpectIds(query + "LIMIT COALESCE($limit, 0ul) OFFSET $lo;", {5});
+        fixture.ExpectIds(query + "LIMIT COALESCE($limit, 0ul) OFFSET COALESCE($limit, 0ul);", {5});
+        fixture.ExpectIds(query + "LIMIT COALESCE($limit, 0ul) OFFSET $lo;", {},
+            fixture.Parameters("alpha", "beta", true, 1, 2, "p2"));
+    }
+}
+
 Y_UNIT_TEST_QUAD(ExplicitPredicateKeepsStringFilters, Compact, Score) {
     TExpressionFixture fixture({.Compact = Compact, .Ngram = true, .Relevance = Score});
     const TVector<std::pair<TString, TVector<ui64>>> filters = {
@@ -933,6 +1067,97 @@ Y_UNIT_TEST_QUAD(ExplicitPredicateKeepsStringFilters, Compact, Score) {
         fixture.ExpectIds(fixture.Query("$q", "", Score, "", filter), expected);
         fixture.ExpectIds(fixture.Query("$q", "", Score, "", filter), {},
             fixture.Parameters("alpha", "absent", false));
+    }
+}
+
+Y_UNIT_TEST_TWIN(DiscardedPatternDoesNotRunForEmptyInput, Compact) {
+    TExpressionFixture fixture({.Compact = Compact, .Ngram = true});
+    for (const TString& predicate : {
+            TString("StartsWith(Text, Unwrap($suffix))"),
+            TString("Text = Unwrap($suffix)")}) {
+        const TString query = R"sql(
+            DECLARE $q AS Utf8;
+            DECLARE $suffix AS Utf8?;
+            SELECT Id FROM `/Root/Docs` VIEW fulltext_idx
+            WHERE FulltextMatch(Text, $q) AND
+        )sql" + predicate + " ORDER BY Id;";
+        const auto parameters = [](const TString& q, std::optional<std::string> suffix) {
+            return NYdb::TParamsBuilder()
+                .AddParam("$q").Utf8(q).Build()
+                .AddParam("$suffix").OptionalUtf8(suffix).Build()
+                .Build();
+        };
+        fixture.ExpectIds(query, {}, parameters("absent", std::nullopt));
+        fixture.ExpectError(query, "Failed to unwrap empty optional", parameters("alpha", std::nullopt),
+            NYdb::EStatus::PRECONDITION_FAILED);
+        fixture.ExpectIds(query, predicate.StartsWith("StartsWith") ? TVector<ui64>{1, 3, 4, 5} : TVector<ui64>{1, 3},
+            parameters("alpha", std::string("alpha")));
+    }
+}
+
+Y_UNIT_TEST_TWIN(DiscardedWildcardKeepsPostfilter, Compact) {
+    TExpressionFixture fixture({.Compact = Compact, .Ngram = true});
+    for (bool reverse : {false, true}) {
+        const TString match = "FulltextMatch(Text, $q)";
+        const TString wildcard = "FulltextMatch(Text, $pattern, \"Wildcard\" AS Mode)";
+        const TString query = fixture.Declarations() + R"sql(
+            $pattern = IF($choose, $other, $q);
+            SELECT Id FROM `/Root/Docs` VIEW fulltext_idx WHERE
+        )sql" + (reverse ? wildcard + " AND " + match : match + " AND " + wildcard) + " ORDER BY Id;";
+        fixture.ExpectIds(query, {1, 3}, fixture.Parameters("alpha", "alpha"));
+        fixture.ExpectIds(query, {5}, fixture.Parameters("alpha", "%beta%"));
+        fixture.ExpectIds(query, {}, fixture.Parameters("alpha", "%absent%"));
+    }
+}
+
+Y_UNIT_TEST_TWIN(DiscardedPatternSharesNestedSourceQuery, Compact) {
+    TExpressionFixture fixture({.Compact = Compact, .Ngram = true});
+    for (bool reverse : {false, true}) {
+        const TString match = "FulltextMatch(Text, $search || \" beta\"u)";
+        const TString residual = "StartsWith(Text, $search)";
+        const TString query = fixture.Declarations() + R"sql(
+            $search = IF(Random($choose) < 0.5, $q, $other);
+            SELECT Id, $search AS Search FROM `/Root/Docs` VIEW fulltext_idx WHERE
+        )sql" + (reverse ? residual + " AND " + match : match + " AND " + residual) + " ORDER BY Id;";
+        for (ui32 iteration = 0; iteration < 16; ++iteration) {
+            const auto result = fixture.Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                fixture.Parameters()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSet(0).RowsCount(), 1,
+                NYdb::FormatResultSetYson(result.GetResultSet(0)));
+            NYdb::TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            const TString search(parser.ColumnParser("Search").GetUtf8());
+            UNIT_ASSERT_C(search == "alpha" || search == "beta", search);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Id").GetUint64(), search == "alpha" ? 5ul : 2ul);
+        }
+    }
+}
+
+Y_UNIT_TEST(CompactRelevanceViewPrimaryKeyOnlyRead) {
+    TExpressionFixture fixture({.Compact = true, .Relevance = true});
+    fixture.ExpectIds("SELECT Id FROM `/Root/Docs` VIEW fulltext_idx WHERE Id = 1ul;", {1});
+    fixture.ExpectIds(fixture.Query("IF($choose, $q, $other)", "", false, "", "Id = 1ul"), {1});
+    fixture.ExpectIds(fixture.Query("IF($choose, $q, $other)", "", true, "", "Id = 1ul"), {1});
+}
+
+Y_UNIT_TEST_TWIN(OptionalImplicitQueryPreservesResultType, Compact) {
+    TExpressionFixture fixture({.Compact = Compact, .NotNull = true, .Ngram = true});
+    for (const TString& predicate : {TString("Text = $search"), TString("StartsWith(Text, $search)")}) {
+        const TString prefix = fixture.Declarations()
+            + "$search = Just($q); SELECT Id, $search AS Search FROM `/Root/Docs` VIEW ";
+        const auto run = [&](const TString& view) {
+            return fixture.Db.ExecuteQuery(prefix + view + " WHERE " + predicate + " ORDER BY Id;",
+                NYdb::NQuery::TTxControl::NoTx(), fixture.Parameters()).ExtractValueSync();
+        };
+        const auto control = run("PRIMARY KEY");
+        UNIT_ASSERT_VALUES_EQUAL_C(control.GetStatus(), NYdb::EStatus::SUCCESS, control.GetIssues().ToString());
+        const auto indexed = run("fulltext_idx");
+        UNIT_ASSERT_VALUES_EQUAL_C(indexed.GetStatus(), NYdb::EStatus::SUCCESS, indexed.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(indexed.GetResultSet(0).GetColumnsMeta()[1].Type.ToString(),
+            control.GetResultSet(0).GetColumnsMeta()[1].Type.ToString(), predicate);
+        CompareYson(NYdb::FormatResultSetYson(control.GetResultSet(0)),
+            NYdb::FormatResultSetYson(indexed.GetResultSet(0)), predicate);
     }
 }
 
@@ -1135,6 +1360,22 @@ Y_UNIT_TEST_QUAD(SeparateResultsKeepOwnVolatileSearchesConsistent, Compact, Scor
                 }
             }
         }
+    }
+}
+
+Y_UNIT_TEST_QUAD(SearchExpressionFailures, Compact, Score) {
+    TExpressionFixture fixture({.Compact = Compact, .Relevance = Score});
+    const TString pure = fixture.Query("Unwrap(IF($choose, Nothing(Utf8?), Just($q)))", "", Score);
+    fixture.ExpectError(pure, "Failed to unwrap empty optional", NYdb::EStatus::PRECONDITION_FAILED);
+    fixture.ExpectIds(pure, {1, 3, 5}, fixture.Parameters("alpha", "beta", false));
+
+    const TString tableRead = fixture.Query("Unwrap($search)", R"sql(
+        $search = (SELECT Pattern FROM `/Root/Patterns` WHERE Id = $lo);
+    )sql", Score);
+    fixture.ExpectIds(tableRead, {1, 3, 5});
+    for (ui64 id : {5ul, 20ul}) {
+        fixture.ExpectError(tableRead, "Failed to unwrap empty optional", fixture.Parameters("alpha", "beta", true, id),
+            NYdb::EStatus::PRECONDITION_FAILED);
     }
 }
 

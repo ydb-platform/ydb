@@ -6,6 +6,7 @@ SRCS(
     dq_opt_equal_nulls_ut.cpp
     dq_opt_hypergraph_ut.cpp
     dq_opt_interesting_orderings_ut.cpp
+    dq_opt_limit_ut.cpp
 )
 
 PEERDIR(

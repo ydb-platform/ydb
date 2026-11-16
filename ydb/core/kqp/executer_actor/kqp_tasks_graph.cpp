@@ -2894,21 +2894,29 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
 
     {
         TStringBuilder queryBuilder;
-        // Logical planning interleaves explicit query values with literal separators.
+        const auto& queryValues = fullTextSource.GetQuerySettings().GetQueryValue();
+        // Logical planning interleaves explicit query values with single-space separators.
+        // Validate that contract before using positions to distinguish query arguments.
+        YQL_ENSURE(queryValues.empty() || queryValues.size() % 2 == 1,
+            "Expected fulltext query values interleaved with separators");
         bool explicitQuery = true;
-        for (const auto& query : fullTextSource.GetQuerySettings().GetQueryValue()) {
+        bool hasEmptyQuery = false;
+        for (const auto& query : queryValues) {
             auto value = ExtractPhyValue(
                 stageInfo, query,
                 TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-            TString resolved(value.AsStringRef());
+            const TStringBuf resolved(value.AsStringRef());
             if (explicitQuery) {
-                settings->MutableQuerySettings()->AddQueries(resolved);
+                hasEmptyQuery |= resolved.empty();
+            } else {
+                YQL_ENSURE(resolved == " ", "Expected a single-space fulltext query separator");
             }
             queryBuilder << resolved;
             explicitQuery = !explicitQuery;
         }
 
         settings->MutableQuerySettings()->SetQuery(TString(queryBuilder));
+        settings->MutableQuerySettings()->SetHasEmptyQuery(hasEmptyQuery);
     }
 
     for (const auto& query : fullTextSource.GetQuerySettings().GetPatternQueries()) {

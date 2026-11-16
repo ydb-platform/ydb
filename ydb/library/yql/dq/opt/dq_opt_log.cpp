@@ -54,7 +54,11 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
             return node;
         }
 
-        if (!IsDqCompletePureExpr(maybeSkip.Cast().Count())) {
+        if (!IsDqCompletePureExpr(maybeSkip.Cast().Count()) ||
+            !IsDqRepeatableExpr(take.Count()) || !IsDqRepeatableExpr(maybeSkip.Cast().Count()))
+        {
+            // TopSort needs a copy of both counts, while the outer Take/Skip
+            // still consumes the original expressions.
             return node;
         }
     }
@@ -80,10 +84,7 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
 
     auto topSortCount = take.Count();
     if (maybeSkip) {
-        topSortCount = Build<TCoAggrAdd>(ctx, node.Pos())
-            .Left(take.Count())
-            .Right(maybeSkip.Cast().Count())
-            .Done();
+        topSortCount = BuildDqTakeSkipCount(take.Count(), maybeSkip.Cast().Count(), ctx);
     }
 
     TExprBase result = Build<TCoTopSort>(ctx, node.Pos())

@@ -2215,34 +2215,45 @@ TExprNode::TPtr BuildFulltextQueryPrecompute(const TExprNode::TPtr& original,
 }
 
 void BuildFulltextQueryPrecomputes(const TExprNode::TListType& queries,
-    TNodeOnNodeOwnedMap& replacements, TExprContext& ctx)
+    TNodeOnNodeOwnedMap& replacements, TExprContext& ctx,
+    const TExprNode::TListType& residualQueries = {})
 {
     TNodeSet queryRoots;
     for (const auto& query : queries) {
         queryRoots.insert(query.Get());
     }
+    for (const auto& query : residualQueries) {
+        queryRoots.insert(query.Get());
+    }
 
     // Postorder makes a dependent query consume the shared precompute of every nested
-    // query root, regardless of predicate or hybrid-branch order.
+    // query root, regardless of predicate or hybrid-branch order. Only visit source
+    // queries: an independent residual expression must still run lazily on each row.
+    TNodeSet visitedNodes;
     for (const auto& query : queries) {
         VisitExpr(query, [](const TExprNode::TPtr&) { return true; }, [&](const TExprNode::TPtr& node) {
             if (queryRoots.contains(node.Get())) {
                 BuildFulltextQueryPrecompute(node, replacements, ctx);
             }
             return true;
-        });
+        }, visitedNodes);
     }
 }
 
-void BuildFulltextPredicateReplacements(TFullTextApplyParseResult& result, TExprContext& ctx,
-    TPositionHandle pos)
+void BuildFulltextPredicateReplacements(TFullTextApplyParseResult& result,
+    const TVector<TFulltextQuery>& residualQueries, TExprContext& ctx, TPositionHandle pos)
 {
     TExprNode::TListType queryRoots;
     queryRoots.reserve(result.Queries.size());
     for (const auto& query : result.Queries) {
         queryRoots.push_back(query.Query);
     }
-    BuildFulltextQueryPrecomputes(queryRoots, result.Replaces, ctx);
+    TExprNode::TListType residualRoots;
+    residualRoots.reserve(residualQueries.size());
+    for (const auto& query : residualQueries) {
+        residualRoots.push_back(query.Query);
+    }
+    BuildFulltextQueryPrecomputes(queryRoots, result.Replaces, ctx, residualRoots);
 
     for (auto& query : result.Queries) {
         const auto original = query.Query;
@@ -2258,6 +2269,16 @@ void BuildFulltextPredicateReplacements(TFullTextApplyParseResult& result, TExpr
                 ? BuildPostfiltersForMatch(ctx, pos, query.Query, query.Column)
                 : Build<TCoBool>(ctx, pos).Literal().Build("true").Done().Ptr();
             result.Replaces.emplace(query.Node.Get(), std::move(replacement));
+        }
+    }
+
+    for (const auto& query : residualQueries) {
+        if (query.IsMatchQuery()) {
+            // An explicit wildcard Match still needs a postfilter when the free-text
+            // driver wins. Reuse source dependencies without materializing this filter.
+            YQL_ENSURE(!query.PatternMode.empty());
+            auto value = ctx.ReplaceNodes(TExprNode::TPtr(query.Query), result.Replaces);
+            result.Replaces.emplace(query.Node.Get(), BuildPostfiltersForMatch(ctx, pos, value, query.Column));
         }
     }
 
@@ -2309,6 +2330,10 @@ TMaybeNode<TExprBase> KqpPushLimitOverFullText(const NYql::NNodes::TExprBase& no
         if (it == renameMap.end() || it->second != NTableIndex::NFulltext::FullTextRelevanceColumn) {
             return node;
         }
+    }
+
+    if (!IsDqRepeatableExpr(topSort.Count())) {
+        return node;
     }
 
     settings.SetItemsLimit(topSort.Count().Ptr());
@@ -2484,14 +2509,21 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     }
 
     YQL_ENSURE(result.Queries.size() >= 1);
-    BuildFulltextPredicateReplacements(result, ctx, node.Pos());
 
     // Keep the driving query first so its named options are used.
     const auto driver = MaxElementBy(result.Queries, [](const auto& query) { return query.Priority(); });
     const auto priority = driver->Priority();
     std::iter_swap(result.Queries.begin(), driver);
     // Only free-text Match/Score needs other predicates to remain residual for scoring/MSM.
-    std::erase_if(result.Queries, [priority](const auto& query) { return priority == 2 && query.Priority() < priority; });
+    TVector<TFulltextQuery> residualQueries;
+    std::erase_if(result.Queries, [&](const auto& query) {
+        if (priority == 2 && query.Priority() < priority) {
+            residualQueries.push_back(query);
+            return true;
+        }
+        return false;
+    });
+    BuildFulltextPredicateReplacements(result, residualQueries, ctx, node.Pos());
 
     TVector<TExprBase> queryData;
     for(const auto& query : result.Queries) {
@@ -3219,7 +3251,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             TString fulltextError;
             if (!parsedFulltext.IsValid(nullptr, &fulltextError)) {
                 if (!fulltextError.empty()) {
-                    return addError(fulltextError);
+                    return addError(TStringBuilder() << branchId << ": " << fulltextError);
                 }
                 return addError(TStringBuilder() << "the first argument of FullTextScore (" << branchId << ") must reference a table column");
             }

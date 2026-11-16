@@ -450,6 +450,8 @@ enum EKqpFullTextIndexType {
 message TKqpFullTextSource {
     message TKqpQuerySettings {
         repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 1;
+        // Explicit keyword query arguments interleaved with literal single-space separators.
+        // Empty for pattern-only and JSON index reads; otherwise contains an odd number of values.
         repeated TKqpPhyValue QueryValue = 2;
 
         message TQueryToken {

@@ -299,13 +299,9 @@ TExprBase KqpBuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx,
 
     auto settings = TKqpReadTableFullTextIndexSettings::Parse(read.Settings());
     if (settings.ItemsLimit) {
-        auto limit = TExprBase(settings.ItemsLimit);
-        if (!limit.Maybe<TCoUint64>() && !limit.Maybe<TCoParameter>() &&
-            !limit.Maybe<TDqPhyPrecompute>() && !limit.Maybe<TKqpTxResultBinding>())
-        {
-            // LIMIT + OFFSET may produce a computed count. The source accepts
-            // only literals and parameters, just as for the query value above.
-            settings.SetItemsLimit(KqpPrecomputeParameter(limit, ctx).Ptr());
+        const auto limit = KqpPrecomputeCount(TExprBase(settings.ItemsLimit), ctx);
+        if (limit.Raw() != settings.ItemsLimit.Get()) {
+            settings.SetItemsLimit(limit.Ptr());
             phyRead = ctx.ChangeChild(*phyRead, TKqpReadTableFullTextIndex::idx_Settings,
                 settings.BuildNode(ctx, read.Settings().Pos()).Ptr());
         }
@@ -828,6 +824,15 @@ NYql::NNodes::TExprBase KqpPrecomputeParameter(NYql::NNodes::TExprBase param, NY
                 .Build()
             .Build()
         .Done();
+}
+
+NYql::NNodes::TExprBase KqpPrecomputeCount(NYql::NNodes::TExprBase count, NYql::TExprContext& ctx) {
+    if (count.Maybe<TCoUint64>() || count.Maybe<TCoParameter>() ||
+        count.Maybe<TDqPhyPrecompute>() || count.Maybe<TKqpTxResultBinding>())
+    {
+        return count;
+    }
+    return KqpPrecomputeParameter(count, ctx);
 }
 
 NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx) {

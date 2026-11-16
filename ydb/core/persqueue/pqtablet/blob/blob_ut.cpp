@@ -485,8 +485,6 @@ Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
                 }
             }
         }
-<<<<<<< HEAD
-=======
         // 2*2*2 * (1+2) * 2 = 48  (batchInfo/isBatch: 3 valid pairs)
         UNIT_ASSERT_VALUES_EQUAL(cases, 48u);
     }
@@ -1508,7 +1506,6 @@ Y_UNIT_TEST_SUITE(FindFirstOffsetAtOrAfterTimestamp) {
             *FindFirstOffsetAtOrAfterTimestamp(tsEarly + TDuration::MilliSeconds(1), 10, batches), 20u);
         UNIT_ASSERT_VALUES_EQUAL(
             *FindFirstOffsetAtOrAfterTimestamp(tsLate, 10, batches), 20u);
->>>>>>> 2ff1f3b9def (LOGBROKER-10406 Fixed bugs & add tests (#53523))
     }
 }
 

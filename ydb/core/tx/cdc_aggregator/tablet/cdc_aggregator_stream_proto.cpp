@@ -116,4 +116,24 @@ TString TCdcAggregatorStreamProtoConverter::SerializeTopic(const TCdcAggregatorS
     return proto.SerializeAsString();
 }
 
+NKikimrCdcAggregator::TEvDescribeTrackingResult TCdcAggregatorStreamProtoConverter::SerializeDescribeTrackingResult(const TCdcAggregatorStream& stream) const {
+    NKikimrCdcAggregator::TEvDescribeTrackingResult proto;
+
+    const auto& lastHeartbeatsBySourceDataShardId = stream.GetLastHeartbeatsBySourceDataShardId();
+    const TMap<ui64, std::optional<NPQ::THeartbeat>> sortedLastHeartbeats(lastHeartbeatsBySourceDataShardId.begin(), lastHeartbeatsBySourceDataShardId.end());
+    for (const auto& [dataShardId, lastHeartbeat] : sortedLastHeartbeats) {
+        auto& source = *proto.AddSources();
+        source.SetDataShardId(dataShardId);
+        if (lastHeartbeat) {
+            lastHeartbeat->Version.ToProto(source.MutableLastHeartbeat());
+        }
+    }
+
+    if (const auto& currentHeartbeat = stream.GetCurrentHeartbeat()) {
+        currentHeartbeat->Version.ToProto(proto.MutableCurrentHeartbeat());
+    }
+
+    return proto;
+}
+
 } // namespace NKikimr::NCdcAggregator

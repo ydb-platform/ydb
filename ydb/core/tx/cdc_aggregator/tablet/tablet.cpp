@@ -6,8 +6,6 @@
 
 #include <ydb/library/actors/core/log.h>
 
-#include <algorithm>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CDC_AGGREGATOR
 
 namespace NKikimr::NCdcAggregator {
@@ -65,22 +63,7 @@ void TCdcAggregator::Handle(TEvCdcAggregator::TEvDescribeTracking::TPtr& ev, con
 
     auto result = MakeHolder<TEvCdcAggregator::TEvDescribeTrackingResult>();
     if (CdcAggregatorStream) {
-        const auto& lastHeartbeats = CdcAggregatorStream->GetLastHeartbeatsBySourceDataShardId();
-        TVector<ui64> sources;
-        for (const auto& [dataShardId, _] : lastHeartbeats) {
-            sources.push_back(dataShardId);
-        }
-        std::sort(sources.begin(), sources.end());
-        for (const auto dataShardId : sources) {
-            auto& source = *result->Record.AddSources();
-            source.SetDataShardId(dataShardId);
-            if (const auto& lastHeartbeat = lastHeartbeats.at(dataShardId)) {
-                lastHeartbeat->Version.ToProto(source.MutableLastHeartbeat());
-            }
-        }
-        if (const auto& currentHeartbeat = CdcAggregatorStream->GetCurrentHeartbeat()) {
-            currentHeartbeat->Version.ToProto(result->Record.MutableCurrentHeartbeat());
-        }
+        result->Record = TCdcAggregatorStreamProtoConverter().SerializeDescribeTrackingResult(*CdcAggregatorStream);
     }
     ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
 }

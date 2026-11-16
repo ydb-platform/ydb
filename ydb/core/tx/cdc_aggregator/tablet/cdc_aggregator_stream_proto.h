@@ -10,6 +10,7 @@ namespace NKikimrCdcAggregator {
     class TCdcAggregatorStreamTopic;
     class TEvPartitioningChanged;
     class TEvWriteHeartbeats_TSourceHeartbeat;
+    class TEvDescribeTrackingResult;
 }
 
 namespace NKikimr::NCdcAggregator {
@@ -24,6 +25,7 @@ public:
     TParseResult<TCdcAggregatorStreamPartitioningChange> ParsePartitioningChange(const NKikimrCdcAggregator::TEvPartitioningChanged& proto) const;
     TParseResult<NPQ::THeartbeat> ParseHeartbeat(const NKikimrCdcAggregator::TEvWriteHeartbeats_TSourceHeartbeat& proto) const;
     TString SerializeTopic(const TCdcAggregatorStreamTopic& topic) const;
+    NKikimrCdcAggregator::TEvDescribeTrackingResult SerializeDescribeTrackingResult(const TCdcAggregatorStream& stream) const;
 };
 
 } // namespace NKikimr::NCdcAggregator

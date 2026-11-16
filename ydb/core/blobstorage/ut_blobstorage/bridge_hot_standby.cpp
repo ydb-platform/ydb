@@ -306,14 +306,15 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         SetStandbyBudget(env, 256 << 20);
         WaitUntil(env, [&] { return lostNode != 0; }, "reconciliation assigned", TDuration::Seconds(1), 90);
         UNIT_ASSERT(9 <= lostNode && lostNode <= 16);
+        const ui32 readerNode = lostNode == 9 ? 10 : 9;
         const auto& [writtenGroup, id, data] = checker.GetWritten().back();
         UNIT_ASSERT_VALUES_EQUAL(writtenGroup, groupId);
-        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 1, id, data), NKikimrProto::NODATA);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], readerNode, id, data), NKikimrProto::NODATA);
         env.StopNode(lostNode);
 
         WaitUntil(env, [&] { return replacementNode != 0; }, "replacement reconciliation assigned",
             TDuration::Seconds(1), 30);
-        WaitUntil(env, [&] { return ReadFromPileGroup(env, piles[1], 1, id, data) == NKikimrProto::OK; },
+        WaitUntil(env, [&] { return ReadFromPileGroup(env, piles[1], readerNode, id, data) == NKikimrProto::OK; },
             "replacement reconciler copies the missed write", TDuration::Seconds(1), 60);
         UNIT_ASSERT_VALUES_EQUAL(registrations, 0);
         UNIT_ASSERT_VALUES_EQUAL(newMarks, 0);

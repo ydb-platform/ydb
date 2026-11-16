@@ -14,31 +14,42 @@ THolder<TEvCdcAggregator::TEvWriteHeartbeats> TCdcAggregatorHeartbeatDeliveryPro
     return ev;
 }
 
-std::pair<std::optional<TCdcAggregatorHeartbeatDeliveryResult>, TString> TCdcAggregatorHeartbeatDeliveryProtoConverter::ParseBatchResult(const NKikimrCdcAggregator::TEvWriteHeartbeatsResult& proto) const {
+std::pair<std::optional<THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>>, TString> TCdcAggregatorHeartbeatDeliveryProtoConverter::ParseBatchResult(const NKikimrCdcAggregator::TEvWriteHeartbeatsResult& proto) const {
     using TProto = NKikimrCdcAggregator::TEvWriteHeartbeatsResult;
 
     if (proto.GetStatus() != TProto::SUCCESS) {
         return {std::nullopt, TStringBuilder() << TProto::EStatus_Name(proto.GetStatus()) << ": " << proto.GetError()};
     }
 
-    TCdcAggregatorHeartbeatDeliveryResult result;
+    using EReplyStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
+
+    THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> tabletRepliesBySourceId;
     for (const auto& item : proto.GetResults()) {
+        const ui64 sourceDataShardId = item.GetSourceDataShardId();
         switch (item.GetStatus()) {
         case TProto::THeartbeatResult::SUCCESS:
             if (item.HasWrittenVersion()) {
-                result.WrittenVersions[item.GetSourceDataShardId()] = TRowVersion::FromProto(item.GetWrittenVersion());
+                tabletRepliesBySourceId[sourceDataShardId] = {
+                    .SourceDataShardId = sourceDataShardId,
+                    .Status = EReplyStatus::Written,
+                    .WrittenVersion = TRowVersion::FromProto(item.GetWrittenVersion()),
+                };
             }
             break;
         case TProto::THeartbeatResult::UNKNOWN_SOURCE:
         case TProto::THeartbeatResult::BAD_REQUEST:
-            result.RejectionErrors[item.GetSourceDataShardId()] = TProto::THeartbeatResult::EStatus_Name(item.GetStatus());
+            tabletRepliesBySourceId[sourceDataShardId] = {
+                .SourceDataShardId = sourceDataShardId,
+                .Status = EReplyStatus::Rejected,
+                .Error = TProto::THeartbeatResult::EStatus_Name(item.GetStatus()),
+            };
             break;
         default:
             break;
         }
     }
 
-    return {std::move(result), TString()};
+    return {std::move(tabletRepliesBySourceId), TString()};
 }
 
 THolder<TEvCdcAggregatorService::TEvWriteHeartbeatResult> TCdcAggregatorHeartbeatDeliveryProtoConverter::SerializeReply(const TCdcAggregatorHeartbeatDeliveryReply& reply) const {

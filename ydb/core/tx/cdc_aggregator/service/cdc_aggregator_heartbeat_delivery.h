@@ -18,11 +18,6 @@ struct TCdcAggregatorHeartbeatBatchItem {
 
 using TCdcAggregatorHeartbeatBatch = TVector<TCdcAggregatorHeartbeatBatchItem>;
 
-struct TCdcAggregatorHeartbeatDeliveryResult {
-    THashMap<ui64, TRowVersion> WrittenVersions;
-    THashMap<ui64, TString> RejectionErrors;
-};
-
 struct TCdcAggregatorHeartbeatDeliveryReply {
     enum class EStatus {
         Written,
@@ -42,7 +37,7 @@ public:
 
     void AddHeartbeat(ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat);
     std::optional<TCdcAggregatorHeartbeatBatch> PrepareNextBatchIfPossible();
-    TVector<TCdcAggregatorHeartbeatDeliveryReply> CompleteBatch(const TCdcAggregatorHeartbeatDeliveryResult& result);
+    TVector<TCdcAggregatorHeartbeatDeliveryReply> CompleteBatch(const THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>& tabletRepliesBySourceId);
     TVector<TCdcAggregatorHeartbeatDeliveryReply> FailBatch(const TString& error);
 
     bool IsIdle() const {

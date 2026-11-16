@@ -52,13 +52,11 @@ std::optional<TCdcAggregatorHeartbeatBatch> TCdcAggregatorHeartbeatDelivery::Pre
     return batch;
 }
 
-TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::CompleteBatch(const TCdcAggregatorHeartbeatDeliveryResult& result) {
+TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::CompleteBatch(const THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>& tabletRepliesBySourceId) {
     TVector<TCdcAggregatorHeartbeatDeliveryReply> replies;
     for (const ui64 sourceDataShardId : InFlight) {
-        if (const auto* writtenVersion = result.WrittenVersions.FindPtr(sourceDataShardId)) {
-            replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Written, .WrittenVersion = *writtenVersion});
-        } else if (const auto* error = result.RejectionErrors.FindPtr(sourceDataShardId)) {
-            replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Rejected, .Error = *error});
+        if (const auto* reply = tabletRepliesBySourceId.FindPtr(sourceDataShardId)) {
+            replies.push_back(*reply);
         } else {
             replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Retry, .Error = "Heartbeat is not confirmed"});
         }

@@ -4,6 +4,7 @@
 
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/change_exchange/change_record.h>
+#include <ydb/core/persqueue/common/heartbeat.h>
 #include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/event.h>
@@ -29,7 +30,7 @@ public:
     void RegisterPendingRecordIds(const TVector<TRecordInfo>& records);
     void RemovePendingRecordIds(const TVector<ui64>& orders);
     std::pair<TVector<IChangeRecord::TPtr>, TVector<ui64>> BufferHeartbeats(TVector<IChangeRecord::TPtr> records);
-    TVector<ui64> HandleCdcAggregatorServiceReply(TAutoPtr<IEventHandle>& ev);
+    TVector<ui64> HandleHeartbeatEvent(TAutoPtr<IEventHandle>& ev);
     TVector<ui64> Clear();
 
 private:
@@ -43,7 +44,7 @@ private:
     ui64 AggregatorTabletId = 0;
 
     TSet<ui64> PendingRecords;
-    TMap<ui64, IChangeRecord::TPtr> PendingHeartbeats;
+    TMap<ui64, NPQ::THeartbeat> PendingHeartbeats;
     std::optional<ui64> InFlight;
     TBackoff Backoff = TBackoff(TDuration::MilliSeconds(100), TDuration::Seconds(10));
 };

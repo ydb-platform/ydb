@@ -707,9 +707,9 @@ class TCdcChangeSenderMain
         }
     }
 
-    void HandleCdcAggregatorServiceReply(TAutoPtr<IEventHandle>& ev) {
+    void HandleHeartbeatEvent(TAutoPtr<IEventHandle>& ev) {
         if (AggregatedHeartbeats) {
-            RemoveRecords(AggregatedHeartbeats->HandleCdcAggregatorServiceReply(ev));
+            RemoveRecords(AggregatedHeartbeats->HandleHeartbeatEvent(ev));
         }
     }
 
@@ -763,8 +763,9 @@ public:
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvGone, Handle);
-            fFunc(NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult::EventType, HandleCdcAggregatorServiceReply);
-            fFunc(TEvents::TEvUndelivered::EventType, HandleCdcAggregatorServiceReply);
+            fFunc(NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult::EventType, HandleHeartbeatEvent);
+            fFunc(TEvents::TEvUndelivered::EventType, HandleHeartbeatEvent);
+            fFunc(TEvents::TEvWakeup::EventType, HandleHeartbeatEvent);
             HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }

@@ -6391,6 +6391,100 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(AggregatedHeartbeatRetriesAndDrop) {
+        using TEvWriteHeartbeat = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeat;
+        using TEvWriteHeartbeatResult = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult;
+
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        auto setAggregatedMode = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([&](auto& ev) {
+            for (auto& entry : ev->Get()->Request->ResultSet) {
+                if (entry.CdcStreamInfo) {
+                    auto info = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TCdcStreamInfo>(*entry.CdcStreamInfo);
+                    info->Description.SetHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated);
+                    info->Description.SetAggregatorTabletId(1);
+                    entry.CdcStreamInfo = info;
+                }
+            }
+        });
+        auto setAggregatedSender = runtime.AddObserver<TEvChangeExchange::TEvAddSender>([&](auto& ev) {
+            if (auto* sender = std::get_if<TEvChangeExchange::TCdcStreamSender>(&ev->Get()->Params)) {
+                sender->Stream.HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated;
+            }
+        });
+
+        runtime.RegisterService(NCdcAggregator::MakeCdcAggregatorServiceId(runtime.GetNodeId(0)), runtime.AllocateEdgeActor());
+        TBlockEvents<TEvWriteHeartbeat> heartbeats(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+        WaitFor(runtime, [&]{ return !heartbeats.empty(); }, "heartbeat");
+
+        const auto senderId = heartbeats.front()->Sender;
+        const auto version = heartbeats.front()->Get()->Heartbeat.Version;
+        const auto data = heartbeats.front()->Get()->Heartbeat.Data;
+        THolder<IEventHandle> retryEvent;
+        TTestActorRuntimeBase::TScheduledEventFilter previousFilter;
+        previousFilter = runtime.SetScheduledEventFilter([&](auto& actorRuntime, auto& event, auto delay, auto& deadline) {
+            if (event->Sender == senderId
+                && (event->GetTypeRewrite() == TEvWriteHeartbeat::EventType
+                    || event->GetTypeRewrite() == TEvents::TEvWakeup::EventType)) {
+                UNIT_ASSERT(!retryEvent);
+                retryEvent.Reset(event.Release());
+                return true;
+            }
+            return previousFilter(actorRuntime, event, delay, deadline);
+        });
+
+        auto answerHeartbeat = [&](IEventBase* reply) {
+            auto heartbeat = std::move(heartbeats.front());
+            heartbeats.pop_front();
+            runtime.Send(new IEventHandle(senderId, edgeActor, reply, 0, heartbeat->Cookie), 0, true);
+        };
+        auto retryHeartbeat = [&](IEventBase* reply) {
+            answerHeartbeat(reply);
+            WaitFor(runtime, [&]{ return bool(retryEvent); }, "scheduled retry");
+            UNIT_ASSERT(heartbeats.empty());
+            runtime.Send(retryEvent.Release(), 0, true);
+            WaitFor(runtime, [&]{ return !heartbeats.empty(); }, "retried heartbeat");
+            UNIT_ASSERT_VALUES_EQUAL(heartbeats.front()->Get()->Heartbeat.Version, version);
+            UNIT_ASSERT_VALUES_EQUAL(heartbeats.front()->Get()->Heartbeat.Data, data);
+        };
+
+        for (const auto status : {TEvWriteHeartbeatResult::EStatus::Retry, TEvWriteHeartbeatResult::EStatus::Written}) {
+            auto result = MakeHolder<TEvWriteHeartbeatResult>();
+            result->Status = status;
+            result->WrittenVersion = TRowVersion::Min();
+            retryHeartbeat(result.Release());
+        }
+        retryHeartbeat(new TEvents::TEvUndelivered(TEvWriteHeartbeat::EventType, TEvents::TEvUndelivered::ReasonActorUnknown));
+
+        auto rejected = MakeHolder<TEvWriteHeartbeatResult>();
+        rejected->Status = TEvWriteHeartbeatResult::EStatus::Rejected;
+        answerHeartbeat(rejected.Release());
+        WaitFor(runtime, [&]{ return !heartbeats.empty(); }, "heartbeat after rejection");
+        UNIT_ASSERT(heartbeats.front()->Get()->Heartbeat.Version > version);
+
+        answerHeartbeat(new TEvWriteHeartbeatResult());
+        WaitFor(runtime, [&]{ return bool(retryEvent); }, "retry before drop");
+        runtime.SetScheduledEventFilter(previousFilter);
+        WaitTxNotification(server, edgeActor, AsyncAlterDropStream(server, "/Root", "Table", "Stream"));
+        UNIT_ASSERT(heartbeats.empty());
+
+        runtime.Send(retryEvent.Release(), 0, true);
+        SimulateSleep(server, TDuration::MilliSeconds(1));
+        UNIT_ASSERT_C(heartbeats.empty(), "Scheduled heartbeat was sent after dropping the stream");
+    }
+
     Y_UNIT_TEST(ResolvedTimestampsMultiplePartitions) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

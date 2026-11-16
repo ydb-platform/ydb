@@ -17,7 +17,7 @@ using IChangeRecord = NChangeExchange::IChangeRecord;
 using TEvWriteHeartbeat = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeat;
 using TEvWriteHeartbeatResult = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult;
 
-std::optional<ui64> FindHeartbeatToSend(const TMap<ui64, IChangeRecord::TPtr>& heartbeats, const TSet<ui64>& pendingRecords) {
+std::optional<ui64> FindHeartbeatToSend(const TMap<ui64, NPQ::THeartbeat>& heartbeats, const TSet<ui64>& pendingRecords) {
     const ui64 firstPending = pendingRecords ? *pendingRecords.begin() : Max<ui64>();
     const auto firstBlocked = heartbeats.lower_bound(firstPending);
     if (firstBlocked == heartbeats.begin()) {
@@ -26,7 +26,7 @@ std::optional<ui64> FindHeartbeatToSend(const TMap<ui64, IChangeRecord::TPtr>& h
     return std::prev(firstBlocked)->first;
 }
 
-TVector<ui64> EraseUpTo(TMap<ui64, IChangeRecord::TPtr>& heartbeats, ui64 upTo) {
+TVector<ui64> EraseUpTo(TMap<ui64, NPQ::THeartbeat>& heartbeats, ui64 upTo) {
     TVector<ui64> orders;
     const auto end = heartbeats.upper_bound(upTo);
     for (auto it = heartbeats.begin(); it != end; it = heartbeats.erase(it)) {
@@ -35,9 +35,9 @@ TVector<ui64> EraseUpTo(TMap<ui64, IChangeRecord::TPtr>& heartbeats, ui64 upTo) 
     return orders;
 }
 
-bool IsWritten(const TEvWriteHeartbeatResult& result, const IChangeRecord& heartbeat) {
+bool IsWritten(const TEvWriteHeartbeatResult& result, const NPQ::THeartbeat& heartbeat) {
     return result.Status == TEvWriteHeartbeatResult::EStatus::Written
-        && result.WrittenVersion >= TRowVersion(heartbeat.GetStep(), heartbeat.GetTxId());
+        && result.WrittenVersion >= heartbeat.Version;
 }
 
 NPQ::THeartbeat MakeHeartbeat(IChangeRecordSerializer& serializer, const IChangeRecord& record) {
@@ -83,7 +83,7 @@ std::pair<TVector<IChangeRecord::TPtr>, TVector<ui64>> TCdcAggregatedHeartbeats:
 
         const ui64 order = record->GetOrder();
         PendingRecords.erase(order);
-        PendingHeartbeats.emplace(order, std::move(record));
+        PendingHeartbeats.emplace(order, MakeHeartbeat(*Serializer, *record));
         buffered.push_back(order);
     }
 
@@ -91,15 +91,18 @@ std::pair<TVector<IChangeRecord::TPtr>, TVector<ui64>> TCdcAggregatedHeartbeats:
     return {std::move(passed), std::move(buffered)};
 }
 
-TVector<ui64> TCdcAggregatedHeartbeats::HandleCdcAggregatorServiceReply(TAutoPtr<IEventHandle>& ev) {
+TVector<ui64> TCdcAggregatedHeartbeats::HandleHeartbeatEvent(TAutoPtr<IEventHandle>& ev) {
     if (!InFlight) {
         return {};
     }
 
     switch (ev->GetTypeRewrite()) {
+    case TEvents::TEvWakeup::EventType:
+        Send(TDuration::Zero());
+        break;
     case TEvWriteHeartbeatResult::EventType: {
         const auto& result = *ev->Get<TEvWriteHeartbeatResult>();
-        const bool written = IsWritten(result, *PendingHeartbeats.at(*InFlight));
+        const bool written = IsWritten(result, PendingHeartbeats.at(*InFlight));
         if (!written) {
             YDB_LOG_WARN("CdcAggregatorService has not written the heartbeat",
                 {"eventDetails", result.ToString()});
@@ -121,6 +124,7 @@ TVector<ui64> TCdcAggregatedHeartbeats::HandleCdcAggregatorServiceReply(TAutoPtr
 
 TVector<ui64> TCdcAggregatedHeartbeats::Clear() {
     InFlight.reset();
+    Backoff.Reset();
     PendingRecords.clear();
     return EraseUpTo(PendingHeartbeats, Max<ui64>());
 }
@@ -158,18 +162,19 @@ TVector<ui64> TCdcAggregatedHeartbeats::RetryInFlight() {
 
 void TCdcAggregatedHeartbeats::Send(TDuration delay) {
     const auto& ctx = TActivationContext::AsActorContext();
+    if (delay) {
+        TActivationContext::Schedule(delay, new IEventHandle(ctx.SelfID, ctx.SelfID,
+            new TEvents::TEvWakeup()));
+        return;
+    }
+
     auto ev = MakeHolder<TEvWriteHeartbeat>();
     ev->RecipientTabletId = AggregatorTabletId;
     ev->SourceDataShardId = SourceDataShardId;
-    ev->Heartbeat = MakeHeartbeat(*Serializer, *PendingHeartbeats.at(*InFlight));
+    ev->Heartbeat = PendingHeartbeats.at(*InFlight);
 
-    auto* handle = new IEventHandle(NCdcAggregator::MakeCdcAggregatorServiceId(ctx.SelfID.NodeId()), ctx.SelfID,
-        ev.Release(), IEventHandle::FlagTrackDelivery);
-    if (delay) {
-        TActivationContext::Schedule(delay, handle);
-    } else {
-        TActivationContext::Send(handle);
-    }
+    TActivationContext::Send(new IEventHandle(NCdcAggregator::MakeCdcAggregatorServiceId(ctx.SelfID.NodeId()), ctx.SelfID,
+        ev.Release(), IEventHandle::FlagTrackDelivery));
 }
 
 } // namespace NKikimr::NDataShard

@@ -11,6 +11,7 @@ namespace NKikimr::NKqp {
 
 struct TPhysicalShardReadSettings: public NYql::TSortingOperator<NYql::ERequestSorting::ASC> {
     ui64 ItemsLimit = 0;
+    bool RequireSortedRead = false;
     NKikimr::NMiniKQL::TType* ResultType = nullptr;
 };
 

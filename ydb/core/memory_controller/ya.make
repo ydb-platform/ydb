@@ -10,7 +10,7 @@ SRCS(
 PEERDIR(
     library/cpp/iterator
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/mon_alloc
     ydb/core/node_whiteboard
     ydb/core/tablet

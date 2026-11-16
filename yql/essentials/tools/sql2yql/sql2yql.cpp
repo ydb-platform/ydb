@@ -13,6 +13,7 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/check/check_range.h>
 #include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
@@ -78,7 +79,13 @@ void VisitField(TPosOutput& out, const google::protobuf::FieldDescriptor& descr,
     }
     if (d->name() == "TToken") {
         const Reflection* r = field.GetReflection();
-        out.Output(r->GetUInt32(field, d->field(0)), r->GetUInt32(field, d->field(1)), r->GetString(field, d->field(2)));
+        const auto* line = d->FindFieldByName("Line");
+        const auto* column = d->FindFieldByName("Column");
+        const auto* value = d->FindFieldByName("Value");
+        if (!line || !column || !value) {
+            ythrow yexception() << "Invalid AST: token position or value is missing";
+        }
+        out.Output(r->GetUInt32(field, line), r->GetUInt32(field, column), r->GetString(field, value));
     } else {
         ExtractQuery(out, field);
     }
@@ -91,6 +98,10 @@ void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node) {
     ref->ListFields(node, &fields);
 
     for (auto& field : fields) {
+        // Inline token indices are scalar fields, not syntax-tree children.
+        if (field->cpp_type() != FieldDescriptor::CPPTYPE_MESSAGE) {
+            continue;
+        }
         if (field->is_repeated()) {
             const ui32 fieldSize = ref->FieldSize(node, field);
             for (ui32 i = 0; i < fieldSize; ++i) {
@@ -161,6 +172,27 @@ bool TestLexers(const TString& query) {
         return false;
     }
 
+    return true;
+}
+
+bool TestParserRanges(
+    const TString& query,
+    const NSQLTranslation::TTranslators& translators,
+    const NSQLTranslation::TTranslationSettings& settings)
+{
+    NYql::TIssues issues;
+    auto lexer = NSQLTranslation::SqlLexer(translators, query, issues, settings);
+    NSQLTranslation::TParsedTokenList tokens;
+    if (!lexer || !NSQLTranslation::Tokenize(*lexer, query, "", tokens, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+        Cerr << issues.ToString();
+        return false;
+    }
+
+    auto* tree = NSQLTranslation::SqlAST(translators, query, "", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, settings);
+    if (!tree || !NSQLTranslationV1::CheckParserRanges(*tree, tokens, issues)) {
+        Cerr << issues.ToString();
+        return false;
+    }
     return true;
 }
 
@@ -267,6 +299,7 @@ int BuildAST(int argc, char** argv) {
     opts.AddLongOption("test-double-format", "check that format(query) == format(format(query))").NoArgument();
     opts.AddLongOption("test-antlr4", "check antlr4 parser").NoArgument();
     opts.AddLongOption("test-lexers", "check other lexers").NoArgument();
+    opts.AddLongOption("test-parser-ranges", "check token ranges in the parser tree").NoArgument();
     opts.AddLongOption("test-complete", "check completion engine").NoArgument();
     opts.AddLongOption("test-syntax-ambiguity", "test syntax ambiguity").NoArgument();
     opts.AddLongOption("debug-syntax-ambiguity", "debug syntax ambiguity").NoArgument();
@@ -484,6 +517,10 @@ int BuildAST(int argc, char** argv) {
 
             if (res.Has("test-lexers") && isSQLv1 && parseRes.IsOk()) {
                 hasError |= !TestLexers(query);
+            }
+
+            if (res.Has("test-parser-ranges") && isSQLv1 && parseRes.IsOk()) {
+                hasError |= !TestParserRanges(query, translators, settings);
             }
 
             if (res.Has("test-complete") && isSQLv1 && parseRes.IsOk()) {

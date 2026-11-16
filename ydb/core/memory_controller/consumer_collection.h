@@ -3,6 +3,7 @@
 #include <ydb/core/base/memory_controller_iface.h>
 
 #include <util/generic/map.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 
 #include <atomic>
@@ -14,6 +15,8 @@ namespace NKikimr::NMemory {
 // One registrant's own consumer object; SetReport is safe to call from any thread.
 class TRegistrantConsumer : public IMemoryConsumer {
 public:
+    explicit TRegistrantConsumer(bool demandOnly = false) : DemandOnly(demandOnly) {}
+    const bool DemandOnly;
     void SetReport(TConsumerReport report) override;
 
     // Snapshot with the read-side clamp applied, so a torn triple cannot break the invariants.
@@ -36,6 +39,8 @@ struct TConsumerCollectionSnapshot {
     struct TEntry {
         TActorId Registrant;
         TConsumerReport Report;
+        bool DemandOnly = false;
+        bool Retiring = false;
         std::optional<ui64> Desired;
         ui64 RequestOrder = 0;
         std::optional<ui64> PlannedLimit; // explicit target admitted by MC, or the retained grant while waiting
@@ -65,10 +70,15 @@ private:
 class TConsumerCollection {
 public:
     // Returns the sender's own consumer; a re-register by the same actor replaces it with a fresh one.
-    TIntrusivePtr<TRegistrantConsumer> Register(TActorId registrant);
+    TIntrusivePtr<TRegistrantConsumer> Register(TActorId registrant, bool demandOnly = false);
 
     // Drops the registrant's entry; false for an actor that holds none.
-    bool Unregister(TActorId registrant);
+    bool Unregister(TActorId registrant, bool retainUntilUnused = false);
+    TVector<TActorId> CollectRetired();
+
+    bool IsRetiring(TActorId registrant) const {
+        return Retiring.contains(registrant);
+    }
 
     // A request belongs to this registration, independently of its usage report.
     bool SetDesired(TActorId registrant, std::optional<ui64> desired, ui64 requestOrder = 0);
@@ -93,6 +103,7 @@ private:
         ui64 RequestOrder = 0;
     };
     TMap<TActorId, TRegistrant> Registrants;
+    THashSet<TActorId> Retiring;
 };
 
 }

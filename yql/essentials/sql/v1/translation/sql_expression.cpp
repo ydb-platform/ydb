@@ -337,7 +337,7 @@ TSQLStatus ExprList(TSqlExpression& sqlExpr, TVector<TNodePtr>& exprNodes, const
         return std::unexpected(status.error());
     }
 
-    for (auto b : node.GetBlock2()) {
+    for (const auto& b : node.GetBlock2()) {
         sqlExpr.Token(b.GetToken1());
         if (auto status = Expr(sqlExpr, exprNodes, b.GetRule_expr2()); !status) {
             return std::unexpected(status.error());

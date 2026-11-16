@@ -107,10 +107,6 @@ class TController::TTxInit: public TTxBase {
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
             );
-            const auto pendingDstPathId = TPathId(
-                rowset.GetValueOrDefault<Schema::Targets::PendingDstPathOwnerId>(InvalidOwnerId),
-                rowset.GetValueOrDefault<Schema::Targets::PendingDstPathLocalId>(InvalidLocalPathId)
-            );
 
             auto replication = Self->Find(rid);
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
@@ -131,9 +127,11 @@ class TController::TTxInit: public TTxBase {
             auto* target = replication->AddTarget(tid, kind, config);
             Y_ABORT_UNLESS(target);
 
-            target->SetDstState(dstState);
+            // Resume legacy attachment through the current destination validation path.
+            target->SetDstState(dstState == TReplication::EDstState::Attaching
+                ? TReplication::EDstState::Alter
+                : dstState);
             target->SetDstPathId(dstPathId);
-            target->SetPendingDstPathId(pendingDstPathId);
             target->SetIssue(issue);
             const auto indexBuild = rowset.GetValueOrDefault<Schema::Targets::IndexBuild>(TString());
             if (indexBuild) {

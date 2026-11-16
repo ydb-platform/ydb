@@ -10,6 +10,8 @@ using namespace NSchemeShardUT_Private;
 Y_UNIT_TEST_SUITE(SetNotNullReboots) {
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SetNotNullOnSingleColumn, 4, 1, false) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
@@ -49,6 +51,8 @@ Y_UNIT_TEST_SUITE(SetNotNullReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SetNotNullShouldBeFailed, 8, 1, false) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
@@ -108,6 +112,8 @@ Y_UNIT_TEST_SUITE(SetNotNullReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SetNotNullOnManyColumnsWithManyShards, 8, 1, false) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);

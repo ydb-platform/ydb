@@ -59,7 +59,7 @@ public:
 
 protected:
     void InitializeKeyCompactionCounters(const NKikimrPQ::TPQTabletConfig& tabletConfig);
-    void InitializeConsumerCounters(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx);
+    void InitializeConsumerCounters(const NKikimrPQ::TPQTabletConfig& tabletConfig);
 
 private:
     NMonitoring::TDynamicCounterPtr DynamicCounters;

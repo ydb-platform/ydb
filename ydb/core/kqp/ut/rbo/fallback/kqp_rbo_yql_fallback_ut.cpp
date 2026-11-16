@@ -146,7 +146,7 @@ void TestFallbackToYql(bool fallbackToYqlEnabled, const std::vector<std::string>
 
 std::vector<std::string> GetQueriesToTestFallbackToYql() {
     std::vector<std::string> queries = {
-        // Insert is not supported.
+        // INSERT ... VALUES is compiled by the new RBO without fallback.
         R"(
             INSERT INTO `/Root/t1` (a, b, c) VALUES (1, 2, 3);
         )",
@@ -167,7 +167,7 @@ std::vector<std::string> GetQueriesToTestFallbackToYql() {
 std::vector<std::pair<ui32, ui32>> GetCompileCountersToTestFallbackToYql() {
     // Represents the number of successes and fails for each query with new RBO compiler pipeline.
     std::vector<std::pair<ui32, ui32>> expectedCompileCounters = {
-        {0, 1},
+        {1, 0},
         {1, 0},
         {0, 1}
     };
@@ -381,8 +381,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     }
 
     Y_UNIT_TEST(FallbackToYqlDisabled) {
-        // First 2 queries should fail because fallback to yql is disabled.
-        const std::vector<bool> expectedResult{false, true, false};
+        // Only the query forcing legacy optimization fails when fallback is disabled.
+        const std::vector<bool> expectedResult{true, true, false};
         TestFallbackToYql(/*fallbackToYqlEnabled=*/false, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
                           expectedResult, NQuery::EExecMode::Explain);
     }
@@ -452,8 +452,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     }
 
     Y_UNIT_TEST(FallbackToYqlDisabledExecute) {
-        // First 2 queries should fail because fallback to yql is disabled.
-        const std::vector<bool> expectedResult{false, true, false};
+        // Only the query forcing legacy optimization fails when fallback is disabled.
+        const std::vector<bool> expectedResult{true, true, false};
         TestFallbackToYql(/*fallbackToYqlEnabled=*/false, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
                           expectedResult, NQuery::EExecMode::Execute);
     }

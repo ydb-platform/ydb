@@ -1,10 +1,10 @@
 #include "mlp_consumer.h"
 #include "mlp_storage.h"
 
-#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
@@ -816,7 +816,23 @@ void TConsumerActor::ProcessEventQueue() {
     ChangeMessageDeadlineRequestsQueue.clear();
 
     for (auto& ev : PurgeRequestsQueue) {
-        Storage->Purge(PartitionEndOffset);
+        auto toOffset = PartitionEndOffset;
+        if (auto evToOffset = ev->Get()->GetToOffset()) {
+            const auto committedOffset = Storage->GetFirstUncommittedOffset();
+            toOffset = Max(committedOffset, *evToOffset);
+            if (toOffset == committedOffset) {
+                // Replayed replication offsets must preserve locks and individual commits.
+                // A preceding operation in this batch may still need to be persisted.
+                if (Storage->IsBatchEmpty()) {
+                    Send(ev->Sender, new TEvPQ::TEvMLPPurgeResponse(PartitionId), 0, ev->Cookie);
+                } else {
+                    PendingPurgeQueue.emplace_back(ev->Sender, ev->Cookie);
+                }
+                continue;
+            }
+        }
+
+        Storage->Purge(toOffset);
         PendingPurgeQueue.emplace_back(ev->Sender, ev->Cookie);
     }
     PurgeRequestsQueue.clear();
@@ -1031,6 +1047,12 @@ size_t TConsumerActor::FifoUnlockedGroupDeficit() const {
 }
 
 bool TConsumerActor::FetchMessagesIfNeeded() {
+    if (AppData()->FeatureFlags.GetEnableMLPConsumerInFlightMutateDisabled()) {
+        LOG_D("Fetch messages is disabled");
+        return false;
+    }
+
+
     if (Storage->GetMessageCount() > 0) {
         LastTimeWithMessages = TAppData::TimeProvider->Now();
         NotifyPQRB();
@@ -1178,14 +1200,6 @@ void TConsumerActor::MoveToDLQIfPossible() {
         return;
     }
 
-    auto destinationTopic = [&]() -> TString {
-        const auto& dlq = Config.GetDeadLetterQueue();
-        if (dlq.empty() || dlq.StartsWith("sqs://")) {
-            return dlq;
-        }
-        return NormalizePath(CanonizePath(Database), CanonizePath(dlq));
-    };
-
     auto messages = Storage->GetDLQMessages();
     if (!messages.empty()) {
         LOG_D(
@@ -1199,7 +1213,7 @@ void TConsumerActor::MoveToDLQIfPossible() {
             .PartitionId = PartitionId,
             .ConsumerName = Config.GetName(),
             .ConsumerGeneration = Config.GetGeneration(),
-            .DestinationTopic = destinationTopic(),
+            .DestinationTopic = NormalizeDlqTopicPath(Config.GetDeadLetterQueue(), Database),
             .Messages = std::move(messages)
         }));
     }

@@ -137,6 +137,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    address
     benchmark
     ut
     ut_fat

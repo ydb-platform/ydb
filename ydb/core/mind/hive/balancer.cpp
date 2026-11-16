@@ -132,11 +132,24 @@ protected:
     const ui32 RunId; // see CountTablet
     using TTabletCounters = TBalancerRunStats::TTabletCounters;
     using ETabletCounter = TBalancerRunStats::ETabletCounter;
+    bool IsNamedResourceBalancer() const {
+        return !Settings.NamedResource.empty();
+    }
 
     static constexpr ui64 MAX_TABLETS_PROCESSED = 10;
 
     TString GetLogPrefix() const {
         return Hive->GetLogPrefix();
+    }
+
+    using TCountersByBalancerType = std::array<THive::TBalanceCounters::TCounterPtr, EBalancerTypeSize>;
+
+    void IncrementByType(TCountersByBalancerType THive::TBalanceCounters::* byType) const {
+        if (Hive->BalanceCounters) {
+            if (const auto& counter = (*Hive->BalanceCounters.*byType)[static_cast<size_t>(Settings.Type)]) {
+                counter->Inc();
+            }
+        }
     }
 
     void PassAway() override {
@@ -190,6 +203,7 @@ protected:
         Hive->RemoveSubActor(this);
         if (Movements == 0) {
             Hive->TabletCounters->Cumulative()[NHive::COUNTER_BALANCER_FAILED].Increment(1);
+            IncrementByType(&THive::TBalanceCounters::BalancerFailed);
             // we failed to balance specific nodes
             for (TNodeId nodeId : Settings.FilterNodeIds) {
                 TNodeInfo* node = Hive->FindNode(nodeId);
@@ -222,6 +236,9 @@ protected:
     }
 
     TString GetDescription() const override {
+        if (IsNamedResourceBalancer()) {
+            return TStringBuilder() << "Balancer(" << EBalancerTypeName(Settings.Type) << ", " << Settings.NamedResource << ")";
+        }
         return TStringBuilder() << "Balancer(" << EBalancerTypeName(Settings.Type) << ")";
     }
 
@@ -257,7 +274,13 @@ protected:
             }
         }
 
-        switch (Hive->GetNodeBalanceStrategy()) {
+        if (IsNamedResourceBalancer()) {
+            // most saturated sources first
+            const TString& name = Settings.NamedResource;
+            std::sort(nodes.begin(), nodes.end(), [&name](const TNodeInfo* a, const TNodeInfo* b) -> bool {
+                return a->GetNamedResourceUsage(name).value_or(0) > b->GetNamedResourceUsage(name).value_or(0);
+            });
+        } else switch (Hive->GetNodeBalanceStrategy()) {
         case NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM:
             BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(nodes, Settings.ResourceToBalance);
             break;
@@ -305,7 +328,14 @@ protected:
             CountTablet(tablet, &TTabletCounters::SkippedObjectFilter, ETabletCounter::SkippedObjectFilter);
             return false;
         }
-        if (!tablet->HasMetric(Settings.ResourceToBalance)) {
+        if (IsNamedResourceBalancer()) {
+            // only the tablets which a move would not interrupt
+            const auto* value = tablet->GetResourceValues().NamedResources.Find(Settings.NamedResource);
+            if (value == nullptr || !value->IsTransferable()) {
+                CountTablet(tablet, &TTabletCounters::SkippedNoMetric, ETabletCounter::SkippedNoMetric);
+                return false;
+            }
+        } else if (!tablet->HasMetric(Settings.ResourceToBalance)) {
             CountTablet(tablet, &TTabletCounters::SkippedNoMetric, ETabletCounter::SkippedNoMetric);
             return false;
         }
@@ -332,6 +362,13 @@ protected:
     }
 
     void BalanceTabletsByStrategy(std::vector<TTabletInfo*>::iterator first, std::vector<TTabletInfo*>::iterator last) {
+        if (IsNamedResourceBalancer()) {
+            const TString& name = Settings.NamedResource;
+            std::stable_sort(first, last, [&name](const TTabletInfo* a, const TTabletInfo* b) -> bool {
+                return a->GetResourceValues().NamedResources.GetValue(name) > b->GetResourceValues().NamedResources.GetValue(name);
+            });
+            return;
+        }
         switch (Hive->GetTabletBalanceStrategy()) {
         case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM:
             BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(first, last, Settings.ResourceToBalance);
@@ -456,7 +493,6 @@ protected:
                 } else {
                     CountTablet(tablet, &TTabletCounters::RejectedSameNode, ETabletCounter::RejectedSameNode);
                 }
-
                 if (expediency.Expedient) {
                     tablet->MakeBalancerDecision(now);
                     tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
@@ -470,22 +506,37 @@ protected:
                     // what the decision was based on: FindBestNode picks the target by GetNodeUsageForTablet,
                     // CheckTabletMoveExpediency compares the resource stdev over nodes before and after the move
                     TStringBuilder details;
-                    details << "balancer=" << EBalancerTypeName(Settings.Type)
-                        << " resource=" << EResourceToBalanceName(Settings.ResourceToBalance)
+                    details << "balancer=" << EBalancerTypeName(Settings.Type);
+                    if (IsNamedResourceBalancer()) {
+                        const TString& name = Settings.NamedResource;
+                        const ui64 value = tablet->GetResourceValues().NamedResources.GetValue(name);
+                        details << " resource=" << name
+                            << " sourceUsage=" << Sprintf("%.3f", tablet->Node->GetNamedResourceUsage(name).value_or(0))
+                            << " targetUsageWithTablet=" << Sprintf("%.3f", node->GetNamedResourceUsage(name, value).value_or(0))
+                            << " tabletValue=" << value;
+                    }
+                    details
+                        << " computeResource=" << EResourceToBalanceName(Settings.ResourceToBalance)
                         << " sourceUsage=" << Sprintf("%.3f", tablet->Node->GetNodeUsage(Settings.ResourceToBalance))
                         << " targetUsage=" << Sprintf("%.3f", node->GetNodeUsage(Settings.ResourceToBalance))
                         << " targetUsageWithTablet=" << Sprintf("%.3f", node->GetNodeUsageForTablet(*tablet))
                         << " tabletWeight=" << Sprintf("%.3f", tablet->GetWeight(Settings.ResourceToBalance))
                         << " tabletUsageImpact=" << Sprintf("%.3f", tablet->GetUsageImpact());
-                    if (expediency.Reason == EHiveEventReason::ResourceStDevImproved) {
+                    if (expediency.Reason == EHiveEventReason::ResourceStDevImproved || expediency.Reason == EHiveEventReason::NamedResourceImproved) {
                         details << " stdevBefore=" << Sprintf("%.3f", expediency.StDevBefore)
                             << " stdevAfter=" << Sprintf("%.3f", expediency.StDevAfter);
+                    }
+                    if (!expediency.NamedResource.empty()) {
+                        details << " named=" << expediency.NamedResource
+                            << " namedBefore=" << Sprintf("%.3f", expediency.NamedBefore)
+                            << " namedAfter=" << Sprintf("%.3f", expediency.NamedAfter);
                     }
                     details << " movement=" << Movements;
                     if (Settings.MaxMovements != 0) {
                         details << "/" << Settings.MaxMovements;
                     }
-                    Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id), expediency.Reason, std::move(details));
+                    IncrementByType(&THive::TBalanceCounters::TabletsMoved);
+                    Hive->RecordTabletMove(now, *tablet, *tablet->Node, *node, expediency.Reason, std::move(details));
                     Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id));
                     UpdateProgress();
                 }
@@ -534,6 +585,7 @@ public:
         UpdateProgress();
         RunStats.StartTime = TActivationContext::Now();
         Hive->TabletCounters->Cumulative()[NHive::COUNTER_BALANCER_EXECUTED].Increment(1);
+        IncrementByType(&THive::TBalanceCounters::BalancerExecuted);
         YDB_LOG_INFO("Balancer started",
             {"logPrefix", GetLogPrefix()},
             {"balancerType", EBalancerTypeName(Settings.Type)},
@@ -561,14 +613,16 @@ public:
     }
 };
 
-void THive::StartHiveBalancer(TBalancerSettings&& settings) {
+bool THive::StartHiveBalancer(TBalancerSettings&& settings) {
     if (IsItPossibleToStartBalancer(settings.Type)) {
         LastBalancerTrigger = settings.Type;
         LastBalancerSuppression.reset();
         auto* balancer = new THiveBalancer(this, std::move(settings));
         SubActors.emplace_back(balancer);
         RegisterWithSameMailbox(balancer);
+        return true;
     }
+    return false;
 }
 
 } // NHive

@@ -6,7 +6,6 @@ from typing import Dict, List, Optional
 
 from .. import resolver
 
-
 logger = logging.getLogger(__name__)
 
 

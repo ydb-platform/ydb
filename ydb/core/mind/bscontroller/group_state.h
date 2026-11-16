@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <array>
 #include <optional>
@@ -10,12 +11,11 @@ namespace NKikimr::NBsController {
 
 using TFailRealmStates = std::array<EMirror3dcFailRealmState, 3>;
 
-// The sustainable target follows the minimum requirements of W and D after this realm becomes normal.
-std::optional<EMirror3dcFailRealmState> GetReplicatedRealmState(const TFailRealmStates& states, ui32 realm);
-
 struct TGroupReplicationInfo {
     ui32 Generation = 0;
+    std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
     TFailRealmStates States;
+    std::optional<EMirror3dcGroupState> GroupState;
     struct TVDisk {
         TVDiskID Id;
         TActorId ActorId;

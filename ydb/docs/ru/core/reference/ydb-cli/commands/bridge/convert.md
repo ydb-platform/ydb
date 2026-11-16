@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-С помощью команды `admin cluster bridge convert` можно преобразовать обычный кластер в [кластер bridge](../../../../concepts/bridge.md) с одним pile. Преобразование необратимо.
+С помощью команды `admin cluster bridge convert` можно преобразовать обычный кластер в [кластер bridge](../../../../concepts/bridge.md) с одним pile. Существующие данные сохраняются. Преобразование необратимо.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -25,39 +25,31 @@
 
 | Имя | Описание |
 | --- | --- |
-| `--skip-storage-pool-conversion` | Оставить существующие пулы и группы хранения обычными. Статическое и системное хранилище всё равно преобразуется. Существующие пулы можно позже преобразовать отдельно командой [`ydb-dstool pool set-bridge-mode`](../../../ydb-dstool/pool-set-bridge-mode.md). Этот параметр требует `bridge_config.enable_non_uniform_storage: true`. |
+| `--skip-storage-pool-conversion` | Оставить существующие пулы и группы хранения баз данных обычными. Статическое и системное хранилище всё равно преобразуется. Позже режим хранения каждой базы данных можно изменить отдельно командой [`set-database-mode`](set-database-mode.md). Этот параметр требует `bridge_config.enable_non_uniform_storage: true`. |
 
 ## Требования {#requirements}
 
 - Должны использоваться конфигурация V2 и автоматическое управление.
-- На каждом статическом и динамическом узле должна работать поддерживающая сборка, а узлы должны быть перезапущены с `bridge_config`, содержащей один pile.
+- На каждом статическом и динамическом узле должна работать поддерживающая сборка, а узлы должны быть перезапущены с `bridge_config`, содержащим один pile.
 - Конфигурация должна содержать ровно один pile.
 - С `--skip-storage-pool-conversion` параметр `bridge_config.enable_non_uniform_storage` должен быть `true`. При преобразовании по умолчанию он не должен быть задан до завершения преобразования.
 
-Полный список проверок и примеры конфигурации приведены в разделе [Преобразование кластера](../../../../devops/deployment-options/manual/bridge-management.md#convert).
+Полная процедура приведена в разделе [Преобразование кластера](../../../../devops/deployment-options/manual/bridge-management.md#convert).
 
 ## Примеры {#examples}
 
-Преобразовать кластер и перевести все существующие пулы в режим bridge:
+Преобразовать кластер и перевести все существующие пулы баз данных в режим bridge:
 
 ```bash
 {{ ydb-cli }} -y admin cluster bridge convert
 ```
 
-Преобразовать только системное хранилище и оставить существующие пулы обычными:
+Преобразовать системное хранилище и оставить существующие пулы баз данных обычными:
 
 ```bash
 {{ ydb-cli }} -y admin cluster bridge convert --skip-storage-pool-conversion
 ```
 
-Это альтернативные режимы. Выбирайте второй для больших кластеров или при необходимости обычных пулов, чтобы управлять синхронизацией пулов отдельно.
-
 ### Проверка результата {#verify}
 
-С помощью [list](list.md) дождитесь завершения преобразования:
-
-```bash
-{{ ydb-cli }} admin cluster bridge list
-```
-
-Преобразование продолжается, пока вывод содержит `Conversion from non-bridged cluster is in progress, piles can't be added yet`. После завершения единственный pile отображается как `PRIMARY`. До завершения список pile изменять нельзя.
+С помощью [list](list.md) дождитесь завершения преобразования. Пока вывод содержит `Conversion from non-bridged cluster is in progress, piles can't be added yet`, список pile изменять нельзя. После завершения единственный pile отображается как `PRIMARY`.

@@ -419,6 +419,20 @@
             "uri": "https://{canondata_backend}/1936947/dcefb773bafc8c1db330eb4dd8fce2c86508c1e2/resource.tar.gz#test.test_Lib-Agg_Sum_Opt-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Lib-LazyBind-default.txt-Debug]": [
+        {
+            "checksum": "36dcdb3bb6509a255c2170ee740073f6",
+            "size": 125,
+            "uri": "https://{canondata_backend}/1600758/06d2bbbce4214e96cd3cdcdeec14185d85cf45de/resource.tar.gz#test.test_Lib-LazyBind-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Lib-LazyBind-default.txt-Results]": [
+        {
+            "checksum": "c9d1de383b72fda4093e207a50f76887",
+            "size": 210,
+            "uri": "https://{canondata_backend}/1600758/06d2bbbce4214e96cd3cdcdeec14185d85cf45de/resource.tar.gz#test.test_Lib-LazyBind-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[List-TwoLMapOverSingleList-default.txt-Debug]": [
         {
             "checksum": "6994f7c76092c55aa68e9c014cb727b8",

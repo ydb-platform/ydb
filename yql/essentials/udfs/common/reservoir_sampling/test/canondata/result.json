@@ -1,52 +1,46 @@
 {
-    "test.test[test_add]": [
+    "test.test[test_add-Results]": [
         {
-            "uri": "file://test.test_test_add_/results.txt"
+            "uri": "file://test.test_test_add-Results_/results.txt"
         }
     ],
-    "test.test[test_add_after_deserialize]": [
+    "test.test[test_add_after_deserialize-Results]": [
         {
-            "uri": "file://test.test_test_add_after_deserialize_/extracted"
+            "uri": "file://test.test_test_add_after_deserialize-Results_/extracted"
         }
     ],
-    "test.test[test_add_different]": [
+    "test.test[test_add_different-Results]": [
         {
-            "uri": "file://test.test_test_add_different_/extracted"
+            "uri": "file://test.test_test_add_different-Results_/extracted"
         }
     ],
-    "test.test[test_create]": [
+    "test.test[test_create-Results]": [
         {
-            "uri": "file://test.test_test_create_/results.txt"
+            "uri": "file://test.test_test_create-Results_/results.txt"
         }
     ],
-    "test.test[test_deserialize]": [
+    "test.test[test_deserialize-Results]": [
         {
-            "uri": "file://test.test_test_deserialize_/results.txt"
+            "uri": "file://test.test_test_deserialize-Results_/results.txt"
         }
     ],
-    "test.test[test_merge]": [
+    "test.test[test_merge-Results]": [
         {
-            "uri": "file://test.test_test_merge_/results.txt"
+            "uri": "file://test.test_test_merge-Results_/results.txt"
         }
     ],
-    "test.test[test_merge_dirty2]": [
-        {
-            "uri": "file://test.test_test_merge_dirty2_/extracted"
-        }
+    "test.test[test_merge_dirty-Results]": [
+        "<tmp_path>/program.sql:<main>: Error: ReservoirSampling: Got same resources as Merge() arguments"
     ],
-    "test.test[test_merge_dirty3]": [
-        {
-            "uri": "file://test.test_test_merge_dirty3_/extracted"
-        }
+    "test.test[test_merge_dirty2-Results]": [
+        "<tmp_path>/program.sql:<main>: Error: ReservoirSampling: Got same resources as Merge() arguments"
     ],
-    "test.test[test_merge_dirty]": [
-        {
-            "uri": "file://test.test_test_merge_dirty_/extracted"
-        }
+    "test.test[test_merge_dirty3-Results]": [
+        "<tmp_path>/program.sql:<main>: Error: ReservoirSampling: Got dirty resource"
     ],
-    "test.test[test_serialize_wrong]": [
+    "test.test[test_serialize_wrong-Results]": [
         {
-            "uri": "file://test.test_test_serialize_wrong_/extracted"
+            "uri": "file://test.test_test_serialize_wrong-Results_/extracted"
         }
     ]
 }

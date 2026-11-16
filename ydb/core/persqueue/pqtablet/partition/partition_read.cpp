@@ -161,6 +161,9 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
         }
     } else if (request.Offset < GetEndOffset()) {
         sendResponse(GetSizeLag(request.Offset), false);
+    } else if (request.Deadline <= ctx.Now()) {
+        sendResponse(0, false);
+        return true;
     } else {
         return false;
     }
@@ -266,10 +269,11 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     }
 
     THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
-        record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
+        record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp,
+        TInstant::MilliSeconds(record.GetDeadline())};
 
     if (!InitDone || !ProcessHasDataRequest(req, ctx)) {
-        THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
+        THasDataDeadline dl{req.Deadline, req};
         auto res = HasDataRequests.insert(std::move(req));
         HasDataDeadlines.insert(dl);
         PQ_ENSURE(res.second);
@@ -373,7 +377,7 @@ void TPartition::Handle(TEvPQ::TEvGetClientOffset::TPtr& ev, const TActorContext
 
 void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& ctx) {
     if (size_t count = GetUserActCount(ev->Get()->ClientId); count > MAX_USER_ACTS) {
-        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+        TabletCounters.Cumulative()[UserActCounter(ev->Get()->Type, false)].Increment(1);
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::OVERLOAD,
             TStringBuilder() << "too big inflight: " << count, ev->Get()->IsInternal ? SelfId() : TActorId{});
         return;

@@ -6570,6 +6570,11 @@
                 "ColumnId": 14,
                 "ColumnName": "SanitizedToken",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "CanRestoreRateLimiterMetering",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6589,7 +6594,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6727,6 +6733,16 @@
                 "ColumnId": 22,
                 "ColumnName": "SysView",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "ReplicationConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 24,
+                "ColumnName": "Kesus",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6754,7 +6770,9 @@
                     19,
                     20,
                     21,
-                    22
+                    22,
+                    23,
+                    24
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7371,6 +7389,21 @@
                 "ColumnId": 12,
                 "ColumnName": "TraceIds",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "Compression",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "CompressionLevel",
+                "ColumnType": "Int32"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "HeartbeatMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -7388,7 +7421,10 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13,
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7476,6 +7512,21 @@
                 "ColumnId": 12,
                 "ColumnName": "TraceIds",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "Compression",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "CompressionLevel",
+                "ColumnType": "Int32"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "HeartbeatMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -7493,7 +7544,10 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13,
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,

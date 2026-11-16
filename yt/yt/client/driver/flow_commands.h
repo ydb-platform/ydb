@@ -124,6 +124,68 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TGetPipelineDynamicSpecPatchesCommand
+    : public TTypedCommand<NApi::TGetPipelineDynamicSpecPatchesOptions>
+    , public TPipelineCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetPipelineDynamicSpecPatchesCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TPatchPipelineDynamicSpecCommand
+    : public TTypedCommand<NApi::TPatchPipelineDynamicSpecOptions>
+    , public TPipelineCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TPatchPipelineDynamicSpecCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TCancelPipelineDynamicSpecPatchCommand
+    : public TTypedCommand<NApi::TCancelPipelineDynamicSpecPatchOptions>
+    , public TPipelineCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TCancelPipelineDynamicSpecPatchCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NFlow::TVersion Version = NFlow::TVersion(0);
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TResetPipelineDynamicSpecCommand
+    : public TTypedCommand<NApi::TResetPipelineDynamicSpecOptions>
+    , public TPipelineCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TResetPipelineDynamicSpecCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TStartPipelineCommand
     : public TTypedCommand<NApi::TStartPipelineOptions>
     , public TPipelineCommandBase

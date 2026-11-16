@@ -4,18 +4,7 @@
 
 namespace NKikimr::NReplication::NController {
 
-class TTargetTableBase: public TTargetWithStream {
-public:
-    explicit TTargetTableBase(TReplication* replication, ETargetKind finalKind,
-        ui64 id, const IConfig::TPtr& config);
-
-    TString GetStreamPath() const override;
-
-protected:
-    virtual TString BuildStreamPath() const = 0;
-};
-
-class TTargetTable: public TTargetTableBase {
+class TTargetTable: public TTargetWithStream {
 public:
     struct TTableConfig: public TConfigBase {
         using TPtr = std::shared_ptr<TTableConfig>;
@@ -32,7 +21,7 @@ protected:
     TString BuildStreamPath() const override;
 };
 
-class TTargetIndexTable: public TTargetTableBase {
+class TTargetIndexTable: public TTargetWithStream {
 public:
     struct TIndexTableConfig: public TConfigBase {
         using TPtr = std::shared_ptr<TIndexTableConfig>;

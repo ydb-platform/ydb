@@ -74,12 +74,14 @@ struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerR
     // An unbounded startup cap is represented by the maximum ui64 value.
     const ui64 InitialLimitBytes;
     const ui64 LimitCeiling;
+    const bool DemandOnly;
 
     TEvConsumerRegister(EMemoryConsumerKind kind, ui64 initialLimitBytes = 0,
-        ui64 limitCeiling = std::numeric_limits<ui64>::max())
+        ui64 limitCeiling = std::numeric_limits<ui64>::max(), bool demandOnly = false)
         : Kind(kind)
         , InitialLimitBytes(initialLimitBytes)
         , LimitCeiling(limitCeiling)
+        , DemandOnly(demandOnly)
     {}
 };
 
@@ -87,8 +89,11 @@ struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerR
 struct TEvConsumerUnregister : public TEventLocal<TEvConsumerUnregister, EvConsumerUnregister> {
     const EMemoryConsumerKind Kind;
 
-    TEvConsumerUnregister(EMemoryConsumerKind kind)
+    const bool RetainUntilUnused;
+
+    TEvConsumerUnregister(EMemoryConsumerKind kind, bool retainUntilUnused = false)
         : Kind(kind)
+        , RetainUntilUnused(retainUntilUnused)
     {}
 };
 

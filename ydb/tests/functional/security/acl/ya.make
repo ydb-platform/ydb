@@ -9,7 +9,8 @@ TEST_SRCS(
     test_paths_lookup.py
 )
 
-SPLIT_FACTOR(20)
+FORK_SUBTESTS()
+SPLIT_FACTOR(10)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)
 
@@ -23,8 +24,6 @@ PEERDIR(
     ydb/tests/library/flavours
     ydb/tests/oss/ydb_sdk_import
 )
-
-FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

@@ -320,6 +320,10 @@ bool TTargetWithStream::IsExpectedStreamCreator(const TActorId& actorId) const {
     return StreamCreator && StreamCreator == actorId;
 }
 
+TString TTargetWithStream::GetStreamPath() const {
+    return BuildStreamPath();
+}
+
 void TTargetWithStream::WorkerStatusChanged(ui64, ui64) {
     // nop
 }

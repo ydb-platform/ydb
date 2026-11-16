@@ -1063,7 +1063,10 @@ namespace NKikimr {
             TChain* const chain = Chains.GetChain(slot.GetSize());
             Y_VERIFY_S(chain, VDiskLogPrefix << "State# " << ToString() << " slot# " << slot.ToString());
             if (TFreeRes res = chain->Free(chain->Convert(slot)); res.ChunkId) {
-                PutChunkIdToFreeChunks(res.ChunkId);
+                // the slot is released only while the heap is serialized, and OccupySlot takes the chunk back from
+                // FreeChunks; a chunk waiting for shredding has to stay in ForbiddenChunks, not go to ForceFreeChunks
+                const bool inserted = FreeChunks.insert(res.ChunkId).second;
+                Y_VERIFY_S(inserted, VDiskLogPrefix << "State# " << ToString() << " slot# " << slot.ToString());
                 return res.InLockedChunks;
             }
             return false;

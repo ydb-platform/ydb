@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/security/certificate_check)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(

@@ -53,15 +53,12 @@ domains_config:
         encryption_mode: <опциональный, укажите 1 для шифрования данных на диске>
         erasure_species: <имя режима отказоустойчивости - none, block-4-2, or mirror-3-dc>
         kind: <имя пула хранения - укажите то же значение, что выше>
-        bridge_mode: <необязательный, true для пула в режиме bridge или false для обычного пула>
         pdisk_filter:
         - property:
           - type: <тип устройства для сопоставления с указанным в host_configs.drive.type>
         vdisk_kind: Default
     - kind: <имя пула хранения>
 ```
-
-В кластере bridge с [неоднородным хранилищем](../../concepts/bridge.md#storage-pools) параметр `bridge_mode` определяет, работает ли пул в режиме bridge (`true`) или в обычном режиме (`false`). Явно задавайте его при создании типов пулов: если значение не указано, оно определяется по сохранённому состоянию bridge кластера. Это поле не может изменить режим существующего пула; используйте [`ydb-dstool pool set-bridge-mode`](../ydb-dstool/pool-set-bridge-mode.md).
 
 Каждой базе данных в кластере назначается как минимум один из доступных пулов хранения, выбираемый в операции создания базы данных. Имена пулов хранения среди назначенных могут быть использованы в атрибуте `DATA` при определении групп колонок в операторах YQL [`CREATE TABLE`](../../yql/reference/syntax/create_table/family.md)/[`ALTER TABLE`](../../yql/reference/syntax/alter_table/family.md).
 

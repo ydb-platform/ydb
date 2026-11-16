@@ -24,6 +24,10 @@ public:
 
     void Reset();
 
+    explicit operator bool() const {
+        return Alive_ && Alive_->load();
+    }
+
 private:
     std::shared_ptr<std::atomic<bool>> Alive_;
 };

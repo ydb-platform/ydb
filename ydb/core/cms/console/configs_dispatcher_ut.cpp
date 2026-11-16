@@ -1,5 +1,6 @@
 #include "configs_dispatcher.h"
 #include "console.h"
+#include "console_configs_subscriber.h"
 #include "ut_helpers.h"
 
 #include <ydb/core/base/counters.h>
@@ -419,6 +420,69 @@ void SetSubscriptions(TTenantTestRuntime &runtime, TActorId aid, TVector<ui32> k
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
+    Y_UNIT_TEST(TestDelayedInitialConsoleNotificationDoesNotResubscribe) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        const auto owner = runtime.AllocateEdgeActor();
+        const auto subscriber = runtime.Register(CreateConfigsSubscriber(
+            owner, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem}, {},
+            0, false, 0, {}, {}, TNodeInfo{TENANT1_1_NAME, "type1"}));
+
+        ui64 generation = 0;
+        ui32 fallbackRequests = 0;
+        TTestActorRuntime::TEventFilter previousFilter;
+        previousFilter = runtime.SetEventFilter([&](TTestActorRuntimeBase& rt, TAutoPtr<IEventHandle>& ev) {
+            // Inspect the original event type before the tablet pipe forwards it.
+            if (ev->Sender == subscriber && ev->Type == TEvConsole::EvGetNodeConfigRequest) {
+                ++fallbackRequests;
+            }
+            return previousFilter(rt, ev);
+        });
+
+        bool acknowledged = false;
+        TAutoPtr<IEventHandle> delayedNotification;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->Sender == subscriber
+                && ev->GetTypeRewrite() == TEvConsole::EvConfigSubscriptionRequest) {
+                generation = ev->Get<TEvConsole::TEvConfigSubscriptionRequest>()->Record.GetGeneration();
+                UNIT_ASSERT_VALUES_EQUAL_C(generation, 1,
+                    "Waiting for the initial config must not restart the subscription");
+            }
+            if (ev->GetRecipientRewrite() == subscriber
+                && ev->GetTypeRewrite() == TEvConsole::EvConfigSubscriptionResponse) {
+                const auto& record = ev->Get<TEvConsole::TEvConfigSubscriptionResponse>()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetGeneration(), 1);
+                acknowledged = true;
+            }
+            if (ev->GetRecipientRewrite() == subscriber
+                && ev->GetTypeRewrite() == TEvConsole::EvConfigSubscriptionNotification
+                && ev->Get<TEvConsole::TEvConfigSubscriptionNotification>()->Record.HasOrder()) {
+                delayedNotification = ev.Release();
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        // Process the acknowledgement while withholding Console's initial update.
+        runtime.WaitFor("subscription acknowledgement and initial notification", [&]() {
+            return acknowledged && delayedNotification;
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(fallbackRequests, 0,
+            "Waiting for the initial config must not issue a fallback GetNodeConfig request");
+        UNIT_ASSERT_VALUES_EQUAL(generation, 1);
+
+        const auto& initialRecord = delayedNotification->Get<TEvConsole::TEvConfigSubscriptionNotification>()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(initialRecord.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(initialRecord.GetOrder(), 1);
+        const auto initialConfig = initialRecord.GetConfig().SerializeAsString();
+        runtime.SetObserverFunc(observer);
+        runtime.Send(delayedNotification.Release());
+        auto notification = runtime.GrabEdgeEvent<TEvConsole::TEvConfigSubscriptionNotification>(owner);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().SerializeAsString(), initialConfig);
+        runtime.SetEventFilter(previousFilter);
+    }
+
     Y_UNIT_TEST(TestCompositeConveyorConfigSubscription) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         TAutoPtr<IEventHandle> handle;

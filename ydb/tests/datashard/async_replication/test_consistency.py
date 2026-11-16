@@ -1,5 +1,8 @@
 import json
+import os
+from urllib.parse import urlparse
 
+import boto3
 import pytest
 import yatest.common
 
@@ -25,6 +28,29 @@ class TestAsyncReplicationConsistency(MulticlusterTestBase):
     def describe(self, cluster, path):
         return json.loads(self.run_cli(
             cluster, "scheme", "describe", path, "--stats", "--format", "proto-json-base64"))
+
+    def run_s3_operation(self, cluster, operation, bucket, source, destination):
+        endpoint = urlparse(os.environ["S3_ENDPOINT"])
+        result = json.loads(self.run_cli(
+            cluster, operation, "s3",
+            "--s3-endpoint", endpoint.netloc, "--scheme", endpoint.scheme,
+            "--bucket", bucket, "--access-key", "test", "--secret-key", "test",
+            "--use-virtual-addressing", "false",
+            "--item", f"Source={source},Destination={destination}",
+            "--format", "proto-json-base64"))
+        operation_id = result["id"]
+
+        def completed():
+            nonlocal result
+            result = json.loads(self.run_cli(
+                cluster, "operation", "get", operation_id, "--format", "proto-json-base64"))
+            if not result.get("ready", False):
+                return False
+            assert result.get("status") == "SUCCESS", result
+            return True
+
+        assert wait_for(completed, timeout_seconds=100), f"{operation} did not finish: {result}"
+        self.run_cli(cluster, "operation", "forget", operation_id)
 
     @pytest.mark.parametrize("from_backup", [False, True], ids=["initial_scan", "backup"])
     @pytest.mark.parametrize("consistency_level", ["ROW", "GLOBAL"])
@@ -77,12 +103,17 @@ class TestAsyncReplicationConsistency(MulticlusterTestBase):
                 return any(consumer["name"] == "replicationConsumer" for consumer in topic.get("consumers", []))
 
             assert wait_for(changefeed_ready, timeout_seconds=100), "Source changefeed is not ready for backup"
-            backup_path = yatest.common.output_path(f"backup_{table_name}")
-            self.run_cli(source_cluster, "tools", "dump", "--path", table_path, "--output", backup_path)
+            assert wait_for(lambda: DMLOperations(destination).table_exists(table_name), timeout_seconds=100), \
+                "Destination placeholder was not created"
+            bucket = f"replication-{self.hash_short}"
+            boto3.client(
+                "s3", endpoint_url=os.environ["S3_ENDPOINT"],
+                aws_access_key_id="test", aws_secret_access_key="test", region_name="us-east-1",
+            ).create_bucket(Bucket=bucket)
+            self.run_s3_operation(source_cluster, "export", bucket, table_path, table_name)
             # These changes must be recovered from CDC, since they are absent from the backup.
             write_rows(0, 25, "during_backup")
-            self.run_cli(destination_cluster, "tools", "restore",
-                         "--path", self.get_database(), "--input", backup_path)
+            self.run_s3_operation(destination_cluster, "import", bucket, table_name, table_path)
             destination.query(f"ALTER ASYNC REPLICATION `{replication_path}` SET (STATE = 'STANDBY')")
 
         assert wait_for(lambda: DMLOperations(destination).table_exists(table_name), timeout_seconds=100), \

@@ -2,7 +2,46 @@
 
 #include <yt/yql/providers/yt/lib/yt_rpc_helpers/yt_convert_helpers.h>
 
+#include <util/system/env.h>
+
 namespace NYql::NDqs {
+
+namespace {
+using NKikimr::NMiniKQL::TStatKey;
+
+TStatKey LocalJobProxyPayloadBytes("Job_RPCReaderLocalJobProxyPayloadBytes", true);
+TStatKey LocalJobProxyPayloadBlocks("Job_RPCReaderLocalJobProxyPayloadBlocks", true);
+TStatKey ClusterProxyPayloadBytes("Job_RPCReaderClusterProxyPayloadBytes", true);
+TStatKey ClusterProxyPayloadBlocks("Job_RPCReaderClusterProxyPayloadBlocks", true);
+
+struct TLocalJobProxySettings {
+    TString ProxyAddress;
+    TString SocketPath;
+};
+
+TMaybe<TLocalJobProxySettings> ReadLocalJobProxySettingsFromEnv() {
+    auto proxyAddress = GetEnv("YQL_YT_JOB_PROXY_ADDRESS");
+    auto socketPath = GetEnv("YT_JOB_PROXY_SOCKET_PATH");
+    if (proxyAddress.empty() || socketPath.empty()) {
+        return Nothing();
+    }
+    return TLocalJobProxySettings{std::move(proxyAddress), std::move(socketPath)};
+}
+} // namespace
+
+void TSettingsHolder::RecordReadPayload(size_t bytes) {
+    if (bytes) {
+        PayloadBytes_.fetch_add(bytes, std::memory_order::relaxed);
+        PayloadBlocks_.fetch_add(1, std::memory_order::relaxed);
+    }
+}
+
+void TSettingsHolder::ReportReadStats(NKikimr::NMiniKQL::IStatsRegistry* stats) {
+    const auto bytes = PayloadBytes_.exchange(0, std::memory_order::relaxed);
+    const auto blocks = PayloadBlocks_.exchange(0, std::memory_order::relaxed);
+    MKQL_ADD_STAT(stats, UseLocalJobProxy_ ? LocalJobProxyPayloadBytes : ClusterProxyPayloadBytes, bytes);
+    MKQL_ADD_STAT(stats, UseLocalJobProxy_ ? LocalJobProxyPayloadBlocks : ClusterProxyPayloadBlocks, blocks);
+}
 
 NYT::NYPath::TRichYPath ConvertYPathFromOld(const NYT::TRichYPath& richYPath) {
     TStringStream ss;
@@ -17,6 +56,11 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
     connectionConfig->ClusterUrl = clusterName;
     connectionConfig->EnableRetries = true;
     connectionConfig->DefaultPingPeriod = TDuration::MilliSeconds(5000);
+    const auto localJobProxySettings = ReadLocalJobProxySettingsFromEnv();
+    if (localJobProxySettings && clusterName == localJobProxySettings->ProxyAddress) {
+        connectionConfig->ProxyUnixDomainSocket = localJobProxySettings->SocketPath;
+        connectionConfig->EnableProxyDiscovery = false;
+    }
 
     auto connection = CreateConnection(connectionConfig);
     auto clientOptions = NYT::NApi::TClientOptions();
@@ -80,7 +124,7 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
 
         requests.emplace_back(std::move(request));
     }
-    return std::make_unique<TSettingsHolder>(std::move(connection), std::move(client), std::move(requests), std::move(originalIndexes));
+    return std::make_unique<TSettingsHolder>(std::move(connection), std::move(client), std::move(requests), std::move(originalIndexes), connectionConfig->ProxyUnixDomainSocket.has_value());
 }
 
 NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> CreateInputStream(NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr request) {

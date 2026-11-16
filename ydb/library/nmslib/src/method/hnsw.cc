@@ -225,6 +225,7 @@ namespace similarity {
             pmgr.CheckUnused();
             return;
         }
+        CheckBuildCancellation();
         ElList_.resize(this->data_.size());
         // One entry should be added before all the threads are started, or else add() will not work properly
         HnswNode *first = new HnswNode(this->data_[0], 0 /* id == 0 */);
@@ -238,6 +239,7 @@ namespace similarity {
         unique_ptr<ProgressDisplay> progress_bar(PrintProgress_ ? new ProgressDisplay(this->data_.size(), cerr) : NULL);
 
         ParallelFor(1, this->data_.size(), indexThreadQty_, [&](int id, int threadId) {
+            CheckBuildCancellation();
             HnswNode *node = new HnswNode(this->data_[id], id);
             add(&space_, node);
             {
@@ -367,6 +369,7 @@ namespace similarity {
         // Checking for maximum size of the datasection:
         int dataSectionSize = 1;
         for (int i = 0; i < ElList_.size(); i++) {
+            CheckBuildCancellation();
             if (ElList_[i]->getData()->bufferlength() > dataSectionSize)
                 dataSectionSize = ElList_[i]->getData()->bufferlength();
         }
@@ -440,6 +443,7 @@ namespace similarity {
         LOG(LIB_INFO) << "Making optimized index";
         data_rearranged_.resize(ElList_.size());
         for (long i = 0; i < ElList_.size(); i++) {
+            CheckBuildCancellation();
             ElList_[i]->copyDataAndLevel0LinksToOptIndex(
                 data_level0_memory_ + (size_t)i * memoryPerObject_, offsetLevel0_, offsetData_);
             data_rearranged_[i] = new Object(data_level0_memory_ + (i)*memoryPerObject_ + offsetData_);
@@ -452,6 +456,7 @@ namespace similarity {
         ////////////////////////////////////////////////////////////////////////
         if (iscosine_) {
             for (long i = 0; i < ElList_.size(); i++) {
+                CheckBuildCancellation();
                 float *v = (float *)(data_level0_memory_ + (size_t)i * memoryPerObject_ + offsetData_ + 16);
                 NormalizeVect(v, vectorlength_);
             };
@@ -462,7 +467,10 @@ namespace similarity {
         // we allocate a few extra bytes to prevent prefetch from accessing out of range memory
         linkLists_ = (char **)malloc((sizeof(void *) * ElList_.size()) + EXTRA_MEM_PAD_SIZE);
         CHECK(linkLists_);
+        // Cancellation may leave only a prefix initialized; destruction visits all slots.
+        std::fill_n(linkLists_, ElList_.size(), nullptr);
         for (long i = 0; i < ElList_.size(); i++) {
+            CheckBuildCancellation();
             if (ElList_[i]->level < 1) {
                 linkLists_[i] = nullptr;
                 continue;

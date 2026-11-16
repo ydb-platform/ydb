@@ -66,6 +66,9 @@ public:
         fullName.SkipPrefix("NSQLv1Generated.");
         for (int i = 0; i < descr->field_count(); ++i) {
             const NProtoBuf::FieldDescriptor* fd = descr->field(i);
+            if (fd->name() == "StartTokenIndex" || fd->name() == "EndTokenIndex") {
+                continue;
+            }
             NProtoBuf::TConstField field(msg, fd);
             if (!field.HasValue()) {
                 continue;
@@ -287,6 +290,9 @@ private:
     void VisitAllFields(const NProtoBuf::Message& msg, const NProtoBuf::Descriptor* descr) {
         for (int i = 0; i < descr->field_count(); ++i) {
             const NProtoBuf::FieldDescriptor* fd = descr->field(i);
+            if (fd->cpp_type() != NProtoBuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+                continue;
+            }
             NProtoBuf::TConstField field(msg, fd);
             if (field.IsMessage()) {
                 for (size_t j = 0; j < field.Size(); ++j) {

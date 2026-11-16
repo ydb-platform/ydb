@@ -175,6 +175,8 @@ struct TSelectRowsOptionsBase
     std::optional<int> HyperLogLogPrecision;
     //! Perform the final aggregation on proxy in parallel.
     std::optional<bool> EnableParallelizeUnorderedGroupBy;
+    //! Merge versioned rows from different stores when reading.
+    bool MergeVersionedRows = true;
 };
 
 struct TSelectRowsOptions
@@ -220,8 +222,6 @@ struct TSelectRowsOptions
     bool EnableCodeCache = true;
     //! Enables canonical SQL behaviour for relational operators, i.e. null </=/> value -> null.
     bool UseCanonicalNullRelations = false;
-    //! Merge versioned rows from different stores when reading.
-    bool MergeVersionedRows = true;
     //! For internal use only.
     //! Use original table schema in result rowset.
     bool UseOriginalTableSchema = false;

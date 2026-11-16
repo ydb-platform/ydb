@@ -213,21 +213,6 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "AutokickExecuted"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#92db00",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
               "options": "DrainExecuted"
             },
             "properties": [
@@ -310,23 +295,6 @@
           "legendFormat": "DrainExecuted",
           "range": true,
           "refId": "B",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "max(rate(tablets_Hive_AutokickExecuted{database=\"$database\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "AutokickExecuted",
-          "range": true,
-          "refId": "C",
           "useBackend": false
         },
         {

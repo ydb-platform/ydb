@@ -22,8 +22,8 @@ def _selfcheck():
                 ydb_bridge_v1_pb2_grpc, ydb_bridge_pb2):
         assert mod is not None
     import importlib
-    modules = ["cluster", "config_yaml", "connectivity", "control_api", "events", "faults", "followups",
-               "health", "instance", "model", "operations", "peers", "replica", "services", "supervisor",
+    modules = ["cluster", "config_yaml", "connectivity", "control_api", "control_ui", "events", "faults", "followups",
+               "health", "instance", "lab", "model", "operations", "peers", "replica", "services", "supervisor",
                "testkit", "topology", "validator"]
     for name in modules:
         importlib.import_module("ydb.apps.bridge_skipper.ydbd_mock.lib.%s" % name)

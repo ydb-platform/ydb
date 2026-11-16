@@ -412,6 +412,10 @@ public:
         REGISTER    (TRemovePipelineSpecCommand,           "remove_pipeline_spec",            Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TGetPipelineDynamicSpecCommand,       "get_pipeline_dynamic_spec",       Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TSetPipelineDynamicSpecCommand,       "set_pipeline_dynamic_spec",       Structured, Structured, true,  false, ApiVersion4);
+        REGISTER(TGetPipelineDynamicSpecPatchesCommand, "get_pipeline_dynamic_spec_patches", Null, Structured, false, false, ApiVersion4);
+        REGISTER(TPatchPipelineDynamicSpecCommand, "patch_pipeline_dynamic_spec", Structured, Structured, true, false, ApiVersion4);
+        REGISTER(TCancelPipelineDynamicSpecPatchCommand, "cancel_pipeline_dynamic_spec_patch", Null, Structured, true, false, ApiVersion4);
+        REGISTER(TResetPipelineDynamicSpecCommand, "reset_pipeline_dynamic_spec", Null, Structured, true, false, ApiVersion4);
         REGISTER    (TRemovePipelineDynamicSpecCommand,    "remove_pipeline_dynamic_spec",    Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TStartPipelineCommand,                "start_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TStopPipelineCommand,                 "stop_pipeline",                   Null,       Structured, true,  false, ApiVersion4);

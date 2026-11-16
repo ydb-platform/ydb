@@ -18,6 +18,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrTxSequenceShard::TEvUpdateSequenceResult::EStatus, s
     stream << NKikimrTxSequenceShard::TEvUpdateSequenceResult::EStatus_Name(value);
 }
 
+Y_DECLARE_OUT_SPEC(, NKikimrTxSequenceShard::TEvAdvanceSequenceResult::EStatus, stream, value) {
+    stream << NKikimrTxSequenceShard::TEvAdvanceSequenceResult::EStatus_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrTxSequenceShard::TEvFreezeSequenceResult::EStatus, stream, value) {
     stream << NKikimrTxSequenceShard::TEvFreezeSequenceResult::EStatus_Name(value);
 }

@@ -1,21 +1,20 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_strategy_put_mirror3dc.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_strategy_put_m3dc.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_strategy_accelerate_put_m3dc.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+using TDataCenterState = NKikimrBlobStorage::TDataCenterState;
 
 namespace NKikimr {
 namespace {
 
-using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-using S = TBlobState::ESituation;
-using P = TEvBlobStorage::TEvPut;
 using TCounts = std::array<ui32, 3>;
-using TStates = std::array<R::EState, 3>;
 
-TIntrusivePtr<TBlobStorageGroupInfo> MakeInfo(const TStates& states) {
+TIntrusivePtr<TBlobStorageGroupInfo> MakeInfo(const TMirror3dcGroupState& states) {
     TBlobStorageGroupInfo::TDynamicInfo dynamic(TGroupId::Zero(), 1);
-    dynamic.FailRealmStates.assign(states.begin(), states.end());
+    dynamic.Mirror3dcState = states;
     return MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupInfo::TTopology(
         TBlobStorageGroupType::ErasureMirror3dc, 3, 4, 1), std::move(dynamic), "");
 }
@@ -27,7 +26,7 @@ struct TTest {
     TLogoBlobID Id;
     TLogContext LogCtx{NKikimrServices::BS_PROXY_PUT, false};
 
-    explicit TTest(const TStates& states, ui32 cookie = 0)
+    explicit TTest(const TMirror3dcGroupState& states, ui32 cookie = 0)
         : Info(MakeInfo(states))
         , Queues(MakeIntrusive<TGroupQueues>(Info->GetTopology()))
         , Blackboard(Info, Queues, NKikimrBlobStorage::UserData, NKikimrBlobStorage::FastRead)
@@ -48,7 +47,7 @@ struct TTest {
         return Info->GetVDiskId(Blackboard[Id].Disks[disk].OrderNumber).FailRealm;
     }
 
-    void Set(const TCounts& counts, S situation) {
+    void Set(const TCounts& counts, TBlobState::ESituation situation) {
         for (ui32 disk = 0; disk < 9; ++disk) {
             if (disk / 3 < counts[Realm(disk)]) {
                 Blackboard[Id].Disks[disk].DiskParts[disk % 3].Situation = situation;
@@ -56,13 +55,13 @@ struct TTest {
         }
     }
 
-    EStrategyOutcome Run(P::ETactic tactic, bool accelerate = false, bool mod3x3 = false) {
+    EStrategyOutcome Run(TEvBlobStorage::TEvPut::ETactic tactic, bool accelerate = false, bool mod3x3 = false) {
         Blackboard.GroupDiskRequests.PutsPending.clear();
         return TMirror3dcPutStrategy(tactic, mod3x3, accelerate).Process(
             LogCtx, Blackboard[Id], *Info, Blackboard, Blackboard.GroupDiskRequests, {});
     }
 
-    EStrategyOutcome RunLegacy(P::ETactic tactic, bool accelerate = false, bool mod3x3 = false) {
+    EStrategyOutcome RunLegacy(TEvBlobStorage::TEvPut::ETactic tactic, bool accelerate = false, bool mod3x3 = false) {
         Blackboard.GroupDiskRequests.PutsPending.clear();
         if (accelerate) {
             return TAcceleratePut3dcStrategy(tactic, mod3x3).Process(
@@ -106,8 +105,8 @@ struct TTest {
 Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
     Y_UNIT_TEST(WrittenQuorumUsesCurrentLayoutAndExcludesExpiredDisks) {
         for (ui32 cookie = 0; cookie < 3; ++cookie) {
-            TTest t({R::N1, R::F, R::F}, cookie);
-            t.Set({2, 3, 3}, S::Present);
+            TTest t({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, cookie);
+            t.Set({2, 3, 3}, TBlobState::ESituation::Present);
             TBlobStorageGroupInfo::TGroupVDisks expired(&t.Info->GetTopology());
             const auto& state = t.Blackboard[t.Id];
             UNIT_ASSERT(state.HasWrittenQuorum(*t.Info, expired));
@@ -122,22 +121,22 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
     }
 
     Y_UNIT_TEST(NormalInitialAndPartialRepliesMatchLegacy) {
-        for (auto tactic : {P::TacticDefault, P::TacticMaxThroughput, P::TacticMinLatency}) {
+        for (auto tactic : {TEvBlobStorage::TEvPut::TacticDefault, TEvBlobStorage::TEvPut::TacticMaxThroughput, TEvBlobStorage::TEvPut::TacticMinLatency}) {
             for (bool mod3x3 : {false, true}) {
                 for (ui32 cookie = 0; cookie < 3; ++cookie) {
-                    TTest initial({R::N0, R::N0, R::N0}, cookie);
-                    TTest legacyInitial({R::N0, R::N0, R::N0}, cookie);
+                    TTest initial({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, cookie);
+                    TTest legacyInitial({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, cookie);
                     UNIT_ASSERT_VALUES_EQUAL(ui32(initial.Run(tactic, false, mod3x3).Value),
                         ui32(legacyInitial.RunLegacy(tactic, false, mod3x3).Value));
                     const ui32 initialMask = initial.RequestMask();
                     UNIT_ASSERT_VALUES_EQUAL(initialMask, legacyInitial.RequestMask());
                     // Every subset of initial requests has replied OK; the others remain Sent.
                     for (ui32 replied = initialMask; ; replied = (replied - 1) & initialMask) {
-                        TTest current({R::N0, R::N0, R::N0}, cookie);
-                        TTest legacy({R::N0, R::N0, R::N0}, cookie);
+                        TTest current({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, cookie);
+                        TTest legacy({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, cookie);
                         for (ui32 disk = 0; disk < 9; ++disk) {
                             if (initialMask & (1u << disk)) {
-                                const auto situation = replied & (1u << disk) ? S::Present : S::Sent;
+                                const auto situation = replied & (1u << disk) ? TBlobState::ESituation::Present : TBlobState::ESituation::Sent;
                                 current.Blackboard[current.Id].Disks[disk].DiskParts[disk % 3].Situation = situation;
                                 legacy.Blackboard[legacy.Id].Disks[disk].DiskParts[disk % 3].Situation = situation;
                             }
@@ -157,11 +156,11 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
     }
 
     Y_UNIT_TEST(NormalFailureMasksMatchLegacy) {
-        for (auto tactic : {P::TacticDefault, P::TacticMaxThroughput, P::TacticMinLatency}) {
+        for (auto tactic : {TEvBlobStorage::TEvPut::TacticDefault, TEvBlobStorage::TEvPut::TacticMaxThroughput, TEvBlobStorage::TEvPut::TacticMinLatency}) {
             for (bool mod3x3 : {false, true}) {
                 for (ui32 errors = 0; errors < 512; ++errors) {
-                    TTest current({R::N0, R::N0, R::N0});
-                    TTest legacy({R::N0, R::N0, R::N0});
+                    TTest current({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
+                    TTest legacy({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
                     bool degraded = false;
                     for (ui32 realm = 0; realm < 3; ++realm) {
                         const ui32 realmMask = 0b001001001u << realm;
@@ -169,8 +168,8 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
                     }
                     for (ui32 disk = 0; disk < 9; ++disk) {
                         if (errors & (1u << disk)) {
-                            current.Blackboard[current.Id].Disks[disk].DiskParts[disk % 3].Situation = S::Error;
-                            legacy.Blackboard[legacy.Id].Disks[disk].DiskParts[disk % 3].Situation = S::Error;
+                            current.Blackboard[current.Id].Disks[disk].DiskParts[disk % 3].Situation = TBlobState::ESituation::Error;
+                            legacy.Blackboard[legacy.Id].Disks[disk].DiskParts[disk % 3].Situation = TBlobState::ESituation::Error;
                         }
                     }
                     const auto context = TStringBuilder() << "tactic " << ui32(tactic)
@@ -185,7 +184,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
                     }
                     // Skip request equality for degraded MinLatency: legacy targets 2+2, new targets 3+3.
                     // The legacy change belongs in a separate PR; outcomes are still compared here.
-                    if (tactic != P::TacticMinLatency || mod3x3 || !degraded) {
+                    if (tactic != TEvBlobStorage::TEvPut::TacticMinLatency || mod3x3 || !degraded) {
                         UNIT_ASSERT_VALUES_EQUAL_C(current.RequestMask(), legacy.RequestMask(), context);
                     }
                     // Resolve each strategy's own requests successfully and compare completion.
@@ -202,10 +201,10 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
     }
 
     Y_UNIT_TEST(NormalInitialAccelerationMatchesLegacy) {
-        for (auto tactic : {P::TacticDefault, P::TacticMaxThroughput, P::TacticMinLatency}) {
+        for (auto tactic : {TEvBlobStorage::TEvPut::TacticDefault, TEvBlobStorage::TEvPut::TacticMaxThroughput, TEvBlobStorage::TEvPut::TacticMinLatency}) {
             for (bool mod3x3 : {false, true}) {
-                TTest current({R::N0, R::N0, R::N0});
-                TTest legacy({R::N0, R::N0, R::N0});
+                TTest current({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
+                TTest legacy({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
                 UNIT_ASSERT(current.Run(tactic, false, mod3x3) == EStrategyOutcome::IN_PROGRESS);
                 UNIT_ASSERT(legacy.RunLegacy(tactic, false, mod3x3) == EStrategyOutcome::IN_PROGRESS);
                 UNIT_ASSERT_VALUES_EQUAL(ui32(current.Run(tactic, true, mod3x3).Value),
@@ -217,23 +216,23 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
 
     Y_UNIT_TEST(DegradedMinLatencyAccelerationUsesSpareCopies) {
         for (ui32 cookie = 0; cookie < 3; ++cookie) {
-            TTest current({R::N0, R::N0, R::N0}, cookie);
-            current.Set({0, 0, 3}, S::Error);
-            current.Set({1, 0, 0}, S::Sent);
+            TTest current({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, cookie);
+            current.Set({0, 0, 3}, TBlobState::ESituation::Error);
+            current.Set({1, 0, 0}, TBlobState::ESituation::Sent);
             // Target 3+3: two fresh disks supplement the pending write, all three in the other realm.
             // Do not compare with legacy here: its degraded MinLatency still targets 2+2.
-            UNIT_ASSERT(current.Run(P::TacticMinLatency, true) == EStrategyOutcome::IN_PROGRESS);
+            UNIT_ASSERT(current.Run(TEvBlobStorage::TEvPut::TacticMinLatency, true) == EStrategyOutcome::IN_PROGRESS);
             current.Expect({2, 3, 0});
         }
     }
 
     Y_UNIT_TEST(NormalFailureModelIsCheckedBeforeWrittenQuorum) {
-        for (auto tactic : {P::TacticMaxThroughput, P::TacticMinLatency}) {
-            TTest current({R::N0, R::N0, R::N0});
-            TTest legacy({R::N0, R::N0, R::N0});
+        for (auto tactic : {TEvBlobStorage::TEvPut::TacticMaxThroughput, TEvBlobStorage::TEvPut::TacticMinLatency}) {
+            TTest current({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
+            TTest legacy({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
             for (auto* test : {&current, &legacy}) {
-                test->Set({3, 3, 3}, S::Present);
-                test->Set({2, 2, 0}, S::Error); // Remaining copies 1+1+3 satisfy W, errors violate legacy's E.
+                test->Set({3, 3, 3}, TBlobState::ESituation::Present);
+                test->Set({2, 2, 0}, TBlobState::ESituation::Error); // Remaining copies 1+1+3 satisfy W, errors violate legacy's E.
             }
             UNIT_ASSERT(current.Run(tactic) == EStrategyOutcome::ERROR);
             UNIT_ASSERT(legacy.RunLegacy(tactic) == EStrategyOutcome::ERROR);
@@ -244,21 +243,21 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
 
     Y_UNIT_TEST(FailureModelUsesCurrentEnsuredLayoutAndIgnoresRecoveryAndFailedRealms) {
         for (ui32 cookie = 0; cookie < 3; ++cookie) {
-            for (auto tactic : {P::TacticMaxThroughput, P::TacticMinLatency}) {
+            for (auto tactic : {TEvBlobStorage::TEvPut::TacticMaxThroughput, TEvBlobStorage::TEvPut::TacticMinLatency}) {
                 for (bool accelerate : {false, true}) {
-                    TTest inv1({R::N1, R::R, R::F}, cookie);
-                    inv1.Set({1, 0, 0}, S::Error); // E=1 in N; W=2+2 is still attainable.
+                    TTest inv1({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, cookie);
+                    inv1.Set({1, 0, 0}, TBlobState::ESituation::Error); // E=1 in I; W=2+2 is still attainable.
                     UNIT_ASSERT(inv1.Run(tactic, accelerate) == EStrategyOutcome::ERROR);
                     inv1.Expect({0, 0, 0});
 
-                    TTest inv2({R::N2, R::R, R::F}, cookie);
-                    inv2.Set({1, 0, 3}, S::Error); // E=2 permits one failed disk in N.
+                    TTest inv2({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, cookie);
+                    inv2.Set({1, 0, 3}, TBlobState::ESituation::Error); // E=2 permits one failed disk in I.
                     UNIT_ASSERT(inv2.Run(tactic, accelerate) == EStrategyOutcome::IN_PROGRESS);
 
-                    TTest recovering({R::N1, R::N1, R::R}, cookie);
-                    recovering.Set({1, 0, 3}, S::Error); // E=1+1 uses only N realms.
+                    TTest recovering({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, cookie);
+                    recovering.Set({1, 0, 3}, TBlobState::ESituation::Error); // E=1+1 uses only I realms.
                     UNIT_ASSERT(recovering.Run(tactic, accelerate) == EStrategyOutcome::IN_PROGRESS);
-                    recovering.Set({1, 1, 3}, S::Error);
+                    recovering.Set({1, 1, 3}, TBlobState::ESituation::Error);
                     UNIT_ASSERT(recovering.Run(tactic, accelerate) == EStrategyOutcome::ERROR);
                     recovering.Expect({0, 0, 0});
                 }
@@ -268,27 +267,27 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
 
     Y_UNIT_TEST(InitialLayoutsFollowRealmRoles) {
         struct TCase {
-            TStates States;
+            TMirror3dcGroupState States;
             TCounts Throughput;
             TCounts Latency;
         };
         const TCase cases[] = {
-            {{R::N0, R::N0, R::N0}, {1, 1, 1}, {2, 2, 2}}, // W = 1+1+1 OR 2+2.
-            {{R::N1, R::N1, R::R}, {1, 1, 1}, {2, 2, 1}}, // Union of 1+1+1 and 2+2 in N/N.
-            {{R::N0, R::N0, R::F}, {2, 2, 0}, {3, 3, 0}}, // W = 2+2, expand to 3+3.
-            {{R::N2, R::N2, R::F}, {2, 2, 0}, {3, 3, 0}},
-            {{R::N1, R::F, R::F}, {2, 0, 0}, {3, 0, 0}},
-            {{R::N2, R::F, R::F}, {2, 0, 0}, {3, 0, 0}},
-            {{R::N1, R::R, R::F}, {2, 2, 0}, {3, 3, 0}}, // W = 2+2 in N/R.
+            {{NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, {1, 1, 1}, {2, 2, 2}}, // W = 1+1+1 OR 2+2.
+            {{NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {1, 1, 1}, {2, 2, 1}}, // Union of 1+1+1 and 2+2 in I/I.
+            {{NKikimrBlobStorage::TGroupState::DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {2, 2, 0}, {3, 3, 0}}, // W = 2+2, expand to 3+3.
+            {{NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {2, 2, 0}, {3, 3, 0}},
+            {{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {2, 0, 0}, {3, 0, 0}},
+            {{NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {2, 0, 0}, {3, 0, 0}},
+            {{NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {2, 2, 0}, {3, 3, 0}}, // W = 2+2 in I/R.
         };
         for (const auto& test : cases) {
             std::array<ui32, 3> permutation = {0, 1, 2};
             do {
                 for (ui32 cookie = 0; cookie < 3; ++cookie) {
-                    for (auto tactic : {P::TacticDefault, P::TacticMaxThroughput, P::TacticMinLatency}) {
-                        TTest t({test.States[permutation[0]], test.States[permutation[1]], test.States[permutation[2]]}, cookie);
+                    for (auto tactic : {TEvBlobStorage::TEvPut::TacticDefault, TEvBlobStorage::TEvPut::TacticMaxThroughput, TEvBlobStorage::TEvPut::TacticMinLatency}) {
+                        TTest t({test.States.State, {test.States.FailRealmStates[permutation[0]], test.States.FailRealmStates[permutation[1]], test.States.FailRealmStates[permutation[2]]}}, cookie);
                         UNIT_ASSERT(t.Run(tactic) == EStrategyOutcome::IN_PROGRESS);
-                        const auto& expected = tactic == P::TacticMinLatency ? test.Latency : test.Throughput;
+                        const auto& expected = tactic == TEvBlobStorage::TEvPut::TacticMinLatency ? test.Latency : test.Throughput;
                         t.Expect({expected[permutation[0]], expected[permutation[1]], expected[permutation[2]]});
                         // Re-running while all requests are pending does not send duplicates.
                         UNIT_ASSERT(t.Run(tactic) == EStrategyOutcome::IN_PROGRESS);
@@ -300,114 +299,114 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
     }
 
     Y_UNIT_TEST(PresentAndSentReduceNewRequests) {
-        TTest throughput({R::N0, R::N0, R::N0});
-        throughput.Set({2, 0, 0}, S::Present);
-        UNIT_ASSERT(throughput.Run(P::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
+        TTest throughput({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
+        throughput.Set({2, 0, 0}, TBlobState::ESituation::Present);
+        UNIT_ASSERT(throughput.Run(TEvBlobStorage::TEvPut::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
         throughput.Expect({0, 1, 1}); // Prefer three realms even with two copies in the first.
 
-        TTest latency({R::N0, R::N0, R::N0});
-        latency.Set({1, 0, 0}, S::Present);
-        latency.Set({0, 1, 0}, S::Sent);
-        UNIT_ASSERT(latency.Run(P::TacticMinLatency) == EStrategyOutcome::IN_PROGRESS);
+        TTest latency({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
+        latency.Set({1, 0, 0}, TBlobState::ESituation::Present);
+        latency.Set({0, 1, 0}, TBlobState::ESituation::Sent);
+        UNIT_ASSERT(latency.Run(TEvBlobStorage::TEvPut::TacticMinLatency) == EStrategyOutcome::IN_PROGRESS);
         latency.Expect({1, 1, 2}); // Complete the 3x2 rectangle without repeating writes.
     }
 
     Y_UNIT_TEST(PartialRectangleAndErrorFallback) {
-        for (auto tactic : {P::TacticMaxThroughput, P::TacticMinLatency}) {
-            TTest t({R::N0, R::N0, R::N0});
-            t.Set({0, 1, 3}, S::Error); // Available: 3+2+0; only W = 2+2 remains.
+        for (auto tactic : {TEvBlobStorage::TEvPut::TacticMaxThroughput, TEvBlobStorage::TEvPut::TacticMinLatency}) {
+            TTest t({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
+            t.Set({0, 1, 3}, TBlobState::ESituation::Error); // Available: 3+2+0; only W = 2+2 remains.
             UNIT_ASSERT(t.Run(tactic) == EStrategyOutcome::IN_PROGRESS);
-            t.Expect(tactic == P::TacticMinLatency ? TCounts{3, 2, 0} : TCounts{2, 2, 0});
+            t.Expect(tactic == TEvBlobStorage::TEvPut::TacticMinLatency ? TCounts{3, 2, 0} : TCounts{2, 2, 0});
         }
-        TTest t({R::N0, R::N0, R::N0});
-        t.Set({0, 2, 2}, S::Error); // W is attainable, but the errors exceed E.
-        UNIT_ASSERT(t.Run(P::TacticMinLatency) == EStrategyOutcome::ERROR);
+        TTest t({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
+        t.Set({0, 2, 2}, TBlobState::ESituation::Error); // W is attainable, but the errors exceed E.
+        UNIT_ASSERT(t.Run(TEvBlobStorage::TEvPut::TacticMinLatency) == EStrategyOutcome::ERROR);
         t.Expect({0, 0, 0});
     }
 
     Y_UNIT_TEST(RecoveryCannotReplaceAnAvailableNormalRealm) {
-        TTest t({R::N0, R::N0, R::R});
-        t.Set({2, 0, 2}, S::Present);
-        UNIT_ASSERT(t.Run(P::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
-        t.Expect({0, 1, 0}); // Complete 1+1+1, not 2+2 in N/R.
-        t.Set({0, 3, 0}, S::Error);
-        UNIT_ASSERT(t.Run(P::TacticMaxThroughput) == EStrategyOutcome::ERROR);
+        TTest t({NKikimrBlobStorage::TGroupState::DC_RECOVERY, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}});
+        t.Set({2, 0, 2}, TBlobState::ESituation::Present);
+        UNIT_ASSERT(t.Run(TEvBlobStorage::TEvPut::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
+        t.Expect({0, 1, 0}); // Complete 1+1+1, not 2+2 in I/R.
+        t.Set({0, 3, 0}, TBlobState::ESituation::Error);
+        UNIT_ASSERT(t.Run(TEvBlobStorage::TEvPut::TacticMaxThroughput) == EStrategyOutcome::ERROR);
         t.Expect({0, 0, 0});
     }
 
     Y_UNIT_TEST(DoneUsesWriteWithoutWaitingForDurability) {
-        TTest t({R::N1, R::N1, R::R});
-        t.Set({2, 2, 0}, S::Present); // W = 2+2 is complete, D = 1+1+1 is not.
-        UNIT_ASSERT(t.Run(P::TacticMinLatency) == EStrategyOutcome::DONE);
+        TTest t({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}});
+        t.Set({2, 2, 0}, TBlobState::ESituation::Present); // W = 2+2 is complete, D = 1+1+1 is not.
+        UNIT_ASSERT(t.Run(TEvBlobStorage::TEvPut::TacticMinLatency) == EStrategyOutcome::DONE);
         t.Expect({0, 0, 0});
 
-        TTest solo({R::N1, R::F, R::F});
-        solo.Set({3, 3, 3}, S::Present);
-        solo.Set({1, 0, 0}, S::Error); // Violates E = 1 but W = 2 remains satisfied.
-        UNIT_ASSERT(solo.Run(P::TacticMaxThroughput) == EStrategyOutcome::ERROR);
+        TTest solo({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}});
+        solo.Set({3, 3, 3}, TBlobState::ESituation::Present);
+        solo.Set({1, 0, 0}, TBlobState::ESituation::Error); // Violates E = 1 but W = 2 remains satisfied.
+        UNIT_ASSERT(solo.Run(TEvBlobStorage::TEvPut::TacticMaxThroughput) == EStrategyOutcome::ERROR);
         solo.Expect({0, 0, 0});
     }
 
     Y_UNIT_TEST(AccelerationUsesFreshDisks) {
-        for (auto tactic : {P::TacticMaxThroughput, P::TacticMinLatency}) {
-            TTest t({R::N0, R::N0, R::N0});
+        for (auto tactic : {TEvBlobStorage::TEvPut::TacticMaxThroughput, TEvBlobStorage::TEvPut::TacticMinLatency}) {
+            TTest t({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
             UNIT_ASSERT(t.Run(tactic) == EStrategyOutcome::IN_PROGRESS);
             UNIT_ASSERT(t.Run(tactic, true) == EStrategyOutcome::IN_PROGRESS);
             t.Expect({1, 1, 1});
             UNIT_ASSERT(t.Run(tactic) == EStrategyOutcome::IN_PROGRESS);
             t.Expect({0, 0, 0});
         }
-        TTest t({R::N1, R::R, R::F});
-        t.Set({1, 1, 0}, S::Present);
-        UNIT_ASSERT(t.Run(P::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
+        TTest t({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}});
+        t.Set({1, 1, 0}, TBlobState::ESituation::Present);
+        UNIT_ASSERT(t.Run(TEvBlobStorage::TEvPut::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
         t.Expect({1, 1, 0});
-        UNIT_ASSERT(t.Run(P::TacticMaxThroughput, true) == EStrategyOutcome::IN_PROGRESS);
+        UNIT_ASSERT(t.Run(TEvBlobStorage::TEvPut::TacticMaxThroughput, true) == EStrategyOutcome::IN_PROGRESS);
         t.Expect({1, 1, 0});
-        UNIT_ASSERT(t.Run(P::TacticMaxThroughput, true) == EStrategyOutcome::IN_PROGRESS);
+        UNIT_ASSERT(t.Run(TEvBlobStorage::TEvPut::TacticMaxThroughput, true) == EStrategyOutcome::IN_PROGRESS);
         t.Expect({0, 0, 0}); // All remaining disks already have a pending write.
     }
 
     Y_UNIT_TEST(SlowDisksAreAvoidedOnlyWhileQuorumRemainsPossible) {
-        TTest t({R::N0, R::N0, R::N0});
+        TTest t({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
         for (ui32 disk = 0; disk < 9; ++disk) {
             t.Blackboard[t.Id].Disks[disk].IsSlow = t.Realm(disk) == 2;
         }
-        UNIT_ASSERT(t.Run(P::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
+        UNIT_ASSERT(t.Run(TEvBlobStorage::TEvPut::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
         t.Expect({2, 2, 0});
 
-        TTest solo({R::N1, R::F, R::F});
+        TTest solo({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}});
         for (auto& disk : solo.Blackboard[solo.Id].Disks) {
             disk.IsSlow = true;
         }
-        UNIT_ASSERT(solo.Run(P::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
+        UNIT_ASSERT(solo.Run(TEvBlobStorage::TEvPut::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
         solo.Expect({2, 0, 0});
     }
 
     Y_UNIT_TEST(Explicit3x3ModeStillSkipsFailedRealms) {
-        TTest normal({R::N0, R::N0, R::N0});
-        UNIT_ASSERT(normal.Run(P::TacticMinLatency, false, true) == EStrategyOutcome::IN_PROGRESS);
+        TTest normal({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
+        UNIT_ASSERT(normal.Run(TEvBlobStorage::TEvPut::TacticMinLatency, false, true) == EStrategyOutcome::IN_PROGRESS);
         normal.Expect({3, 3, 3});
-        TTest failed({R::N0, R::N0, R::F});
-        UNIT_ASSERT(failed.Run(P::TacticMinLatency, false, true) == EStrategyOutcome::IN_PROGRESS);
+        TTest failed({NKikimrBlobStorage::TGroupState::DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}});
+        UNIT_ASSERT(failed.Run(TEvBlobStorage::TEvPut::TacticMinLatency, false, true) == EStrategyOutcome::IN_PROGRESS);
         failed.Expect({3, 3, 0});
         // Explicit 3x3 mode must also reject errors that exceed E.
-        TTest partial({R::N0, R::N0, R::N0});
-        partial.Set({1, 1, 2}, S::Error);
-        UNIT_ASSERT(partial.Run(P::TacticMinLatency, false, true) == EStrategyOutcome::ERROR);
+        TTest partial({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
+        partial.Set({1, 1, 2}, TBlobState::ESituation::Error);
+        UNIT_ASSERT(partial.Run(TEvBlobStorage::TEvPut::TacticMinLatency, false, true) == EStrategyOutcome::ERROR);
         partial.Expect({0, 0, 0});
     }
 
     Y_UNIT_TEST(InvalidStateDoesNotSendWrites) {
-        TTest t({R::N0, R::R, R::R});
-        UNIT_ASSERT(t.Run(P::TacticMaxThroughput) == EStrategyOutcome::ERROR);
+        TTest t({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::RECOVERING}});
+        UNIT_ASSERT(t.Run(TEvBlobStorage::TEvPut::TacticMaxThroughput) == EStrategyOutcome::ERROR);
         t.Expect({0, 0, 0});
     }
 
     Y_UNIT_TEST(EveryFailureMaskTerminatesAccordingToWriteQuorumAndFailureModel) {
         // 512 binary failure masks, not a Cartesian product of all reply statuses.
-        for (const auto states : {TStates{R::N0, R::N0, R::N0}, TStates{R::N1, R::N1, R::R},
-                TStates{R::N0, R::N0, R::F}, TStates{R::N1, R::R, R::F}, TStates{R::N1, R::F, R::F}}) {
-            for (auto tactic : {P::TacticMaxThroughput, P::TacticMinLatency}) {
+        for (const auto states : {TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}},
+                TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}}) {
+            for (auto tactic : {TEvBlobStorage::TEvPut::TacticMaxThroughput, TEvBlobStorage::TEvPut::TacticMinLatency}) {
                 for (ui32 errors = 0; errors < 512; ++errors) {
                     TTest t(states);
                     const auto checker = TMirror3dcWriteQuorumChecker::TryCreate(*t.Info, t.Id.Hash());
@@ -430,7 +429,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
                         for (const auto& request : t.Blackboard.GroupDiskRequests.PutsPending) {
                             const ui32 disk = t.Info->GetIdxInSubgroup(t.Info->GetVDiskId(request.OrderNumber), t.Id.Hash());
                             UNIT_ASSERT(!(sent & (1u << disk)));
-                            UNIT_ASSERT(states[t.Realm(disk)] != R::F);
+                            UNIT_ASSERT(states.FailRealmStates[t.Realm(disk)] != TDataCenterState::EXCLUDED);
                             sent |= 1u << disk;
                             if (errors & (1u << disk)) {
                                 observedFailures += TBlobStorageGroupInfo::TSubgroupVDisks(&t.Info->GetTopology(), disk);

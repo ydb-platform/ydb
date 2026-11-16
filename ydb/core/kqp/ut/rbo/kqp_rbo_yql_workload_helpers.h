@@ -23,7 +23,7 @@ inline void Replace(std::string& s, const std::string& from, const std::string& 
 }
 
 inline TString GetFullPath(const TString& prefix, const TString& filePath) {
-    TString fullPath = ArcadiaFromCurrentLocation("ydb/core/kqp/ut/rbo/kqp_rbo_yql_workload_helpers.h", prefix + filePath);
+    TString fullPath = ArcadiaFromCurrentLocation(__SOURCE_FILE__, prefix + filePath);
 
     std::ifstream file(fullPath);
 
@@ -60,6 +60,15 @@ static constexpr std::array<const char*, 3> BenchmarkSchemaPathPrefix{R"(data/)"
 static constexpr std::array<const char*, 3> BenchmarkSchemaPath{R"(schema/tpch.sql)", R"(schema/tpcds.sql)", R"(schema/clickbench.sql)"};
 
 static constexpr std::array<const char*, 3> BenchmarkQueryPath{R"(data/yql-tpch/q)", R"(data/yql-tpcds/q)", R"(data/yql-clickbench/q)"};
+
+inline TString ReadBenchmarkQuery(EBenchType type, ui32 queryId, const TString& tablePathPrefix) {
+    return "PRAGMA TablePathPrefix = '" + tablePathPrefix + "';\n"
+        + GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+}
+
+inline TString ReadBenchmarkQuery(EBenchType type, ui32 queryId) {
+    return ReadBenchmarkQuery(type, queryId, type == TPCDS ? "/Root/test/ds" : "/Root");
+}
 
 inline NKikimrKqp::TKqpSetting MakeTPCHStatsSetting() {
     NKikimrKqp::TKqpSetting statsSetting;

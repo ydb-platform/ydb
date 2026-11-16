@@ -830,6 +830,12 @@ namespace NKikimr {
                 ++ReplCtx->MonGroup.ReplPhantomBlobsWithProblems();
             }
             UnreplicatedBlobsPtr->Push(item.Id);
+            if (!looksLikePhantom && !std::exchange(ReplInfo->UnrecoveredNonphantomBlobs, true)) {
+                // Revoke the previous pass's phantom-only verdict as soon as contrary evidence is known,
+                // even if other work prevents this quantum from finishing.
+                TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ParentId,
+                    SelfId(), nullptr, static_cast<ui64>(EReplDone::NonPhantomsRemain)));
+            }
         }
 
         void DropUnreplicatedBlobRecord(const TLogoBlobID& id) {

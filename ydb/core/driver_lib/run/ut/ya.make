@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/driver_lib/run)
 
-FORK_SUBTESTS()
-
 SIZE(SMALL)
 
 PEERDIR(

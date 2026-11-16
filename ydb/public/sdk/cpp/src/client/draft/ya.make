@@ -18,6 +18,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/issue
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/client/types/operation
     ydb/public/sdk/cpp/src/client/value
     ydb/public/api/grpc

@@ -58,6 +58,7 @@ TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const T
         , LogicalMessageCount(logicalMessageCount)
         , IsBatch(isBatch) {
     AFL_ENSURE(PartitionKey.size() <= 256)("partition_key_size", PartitionKey.size());
+    AFL_ENSURE(ExplicitHashKey.size() <= Max<ui8>())("explicit_hash_key_size", ExplicitHashKey.size());
     AFL_ENSURE(LogicalMessageCount >= 1 && LogicalMessageCount <= MAX_LOGICAL_MESSAGE_COUNT)
         ("logical_message_count", LogicalMessageCount)
         ("max_logical_message_count", MAX_LOGICAL_MESSAGE_COUNT);

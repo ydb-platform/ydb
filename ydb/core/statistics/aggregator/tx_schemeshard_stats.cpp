@@ -7,6 +7,7 @@ namespace NKikimr::NStat {
 struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
     NKikimrStat::TEvSchemeShardStats Record;
     std::shared_ptr<TString> UpdatedStats;
+    TBaseStatisticsTotals UpdatedTotals;
 
     TTxSchemeShardStats(TSelf* self, NKikimrStat::TEvSchemeShardStats&& record)
         : TTxBase(self)
@@ -44,6 +45,7 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
             !statRecord.HasAreAllStatsFull() || statRecord.GetAreAllStatsFull();
         if (areAllStatsFull) {
             UpdatedStats = std::make_shared<TString>(stats);
+            UpdatedTotals = CalculateBaseStatisticsTotals(statRecord);
         } else if (existingStats.Latest) {
             NKikimrStat::TSchemeShardStats oldStatRecord;
             Y_PROTOBUF_SUPPRESS_NODISCARD oldStatRecord.ParseFromString(*existingStats.Latest);
@@ -94,6 +96,7 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
 
             UpdatedStats = std::make_shared<TString>();
             Y_PROTOBUF_SUPPRESS_NODISCARD newStatRecord.SerializeToString(UpdatedStats.get());
+            UpdatedTotals = CalculateBaseStatisticsTotals(newStatRecord);
         }
 
         if (UpdatedStats) {
@@ -158,12 +161,18 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
         YDB_LOG_DEBUG("TTxSchemeShardStats::Complete",
             {"tabletId", Self->TabletID()});
         if (UpdatedStats) {
-            Self->BaseStatistics[Record.GetSchemeShardId()].Committed = UpdatedStats;
+            auto& stats = Self->BaseStatistics[Record.GetSchemeShardId()];
+            // Latest may already contain a later transaction's update.
+            Self->BaseStatisticsTotals.RowCount -= stats.CommittedTotals.RowCount;
+            Self->BaseStatisticsTotals.BytesSize -= stats.CommittedTotals.BytesSize;
+            Self->BaseStatisticsTotals.RowCount += UpdatedTotals.RowCount;
+            Self->BaseStatisticsTotals.BytesSize += UpdatedTotals.BytesSize;
+            stats.Committed = UpdatedStats;
+            stats.CommittedTotals = UpdatedTotals;
+            Self->ReportBaseStatisticsCounters();
         }
 
         Self->InvalidateCachedChangeCounters();
-        Self->ReportBaseStatisticsCounters();
-        Self->ReportAnalyzeCounters();
     }
 };
 

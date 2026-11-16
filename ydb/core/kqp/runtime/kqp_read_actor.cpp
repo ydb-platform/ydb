@@ -978,6 +978,9 @@ public:
         record.SetMaxBytes(Min<ui64>(record.GetMaxBytes(), BufSize));
 
         record.SetResultFormat(Settings->GetDataFormat());
+        if (Settings->GetReadHints()) {
+            record.SetHints(Settings->GetReadHints());
+        }
 
         if (Settings->HasLockTxId() && LockInfo.BrokenLocks.empty()) {
             record.SetLockTxId(Settings->GetLockTxId());
@@ -1137,7 +1140,10 @@ public:
         auto replyError = [&](auto message, auto status) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
-            return RuntimeError(message, status, issues);
+            // Preserve the reason so explicit-snapshot queries can fail without retrying the same lost snapshot.
+            const auto issueCode = record.GetStatus().GetCode() == Ydb::StatusIds::PRECONDITION_FAILED
+                ? NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED : 0;
+            return RuntimeError(message, status, issues, issueCode);
         };
 
         // Preserve schema errors so the session can invalidate a stale query plan.
@@ -1678,8 +1684,11 @@ public:
         TBase::PassAway();
     }
 
-    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
+    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {},
+        NYql::TIssueCode issueCode = 0)
+    {
         NYql::TIssue issue(message);
+        issue.SetCode(issueCode, NYql::TSeverityIds::S_ERROR);
         for (const auto& i : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
         }

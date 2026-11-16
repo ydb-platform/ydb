@@ -3241,7 +3241,11 @@ namespace NSchemeShardUT_Private {
 
     void UploadRow(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<TCell>& keys, const TVector<TCell>& values)
     {
-        auto tableDesc = DescribePath(runtime, tablePath, true, true);
+        UploadRow(runtime, DescribePath(runtime, tablePath, true, true), partitionIdx, keyTags, valueTags, keys, values);
+    }
+
+    void UploadRow(TTestActorRuntime& runtime, const NKikimrScheme::TEvDescribeSchemeResult& tableDesc, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<TCell>& keys, const TVector<TCell>& values)
+    {
         const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
         UNIT_ASSERT(partitionIdx < tablePartitions.size());
         const ui64 datashardTabletId = tablePartitions[partitionIdx].GetDatashardId();

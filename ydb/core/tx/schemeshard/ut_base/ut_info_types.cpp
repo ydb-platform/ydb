@@ -3,8 +3,10 @@
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <util/string/printf.h>
 #include <util/string/strip.h>
 
+#include <optional>
 #include <source_location>
 
 using namespace NKikimr;
@@ -12,6 +14,117 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
+
+    NKikimrCompaction::TCompactionPolicy CompactionPolicyWithGenerationIds(
+            const TVector<std::optional<ui32>>& ids) {
+        NKikimrCompaction::TCompactionPolicy policy;
+        for (const auto id : ids) {
+            auto* generation = policy.AddGeneration();
+            if (id) {
+                generation->SetGenerationId(*id);
+            }
+        }
+        return policy;
+    }
+
+    Y_UNIT_TEST(CompactionPolicyRejectsInvalidGenerationIds) {
+        struct TCase {
+            TVector<std::optional<ui32>> Ids;
+            ui32 Index;
+            ui32 ActualId;
+        };
+        const TCase cases[] = {
+            {{1}, 0, 1},
+            {{0, 0}, 1, 0},
+            {{0, 2}, 1, 2},
+            {{0, 2, 1}, 1, 2},
+            {{0, std::nullopt}, 1, 0},
+        };
+        for (const auto& test : cases) {
+            const auto policy = CompactionPolicyWithGenerationIds(test.Ids);
+            TString error;
+            UNIT_ASSERT(!TPartitionConfigMerger::VerifyCompactionPolicy(policy, error));
+            UNIT_ASSERT_VALUES_EQUAL(error, Sprintf(
+                "Compaction generation %u: expected GenerationId %u, got %u",
+                test.Index, test.Index, test.ActualId));
+        }
+    }
+
+    Y_UNIT_TEST(CompactionPolicyAcceptsSequentialGenerationIds) {
+        for (const bool omitFirstId : {false, true}) {
+            auto policy = CompactionPolicyWithGenerationIds({0, 1, 2});
+            if (omitFirstId) {
+                policy.MutableGeneration(0)->ClearGenerationId();
+            }
+            TString error;
+            UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCompactionPolicy(policy, error), error);
+        }
+    }
+
+    Y_UNIT_TEST(CreateAndAlterRejectInvalidCompactionGenerationIds) {
+        NKikimrSchemeOp::TPartitionConfig source;
+        source.MutableCompactionPolicy()->CopyFrom(CompactionPolicyWithGenerationIds({0, 1, 2}));
+        TString error;
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(source, nullptr, false, error), error);
+
+        auto invalid = source;
+        invalid.MutableCompactionPolicy()->MutableGeneration(1)->SetGenerationId(2);
+        UNIT_ASSERT(!TPartitionConfigMerger::VerifyCreateParams(invalid, nullptr, false, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "Compaction generation 1: expected GenerationId 1, got 2");
+        error.clear();
+        UNIT_ASSERT(!TPartitionConfigMerger::VerifyAlterParams(source, invalid, nullptr, false, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "Compaction generation 1: expected GenerationId 1, got 2");
+    }
+
+    Y_UNIT_TEST_FLAG(VectorIndexDescriptionPersistence, Hnsw) {
+        NKikimrSchemeOp::TIndexCreationConfig config;
+        config.SetName("vidx");
+        config.SetType(Hnsw
+            ? NKikimrSchemeOp::EIndexTypeGlobalHnsw
+            : NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
+        config.AddKeyColumnNames("scope");
+        config.AddKeyColumnNames("custom_embedding");
+        config.AddDataColumnNames("payload");
+        auto* settings = Hnsw
+            ? config.MutableHnswIndexDescription()->MutableSettings()
+            : config.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
+        settings->set_clusters(Hnsw ? 1 : 2);
+        settings->set_levels(1);
+        settings->set_autoupdate(false);
+        auto* vector = settings->mutable_settings();
+        vector->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        vector->set_vector_dimension(128);
+        if (Hnsw) {
+            vector->set_min_rows(0);
+            vector->set_m(24);
+            vector->set_ef_construction(300);
+            vector->set_delta_rows(1ULL << 40);
+        }
+
+        TString error;
+        const auto index = TTableIndexInfo::Create(config, error);
+        UNIT_ASSERT_C(index, error);
+        const auto& altered = *index->AlterData;
+        UNIT_ASSERT_VALUES_EQUAL(altered.IndexKeys.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(altered.IndexKeys.back(), "custom_embedding");
+        UNIT_ASSERT_VALUES_EQUAL(altered.IndexDataColumns.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(altered.IndexDataColumns.front(), "payload");
+
+        // The description is stored separately from the index type and keys.
+        const auto serialized = altered.SerializeDescription();
+        const TTableIndexInfo restored(altered.AlterVersion, altered.Type, altered.State, serialized);
+        UNIT_ASSERT_VALUES_EQUAL(restored.SerializeDescription(), serialized);
+        if (Hnsw) {
+            UNIT_ASSERT(std::holds_alternative<NKikimrSchemeOp::THnswIndexDescription>(restored.SpecializedIndexDescription));
+            const auto& description = std::get<NKikimrSchemeOp::THnswIndexDescription>(restored.SpecializedIndexDescription);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetSettings().SerializeAsString(), settings->SerializeAsString());
+        } else {
+            UNIT_ASSERT(std::holds_alternative<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(restored.SpecializedIndexDescription));
+            const auto& description = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(restored.SpecializedIndexDescription);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetSettings().SerializeAsString(), settings->SerializeAsString());
+        }
+    }
 
     void VerifyDeduplicateColumnFamiliesById(
             const TString& srcProtoText,

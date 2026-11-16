@@ -1268,7 +1268,7 @@ Y_UNIT_TEST(DeadRegistrantLeavesTheSum) {
     UNIT_ASSERT(!waiterGotLimit);
 }
 
-Y_UNIT_TEST(ConsumerUnregisterDropsAccounting) {
+Y_UNIT_TEST_TWIN(ConsumerUnregisterDropsAccounting, RetainUntilUnused) {
     NKikimrConfig::TMemoryControllerConfig config;
     config.SetHardLimitBytes(200_MB);
     TControllerFixture fixture(config);
@@ -1288,8 +1288,16 @@ Y_UNIT_TEST(ConsumerUnregisterDropsAccounting) {
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 30_MB);
 
     // The owner's unregister takes its bytes out of the accounting and zeroes the gauges of the removed kind
-    fixture.Runtime.Send(new IEventHandle(fixture.MemoryController, owner, new TEvConsumerUnregister(EMemoryConsumerKind::SharedCache)));
+    fixture.Runtime.Send(new IEventHandle(fixture.MemoryController, owner, new TEvConsumerUnregister(EMemoryConsumerKind::SharedCache, RetainUntilUnused)));
     fixture.Tick();
+    if constexpr (RetainUntilUnused) {
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 30_MB);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Demand"), 30_MB);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 0);
+        UNIT_ASSERT_GE(fixture.Counter("Stats/ConsumersCommitted"), 30_MB);
+        consumer->SetReport({});
+        fixture.Tick();
+    }
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 0);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 0);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Demand"), 0);

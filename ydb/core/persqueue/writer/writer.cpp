@@ -349,7 +349,8 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
         auto* operations = ev->Record.MutableRequest()->MutableTopicOperations();
         operations->SetTrackProducerId(Opts.TrackProducerId);
         auto* topics = operations->AddTopics();
-        topics->set_path(Opts.TopicPath);
+        topics->set_path(AppData()->FeatureFlags.GetEnableRelativePaths()
+            ? PrependDomainIfNeeded(Opts.Database, Opts.TopicPath) : Opts.TopicPath);
         auto* partitions = topics->add_partitions();
         partitions->set_partition_id(PartitionId);
 
@@ -382,6 +383,7 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
         auto& cmd = *request.MutableCmdGetOwnership();
         cmd.SetOwner(SourceId);
         cmd.SetForce(true);
+        cmd.SetQuotaWaitTimeMs(Opts.WriteSessionQuotaWaitTime.MilliSeconds());
 
         SetWriteId(request);
         SetTopic(request);

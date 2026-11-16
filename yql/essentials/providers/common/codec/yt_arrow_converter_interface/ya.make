@@ -7,4 +7,9 @@ PEERDIR(
     yql/essentials/public/udf/arrow
 )
 
+SRCS(
+    yt_arrow_converter.cpp
+    yt_arrow_converter_details.cpp
+)
+
 END()

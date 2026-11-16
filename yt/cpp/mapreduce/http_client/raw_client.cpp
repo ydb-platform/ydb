@@ -327,6 +327,9 @@ void THttpRawClient::PingTransaction(const TTransactionId& transactionId)
     if (const auto& serviceTicketAuth = Context_.ServiceTicketAuth) {
         const auto serviceTicket = serviceTicketAuth->Ptr->IssueServiceTicket();
         headers->Add("X-Ya-Service-Ticket", serviceTicket);
+        if (!Context_.UserTicket.empty()) {
+            headers->Add("X-Ya-User-Ticket", Context_.UserTicket);
+        }
     } else if (const auto& token = Context_.Token; !token.empty()) {
         headers->Add("Authorization", "OAuth " + token);
     }

@@ -36,16 +36,16 @@ $$\mathrm{Scatter} = \frac{\mathrm{MaxUsage} - \mathrm{MinUsage}}{\mathrm{MaxUsa
 
 $\mathrm{MaxUsage}$ and $\mathrm{MinUsage}$ are, respectively, the maximum and minimum usage of a resource across all nodes. To normalize consumption on each node, the number of available resources on the node is used, which may vary between nodes. Under low loads, this metric may fluctuate significantly. To avoid this, when calculating $\mathrm{Scatter}$, it is assumed that resource usage cannot be lower than 30%. The balancer is triggered if $Scatter$ exceeds a threshold.
 
-The maximum value of $Scatter$ across different resources is available as the [sensor](../devops/observability/monitoring.md) `Hive/MAX(BalanceScatter)` in the `tablets` subgroup.
+The maximum value of $Scatter$ across different resources is available as the [sensor](../devops/observability/monitoring.md) `MAX(Hive/BalanceScatter)` in the `tablets` subgroup.
 
 ### Node Overload {#emergency}
 
 Overloaded nodes can negatively affect {{ ydb-short-name }} performance. CPU overload raises latencies, and consuming all memory can cause the node to crash with an out-of-memory error. The balancer is triggered when the load of one node exceeds 90% while the load on another node falls below 70%.
 
-The maximum resource usage on a node is reported by the `Hive/MAX(BalanceUsageMax)` [sensor](../devops/observability/monitoring.md)  in the `tablets` subgroup.
+The maximum resource usage on a node is reported by the `MAX(Hive/BalanceUsageMax)` [sensor](../devops/observability/monitoring.md)  in the `tablets` subgroup.
 
 ### Even Distribution for a Specific Object {#imbalance}
 
 For tablets that use the Counter resource, the evenness of tablet distribution for each object (each table) is tracked in the form of the `ObjectImbalance` metric, similar to the $Scatter$ described above. Restarting nodes may break the balance in tablet distribution and trigger balancing.
 
-The maximum value of `ObjectImbalance` across different objects is reported by the `Hive/MAX(BalanceObjectImbalance)` [sensor](../devops/observability/monitoring.md) in the `tablets` subgroup.
+The [sensor](../devops/observability/monitoring.md) `MAX(Hive/ImbalancedObjects)` shows the largest number of objects with non-zero `ObjectImbalance` among the Hives in the `tablets` subgroup. For each Hive, `WorstObjectVariance` is the variance of per-node tablet counts for the object with the highest `ObjectImbalance`; the `MAX(Hive/WorstObjectVariance)` sensor shows the largest of these values.

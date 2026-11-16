@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+#include <ydb/core/kqp/query_plan/query_plan.h>
 
 #include <util/generic/string.h>
 
@@ -68,15 +69,5 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes:
     TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& database,
     const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TIntrusivePtr<NYql::TKikimrConfiguration> config,
     NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx);
-
-/*
- * Fill stages in given txPlan with ExecutionStats fields. Each plan stage stores StageGuid which is
- * used to find corresponding TKqpStatsExecution object.
- */
-TString AddExecStatsToTxPlan(const TString& txPlan, const NYql::NDqProto::TDqExecutionStats& stats, bool newRboEnabled);
-
-TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, bool newRboEnabled, const TString& poolId = "");
-
-TString SerializeScriptPlan(const TVector<const TString>& queryPlans);
 
 } // namespace NKikimr::NKqp

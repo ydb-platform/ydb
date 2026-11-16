@@ -9,6 +9,8 @@ namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
 
+NYql::TProjectSettings FilterScopedProjectSettings(const NYql::TProjectSettings& settings);
+
 class TSqlQuery: public TSqlTranslation {
 public:
     TSqlQuery(TContext& ctx, NSQLTranslation::ESqlMode mode, bool topLevel, bool allowTopLevelPragmas = false)
@@ -54,6 +56,9 @@ private:
     bool AlterTableAlterIndex(const TRule_alter_table_alter_index& node, TAlterTableParameters& params);
     bool AlterSequenceAction(const TRule_alter_sequence_action& node, TSequenceParameters& params);
     TMaybe<TNodePtr> PragmaStatement(const TRule_pragma_stmt& stmt);
+    TMaybe<TNodePtr> ApplyPragma(const TString& prefix, const TString& pragma, const TString& normalizedPragma,
+                                 TVector<TDeferredAtom>& values, bool pragmaValueDefault, bool allowTopLevelPragmas, bool hasLexicalScope, bool failOnUnknownPragma = true);
+    bool ApplyProjectSettings(TVector<TNodePtr>& blocks);
     void AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node);
     bool ParseTableStoreFeatures(std::map<TString, TDeferredAtom>& result, const TRule_alter_table_store_action& actions);
     bool AlterTableAlterColumnDropNotNull(const TRule_alter_table_alter_column_drop_not_null& node, TAlterTableParameters& params);
@@ -79,6 +84,8 @@ private:
 };
 
 bool IsYqlSelectCompatiblePragma(TStringBuf prefix, TStringBuf pragma);
+
+bool AcceptsSqlProjectSetting(const NYql::TProjectSettings::TPragma& pragma);
 
 void EnumeratePragmas(std::function<void(std::string_view)> callback);
 void EnumerateStmtContexts(std::function<void(std::string_view)> callback);

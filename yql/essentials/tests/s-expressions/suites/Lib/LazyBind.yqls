@@ -1,0 +1,9 @@
+(
+(import core_module '/lib/yql/core.yqls)
+(let equals (LazyBind '/lib/yql/core 'Equals))
+(let data (Apply (Apply equals (Int32 '42)) (Int32 '42)))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

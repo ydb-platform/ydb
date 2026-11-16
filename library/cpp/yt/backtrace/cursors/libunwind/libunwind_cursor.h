@@ -9,7 +9,7 @@ namespace NYT::NBacktrace {
 class TLibunwindCursor
 {
 public:
-    TLibunwindCursor();
+    //! The stack described by |context| must remain valid during traversal.
     explicit TLibunwindCursor(const unw_context_t& context);
 
     bool IsFinished() const;
@@ -24,7 +24,6 @@ private:
 
     const void* CurrentIP_ = nullptr;
 
-    void Initialize();
     void ReadCurrentIP();
 };
 

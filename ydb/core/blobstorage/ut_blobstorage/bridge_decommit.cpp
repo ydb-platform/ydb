@@ -117,15 +117,7 @@ namespace {
         void Release() {
             Hold = false;
             for (auto& [nodeId, ev] : std::exchange(Held, {})) {
-                // runtime resolves service id of the recipient at send, and the actor it was resolved to may be gone
-                // already, so the event is sent anew
-                const TActorId forwardOnNondelivery = ev->GetForwardOnNondeliveryRecipient();
-                const TActorId *forward = forwardOnNondelivery ? &forwardOnNondelivery : nullptr;
-                Env.Runtime->Send(ev->HasEvent()
-                    ? new IEventHandle(ev->Recipient, ev->Sender, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie, forward)
-                    // events coming from other nodes are kept serialized
-                    : new IEventHandle(ev->Type, ev->Flags, ev->Recipient, ev->Sender, ev->ReleaseChainBuffer(), ev->Cookie,
-                        forward), nodeId);
+                ResendEvent(Env, nodeId, std::move(ev));
             }
         }
     };
@@ -555,6 +547,73 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         };
         TFilterChain chain(env);
         RunDecommission(env, chain, checker, groupId, {}, {.InProgress = expectRefused, .Done = expectRefused});
+    }
+
+    // the node that has no info of the inline pile being decommitted starts its DS proxy without configuration, and the
+    // requests queued there go to the BlobDepot agent, which is in front of the group then, not to the bridge proxy
+    // behind the agent: the blob written through the agent resides in the channels of the BlobDepot only
+    Y_UNIT_TEST(QueuedRequestOfInlinePileReachesAgent) {
+        TEnvironmentSetup env(MakeUnbridgedSettingsWithSpareNode(true));
+        TDataChecker checker(env);
+        const ui32 groupId = ConvertCluster(env, checker, 2);
+        const ui32 nodeId = PickNodeWithoutGroupVDisks(env, groupId);
+
+        TFilterChain chain(env);
+        RunDecommission(env, chain, checker, groupId, {}, {.InProgress = [&] {
+            checker.Write(groupId); // through the agent, into the channels of the BlobDepot
+            const auto [writtenGroupId, id, data] = checker.GetWritten().back();
+
+            // the node is restarted, and the info of the group doesn't get there until the request is queued
+            TEventHold& infoHold = chain.AddHold([&](IEventHandle& ev) {
+                return IsGroupInfoForNode(ev, groupId, nodeId);
+            });
+            Cerr << "*** restarting node " << nodeId << " having no VDisks of the group" << Endl;
+            env.RestartNode(nodeId);
+            env.Sim(TDuration::Seconds(30));
+            const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                    NKikimrBlobStorage::FastRead));
+            });
+            infoHold.WaitForHeld();
+            infoHold.Release();
+            CheckGetResult(*env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false)->Get(), data);
+        }});
+    }
+
+    // decommission cancelled before the BlobDepot starts leaves the bridged group as it was: the bridge proxy group has no
+    // VDisks of its own, but its data stays in its parts
+    Y_UNIT_TEST(CancelledDecommitKeepsProxyGroup) {
+        TEnvironmentSetup env(MakeBridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
+        const auto parts = GetPileGroups(env, groupId);
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *decommit = request.AddCommand()->MutableDecommitGroups();
+        decommit->AddGroupIds(groupId);
+        decommit->SetDatabase(TStringBuilder() << '/' << env.Runtime->GetDomainsInfo()->GetDomain()->Name);
+        request.AddCommand()->MutableCancelVirtualGroup()->SetGroupId(groupId);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        WaitUntil(env, [&] {
+            const auto config = env.FetchBaseConfig(); // the proxy group stays there all along
+            return !FindGroup(config, groupId).HasVirtualGroupInfo();
+        }, "decommission cancelled");
+
+        const auto config = env.FetchBaseConfig();
+        UNIT_ASSERT(GetPileGroups(env, groupId) == parts);
+        for (const ui32 part : parts) {
+            FindGroup(config, part);
+        }
+
+        // the group works as before, and so it does after BS_CONTROLLER restarts
+        checker.CheckAll();
+        checker.Write(groupId);
+        env.RestartNode(env.Settings.ControllerNodeId);
+        env.Sim(TDuration::Seconds(30));
+        env.FetchBaseConfig();
+        checker.CheckAll();
     }
 
     // group converted into an inline pile keeps its id, so it stays in place as the virtual group, but loses its VDisks

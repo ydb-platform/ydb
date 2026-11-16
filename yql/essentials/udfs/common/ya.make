@@ -15,7 +15,6 @@ IF (NOT EXPORT_CMAKE)
         ip_base
         ip_base/impl
         ip_base/fat
-        json
         json2
         json2/impl
         math

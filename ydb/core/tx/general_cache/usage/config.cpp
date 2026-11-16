@@ -5,7 +5,8 @@
 
 namespace NKikimr::NGeneralCache::NPublic {
 
-TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TGeneralCacheConfig& config) {
+TConclusionStatus TConfig::DeserializeFromProto(
+    const NKikimrConfig::TGeneralCacheConfig& config, const std::optional<THashSet<TString>>& allowedConsumers) {
     if (config.HasDirectInflightSourceLimit()) {
         DirectInflightSourceLimit = config.GetDirectInflightSourceLimit();
     }
@@ -15,12 +16,48 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TGeneralCac
     if (config.HasMemoryLimit()) {
         MemoryLimit = config.GetMemoryLimit();
     }
+    THashSet<TString> seen;
+    ui64 nextQueueId = 1;
+    for (const auto& consumer : config.GetConsumers()) {
+        if (!consumer.HasName() || consumer.GetName().empty()) {
+            return TConclusionStatus::Fail("general cache consumer name is empty");
+        }
+        const TString& name = consumer.GetName();
+        if (!seen.emplace(name).second) {
+            return TConclusionStatus::Fail(TStringBuilder() << "duplicate general cache consumer " << name);
+        }
+        if (name != "*" && allowedConsumers && !allowedConsumers->contains(name)) {
+            return TConclusionStatus::Fail(TStringBuilder() << "unknown general cache consumer " << name);
+        }
+        TCacheRequestClass requestClass;
+        requestClass.Weight = consumer.GetWeight();
+        if (requestClass.Weight > 0) {
+            requestClass.QueueId = nextQueueId++;
+            HasWeights = true;
+        }
+        if (name == "*") {
+            AnyConsumer = requestClass;
+        } else {
+            Consumers.emplace(name, requestClass);
+        }
+    }
     return TConclusionStatus::Success();
 }
 
-TConclusion<TConfig> TConfig::BuildFromProto(const NKikimrConfig::TGeneralCacheConfig& protoConfig) {
+TCacheRequestClass TConfig::Classify(const TString& consumerName) const {
+    if (const auto* found = Consumers.FindPtr(consumerName)) {
+        return *found;
+    }
+    if (AnyConsumer) {
+        return *AnyConsumer;
+    }
+    return {};
+}
+
+TConclusion<TConfig> TConfig::BuildFromProto(
+    const NKikimrConfig::TGeneralCacheConfig& protoConfig, const std::optional<THashSet<TString>>& allowedConsumers) {
     TConfig config;
-    auto conclusion = config.DeserializeFromProto(protoConfig);
+    auto conclusion = config.DeserializeFromProto(protoConfig, allowedConsumers);
     if (conclusion.IsFail()) {
         return conclusion;
     }
@@ -33,6 +70,12 @@ TString TConfig::DebugString() const {
     sb << "MemoryLimit=" << MemoryLimit << ";";
     sb << "DirectInflightSourceLimit=" << DirectInflightSourceLimit << ";";
     sb << "DirectInflightGlobalLimit=" << DirectInflightGlobalLimit << ";";
+    for (const auto& [name, requestClass] : Consumers) {
+        sb << name << "{Weight=" << requestClass.Weight << ";};";
+    }
+    if (AnyConsumer) {
+        sb << "*{Weight=" << AnyConsumer->Weight << ";};";
+    }
     sb << "}";
     return sb;
 }

@@ -1207,7 +1207,7 @@ private:
                 if (type & (EYtSettingType::InferScheme | EYtSettingType::ForceInferScheme |
                     EYtSettingType::DoNotFailOnInvalidSchema | EYtSettingType::XLock |
                     EYtSettingType::UserSchema | EYtSettingType::UserColumns | EYtSettingType::IgnoreTypeV3 |
-                    EYtSettingType::ExtraColumns))
+                    EYtSettingType::ExtraColumns | EYtSettingType::Consumer))
                 {
                     tableSettings.push_back(setting);
                 } else {

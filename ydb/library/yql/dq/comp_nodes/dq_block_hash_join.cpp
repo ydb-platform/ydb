@@ -397,6 +397,9 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     }
     const ESide preservedSide = PreservedSideForLeftBuild(leftIsBuild);
     meta.UserTypes = ForceOptionalOnNullableSide(itemTypes, meta.Kind, OtherSide(preservedSide), ctx.Env);
+    for (ESide side : EachSide) {
+        EnsureNoResourceKeys(meta.UserTypes.SelectSide(side), meta.KeyColumns.SelectSide(side));
+    }
 
     const auto streams = SidesForLeftBuild(leftIsBuild, leftStream, rightStream);
     TJoinFilters filters = ParseJoinFiltersForBuildSide(ctx, callable, BaseInputs, leftIsBuild);

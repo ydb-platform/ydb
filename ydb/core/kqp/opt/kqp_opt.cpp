@@ -4,6 +4,8 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -140,6 +142,12 @@ bool IsKqpPureLambda(const TCoLambda& lambda) {
     return IsKqpPureExpr(lambda.Body());
 }
 
+bool IsKqpCompletePureExpr(const TExprBase& expr) {
+    return NYql::NDq::IsDqCompletePureExpr(expr, /* isPrecomputePure */ false)
+        && IsPureIsolatedLambda(expr.Ref())
+        && IsKqpPureExpr(expr, /* checkDqSources */ true, /* checkIndexReads */ true);
+}
+
 bool IsKqpPureInputs(const TExprList& inputs) {
     return !FindNode(inputs.Ptr(), [](const TExprNode::TPtr& node) {
         if (TMaybeNode<TKqpCnStreamLookup>(node)) {
@@ -247,6 +255,30 @@ TVector<TString> ExtractSortingKeys(const NYql::NNodes::TCoLambda& keySelector) 
 
     return sortingKeys;
 };
+
+bool OlapProcessPreservesSorting(const TExprNode::TPtr& lambda, const THashSet<TString>& sortColumns) {
+    if (!lambda) {
+        return true;
+    }
+    const auto process = TCoLambda(lambda);
+    auto input = process.Body();
+    while (input.Raw() != process.Args().Arg(0).Raw()) {
+        if (const auto filter = input.Maybe<TKqpOlapFilter>()) {
+            input = filter.Cast().Input();
+        } else if (const auto projections = input.Maybe<TKqpOlapProjections>()) {
+            for (const auto& item : projections.Cast().Projections()) {
+                if (sortColumns.contains(item.Cast<TKqpOlapProjection>().ColumnName().StringValue())) {
+                    return false;
+                }
+            }
+            input = projections.Cast().Input();
+        } else {
+            // Aggregation, distinct and unknown operations do not supply the storage's PK order.
+            return false;
+        }
+    }
+    return true;
+}
 
 bool IsSortKeyPrimary(
     const NYql::NNodes::TCoLambda& keySelector,

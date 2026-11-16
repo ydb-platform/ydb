@@ -205,6 +205,9 @@ void FillReplicationDescription(
         out.clear_availability_period();
     }
     ConvertState(inDesc.GetState(), out);
+    if (inDesc.HasTransactions()) {
+        out.mutable_transactions()->CopyFrom(inDesc.GetTransactions());
+    }
 
     for (const auto& target : inDesc.GetTargets()) {
         ConvertItem(target, *out.add_items());

@@ -19,7 +19,7 @@ namespace NVectorDistance::NInt4::NSse::NPrivate {
             const auto mask = _mm_set1_epi8(15);
             const auto nibbles = _mm_unpacklo_epi8(_mm_and_si128(bytes, mask),
                 _mm_and_si128(_mm_srli_epi16(bytes, 4), mask));
-            auto values = _mm_unpacklo_epi16(_mm_unpacklo_epi8(nibbles, zero), zero);
+            __m128i values = _mm_unpacklo_epi16(_mm_unpacklo_epi8(nibbles, zero), zero);
             if constexpr (Signed) {
                 const auto sign = _mm_set1_epi32(8);
                 values = _mm_sub_epi32(_mm_xor_si128(values, sign), sign);

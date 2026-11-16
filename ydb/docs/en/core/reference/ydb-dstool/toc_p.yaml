@@ -3,11 +3,11 @@ items:
     href: index.md
   - name: Installation
     href: install.md
+  - name: Connection and authentication
+    href: connect.md
   - name: Global options
     href: global-options.md
   - name: Device list
     href: device-list.md
   - name: Populate a PDisk
     href: pdisk-populate.md
-  - name: Set a pool bridge mode
-    href: pool-set-bridge-mode.md

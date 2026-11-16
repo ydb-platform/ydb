@@ -3,4 +3,8 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_SQS_MIGRATION_STAGE=topic_creation)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/sqs/migration/suites/messaging.inc)
+
+FORK_SUBTESTS()
+SPLIT_FACTOR(60)
+
 END()

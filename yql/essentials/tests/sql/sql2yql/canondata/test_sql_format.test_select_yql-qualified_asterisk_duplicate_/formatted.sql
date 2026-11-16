@@ -1,0 +1,12 @@
+/* custom error: Unable to use duplicate column names. Collision in name: a */
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    x.*,
+    x.*
+FROM (
+    VALUES
+        (1)
+) AS x (
+    a
+);

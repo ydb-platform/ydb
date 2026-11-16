@@ -5,10 +5,12 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <util/datetime/cputimer.h>
+#include <benchmark/benchmark.h>
 #include <util/string/builder.h>
 
 using namespace NSQLTranslationV1;
+
+namespace {
 
 enum class EDebugOutput {
     None,
@@ -53,7 +55,7 @@ NYql::TAstParseResult SqlToYql(const TString& query, size_t maxErrors = 10, cons
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider, debug);
 }
 
-int main(int, char**) {
+TString MakeSql() {
     TStringBuilder builder;
     builder << "USE plato;\n";
     for (ui32 i = 0; i < 10; ++i) {
@@ -70,14 +72,16 @@ int main(int, char**) {
     }
 
     builder << "SELECT * FROM $query;\n";
-    TString sql = builder;
-    // Cerr << sql;
-    TSimpleTimer timer;
-    for (ui32 i = 0; i < 100; ++i) {
+    return builder;
+}
+
+void TranslateSql(benchmark::State& state) {
+    const TString sql = MakeSql();
+    for (auto _ : state) {
         NYql::TAstParseResult res = SqlToYql(sql);
         Y_ENSURE(res.Root);
     }
-
-    Cerr << "Elapsed: " << timer.Get() << "\n";
-    return 0;
 }
+BENCHMARK(TranslateSql);
+
+} // namespace

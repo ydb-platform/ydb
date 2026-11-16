@@ -15,6 +15,19 @@ namespace NKikimrKqp {
     class TKqpAlterTableRequest;
 }
 
+namespace NKikimrSchemeOp {
+    class TAlterColumnTable;
+    class TCdcStreamDescription;
+    class TColumnDescription;
+    class TColumnTableDescription;
+    class TIndexedTableCreationConfig;
+    class TModifyScheme;
+    class TMultiColumnStatisticsDescription;
+    class TPathDescription;
+    class TSequenceDescription;
+    class TTableDescription;
+}
+
 namespace NYql{
     struct TKikimrTableMetadata;
 }
@@ -239,7 +252,8 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
     Ydb::StatusIds::StatusCode& status, TString& error, bool indexedTable = false);
 bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
-    const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);
+    const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error,
+    const TString& sourceDatabase = {}, const TString& targetDatabase = {});
 
 
 // out

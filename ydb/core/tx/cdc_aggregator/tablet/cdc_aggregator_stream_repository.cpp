@@ -21,19 +21,18 @@ void TCdcAggregatorStreamRepository::ApplyCdcAggregatorStreamSourcesDiff(NIceDb:
     }
 }
 
-bool TCdcAggregatorStreamRepository::LoadCdcAggregatorStream(NIceDb::TNiceDb& db, std::optional<TCdcAggregatorStream>& stream) const {
+std::pair<bool, std::optional<TCdcAggregatorStream>> TCdcAggregatorStreamRepository::LoadCdcAggregatorStream(NIceDb::TNiceDb& db) const {
     auto state = db.Table<Schema::State>().Key(Schema::State::Id::Value).Select();
     if (!state.IsReady()) {
-        return false;
+        return {false, std::nullopt};
     }
     if (!state.IsValid()) {
-        stream.reset();
-        return true;
+        return {true, std::nullopt};
     }
 
     THashSet<ui64> sources;
     if (!LoadSourceDataShardIds(db, sources)) {
-        return false;
+        return {false, std::nullopt};
     }
 
     NKikimrCdcAggregator::TTrackingConfig proto;
@@ -41,8 +40,7 @@ bool TCdcAggregatorStreamRepository::LoadCdcAggregatorStream(NIceDb::TNiceDb& db
     auto [topic, error] = Converter.ParseTopic(proto);
     Y_ENSURE(topic, "Invalid tracking config: " << error);
 
-    stream.emplace(std::move(*topic), std::move(sources));
-    return true;
+    return {true, TCdcAggregatorStream(std::move(*topic), std::move(sources))};
 }
 
 bool TCdcAggregatorStreamRepository::LoadSourceDataShardIds(NIceDb::TNiceDb& db, THashSet<ui64>& sources) const {

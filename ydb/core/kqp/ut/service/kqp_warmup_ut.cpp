@@ -376,6 +376,7 @@ namespace {
         bool FillCache = true;
         bool FillImplicitParams = true;
         bool WaitBootstrap = false;
+        bool CompileCacheV2 = false;
     };
 
     struct TWarmupTestEnv {
@@ -391,6 +392,7 @@ namespace {
     TKikimrSettings MakeWarmupTestSettings(const TWarmupTestParams& params) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableCompileCacheView(true);
+        featureFlags.SetEnableCompileCacheV2(params.CompileCacheV2);
         auto settings = TKikimrSettings()
             .SetUseRealThreads(params.UseRealThreads)
             .SetNodeCount(params.NodeCount)
@@ -545,8 +547,9 @@ namespace {
 
     Y_UNIT_TEST_SUITE(KqpWarmup) {
 
-        Y_UNIT_TEST(WarmupActorBasic) {
+        Y_UNIT_TEST_TWIN(WarmupActorBasic, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0", "user1", "user2", "user3", "user4"};
 
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
@@ -946,8 +949,9 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, 0);
         }
 
-        Y_UNIT_TEST(WarmupEmptyCache) {
+        Y_UNIT_TEST_TWIN(WarmupEmptyCache, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0"};
             params.FillCache = false;
             params.FillImplicitParams = false;
@@ -1031,8 +1035,9 @@ namespace {
                 "Baseline: " << baselineLoaded << ", filtered: " << filteredLoaded);
         }
 
-        Y_UNIT_TEST(WarmupAfterSchemaChange) {
+        Y_UNIT_TEST_TWIN(WarmupAfterSchemaChange, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0", "user1"};
 
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
@@ -1673,8 +1678,9 @@ namespace {
                 TParamsBuilder().AddParam("$implKey").Uint32(1).Build().Build());
         }
 
-        Y_UNIT_TEST(ObservationWindowHitsAreAttributedToWarmup) {
+        Y_UNIT_TEST_TWIN(ObservationWindowHitsAreAttributedToWarmup, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0"};
 
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
@@ -1713,8 +1719,9 @@ namespace {
                 "Repeated client hits on the same warmup uid must not be counted again");
         }
 
-        Y_UNIT_TEST(ObservationWindowHitsAreAttributedToWarmupQueryApi) {
+        Y_UNIT_TEST_TWIN(ObservationWindowHitsAreAttributedToWarmupQueryApi, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0"};
             params.FillCache = false;
             params.FillImplicitParams = false;
@@ -1776,8 +1783,9 @@ namespace {
             pinnedDriver.Stop(true);
         }
 
-        Y_UNIT_TEST(ObservationWindowCountsMissesOnly) {
+        Y_UNIT_TEST_TWIN(ObservationWindowCountsMissesOnly, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0"};
 
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
@@ -1808,8 +1816,9 @@ namespace {
                 << " (was " << missesBeforeFreshQuery << ", now " << missesAfterFreshQuery << ")");
         }
 
-        Y_UNIT_TEST(ObservationWindowDoesNotOpenWithoutWarmupInserts) {
+        Y_UNIT_TEST_TWIN(ObservationWindowDoesNotOpenWithoutWarmupInserts, CompileCacheV2) {
             TWarmupTestParams params;
+            params.CompileCacheV2 = CompileCacheV2;
             params.UserSids = {"user0"};
             params.FillCache = false;
             params.FillImplicitParams = false;

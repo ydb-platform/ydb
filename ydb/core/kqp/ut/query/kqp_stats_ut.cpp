@@ -102,8 +102,9 @@ Y_UNIT_TEST_SUITE(KqpStats) {
 
 // A miss is reported once per query lookup, before the request is queued.
 // Recompile and SPLIT requests are not lookups.
-Y_UNIT_TEST(CompilationCacheHitMissCounters) {
+Y_UNIT_TEST_TWIN(CompilationCacheHitMissCounters, CompileCacheV2) {
     auto settings = TKikimrSettings().SetUseRealThreads(false).SetWithSampleTables(false).SetDisablePgCompatibility(true);
+    settings.AppConfig.MutableFeatureFlags()->SetEnableCompileCacheV2(CompileCacheV2);
     auto* config = settings.AppConfig.MutableTableServiceConfig();
     config->SetEnableCreateTableAs(true);
     config->SetEnableDataShardCreateTableAs(true);
@@ -419,8 +420,9 @@ Y_UNIT_TEST(LateInvalidationPreservesReplacementPreparedPlan) {
     cache.Receive(cache.Edge, Ydb::StatusIds::NOT_FOUND);
 }
 
-Y_UNIT_TEST(PathAliasesInvalidateCompilationCache) {
+Y_UNIT_TEST_TWIN(PathAliasesInvalidateCompilationCache, CompileCacheV2) {
     auto settings = TKikimrSettings().SetUseRealThreads(false);
+    settings.AppConfig.MutableFeatureFlags()->SetEnableCompileCacheV2(CompileCacheV2);
     auto* config = settings.AppConfig.MutableTableServiceConfig();
     auto* rule = settings.AppConfig.MutableResourcePathPrefixMapping()->AddRules();
     rule->SetSrc("/Alias");
@@ -477,8 +479,9 @@ Y_UNIT_TEST(PathAliasesInvalidateCompilationCache) {
 
 // A compilation that was in flight during a cache-invalidating config change
 // must not land in the cleared cache: its result is compiled with the old config.
-Y_UNIT_TEST(InFlightCompileResultDroppedFromCacheOnConfigChange) {
+Y_UNIT_TEST_TWIN(InFlightCompileResultDroppedFromCacheOnConfigChange, CompileCacheV2) {
     auto settings = TKikimrSettings().SetUseRealThreads(false).SetWithSampleTables(false);
+    settings.AppConfig.MutableFeatureFlags()->SetEnableCompileCacheV2(CompileCacheV2);
     TKikimrRunner kikimr(settings);
     UNIT_ASSERT(kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
     auto& runtime = *kikimr.GetTestServer().GetRuntime();

@@ -704,8 +704,10 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
         }
     }
 
-    Y_UNIT_TEST(QueryCacheIsUpdated) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(QueryCacheIsUpdated, CompileCacheV2) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableCompileCacheV2(CompileCacheV2);
+        TKikimrRunner kikimr(settings);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         constexpr const char* viewName = "TheView";

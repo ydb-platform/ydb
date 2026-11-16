@@ -447,9 +447,10 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
     }
 
-    Y_UNIT_TEST(QueryCacheTtl) {
+    Y_UNIT_TEST_TWIN(QueryCacheTtl, CompileCacheV2) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetCompileQueryCacheTTLSec(2);
+        appConfig.MutableFeatureFlags()->SetEnableCompileCacheV2(CompileCacheV2);
 
         TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
@@ -495,8 +496,10 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
     }
 
-    Y_UNIT_TEST(QueryCacheInvalidate) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(QueryCacheInvalidate, CompileCacheV2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableCompileCacheV2(CompileCacheV2);
+        TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

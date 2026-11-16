@@ -955,10 +955,11 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         }
     }
 
-    Y_UNIT_TEST(CompileCacheQueriesOrderByDesc) {
+    Y_UNIT_TEST_TWIN(CompileCacheQueriesOrderByDesc, CompileCacheV2) {
         // Test ORDER BY DESC for compile_cache_queries sys view
         // Primary key: NodeId, QueryId
         auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableCompileCacheV2(CompileCacheV2);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
         auto client = kikimr.GetQueryClient();

@@ -1215,8 +1215,10 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         AssertStatus(*uploader, "Load statistics", NTraceProto::Status::STATUS_CODE_ERROR);
     }
 
-    Y_UNIT_TEST(CompileFailureAndCacheHit) {
-        auto [runtime, server, sender] = CreateServer();
+    Y_UNIT_TEST_TWIN(CompileFailureAndCacheHit, CompileCacheV2) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableCompileCacheV2(CompileCacheV2);
+        auto [runtime, server, sender] = CreateServer(1, config);
         auto* uploader = RegisterUploader(runtime);
         ExecSQL(runtime, sender, "SELECT * FROM `/Root/missing_table`;", 15, Ydb::StatusIds::SCHEME_ERROR);
         AssertStatus(*uploader, "Get query plan", NTraceProto::Status::STATUS_CODE_ERROR);

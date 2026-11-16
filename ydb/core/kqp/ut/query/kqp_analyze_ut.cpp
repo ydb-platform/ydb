@@ -98,8 +98,9 @@ Y_UNIT_TEST_TWIN(AnalyzeScansWithNewRboWithoutFallback, PerShard) {
     UNIT_ASSERT_VALUES_EQUAL(FailedNewRboCompilations(runtime), failedBefore);
 }
 
-Y_UNIT_TEST_TWIN(AnalyzeOptimizerCache, AnalyzeFirst) {
+Y_UNIT_TEST_QUAD(AnalyzeOptimizerCache, AnalyzeFirst, CompileCacheV2) {
     NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableFeatureFlags()->SetEnableCompileCacheV2(CompileCacheV2);
     appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
     appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
     TKikimrRunner kikimr{TKikimrSettings(appConfig).SetWithSampleTables(false)};

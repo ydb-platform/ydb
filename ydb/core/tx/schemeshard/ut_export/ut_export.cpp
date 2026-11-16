@@ -46,6 +46,7 @@
 
 #include <util/string/builder.h>
 #include <util/folder/tempdir.h>
+#include <util/generic/algorithm.h>
 #include <util/stream/file.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -610,6 +611,9 @@ namespace {
                 UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
                 UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Injected marker upload failure");
 
+                Runtime().WaitFor("export end audit record", [&] {
+                    return AnyOf(AuditLines, [](const auto& line) { return line.find("operation=EXPORT END") != std::string::npos; });
+                }, TDuration::Seconds(10));
                 const auto line = FindAuditLine(AuditLines, "operation=EXPORT END");
                 UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
                 UNIT_ASSERT_STRING_CONTAINS(line, "reason=" + entry.GetIssues(0).message());

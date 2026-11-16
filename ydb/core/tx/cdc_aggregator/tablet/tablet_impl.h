@@ -1,7 +1,7 @@
 #pragma once
 
 #include "cdc_aggregator_stream.h"
-#include "cdc_aggregator_stream_proto.h"
+#include "cdc_aggregator_stream_repository.h"
 #include "schema.h"
 
 #include <ydb/core/protos/counters_cdc_aggregator.pb.h>
@@ -42,9 +42,6 @@ private:
     void RunTxInit(const TActorContext& ctx);
     void SwitchToWork(const TActorContext& ctx);
 
-    void PersistCdcAggregatorStream(NIceDb::TNiceDb& db);
-    void PersistCdcAggregatorStreamSourcesDiff(NIceDb::TNiceDb& db, const TCdcAggregatorStreamSourcesDiff& diff);
-
     void Handle(TEvCdcAggregator::TEvConfigureTracking::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCdcAggregator::TEvWriteHeartbeats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCdcAggregator::TEvPartitioningChanged::TPtr& ev, const TActorContext& ctx);
@@ -55,6 +52,7 @@ private:
 
 private:
     std::optional<TCdcAggregatorStream> CdcAggregatorStream;
+    TCdcAggregatorStreamRepository CdcAggregatorStreamRepository;
 };
 
 } // namespace NKikimr::NCdcAggregator

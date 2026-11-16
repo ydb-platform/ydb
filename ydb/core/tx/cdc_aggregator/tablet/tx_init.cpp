@@ -3,23 +3,6 @@
 namespace NKikimr::NCdcAggregator {
 
 class TCdcAggregator::TTxInit : public TTxBase {
-    static bool LoadSources(NIceDb::TNiceDb& db, THashSet<ui64>& sources) {
-        auto rowset = db.Table<Schema::Sources>().Select();
-        if (!rowset.IsReady()) {
-            return false;
-        }
-
-        while (!rowset.EndOfSet()) {
-            sources.insert(rowset.GetValue<Schema::Sources::DataShardId>());
-
-            if (!rowset.Next()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
 public:
     explicit TTxInit(TCdcAggregator* self)
         : TTxBase(self)
@@ -32,27 +15,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
-
-        auto state = db.Table<Schema::State>().Key(Schema::State::Id::Value).Select();
-        if (!state.IsReady()) {
-            return false;
-        }
-        if (!state.IsValid()) {
-            return true;
-        }
-
-        THashSet<ui64> sources;
-        if (!LoadSources(db, sources)) {
-            return false;
-        }
-
-        NKikimrCdcAggregator::TTrackingConfig proto;
-        Y_ENSURE(proto.ParseFromString(state.GetValue<Schema::State::TrackingConfig>()), "Malformed tracking config");
-        auto [topic, error] = TCdcAggregatorStreamProtoConverter().ParseTopic(proto);
-        Y_ENSURE(topic, "Invalid tracking config: " << error);
-
-        Self->CdcAggregatorStream.emplace(std::move(*topic), std::move(sources));
-        return true;
+        return Self->CdcAggregatorStreamRepository.Load(db, Self->CdcAggregatorStream);
     }
 
     void Complete(const TActorContext& ctx) override {

@@ -327,6 +327,7 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(BackupBackupCollection);
     GENERIC_HELPERS(BackupIncrementalBackupCollection);
     GENERIC_HELPERS(RestoreBackupCollection);
+    GENERIC_HELPERS(CreateLongIncrementalRestoreOp);
 
     // sysview
     GENERIC_HELPERS(CreateSysView);
@@ -360,10 +361,6 @@ namespace NSchemeShardUT_Private {
     #undef UT_GENERIC_PARAMS
 
     ////////// non-generic
-
-    // backup collection
-    void TestCreateLongIncrementalRestoreOp(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath,
-        const TString& scheme, const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusAccepted}});
 
     // cancel tx
     TEvSchemeShard::TEvCancelTx* CancelTxRequest(ui64 txId, ui64 targetTxId);

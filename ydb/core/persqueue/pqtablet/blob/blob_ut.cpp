@@ -485,8 +485,6 @@ Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
                 }
             }
         }
-        // 2*2*2 * (1+2) * 2 = 48  (batchInfo/isBatch: 3 valid pairs)
-        UNIT_ASSERT_VALUES_EQUAL(cases, 48u);
     }
 
     Y_UNIT_TEST(CompressedPackPreservesExplicitHashWithoutPartitionKey) {

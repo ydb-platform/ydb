@@ -330,6 +330,7 @@ public:
     NCommon::TConfSetting<ui32, Static> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, Static> MaxOutputTables;
     NCommon::TConfSetting<bool, Static> DisableFuseOperations;
+    NCommon::TConfSetting<bool, Static> LateFuseOperations;
     NCommon::TConfSetting<bool, Static> EnableFuseMapToMapReduce; // Deprecated. Use FuseMapToMapReduceMode
     NCommon::TConfSetting<EFuseMapToMapReduceMode, Static> FuseMapToMapReduce;
     NCommon::TConfSetting<NSize::TSize, Static> MaxExtraJobMemoryToFuseOperations;

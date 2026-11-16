@@ -66,12 +66,12 @@ std::pair<std::optional<TCdcAggregatorStreamConfig>, TString> TCdcAggregatorStre
     return {TCdcAggregatorStreamConfig{.Topic = std::move(*topic), .SourceDataShardIds = std::move(sources)}, TString()};
 }
 
-std::pair<std::optional<TCdcAggregatorStreamTopic>, TString> TCdcAggregatorStreamProtoConverter::ParseTopic(const NKikimrCdcAggregator::TTrackingState& proto) const {
+std::pair<std::optional<TCdcAggregatorStreamTopic>, TString> TCdcAggregatorStreamProtoConverter::ParseTopic(const NKikimrCdcAggregator::TCdcAggregatorStreamTopic& proto) const {
     return ParseTopicFields(proto);
 }
 
 TString TCdcAggregatorStreamProtoConverter::SerializeTopic(const TCdcAggregatorStreamTopic& topic) const {
-    NKikimrCdcAggregator::TTrackingState proto;
+    NKikimrCdcAggregator::TCdcAggregatorStreamTopic proto;
     topic.StreamPathId.ToProto(proto.MutableStreamPathId());
     proto.SetStreamPath(topic.StreamPath);
     for (const auto& partition : topic.Partitions) {

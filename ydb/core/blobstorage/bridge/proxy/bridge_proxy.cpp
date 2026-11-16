@@ -1661,9 +1661,6 @@ namespace NKikimr {
         void FinishRequest(TRequest& request) {
             Y_DEBUG_ABORT_UNLESS(!request.Finished);
             request.Finished = true;
-            if (request.StandbyLosses.empty()) {
-                return;
-            }
             for (const auto& [targetGroupId, data] : std::exchange(request.StandbyLosses, {})) {
                 MarkStandbyDirty(targetGroupId, data);
                 const auto it = StandbyLossesHeld.find(targetGroupId);

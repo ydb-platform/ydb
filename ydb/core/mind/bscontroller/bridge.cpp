@@ -1384,9 +1384,10 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
                     ++it;
                 } else {
                     // we have to remove existing syncer; don't need to update it, 'cause node is not connected/working
-                    syncerState.NodeIds.erase(it++);
+                    MarkStandbyDirty(syncerState, item.Repairs);
                     SysViewChangedGroups.insert(targetGroupId);
                     NodeToSyncerState.erase({existingNodeId, &syncerState});
+                    syncerState.NodeIds.erase(it++);
                     BridgeSyncNodeRatesDirty = true;
                 }
             }
@@ -1661,6 +1662,8 @@ void TBlobStorageController::CheckSyncerDisconnectedNodes() {
         if (node->DisconnectedTimestampMono <= now - DisconnectedSyncerReactionTime) {
             for (auto jt = beginIt; jt != it; ++jt) {
                 const auto& [nodeId, syncerState] = *jt;
+                // The worker did not finish, so its repair obligation goes back to the part before the assignment is lost.
+                MarkStandbyDirty(*syncerState, syncerState->NodeIds.at(nodeId).Repairs);
                 const size_t numErased = syncerState->NodeIds.erase(nodeId);
                 Y_ABORT_UNLESS(numErased == 1);
                 SysViewChangedGroups.insert(syncerState->TargetGroupId);

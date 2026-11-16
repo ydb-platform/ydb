@@ -625,7 +625,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, describeSettings);
         AssertBadRequest(
             promise,
-            "<main>: Error: Retry limit exceeded for secret `/Root/secret-name`\n",
+            "<main>: Error: Schemeshard is not available for secret `/Root/secret-name`\n",
             Ydb::StatusIds::UNAVAILABLE);
     }
 

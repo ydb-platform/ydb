@@ -568,7 +568,13 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
         {"requestId", requestId},
         {"error", EStatus_Name(status)}
     );
-    if (IsRetryableSchemeShardStatus(status)) {
+    const auto requestIt = RequestsInFlight.find(requestId);
+    Y_ENSURE(
+        requestIt != RequestsInFlight.end(),
+        "Unregistered requestId: " << ToString(requestId));
+
+    const auto retryPolicy = requestIt->second.Request->Settings.RetryPolicy;
+    if (IsRetryableSchemeShardStatus(status) && retryPolicy != ERetryPolicy::NoRetries) {
         if (ScheduleSchemeShardRetry(requestId, secretName)) {
             return true;
         }

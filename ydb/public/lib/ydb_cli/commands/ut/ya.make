@@ -9,6 +9,7 @@ SRCS(
     bridge_ut.cpp
     oidc_credentials_ut.cpp
     completion_ut.cpp
+    list_objects_ut.cpp
 )
 
 END()

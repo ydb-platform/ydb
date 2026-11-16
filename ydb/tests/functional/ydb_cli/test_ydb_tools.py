@@ -5,6 +5,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 import os
 import logging
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -148,3 +149,106 @@ class TestToolsCopy(BaseCliTestWithDatabase):
         self.verify_table_data(self.session, dest2_path)
         desc2 = self.session.describe_table(dest2_path)
         assert len(desc2.indexes) == 0, f"Expected 0 indexes in second table, got {len(desc2.indexes)}"
+
+
+class TestToolsListObjects(BaseCliTestWithDatabase):
+
+    @classmethod
+    def setup_class(cls):
+        super().setup_class()
+        cls.session = cls.driver.table_client.session().create()
+
+    def create_simple_table(self, path):
+        self.session.create_table(
+            path,
+            ydb.TableDescription()
+            .with_columns(
+                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Uint32)),
+                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.String))
+            )
+            .with_primary_keys('key')
+        )
+
+    def create_indexed_table(self, path):
+        self.session.create_table(
+            path,
+            ydb.TableDescription()
+            .with_columns(
+                ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Uint32)),
+                ydb.Column('id', ydb.OptionalType(ydb.PrimitiveType.Uint64)),
+                ydb.Column('value', ydb.OptionalType(ydb.PrimitiveType.String))
+            )
+            .with_primary_keys('key')
+            .with_indexes(
+                ydb.TableIndex('by_id').with_index_columns('id'),
+                ydb.TableIndex('by_value').with_index_columns('value')
+            )
+        )
+
+    def list_objects(self, extra_args, check_exit_code=True):
+        result = self.execute_ydb_cli_command(
+            ["tools", "list-objects"] + extra_args,
+            check_exit_code=check_exit_code,
+        )
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        return result, lines
+
+    def test_relative_and_absolute_path(self):
+        self.driver.scheme_client.make_directory("/Root/lo_dir")
+        self.driver.scheme_client.make_directory("/Root/lo_dir/nested")
+        self.create_simple_table("/Root/lo_dir/t1")
+        self.create_simple_table("/Root/lo_dir/nested/t2")
+
+        _, relative = self.list_objects(["--path", "lo_dir"])
+        _, absolute = self.list_objects(["--path", "/Root/lo_dir"])
+        assert relative == absolute
+        assert relative == ["nested/t2", "t1"]
+
+    def test_single_table_is_dot(self):
+        self.create_simple_table("/Root/lo_single")
+        _, relative = self.list_objects(["--path", "lo_single"])
+        _, absolute = self.list_objects(["--path", "/Root/lo_single"])
+        assert relative == ["."]
+        assert absolute == ["."]
+
+    def test_include_index_data(self):
+        self.driver.scheme_client.make_directory("/Root/lo_idx_dir")
+        self.create_indexed_table("/Root/lo_idx_dir/t")
+
+        _, without_indexes = self.list_objects(["--path", "lo_idx_dir"])
+        assert without_indexes == ["t"]
+
+        _, with_indexes = self.list_objects(["--path", "lo_idx_dir", "--include-index-data"])
+        assert with_indexes == [
+            "t",
+            "t/by_id/indexImplTable",
+            "t/by_value/indexImplTable",
+        ]
+
+        _, table_with_indexes = self.list_objects(["--path", "lo_idx_dir/t", "--include-index-data"])
+        assert table_with_indexes == [
+            ".",
+            "by_id/indexImplTable",
+            "by_value/indexImplTable",
+        ]
+
+    def test_output_file(self):
+        self.driver.scheme_client.make_directory("/Root/lo_out")
+        self.create_simple_table("/Root/lo_out/a")
+        self.create_simple_table("/Root/lo_out/b")
+
+        fd, output_path = tempfile.mkstemp()
+        os.close(fd)
+        try:
+            result, stdout_lines = self.list_objects(["--path", "lo_out", "--output", output_path])
+            assert stdout_lines == []
+            with open(output_path, "r", encoding="utf-8") as output:
+                assert output.read().splitlines() == ["a", "b"]
+            assert result.exit_code == 0
+        finally:
+            os.remove(output_path)
+
+    def test_absolute_path_outside_database(self):
+        result, _ = self.list_objects(["--path", "/not-the-database/table"], check_exit_code=False)
+        assert result.exit_code != 0
+        assert "starts with" in result.stderr

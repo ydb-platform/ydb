@@ -266,7 +266,7 @@ TExprBase KqpBuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx,
 
     // Scalar subqueries are lowered by the shared precompute rules.
     // Wait until all logical dependencies have been materialized before building the read.
-    if (!IsDqPureExpr(read.Query()) || !IsDqPureExpr(read.Settings())) {
+    if (!IsDqPureExpr(read.Query())) {
         return node;
     }
 
@@ -296,16 +296,6 @@ TExprBase KqpBuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx,
     }
     phyRead = ctx.ChangeChild(*phyRead, TKqpReadTableFullTextIndex::idx_Query,
         Build<TExprList>(ctx, read.Query().Pos()).Add(query).Done().Ptr());
-
-    auto settings = TKqpReadTableFullTextIndexSettings::Parse(read.Settings());
-    if (settings.ItemsLimit) {
-        const auto limit = KqpPrecomputeCount(TExprBase(settings.ItemsLimit), ctx);
-        if (limit.Raw() != settings.ItemsLimit.Get()) {
-            settings.SetItemsLimit(limit.Ptr());
-            phyRead = ctx.ChangeChild(*phyRead, TKqpReadTableFullTextIndex::idx_Settings,
-                settings.BuildNode(ctx, read.Settings().Pos()).Ptr());
-        }
-    }
 
     auto stage = Build<TDqStage>(ctx, read.Pos())
         .Inputs()
@@ -824,15 +814,6 @@ NYql::NNodes::TExprBase KqpPrecomputeParameter(NYql::NNodes::TExprBase param, NY
                 .Build()
             .Build()
         .Done();
-}
-
-NYql::NNodes::TExprBase KqpPrecomputeCount(NYql::NNodes::TExprBase count, NYql::TExprContext& ctx) {
-    if (count.Maybe<TCoUint64>() || count.Maybe<TCoParameter>() ||
-        count.Maybe<TDqPhyPrecompute>() || count.Maybe<TKqpTxResultBinding>())
-    {
-        return count;
-    }
-    return KqpPrecomputeParameter(count, ctx);
 }
 
 NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx) {

@@ -594,10 +594,7 @@ protected:
     TMaybeNode<TExprBase> BuildTopStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = KqpBuildFinalLimitStage(node, ctx, *getParents(), IsGlobal);
-        if (output.Raw() == node.Raw()) {
-            output = DqBuildTopStage(node, ctx, optCtx, *getParents(), IsGlobal);
-        }
+        TExprBase output = DqBuildTopStage(node, ctx, optCtx, *getParents(), IsGlobal);
         DumpAppliedRule("BuildTopStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -606,10 +603,7 @@ protected:
     TMaybeNode<TExprBase> BuildTopSortStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = KqpBuildFinalLimitStage(node, ctx, *getParents(), IsGlobal);
-        if (output.Raw() == node.Raw()) {
-            output = DqBuildTopSortStage(node, ctx, optCtx, *getParents(), IsGlobal);
-        }
+        TExprBase output = DqBuildTopSortStage(node, ctx, optCtx, *getParents(), IsGlobal);
         DumpAppliedRule("BuildTopSortStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -618,10 +612,7 @@ protected:
     TMaybeNode<TExprBase> BuildTakeSkipStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = KqpBuildFinalLimitStage(node, ctx, *getParents(), IsGlobal);
-        if (output.Raw() == node.Raw()) {
-            output = DqBuildTakeSkipStage(node, ctx, optCtx, *getParents(), IsGlobal);
-        }
+        TExprBase output = DqBuildTakeSkipStage(node, ctx, optCtx, *getParents(), IsGlobal);
         DumpAppliedRule("BuildTakeSkipStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -639,10 +630,7 @@ protected:
     TMaybeNode<TExprBase> BuildTakeStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = KqpBuildFinalLimitStage(node, ctx, *getParents(), IsGlobal);
-        if (output.Raw() == node.Raw()) {
-            output = DqBuildTakeStage(node, ctx, optCtx, *getParents(), IsGlobal);
-        }
+        TExprBase output = DqBuildTakeStage(node, ctx, optCtx, *getParents(), IsGlobal);
         DumpAppliedRule("BuildTakeStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

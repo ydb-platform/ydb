@@ -4,8 +4,6 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
-#include <algorithm>
-
 namespace NKikimr::NKqp {
 
 using namespace NYdb::NQuery;
@@ -2560,104 +2558,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 5);
             }
         }, /* enableJsonIndexAutoSelect */ true);
-    }
-
-    Y_UNIT_TEST_TWIN(SelectJsonIndex_ComputedPagination, Compact) {
-        auto kikimr = KikimrJson(/* enableJsonIndexAutoSelect */ true, Compact);
-        auto db = kikimr.GetQueryClient();
-        CreateTestTable(db, "JsonDocument", /* withIndex */ true);
-        ExecuteJsonStatement(db, R"sql(
-            UPSERT INTO TestTable (Key, Text, Data) VALUES
-                (1u, JsonDocument('{"k1": true}'), "d"u),
-                (2u, JsonDocument('{"other": true}'), "x"u),
-                (3u, JsonDocument('{"k1": true}'), "b"u),
-                (4u, JsonDocument('{"k1": true}'), "a"u),
-                (5u, JsonDocument('{"other": true}'), "y"u),
-                (6u, JsonDocument('{"k1": true}'), "c"u);
-        )sql");
-        ExecuteJsonStatement(db, R"sql(
-            CREATE TABLE PageCounts (Key Uint64, PRIMARY KEY (Key));
-        )sql");
-        ExecuteJsonStatement(db, R"sql(
-            UPSERT INTO PageCounts (Key) VALUES (1u), (2u), (3u);
-        )sql");
-
-        const auto queryFor = [](TStringBuf view, bool ordered, bool readCounts) {
-            return TString(R"sql(
-                DECLARE $limit AS Uint64;
-                DECLARE $offset AS Uint64;
-            )sql") + (readCounts ? R"sql(
-                $rowLimit = (SELECT COUNT(*) FROM PageCounts WHERE Key <= $limit);
-                $rowOffset = (SELECT COUNT(*) FROM PageCounts WHERE Key <= $offset);
-            )sql" : R"sql(
-                $rowLimit = $limit;
-                $rowOffset = $offset;
-            )sql") + R"sql(
-                $pageLimit = IF($rowLimit = 0ul, 0ul, $rowLimit + 1ul);
-                $pageOffset = $rowOffset * 2ul;
-                SELECT Key FROM TestTable
-            )sql" + TString(view) + R"sql(
-                WHERE JSON_EXISTS(Text, '$.k1')
-            )sql" + (ordered ? " ORDER BY Data, Key " : " ") + "LIMIT $pageLimit OFFSET $pageOffset;";
-        };
-        const auto params = [](ui64 limit, ui64 offset) {
-            return TParamsBuilder()
-                .AddParam("$limit").Uint64(limit).Build()
-                .AddParam("$offset").Uint64(offset).Build()
-                .Build();
-        };
-        const auto execute = [&](const TString& query, ui64 limit, ui64 offset, bool fromCache,
-                bool ordered, const std::vector<ui64>& expected) {
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx(), params(limit, offset),
-                TExecuteQuerySettings().StatsMode(EStatsMode::Basic)).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetStats());
-            const auto compilation = result.GetStats()->GetCompilation();
-            UNIT_ASSERT(compilation);
-            UNIT_ASSERT_VALUES_EQUAL_C(compilation->IsFromCache(), fromCache, query);
-
-            std::vector<ui64> keys;
-            TResultSetParser parser(result.GetResultSet(0));
-            while (parser.TryNextRow()) {
-                const ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
-                UNIT_ASSERT_C(key == 1u || key == 3u || key == 4u || key == 6u, key);
-                keys.push_back(key);
-            }
-            UNIT_ASSERT_VALUES_EQUAL(keys.size(), expected.size());
-            if (ordered) {
-                UNIT_ASSERT_VALUES_EQUAL(keys, expected);
-            } else {
-                Sort(keys);
-                UNIT_ASSERT(std::unique(keys.begin(), keys.end()) == keys.end());
-            }
-        };
-
-        for (bool readCounts : {false, true}) {
-            for (bool ordered : {false, true}) {
-                for (TStringBuf view : {" VIEW PRIMARY KEY", " VIEW json_idx", ""}) {
-                    const TString query = queryFor(view, ordered, readCounts);
-                    execute(query, 1, 0, false, ordered, {4u, 3u});
-                    execute(query, 1, 1, true, ordered, {6u, 1u});
-                    execute(query, 3, 0, true, ordered, {4u, 3u, 6u, 1u});
-                    execute(query, 0, 0, true, ordered, {});
-                    execute(query, 1, 3, true, ordered, {});
-
-                    auto explain = db.ExecuteQuery(query, TTxControl::NoTx(), params(1, 0),
-                        TExecuteQuerySettings().ExecMode(EExecMode::Explain)).ExtractValueSync();
-                    UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
-                    UNIT_ASSERT_C(explain.GetStats() && explain.GetStats()->GetPlan(), "Explain plan is missing");
-                    NJson::TJsonValue plan;
-                    UNIT_ASSERT(NJson::ReadJsonTree(*explain.GetStats()->GetPlan(), &plan, true));
-                    UNIT_ASSERT_VALUES_EQUAL_C(CountPlanNodesByKv(plan, "Index", "json_idx"),
-                        view == " VIEW PRIMARY KEY" ? 0 : 1, query);
-                }
-            }
-        }
-
-        // Cached scalar counts must read current data on every execution.
-        ExecuteJsonStatement(db, "DELETE FROM PageCounts WHERE Key = 1u;");
-        execute(queryFor("", /* ordered */ true, /* readCounts */ true),
-            3, 0, true, true, {4u, 3u, 6u});
     }
 
     Y_UNIT_TEST(TruncateTable) {

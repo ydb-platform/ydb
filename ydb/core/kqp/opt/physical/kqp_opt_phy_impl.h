@@ -21,9 +21,6 @@ NYql::NNodes::TCoAtomList BuildColumnsList(const THashSet<TStringBuf>& columns, 
 
 NYql::NNodes::TExprBase KqpPrecomputeParameter(NYql::NNodes::TExprBase param, NYql::TExprContext& ctx);
 
-// Fulltext sources consume a literal count or a value materialized as a parameter.
-NYql::NNodes::TExprBase KqpPrecomputeCount(NYql::NNodes::TExprBase count, NYql::TExprContext& ctx);
-
 NYql::NNodes::TCoAtomList BuildColumnsList(const TVector<TStringBuf>& columns, NYql::TPositionHandle pos,
     NYql::TExprContext& ctx);
 

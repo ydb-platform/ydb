@@ -15,7 +15,6 @@ SRCS(
     kqp_merge_ut.cpp
     kqp_named_expressions_ut.cpp
     kqp_ne_ut.cpp
-    kqp_limit_ut.cpp
     kqp_not_null_ut.cpp
     kqp_ranges_ut.cpp
     kqp_returning_ut.cpp

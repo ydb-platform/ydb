@@ -4,8 +4,6 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -15,60 +13,6 @@ namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NNodes;
-
-TExprBase KqpBuildFinalLimitStage(TExprBase node, TExprContext& ctx, const TParentsMap& parents,
-    bool allowStageMultiUsage)
-{
-    TMaybeNode<TDqCnUnionAll> input;
-    TMaybeNode<TExprBase> count;
-    TMaybeNode<TExprBase> skipCount;
-    TMaybeNode<TCoLambda> keySelector;
-    if (auto maybeTake = node.Maybe<TCoTakeBase>()) {
-        const auto take = maybeTake.Cast();
-        const auto maybeSkip = take.Input().Maybe<TCoSkip>();
-        input = (maybeSkip ? maybeSkip.Cast().Input() : take.Input()).Maybe<TDqCnUnionAll>();
-        count = take.Count();
-        if (maybeSkip) {
-            skipCount = maybeSkip.Cast().Count();
-        }
-    } else if (auto maybeTop = node.Maybe<TCoTopBase>()) {
-        const auto top = maybeTop.Cast();
-        input = top.Input().Maybe<TDqCnUnionAll>();
-        count = top.Count();
-        keySelector = top.KeySelectorLambda();
-    }
-
-    if (!input || !NYql::NDq::IsSingleConsumerConnection(input.Cast(), parents, allowStageMultiUsage)) {
-        return node;
-    }
-
-    if (!NYql::NDq::CanPushDqExpr(count.Cast(), input.Cast()) ||
-        (skipCount && !NYql::NDq::CanPushDqExpr(skipCount.Cast(), input.Cast())) ||
-        (keySelector && !NYql::NDq::CanPushDqExpr(keySelector.Cast(), input.Cast())))
-    {
-        return node;
-    }
-
-    if (IsKqpRepeatableExpr(count.Cast()) && (!skipCount || IsKqpRepeatableExpr(skipCount.Cast()))) {
-        return node;
-    }
-
-    // Partial and final limits must not evaluate a volatile count separately.
-    // Keep the original expressions together, including any shared descendants.
-    const auto stream = Build<TCoArgument>(ctx, node.Pos()).Name("stream").Done();
-    const auto stage = Build<TDqStage>(ctx, node.Pos())
-        .Inputs().Add(input.Cast()).Build()
-        .Program()
-            .Args({stream})
-            .Body(ctx.ReplaceNode(node.Ptr(), input.Cast().Ref(), stream.Ptr()))
-            .Build()
-        .Settings(NYql::NDq::TDqStageSettings().BuildNode(ctx, node.Pos()))
-        .Done();
-
-    return Build<TDqCnUnionAll>(ctx, node.Pos())
-        .Output().Stage(stage).Index().Build("0").Build()
-        .Done();
-}
 
 TExprBase KqpApplyLimitToFullTextIndex(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     Y_UNUSED(kqpCtx);
@@ -97,12 +41,7 @@ TExprBase KqpApplyLimitToFullTextIndex(TExprBase node, TExprContext& ctx, const 
         return node; // already set?
     }
 
-    auto limit = take.Count();
-    if (!NYql::NDq::IsDqCompletePureExpr(limit) || !IsKqpRepeatableExpr(limit)) {
-        return node;
-    }
-    limit = KqpPrecomputeCount(limit, ctx);
-    settings.SetItemsLimit(limit.Ptr());
+    settings.SetItemsLimit(take.Count().Ptr());
 
     auto newSettings = settings.BuildNode(ctx, input.Pos());
 
@@ -165,13 +104,6 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
         return node;
     }
 
-    if (!IsKqpRepeatableExpr(take.Count()) ||
-        (maybeSkip && !IsKqpRepeatableExpr(maybeSkip.Cast().Count())))
-    {
-        // The source limit must agree with the final Take/Skip counts.
-        return node;
-    }
-
     if (kqpCtx.IsScanQuery()) {
         auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, GetReadTablePath(input, isReadTableRanges));
 
@@ -187,17 +119,38 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
 
     settings.SequentialInFlight = 1;
 
-    const auto limitValue = maybeSkip
-        ? BuildKqpTakeSkipCount(take.Count(), maybeSkip.Cast().Count(), ctx)
-        : take.Count();
+    TMaybeNode<TExprBase> limitValue;
+    auto maybeTakeCount = take.Count().Maybe<TCoUint64>();
+    auto maybeSkipCount = maybeSkip.Count().Maybe<TCoUint64>();
 
-    YQL_CLOG(TRACE, ProviderKqp) << "-- set limit items value to " << limitValue.Ref().Dump();
+    if (maybeTakeCount && (!maybeSkip || maybeSkipCount)) {
+        ui64 totalLimit = FromString<ui64>(maybeTakeCount.Cast().Literal().Value());
+
+        if (maybeSkipCount) {
+            totalLimit += FromString<ui64>(maybeSkipCount.Cast().Literal().Value());
+        }
+
+        limitValue = Build<TCoUint64>(ctx, node.Pos())
+            .Literal<TCoAtom>()
+            .Value(ToString(totalLimit)).Build()
+            .Done();
+    } else {
+        limitValue = take.Count();
+        if (maybeSkip) {
+            limitValue = Build<TCoAggrAdd>(ctx, node.Pos())
+                .Left(limitValue.Cast())
+                .Right(maybeSkip.Cast().Count())
+                .Done();
+        }
+    }
+
+    YQL_CLOG(TRACE, ProviderKqp) << "-- set limit items value to " << limitValue.Cast().Ref().Dump();
 
     if (limitValue.Maybe<TCoUint64>()) {
-        settings.SetItemsLimit(limitValue.Ptr());
+        settings.SetItemsLimit(limitValue.Cast().Ptr());
     } else {
         settings.SetItemsLimit(Build<TDqPrecompute>(ctx, node.Pos())
-            .Input(limitValue)
+            .Input(limitValue.Cast())
             .Done().Ptr());
     }
 
@@ -237,12 +190,6 @@ TExprBase KqpApplyLimitToOlapReadTable(TExprBase node, TExprContext& ctx, const 
         return node;
     }
 
-    if (!IsKqpRepeatableExpr(topSort.Count()) ||
-        (maybeSkip && !IsKqpRepeatableExpr(maybeSkip.Cast().Count())))
-    {
-        return node;
-    }
-
     const bool isReadTableRanges = true;
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, GetReadTablePath(input, isReadTableRanges));
 
@@ -267,17 +214,38 @@ TExprBase KqpApplyLimitToOlapReadTable(TExprBase node, TExprContext& ctx, const 
         return node;
     }
 
-    const auto limitValue = maybeSkip
-        ? BuildKqpTakeSkipCount(topSort.Count(), maybeSkip.Cast().Count(), ctx)
-        : topSort.Count();
+    TMaybeNode<TExprBase> limitValue;
+    auto maybeTopSortCount = topSort.Count().Maybe<TCoUint64>();
+    auto maybeSkipCount = maybeSkip.Count().Maybe<TCoUint64>();
 
-    YQL_CLOG(TRACE, ProviderKqp) << "-- set limit items value to " << limitValue.Ref().Dump();
+    if (maybeTopSortCount && (!maybeSkip || maybeSkipCount)) {
+        ui64 totalLimit = FromString<ui64>(maybeTopSortCount.Cast().Literal().Value());
+
+        if (maybeSkipCount) {
+            totalLimit += FromString<ui64>(maybeSkipCount.Cast().Literal().Value());
+        }
+
+        limitValue = Build<TCoUint64>(ctx, node.Pos())
+            .Literal<TCoAtom>()
+            .Value(ToString(totalLimit)).Build()
+            .Done();
+    } else {
+        limitValue = topSort.Count();
+        if (maybeSkip) {
+            limitValue = Build<TCoAggrAdd>(ctx, node.Pos())
+                .Left(limitValue.Cast())
+                .Right(maybeSkip.Cast().Count())
+                .Done();
+        }
+    }
+
+    YQL_CLOG(TRACE, ProviderKqp) << "-- set limit items value to " << limitValue.Cast().Ref().Dump();
 
     if (limitValue.Maybe<TCoUint64>()) {
-        settings.SetItemsLimit(limitValue.Ptr());
+        settings.SetItemsLimit(limitValue.Cast().Ptr());
     } else {
         settings.SetItemsLimit(Build<TDqPrecompute>(ctx, node.Pos())
-            .Input(limitValue)
+            .Input(limitValue.Cast())
             .Done().Ptr());
     }
 

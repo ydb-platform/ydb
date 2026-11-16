@@ -2332,10 +2332,6 @@ TMaybeNode<TExprBase> KqpPushLimitOverFullText(const NYql::NNodes::TExprBase& no
         }
     }
 
-    if (!IsKqpRepeatableExpr(topSort.Count())) {
-        return node;
-    }
-
     settings.SetItemsLimit(topSort.Count().Ptr());
 
     auto input = ctx.ChangeChild(

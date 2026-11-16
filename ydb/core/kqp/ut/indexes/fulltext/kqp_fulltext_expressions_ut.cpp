@@ -859,28 +859,6 @@ Y_UNIT_TEST_QUAD(CachedWildcardPrecomputeSwitchesBetweenIndexAndScan, Compact, U
     }
 }
 
-Y_UNIT_TEST_QUAD(WildcardPrecomputeLimitFollowsPostfilter, Compact, Utf8) {
-    TExpressionFixture fixture({.Compact = Compact, .Utf8 = Utf8, .Prefixed = true, .Ngram = true});
-    fixture.Execute(R"sql(
-        UPSERT INTO `/Root/Docs` (Id, Scope, Text) VALUES (0ul, "p1"u, "alp lph pha");
-    )sql");
-    // Id=0 is an earlier posting candidate containing every query ngram, but it
-    // fails the wildcard. Applying LIMIT before the postfilter loses Id=1.
-    const TString setup = fixture.Declarations() + R"sql(
-        $pattern = (SELECT Pattern FROM `/Root/Patterns` WHERE Id = $lo);
-        $search = "%" || CAST(COALESCE($pattern, $other) AS String) || "%";
-        $limit = IF($choose, 1ul, 2ul);
-    )sql";
-    for (const TString& predicate : {TString("FulltextMatch(Text, $search, \"Wildcard\" AS Mode)"),
-            TString("Text ILIKE $search")}) {
-        const TString query = setup + "SELECT Id FROM `/Root/Docs` VIEW fulltext_idx WHERE Scope = $scope AND "
-            + predicate + " ORDER BY Id LIMIT $limit;";
-        fixture.ExpectIds(query, {1});
-        fixture.ExpectIds(query, {1, 4}, fixture.Parameters("alpha", "beta", false));
-        fixture.ExpectIds(query, {2}, fixture.Parameters("alpha", "beta", true, 2));
-    }
-}
-
 Y_UNIT_TEST_QUAD(ImplicitStringPredicates, Compact, Utf8) {
     TExpressionFixture fixture({.Compact = Compact, .Utf8 = Utf8, .Prefixed = true, .Ngram = true});
     const TString setup = R"sql(
@@ -952,32 +930,7 @@ Y_UNIT_TEST_QUAD(ScoreOptionsFollowComputedQuery, Compact, Utf8) {
     }
 }
 
-Y_UNIT_TEST_QUAD(PrecomputeLimitWithoutOrdering, Compact, Score) {
-    TExpressionFixture fixture({.Compact = Compact, .Relevance = Score});
-    for (const TString& limit : {TString("IF($choose, $hi, $lo)"),
-            TString("COALESCE((SELECT COUNT(*) FROM `/Root/Patterns` WHERE Id <= $hi), 0ul)")}) {
-        const TString query = fixture.Declarations() + R"sql(
-            $search = COALESCE((SELECT Pattern FROM `/Root/Patterns` WHERE Id = $lo), $other);
-            SELECT COUNT(*) AS Cnt FROM (
-                SELECT Id FROM `/Root/Docs` VIEW fulltext_idx WHERE
-        )sql" + (Score ? "FulltextScore(Text, $search) > 0" : "FulltextMatch(Text, $search)")
-            + " LIMIT " + limit + ");";
-        for (const auto& [patternId, matchingRows] : TVector<std::pair<ui64, ui64>>{{1, 3}, {2, 2}, {3, 0}}) {
-            for (ui64 count : {0ul, 1ul, 2ul, 3ul}) {
-                const auto params = fixture.Parameters("alpha", "absent", true, patternId, count);
-                const auto result = fixture.Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, query << result.GetIssues().ToString());
-                NYdb::TResultSetParser parser(result.GetResultSet(0));
-                UNIT_ASSERT(parser.TryNextRow());
-                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser("Cnt").GetUint64(),
-                    count < matchingRows ? count : matchingRows, query);
-                UNIT_ASSERT(!parser.TryNextRow());
-            }
-        }
-    }
-}
-
-Y_UNIT_TEST_QUAD(RelevancePrecomputeOrderingAndLimits, Compact, Utf8) {
+Y_UNIT_TEST_QUAD(RelevanceOrderingWithComputedQueries, Compact, Utf8) {
     TExpressionFixture fixture({.Compact = Compact, .Utf8 = Utf8, .Relevance = true});
     fixture.Execute(R"sql(
         UPSERT INTO `/Root/Docs` (Id, Text) VALUES
@@ -985,73 +938,32 @@ Y_UNIT_TEST_QUAD(RelevancePrecomputeOrderingAndLimits, Compact, Utf8) {
             (3ul, "alpha alpha alpha"), (5ul, "alpha beta filler");
     )sql");
     // Equal document lengths and distinct term frequencies give the strict
-    // orders alpha: 3,1,5 and beta: 2,5, including inside pushed TopK.
-    const auto query = [&](const TString& expression, const TString& suffix, const TString& predicate = "") {
+    // orders alpha: 3,1,5 and beta: 2,5.
+    const auto query = [&](const TString& expression, const TString& predicate = "") {
         const TString score = "FulltextScore(Text, " + expression + ", 0.5 AS B)";
         return fixture.Declarations() + R"sql(
             $search = IF($choose, $q, $other);
-            $limit = (SELECT COUNT(*) FROM `/Root/Patterns` WHERE Id < $hi);
         )sql" + "SELECT Id, " + score + " AS Score FROM `/Root/Docs` VIEW fulltext_idx WHERE "
             + (predicate.empty() ? score + " > 0" : "0 < " + score + " AND (" + predicate + ")")
-            + " ORDER BY Score DESC" + suffix + ";";
-    };
-    struct TLimitCase {
-        TString Suffix;
-        TVector<ui64> Alpha;
-        TVector<ui64> Beta;
-    };
-    const TVector<TLimitCase> limits = {
-        {" LIMIT 1", {3}, {2}},
-        {" LIMIT 1 OFFSET 1", {1}, {5}},
-        {" LIMIT $hi", {3, 1}, {2, 5}},
-        {" LIMIT $hi OFFSET $lo", {1, 5}, {}},
-        {" LIMIT 1 OFFSET COALESCE($limit, 0ul)", {1}, {5}},
-        {" LIMIT COALESCE($limit, 0ul) OFFSET 1", {1}, {5}},
-        {" LIMIT COALESCE($limit, 0ul) OFFSET COALESCE($limit, 0ul)", {1}, {5}},
+            + " ORDER BY Score DESC;";
     };
     const TVector<TString> expressions = {
         "$q", "$search", "COALESCE((SELECT Pattern FROM `/Root/Patterns` WHERE Id = $lo), $other)",
     };
     for (const auto& [term, id] : TVector<std::pair<TString, ui64>>{{"alpha", 1}, {"beta", 2}, {"absent", 3}}) {
         const auto params = fixture.Parameters(term, "absent", true, id);
-        for (const auto& limit : limits) {
-            const TVector<ui64> expected = term == "alpha" ? limit.Alpha : term == "beta" ? limit.Beta : TVector<ui64>{};
-            const TString literal = fixture.ExpectIds(query("\"" + term + "\"", limit.Suffix), expected, params);
-            for (const auto& expression : expressions) {
-                CompareYson(literal, fixture.ExpectIds(query(expression, limit.Suffix), expected, params));
-            }
+        const TVector<ui64> expected = term == "alpha" ? TVector<ui64>{3, 1, 5}
+            : term == "beta" ? TVector<ui64>{2, 5} : TVector<ui64>{};
+        const TString literal = fixture.ExpectIds(query("\"" + term + "\""), expected, params);
+        for (const auto& expression : expressions) {
+            CompareYson(literal, fixture.ExpectIds(query(expression), expected, params));
         }
     }
-    fixture.ExpectIds(query("$search", " LIMIT $hi"), {2, 5}, fixture.Parameters("alpha", "beta", false));
-    fixture.ExpectIds(query("$search", " LIMIT $hi"), {}, fixture.Parameters("alpha", "beta", true, 1, 0));
-    fixture.ExpectIds(query("$search", " LIMIT COALESCE($limit, 0ul)"), {3, 1},
-        fixture.Parameters("alpha", "beta", true, 1, 3));
+    fixture.ExpectIds(query("$search"), {2, 5}, fixture.Parameters("alpha", "beta", false));
     for (const auto& [predicate, expected] : TVector<std::pair<TString, TVector<ui64>>>{
             {"Id = 1ul", {1}}, {"Id = 3ul", {3}}, {"Id >= 2ul AND Id < 6ul", {3, 5}},
             {"Id >= 6ul AND Id < 2ul", {}}, {"Id >= CAST(LENGTH($search) AS Uint64)", {5}}}) {
-        fixture.ExpectIds(query("$search", "", predicate), expected);
-    }
-}
-
-Y_UNIT_TEST_TWIN(PrefixedRelevanceComputedLimitAndOffset, Utf8) {
-    TExpressionFixture fixture({.Compact = true, .Utf8 = Utf8, .Prefixed = true, .Relevance = true});
-    fixture.Execute(R"sql(
-        UPSERT INTO `/Root/Docs` (Id, Text) VALUES
-            (1ul, "alpha alpha filler"), (2ul, "beta beta filler"),
-            (3ul, "alpha alpha alpha"), (5ul, "alpha beta filler");
-    )sql");
-    for (const TString& expression : {TString("$q"), TString("$search")}) {
-        const TString score = "FulltextScore(Text, " + expression + ", 0.5 AS B)";
-        const TString query = fixture.Declarations() + R"sql(
-            $search = COALESCE((SELECT Pattern FROM `/Root/Patterns` WHERE Id = $lo), $other);
-            $limit = (SELECT COUNT(*) FROM `/Root/Patterns` WHERE Id < $hi);
-        )sql" + "SELECT Id, " + score + " AS Score FROM `/Root/Docs` VIEW fulltext_idx "
-            "WHERE Scope = $scope AND " + score + " > 0 ORDER BY Score DESC ";
-        fixture.ExpectIds(query + "LIMIT $hi OFFSET ($lo - 1ul);", {1, 5});
-        fixture.ExpectIds(query + "LIMIT COALESCE($limit, 0ul) OFFSET $lo;", {5});
-        fixture.ExpectIds(query + "LIMIT COALESCE($limit, 0ul) OFFSET COALESCE($limit, 0ul);", {5});
-        fixture.ExpectIds(query + "LIMIT COALESCE($limit, 0ul) OFFSET $lo;", {},
-            fixture.Parameters("alpha", "beta", true, 1, 2, "p2"));
+        fixture.ExpectIds(query("$search", predicate), expected);
     }
 }
 

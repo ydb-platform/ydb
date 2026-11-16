@@ -1,7 +1,9 @@
 #include "common.h"
 
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/local_proxy/local_pq_client/local_topic_client.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 
 #include <ydb/library/testlib/helpers.h>
 
@@ -13,17 +15,23 @@ namespace {
 
 class TPathAliasingLocalTopicClientFixture: public TLocalTopicClientFixture {
 public:
-    void SetUp(NUnitTest::TTestContext&) override {
-        TKikimrSettings settings;
-        settings.SetWithSampleTables(false).SetAuthToken(BUILTIN_ACL_ROOT).SetEnableTopicDeferredPublish(true);
-        auto* rule = settings.AppConfig.MutableResourcePathPrefixMapping()->AddRules();
+    void SetUp(NUnitTest::TTestContext& context) override {
+        TLocalTopicClientFixture::SetUp(context);
+
+        auto& server = Kikimr->GetTestServer();
+        auto& runtime = *server.GetRuntime();
+        auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        update->Record.MutableConfig()->CopyFrom(*server.GetSettings().AppConfig);
+        auto* rule = update->Record.MutableConfig()->MutableResourcePathPrefixMapping()->AddRules();
         rule->SetSrc("/Root/topic");
         rule->SetDst("/Root/missing-topic");
-
-        Kikimr = std::make_unique<TKikimrRunner>(settings);
-        const auto result = Kikimr->GetQueryClient().ExecuteQuery(
-            "CREATE TOPIC `/Root/topic` (CONSUMER consumer)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        update->PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(
+            update->Record.GetConfig().GetResourcePathPrefixMapping(), runtime.GetAppData().Counters);
+        runtime.GetAppData().SetPathNormalizer(*update->PathNormalizer);
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.Send(NGRpcService::CreateGRpcRequestProxyId(), sender, update.Release());
+        runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender, TEST_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL(TopicClient->DescribeTopic(TOPIC_PATH).GetValue(TEST_TIMEOUT).GetStatus(), EStatus::SCHEME_ERROR);
     }
 };
 

@@ -107,7 +107,7 @@ bool IsBatchQuery(const NKqpProto::TKqpPhyQuery& physicalQuery) {
             }
             for (auto& transform : stage.GetOutputTransforms()) {
                 if (FillTableSinkSettings(sinkSettings, transform) && sinkSettings.HasIsBatch() && sinkSettings.GetIsBatch()) {
-                    AFL_ENSURE(false);
+                    YDB_LOG_ENSURE(false);
                 }
             }
         }
@@ -1319,8 +1319,8 @@ public:
     }
 
     void AcquirePersistentSnapshot() {
-        AFL_ENSURE(QueryState->UserRequestContext);
-        AFL_ENSURE(!QueryState->UserRequestContext->IsStreamingQuery);
+        YDB_LOG_ENSURE(QueryState->UserRequestContext);
+        YDB_LOG_ENSURE(!QueryState->UserRequestContext->IsStreamingQuery);
         QueryState->AcquireSnapshotSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::SessionAcquireSnapshot,
             QueryState->KqpSessionSpan.GetTraceId(), {
                 .Name = "Acquire persistent snapshot",
@@ -1424,7 +1424,7 @@ public:
         QueryState->TxCtx->SnapshotHandle.Snapshot = response->Snapshot;
         QueryState->TxCtx->SnapshotHandle.Handle = std::move(response->SnapshotHandle);
 
-        AFL_ENSURE(QueryState->UserRequestContext);
+        YDB_LOG_ENSURE(QueryState->UserRequestContext);
         if (QueryState->UserRequestContext->IsStreamingQuery) {
             // Streaming queries are long-running: the snapshot must not be pinned for
             // their whole lifetime. Reads at the acquired step stay valid via the
@@ -1746,7 +1746,7 @@ public:
                 return false;
             }
         } else {
-            AFL_ENSURE(checkSchemeTx());
+            YDB_LOG_ENSURE(checkSchemeTx());
         }
 
         if (phyQuery.HasEnableHtapTx()) {
@@ -1759,7 +1759,7 @@ public:
                 return false;
             }
         } else {
-            AFL_ENSURE(checkSchemeTx());
+            YDB_LOG_ENSURE(checkSchemeTx());
         }
 
         // Only modes that promise repeatable reads are aborted: the rest are documented to
@@ -1979,7 +1979,7 @@ public:
     IKqpGateway::TExecPhysicalRequest PrepareGenericRequest(TKqpQueryState *queryState) {
         auto request = PrepareBaseRequest(queryState, queryState->TxCtx->TxAlloc);
 
-        AFL_ENSURE(queryState);
+        YDB_LOG_ENSURE(queryState);
         request.Snapshot = queryState->TxCtx->GetSnapshot();
         request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
 
@@ -1989,7 +1989,7 @@ public:
     IKqpGateway::TExecPhysicalRequest PrepareRequest(const TKqpPhyTxHolder::TConstPtr& tx, bool literal,
         TKqpQueryState *queryState)
     {
-        AFL_ENSURE(queryState && QueryState);
+        YDB_LOG_ENSURE(queryState && QueryState);
         if (literal) {
             YQL_ENSURE(tx);
             return PrepareLiteralRequest(QueryState.get());
@@ -2015,7 +2015,7 @@ public:
 
     bool CheckTransactionLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         const auto& txCtx = *QueryState->TxCtx;
-        AFL_ENSURE(txCtx.TxManager);
+        YDB_LOG_ENSURE(txCtx.TxManager);
         const bool broken = !!txCtx.TxManager->GetLockIssue();
 
         if ((txCtx.TxHasEffects() && broken) || txCtx.TxManager->BrokenLocks()) {
@@ -2031,14 +2031,14 @@ public:
                 ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
                     MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
             } else {
-                AFL_ENSURE(txCtx.TxManager->BrokenLocks());
+                YDB_LOG_ENSURE(txCtx.TxManager->BrokenLocks());
                 ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
                     MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
             }
             return false;
         }
 
-        AFL_ENSURE(!tx || !tx->GetHasEffects() || !broken);
+        YDB_LOG_ENSURE(!tx || !tx->GetHasEffects() || !broken);
 
         return true;
     }
@@ -2441,7 +2441,7 @@ public:
                 // When CanDeferEffects() is true, GetCurrentPhyTx() defers all
                 // effect-only txs (ResultsSize() == 0), so the remaining tx
                 // must have results (RETURNING clause).
-                AFL_ENSURE(tx->ResultsSize() > 0);
+                YDB_LOG_ENSURE(tx->ResultsSize() > 0);
             }
         }
 
@@ -2638,7 +2638,7 @@ public:
             tableIdsForSnapshot = QueryState->GetTableIdsForSnapshot();
         }
 
-        AFL_ENSURE(txCtx->TxManager);
+        YDB_LOG_ENSURE(txCtx->TxManager);
         auto* executerActor = CreateKqpExecuter(
             std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
@@ -3125,7 +3125,7 @@ public:
         EmitBreakerLogs(ev);
         EmitDeferredBreakerLogs(ev);
 
-        AFL_ENSURE(QueryState->TxCtx->TxManager);
+        YDB_LOG_ENSURE(QueryState->TxCtx->TxManager);
         QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
 
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -3297,7 +3297,7 @@ public:
         } else {
             // No executer to forward to; emit victim TLI stats directly since
             // ProcessExecuterResult (which normally handles this) won't be called.
-            AFL_ENSURE(QueryState->TxCtx->TxManager);
+            YDB_LOG_ENSURE(QueryState->TxCtx->TxManager);
             if (QueryState->TxCtx->TxManager->BrokenLocks()) {
                 auto brokenLockQuerySpanId = QueryState->TxCtx->TxManager->GetVictimQuerySpanId();
                 auto victimCount = QueryState->TxCtx->TxManager->GetBrokenLocksCount();
@@ -3321,10 +3321,10 @@ public:
                 {"traceId", TraceId()});
         }
 
-        AFL_ENSURE(ExecuterId); // ExecuterId can't be empty during cleanup if TransactionsToBeAborted is not empty.
+        YDB_LOG_ENSURE(ExecuterId); // ExecuterId can't be empty during cleanup if TransactionsToBeAborted is not empty.
 
         const auto& txCtx = CleanupCtx->TransactionsToBeAborted.front();
-        AFL_ENSURE(txCtx);
+        YDB_LOG_ENSURE(txCtx);
         if (txCtx->BufferActorId != ev->Sender) {
             YDB_LOG_ERROR("Ignored error. Current BufferActorId is not sender",
                 {"marker", "KQPSA"},
@@ -4166,7 +4166,7 @@ public:
                 {"traceId", TraceId()});
 
             for (const auto& txCtx : CleanupCtx->TransactionsToBeAborted) {
-                AFL_ENSURE(txCtx);
+                YDB_LOG_ENSURE(txCtx);
                 // Terminate BufferActors without waiting
                 TerminateBufferActor(txCtx);
             }

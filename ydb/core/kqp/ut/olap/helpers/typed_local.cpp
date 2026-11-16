@@ -200,7 +200,7 @@ void TTypedLocalHelper::GetStats(std::vector<NJson::TJsonValue>& stats, const bo
         for (auto&& c : r) {
             if (c.first == "Stats") {
                 NJson::TJsonValue jsonStore;
-                AFL_VERIFY(NJson::ReadJsonFastTree(GetUtf8(c.second), &jsonStore));
+                YDB_LOG_VERIFY(NJson::ReadJsonFastTree(GetUtf8(c.second), &jsonStore));
                 stats.emplace_back(jsonStore);
             }
         }
@@ -241,7 +241,7 @@ void TTypedLocalHelper::TSimultaneousWritingSession::SendDataViaActorSystem(TStr
 }
 
 void TTypedLocalHelper::TSimultaneousWritingSession::Finalize() {
-    AFL_VERIFY(!Finished);
+    YDB_LOG_VERIFY(!Finished);
     Finished = true;
     auto* runtime = KikimrRunner.GetTestServer().GetRuntime();
     TDispatchOptions options;

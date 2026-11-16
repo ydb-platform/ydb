@@ -436,7 +436,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
         // Splitted Expr can be used only for CTAS statement.
         // CTAS consists of 3 exprs: CREATE TABLE, REPLACE, ALTER TABLE RENAME.
         // For explain we need only REPLACE, because explain doesn't support for DDL statements.
-        AFL_ENSURE(SplittedExprs.size() == 3);
+        YDB_LOG_ENSURE(SplittedExprs.size() == 3);
         NextSplittedExpr = 1;
     }
 

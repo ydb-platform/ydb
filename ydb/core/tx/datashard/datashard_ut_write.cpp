@@ -1840,6 +1840,21 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         return Write(runtime, sender, shard, std::move(request));
     }
 
+    NKikimrDataEvents::TEvWriteResult CommitWriteLock(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const NKikimrDataEvents::TLock& lock,
+        NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
+    {
+        auto request = std::make_unique<NEvents::TDataEvents::TEvWrite>(
+            NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        auto* locks = request->Record.MutableLocks();
+        locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+        locks->AddSendingShards(shard);
+        locks->AddReceivingShards(shard);
+        *locks->AddLocks() = lock;
+        return Write(runtime, sender, shard, std::move(request), expectedStatus);
+    }
+
     enum class EReadOnlyPrepareLocks {
         None,
         Empty,
@@ -2608,7 +2623,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 UNIT_ASSERT_VALUES_EQUAL(overloaded.GetOverloadSubscribed(), subscriptionSequence);
             }
         }
-        CommitLock(runtime, sender, shard, writeLock,
+        CommitWriteLock(runtime, sender, shard, writeLock,
             NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
         UNIT_ASSERT_VALUES_EQUAL(ReadChangeQueueSize(runtime, shard), 1u);
 
@@ -2617,7 +2632,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(ready->Get()->Record.GetTabletID(), shard);
         UNIT_ASSERT_VALUES_EQUAL(ready->Get()->Record.GetSeqNo(), subscriptionSequence);
         UNIT_ASSERT_VALUES_EQUAL(ReadChangeQueueSize(runtime, shard), 0u);
-        CommitLock(runtime, sender, shard, writeLock);
+        CommitWriteLock(runtime, sender, shard, writeLock,
+            NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId),
             "key = 1, value = 10\nkey = 2, value = 20\n");
     }

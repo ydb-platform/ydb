@@ -1380,18 +1380,6 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
 
 namespace {
 
-TString ResolveBackupPath(const TString& basePath, const TString& path) {
-    Y_ENSURE(basePath.empty() || basePath.StartsWith('/'),
-        "absolute base path is required for backup metadata, base# " << basePath.Quote());
-    if (basePath.empty() || path.StartsWith('/')) {
-        return path;
-    }
-    if (path.empty()) {
-        return basePath;
-    }
-    return basePath + (basePath.EndsWith('/') ? "" : "/") + path;
-}
-
 NCms::TListDatabasesResult ListDatabases(TDriver driver) {
     NCms::TCmsClient client(driver);
 
@@ -1688,8 +1676,11 @@ void BackupFolder(const TDriver& driver, const TString& database, const TString&
     // cluster root for backup metadata and SQL references.
     const TString canonicalDatabase = database.empty() || database.StartsWith('/')
         ? database
-        : ResolveBackupPath(FindClusterRootPath(driver), database);
-    const TString dbPrefix = ResolveBackupPath(canonicalDatabase, relDbPath);
+        : JoinDatabasePath(FindClusterRootPath(driver), database);
+    const TString dbPrefix = JoinDatabasePath(canonicalDatabase,
+        !canonicalDatabase.empty() && relDbPath.StartsWith('/') && relDbPath != "/"
+            ? RelPathFromAbsolute(canonicalDatabase, relDbPath)
+            : relDbPath);
 
     TString temporalBackupPostfix = CreateTemporalBackupName();
     if (!folderPath) {

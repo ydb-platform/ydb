@@ -49,7 +49,7 @@ public:
         Result = MakeHolder<TEvCdcAggregator::TEvConfigureTrackingResult>();
         Result->Record.SetOrigin(Self->TabletID());
 
-        const auto [config, error] = TCdcAggregatorStreamProtoConverter().ParseConfig(record.GetConfig());
+        const auto [config, error] = Self->CdcAggregatorStreamProtoConverter.ParseConfig(record.GetConfig());
         if (!config) {
             Result->Record.SetStatus(TResult::BAD_REQUEST);
             Result->Record.SetError(error);

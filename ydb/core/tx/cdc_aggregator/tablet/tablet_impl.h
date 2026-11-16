@@ -64,6 +64,7 @@ private:
 
 private:
     std::optional<TCdcAggregatorStream> CdcAggregatorStream;
+    TCdcAggregatorStreamProtoConverter CdcAggregatorStreamProtoConverter;
     TCdcAggregatorStreamRepository CdcAggregatorStreamRepository;
 };
 

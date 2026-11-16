@@ -63,7 +63,7 @@ void TCdcAggregator::Handle(TEvCdcAggregator::TEvDescribeTracking::TPtr& ev, con
 
     auto result = MakeHolder<TEvCdcAggregator::TEvDescribeTrackingResult>();
     if (CdcAggregatorStream) {
-        result->Record = TCdcAggregatorStreamProtoConverter().SerializeDescribeTrackingResult(*CdcAggregatorStream);
+        result->Record = CdcAggregatorStreamProtoConverter.SerializeDescribeTrackingResult(*CdcAggregatorStream);
     }
     ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
 }

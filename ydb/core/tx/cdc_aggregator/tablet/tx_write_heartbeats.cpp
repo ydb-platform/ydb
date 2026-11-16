@@ -6,9 +6,19 @@
 
 namespace NKikimr::NCdcAggregator {
 
-class TCdcAggregator::TTxWriteHeartbeats : public TTxBase {
-    using TResult = NKikimrCdcAggregator::TEvWriteHeartbeatsResult;
+namespace {
 
+THolder<TEvCdcAggregator::TEvWriteHeartbeatsResult> MakeNotReadyResult(ui64 tabletId) {
+    auto result = MakeHolder<TEvCdcAggregator::TEvWriteHeartbeatsResult>();
+    result->Record.SetOrigin(tabletId);
+    result->Record.SetStatus(NKikimrCdcAggregator::TEvWriteHeartbeatsResult::NOT_READY);
+    result->Record.SetError("Tracking is not configured");
+    return result;
+}
+
+} // namespace
+
+class TCdcAggregator::TTxWriteHeartbeats : public TTxBase {
     TEvCdcAggregator::TEvWriteHeartbeats::TPtr Ev;
     THolder<TEvCdcAggregator::TEvWriteHeartbeatsResult> Result;
 
@@ -28,20 +38,17 @@ public:
         YDB_LOG_DEBUG("Execute",
             {"ev", Ev->Get()->ToString()});
 
-        Result = MakeHolder<TEvCdcAggregator::TEvWriteHeartbeatsResult>();
         if (!Self->CdcAggregatorStream) {
-            Result->Record.SetOrigin(Self->TabletID());
-            Result->Record.SetStatus(TResult::NOT_READY);
-            Result->Record.SetError("Tracking is not configured");
+            Result = MakeNotReadyResult(Self->TabletID());
             return true;
         }
 
-        TCdcAggregatorStreamProtoConverter converter;
-        const auto batch = converter.ParseHeartbeatsBatch(Ev->Get()->Record);
+        const auto batch = Self->CdcAggregatorStreamProtoConverter.ParseHeartbeatsBatch(Ev->Get()->Record);
         const auto diff = Self->CdcAggregatorStream->WriteHeartbeats(batch.HeartbeatsBySourceDataShardId);
         NIceDb::TNiceDb db(txc.DB);
         Self->CdcAggregatorStreamRepository.ApplyCdcAggregatorStreamHeartbeatsDiff(db, diff);
-        Result->Record = converter.SerializeWriteHeartbeatsResult(batch, diff);
+        Result = MakeHolder<TEvCdcAggregator::TEvWriteHeartbeatsResult>();
+        Result->Record = Self->CdcAggregatorStreamProtoConverter.SerializeWriteHeartbeatsResult(batch, diff);
         Result->Record.SetOrigin(Self->TabletID());
 
         if (const auto& currentHeartbeat = diff.CurrentHeartbeat) {

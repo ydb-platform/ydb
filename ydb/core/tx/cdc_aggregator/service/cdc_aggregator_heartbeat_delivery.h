@@ -7,12 +7,16 @@
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
 
+#include <optional>
+
 namespace NKikimr::NCdcAggregator {
 
-struct TCdcAggregatorHeartbeatDeliveryItem {
+struct TCdcAggregatorHeartbeatBatchItem {
     ui64 SourceDataShardId = 0;
     NPQ::THeartbeat Heartbeat;
 };
+
+using TCdcAggregatorHeartbeatBatch = TVector<TCdcAggregatorHeartbeatBatchItem>;
 
 struct TCdcAggregatorHeartbeatDeliveryResult {
     THashMap<ui64, TRowVersion> WrittenVersions;
@@ -37,23 +41,19 @@ public:
     explicit TCdcAggregatorHeartbeatDelivery(ui32 maxBatchSize);
 
     void AddHeartbeat(ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat);
-    TVector<TCdcAggregatorHeartbeatDeliveryItem> TakeBatch();
+    std::optional<TCdcAggregatorHeartbeatBatch> PrepareNextBatchIfPossible();
     TVector<TCdcAggregatorHeartbeatDeliveryReply> CompleteBatch(const TCdcAggregatorHeartbeatDeliveryResult& result);
     TVector<TCdcAggregatorHeartbeatDeliveryReply> FailBatch(const TString& error);
 
-    bool HasBatchToSend() const {
-        return InFlight.empty() && !PendingSourceIds.empty();
-    }
-
     bool IsIdle() const {
-        return Pending.empty() && InFlight.empty();
+        return PendingHeartbeatsBySourceId.empty() && InFlight.empty();
     }
 
 private:
     const ui32 MaxBatchSize;
 
-    THashMap<ui64, NPQ::THeartbeat> Pending;
-    TDeque<ui64> PendingSourceIds;
+    THashMap<ui64, NPQ::THeartbeat> PendingHeartbeatsBySourceId;
+    TDeque<ui64> PendingSourceIdQueue;
     TVector<ui64> InFlight;
 };
 

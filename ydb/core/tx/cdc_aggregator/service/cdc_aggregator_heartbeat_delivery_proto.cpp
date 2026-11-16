@@ -4,7 +4,7 @@
 
 namespace NKikimr::NCdcAggregator {
 
-THolder<TEvCdcAggregator::TEvWriteHeartbeats> TCdcAggregatorHeartbeatDeliveryProtoConverter::SerializeBatch(const TVector<TCdcAggregatorHeartbeatDeliveryItem>& batch) const {
+THolder<TEvCdcAggregator::TEvWriteHeartbeats> TCdcAggregatorHeartbeatDeliveryProtoConverter::SerializeBatch(const TCdcAggregatorHeartbeatBatch& batch) const {
     auto ev = MakeHolder<TEvCdcAggregator::TEvWriteHeartbeats>();
     for (const auto& item : batch) {
         auto& proto = *ev->Record.AddHeartbeats();

@@ -26,7 +26,7 @@ TCdcAggregatorHeartbeatDeliveryResult MakeWritten(const TVector<std::pair<ui64, 
     return result;
 }
 
-TVector<ui64> GetSources(const TVector<TCdcAggregatorHeartbeatDeliveryItem>& batch) {
+TVector<ui64> GetSources(const TCdcAggregatorHeartbeatBatch& batch) {
     TVector<ui64> sources;
     for (const auto& item : batch) {
         sources.push_back(item.SourceDataShardId);
@@ -44,9 +44,8 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
             delivery.AddHeartbeat(sourceDataShardId, MakeHeartbeat(100));
         }
 
-        UNIT_ASSERT(delivery.HasBatchToSend());
-        UNIT_ASSERT_VALUES_EQUAL(GetSources(delivery.TakeBatch()), TVector<ui64>({1, 2, 3}));
-        UNIT_ASSERT(!delivery.HasBatchToSend());
+        UNIT_ASSERT_VALUES_EQUAL(GetSources(delivery.PrepareNextBatchIfPossible().value()), TVector<ui64>({1, 2, 3}));
+        UNIT_ASSERT(!delivery.PrepareNextBatchIfPossible());
     }
 
     Y_UNIT_TEST(KeepsNewestHeartbeatOfSource) {
@@ -55,7 +54,7 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
         delivery.AddHeartbeat(1, MakeHeartbeat(120, "b"));
         delivery.AddHeartbeat(1, MakeHeartbeat(110, "c"));
 
-        const auto batch = delivery.TakeBatch();
+        const auto batch = delivery.PrepareNextBatchIfPossible().value();
         UNIT_ASSERT_VALUES_EQUAL(batch.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(batch[0].Heartbeat.Version, TRowVersion(120, 0));
         UNIT_ASSERT_VALUES_EQUAL(batch[0].Heartbeat.Data, "b");
@@ -70,18 +69,17 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
     Y_UNIT_TEST(SendsHeartbeatAddedInFlightInNextBatch) {
         TCdcAggregatorHeartbeatDelivery delivery(100);
         delivery.AddHeartbeat(1, MakeHeartbeat(100));
-        delivery.TakeBatch();
+        delivery.PrepareNextBatchIfPossible().value();
 
         delivery.AddHeartbeat(1, MakeHeartbeat(120));
-        UNIT_ASSERT(!delivery.HasBatchToSend());
+        UNIT_ASSERT(!delivery.PrepareNextBatchIfPossible());
 
         const auto replies = delivery.CompleteBatch(MakeWritten({{1, 100}}));
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
         UNIT_ASSERT(replies[0].Status == EStatus::Written);
         UNIT_ASSERT_VALUES_EQUAL(replies[0].WrittenVersion, TRowVersion(100, 0));
 
-        UNIT_ASSERT(delivery.HasBatchToSend());
-        UNIT_ASSERT_VALUES_EQUAL(delivery.TakeBatch()[0].Heartbeat.Version, TRowVersion(120, 0));
+        UNIT_ASSERT_VALUES_EQUAL(delivery.PrepareNextBatchIfPossible().value()[0].Heartbeat.Version, TRowVersion(120, 0));
     }
 
     Y_UNIT_TEST(RetriesSourcesWithoutResult) {
@@ -90,7 +88,7 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
             delivery.AddHeartbeat(sourceDataShardId, MakeHeartbeat(100));
         }
 
-        delivery.TakeBatch();
+        delivery.PrepareNextBatchIfPossible().value();
         UNIT_ASSERT(!delivery.IsIdle());
 
         const auto replies = delivery.CompleteBatch(MakeWritten({{1, 100}, {2, 100}}));
@@ -108,18 +106,17 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
             delivery.AddHeartbeat(sourceDataShardId, MakeHeartbeat(100));
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(GetSources(delivery.TakeBatch()), TVector<ui64>({1, 2}));
-        UNIT_ASSERT(!delivery.HasBatchToSend());
+        UNIT_ASSERT_VALUES_EQUAL(GetSources(delivery.PrepareNextBatchIfPossible().value()), TVector<ui64>({1, 2}));
+        UNIT_ASSERT(!delivery.PrepareNextBatchIfPossible());
 
         delivery.CompleteBatch(MakeWritten({{1, 100}, {2, 100}}));
-        UNIT_ASSERT(delivery.HasBatchToSend());
-        UNIT_ASSERT_VALUES_EQUAL(GetSources(delivery.TakeBatch()), TVector<ui64>({3}));
+        UNIT_ASSERT_VALUES_EQUAL(GetSources(delivery.PrepareNextBatchIfPossible().value()), TVector<ui64>({3}));
     }
 
     Y_UNIT_TEST(RetriesAllSourcesWhenBatchFails) {
         TCdcAggregatorHeartbeatDelivery delivery(100);
         delivery.AddHeartbeat(1, MakeHeartbeat(100));
-        delivery.TakeBatch();
+        delivery.PrepareNextBatchIfPossible().value();
         delivery.AddHeartbeat(2, MakeHeartbeat(100));
 
         const auto replies = delivery.FailBatch("NOT_READY: ");
@@ -136,13 +133,13 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
         delivery.AddHeartbeat(1, MakeHeartbeat(100));
 
         UNIT_ASSERT(delivery.FailBatch("NOT_READY: ").empty());
-        UNIT_ASSERT(delivery.HasBatchToSend());
+        UNIT_ASSERT(delivery.PrepareNextBatchIfPossible());
     }
 
     Y_UNIT_TEST(RejectsUnknownSource) {
         TCdcAggregatorHeartbeatDelivery delivery(100);
         delivery.AddHeartbeat(1, MakeHeartbeat(100));
-        delivery.TakeBatch();
+        delivery.PrepareNextBatchIfPossible().value();
 
         TCdcAggregatorHeartbeatDeliveryResult result;
         result.RejectionErrors[1] = "UNKNOWN_SOURCE";

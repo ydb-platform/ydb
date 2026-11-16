@@ -8,6 +8,17 @@ namespace {
 
 using EStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
 
+TCdcAggregatorHeartbeatBatchItem PopOldestPending(TDeque<ui64>& sourceIdQueue, THashMap<ui64, NPQ::THeartbeat>& heartbeatsBySourceId) {
+    const ui64 sourceDataShardId = sourceIdQueue.front();
+    sourceIdQueue.pop_front();
+    TCdcAggregatorHeartbeatBatchItem item{
+        .SourceDataShardId = sourceDataShardId,
+        .Heartbeat = std::move(heartbeatsBySourceId.at(sourceDataShardId)),
+    };
+    heartbeatsBySourceId.erase(sourceDataShardId);
+    return item;
+}
+
 } // namespace
 
 TCdcAggregatorHeartbeatDelivery::TCdcAggregatorHeartbeatDelivery(ui32 maxBatchSize)
@@ -17,29 +28,25 @@ TCdcAggregatorHeartbeatDelivery::TCdcAggregatorHeartbeatDelivery(ui32 maxBatchSi
 }
 
 void TCdcAggregatorHeartbeatDelivery::AddHeartbeat(ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat) {
-    auto it = Pending.find(sourceDataShardId);
-    if (it == Pending.end()) {
-        Pending.emplace(sourceDataShardId, heartbeat);
-        PendingSourceIds.push_back(sourceDataShardId);
+    auto it = PendingHeartbeatsBySourceId.find(sourceDataShardId);
+    if (it == PendingHeartbeatsBySourceId.end()) {
+        PendingHeartbeatsBySourceId.emplace(sourceDataShardId, heartbeat);
+        PendingSourceIdQueue.push_back(sourceDataShardId);
     } else if (it->second.Version < heartbeat.Version) {
         it->second = heartbeat;
     }
 }
 
-TVector<TCdcAggregatorHeartbeatDeliveryItem> TCdcAggregatorHeartbeatDelivery::TakeBatch() {
-    Y_ENSURE(InFlight.empty());
+std::optional<TCdcAggregatorHeartbeatBatch> TCdcAggregatorHeartbeatDelivery::PrepareNextBatchIfPossible() {
+    if (!InFlight.empty() || PendingSourceIdQueue.empty()) {
+        return std::nullopt;
+    }
 
-    TVector<TCdcAggregatorHeartbeatDeliveryItem> batch;
-    while (!PendingSourceIds.empty() && batch.size() < MaxBatchSize) {
-        const ui64 sourceDataShardId = PendingSourceIds.front();
-        PendingSourceIds.pop_front();
-
-        batch.push_back(TCdcAggregatorHeartbeatDeliveryItem{
-            .SourceDataShardId = sourceDataShardId,
-            .Heartbeat = std::move(Pending.at(sourceDataShardId)),
-        });
-        Pending.erase(sourceDataShardId);
-        InFlight.push_back(sourceDataShardId);
+    TCdcAggregatorHeartbeatBatch batch;
+    while (!PendingSourceIdQueue.empty() && batch.size() < MaxBatchSize) {
+        TCdcAggregatorHeartbeatBatchItem item = PopOldestPending(PendingSourceIdQueue, PendingHeartbeatsBySourceId);
+        InFlight.push_back(item.SourceDataShardId);
+        batch.push_back(std::move(item));
     }
 
     return batch;
@@ -70,12 +77,12 @@ TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::F
     for (const ui64 sourceDataShardId : InFlight) {
         replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Retry, .Error = error});
     }
-    for (const ui64 sourceDataShardId : PendingSourceIds) {
+    for (const ui64 sourceDataShardId : PendingSourceIdQueue) {
         replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Retry, .Error = error});
     }
 
-    Pending.clear();
-    PendingSourceIds.clear();
+    PendingHeartbeatsBySourceId.clear();
+    PendingSourceIdQueue.clear();
     InFlight.clear();
 
     return replies;

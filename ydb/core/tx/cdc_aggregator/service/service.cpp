@@ -80,7 +80,8 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
     void SendHeartbeatBatches() {
         for (auto& [tabletId, connection] : CdcAggregatorConnections) {
             auto& delivery = connection.CdcAggregatorHeartbeatDelivery;
-            if (!delivery.HasBatchToSend()) {
+            auto batch = delivery.PrepareNextBatchIfPossible();
+            if (!batch) {
                 continue;
             }
 
@@ -90,7 +91,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
                 connection.PipeClient = Register(NTabletPipe::CreateClient(SelfId(), tabletId, config));
             }
 
-            auto ev = ProtoConverter.SerializeBatch(delivery.TakeBatch());
+            auto ev = ProtoConverter.SerializeBatch(*batch);
             connection.BatchCookie = ++LastBatchCookie;
             connection.BatchDeadline = TActivationContext::Monotonic() + BatchTimeout;
             YDB_LOG_DEBUG("Send batch",

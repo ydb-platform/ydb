@@ -224,8 +224,8 @@ public:
     }
 
 private:
-    // Reserve 256 bytes for the private pool chunk header so the first allocation rounds to 64 KiB.
-    static constexpr size_t InitialPoolSize = 64 * 1024 - 256;
+    // Reserve 256 bytes for the private pool chunk header so the first allocation rounds to 8 KiB.
+    static constexpr size_t InitialPoolSize = 8 * 1024 - 256;
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> Columns;
 

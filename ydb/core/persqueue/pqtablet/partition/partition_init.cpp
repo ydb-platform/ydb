@@ -1139,6 +1139,21 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     Done(ctx);
 }
 
+void TPartition::InitFirstCompactionPart()
+{
+    auto& head = CompactionBlobEncoder.Head;
+    head.TrailingOffsetDelta = 0;
+    if (CompactionBlobEncoder.HeadKeys.empty()) {
+        return;
+    }
+
+    TBatch batch = head.GetLastBatch();
+    batch.Unpack();
+    const auto& lastBlob = batch.Blobs.back();
+    head.TrailingOffsetDelta = lastBlob.IsLastPart() ? 0 : lastBlob.LogicalMessageCount;
+    FirstCompactionPart = std::make_pair(batch.GetOffset(), lastBlob.GetPartNo());
+}
+
 
 //
 // TInitEndWriteTimestampStep

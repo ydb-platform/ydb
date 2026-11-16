@@ -14,6 +14,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/core/future.h>
 
+#include <util/generic/scope.h>
 #include <util/stream/zlib.h>
 
 #include <array>
@@ -96,6 +97,7 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
         UNIT_ASSERT(!connectDelay || connectDelayOperationContext);
 
         Contexts = {connectContext, connectTimeoutContext, connectDelayOperationContext};
+        ConnectDelay = connectDelay;
         OnCreateProcessor(++CreateCallsCount);
     }
 
@@ -115,11 +117,14 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
         }
     }
 
-    void FailCreation(EStatus status = EStatus::INTERNAL_ERROR, const TString& message = {}) { // Fail.
+    void FailCreation(EStatus status = EStatus::INTERNAL_ERROR, const TString& message = {}, bool sync = false) { // Fail.
         UNIT_ASSERT(ConnectedCallback);
         auto cb = std::move(ConnectedCallback);
         ConnectedCallback = nullptr;
         ConnectTimeoutCallback = nullptr;
+        if (sync) {
+            return cb(TPlainStatus(status, message), {});
+        }
         with_lock (Lock) {
             CallbackFutures.push(std::async(std::launch::async, std::move(cb), TPlainStatus(status, message), nullptr));
         }
@@ -196,6 +201,7 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
 
     std::atomic<size_t> CreateCallsCount = 0;
     std::array<std::weak_ptr<NYdbGrpc::IQueueClientContext>, 3> Contexts;
+    TDuration ConnectDelay;
 
 private:
     TAdaptiveLock Lock;
@@ -947,38 +953,57 @@ void CheckClosedReadSessions(const TReadSettings& baseSettings) {
 namespace NYdb::inline Dev::NTopic::NTests {
 class TDirectReadSessionImplTestSetup {
 public:
-    enum class EFailure { Connect, Read, Start };
+    enum class EFailure { Connect, Read, Start, Reconnect };
 
     static void CheckTerminalCallback(EFailure failure) {
-        struct TControlCallbacks : IDirectReadSessionControlCallbacks {
-            MOCK_METHOD(void, AbortSession, (TSessionClosedEvent&&), (override));
+        struct TImmediateRetry : IRetryPolicy::IRetryState {
+            TMaybe<TDuration> GetNextRetryDelay(EStatus status) override {
+                return status == EStatus::TRANSPORT_UNAVAILABLE ? TMaybe<TDuration>(TDuration::Zero()) : Nothing();
+            }
         };
-        auto counters = MakeIntrusive<TReaderCounters>();
-        MakeCountersNotNull(*counters);
+        auto counters = MakeIntrusive<TReaderCounters>(MakeIntrusive<::NMonitoring::TDynamicCounters>());
         TReadSessionSettings settings;
-        settings.Counters(counters).RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
-        auto callbacks = std::make_shared<TControlCallbacks>();
+        settings.DirectRead(true).Counters(counters).RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
+        auto parentContext = MakeWithCallbackContext<TSingleClusterReadSessionImpl<false>>(
+            settings, "", "", "", TLog{}, nullptr, std::make_shared<TReadSessionEventsQueue<false>>(settings),
+            std::make_shared<::TReadSessionImplTestSetup::TFakeContext>(), 1, 1);
+        Y_DEFER { parentContext->Cancel(); };
+        auto parent = parentContext->TryGet();
+        auto callbacks = std::make_shared<TDirectReadSessionControlCallbacks>(parentContext);
         auto factory = std::make_shared<::TMockProcessorFactory<TDirectReadClientMessage, TDirectReadServerMessage>>();
         auto context = MakeWithCallbackContext<TDirectReadSession>(0, "", settings, callbacks,
-            std::make_shared<::TReadSessionImplTestSetup::TFakeContext>(), factory, TLog{});
+            parent->ClientContext->CreateContext(), factory, TLog{});
         auto session = context->TryGet();
-        TDirectReadSessionManager manager("", settings, callbacks, session->ClientContext, factory, TLog{});
+        auto& manager = parent->DirectReadSessionManager.emplace("", settings, callbacks, parent->ClientContext, factory, TLog{});
         manager.NodeSessions[0] = context;
-        EStatus deliveredStatus = EStatus::SUCCESS;
-        EXPECT_CALL(*callbacks, AbortSession(_)).WillOnce([&](TSessionClosedEvent&& event) {
-            deliveredStatus = event.GetStatus();
-            manager.Close();
-        });
+        auto stream = MakeIntrusive<TPartitionStreamImpl<false>>(ui64{1}, "topic", "", 0, 1, 0, std::nullopt, parentContext);
+        stream->SetLastDirectReadId(3);
+        parent->PartitionStreams[1] = stream;
         EXPECT_CALL(*factory, OnCreateProcessor(1));
         manager.StartPartitionSession({.PartitionSessionId = 1, .Location = {0, 1}});
+        auto responses = std::make_shared<TLockFreeQueue<Ydb::Topic::StreamDirectReadMessage::DirectReadResponse>>();
+        callbacks->OnDirectReadDone(responses);
+        Ydb::Topic::StreamDirectReadMessage::DirectReadResponse response;
+        response.set_partition_session_id(1);
+        response.mutable_partition_data()->set_partition_session_id(1);
+        response.set_direct_read_id(1);
+        responses->Enqueue(response);
+        callbacks->OnDirectReadDone(responses);
+        response.set_direct_read_id(2);
+        responses->Enqueue(std::move(response));
         if (failure == EFailure::Connect) {
-            factory->FailCreation(EStatus::UNAVAILABLE);
-        }
-        factory->Wait();
-        if (failure != EFailure::Connect) {
+            factory->FailCreation(EStatus::UNAVAILABLE, {}, true);
+        } else {
+            factory->Validate();
             TDeferredActions<false> deferred;
             if (auto borrowed = context->LockShared()) {
-                if (failure == EFailure::Read) {
+                if (failure == EFailure::Reconnect) {
+                    borrowed->RetryState = std::make_unique<TImmediateRetry>();
+                    EXPECT_CALL(*factory, OnCreateProcessor(2)).WillOnce([&] {
+                        factory->FailCreation(EStatus::UNAVAILABLE, {}, !factory->ConnectDelay);
+                    });
+                }
+                if (failure == EFailure::Read || failure == EFailure::Reconnect) {
                     borrowed->State = TDirectReadSession::EState::WORKING;
                     borrowed->OnReadDone(NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Read failed"), borrowed->ConnectionGeneration, deferred);
                 } else {
@@ -988,12 +1013,20 @@ public:
                     }
                 }
             }
-            manager.StartPartitionSession({.PartitionSessionId = 2, .Location = {0, 1}});
-            UNIT_ASSERT_VALUES_EQUAL(deliveredStatus, EStatus::SUCCESS);
-            UNIT_ASSERT(session->PartitionSessions.size() == 1 && manager.Locations.size() == 1);
+            if (failure != EFailure::Reconnect) {
+                manager.StartPartitionSession({.PartitionSessionId = 2, .Location = {0, 1}});
+                UNIT_ASSERT(!parent->Aborting);
+                UNIT_ASSERT(session->PartitionSessions.size() == 1 && manager.Locations.size() == 1);
+            }
         }
+        factory->Wait();
         factory->Validate();
-        UNIT_ASSERT_VALUES_EQUAL(deliveredStatus, failure == EFailure::Read ? EStatus::TRANSPORT_UNAVAILABLE : EStatus::UNAVAILABLE);
+        UNIT_ASSERT(!parent->DirectReadSessionManager);
+        callbacks->OnDirectReadDone(responses);
+        UNIT_ASSERT_VALUES_EQUAL(stream->GetNextDirectReadId(), 2);
+        auto event = parent->GetEventsQueue()->GetEvent(false);
+        UNIT_ASSERT(event);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TSessionClosedEvent>(*event).GetStatus(), failure == EFailure::Read ? EStatus::TRANSPORT_UNAVAILABLE : EStatus::UNAVAILABLE);
     }
 };
 } // namespace NYdb::NTopic::NTests
@@ -1039,7 +1072,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
     Y_UNIT_TEST(DirectTerminalCallbacksCanCloseReader) {
         using TSetup = NTopic::NTests::TDirectReadSessionImplTestSetup;
-        for (auto failure : {TSetup::EFailure::Connect, TSetup::EFailure::Read, TSetup::EFailure::Start}) {
+        for (auto failure : {TSetup::EFailure::Connect, TSetup::EFailure::Read, TSetup::EFailure::Start, TSetup::EFailure::Reconnect}) {
             TSetup::CheckTerminalCallback(failure);
         }
     }

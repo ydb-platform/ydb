@@ -1549,7 +1549,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
     TDeferredActions<false> deferred;
     with_lock (Lock) {
         Ydb::Topic::StreamDirectReadMessage::DirectReadResponse response;
-        if (!responses->Dequeue(&response)) {
+        if (Aborting || !responses->Dequeue(&response)) {
             return;
         }
 

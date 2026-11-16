@@ -971,7 +971,7 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
             if (!nextDelay) {
                 return false;
             }
-            delay = *nextDelay;
+            delay = std::max(*nextDelay, TDuration::MicroSeconds(1)); // Keep reconnect callbacks asynchronous.
             connectDelayContext = ClientContext->CreateContext();
             if (!connectDelayContext) {
                 return false;

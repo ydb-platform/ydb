@@ -91,7 +91,7 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
                 {"ffModified", FFColumns->DebugString()});
         } else {
             //            YDB_LOG_VERIFY(!FFColumns->Contains(*SpecColumns),
-                              {"info", FFColumns->DebugString()});
+            //                {"info", FFColumns->DebugString()});
             YDB_LOG_DEBUG("",
                 {"ffFirst", FFColumns->DebugString()});
         }

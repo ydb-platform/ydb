@@ -56,7 +56,7 @@ void TOrderedResultWithLimitCollection::DoOnSourceFinished(const NCommon::IDataS
         {"inFlight", GetSourcesInFlightCount()},
         {"fetching", FetchingInFlightSources.size()});
     YDB_LOG_VERIFY(FetchingInFlightSources.erase(source.GetSourceIdx()) || Cleared || Aborted,
-        {"source_idx", source.GetSourceIdx()});
+        {"sourceIdx", source.GetSourceIdx()});
 }
 
 TOrderedResultWithLimitCollection::TOrderedResultWithLimitCollection(

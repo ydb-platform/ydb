@@ -61,7 +61,7 @@ void TCdcAggregator::SwitchToWork(const TActorContext& ctx) {
 
 void TCdcAggregator::PersistCdcAggregatorStream(NIceDb::TNiceDb& db) {
     db.Table<Schema::State>().Key(Schema::State::Id::Value).Update(
-        NIceDb::TUpdate<Schema::State::TrackingConfig>(SerializeCdcAggregatorStreamTopic(CdcAggregatorStream->GetTopic())));
+        NIceDb::TUpdate<Schema::State::TrackingConfig>(TCdcAggregatorStreamProtoConverter().SerializeTopic(CdcAggregatorStream->GetTopic())));
 
     for (const auto dataShardId : CdcAggregatorStream->GetSourceDataShardIds()) {
         db.Table<Schema::Sources>().Key(dataShardId).Update();

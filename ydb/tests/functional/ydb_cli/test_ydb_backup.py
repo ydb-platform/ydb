@@ -1759,10 +1759,11 @@ class TestDatabaseBackup(BaseTestClusterBackupInFiles):
             ".sys/udf_modules/system_view.pb",
             ".sys/udf_modules/permissions.pb",
         ]
-        slashless_database = (
-            os.path.relpath(self.database, self.root_dir) if self.enable_relative_paths else self.database.lstrip("/")
+        databases = (
+            (self.database, os.path.relpath(self.database, self.root_dir))
+            if self.enable_relative_paths else (self.database,)
         )
-        for index, database in enumerate((self.database, slashless_database)):
+        for index, database in enumerate(databases):
             self.create_database_backup(expected_files, output=f"backup_files_dir_{index}", database=database)
 
 
@@ -1993,13 +1994,13 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
 
 
 class TestRestoreReplaceOption(BaseTestBackupInFiles):
-    def ydb_cli(self, args, database="/Root"):
+    def ydb_cli(self, args):
         return yatest.common.execute(
             [
                 backup_bin(),
                 "-vvv",
                 "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database", database,
+                "--database", "/Root",
             ]
             + args
         )
@@ -2126,22 +2127,6 @@ class TestRestoreReplaceOption(BaseTestBackupInFiles):
             are_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
             is_(True),
         )
-
-        # A relative destination is resolved against the database.
-        source_path = "/Root/table"
-        restored_path = "/Root/relative_restoration/point/table"
-        self.ydb_cli([
-            "tools", "restore", "--path", "relative_restoration/point", "--input", backup_files_dir,
-        ], database="/Root")
-        assert_that(are_tables_the_same(session, self.driver.scheme_client, source_path, restored_path), is_(True))
-
-        self.delete_some_rows(session, restored_path)
-        # A slashless cluster-root prefix is another relative path component.
-        restored_path = "/Root/Root/relative_restoration/point/table"
-        self.ydb_cli([
-            "tools", "restore", "--path", "Root/relative_restoration/point", "--input", backup_files_dir, "--replace",
-        ], database="/Root")
-        assert_that(are_tables_the_same(session, self.driver.scheme_client, source_path, restored_path), is_(True))
 
 
 class BaseTestReplaceSysACLOption(BaseTestBackupInFiles):

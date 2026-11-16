@@ -82,6 +82,9 @@ void TCommandRemoveDirectory::Config(TConfig& config) {
 void TCommandRemoveDirectory::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
+    if (Path == "/") {
+        throw TMisuseException() << "Cannot remove the cluster root";
+    }
     if (InFlight == 0) {
         throw TMisuseException() << "--in-flight must be greater than 0";
     }

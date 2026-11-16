@@ -1,8 +1,4 @@
 #include "normalize_path.h"
-#include "scoped_driver.h"
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -49,30 +45,12 @@ namespace NConsoleClient {
     }
 
     void AdjustPath(TString& path, const TClientCommand::TConfig& config) {
-        const auto& base = config.Path ? config.Path : config.Database;
-        if (!path.StartsWith('/') && (config.Path || base.StartsWith('/'))) {
-            path = base + '/' + path;
+        if (!path.StartsWith('/')) {
+            path = (config.Path ? config.Path : config.Database) + '/' + path;
         }
-
-        // Retain the existing CLI normalization without making a relative path absolute.
-        if (path != "/") {
-            const bool relative = !path.StartsWith('/');
-            path = NormalizePath(relative ? "/" + path : path);
-            if (relative && !path.empty()) {
-                path.erase(0, 1);
-            }
-        }
-    }
-
-    void AdjustPathToDatabase(TString& path, TClientCommand::TConfig& config) {
-        AdjustPath(path, config);
-        if (!path.StartsWith('/') && !config.Database.empty() && !config.Database.StartsWith('/')) {
-            TScopedDriver driver{TDriver(config.CreateDriverConfigWithBuildInfo())};
-            NScheme::TSchemeClient client(driver);
-            auto root = client.ListDirectory("/").GetValueSync();
-            NStatusHelpers::ThrowOnErrorOrPrintIssues(root);
-            Y_ENSURE(root.GetChildren().size() == 1, "Exactly one cluster root expected");
-            path = NormalizePath("/" + root.GetChildren().front().Name + "/" + config.Database + "/" + path);
+        path = NormalizePath(path);
+        if (path.empty()) {
+            path = "/";
         }
     }
 

@@ -493,11 +493,12 @@ Y_UNIT_TEST_SUITE(ExportTest) {
 
     Y_UNIT_TEST_F(ApplyExcludeClientFilter, TExportFixture) {
         const TString path = GetDatabase() + "/tenant/a";
-        Service<TSchemeImpl>().Database = "tenant";
+        Service<TSchemeImpl>().BootstrapDatabase = "tenant";
+        Service<TSchemeImpl>().Database = GetDatabase() + "/tenant";
         Service<TSchemeImpl>()
             .ExpectChild("/", "test_database", Ydb::Scheme::Entry::DIRECTORY)
             .ExpectListDirectory(path)
-            .ExpectChild(path, "data", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild(path, "keep", Ydb::Scheme::Entry::TABLE)
             .ExpectChild(path, "skip", Ydb::Scheme::Entry::TABLE)
             .ExpectChild(path, "nested", Ydb::Scheme::Entry::DIRECTORY)
             .ExpectListDirectory(path + "/nested")
@@ -510,7 +511,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             .ExpectS3SecretKey("test-access-key")
             .ExpectCommonSourcePrefix(path)
             .ExpectCommonDstPrefix("dst")
-            .ExpectItem(path + "/data", "dst/data")
+            .ExpectItem(path + "/keep", "dst/keep")
             .ExpectItem(path + "/nested/keep_nested", "dst/nested/keep_nested");
 
         RunCli(
@@ -610,8 +611,9 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             for (bool explicitItem : {false, true}) {
                 const TString database = relative ? "tenant" : GetDatabase();
                 const TString path = relative ? GetDatabase() + "/tenant" : GetDatabase();
-                Service<TSchemeImpl>().Database = database;
+                Service<TSchemeImpl>().Database = path;
                 if (relative) {
+                    Service<TSchemeImpl>().BootstrapDatabase = database;
                     Service<TSchemeImpl>().ExpectChild("/", "test_database", Ydb::Scheme::Entry::DIRECTORY);
                 }
                 Service<TSchemeImpl>()

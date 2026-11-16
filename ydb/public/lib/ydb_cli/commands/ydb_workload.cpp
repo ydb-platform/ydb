@@ -383,9 +383,7 @@ TWorkloadCommandRun::TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, 
 int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
     Params.SetClients(QueryClient.get(), nullptr, TableClient.get(), nullptr);
-    TString databasePath = ".";
-    AdjustPathToDatabase(databasePath, config);
-    Params.DbPath = databasePath;
+    Params.DbPath = config.Database;
     Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
     Params.Validate(NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
@@ -429,9 +427,7 @@ int TWorkloadCommandBase::Run(TConfig& config) {
         QueryClient = MakeHolder<NQuery::TQueryClient>(*Driver);
         Params.SetClients(QueryClient.Get(), SchemeClient.Get(), TableClient.Get(), TopicClient.Get());
     }
-    TString databasePath = ".";
-    AdjustPathToDatabase(databasePath, config);
-    Params.DbPath = databasePath;
+    Params.DbPath = config.Database;
     Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
     auto result = DoRun(*workloadGen, config);
@@ -449,13 +445,23 @@ int TWorkloadCommandBase::Run(TConfig& config) {
 
 void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) {
     auto pathsToDelete = workloadGen.GetCleanPaths();
+    for (const auto& path : pathsToDelete) {
+        if (NormalizePath("/" + path).empty()) {
+            throw TMisuseException() << "Workload cleanup path must not be empty or the database root";
+        }
+        for (TStringBuf remaining(path); remaining;) {
+            const auto component = remaining.NextTok('/');
+            if (component == "." || component == "..") {
+                throw TMisuseException() << "Workload cleanup path must not contain '.' or '..' components";
+            }
+        }
+    }
     TRemoveDirectoryRecursiveSettings settings;
     settings.NotExistsIsOk(true);
     settings.CreateProgressBar(true);
     for (const auto& path : pathsToDelete) {
         Cout << "Remove path " << path << "..."  << Endl;
-        TString fullPath(path);
-        NConsoleClient::AdjustPath(fullPath, config);
+        auto fullPath = config.Database + "/" + path.c_str();
         if (DryRun) {
             Cout << "Remove " << fullPath << Endl;
         } else {
@@ -471,8 +477,7 @@ void TWorkloadCommandBase::RmParentIfEmpty(TStringBuf path, TConfig& config) {
     if (!path) {
         return;
     }
-    TString fullPath(path);
-    NConsoleClient::AdjustPath(fullPath, config);
+    auto fullPath = std::string(config.Database.c_str()) + "/" + std::string(path.cbegin(), path.cend());
     auto lsResult = SchemeClient->ListDirectory(fullPath).GetValueSync();
     if (lsResult.IsSuccess() && lsResult.GetChildren().empty() && lsResult.GetEntry().Type == NScheme::ESchemeEntryType::Directory) {
         Cout << "Folder " << path << " is empty, remove it..." << Endl;
@@ -541,8 +546,7 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
         } else {
             TVector<TString> existPaths;
             for (const auto& path: workloadGen.GetCleanPaths()) {
-                TString fullPath(path);
-                NConsoleClient::AdjustPath(fullPath, config);
+                const auto fullPath = config.Database + "/" + path.c_str();
                 if (SchemeClient->DescribePath(fullPath).GetValueSync().IsSuccess()) {
                     existPaths.emplace_back(path);
                 }

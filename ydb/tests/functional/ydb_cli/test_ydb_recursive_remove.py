@@ -8,6 +8,7 @@ import yatest
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin
 from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.library.fixtures import ydb_database_ctx
 
 CLUSTER_CONFIG = dict(
     extra_feature_flags=["enable_external_data_sources", "enable_schema_secrets", "enable_backup_service"],
@@ -17,6 +18,16 @@ CLUSTER_CONFIG = dict(
     query_service_config=dict(
         available_external_data_sources=["ObjectStorage"]
     ))
+
+
+@pytest.fixture(scope="module")
+def ydb_cluster_configuration(request):
+    if not hasattr(request, "param"):
+        return CLUSTER_CONFIG
+    config = CLUSTER_CONFIG.copy()
+    flags = "extra_feature_flags" if request.param else "disabled_feature_flags"
+    config[flags] = CLUSTER_CONFIG[flags] + ["enable_relative_paths"]
+    return config
 
 
 def execute_ydb_cli_command(node, database, args, stdin=None):
@@ -76,6 +87,69 @@ def create_external_table(session, external_table, external_data_source):
         );
         """
     )
+
+
+@pytest.mark.parametrize(
+    "ydb_cluster_configuration", [False, True], indirect=True,
+    ids=["relative_paths_disabled", "relative_paths_enabled"],
+)
+class TestRootPathSafety:
+    def test_relative_database_uses_the_same_connection_and_resource_base(
+        self, ydb_cluster, ydb_root, ydb_client_session,
+    ):
+        relative_database = ydb_root.lstrip("/")
+        with ydb_database_ctx(ydb_cluster, f"{ydb_root}/{relative_database}") as database:
+            with ydb_client_session(database).checkout() as session:
+                create_table(session, "orders")
+                session.transaction().execute(
+                    'UPSERT INTO orders (key, value) VALUES (1, "tenant");', commit_tx=True,
+                )
+                output = execute_ydb_cli_command(
+                    ydb_cluster.nodes[1], relative_database,
+                    ["sql", "-s", "SELECT key, value FROM orders;", "--format", "json-unicode-array"],
+                )
+                assert json.loads(output) == [{"key": 1, "value": "tenant"}]
+
+    @pytest.mark.parametrize(
+        "path", ["/", "//"],
+        ids=["root", "slashes"],
+    )
+    def test_rmdir_root_aliases(self, ydb_cluster, ydb_root, ydb_database, ydb_client_session, path):
+        node = ydb_cluster.nodes[1]
+        with ydb_client_session(ydb_database).checkout() as session:
+            create_table(session, "sentinel")
+            session.transaction().execute(
+                'UPSERT INTO sentinel (key, value) VALUES (1, "retained");', commit_tx=True,
+            )
+            removal = yatest.common.execute(
+                [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}", "--database", ydb_root,
+                 "scheme", "rmdir", "-rf", path], check_exit_code=False,
+            )
+            rows = session.transaction().execute("SELECT key, value FROM sentinel;", commit_tx=True)[0].rows
+            assert [(row.key, row.value) for row in rows] == [(1, "retained")]
+            assert removal.exit_code != 0
+
+    @pytest.mark.parametrize("command", [["clean"], ["init", "--clear"]], ids=["clean", "init_clear"])
+    @pytest.mark.parametrize(
+        "path", [".", "", "bench/.", "bench/.."],
+        ids=["dot", "empty", "bench_dot", "bench_dotdot"],
+    )
+    def test_workload_cleanup_paths(self, ydb_cluster, ydb_database, ydb_client_session, command, path):
+        node = ydb_cluster.nodes[1]
+        with ydb_client_session(ydb_database).checkout() as session:
+            create_table(session, "bench/sentinel")
+            session.transaction().execute(
+                'UPSERT INTO `bench/sentinel` (key, value) VALUES (1, "retained");', commit_tx=True,
+            )
+            cleanup = yatest.common.execute(
+                [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}", "--database", ydb_database,
+                 "workload", "kv"] + command + ["--path", path], check_exit_code=False,
+            )
+            rows = session.transaction().execute(
+                "SELECT key, value FROM `bench/sentinel`;", commit_tx=True,
+            )[0].rows
+            assert [(row.key, row.value) for row in rows] == [(1, "retained")]
+            assert cleanup.exit_code != 0
 
 
 class TestRecursiveRemove:

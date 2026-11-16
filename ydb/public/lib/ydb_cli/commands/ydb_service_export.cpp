@@ -206,7 +206,7 @@ void TCommandExportToYt::Parse(TConfig& config) {
 void TCommandExportToYt::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
     for (auto& item : Items) {
-        AdjustPathToDatabase(item.Source, config);
+        NConsoleClient::AdjustPath(item.Source, config);
 
         const bool hasAppendPrefix = item.Destination.StartsWith(AppendPrefix);
         if (item.Append && !hasAppendPrefix) {
@@ -365,7 +365,7 @@ void TCommandExportBase::ExtractParams(TConfig& config) {
         if (CommonSourcePath && item.Source && item.Source[0] != '/') {
             item.Source = CommonSourcePath + "/" + item.Source;
         }
-        AdjustPathToDatabase(item.Source, config);
+        NConsoleClient::AdjustPath(item.Source, config);
     }
 }
 
@@ -430,7 +430,7 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     }
 
     if (CommonSourcePath) {
-        AdjustPathToDatabase(CommonSourcePath, config);
+        NConsoleClient::AdjustPath(CommonSourcePath, config);
         settings.SourcePath(CommonSourcePath);
     }
 
@@ -446,9 +446,7 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     const bool expandItems = (!CommonDestinationPrefix || !ExclusionPatterns.empty());
     if (expandItems && settings.Item_.empty()) {
         constexpr bool isFs = std::is_same_v<TSettings, NExport::TExportToFsSettings>;
-        TString source = CommonSourcePath ? CommonSourcePath : TString(".");
-        AdjustPathToDatabase(source, config);
-        settings.AppendItem(typename TSettings::TItem{.Src = source, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
+        settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
     }
 
     const auto driver = CreateDriver(config);

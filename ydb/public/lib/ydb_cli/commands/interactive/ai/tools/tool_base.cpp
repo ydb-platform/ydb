@@ -63,19 +63,12 @@ TToolBase::TResponse TToolBase::Execute(const NJson::TJsonValue& parameters) {
 
 TDatabaseToolBase::TDatabaseToolBase(const TString& database, const NJson::TJsonValue& parametersSchema, const TString& description)
     : TBase(parametersSchema, description)
-    , Database(database.StartsWith('/') ? CanonizeAbsolutePath(database) : database)
+    , Database(CanonizeAbsolutePath(database))
 {}
 
 TString TDatabaseToolBase::CanonizePath(const TString& path) const {
     const auto result = Strip(path);
-    if (!Database.StartsWith('/')) {
-        return result.StartsWith('/') ? CanonizeAbsolutePath(result) : result;
-    }
-    auto canonical = CanonizeAbsolutePath(result);
-    if (!result.StartsWith('/') || (canonical != "/" && !canonical.StartsWith(Database))) {
-        canonical = JoinYdbPath({Database, result});
-    }
-    return canonical;
+    return result.StartsWith('/') ? CanonizeAbsolutePath(result) : JoinYdbPath({Database, result});
 }
 
 } // namespace NYdb::NConsoleClient::NAi

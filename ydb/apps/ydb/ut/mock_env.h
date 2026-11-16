@@ -113,7 +113,13 @@ public:
     };
 
     grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) {
-        CheckClientMetadata(context, "x-ydb-database", Database);
+        if (BootstrapDatabase) {
+            CHECK_EXP(request->path() == "/", "Expected cluster-root discovery");
+            CheckClientMetadata(context, "x-ydb-database", BootstrapDatabase);
+            BootstrapDatabase.clear();
+        } else {
+            CheckClientMetadata(context, "x-ydb-database", Database);
+        }
         if (Token) {
             CheckClientMetadata(context, "x-ydb-auth-ticket", Token);
         } else {
@@ -186,6 +192,7 @@ public:
 
     void ClearExpectations() {
         ExpectedClientCert = Token = {};
+        BootstrapDatabase.clear();
         Database = TEST_DATABASE;
         Directories.clear();
     }
@@ -195,6 +202,7 @@ public:
     }
 
     TString Database = TEST_DATABASE;
+    TString BootstrapDatabase;
     TString Token;
     TString ExpectedClientCert;
     THashMap<TString, TDirectory> Directories;

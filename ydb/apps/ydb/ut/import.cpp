@@ -463,7 +463,8 @@ Y_UNIT_TEST_SUITE(ImportTest) {
 
         const TString s3Endpoint = GetS3Endpoint();
 
-        Service<TSchemeImpl>().Database = "import-root";
+        Service<TSchemeImpl>().BootstrapDatabase = "import-root";
+        Service<TSchemeImpl>().Database = GetDatabase() + "/import-root";
         Service<TSchemeImpl>().ExpectChild("/", "test_database", Ydb::Scheme::Entry::DIRECTORY);
         Service<TImportImpl>()
             .ExpectBucket(TEST_BUCKET)

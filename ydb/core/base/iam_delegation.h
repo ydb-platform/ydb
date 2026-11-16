@@ -94,6 +94,8 @@ struct TEvIamDelegation {
 };
 
 // Node-local service for privileged components performing SetupDelegation / RevokeDelegation.
+// Callers must authorize the subject and the target service account/cloud before sending a request.
+// This transport service does not perform YDB ACL checks or authenticate the sending actor.
 inline NActors::TActorId MakeIamDelegationServiceId(ui32 nodeId = 0) {
     return NActors::TActorId(nodeId, "iam_dlg_srv");
 }

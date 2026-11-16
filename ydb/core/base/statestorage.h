@@ -9,8 +9,11 @@
 #include <util/stream/str.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
+#include <util/generic/strbuf.h>
 
 namespace NKikimr {
+
+struct TPathId;
 
 struct TEvStateStorage {
     enum EEv {
@@ -82,6 +85,7 @@ struct TEvStateStorage {
         };
 
         ESigWaitMode SigWaitMode;
+        bool WaitForAllRingGroups = false;
 
         TProxyOptions(ESigWaitMode sigWaitMode = SigNone)
             : SigWaitMode(sigWaitMode)
@@ -89,8 +93,8 @@ struct TEvStateStorage {
 
         TString ToString() const {
             switch (SigWaitMode) {
-            case SigNone: return "SigNone";
-            case SigAsync: return "SigAsync";
+            case SigNone: return WaitForAllRingGroups ? "SigNone WaitForAllRingGroups" : "SigNone";
+            case SigAsync: return WaitForAllRingGroups ? "SigAsync WaitForAllRingGroups" : "SigAsync";
             case SigSync: return "SigSync";
             default: return "Unknown";
             }
@@ -351,6 +355,9 @@ struct TEvStateStorage {
         const ui64 LockedFor;
         const TSignature Signature;
         TVector<TFollowerInfo> Followers;
+        // Cluster-state version of this request's immutable StateStorage configuration; zero means unknown.
+        ui64 ClusterStateGeneration = 0;
+        ui64 ClusterStateGuid = 0;
 
         TEvInfo(NKikimrProto::EReplyStatus status, ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, bool locked, ui64 lockedFor, const TSignature &sig, TVector<TFollowerInfo>&& followers)
             : Status(status)
@@ -633,6 +640,9 @@ struct TBoardRetrySettings {
     TDuration StartDelayMs = TDuration::MilliSeconds(2000);
     TDuration MaxDelayMs = TDuration::MilliSeconds(5000);
 };
+
+ui64 GetSchemeBoardSelectionKey(TStringBuf path);
+ui64 GetSchemeBoardSelectionKey(const TPathId& pathId);
 
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config);
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config);

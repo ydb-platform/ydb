@@ -1,5 +1,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
+#include <util/system/type_name.h>
+
 Y_UNIT_TEST_SUITE(BlobStorageBlockRace) {
     Y_UNIT_TEST(Test) {
         TEnvironmentSetup env{{
@@ -199,5 +201,67 @@ Y_UNIT_TEST_SUITE(BlobStorageBlockRace) {
         checkStatus(6, NKikimrProto::ALREADY);
         issue(0, 6, guid1);
         checkStatus(6, NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(AlreadyWaitsForItsOwnLogCommit) {
+        constexpr ui64 TabletId = 100500;
+        constexpr ui32 Generation = 10;
+        TEnvironmentSetup env{{.NodeCount = 1, .Erasure = TBlobStorageGroupType::ErasureNone}};
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        auto& runtime = env.Runtime;
+        const auto info = env.GetGroupInfo(env.GetGroups().front());
+        const auto vdisk = info->GetVDiskId(0);
+        const auto queue = env.CreateQueueActor(vdisk, NKikimrBlobStorage::PutTabletLog, 1000);
+        const auto writer = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const auto retry = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        bool holding = true;
+        bool already = false;
+        ui32 completedWrites = 0;
+        std::vector<std::unique_ptr<IEventHandle>> logs;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (holding && ev->GetTypeRewrite() == NPDisk::TEvLogResult::EventType) {
+                auto *actor = runtime->GetActor(ev->GetRecipientRewrite());
+                if (actor && TypeName(*actor).Contains("TSkeleton")) {
+                    logs.push_back(std::move(ev));
+                    return false;
+                }
+            }
+            if (ev->GetRecipientRewrite() == retry && ev->GetTypeRewrite() == TEvBlobStorage::EvVBlockResult) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvBlobStorage::TEvVBlockResult>()->Record.GetStatus(),
+                    NKikimrProto::ALREADY);
+                already = true;
+                return false;
+            }
+            if (ev->GetRecipientRewrite() == writer && ev->GetTypeRewrite() == TEvBlobStorage::EvVBlockResult) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvBlobStorage::TEvVBlockResult>()->Record.GetStatus(),
+                    NKikimrProto::OK);
+                ++completedWrites;
+                return false;
+            }
+            return true;
+        };
+        auto send = [&](ui64 tabletId, const TActorId& sender) {
+            runtime->Send(new IEventHandle(queue, sender, new TEvBlobStorage::TEvVBlock(tabletId, Generation,
+                vdisk, TInstant::Max())), 1);
+            env.Sim(TDuration::MilliSeconds(100));
+        };
+        send(TabletId - 1, writer);
+        UNIT_ASSERT_VALUES_EQUAL(logs.size(), 1);
+        send(TabletId, writer);
+        UNIT_ASSERT_VALUES_EQUAL(logs.size(), 2);
+        send(TabletId, retry);
+        UNIT_ASSERT(!already);
+
+        holding = false;
+        runtime->Send(logs.front().release(), 1);
+        env.Sim(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_C(!already, "ALREADY was released by an earlier, unrelated LSN");
+        UNIT_ASSERT_VALUES_EQUAL(completedWrites, 1);
+        runtime->Send(logs.back().release(), 1);
+        env.Sim(TDuration::MilliSeconds(100));
+        UNIT_ASSERT(already);
+        UNIT_ASSERT_VALUES_EQUAL(completedWrites, 2);
+        runtime->FilterFunction = {};
     }
 }

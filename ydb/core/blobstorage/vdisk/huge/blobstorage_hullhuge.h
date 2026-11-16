@@ -7,6 +7,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
+#include <optional>
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
@@ -26,6 +28,8 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
+        // Present for VPut requests; internal replication does not acknowledge a client write.
+        std::optional<ui32> AdmittedGroupGeneration;
 
         mutable NLWTrace::TOrbit Orbit;
 
@@ -87,6 +91,8 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
+        // Present for VPut requests; internal replication does not acknowledge a client write.
+        std::optional<ui32> AdmittedGroupGeneration;
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,

@@ -114,6 +114,9 @@ TString TTabletInfo::FamilyString() const {
 }
 
 void TTabletInfo::ChangeVolatileState(EVolatileState state) {
+    if (BootAttemptId && state != EVolatileState::TABLET_VOLATILE_STATE_STARTING) {
+        Hive.ClearBootAttempt(*this);
+    }
     if (VolatileState == state) {
         if (Node != nullptr) {
             YDB_LOG_DEBUG("TTabletInfo::ChangeVolatileState volatile state unchanged",
@@ -543,8 +546,7 @@ const TNodeFilter& TTabletInfo::GetNodeFilter() const {
 bool TTabletInfo::InitiateStart(TNodeInfo* node) {
     if (BecomeStarting(node->Id)) {
         PostponedStart = {};
-        TFullTabletId tabletId = GetFullTabletId();
-        Hive.ExecuteStartTablet(tabletId, node->Local, tabletId.first, false);
+        Hive.ExecuteStartTablet(GetFullTabletId(), node->Local);
         return true;
     }
     return false;

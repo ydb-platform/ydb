@@ -11,6 +11,7 @@
 #include <util/generic/xrange.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NCmsTest {
 
@@ -565,6 +566,83 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         CheckSelfHealStatePull(false);
     }
 
+    Y_UNIT_TEST(SelfHealStatePullPreservesPendingPush) {
+        const auto relaxTime = TDuration::Seconds(30);
+        NKikimrCms::TCmsConfig config;
+        auto* selfheal = config.MutableSentinelConfig()->MutableStateStorageSelfHealConfig();
+        selfheal->SetEnable(true);
+        selfheal->SetNodeGoodStateLimit(3);
+        selfheal->SetNodePrettyGoodStateLimit(2);
+        selfheal->SetNodeBadStateLimit(3);
+        selfheal->SetRelaxTime(relaxTime.GetValue());
+        TTestEnv env(8, 4, config);
+        const auto edge = env.AllocateEdgeActor();
+        const auto nodeId = env.GetFirstNodeId();
+        TVector<NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot> pushes;
+        auto prevObserver = env.SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType
+                    && ev->Sender == env.GetSentinelActor()
+                    && ev->Recipient == MakeBlobStorageNodeWardenID(nodeId)) {
+                pushes.push_back(ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return prevObserver(ev);
+        });
+        auto checkNodeState = [&](ui32 expected) {
+            env.Send(new IEventHandle(env.GetSentinelActor(), edge, new TEvCms::TEvGetSentinelStateRequest));
+            auto response = env.GrabEdgeEventRethrow<TEvCms::TEvGetSentinelStateResponse>(edge);
+            const auto& states = response->Get()->Record.GetNodesState();
+            UNIT_ASSERT_VALUES_EQUAL(states.size(), 8);
+            for (const auto& node : states) {
+                UNIT_ASSERT_VALUES_EQUAL(node.GetState(), node.GetNodeId() == nodeId ? expected : ui32(ENodeState::GOOD));
+            }
+        };
+        auto sample = [&] {
+            env.SetPDiskState({}, NKikimrBlobStorage::TPDiskState::Normal);
+        };
+
+        for (ui32 i = 0; i < 3; ++i) {
+            sample();
+        }
+        checkNodeState(ENodeState::GOOD);
+        env.AdvanceCurrentTime(relaxTime + TDuration::Seconds(1));
+        sample();
+        checkNodeState(ENodeState::GOOD);
+        UNIT_ASSERT_VALUES_EQUAL(pushes.size(), 1);
+        pushes.clear();
+
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            MockNodes.at(nodeId).Connected = false;
+        }
+        for (ui32 i : xrange(3)) {
+            sample();
+            checkNodeState(i == 2 ? ENodeState::BAD : ENodeState::MAY_BE_BAD);
+        }
+        UNIT_ASSERT(pushes.empty());
+
+        env.Send(new IEventHandle(env.GetSentinelActor(), edge, new NStorage::TEvNodeConfigGetSelfHealState));
+        checkNodeState(ENodeState::BAD);
+        auto response = env.GrabEdgeEventRethrow<NStorage::TEvNodeConfigInvokeOnRoot>(edge);
+        const auto pulled = response->Get()->Record.SerializeAsString();
+        response.Reset();
+        env.AdvanceCurrentTime(relaxTime - TDuration::Seconds(1));
+        sample();
+        checkNodeState(ENodeState::BAD);
+        UNIT_ASSERT(pushes.empty());
+        env.AdvanceCurrentTime(TDuration::Seconds(2));
+        sample();
+        checkNodeState(ENodeState::BAD);
+        UNIT_ASSERT_VALUES_EQUAL(pushes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pushes.front().SerializeAsString(), pulled);
+        env.AdvanceCurrentTime(relaxTime + TDuration::Seconds(1));
+        sample();
+        checkNodeState(ENodeState::BAD);
+        UNIT_ASSERT_VALUES_EQUAL(pushes.size(), 1);
+        env.SetObserverFunc(prevObserver);
+    }
+
     Y_UNIT_TEST(Smoke) {
         TTestEnv env(8, 4);
     }
@@ -824,6 +902,91 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal);
         }
         env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
+    }
+
+    Y_UNIT_TEST(PDiskOfCutOffPileUntouched) {
+        TTestEnv env(8, 4);
+        env.MockBridgeModePiles(2);
+
+        const auto pdisks = env.PDisksForRandomPile();
+        const ui32 pileIndex = pdisks.begin()->NodeId % 2;
+
+        TSet<TPDiskID> requested;
+        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            for (const auto& command : event->Get()->Record.GetRequest().GetCommand()) {
+                if (command.HasUpdateDriveStatus()) {
+                    const auto& update = command.GetUpdateDriveStatus();
+                    const TPDiskID id(update.GetHostKey().GetNodeId(), update.GetPDiskId());
+                    if (pdisks.contains(id)) {
+                        requested.insert(id);
+                    }
+                }
+            }
+        });
+
+        // the pile is disconnected, then removed from the cluster: its drives look bad for longer than it takes to make
+        // them FAULTY, but nobody can tell how they are
+        for (const auto state : {NKikimrBridge::TClusterState::DISCONNECTED, NKikimrBridge::TClusterState::INACTIVE}) {
+            std::vector<NKikimrBridge::TClusterState::EPileState> states(2, NKikimrBridge::TClusterState::SYNCHRONIZED);
+            states[pileIndex] = state;
+            env.MockBridgeInfo(2, states);
+            for (ui32 i = 0; i < DefaultErrorStateLimit + 1; ++i) {
+                env.SetPDiskState(pdisks, ErrorStates[0]);
+            }
+        }
+        env.SimulateSleep(TDuration::Minutes(5));
+
+        observerHolder.Remove();
+        UNIT_ASSERT_C(requested.empty(), "status of drives of the cut off pile has been changed: " << JoinSeq(", ", requested));
+
+        // once the pile connects back, its drives are judged anew
+        env.MockBridgeInfo(2);
+        env.SetPDiskState(pdisks, ErrorStates[0], EPDiskStatus::INACTIVE);
+    }
+
+    // the change judged while the pile was connected, but not confirmed by BSC, is not retried once the pile is cut off:
+    // BSC may have made it already, then the pile may have been removed and its drives made ACTIVE again, and the retry
+    // would make them INACTIVE, which keeps the pile from being added back
+    Y_UNIT_TEST(PendingChangeOfCutOffPileDropped) {
+        TTestEnv env(8, 4);
+        env.MockBridgeModePiles(2);
+        env.MockBridgeInfo(2);
+
+        const auto pdisks = env.PDisksForRandomPile();
+        const ui32 pileIndex = pdisks.begin()->NodeId % 2;
+        for (const auto& id : pdisks) {
+            env.AddBSCFailures(id, TVector<bool>(100, false)); // BSC never confirms the change
+        }
+
+        ui32 numRequested = 0;
+        bool allSkipIfPileCutOff = true;
+        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            for (const auto& command : event->Get()->Record.GetRequest().GetCommand()) {
+                if (command.HasUpdateDriveStatus()) {
+                    const auto& update = command.GetUpdateDriveStatus();
+                    if (pdisks.contains(TPDiskID(update.GetHostKey().GetNodeId(), update.GetPDiskId()))) {
+                        ++numRequested;
+                        allSkipIfPileCutOff &= update.GetSkipIfPileCutOff();
+                    }
+                }
+            }
+        });
+
+        env.SetPDiskState(pdisks, ErrorStates[0]);
+        env.SimulateSleep(TDuration::Seconds(5));
+        UNIT_ASSERT(numRequested);
+        UNIT_ASSERT(allSkipIfPileCutOff); // BSC keeps the status if it learns of the cut off first
+
+        std::vector<NKikimrBridge::TClusterState::EPileState> states(2, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        states[pileIndex] = NKikimrBridge::TClusterState::DISCONNECTED;
+        env.MockBridgeInfo(2, states);
+        numRequested = 0;
+        env.SimulateSleep(TDuration::Minutes(5));
+        observerHolder.Remove();
+        UNIT_ASSERT_VALUES_EQUAL(numRequested, 0);
+
+        TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+        TFakeNodeWhiteboardService::BSControllerResponsePatterns.clear();
     }
 
     Y_UNIT_TEST(PDiskFaultyGuard) {

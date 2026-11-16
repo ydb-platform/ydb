@@ -1,0 +1,7 @@
+self_check_result: MAINTENANCE_REQUIRED
+issue_log { id: "logical" status: ORANGE type: "STORAGE_GROUP" message: "Group dead in some piles" location { storage { pool { name: "/Root:test" group { id: "1" } } } } reason: "part" }
+issue_log { id: "part" status: RED type: "BRIDGE_GROUP" message: "Group failed" location { storage { pool { name: "/Root:test" group { id: "1" pile { name: "b" } } } } } reason: "blue1" reason: "blue2" reason: "blue3" reason: "throttled" }
+issue_log { id: "blue1" status: BLUE type: "VDISK" message: "Replication in progress" }
+issue_log { id: "blue2" status: BLUE type: "VDISK" message: "Replication in progress" }
+issue_log { id: "blue3" status: BLUE type: "VDISK" message: "Replication in progress" }
+issue_log { id: "throttled" status: ORANGE type: "VDISK" message: "VDisk is being throttled, rate 250 per mille" }

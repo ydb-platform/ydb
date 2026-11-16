@@ -60,6 +60,7 @@ namespace NKikimr::NBlobDepot {
                 range->SetReverse(true);
                 item->SetTabletId(Request.TabletId);
                 item->SetMustRestoreFirst(true);
+                SetResolveDeadline(Resolve);
             }
 
             void IssueResolve() {

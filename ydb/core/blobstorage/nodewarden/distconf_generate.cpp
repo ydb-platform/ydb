@@ -1,6 +1,8 @@
 #include "distconf.h"
 #include "distconf_statestorage_config_generator.h"
 
+#include <ydb/core/blobstorage/base/pdisk_filter.h>
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
@@ -150,20 +152,45 @@ namespace NKikimr::NStorage {
             std::optional<NKikimrBlobStorage::EPDiskType> pdiskType,
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid, i64 requiredSpace,
-            NKikimrBlobStorage::TBaseConfig *baseConfig, bool convertToDonor, bool ignoreVSlotQuotaCheck,
+            const NKikimrBlobStorage::TBaseConfig *baseConfig, bool convertToDonor, bool ignoreVSlotQuotaCheck,
             bool isSelfHealReasonDecommit, TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId,
             const NProtoBuf::RepeatedField<ui32>& selfHealAllowedNodes, bool applyNodeAllowList) {
         using TPDiskId = NBsController::TPDiskId;
 
         NKikimrConfig::TBlobStorageConfig *bsConfig = config->MutableBlobStorageConfig();
+        auto selfManagementConfig = config->GetSelfManagementConfig();
+        selfManagementConfig.MutableGeometry()->CopyFrom(geometry);
+        selfManagementConfig.MutablePDiskFilter()->CopyFrom(pdiskFilters);
+        if (pdiskType) {
+            selfManagementConfig.SetPDiskType(*pdiskType);
+        } else {
+            selfManagementConfig.ClearPDiskType();
+        }
+        const auto pileRegistry = GetConfigPileRegistry(*config);
+        if (bridgePileId && pileRegistry && bridgePileId.GetPileIndex() < pileRegistry->PilesSize()) {
+            const auto& pileName = pileRegistry->GetPiles(bridgePileId.GetPileIndex()).GetName();
+            if (const auto *rule = FindStoragePoolPileOverride(*bsConfig, pileName, std::nullopt)) {
+                ApplyStoragePoolPileOverride(selfManagementConfig, *rule);
+                if (rule->HasErasureSpecies()) {
+                    TBlobStorageGroupType::EErasureSpecies species;
+                    if (!TBlobStorageGroupType::ParseErasureName(species, rule->GetErasureSpecies())) {
+                        throw TExConfigError() << "invalid static group pile override ErasureSpecies";
+                    }
+                    gtype = TBlobStorageGroupType(species);
+                }
+            }
+        }
+        pdiskType = selfManagementConfig.HasPDiskType()
+            ? std::make_optional(selfManagementConfig.GetPDiskType()) : std::nullopt;
 
         // build node location map
         THashMap<ui32, TNodeLocation> nodeLocations;
         THashSet<ui32> allowedNodeIds;
+        const auto placementPileId = NBridge::GetPlacementPileId(bridgePileId, BridgeInfo.get());
         for (const auto& node : config->GetAllNodes()) {
             TNodeLocation location(node.GetLocation());
             nodeLocations.try_emplace(node.GetNodeId(), location);
-            if (bridgePileId == ResolveNodePileId(location)) {
+            if (placementPileId == ResolveNodePileId(pileRegistry, location).value_or(TBridgePileId())) {
                 allowedNodeIds.insert(node.GetNodeId());
             }
         }
@@ -187,11 +214,11 @@ namespace NKikimr::NStorage {
 
         THashMap<TPDiskId, TPDiskInfo> pdisks;
 
-        auto checkMatch = [&](NKikimrBlobStorage::EPDiskType type, bool sharedWithOs, bool readCentric, ui64 kind) {
+        auto checkMatch = [&](ui32 nodeId, NKikimrBlobStorage::EPDiskType type, bool sharedWithOs, bool readCentric, ui64 kind) {
             if (type == pdiskType) {
                 return true;
             }
-            for (const auto& pdiskFilter : pdiskFilters) {
+            for (const auto& pdiskFilter : selfManagementConfig.GetPDiskFilter()) {
                 bool m = true;
                 for (const auto& p : pdiskFilter.GetProperty()) {
                     bool pMatch = false;
@@ -208,6 +235,14 @@ namespace NKikimr::NStorage {
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKind:
                             pMatch = p.GetKind() == kind;
                             break;
+                        case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation: {
+                            if (!IsValidPDiskFilterLocation(p.GetLocation())) {
+                                throw TExConfigError() << "Location requires current string fields";
+                            }
+                            const auto it = nodeLocations.find(nodeId);
+                            pMatch = it != nodeLocations.end() && MatchPDiskLocation(it->second, TNodeLocation(p.GetLocation()));
+                            break;
+                        }
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
                             throw TExConfigError() << "invalid TPDiskFilter record";
                     }
@@ -225,6 +260,7 @@ namespace NKikimr::NStorage {
 
         ui32 defaultMaxSlots = 16;
 
+        THashMap<TPDiskId, ui32> maxVSlotId;
         if (baseConfig) {
             std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> pdiskSpaceColorBorder;
             ui32 pdiskSpaceMarginPromille = 150;
@@ -243,7 +279,7 @@ namespace NKikimr::NStorage {
             }
 
             for (const auto& pdisk : baseConfig->GetPDisk()) {
-                if (!checkMatch(pdisk.GetType(), pdisk.GetSharedWithOs(), pdisk.GetReadCentric(), pdisk.GetKind())) {
+                if (!checkMatch(pdisk.GetNodeId(), pdisk.GetType(), pdisk.GetSharedWithOs(), pdisk.GetReadCentric(), pdisk.GetKind())) {
                     continue;
                 }
 
@@ -305,6 +341,7 @@ namespace NKikimr::NStorage {
             for (const auto& vslot : baseConfig->GetVSlot()) {
                 const auto& vslotId = vslot.GetVSlotId();
                 const TPDiskId pdiskId(vslotId.GetNodeId(), vslotId.GetPDiskId());
+                maxVSlotId[pdiskId] = Max(maxVSlotId[pdiskId], vslotId.GetVSlotId());
                 if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
                     TPDiskInfo& pdiskInfo = it->second;
                     ++pdiskInfo.UsedSlots; // TODO(ydynnikov): account GroupSizeInUnits
@@ -320,7 +357,6 @@ namespace NKikimr::NStorage {
         // then all existing drives from the current storage config; also extract group definition, if it exists
         NBsController::TGroupMapper::TGroupDefinition groupDefinition;
         THashMap<ui32, ui32> maxPDiskId;
-        THashMap<TPDiskId, ui32> maxVSlotId;
         THashSet<TPDiskId> addedPDisks;
         THashMap<TVDiskIdShort, NKikimrBlobStorage::TVDiskLocation> vdiskLocations;
 
@@ -333,6 +369,9 @@ namespace NKikimr::NStorage {
 
             for (const auto& group : ss.GetGroups()) {
                 if (TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID) == groupId) {
+                    if (group.GetErasureSpecies() != gtype.GetErasure()) {
+                        throw TExConfigError() << "can't change erasure of existing static group";
+                    }
                     generation.emplace(group.GetGroupGeneration());
 
                     ui32 failRealmIdx = 0;
@@ -419,6 +458,28 @@ namespace NKikimr::NStorage {
             }
         }
 
+        // static VDisks take slot ids below the ones BSC allocates from (its PDisks start with NextVSlotId of 1000), as
+        // BSC (of older versions) doesn't check VSlots of static VDisks, and VSlots of BSC being deleted are not even
+        // listed in base config; ids of the destroyed static VDisks are kept until they are slain; when static ids have
+        // already reached BSC's range, new ones go above every VSlot listed
+        static constexpr ui32 MinBscVSlotId = 1000;
+        THashMap<TPDiskId, ui32> maxStaticVSlotId;
+        if (bsConfig->HasServiceSet()) {
+            for (const auto& vdisk : bsConfig->GetServiceSet().GetVDisks()) {
+                const auto& location = vdisk.GetVDiskLocation();
+                auto& maxId = maxStaticVSlotId[TPDiskId(location.GetNodeID(), location.GetPDiskID())];
+                maxId = Max(maxId, location.GetVDiskSlotID());
+            }
+        }
+        auto allocateVSlotId = [&](TPDiskId pdiskId) {
+            ui32& id = maxStaticVSlotId[pdiskId];
+            if (++id >= MinBscVSlotId) {
+                id = Max(id, maxVSlotId[pdiskId] + 1);
+            }
+            maxVSlotId[pdiskId] = Max(maxVSlotId[pdiskId], id);
+            return id;
+        };
+
         // build PDisk locator map (nodeId:path -> pdiskId)
         THashSet<std::tuple<ui32, TString>> pdiskLocations;
         for (const auto& [pdiskId, item] : pdisks) {
@@ -431,7 +492,7 @@ namespace NKikimr::NStorage {
             if (pdiskLocations.contains(std::make_tuple(nodeId, drive.GetPath()))) {
                 return;
             }
-            if (checkMatch(drive.GetType(), drive.GetSharedWithOs(), drive.GetReadCentric(), drive.GetKind())) {
+            if (checkMatch(nodeId, drive.GetType(), drive.GetSharedWithOs(), drive.GetReadCentric(), drive.GetKind())) {
                 const TPDiskId pdiskId(nodeId, ++maxPDiskId[nodeId]);
                 if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
                     auto& r = it->second.Record;
@@ -452,7 +513,7 @@ namespace NKikimr::NStorage {
         EnumerateConfigDrives(*config, 0, processDrive, nullptr, true);
 
         // group mapper
-        NBsController::TGroupGeometryInfo geom(gtype.GetErasure(), geometry);
+        NBsController::TGroupGeometryInfo geom(gtype.GetErasure(), selfManagementConfig.GetGeometry());
         NBsController::TGroupMapper mapper(geom);
 
         for (const auto& [pdiskId, item] : pdisks) {
@@ -476,7 +537,7 @@ namespace NKikimr::NStorage {
                 slotSizeInUnits = item.ReportedSlotSizeInUnits;
             }
 
-            const bool pileFilter = !bridgePileId || allowedNodeIds.contains(pdiskId.NodeId);
+            const bool pileFilter = !Cfg->BridgeConfig || allowedNodeIds.contains(pdiskId.NodeId);
             const bool nodeAllowFilter = !restrictSelfHealNodes || selfHealAllowedNodeSet.contains(pdiskId.NodeId);
 
             TString whyUnusable = item.WhyUnusable;
@@ -496,6 +557,7 @@ namespace NKikimr::NStorage {
                 .Operational = true,
                 .Decommitted = false,
                 .WhyUnusable = whyUnusable,
+                .BridgePileId = ResolveNodePileId(pileRegistry, it->second).value_or(TBridgePileId()),
             });
         }
 
@@ -519,7 +581,7 @@ namespace NKikimr::NStorage {
         NBsController::TGroupMapperError error;
         const ui32 groupSizeInUnits = 1; // static groups are always single-unit
         if (!mapper.AllocateGroup(groupId.GetRawId(), groupDefinition, replacedDisks, forbid,
-                groupSizeInUnits, requiredSpace, false, {}, error)) {
+                groupSizeInUnits, requiredSpace, false, placementPileId, error)) {
             throw TExConfigError() << "group allocation failed Error# " << error.ErrorMessage
                 << " groupDefinition# " << dumpGroupDefinition();
         }
@@ -608,7 +670,7 @@ namespace NKikimr::NStorage {
             } else {
                 sLoc->SetNodeID(pdiskId.NodeId);
                 sLoc->SetPDiskID(pdiskId.PDiskId);
-                sLoc->SetVDiskSlotID(++maxVSlotId[pdiskId]); // keep VDiskSlotID for unchanged items
+                sLoc->SetVDiskSlotID(allocateVSlotId(pdiskId)); // keep VDiskSlotID for unchanged items
                 sLoc->SetPDiskGuid(pdisk.GetPDiskGuid());
 
                 auto *sDisk = sSet->AddVDisks();
@@ -654,12 +716,18 @@ namespace NKikimr::NStorage {
         }
         std::map<TBridgePileId, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
         bool goodConfig = true;
+        // piles are taken into account only when the config is bridged one
+        const auto pileRegistry = baseConfig.HasClusterState() ? GetConfigPileRegistry(baseConfig) : std::nullopt;
         for (const auto& node : baseConfig.GetAllNodes()) {
             if (!nodesToUse.empty() && !nodesToUse.contains(node.GetNodeId())) {
                 continue;
             }
             TNodeLocation location(node.GetLocation());
-            TBridgePileId pileId = ResolveNodePileId(location);
+            TBridgePileId pileId = ResolveNodePileId(pileRegistry, location).value_or(TBridgePileId());
+            if (pileId && NBridge::GetPileState(baseConfig.GetClusterState(), pileId) ==
+                    NKikimrBridge::TClusterState::INACTIVE) {
+                continue; // INACTIVE pile has no state storage replicas
+            }
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
         for (auto& [pileId, nodesByDataCenter] : nodes) {

@@ -6,7 +6,7 @@ namespace NKikimr::NStorage {
 
     namespace {
         bool IsTimedScatterRequest(const NKikimrBlobStorage::TEvNodeConfigScatter& request) {
-            return request.HasCollectConfigs() || request.HasProposeStorageConfig();
+            return request.HasCollectConfigs() || request.HasProposeStorageConfig() || request.HasCollectBridgeCapability();
         }
     }
 

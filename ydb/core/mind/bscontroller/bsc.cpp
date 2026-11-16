@@ -8,6 +8,7 @@
 #include "group_layout_checker.h"
 #include "util.h"
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
@@ -79,8 +80,11 @@ bool TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
     const TGroupStatus prev = Status;
     Status = {NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL};
 
+    // virtual group without working BlobDepot can't serve anything, unless it has physical part; for bridge proxy group
+    // the physical part is in its piles, its status is derived from them
     if ((VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED ||
-            VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW) && VDisksInGroup.empty()) {
+            VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW) && VDisksInGroup.empty() &&
+            !BridgeGroupInfo) {
         Status.MakeWorst(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, NKikimrBlobStorage::TGroupStatus::DISINTEGRATED);
     }
 
@@ -130,32 +134,24 @@ bool TBlobStorageController::TGroupInfo::FillInGroupParameters(
     } else if (BridgeGroupInfo) {
         Y_ABORT_UNLESS(self->BridgeInfo);
         bool res = true;
-        for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+        NBridge::ForEachGroupPile(BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                const NKikimrBridge::TGroupState::TPile& pile) {
             const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
             if (TGroupInfo *groupInfo = self->FindGroup(groupId)) {
                 Y_ABORT_UNLESS(groupInfo->BridgePileId);
                 if (!NBridge::PileStateTraits(self->BridgeInfo->GetPile(groupInfo->BridgePileId)->State).AllowsConnection) {
-                    continue; // ignore groups from disconnected piles
+                    return; // ignore groups from disconnected piles
                 }
-                res &= groupInfo->FillInGroupParameters(params, self);
+                res &= groupId == ID
+                    ? FillInOwnGroupParameters(params) // inline pile
+                    : groupInfo->FillInGroupParameters(params, self);
             } else {
                 Y_DEBUG_ABORT();
             }
-        }
+        });
         return res;
     } else {
-        bool res = true;
-        params->SetGroupSizeInUnits(GroupSizeInUnits);
-        if (VDisksInGroup.empty()
-            || !Topology
-            || !Topology->GetTotalVDisksNum()
-            || !Topology->GetTotalFailDomainsNum()) {
-            return false;
-        }
-        res &= FillInResources(params->MutableAssuredResources(), true);
-        res &= FillInResources(params->MutableCurrentResources(), false);
-        res &= FillInVDiskResources(params);
-        return res;
+        return FillInOwnGroupParameters(params);
     }
 }
 
@@ -163,6 +159,22 @@ ui64 TBlobStorageController::TGroupInfo::ScaleGroupResource(ui64 value) const {
     const TBlobStorageGroupType type(ErasureSpecies);
     const auto scaled = static_cast<unsigned __int128>(value) * VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
     return scaled > Max<ui64>() ? Max<ui64>() : static_cast<ui64>(scaled);
+}
+
+bool TBlobStorageController::TGroupInfo::FillInOwnGroupParameters(
+        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params) const {
+    bool res = true;
+    params->SetGroupSizeInUnits(GroupSizeInUnits);
+    if (VDisksInGroup.empty()
+        || !Topology
+        || !Topology->GetTotalVDisksNum()
+        || !Topology->GetTotalFailDomainsNum()) {
+        return false;
+    }
+    res &= FillInResources(params->MutableAssuredResources(), true);
+    res &= FillInResources(params->MutableCurrentResources(), false);
+    res &= FillInVDiskResources(params);
+    return res;
 }
 
 bool TBlobStorageController::TGroupInfo::FillInResources(
@@ -297,6 +309,7 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
 
     // create storage pool stats monitor
     StoragePoolStat = std::make_unique<TStoragePoolStat>(GetServiceCounters(AppData()->Counters, "storage_pool_stat"));
+    BridgeSyncCounters = std::make_unique<TBridgeSyncCounters>(GetServiceCounters(AppData()->Counters, "bridge"));
 
     // initiate timer
     ScrubState.HandleTimer();
@@ -320,6 +333,17 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     auto prevStaticVSlots = std::exchange(StaticVSlots, {});
     auto prevStaticGroups = std::exchange(StaticGroups, {});
     StaticVDiskMap.clear();
+
+    // static entities may go away (e.g. along with the pile removed), so that they are deleted from system views
+    for (const auto& [pdiskId, _] : prevStaticPDisks) {
+        SysViewChangedPDisks.insert(pdiskId);
+    }
+    for (const auto& [vslotId, _] : prevStaticVSlots) {
+        SysViewChangedVSlots.insert(vslotId);
+    }
+    for (const auto& [groupId, _] : prevStaticGroups) {
+        SysViewChangedGroups.insert(groupId);
+    }
 
     const TMonotonic mono = TActivationContext::Monotonic();
 
@@ -349,6 +373,17 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 StaticGroups.try_emplace(groupId, group, prevStaticGroups);
                 SysViewChangedGroups.insert(groupId);
             }
+
+            // static VDisks may be placed on (or moved away from) PDisks managed by BSC too, as it happens when static
+            // group gets its part in the pile being added or its disk reassigned
+            for (const auto& [pdiskId, pdisk] : PDisks) {
+                const auto it = StaticPDisks.find(pdiskId);
+                const ui32 staticSlotUsage = it != StaticPDisks.end() ? it->second.StaticSlotUsage : 0;
+                if (pdisk->StaticSlotUsage != staticSlotUsage) {
+                    pdisk->StaticSlotUsage = staticSlotUsage;
+                    SysViewChangedPDisks.insert(pdiskId);
+                }
+            }
         } else {
             Y_FAIL("no storage configuration provided");
         }
@@ -361,12 +396,25 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         if (!prevBridgeInfo) {
             changed = true;
         } else {
-            Y_ABORT_UNLESS(std::size(prevBridgeInfo->Piles) == std::size(BridgeInfo->Piles));
-            for (size_t k = 0; k < std::size(BridgeInfo->Piles); ++k) {
-                if (prevBridgeInfo->Piles[k].State != BridgeInfo->Piles[k].State) {
-                    changed = true;
-                    break;
+            changed = prevBridgeInfo->IsImplicit != BridgeInfo->IsImplicit ||
+                std::size(prevBridgeInfo->Piles) != std::size(BridgeInfo->Piles); // list of piles has changed
+            for (size_t k = 0; !changed && k < std::size(BridgeInfo->Piles); ++k) {
+                const auto& pile = BridgeInfo->Piles[k];
+                changed = prevBridgeInfo->Piles[k].State != pile.State ||
+                    prevBridgeInfo->Piles[k].IsFreeSlot != pile.IsFreeSlot;
+                const NKikimrBridge::TClusterStateDetails::TPileSyncState* previousSync = nullptr;
+                if (prevStorageConfig) {
+                    for (const auto& sync : prevStorageConfig->GetClusterStateDetails().GetPileSyncState()) {
+                        if (TBridgePileId::FromProto(&sync,
+                                &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId) == pile.BridgePileId) {
+                            previousSync = &sync;
+                            break;
+                        }
+                    }
                 }
+                const auto* currentSync = FindPileSyncState(pile.BridgePileId);
+                changed |= bool(previousSync) != bool(currentSync) || (previousSync && currentSync &&
+                    previousSync->GetBecameUnsyncedGeneration() != currentSync->GetBecameUnsyncedGeneration());
             }
         }
         if (changed) {
@@ -376,6 +424,10 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             for (const auto& [groupId, iter] : GroupToWaitingSelectGroupsItem) {
                 groupsToCheck.insert(groupId);
             }
+        }
+    } else if (prevBridgeInfo) {
+        for (const auto& [groupId, group] : GroupMap) {
+            SysViewChangedGroups.insert(groupId);
         }
     }
 
@@ -392,6 +444,11 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         } else {
             ConsoleInteraction->Start(); // we manage the Console now
         }
+    }
+
+    if (Loaded) {
+        // goes before any other transaction this config makes BSC issue, so they follow the overrides adopted from it
+        UpdatePileOverrides();
     }
 
     if (!isFirstStorageConfig) {
@@ -417,6 +474,10 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         RecheckUnsyncedBridgePiles = true;
         CheckUnsyncedBridgePiles();
     }
+
+    CheckBridgeConversion();
+    CheckBridgePileOperation();
+    CheckBridgeGroupModes(); // groups may wait for their piles to get synchronized
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
@@ -792,6 +853,50 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
             break;
         }
 
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateAddBridgePile: {
+            const auto pileId = TBridgePileId::FromProto(&record,
+                &NKikimrBlobStorage::TEvControllerDistconfRequest::GetBridgePileId);
+            NKikimrBlobStorage::TStorageConfig storageConfig;
+            if (!BridgeInfo || !BridgeInfo->FindPile(pileId)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("unknown pile");
+                break;
+            } else if (!record.HasStorageConfig() || !record.GetStorageConfig().UnpackTo(&storageConfig)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("missing proposed storage config");
+                break;
+            }
+            // the transaction replies when it is done
+            Execute(CreateTxValidateAddBridgePile(pileId, std::move(storageConfig), std::exchange(h, {})));
+            return;
+        }
+
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateRemoveBridgePile: {
+            const auto pileId = TBridgePileId::FromProto(&record,
+                &NKikimrBlobStorage::TEvControllerDistconfRequest::GetBridgePileId);
+            if (!BridgeInfo || !BridgeInfo->FindPile(pileId)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("unknown pile");
+                break;
+            }
+            // the transaction replies when it is done
+            Execute(CreateTxValidateRemoveBridgePile(pileId, std::exchange(h, {})));
+            return;
+        }
+
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateBridgeRollback: {
+            const auto pileId = TBridgePileId::FromProto(&record,
+                &NKikimrBlobStorage::TEvControllerDistconfRequest::GetBridgePileId);
+            if (!BridgeInfo || !BridgeInfo->FindPile(pileId)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("unknown pile");
+                break;
+            }
+            // the transaction replies when it is done
+            Execute(CreateTxValidateBridgeRollback(pileId, std::exchange(h, {})));
+            return;
+        }
+
         case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateConfig: {
             if (!mainYaml) {
                 rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
@@ -817,6 +922,12 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
                     rr.SetErrorReason(TStringBuilder() << "failed to parse YAML: " << ex.what());
                     break;
                 }
+            }
+
+            if (auto error = ValidateStoragePoolPileOverrides(storageConfig)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason(*error);
+                break;
             }
 
             const ui64 cookie = NextValidationCookie++;
@@ -982,6 +1093,7 @@ STFUNC(TBlobStorageController::StateWork) {
     switch (type) {
         fFunc(TEvBlobStorage::EvControllerRegisterNode, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerGetGroup, EnqueueIncomingEvent);
+        fFunc(TEvBlobStorage::EvControllerQueryBridgeStorage, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerSelectGroups, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerUpdateDiskStatus, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerUpdateGroupStat, EnqueueIncomingEvent);
@@ -1027,8 +1139,14 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
+        cFunc(TEvPrivate::EvRetryBridgeConversion, HandleRetryBridgeConversion);
+        cFunc(TEvPrivate::EvRetryBridgePileOperation, HandleRetryBridgePileOperation);
+        cFunc(TEvPrivate::EvRetryBridgeGroupModes, HandleRetryBridgeGroupModes);
+        cFunc(TEvPrivate::EvCheckBridgeGroupModes, HandleCheckBridgeGroupModes);
+        cFunc(TEvPrivate::EvRetrySyncers, HandleRetrySyncers);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
+        hFunc(TEvFeatureFlags::TEvChanged, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_ERROR("StateWork unexpected event",
@@ -1050,7 +1168,33 @@ STFUNC(TBlobStorageController::StateWork) {
     }
 }
 
+void TBlobStorageController::SubscribeToFeatureFlags() {
+    ReportPhantomsOnlyVDisksAsReady = AppData()->FeatureFlags.GetReportPhantomsOnlyVDisksAsReady();
+    Send(MakeFeatureFlagsServiceID(), new TEvFeatureFlags::TEvSubscribe("BS_CONTROLLER"));
+}
+
+void TBlobStorageController::Handle(TEvFeatureFlags::TEvChanged::TPtr /*ev*/) {
+    const bool value = AppData()->FeatureFlags.GetReportPhantomsOnlyVDisksAsReady();
+    if (std::exchange(ReportPhantomsOnlyVDisksAsReady, value) == value) {
+        return;
+    }
+    // status of these VSlots in system views depends on the flag
+    for (const auto& [vslotId, vslot] : VSlots) {
+        if (vslot->IsReplicatingWithPhantomsOnly()) {
+            SysViewChangedVSlots.insert(vslotId);
+        }
+    }
+    for (const auto& [vslotId, vslot] : StaticVSlots) {
+        if (vslot.IsReplicatingWithPhantomsOnly()) {
+            SysViewChangedVSlots.insert(vslotId);
+        }
+    }
+}
+
 void TBlobStorageController::PassAway() {
+    if (Loaded) {
+        Send(MakeFeatureFlagsServiceID(), new TEvFeatureFlags::TEvUnsubscribe);
+    }
     if (ResponsivenessPinger) {
         ResponsivenessPinger->Detach(TActivationContext::ActorContextFor(ResponsivenessActorID));
         ResponsivenessPinger = nullptr;
@@ -1128,6 +1272,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerUpdateGroupStat:              return 10;
         case TEvControllerCommitGroupLatencies::EventType:             return 10;
         case TEvBlobStorage::EvRequestControllerInfo:                  return 10;
+        case TEvBlobStorage::EvControllerQueryBridgeStorage:           return 10;
         case TEvPrivate::EvUpdateSelfHealCounters:                     return 10;
 
         case TEvBlobStorage::EvControllerUpdateDiskStatus: {
@@ -1201,6 +1346,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMoveDDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kPopulatePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteSpecificGroups:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kChangeStoragePoolBridgeMode:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:
@@ -1223,7 +1369,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
 }
 
 void TBlobStorageController::TStaticGroupInfo::UpdateStatus(TMonotonic mono, TBlobStorageController *controller) {
-    if (!Info || Info->IsBridged()) {
+    if (!Info || (Info->IsBridged() && !Info->IsInlinePile())) {
         return;
     }
 
@@ -1257,7 +1403,7 @@ void TBlobStorageController::TStaticGroupInfo::UpdateStatus(TMonotonic mono, TBl
 
 void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageController *controller) {
     LayoutCorrect = true;
-    if (!Info || Info->IsBridged() || !controller->SelfManagementEnabled) {
+    if (!Info || (Info->IsBridged() && !Info->IsInlinePile()) || !controller->SelfManagementEnabled) {
         return;
     }
 
@@ -1289,16 +1435,21 @@ namespace {
     TBlobStorageController::TGroupInfo::TGroupStatus GetGroupStatus(const T& entity, TFinder&& finder,
             const TBridgeInfo *bridgeInfo) {
         const NKikimrBlobStorage::TGroupInfo *groupInfo = nullptr;
+        TGroupId selfGroupId;
         if constexpr (std::is_same_v<T, TBlobStorageController::TGroupInfo>) {
             groupInfo = entity.BridgeGroupInfo
                 ? &entity.BridgeGroupInfo.value()
                 : nullptr;
+            selfGroupId = entity.ID;
         } else {
             Y_DEBUG_ABORT_UNLESS(entity.Info);
             Y_DEBUG_ABORT_UNLESS(entity.Info->Group);
             groupInfo = entity.Info && entity.Info->Group && entity.Info->Group->HasBridgeGroupState()
                 ? &entity.Info->Group.value()
                 : nullptr;
+            if (groupInfo) {
+                selfGroupId = entity.Info->GroupID;
+            }
         }
 
         if (groupInfo) {
@@ -1306,24 +1457,24 @@ namespace {
             Y_ABORT_UNLESS(groupInfo->HasBridgeGroupState());
 
             std::optional<TBlobStorageController::TGroupInfo::TGroupStatus> res;
-            const auto& bridgeGroupState = groupInfo->GetBridgeGroupState();
-            const auto& piles = bridgeGroupState.GetPile();
-
-            for (int pileIndex = 0; pileIndex < piles.size(); ++pileIndex) {
-                const TBridgePileId bridgePileId = TBridgePileId::FromPileIndex(pileIndex);
-                if (NBridge::PileStateTraits(bridgeInfo->GetPile(bridgePileId)->State).RequiresDataQuorum) {
-                    const auto& pile = piles[pileIndex];
+            NBridge::ForEachGroupPile(groupInfo->GetBridgeGroupState(), [&](TBridgePileId bridgePileId,
+                    const NKikimrBridge::TGroupState::TPile& pile) {
+                if (const auto *bridgePile = bridgeInfo->FindPile(bridgePileId);
+                        bridgePile && NBridge::PileStateTraits(bridgePile->State).RequiresDataQuorum) {
                     const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-                    if (const auto *group = finder(groupId)) {
-                        const auto& s = group->GetStatus(finder, bridgeInfo);
-                        if (res) {
-                            res->MakeWorst(s.OperatingStatus, s.ExpectedStatus);
-                        } else {
-                            res.emplace(s);
-                        }
+                    std::optional<TBlobStorageController::TGroupInfo::TGroupStatus> s;
+                    if (groupId == selfGroupId) { // inline pile, the status is derived from own VDisks
+                        s.emplace(entity.Status);
+                    } else if (const auto *group = finder(groupId)) {
+                        s.emplace(group->GetStatus(finder, bridgeInfo));
+                    }
+                    if (s && res) {
+                        res->MakeWorst(s->OperatingStatus, s->ExpectedStatus);
+                    } else if (s) {
+                        res = s;
                     }
                 }
-            }
+            });
 
             return res.value_or(TBlobStorageController::TGroupInfo::TGroupStatus());
         } else {
@@ -1346,7 +1497,11 @@ TBlobStorageController::TGroupInfo::TGroupStatus TBlobStorageController::TStatic
 bool TBlobStorageController::TStaticGroupInfo::IsLayoutCorrect(const TStaticGroupFinder& finder) const {
     if (Info && Info->IsBridged()) {
         for (TGroupId groupId : Info->GetBridgeGroupIds()) {
-            if (TStaticGroupInfo *g = finder(groupId)) {
+            if (groupId == Info->GroupID) { // inline pile
+                if (!LayoutCorrect) {
+                    return false;
+                }
+            } else if (TStaticGroupInfo *g = finder(groupId)) {
                 if (!g->IsLayoutCorrect(finder)) {
                     return false;
                 }
@@ -1370,6 +1525,7 @@ void TBlobStorageController::InvokeOnRoot(NKikimrBlobStorage::TEvNodeConfigInvok
     const auto [it, inserted] = InvokeOnRootCommands.emplace(cookie, TInvokeOnRootCommand{
         .Request = std::move(request),
         .Callback = std::move(callback),
+        .StartedAt = TActivationContext::Monotonic(),
     });
     auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
     ev->Record.CopyFrom(it->second.Request);
@@ -1393,11 +1549,26 @@ void TBlobStorageController::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::T
         {"success", success},
         {"retriable", retriable});
     if (retriable) {
+        // retrying is right, as the root is expected to come back, but its staying away has to be noticed
+        if (!cmd.Alarmed && cmd.StartedAt + InvokeOnRootAlarmTimeout <= TActivationContext::Monotonic()) {
+            cmd.Alarmed = true;
+            YDB_LOG_CRIT("distconf root keeps failing the command",
+                {"marker", "BSC53"},
+                {"cookie", ev->Cookie},
+                {"request", cmd.Request},
+                {"response", record});
+        }
         auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         ev->Record.CopyFrom(cmd.Request);
         TActivationContext::Schedule(cmd.Timer.Next(), new IEventHandle(
             MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), ev.release(), 0, it->first));
     } else {
+        if (cmd.Alarmed) {
+            YDB_LOG_NOTICE("distconf root has answered the command at last",
+                {"marker", "BSC54"},
+                {"cookie", ev->Cookie},
+                {"success", success});
+        }
         cmd.Callback(record);
         InvokeOnRootCommands.erase(it);
     }

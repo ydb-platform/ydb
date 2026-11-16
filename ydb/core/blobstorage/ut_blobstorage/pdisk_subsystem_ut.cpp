@@ -180,12 +180,12 @@ namespace {
         runtime->FilterFunction = nullptr;
     }
 
-    void CheckSlowBootstrap() {
-        constexpr ui32 nodeCount = 1;
+    void CheckSlowBootstrap(bool bridge) {
+        const ui32 nodeCount = bridge ? 2 : 1;
         TSlowPDiskState state;
         TEnvironmentSetup env({
             .NodeCount = nodeCount,
-            .ConfigPreprocessor = [&](ui32, TNodeWardenConfig& config) {
+            .ConfigPreprocessor = [&, nodeCount, bridge](ui32, TNodeWardenConfig& config) {
                 config.PDiskServiceFactory.Reset(new TSlowPDiskServiceFactory(state, config.PDiskServiceFactory));
                 auto& sm = *config.SelfManagementConfig;
                 sm.SetErasureSpecies("none");
@@ -204,6 +204,9 @@ namespace {
                     auto* location = node->MutableLocation();
                     location->SetDataCenter("dc");
                     location->SetRack(TStringBuilder() << "rack_" << nodeId);
+                    if (bridge) {
+                        location->SetBridgePileName(TStringBuilder() << "pile_" << nodeId);
+                    }
                     auto* host = config.BlobStorageConfig.MutableDefineBox()->AddHost();
                     host->SetEnforcedNodeId(nodeId);
                     host->SetHostConfigId(1);
@@ -214,9 +217,13 @@ namespace {
                 NActorsInterconnect::TNodeLocation location;
                 location.SetDataCenter("dc");
                 location.SetRack(TStringBuilder() << "rack_" << nodeId);
+                if (bridge) {
+                    location.SetBridgePileName(TStringBuilder() << "pile_" << nodeId);
+                }
                 return TNodeLocation(location);
             },
             .SelfManagementConfig = true,
+            .NumPiles = bridge ? 2u : 0u,
         });
         auto& runtime = env.Runtime;
         env.Sim(TDuration::Seconds(151));
@@ -524,7 +531,11 @@ Y_UNIT_TEST_SUITE(PDiskSubsystem) {
     }
 
     Y_UNIT_TEST(BootstrapPreservesSlowPDiskStartup) {
-        CheckSlowBootstrap();
+        CheckSlowBootstrap(false);
+    }
+
+    Y_UNIT_TEST(BridgeBootstrapPreservesSlowPDiskStartup) {
+        CheckSlowBootstrap(true);
     }
 
 

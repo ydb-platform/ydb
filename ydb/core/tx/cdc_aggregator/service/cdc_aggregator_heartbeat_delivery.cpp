@@ -8,14 +8,14 @@ namespace {
 
 using EStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
 
-TCdcAggregatorHeartbeatBatchItem PopOldestPending(TDeque<ui64>& sourceIdQueue, THashMap<ui64, NPQ::THeartbeat>& heartbeatsBySourceId) {
-    const ui64 sourceDataShardId = sourceIdQueue.front();
-    sourceIdQueue.pop_front();
+TCdcAggregatorHeartbeatBatchItem PopOldestPending(TDeque<ui64>& sourceDataShardIdQueue, THashMap<ui64, NPQ::THeartbeat>& heartbeatsBySourceDataShardId) {
+    const ui64 sourceDataShardId = sourceDataShardIdQueue.front();
+    sourceDataShardIdQueue.pop_front();
     TCdcAggregatorHeartbeatBatchItem item{
         .SourceDataShardId = sourceDataShardId,
-        .Heartbeat = std::move(heartbeatsBySourceId.at(sourceDataShardId)),
+        .Heartbeat = std::move(heartbeatsBySourceDataShardId.at(sourceDataShardId)),
     };
-    heartbeatsBySourceId.erase(sourceDataShardId);
+    heartbeatsBySourceDataShardId.erase(sourceDataShardId);
     return item;
 }
 
@@ -28,60 +28,60 @@ TCdcAggregatorHeartbeatDelivery::TCdcAggregatorHeartbeatDelivery(ui32 maxBatchSi
 }
 
 void TCdcAggregatorHeartbeatDelivery::AddHeartbeat(ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat) {
-    auto it = PendingHeartbeatsBySourceId.find(sourceDataShardId);
-    if (it == PendingHeartbeatsBySourceId.end()) {
-        PendingHeartbeatsBySourceId.emplace(sourceDataShardId, heartbeat);
-        PendingSourceIdQueue.push_back(sourceDataShardId);
+    auto it = PendingHeartbeatsBySourceDataShardId.find(sourceDataShardId);
+    if (it == PendingHeartbeatsBySourceDataShardId.end()) {
+        PendingHeartbeatsBySourceDataShardId.emplace(sourceDataShardId, heartbeat);
+        PendingSourceDataShardIdQueue.push_back(sourceDataShardId);
     } else if (it->second.Version < heartbeat.Version) {
         it->second = heartbeat;
     }
 }
 
 std::optional<TCdcAggregatorHeartbeatBatch> TCdcAggregatorHeartbeatDelivery::PrepareNextBatchIfPossible() {
-    if (!AwaitingReplySourceIds.empty() || PendingSourceIdQueue.empty()) {
+    if (!AwaitingReplySourceDataShardIds.empty() || PendingSourceDataShardIdQueue.empty()) {
         return std::nullopt;
     }
 
     TCdcAggregatorHeartbeatBatch batch;
-    while (!PendingSourceIdQueue.empty() && batch.size() < MaxBatchSize) {
-        TCdcAggregatorHeartbeatBatchItem item = PopOldestPending(PendingSourceIdQueue, PendingHeartbeatsBySourceId);
-        AwaitingReplySourceIds.push_back(item.SourceDataShardId);
+    while (!PendingSourceDataShardIdQueue.empty() && batch.size() < MaxBatchSize) {
+        TCdcAggregatorHeartbeatBatchItem item = PopOldestPending(PendingSourceDataShardIdQueue, PendingHeartbeatsBySourceDataShardId);
+        AwaitingReplySourceDataShardIds.push_back(item.SourceDataShardId);
         batch.push_back(std::move(item));
     }
 
     return batch;
 }
 
-TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::CompleteBatch(const THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>& tabletRepliesBySourceId) {
+TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::CompleteBatch(const THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>& tabletRepliesBySourceDataShardId) {
     TVector<TCdcAggregatorHeartbeatDeliveryReply> replies;
-    for (const ui64 sourceDataShardId : AwaitingReplySourceIds) {
-        if (const auto* reply = tabletRepliesBySourceId.FindPtr(sourceDataShardId)) {
+    for (const ui64 sourceDataShardId : AwaitingReplySourceDataShardIds) {
+        if (const auto* reply = tabletRepliesBySourceDataShardId.FindPtr(sourceDataShardId)) {
             replies.push_back(*reply);
         } else {
             replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Retry, .Error = "Heartbeat is not confirmed"});
         }
     }
 
-    AwaitingReplySourceIds.clear();
+    AwaitingReplySourceDataShardIds.clear();
     return replies;
 }
 
 TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::FailBatch(const TString& error) {
-    if (AwaitingReplySourceIds.empty()) {
+    if (AwaitingReplySourceDataShardIds.empty()) {
         return {};
     }
 
     TVector<TCdcAggregatorHeartbeatDeliveryReply> replies;
-    for (const ui64 sourceDataShardId : AwaitingReplySourceIds) {
+    for (const ui64 sourceDataShardId : AwaitingReplySourceDataShardIds) {
         replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Retry, .Error = error});
     }
-    for (const ui64 sourceDataShardId : PendingSourceIdQueue) {
+    for (const ui64 sourceDataShardId : PendingSourceDataShardIdQueue) {
         replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Retry, .Error = error});
     }
 
-    PendingHeartbeatsBySourceId.clear();
-    PendingSourceIdQueue.clear();
-    AwaitingReplySourceIds.clear();
+    PendingHeartbeatsBySourceDataShardId.clear();
+    PendingSourceDataShardIdQueue.clear();
+    AwaitingReplySourceDataShardIds.clear();
 
     return replies;
 }

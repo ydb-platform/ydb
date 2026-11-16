@@ -23,13 +23,13 @@ std::pair<std::optional<THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>>, T
 
     using EReplyStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
 
-    THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> tabletRepliesBySourceId;
+    THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> tabletRepliesBySourceDataShardId;
     for (const auto& item : proto.GetResults()) {
         const ui64 sourceDataShardId = item.GetSourceDataShardId();
         switch (item.GetStatus()) {
         case TProto::THeartbeatResult::SUCCESS:
             if (item.HasWrittenVersion()) {
-                tabletRepliesBySourceId[sourceDataShardId] = {
+                tabletRepliesBySourceDataShardId[sourceDataShardId] = {
                     .SourceDataShardId = sourceDataShardId,
                     .Status = EReplyStatus::Written,
                     .WrittenVersion = TRowVersion::FromProto(item.GetWrittenVersion()),
@@ -38,7 +38,7 @@ std::pair<std::optional<THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>>, T
             break;
         case TProto::THeartbeatResult::UNKNOWN_SOURCE:
         case TProto::THeartbeatResult::BAD_REQUEST:
-            tabletRepliesBySourceId[sourceDataShardId] = {
+            tabletRepliesBySourceDataShardId[sourceDataShardId] = {
                 .SourceDataShardId = sourceDataShardId,
                 .Status = EReplyStatus::Rejected,
                 .Error = TProto::THeartbeatResult::EStatus_Name(item.GetStatus()),
@@ -49,7 +49,7 @@ std::pair<std::optional<THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>>, T
         }
     }
 
-    return {std::move(tabletRepliesBySourceId), TString()};
+    return {std::move(tabletRepliesBySourceDataShardId), TString()};
 }
 
 THolder<TEvCdcAggregatorService::TEvWriteHeartbeatResult> TCdcAggregatorHeartbeatDeliveryProtoConverter::SerializeReply(const TCdcAggregatorHeartbeatDeliveryReply& reply) const {

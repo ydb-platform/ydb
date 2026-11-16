@@ -129,8 +129,8 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         it->second.BatchCookie = 0;
         it->second.LastActivity = TActivationContext::Monotonic();
         auto& delivery = it->second.CdcAggregatorHeartbeatDelivery;
-        auto [tabletRepliesBySourceId, error] = ProtoConverter.ParseBatchResult(record);
-        ReplyToOrigins(it->second, tabletRepliesBySourceId ? delivery.CompleteBatch(*tabletRepliesBySourceId) : delivery.FailBatch(error));
+        auto [tabletRepliesBySourceDataShardId, error] = ProtoConverter.ParseBatchResult(record);
+        ReplyToOrigins(it->second, tabletRepliesBySourceDataShardId ? delivery.CompleteBatch(*tabletRepliesBySourceDataShardId) : delivery.FailBatch(error));
     }
 
     void DropCdcAggregatorConnection(ui64 tabletId, const TActorId& pipeClient, const TString& error) {

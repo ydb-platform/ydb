@@ -19,15 +19,15 @@ NPQ::THeartbeat MakeHeartbeat(ui64 step, const TString& data = {}) {
 }
 
 THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> MakeWritten(const TVector<std::pair<ui64, ui64>>& written) {
-    THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> tabletRepliesBySourceId;
+    THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> tabletRepliesBySourceDataShardId;
     for (const auto& [sourceDataShardId, step] : written) {
-        tabletRepliesBySourceId[sourceDataShardId] = {
+        tabletRepliesBySourceDataShardId[sourceDataShardId] = {
             .SourceDataShardId = sourceDataShardId,
             .Status = EStatus::Written,
             .WrittenVersion = TRowVersion(step, 0),
         };
     }
-    return tabletRepliesBySourceId;
+    return tabletRepliesBySourceDataShardId;
 }
 
 TVector<ui64> GetSources(const TCdcAggregatorHeartbeatBatch& batch) {
@@ -145,10 +145,10 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
         delivery.AddHeartbeat(1, MakeHeartbeat(100));
         delivery.PrepareNextBatchIfPossible().value();
 
-        THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> tabletRepliesBySourceId;
-        tabletRepliesBySourceId[1] = {.SourceDataShardId = 1, .Status = EStatus::Rejected, .Error = "UNKNOWN_SOURCE"};
+        THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> tabletRepliesBySourceDataShardId;
+        tabletRepliesBySourceDataShardId[1] = {.SourceDataShardId = 1, .Status = EStatus::Rejected, .Error = "UNKNOWN_SOURCE"};
 
-        const auto replies = delivery.CompleteBatch(tabletRepliesBySourceId);
+        const auto replies = delivery.CompleteBatch(tabletRepliesBySourceDataShardId);
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
         UNIT_ASSERT(replies[0].Status == EStatus::Rejected);
         UNIT_ASSERT_VALUES_EQUAL(replies[0].Error, "UNKNOWN_SOURCE");
@@ -185,13 +185,13 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDeliveryProtoConverter) {
         withoutVersion.SetSourceDataShardId(3);
         withoutVersion.SetStatus(TProtoResult::THeartbeatResult::SUCCESS);
 
-        const auto [tabletRepliesBySourceId, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseBatchResult(proto);
-        UNIT_ASSERT_C(tabletRepliesBySourceId, error);
-        UNIT_ASSERT_VALUES_EQUAL(tabletRepliesBySourceId->size(), 2);
-        UNIT_ASSERT(tabletRepliesBySourceId->at(1).Status == EStatus::Written);
-        UNIT_ASSERT_VALUES_EQUAL(tabletRepliesBySourceId->at(1).WrittenVersion, TRowVersion(100, 0));
-        UNIT_ASSERT(tabletRepliesBySourceId->at(2).Status == EStatus::Rejected);
-        UNIT_ASSERT_VALUES_EQUAL(tabletRepliesBySourceId->at(2).Error, "UNKNOWN_SOURCE");
+        const auto [tabletRepliesBySourceDataShardId, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseBatchResult(proto);
+        UNIT_ASSERT_C(tabletRepliesBySourceDataShardId, error);
+        UNIT_ASSERT_VALUES_EQUAL(tabletRepliesBySourceDataShardId->size(), 2);
+        UNIT_ASSERT(tabletRepliesBySourceDataShardId->at(1).Status == EStatus::Written);
+        UNIT_ASSERT_VALUES_EQUAL(tabletRepliesBySourceDataShardId->at(1).WrittenVersion, TRowVersion(100, 0));
+        UNIT_ASSERT(tabletRepliesBySourceDataShardId->at(2).Status == EStatus::Rejected);
+        UNIT_ASSERT_VALUES_EQUAL(tabletRepliesBySourceDataShardId->at(2).Error, "UNKNOWN_SOURCE");
     }
 
     Y_UNIT_TEST(FailsBatchNotProcessedByTablet) {
@@ -200,8 +200,8 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDeliveryProtoConverter) {
             proto.SetStatus(status);
             proto.SetError("Stream is not configured");
 
-            const auto [tabletRepliesBySourceId, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseBatchResult(proto);
-            UNIT_ASSERT(!tabletRepliesBySourceId);
+            const auto [tabletRepliesBySourceDataShardId, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseBatchResult(proto);
+            UNIT_ASSERT(!tabletRepliesBySourceDataShardId);
             UNIT_ASSERT_VALUES_EQUAL(error, TProtoResult::EStatus_Name(status) + ": Stream is not configured");
         }
     }

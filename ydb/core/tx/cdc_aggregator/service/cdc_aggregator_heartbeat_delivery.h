@@ -37,19 +37,19 @@ public:
 
     void AddHeartbeat(ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat);
     std::optional<TCdcAggregatorHeartbeatBatch> PrepareNextBatchIfPossible();
-    TVector<TCdcAggregatorHeartbeatDeliveryReply> CompleteBatch(const THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>& tabletRepliesBySourceId);
+    TVector<TCdcAggregatorHeartbeatDeliveryReply> CompleteBatch(const THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>& tabletRepliesBySourceDataShardId);
     TVector<TCdcAggregatorHeartbeatDeliveryReply> FailBatch(const TString& error);
 
     bool IsIdle() const {
-        return PendingHeartbeatsBySourceId.empty() && AwaitingReplySourceIds.empty();
+        return PendingHeartbeatsBySourceDataShardId.empty() && AwaitingReplySourceDataShardIds.empty();
     }
 
 private:
     const ui32 MaxBatchSize;
 
-    THashMap<ui64, NPQ::THeartbeat> PendingHeartbeatsBySourceId;
-    TDeque<ui64> PendingSourceIdQueue;
-    TVector<ui64> AwaitingReplySourceIds;
+    THashMap<ui64, NPQ::THeartbeat> PendingHeartbeatsBySourceDataShardId;
+    TDeque<ui64> PendingSourceDataShardIdQueue;
+    TVector<ui64> AwaitingReplySourceDataShardIds;
 };
 
 } // namespace NKikimr::NCdcAggregator

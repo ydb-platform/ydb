@@ -2,6 +2,7 @@ syntax = "proto3";
 
 import "ydb/core/protos/config.proto";
 import "ydb/core/protos/blobstorage_base.proto";
+import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/bridge.proto";
 import "ydb/library/actors/protos/actors.proto";
@@ -39,6 +40,8 @@ message TStorageConfig { // contents of storage metadata
     optional uint64 ExpectedStorageYamlVersion = 15;
     NKikimrBridge.TClusterState ClusterState = 16; // for bridged clusters; not set for ordinary ones
     NKikimrBridge.TClusterStateDetails ClusterStateDetails = 17; // history of unsynced state changes
+    TDefineDataCenterStates DataCenterStates = 19;
+    uint64 DataCenterStatesVersion = 20;
     NKikimrBridge.TBridgeRollbackRecord BridgeRollback = 18; // set when the bridged cluster has been rolled back
 }
 
@@ -445,6 +448,7 @@ message TEvNodeConfigInvokeOnRoot {
         TQueryPileConnectivity QueryPileConnectivity = 31;
         TQueryBridgeRollbackStatus QueryBridgeRollbackStatus = 32;
         TRollbackBridge RollbackBridge = 33;
+        TDefineDataCenterStates ApplyDataCenterStates = 34;
     }
 }
 

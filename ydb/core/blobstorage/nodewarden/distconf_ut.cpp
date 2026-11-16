@@ -395,6 +395,77 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         return *rootNodeId;
     }
 
+    Y_UNIT_TEST(StaticDataCenterVersionCannotBeRolledBack) {
+        auto current = MakeStorageConfig(3, 2);
+        current.MutableDataCenterStates();
+        current.SetDataCenterStatesVersion(1);
+        auto next = current;
+        next.SetGeneration(3);
+        UNIT_ASSERT(!NStorage::ValidateConfigUpdate(current, next));
+        next.ClearDataCenterStates();
+        next.ClearDataCenterStatesVersion();
+        UNIT_ASSERT_STRING_CONTAINS(*NStorage::ValidateConfigUpdate(current, next), "cannot be removed");
+        next = current;
+        next.SetGeneration(3);
+        auto *dc = next.MutableDataCenterStates()->AddDataCenter();
+        dc->SetName("dc-2");
+        dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        UNIT_ASSERT_STRING_CONTAINS(*NStorage::ValidateConfigUpdate(current, next), "require a new");
+        next.SetDataCenterStatesVersion(2);
+        UNIT_ASSERT(!NStorage::ValidateConfigUpdate(current, next));
+        next.SetDataCenterStatesVersion(0);
+        UNIT_ASSERT_STRING_CONTAINS(*NStorage::ValidateConfigUpdate(current, next), "rolled back");
+    }
+
+    Y_UNIT_TEST(StaticGroupFollowsDataCenterAvailability) {
+        NKikimrBlobStorage::TStorageConfig config;
+        AddStorageConfigNodes(config, 3);
+        AddMultiVDiskGroup(config, {1, 2, 3}, TBlobStorageGroupType::ErasureMirror3dc);
+        NKikimrBlobStorage::TDefineDataCenterStates command;
+        auto *dc = command.AddDataCenter();
+        dc->SetName("dc-3");
+        dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&config, command));
+        UNIT_ASSERT(config.HasDataCenterStates());
+        UNIT_ASSERT_VALUES_EQUAL(config.GetDataCenterStatesVersion(), 1);
+        config.SetGeneration(1);
+        const auto& serviceSet = config.GetBlobStorageConfig().GetServiceSet();
+        const auto& group = serviceSet.GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetMirror3dcState()), ui32(NKikimrBlobStorage::TGroupState::DC_FAILURE));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetState()), ui32(NKikimrBlobStorage::TDataCenterState::EXCLUDED));
+        for (const auto& disk : serviceSet.GetVDisks()) {
+            UNIT_ASSERT_VALUES_EQUAL(disk.GetVDiskID().GetGroupGeneration(), 2);
+        }
+        UNIT_ASSERT(!NStorage::ApplyStaticDataCenterStates(&config, command));
+        auto conflicting = config;
+        conflicting.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0)->MutableRings(2)->SetState(
+            NKikimrBlobStorage::TDataCenterState::RECOVERING);
+        conflicting.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0)->SetMirror3dcState(
+            NKikimrBlobStorage::TGroupState::DC_RECOVERY);
+        UNIT_ASSERT(NStorage::ValidateConfig(conflicting));
+        dc->SetState(NKikimrBlobStorage::TDataCenterState::INCLUDED);
+        UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&config, command));
+        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetDataCenterStatesVersion(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetMirror3dcState()), ui32(NKikimrBlobStorage::TGroupState::DC_RECOVERY));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetState()), ui32(NKikimrBlobStorage::TDataCenterState::RECOVERING));
+        UNIT_ASSERT(!NStorage::ApplyStaticDataCenterStates(&config, command));
+    }
+
+    Y_UNIT_TEST(StaticDataCenterUpdateRejectsMultipleRealmChanges) {
+        NKikimrBlobStorage::TStorageConfig config;
+        AddStorageConfigNodes(config, 3);
+        AddMultiVDiskGroup(config, {1, 2, 3}, TBlobStorageGroupType::ErasureMirror3dc);
+        NKikimrBlobStorage::TDefineDataCenterStates command;
+        for (const char *name : {"dc-2", "dc-3"}) {
+            auto *dc = command.AddDataCenter();
+            dc->SetName(name);
+            dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        }
+        UNIT_ASSERT_EXCEPTION(NStorage::ApplyStaticDataCenterStates(&config, command), yexception);
+    }
+
     Y_UNIT_TEST(InitialConfigBootstrapUsesNodeMajority) {
         const auto config = MakeInitialStorageConfig(3);
         for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
@@ -4348,6 +4419,82 @@ selector_config: []
             return false;
         }
         return true;
+    }
+
+    Y_UNIT_TEST(StaticDataCenterOperationWaitsForVersionedBscAck) {
+        TCommitConfirmationFixture fixture;
+        fixture.UseMirror3dcGroup();
+        fixture.Start();
+        auto& runtime = fixture.Runtime;
+        TActorId tablet = runtime.Register(new TIgnoreActor, 1);
+        runtime.RegisterService(MakeTabletResolverID(), runtime.Register(new TIgnoreActor, 1));
+        TActorId client = runtime.AllocateEdgeActor(1);
+        TActorId handler;
+        ui64 version = 0;
+        ui32 requests = 0;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        runtime.FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (CaptureInvokeResult(*event, client, response)) {
+                return false;
+            }
+            if (event->GetTypeRewrite() == TEvTabletResolver::TEvForward::EventType
+                    && event->Get<TEvTabletResolver::TEvForward>()->TabletID == MakeBSControllerID()) {
+                runtime.Send(new IEventHandle(event->Sender, tablet,
+                    new TEvTabletResolver::TEvForwardResult(MakeBSControllerID(), tablet, tablet, 0)), node);
+                return false;
+            }
+            if (event->GetTypeRewrite() == TEvTabletPipe::TEvConnect::EventType && event->GetRecipientRewrite() == tablet) {
+                runtime.Send(new IEventHandle(event->Sender, tablet, new TEvTabletPipe::TEvConnectResult(
+                    NKikimrProto::OK, MakeBSControllerID(), event->Sender, tablet, true, 1, TString()), 0, event->Cookie), node);
+                return false;
+            }
+            if (event->GetTypeRewrite() == TEvTabletPipe::EvSend
+                    && event->Type == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                const auto& command = event->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest().GetCommand(0);
+                UNIT_ASSERT(command.HasDefineDataCenterStates());
+                handler = event->Sender;
+                version = command.GetDefineDataCenterStates().GetDistconfGeneration();
+                ++requests;
+                return false;
+            }
+            return true;
+        };
+        auto acknowledge = [&](bool success) {
+            auto result = std::make_unique<TEvBlobStorage::TEvControllerConfigResponse>();
+            result->Record.MutableResponse()->SetSuccess(success);
+            result->Record.MutableResponse()->SetAppliedDataCenterStatesVersion(version);
+            runtime.Send(new IEventHandle(handler, tablet, result.release()), 1);
+        };
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *dc = request->Record.MutableApplyDataCenterStates()->AddDataCenter();
+        dc->SetName("dc-3");
+        dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        runtime.Send(new IEventHandle(fixture.Root(), client, request.release()), 1);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 1; }));
+        UNIT_ASSERT(!response);
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return fixture.Metadata(1).GetCommittedStorageConfig().GetDataCenterStatesVersion() == version;
+        }));
+        acknowledge(false);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 2; }));
+        UNIT_ASSERT(!response);
+        acknowledge(true);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(response->GetStatus()), ui32(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK));
+        response.reset();
+        ui64 previousVersion = version;
+        request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableApplyDataCenterStates(); // return the DC through RECOVERING
+        runtime.Send(new IEventHandle(fixture.Root(), client, request.release()), 1);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 3; }));
+        UNIT_ASSERT_VALUES_EQUAL(version, previousVersion); // first acknowledge the prior snapshot
+        acknowledge(true);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 4; }));
+        UNIT_ASSERT(version > previousVersion);
+        UNIT_ASSERT(!response);
+        acknowledge(true);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(response->GetStatus()), ui32(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK));
     }
 
     void SetMetadataDiskGuid(ui32 nodeId, IEventHandle& ev) {

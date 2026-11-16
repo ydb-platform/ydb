@@ -485,6 +485,7 @@ namespace NKikimr::NBsController {
                 } else {
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
                 }
+                Ev->Record.MutableResponse()->SetAppliedDataCenterStatesVersion(Self->AppliedDataCenterStatesVersion);
                 TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
                 Self->UpdatePDisksCounters();
             }

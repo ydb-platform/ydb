@@ -1,5 +1,6 @@
 #include "distconf_invoke.h"
 #include "distconf_quorum.h"
+#include <ydb/core/blobstorage/base/data_center_states.h>
 
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/util/address_classifier.h>
@@ -160,6 +161,9 @@ namespace NKikimr::NStorage {
                     {"selfId", SelfId()},
                     {"command", op.Command});
                 switch (op.Command.GetRequestCase()) {
+                    case TQuery::kApplyDataCenterStates:
+                        return ApplyDataCenterStates(op.Command.GetApplyDataCenterStates());
+
                     case TQuery::kUpdateConfig:
                         return UpdateConfig(op.Command.MutableUpdateConfig());
 
@@ -322,6 +326,15 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::UpdateConfig(TQuery::TUpdateConfig *request) {
         RunCommonChecks();
+        const auto& current = *Self->StorageConfig;
+        const auto& proposed = request->GetConfig();
+        auto before = ParseDataCenterStates(current.GetDataCenterStates());
+        auto after = ParseDataCenterStates(proposed.GetDataCenterStates());
+        if (current.HasDataCenterStates() != proposed.HasDataCenterStates()
+                || current.GetDataCenterStatesVersion() != proposed.GetDataCenterStatesVersion()
+                || !before || !after || *before != *after) {
+            throw TExError() << "Use ApplyDataCenterStates to change DC availability";
+        }
         StartProposition(request->MutableConfig());
     }
 
@@ -604,6 +617,8 @@ namespace NKikimr::NStorage {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
         } else if (RecoveryProposition && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
             Finish(TResult::RACE, "Configuration was recovered; retry the original operation");
+        } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query); op && op->Command.HasApplyDataCenterStates()) {
+            StartDataCenterReconciliation();
         } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
                    op && op->Command.HasReplaceStorageConfig() && ControllerOp == EControllerOp::OTHER
                    && Self->SelfManagementEnabled) {

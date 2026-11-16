@@ -264,6 +264,12 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::HandleWakeup(STFUNC_SIG) {
+        if (ev->Cookie == DataCenterRetryCookie) {
+            if (DataCenterReconciliation && WaitingForConfigValidation) {
+                SendDataCenterSnapshot();
+            }
+            return;
+        }
         if (ev->Cookie == VStatusTimeoutCookie) {
             if (!PendingVDiskIds.empty()) {
                 throw TExError() << "Timed out waiting for VDisk status before group reassignment";
@@ -748,6 +754,24 @@ namespace NKikimr::NStorage {
         });
     }
 
+    void TInvokeRequestHandlerActor::StartDataCenterReconciliation() {
+        DataCenterReconciliation = true;
+        WaitingForConfigValidation = true;
+        TActivationContext::Schedule(TDuration::Minutes(10), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+            SelfId(), {}, nullptr, ConfigValidationTimeoutCookie));
+        ControllerPipeId = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(),
+            NTabletPipe::TClientRetryPolicy::WithRetries()));
+        SendDataCenterSnapshot();
+    }
+
+    void TInvokeRequestHandlerActor::SendDataCenterSnapshot() {
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto *command = request->Record.MutableRequest()->AddCommand()->MutableDefineDataCenterStates();
+        *command = Self->StorageConfig->GetDataCenterStates();
+        command->SetDistconfGeneration(Self->StorageConfig->GetDataCenterStatesVersion());
+        NTabletPipe::SendData(SelfId(), ControllerPipeId, request.release());
+    }
+
     void TInvokeRequestHandlerActor::ConnectToController() {
         WaitingForConfigValidation = true;
         TActivationContext::Schedule(TDuration::Minutes(10), new IEventHandle(TEvents::TSystem::Wakeup, 0,
@@ -815,6 +839,26 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
         const auto& response = ev->Get()->Record.GetResponse();
+        if (DataCenterReconciliation) {
+            if (!response.GetSuccess()) {
+                TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+                    SelfId(), {}, nullptr, DataCenterRetryCookie));
+                return;
+            }
+            if (!response.HasAppliedDataCenterStatesVersion()
+                    || response.GetAppliedDataCenterStatesVersion() != Self->StorageConfig->GetDataCenterStatesVersion()) {
+                throw TExError() << "BSC did not acknowledge the current DC state version";
+            }
+            WaitingForConfigValidation = false;
+            if (DataCenterPreflight) {
+                DataCenterPreflight = false;
+                DataCenterReconciliation = false;
+                NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);
+                return StartProposition(&ProposedStorageConfig);
+            }
+            return Finish(TResult::OK, std::nullopt);
+        }
+
         YDB_LOG_DEBUG("Received TEvControllerConfigResponse",
             {"marker", "NWDC80"},
             {"selfId", SelfId()},

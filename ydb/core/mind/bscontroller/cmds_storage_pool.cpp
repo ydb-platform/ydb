@@ -1224,6 +1224,25 @@ namespace NKikimr::NBsController {
         if (!states) {
             throw TExError() << states.error();
         }
+        if (Self.SelfManagementEnabled) {
+            if (!cmd.HasDistconfGeneration() || !Self.StorageConfig || !Self.StorageConfig->HasDataCenterStates()
+                    || cmd.GetDistconfGeneration() != Self.StorageConfig->GetDataCenterStatesVersion()) {
+                throw TExError() << "DC states must match the current distconf snapshot and its version";
+            }
+            auto authoritative = ParseDataCenterStates(Self.StorageConfig->GetDataCenterStates());
+            if (!authoritative || *authoritative != *states) {
+                throw TExError() << "DC states differ from distconf";
+            }
+            if (cmd.GetDistconfGeneration() < AppliedDataCenterStatesVersion.Get()) {
+                throw TExError() << "Stale distconf DC state version";
+            }
+            if (cmd.GetDistconfGeneration() == AppliedDataCenterStatesVersion.Get() && *states == DataCenterStates.Get()) {
+                return; // the snapshot was already committed; acknowledge it without rescanning groups
+            }
+            AppliedDataCenterStatesVersion.Unshare() = cmd.GetDistconfGeneration();
+        } else if (cmd.HasDistconfGeneration()) {
+            throw TExError() << "Versioned DC states require distconf self-management";
+        }
         DataCenterStates.Unshare() = std::move(*states);
     }
 
@@ -1360,6 +1379,20 @@ namespace NKikimr::NBsController {
                         current = *next;
                     }
                     GroupContentChanged.insert(groupId);
+                }
+            }
+            if (Self.SelfManagementEnabled && AppliedDataCenterStatesVersion.Get()) {
+                for (const TVSlotInfo* slot : group->VDisksInGroup) {
+                    if (!HostRecords->GetHostId(slot->VSlotId.NodeId)) {
+                        return std::unexpected<TString>("VDisk node has no HostRecord for DC state validation");
+                    }
+                    NActorsInterconnect::TNodeLocation location;
+                    HostRecords->GetLocation(slot->VSlotId.NodeId).Serialize(&location, false);
+                    auto it = DataCenterStates.Get().find(location.GetDataCenter());
+                    if (it != DataCenterStates.Get().end() && it->second == TFailRealm::EXCLUDED
+                            && current.Realms[slot->RingIdx] != TFailRealm::EXCLUDED) {
+                        return std::unexpected<TString>("Group cannot include a DC excluded by distconf");
+                    }
                 }
             }
             if (previous.State != current.State) {

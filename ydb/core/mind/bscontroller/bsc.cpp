@@ -1,4 +1,5 @@
 #include "impl.h"
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include "config.h"
 #include "self_heal.h"
 #include "sys_view.h"
@@ -501,6 +502,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     if (Loaded) {
         ApplyStorageConfig();
+        ReconcileDataCenterStates();
     }
 
     ApplyStaticGroupUpdateForSyncers(prevStaticGroups);
@@ -728,6 +730,27 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
     }
 
     return nullptr;
+}
+
+void TBlobStorageController::RetryDataCenterStates() {
+    DataCenterRetryScheduled = false;
+    ReconcileDataCenterStates();
+}
+
+void TBlobStorageController::ReconcileDataCenterStates() {
+    if (!SelfManagementEnabled || !StorageConfig || !StorageConfig->HasDataCenterStates()
+            || StorageConfig->GetDataCenterStatesVersion() <= AppliedDataCenterStatesVersion) {
+        return;
+    }
+    auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+    auto *command = request->Record.MutableRequest()->AddCommand()->MutableDefineDataCenterStates();
+    *command = StorageConfig->GetDataCenterStates();
+    command->SetDistconfGeneration(StorageConfig->GetDataCenterStatesVersion());
+    Send(SelfId(), request.release());
+    if (!DataCenterRetryScheduled) {
+        DataCenterRetryScheduled = true;
+        Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvReconcileDataCenterStates, 0, SelfId(), {}, nullptr, 0));
+    }
 }
 
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
@@ -1199,6 +1222,7 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvRetryBridgeGroupModes, HandleRetryBridgeGroupModes);
         cFunc(TEvPrivate::EvCheckBridgeGroupModes, HandleCheckBridgeGroupModes);
         cFunc(TEvPrivate::EvRetrySyncers, HandleRetrySyncers);
+        cFunc(TEvPrivate::EvReconcileDataCenterStates, RetryDataCenterStates);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         hFunc(TEvBlobStorage::TEvControllerDDiskInfoListTablets, Handle);

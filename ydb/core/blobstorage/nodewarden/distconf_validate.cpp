@@ -1,6 +1,7 @@
 #include "distconf.h"
 
 #include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/base/pdisk_config_validation.h>
 #include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
@@ -197,6 +198,19 @@ namespace NKikimr::NStorage {
                 << " proposed# " << proposed.GetGeneration();
         }
 
+        if (current.HasDataCenterStates()) {
+            if (!proposed.HasDataCenterStates() || proposed.GetDataCenterStatesVersion() < current.GetDataCenterStatesVersion()) {
+                return "DC state snapshot cannot be removed or rolled back";
+            }
+            auto before = ParseDataCenterStates(current.GetDataCenterStates());
+            auto after = ParseDataCenterStates(proposed.GetDataCenterStates());
+            if (!before || !after) {
+                return "Invalid DC state snapshot";
+            }
+            if (proposed.GetDataCenterStatesVersion() == current.GetDataCenterStatesVersion() && *before != *after) {
+                return "DC state changes require a new DC state version";
+            }
+        }
         if (auto error = ValidateConfig(proposed)) {
             return TStringBuilder() << "proposed config validation failed: " << *error;
         }
@@ -526,6 +540,27 @@ namespace NKikimr::NStorage {
     }
 
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (config.HasDataCenterStates()) {
+            if (!config.GetDataCenterStatesVersion() || config.GetDataCenterStatesVersion() > config.GetGeneration()) {
+                return "DC state version must be nonzero and no newer than the storage configuration";
+            }
+            if (config.GetDataCenterStates().HasDistconfGeneration()) {
+                return "Stored DC snapshot must not contain a BSC delivery version";
+            }
+            if (auto states = ParseDataCenterStates(config.GetDataCenterStates()); !states) {
+                return states.error();
+            }
+            auto normalized = config;
+            try {
+                if (ApplyStaticDataCenterStates(&normalized, config.GetDataCenterStates())) {
+                    return "Static group roles do not match authoritative DC states";
+                }
+            } catch (const yexception& error) {
+                return error.what();
+            }
+        } else if (config.GetDataCenterStatesVersion()) {
+            return "DC state version has no snapshot";
+        }
         if (config.HasClusterState()) {
             if (auto error = ValidateBridgeClusterState(config.GetClusterState())) {
                 return error;

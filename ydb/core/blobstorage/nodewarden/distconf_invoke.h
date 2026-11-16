@@ -248,6 +248,12 @@ namespace NKikimr::NStorage {
         // Configuration proposition
 
         void AdvanceGeneration();
+        void StartDataCenterReconciliation();
+        void SendDataCenterSnapshot();
+        static constexpr ui64 DataCenterRetryCookie = 3;
+        bool DataCenterReconciliation = false;
+        bool DataCenterPreflight = false;
+        void ApplyDataCenterStates(const NKikimrBlobStorage::TDefineDataCenterStates& command);
         void QueryConfig(const TQuery::TQueryConfig& request);
         void CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback, bool allowConflictingGenerationAdvance = false);
         void StartRecoveryProposition(TProcessCollectConfigsResult& result);

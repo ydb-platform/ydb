@@ -72,6 +72,7 @@ namespace NKikimr {
 
             // user-defined configuration
             TCowHolder<TDataCenterStates> DataCenterStates;
+            TCowHolder<ui64> AppliedDataCenterStatesVersion;
             TCowHolder<TMap<THostConfigId, THostConfigInfo>> HostConfigs;
             TCowHolder<TMap<TBoxId, TBoxInfo>> Boxes;
             TCowHolder<TMap<TBoxStoragePoolId, TStoragePoolInfo>> StoragePools;
@@ -192,6 +193,7 @@ namespace NKikimr {
                     TMonotonic mono, const NKikimrBlobStorage::TStorageConfig *storageConfig = nullptr)
                 : Self(controller)
                 , DataCenterStates(&controller.DataCenterStates)
+                , AppliedDataCenterStatesVersion(&controller.AppliedDataCenterStatesVersion)
                 , HostConfigs(&controller.HostConfigs)
                 , Boxes(&controller.Boxes)
                 , StoragePools(&controller.StoragePools)
@@ -245,6 +247,7 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(!Fit);
 
                 DataCenterStates.Commit();
+                AppliedDataCenterStatesVersion.Commit();
                 HostConfigs.Commit();
                 Boxes.Commit();
                 StoragePools.Commit();
@@ -269,7 +272,7 @@ namespace NKikimr {
             }
 
             bool Changed() const {
-                return DataCenterStates.Changed() || HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
+                return AppliedDataCenterStatesVersion.Changed() || DataCenterStates.Changed() || HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
                     StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || PDisks.Changed() ||
                     DrivesSerials.Changed() || Nodes.Changed() || VSlots.Changed() || Groups.Changed() ||
                     IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() || NextStoragePoolId.Changed() ||

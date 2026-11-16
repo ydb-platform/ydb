@@ -9,6 +9,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/printf.h>
 #include <util/datetime/base.h>
+#include <atomic>
 
 namespace NKikimr::NReplication::NController {
 namespace {
@@ -22,28 +23,47 @@ class TTopicMirroringFixture {
         return flags;
     }
 
+    struct TSourceEnv: TEnv<> {
+        TSourceEnv(): TEnv<>(Flags()) {
+            UNIT_ASSERT_VALUES_EQUAL(CreateTopic("/Root", *MakeTopicDescription({.Name = "topic"})), NMsgBusProxy::MSTATUS_OK);
+        }
+    };
+
 public:
-    TEnv<> Source{Flags()};
-    TEnv<> Destination{Flags()};
+    TSourceEnv Source;
+    TEnv<> Destination;
     const ui64 SchemeShard = Destination.GetPathId("/Root").OwnerId;
 
-    explicit TTopicMirroringFixture(const TString& sourceHost = "localhost") {
+    explicit TTopicMirroringFixture(const TString& sourceHost = "localhost", bool stopBeforeCreateResult = false)
+        : Destination(Flags(), true, stopBeforeCreateResult ? ERuntimeMode::Simulated : ERuntimeMode::RealThreads)
+    {
         auto& app = Destination.GetRuntime().GetAppData(0);
         app.PersQueueMirrorReaderFactory->Initialize(
             Destination.GetRuntime().GetAnyNodeActorSystem(), app.PQConfig.GetMirrorConfig().GetPQLibSettings());
-        UNIT_ASSERT_VALUES_EQUAL(Source.CreateTopic("/Root", *MakeTopicDescription({.Name = "topic"})), NMsgBusProxy::MSTATUS_OK);
+        std::atomic<bool> createResultBlocked = false;
+        auto observer = Destination.GetRuntime().AddObserver<TEvPrivate::TEvCreateDstResult>(
+            [&](TEvPrivate::TEvCreateDstResult::TPtr& ev) {
+                if (stopBeforeCreateResult && ev->Get()->IsSuccess()) {
+                    ev.Reset();
+                    createResultBlocked = true;
+                }
+            });
         const auto endpoint = sourceHost + Source.GetEndpoint().substr(Source.GetEndpoint().rfind(':'));
         Exec(Sprintf(R"(CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/topic` AS `/Root/topic`
             WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin",
                 CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", endpoint.c_str()));
+        if (stopBeforeCreateResult) {
+            Wait([&] { return createResultBlocked.load(); });
+            return;
+        }
         WaitMirror(true);
         UNIT_ASSERT(Config().GetPartitionConfig().GetMirrorFrom().GetMirrorConsumerOffsets());
     }
 
     void Exec(const TString& query) {
         NYdb::NTable::TTableClient client(Destination.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        auto session = Destination.RunCall([&] { return client.CreateSession().GetValueSync().GetSession(); });
+        const auto result = Destination.RunCall([&] { return session.ExecuteSchemeQuery(query).GetValueSync(); });
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
@@ -58,12 +78,22 @@ public:
         const auto deadline = TInstant::Now() + TDuration::Seconds(60);
         while (!ready()) {
             UNIT_ASSERT_C(TInstant::Now() < deadline, "Timed out waiting for topic mirroring");
-            Sleep(TDuration::MilliSeconds(10));
+            if (Destination.GetRuntime().IsRealThreads()) {
+                Sleep(TDuration::MilliSeconds(10));
+            } else {
+                Destination.GetRuntime().SimulateSleep(TDuration::MilliSeconds(10));
+            }
         }
     }
 
     void WaitMirror(bool enabled) {
         Wait([&] { return Config().GetPartitionConfig().HasMirrorFrom() == enabled; });
+    }
+
+    void Done() {
+        Exec("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');");
+        Wait([&] { return Destination.GetDescription("/Root/replication")
+            .GetPathDescription().GetReplicationDescription().GetState().HasDone(); });
     }
 
     void CheckMissingDestination() {
@@ -99,6 +129,12 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(TopicMirroring) {
+    Y_UNIT_TEST(DoneBeforeCreateResultDoesNotStartMirroring) {
+        TTopicMirroringFixture test("localhost", true);
+        test.Done();
+        UNIT_ASSERT(!test.Config().GetPartitionConfig().HasMirrorFrom());
+    }
+
     Y_UNIT_TEST(MissingDestinationCannotResume) {
         TTopicMirroringFixture test;
         test.CheckMissingDestination();

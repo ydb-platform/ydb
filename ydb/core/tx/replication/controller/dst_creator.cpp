@@ -423,8 +423,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         if (!proposal) {
             return Error(NKikimrScheme::StatusInvalidParameter, proposal.GetErrorMessage());
         }
-        TxBody.MutableCreatePersQueueGroup()->MutablePQTabletConfig()->MutablePartitionConfig()
-            ->MutableMirrorFrom()->CopyFrom(TopicMirror.Config);
+        // Start mirroring only after the controller has persisted the destination id.
+        TxBody.MutableCreatePersQueueGroup()->MutablePQTabletConfig()
+            ->SetReplicationSourceConsumer(TopicMirror.Config.GetConsumer());
         AllocateTxId();
     }
 
@@ -646,11 +647,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case TReplication::ETargetKind::IndexTable:
             return CheckTableScheme(desc.GetTable(), error);
         case TReplication::ETargetKind::Topic:
-            if (desc.HasPersQueueGroup() && desc.GetPersQueueGroup().GetPQTabletConfig()
-                .GetPartitionConfig().GetMirrorFrom().GetConsumer() == TopicMirror.Config.GetConsumer()) {
+            if (!TopicMirror.Config.GetConsumer().empty() && desc.HasPersQueueGroup()
+                && desc.GetPersQueueGroup().GetPQTabletConfig().GetReplicationSourceConsumer() == TopicMirror.Config.GetConsumer()) {
                 return true;
             }
-            error = "Destination topic already exists with a different mirroring configuration";
+            error = "Destination topic was not created by this replication";
             return false;
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");

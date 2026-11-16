@@ -30,11 +30,11 @@ private:
         TStringBuf port;
         if (endpoint.StartsWith('[')) {
             const auto close = endpoint.find(']');
-            if (close == TStringBuf::npos || close + 1 >= endpoint.size() || endpoint[close + 1] != ':') {
+            if (close == TStringBuf::npos || close == 1 || close + 1 >= endpoint.size() || endpoint[close + 1] != ':') {
                 error = "Invalid source endpoint";
                 return false;
             }
-            host = endpoint.substr(1, close - 1);
+            host = endpoint.substr(0, close + 1);
             port = endpoint.substr(close + 2);
         } else {
             const auto colon = endpoint.rfind(':');

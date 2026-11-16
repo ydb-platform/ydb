@@ -27,14 +27,15 @@ public:
     TEnv<> Destination{Flags()};
     const ui64 SchemeShard = Destination.GetPathId("/Root").OwnerId;
 
-    TTopicMirroringFixture() {
+    explicit TTopicMirroringFixture(const TString& sourceHost = "localhost") {
         auto& app = Destination.GetRuntime().GetAppData(0);
         app.PersQueueMirrorReaderFactory->Initialize(
             Destination.GetRuntime().GetAnyNodeActorSystem(), app.PQConfig.GetMirrorConfig().GetPQLibSettings());
         UNIT_ASSERT_VALUES_EQUAL(Source.CreateTopic("/Root", *MakeTopicDescription({.Name = "topic"})), NMsgBusProxy::MSTATUS_OK);
+        const auto endpoint = sourceHost + Source.GetEndpoint().substr(Source.GetEndpoint().rfind(':'));
         Exec(Sprintf(R"(CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/topic` AS `/Root/topic`
             WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin",
-                CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", Source.GetEndpoint().c_str()));
+                CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", endpoint.c_str()));
         WaitMirror(true);
         UNIT_ASSERT(Config().GetPartitionConfig().GetMirrorFrom().GetMirrorConsumerOffsets());
     }
@@ -104,7 +105,7 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
     }
 
     Y_UNIT_TEST(CopiesMessagesAcrossPauseAndResume) {
-        TTopicMirroringFixture test;
+        TTopicMirroringFixture test("[::1]");
         test.WriteAndWait("first", 1);
         test.Exec("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'PAUSED');");
         test.WaitMirror(false);

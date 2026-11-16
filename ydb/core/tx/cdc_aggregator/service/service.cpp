@@ -55,23 +55,27 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         }
     }
 
-    void SendHeartbeatBatch(ui64 tabletId, TCdcAggregatorConnection& connection) {
-        auto& delivery = connection.CdcAggregatorHeartbeatDelivery;
-        if (!delivery.HasBatchToSend()) {
-            return;
+    void SendHeartbeatBatchesPeriodically() {
+        for (auto& [tabletId, connection] : CdcAggregatorConnections) {
+            auto& delivery = connection.CdcAggregatorHeartbeatDelivery;
+            if (!delivery.HasBatchToSend()) {
+                continue;
+            }
+
+            if (!connection.PipeClient) {
+                NTabletPipe::TClientConfig config;
+                config.RetryPolicy = {.RetryLimitCount = PipeRetryLimit};
+                connection.PipeClient = Register(NTabletPipe::CreateClient(SelfId(), tabletId, config));
+            }
+
+            auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeBatch(delivery.TakeBatch());
+            YDB_LOG_DEBUG("Send batch",
+                {"aggregator", tabletId},
+                {"heartbeats", ev->Record.HeartbeatsSize()});
+            NTabletPipe::SendData(SelfId(), connection.PipeClient, ev.Release());
         }
 
-        if (!connection.PipeClient) {
-            NTabletPipe::TClientConfig config;
-            config.RetryPolicy = {.RetryLimitCount = PipeRetryLimit};
-            connection.PipeClient = Register(NTabletPipe::CreateClient(SelfId(), tabletId, config));
-        }
-
-        auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeBatch(delivery.TakeBatch());
-        YDB_LOG_DEBUG("Send batch",
-            {"aggregator", tabletId},
-            {"heartbeats", ev->Record.HeartbeatsSize()});
-        NTabletPipe::SendData(SelfId(), connection.PipeClient, ev.Release());
+        Schedule(FlushPeriod, new TEvents::TEvWakeup());
     }
 
     void DropCdcAggregatorConnection(ui64 tabletId, const TActorId& pipeClient, const TString& error) {
@@ -119,13 +123,6 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         connection.CdcAggregatorHeartbeatDelivery.AddHeartbeat(msg->SourceDataShardId, msg->Heartbeat);
     }
 
-    void Handle(TEvents::TEvWakeup::TPtr&) {
-        for (auto& [tabletId, connection] : CdcAggregatorConnections) {
-            SendHeartbeatBatch(tabletId, connection);
-        }
-        Schedule(FlushPeriod, new TEvents::TEvWakeup());
-    }
-
     void Handle(TEvCdcAggregator::TEvWriteHeartbeatsResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         YDB_LOG_DEBUG("Handle",
@@ -170,7 +167,7 @@ public:
             hFunc(TEvCdcAggregator::TEvWriteHeartbeatsResult, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            hFunc(TEvents::TEvWakeup, Handle);
+            sFunc(TEvents::TEvWakeup, SendHeartbeatBatchesPeriodically);
         }
     }
 

@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 0);
     }
 
-    // Isolate the process abort caused by a second PassAway before #58064 is fixed.
+    // Isolate a possible process abort if the double-PassAway regression returns (#58064).
     SIMPLE_UNIT_FORKED_TEST(UnknownPartitionsInTwoTopicsReturnsBadRequest) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
         EnableFetchLogs(*setup);

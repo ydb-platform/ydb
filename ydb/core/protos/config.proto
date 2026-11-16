@@ -2020,6 +2020,13 @@ message THiveConfig {
         HIVE_BOOT_STRATEGY_FAST = 1 [(EnumDescription) = "when the per-node startup limit is reached on one node, continue starting tablets on other nodes"];
     }
 
+    enum ECountersExportMode {
+        COUNTERS_EXPORT_MODE_BASIC = 0 [(EnumDescription) = "only the basic Hive counters"];
+        COUNTERS_EXPORT_MODE_PER_RESOURCE_COUNTERS = 10 [(EnumDescription) = "also per-resource balancing counters (BalanceScatterCpu, BalancerExecuted by balancer type etc.)"];
+        COUNTERS_EXPORT_MODE_LOCAL_PER_NODE_COUNTERS = 20 [(EnumDescription) = "also node usage counters in Locals of this Hive, each node exports its own"];
+        COUNTERS_EXPORT_MODE_HIVE_PER_NODE_COUNTERS = 30 [(EnumDescription) = "also counters per node in Hive itself: all of them on the Hive node, the heaviest mode"];
+    }
+
     message TBootPriority {
         optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
         optional double Priority = 2;
@@ -2127,6 +2134,7 @@ message THiveConfig {
     repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
     optional uint64 TabletEventHistorySize = 95 [default = 20, (ParamDescription) = "Number of recent events kept in memory per tablet for debugging, shown on the tablet page in Hive UI. 0 disables per-tablet history, values above 5000 are capped."];
     optional uint64 NodeEventHistorySize = 96 [default = 50, (ParamDescription) = "Number of recent events kept in memory per node for debugging, shown on the node page in Hive UI. 0 disables per-node history, values above 5000 are capped."];
+    optional ECountersExportMode CountersExportMode = 98 [default = COUNTERS_EXPORT_MODE_BASIC, (ParamDescription) = "Which balancing counters Hive and Locals of its nodes export. Each mode includes the previous ones. Per-node counters produce one counter group per node."];
 }
 
 message THealthCheckConfig {

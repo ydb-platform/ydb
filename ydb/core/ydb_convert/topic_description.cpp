@@ -59,7 +59,7 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& c
     }
 
     out.set_important(in.GetImportant());
-    out.set_disable_commits(in.GetDisableCommits());
+    out.set_allow_commits_into_replica_topic(in.GetAllowCommitsIntoReplicaTopic());
     if (in.has_availabilityperiodms()) {
         out.mutable_availability_period()->set_seconds(in.availabilityperiodms() / 1000);
         out.mutable_availability_period()->set_nanos((in.availabilityperiodms() % 1000) * 1'000'000);

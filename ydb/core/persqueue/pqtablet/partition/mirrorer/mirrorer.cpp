@@ -782,9 +782,9 @@ void TMirrorer::AddMessagesToQueue(
                 LOG_D("Received replication data", {"replicationData", replicationData.DebugString()});
 
                 for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
-                    auto& pendingOffset = OffsetsByConsumers[consumer];
-                    pendingOffset = Max(pendingOffset, offset);
+                    OffsetsByConsumers[consumer] = offset;
                 }
+                TryToSendReplicationData(ctx);
             } else {
                 LOG_E("Failed to parse replication service message", {"payloadSize", msg.GetData().size()});
             }

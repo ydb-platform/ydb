@@ -4181,60 +4181,6 @@ Y_UNIT_TEST(TestSetClientOffset) {
     });
 }
 
-Y_UNIT_TEST(DisableCommits) {
-    TTestContext tc;
-    TFinalizer finalizer(tc);
-    tc.Prepare();
-    tc.Runtime->SetScheduledLimit(5000);
-
-    const TTabletPreparationParameters params{
-        .deleteTime = 10'000,
-        .partitions = 1,
-        .specVersion = 1,
-        .AddDefaultConsumer = false,
-    };
-    PQTabletPrepare(params, {{"blocked", true}, {"allowed", true}}, tc);
-
-    CmdWrite(0, "source", {{1, "first"}, {2, "second"}}, tc);
-    CmdSetOffset(0, "blocked", 1, false, tc);
-    CmdGetOffset(0, "blocked", 1, tc);
-
-    auto config = MakePQTabletConfig(params,
-        {{.Name = "blocked", .Important = true}, {.Name = "allowed", .Important = true}},
-        *tc.Runtime, 2);
-    config.MutableConsumers(0)->SetDisableCommits(true);
-    auto updateConfig = [&] {
-        SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config,
-            tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
-    };
-    updateConfig();
-
-    PQTabletRestart(tc);
-    CmdGetOffset(0, "blocked", 1, tc);
-
-    auto request = MakeHolder<TEvPersQueue::TEvRequest>();
-    auto* partition = request->Record.MutablePartitionRequest();
-    partition->SetPartition(0);
-    auto* commit = partition->MutableCmdSetClientOffset();
-    commit->SetClientId("blocked");
-    commit->SetOffset(2);
-    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-    auto response = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(tc.Edge);
-    UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
-    UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.GetErrorReason(), "Commits for consumer are disabled");
-    CmdGetOffset(0, "blocked", 1, tc);
-    CmdRead(0, 1, 1, 1_KB, 1, false, tc, {1}, 0, 0, "blocked");
-    CmdSetOffset(0, "allowed", 2, false, tc);
-    CmdGetOffset(0, "allowed", 2, tc);
-    CmdSetOffset(0, "unknown", 0, false, tc);
-
-    config.SetVersion(3);
-    config.MutableConsumers(0)->SetDisableCommits(false);
-    updateConfig();
-    CmdSetOffset(0, "blocked", 2, false, tc);
-    CmdGetOffset(0, "blocked", 2, tc);
-}
-
 Y_UNIT_TEST(TestReadSessions) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {

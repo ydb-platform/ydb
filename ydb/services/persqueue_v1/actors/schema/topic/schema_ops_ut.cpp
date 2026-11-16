@@ -1014,10 +1014,10 @@ Y_UNIT_TEST(DescribeTopicSmokeAndMissing) {
     }
 }
 
-Y_UNIT_TEST(DescribeDisableCommits) {
+Y_UNIT_TEST(DescribeAllowCommitsIntoReplicaTopic) {
     auto server = CreateSimulatedServer();
     auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_disable_commits";
+    const TString path = "/Root/topic_allow_commits_into_replica_topic";
     auto createRequest = MakeCreateTopicRequest(path);
     createRequest.add_consumers()->set_name("allowed");
     auto createResult = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
@@ -1028,7 +1028,7 @@ Y_UNIT_TEST(DescribeDisableCommits) {
         "localhost:" + ToString(server->Server->GrpcPort), grpc::InsecureChannelCredentials());
     auto pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
 
-    for (const std::optional<bool> disableCommits : {std::optional<bool>{}, {false}, {true}}) {
+    for (const std::optional<bool> allowCommitsIntoReplicaTopic : {std::optional<bool>{}, {false}, {true}}) {
         // The flag is read-only in the public API, so provide the internal config through scheme cache.
         auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
             [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -1038,10 +1038,10 @@ Y_UNIT_TEST(DescribeDisableCommits) {
                     }
                     auto copy = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>(*entry.PQGroupInfo);
                     for (auto& consumer : *copy->Description.MutablePQTabletConfig()->MutableConsumers()) {
-                        if (consumer.GetName() == "user" && disableCommits.has_value()) {
-                            consumer.SetDisableCommits(*disableCommits);
+                        if (consumer.GetName() == "user" && allowCommitsIntoReplicaTopic.has_value()) {
+                            consumer.SetAllowCommitsIntoReplicaTopic(*allowCommitsIntoReplicaTopic);
                         } else {
-                            consumer.ClearDisableCommits();
+                            consumer.ClearAllowCommitsIntoReplicaTopic();
                         }
                     }
                     entry.PQGroupInfo = copy;
@@ -1051,8 +1051,8 @@ Y_UNIT_TEST(DescribeDisableCommits) {
         const auto topic = DescribeTopic(runtime, path);
         UNIT_ASSERT_VALUES_EQUAL(topic.consumers_size(), 2);
         for (const auto& consumer : topic.consumers()) {
-            UNIT_ASSERT_VALUES_EQUAL(consumer.disable_commits(),
-                consumer.name() == "user" && disableCommits.value_or(false));
+            UNIT_ASSERT_VALUES_EQUAL(consumer.allow_commits_into_replica_topic(),
+                consumer.name() == "user" && allowCommitsIntoReplicaTopic.value_or(false));
 
             Ydb::Topic::DescribeConsumerRequest request;
             request.set_path(path);
@@ -1062,7 +1062,7 @@ Y_UNIT_TEST(DescribeDisableCommits) {
             AssertStatus(result, Ydb::StatusIds::SUCCESS);
             const auto& describedConsumer = GetResult<Ydb::Topic::DescribeConsumerResult>(result).consumer();
             UNIT_ASSERT_VALUES_EQUAL(describedConsumer.name(), consumer.name());
-            UNIT_ASSERT_VALUES_EQUAL(describedConsumer.disable_commits(), consumer.disable_commits());
+            UNIT_ASSERT_VALUES_EQUAL(describedConsumer.allow_commits_into_replica_topic(), consumer.allow_commits_into_replica_topic());
         }
 
         auto future = NThreading::Async([&] {
@@ -1081,8 +1081,8 @@ Y_UNIT_TEST(DescribeDisableCommits) {
         UNIT_ASSERT(response.operation().result().UnpackTo(&pqTopic));
         UNIT_ASSERT_VALUES_EQUAL(pqTopic.settings().read_rules_size(), 2);
         for (const auto& rule : pqTopic.settings().read_rules()) {
-            UNIT_ASSERT_VALUES_EQUAL(rule.disable_commits(),
-                rule.consumer_name() == "user" && disableCommits.value_or(false));
+            UNIT_ASSERT_VALUES_EQUAL(rule.allow_commits_into_replica_topic(),
+                rule.consumer_name() == "user" && allowCommitsIntoReplicaTopic.value_or(false));
         }
     }
 }

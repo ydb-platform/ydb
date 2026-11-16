@@ -2709,8 +2709,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     }
 
     if (req.HasCmdSetClientOffset()) {
-        const auto* consumer = GetConsumer(Config, req.GetCmdSetClientOffset().GetClientId());
-        if (consumer && consumer->GetDisableCommits()) {
+        auto* consumer = GetConsumer(Config, req.GetCmdSetClientOffset().GetClientId());
+        if ((!consumer || !consumer->GetAllowCommitsIntoReplicaTopic()) && ReplicationEnabled(Config) && !AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
             ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
                        "Commits for consumer are disabled");
             return;

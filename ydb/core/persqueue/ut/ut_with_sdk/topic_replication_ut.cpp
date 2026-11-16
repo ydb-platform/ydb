@@ -1,5 +1,9 @@
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/mlp/ut/common/common.h>
+#include <ydb/core/persqueue/public/schema/common.h>
+#include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
@@ -435,7 +439,7 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(TTopicReplication) {
-    Y_UNIT_TEST(WriteAfterDisablingActiveReplicationWithConsumerOffsets) {
+    Y_UNIT_TEST(WriteAndCommitAfterDisablingActiveReplicationWithConsumerOffsets) {
         auto settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
         settings.FeatureFlags.SetEnableDstTopicReplicationDisabled(false);
         auto factory = std::make_shared<TObservedMirrorReaderFactory>();
@@ -444,6 +448,7 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         const TString destination = "/Root/active_replication_destination";
         env.Create(source, true);
         env.Create(destination, false);
+        env.Commit(destination, 0);
         env.EnableMirroring(source, destination);
 
         env.Write(source, 0, 3);
@@ -454,9 +459,57 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         env.Commit(source, 2);
         env.WaitForOffsets(destination, 2, 5);
 
+        const auto commitResult = env.Client.CommitOffset(destination, 0, "reader", 3).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(commitResult.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(commitResult.GetIssues().ToString(), "Commits for consumer are disabled");
+        env.WaitForOffsets(destination, 2, 5);
+
+        auto& runtime = env.Setup.GetRuntime();
+        ui64 txId = 1006;
+        auto setAllowCommits = [&](bool allow) {
+            // The consumer option is read-only in the public API.
+            NPQ::NTest::CreateDescriberActor(runtime, env.Setup.GetDatabase(), destination);
+            const auto description = NPQ::NTest::GetDescriberResponse(runtime);
+            const auto& topic = description->Topics.at(destination);
+            UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
+            NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+            NPQ::NSchema::CopyConfig(scheme, topic.Info->Description);
+            auto* consumer = NPQ::GetConsumer(*scheme.MutablePQTabletConfig(), "reader");
+            UNIT_ASSERT(consumer);
+            consumer->SetAllowCommitsIntoReplicaTopic(allow);
+            NPQ::NTest::DoRequest(runtime, txId, scheme);
+            ++txId;
+            return topic.Info->Description.GetPartitions(0).GetTabletId();
+        };
+
+        const ui64 tabletId = setAllowCommits(true);
+        const auto allowed = env.Client.CommitOffset(destination, 0, "reader", 2,
+            NYdb::NTopic::TCommitOffsetSettings().ClientTimeout(TDuration::Seconds(10))).GetValueSync();
+        UNIT_ASSERT_C(allowed.IsSuccess(), allowed.GetIssues().ToString());
+
+        const auto otherConsumer = env.Client.CommitOffset(destination, 0, "replicator", 0).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(otherConsumer.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(otherConsumer.GetIssues().ToString(), "Commits for consumer are disabled");
+
+        // Send directly to the tablet: the public API rejects unknown consumers before reaching it.
+        const auto edge = runtime.AllocateEdgeActor();
+        auto unknownConsumer = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto* partition = unknownConsumer->Record.MutablePartitionRequest();
+        partition->SetPartition(0);
+        partition->MutableCmdSetClientOffset()->SetClientId("unknown");
+        partition->MutableCmdSetClientOffset()->SetOffset(0);
+        static_cast<NKikimr::TTestActorRuntime&>(runtime).SendToPipe(tabletId, edge, unknownConsumer.Release());
+        auto unknownResponse = runtime.GrabEdgeEvent<TEvPersQueue::TEvResponse>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(unknownResponse->Get()->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(unknownResponse->Get()->Record.GetErrorReason(), "Commits for consumer are disabled");
+
+        setAllowCommits(false);
+        const auto disabled = env.Client.CommitOffset(destination, 0, "reader", 3).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(disabled.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(disabled.GetIssues().ToString(), "Commits for consumer are disabled");
+
         auto sessionReleased = factory->GetSessionReleasedFuture();
         UNIT_ASSERT(!sessionReleased.HasValue());
-        auto& runtime = env.Setup.GetRuntime();
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
             runtime.GetAppData(node).FeatureFlags.SetEnableDstTopicReplicationDisabled(true);
         }
@@ -466,6 +519,7 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         // session to be released before checking that no new data was mirrored.
         UNIT_ASSERT_C(sessionReleased.Wait(TDuration::Seconds(30)), "Mirrorer did not release its read session");
         env.WaitForOffsets(destination, 2, 5);
+        env.Commit(destination, 2);
 
         // Keep the mirror rule and continue writing after the replicated data.
         env.Write(destination, 5, 2);

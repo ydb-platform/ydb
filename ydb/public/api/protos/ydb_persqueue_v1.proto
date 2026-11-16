@@ -1218,8 +1218,8 @@ message TopicSettings {
         // Not set or zero value means no limit.
         optional int64 read_speed_messages_per_second = 12 [(Ydb.value) = ">= 0"];
 
-        // Whether commits are disabled for this consumer. Read-only, returned by Describe requests.
-        bool disable_commits = 13;
+        // Whether commits into a replica topic are allowed for this consumer. Read-only, returned by Describe requests.
+        bool allow_commits_into_replica_topic = 13;
     }
 
     // List of consumer read rules for this topic.

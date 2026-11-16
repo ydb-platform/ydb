@@ -3898,28 +3898,55 @@ Y_UNIT_TEST_F(ReplicationDataIgnoresReplicationConsumerWithoutRetryingPersist, T
     }
 }
 
-Y_UNIT_TEST_F(ReplicationDataDoesNotRewindConsumerOffsets, TPartitionFixture)
+Y_UNIT_TEST_F(ReplicationDataRewindsConsumerOffsetsAndClampsToStart, TPartitionFixture)
 {
-    const TConfigParams initialConfig{.Version = 1,
-        .Consumers = {{.Consumer = "first", .Offset = 6}, {.Consumer = "second"}}};
-    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+    const TConfigParams initialConfig{.Version = 1, .Consumers = {
+        {.Consumer = "important", .Offset = 10},
+        {.Consumer = "extended", .Offset = 10},
+        {.Consumer = "regular", .Offset = 10},
+    }};
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 5, .End = 15,
         .Config = initialConfig, .FillHead = true}, initialConfig);
-    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
-    event->OffsetsByConsumers = {{"first", 4}, {"second", 8}};
-    SendEvent(event.Release());
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 6}}, {1, {.Consumer = "second", .Offset = 8}}}});
+    Config.SetVersion(2);
+    GetConsumer(Config, "important")->SetImportant(true);
+    GetConsumer(Config, "extended")->SetAvailabilityPeriodMs(TDuration::Days(1).MilliSeconds());
+    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    WaitCmdWrite();
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitForReplicationDataPersisted(*partition);
+    WaitPartitionConfigChanged();
 
-    // An older batch does not move persisted offsets backwards.
-    event = MakeHolder<TEvPQ::TEvReplicationData>();
-    event->OffsetsByConsumers = {{"first", 1}, {"second", 2}};
-    SendEvent(event.Release());
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 6}}, {1, {.Consumer = "second", .Offset = 8}}}});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitForReplicationDataPersisted(*partition);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "first")->Offset, 6);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "second")->Offset, 8);
+    ui64 writes = 0;
+    auto prevObserver = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->Sender == ActorId
+            && event->GetTypeRewrite() == TEvKeyValue::TEvRequest::EventType
+            && event->Get<TEvKeyValue::TEvRequest>()->Record.CmdWriteSize() > 0) {
+            ++writes;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    // Rewind within the retained range, then below its beginning.
+    for (ui64 offset : {7u, 2u}) {
+        const auto writesBefore = writes;
+        const auto effectiveOffset = Max<ui64>(offset, 5);
+        auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+        event->OffsetsByConsumers = {{"important", offset}, {"extended", offset}, {"regular", offset}};
+        SendEvent(event.Release());
+        WaitCmdWrite({.UserInfos = {
+            {0, {.Consumer = "important", .Offset = effectiveOffset}},
+            {1, {.Consumer = "extended", .Offset = effectiveOffset}},
+            {2, {.Consumer = "regular", .Offset = offset}},
+        }});
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        WaitForReplicationDataPersisted(*partition);
+        Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "important")->Offset, effectiveOffset);
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "extended")->Offset, effectiveOffset);
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "regular")->Offset, offset);
+        UNIT_ASSERT_VALUES_EQUAL(writes, writesBefore + 1);
+    }
+    Ctx->Runtime->SetObserverFunc(prevObserver);
 }
 
 Y_UNIT_TEST_F(ReplicationDataDoesNotRestoreRemovedConsumer, TPartitionFixture)

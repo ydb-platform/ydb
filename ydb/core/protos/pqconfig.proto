@@ -457,7 +457,7 @@ message TPQTabletConfig {
         // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
         optional string MonitoringProjectId = 22;
 
-        optional bool DisableCommits = 23 [default = false];
+        optional bool AllowCommitsIntoReplicaTopic = 23 [default = false];
     }
 
     repeated TConsumer Consumers = 37;

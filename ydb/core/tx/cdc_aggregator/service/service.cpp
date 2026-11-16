@@ -59,6 +59,62 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             CdcAggregatorHeartbeatDelivery.AddHeartbeat(sourceDataShardId, heartbeat);
         }
 
+        std::optional<TCdcAggregatorHeartbeatBatch> PrepareNextBatchIfPossible(ui64 batchCookie) {
+            auto batch = CdcAggregatorHeartbeatDelivery.PrepareNextBatchIfPossible();
+            if (batch) {
+                BatchCookie = batchCookie;
+                BatchDeadline = TActivationContext::Monotonic() + BatchTimeout;
+            }
+            return batch;
+        }
+
+        const TActorId& GetOrCreatePipeClient(const std::function<TActorId()>& createPipeClient) {
+            if (!PipeClient) {
+                PipeClient = createPipeClient();
+            }
+            return PipeClient;
+        }
+
+        bool IsAwaitingBatch(ui64 batchCookie) const {
+            return BatchCookie && BatchCookie == batchCookie;
+        }
+
+        void CompleteBatch(const TCdcAggregatorWriteHeartbeatsResult& writeHeartbeatsResult, const TSendReply& sendReply) {
+            BatchCookie = 0;
+            LastActivity = TActivationContext::Monotonic();
+            ReplyToOrigins(CdcAggregatorHeartbeatDelivery.CompleteBatch(writeHeartbeatsResult), sendReply);
+        }
+
+        void FailBatch(const TString& error, const TSendReply& sendReply) {
+            BatchCookie = 0;
+            LastActivity = TActivationContext::Monotonic();
+            ReplyToOrigins(CdcAggregatorHeartbeatDelivery.FailBatch(error), sendReply);
+        }
+
+        void ReplyToAllOrigins(const TCdcAggregatorHeartbeatDeliveryReply& reply, const TSendReply& sendReply) {
+            for (const auto& [sourceDataShardId, origin] : Origins) {
+                sendReply(origin, reply);
+            }
+            Origins.clear();
+        }
+
+        bool IsBatchExpired(TMonotonic now) const {
+            return BatchCookie && now >= BatchDeadline;
+        }
+
+        bool IsIdleExpired(TMonotonic now) const {
+            return CdcAggregatorHeartbeatDelivery.IsIdle() && now - LastActivity >= IdleTimeout;
+        }
+
+        const TActorId& GetPipeClient() const {
+            return PipeClient;
+        }
+
+        size_t GetOriginCount() const {
+            return Origins.size();
+        }
+
+    private:
         void ReplyToOrigins(const TCdcAggregatorHeartbeatBatchResult& batchResult, const TSendReply& sendReply) {
             for (const auto& [sourceDataShardId, reply] : batchResult) {
                 auto it = Origins.find(sourceDataShardId);
@@ -71,25 +127,12 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             }
         }
 
-        void ReplyToAllOrigins(const TCdcAggregatorHeartbeatDeliveryReply& reply, const TSendReply& sendReply) {
-            for (const auto& [sourceDataShardId, origin] : Origins) {
-                sendReply(origin, reply);
-            }
-            Origins.clear();
-        }
-
-        size_t GetOriginCount() const {
-            return Origins.size();
-        }
-
         TCdcAggregatorHeartbeatDelivery CdcAggregatorHeartbeatDelivery{MaxBatchSize};
+        THashMap<ui64, TOrigin> Origins;
         TActorId PipeClient;
         ui64 BatchCookie = 0;
         TMonotonic BatchDeadline;
         TMonotonic LastActivity;
-
-    private:
-        THashMap<ui64, TOrigin> Origins;
     };
 
     void AcceptHeartbeat(const TOrigin& origin, const TEvCdcAggregatorService::TEvWriteHeartbeat& msg) {
@@ -106,26 +149,24 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
 
     void SendHeartbeatBatches() {
         for (auto& [tabletId, connection] : CdcAggregatorConnections) {
-            auto& delivery = connection.CdcAggregatorHeartbeatDelivery;
-            auto batch = delivery.PrepareNextBatchIfPossible();
+            const ui64 batchCookie = ++LastBatchCookie;
+            auto batch = connection.PrepareNextBatchIfPossible(batchCookie);
             if (!batch) {
                 continue;
             }
 
-            if (!connection.PipeClient) {
+            const TActorId& pipeClient = connection.GetOrCreatePipeClient([this, tabletId = tabletId] {
                 NTabletPipe::TClientConfig config;
                 config.RetryPolicy = {.RetryLimitCount = PipeRetryLimit};
-                connection.PipeClient = Register(NTabletPipe::CreateClient(SelfId(), tabletId, config));
-            }
+                return Register(NTabletPipe::CreateClient(SelfId(), tabletId, config));
+            });
 
             auto ev = ProtoConverter.SerializeBatch(*batch);
-            connection.BatchCookie = ++LastBatchCookie;
-            connection.BatchDeadline = TActivationContext::Monotonic() + BatchTimeout;
             YDB_LOG_DEBUG("Send batch",
                 {"aggregator", tabletId},
-                {"batchCookie", connection.BatchCookie},
+                {"batchCookie", batchCookie},
                 {"heartbeats", ev->Record.HeartbeatsSize()});
-            NTabletPipe::SendData(SelfId(), connection.PipeClient, ev.Release(), connection.BatchCookie);
+            NTabletPipe::SendData(SelfId(), pipeClient, ev.Release(), batchCookie);
         }
     }
 
@@ -134,11 +175,11 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         for (auto it = CdcAggregatorConnections.begin(); it != CdcAggregatorConnections.end();) {
             const auto current = it++;
             auto& connection = current->second;
-            if (connection.BatchCookie && now >= connection.BatchDeadline) {
-                NTabletPipe::CloseClient(SelfId(), connection.PipeClient);
-                DropCdcAggregatorConnection(current->first, connection.PipeClient, "Heartbeat batch timed out");
-            } else if (connection.CdcAggregatorHeartbeatDelivery.IsIdle() && now - connection.LastActivity >= IdleTimeout) {
-                NTabletPipe::CloseClient(SelfId(), connection.PipeClient);
+            if (connection.IsBatchExpired(now)) {
+                NTabletPipe::CloseClient(SelfId(), connection.GetPipeClient());
+                DropCdcAggregatorConnection(current->first, connection.GetPipeClient(), "Heartbeat batch timed out");
+            } else if (connection.IsIdleExpired(now)) {
+                NTabletPipe::CloseClient(SelfId(), connection.GetPipeClient());
                 CdcAggregatorConnections.erase(current);
             }
         }
@@ -149,23 +190,24 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             {"record", record.ShortDebugString()});
 
         auto it = CdcAggregatorConnections.find(record.GetOrigin());
-        if (it == CdcAggregatorConnections.end() || !it->second.BatchCookie || it->second.BatchCookie != cookie) {
+        if (it == CdcAggregatorConnections.end() || !it->second.IsAwaitingBatch(cookie)) {
             return;
         }
 
-        it->second.BatchCookie = 0;
-        it->second.LastActivity = TActivationContext::Monotonic();
-        auto& delivery = it->second.CdcAggregatorHeartbeatDelivery;
-        auto [writeHeartbeatsResult, error] = ProtoConverter.ParseWriteHeartbeatsResult(record);
-        const auto batchResult = writeHeartbeatsResult ? delivery.CompleteBatch(*writeHeartbeatsResult) : delivery.FailBatch(error);
-        it->second.ReplyToOrigins(batchResult, [this](const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
+        const auto sendReply = [this](const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
             Reply(origin, reply);
-        });
+        };
+        auto [writeHeartbeatsResult, error] = ProtoConverter.ParseWriteHeartbeatsResult(record);
+        if (writeHeartbeatsResult) {
+            it->second.CompleteBatch(*writeHeartbeatsResult, sendReply);
+        } else {
+            it->second.FailBatch(error, sendReply);
+        }
     }
 
     void DropCdcAggregatorConnection(ui64 tabletId, const TActorId& pipeClient, const TString& error) {
         auto it = CdcAggregatorConnections.find(tabletId);
-        if (it == CdcAggregatorConnections.end() || it->second.PipeClient != pipeClient) {
+        if (it == CdcAggregatorConnections.end() || it->second.GetPipeClient() != pipeClient) {
             return;
         }
 

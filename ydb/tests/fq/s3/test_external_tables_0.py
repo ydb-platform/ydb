@@ -52,7 +52,11 @@ class TestExternalTables:
         client.drop('EXTERNAL DATA SOURCE', source)
         assert not client.list_directory().children
 
-    @pytest.mark.parametrize('kikimr_settings', [{'is_replace_if_exists': True}], indirect=True)
+    @pytest.mark.parametrize(
+        ('kikimr_settings', 'kikimr_params'),
+        [({'is_replace_if_exists': True}, {'data_inflight': 8 * 1024 * 1024})],
+        indirect=True,
+    )
     def test_replace_source_with_many_external_tables(self, s3, client, unique_prefix):
         self.prepare(s3)
         source = unique_prefix + 'source'

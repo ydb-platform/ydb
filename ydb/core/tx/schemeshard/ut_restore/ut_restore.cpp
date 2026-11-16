@@ -5781,7 +5781,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     void ShouldFailOnInvalidCsv(const TString& csv, bool enableDataShardDirectPartImport) {
+        std::vector<std::string> auditLines;
         TTestBasicRuntime runtime;
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(auditLines);
 
         const auto data = TTestDataWithScheme(R"(
             columns {
@@ -5795,7 +5797,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             primary_key: "key"
         )", {TTestData(csv, EmptyYsonStr)});
 
-        Run(runtime, ConvertTestData(data), R"(
+        const auto importId = Run(runtime, ConvertTestData(data), R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -5805,6 +5807,15 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
         )", enableDataShardDirectPartImport, Ydb::StatusIds::CANCELLED);
+
+        const auto result = TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = result.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT(!entry.GetIssues(0).message().empty());
+
+        const auto line = FindAuditLine(auditLines, "operation=IMPORT END");
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, "reason=" + entry.GetIssues(0).message());
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnFileWithoutNewLines, EnableDataShardDirectPartImport) {

@@ -253,11 +253,6 @@ struct TXxportRecord {
 };
 
 void AuditLogXxport(TXxportRecord&& record) {
-    if (record.Status == "ERROR" && record.Reason.empty()) {
-        record.Reason = TStringBuilder() << record.OperationName << " failed: reason not provided (status "
-            << Ydb::StatusIds::StatusCode_Name(record.DetailedStatus) << ")";
-    }
-
     AUDIT_LOG(
         AUDIT_PART("component", SchemeshardComponentName)
 
@@ -423,15 +418,6 @@ void _AuditLogXxportEnd(const Info& info, const TString& operationName, TParts&&
     Y_ABORT_UNLESS(info.State == Info::EState::Done || info.State == Info::EState::Cancelled);
     TString status = TString(info.State == Info::EState::Done ? "SUCCESS" : "ERROR");
     Ydb::StatusIds::StatusCode detailedStatus = (info.State == Info::EState::Done ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
-    TString reason = info.Issue;
-    if (reason.empty() && info.State == Info::EState::Cancelled) {
-        for (const auto& item : info.Items) {
-            if (!item.Issue.empty()) {
-                reason = item.Issue;
-                break;
-            }
-        }
-    }
 
     AuditLogXxport({
         .OperationName = operationName,
@@ -443,7 +429,7 @@ void _AuditLogXxportEnd(const Info& info, const TString& operationName, TParts&&
         .DatabasePath = databasePath.PathString(),
         .Status = status,
         .DetailedStatus = detailedStatus,
-        .Reason = std::move(reason),
+        .Reason = info.Issue,
 
         .AdditionalParts = std::move(additionalParts),
 

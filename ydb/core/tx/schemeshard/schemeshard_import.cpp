@@ -22,7 +22,7 @@ namespace {
         }
 
         for (const auto& item : importInfo.Items) {
-            if (item.Issue) {
+            if (item.Issue && item.Issue != importInfo.Issue) {
                 AddIssue(import, item.Issue, severity);
             }
         }

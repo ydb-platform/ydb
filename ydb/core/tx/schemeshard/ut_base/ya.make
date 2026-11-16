@@ -9,7 +9,6 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
-    ydb/core/testlib/audit_helpers
     ydb/core/testlib/pg
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers

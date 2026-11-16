@@ -1,4 +1,9 @@
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
+#include <ydb/core/tx/schemeshard/schemeshard_audit_log.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+
+#include <util/generic/algorithm.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -340,5 +345,46 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditSettings) {
             Cerr << "TEST AlterSubdomain, '" << atCreate << "' + '" << atAlter << "'" << Endl;
             test(atCreate, atAlter, MessageFromText<NKikimrSubDomains::TDomainDescription>(expected).GetAuditSettings());
         }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TSchemeShardAuditLog) {
+    Y_UNIT_TEST(ErrorWithoutReasonIsLogged) {
+        std::vector<std::string> logLines;
+        std::vector<std::string> auditLines;
+        TTestBasicRuntime runtime;
+        runtime.SetLogBackend(new Tests::TMemoryLogBackend(logLines));
+        runtime.AuditLogBackends = Tests::CreateTestAuditLogBackends(auditLines);
+        TTestEnv env(runtime, TTestEnvOptions().SchemeShardLogPriority(NLog::PRI_CRIT));
+        auto* ss = dynamic_cast<TSchemeShard*>(runtime.FindActor(ResolveTablet(runtime, TTestTxConfig::SchemeShard)));
+        UNIT_ASSERT(ss);
+        const ui64 txId = 100;
+
+        NKikimrSchemeOp::TModifyScheme operation;
+        operation.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+        operation.SetWorkingDir("/MyRoot");
+        operation.MutableMkDir()->SetName("Dir");
+        runtime.RunCall([&] {
+            AuditLogModifySchemeOperation(operation, NKikimrScheme::StatusInvalidParameter, {},
+                ss, {}, {}, {}, txId, {});
+            return true;
+        });
+
+        const std::string message = "Scheme operation failed without a reason";
+        const std::string marker = "tx_id=" + std::to_string(txId);
+        runtime.WaitFor("missing reason diagnostic and audit record", [&] {
+            return AnyOf(logLines, [&](const auto& line) { return line.find(message) != std::string::npos; })
+                && AnyOf(auditLines, [&](const auto& line) { return line.find(marker) != std::string::npos; });
+        }, TDuration::Seconds(10));
+        const auto diagnostic = Tests::FindAuditLine(logLines, message);
+        UNIT_ASSERT_STRING_CONTAINS(diagnostic, "FLAT_TX_SCHEMESHARD CRIT");
+        UNIT_ASSERT_STRING_CONTAINS(diagnostic, "ESchemeOpMkDir");
+        UNIT_ASSERT_STRING_CONTAINS(diagnostic, "StatusInvalidParameter");
+        UNIT_ASSERT_STRING_CONTAINS(diagnostic, "txId=100");
+
+        const auto line = Tests::FindAuditLine(auditLines, marker);
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=StatusInvalidParameter");
+        UNIT_ASSERT(line.find("reason=") == std::string::npos);
     }
 }

@@ -396,8 +396,8 @@ struct TMirrorerEnv {
         return options;
     }
 
-    static TVector<TEnvOptions> SecretVariants() {
-        TVector<TEnvOptions> variants(3);
+    static std::vector<TEnvOptions> SecretVariants() {
+        std::vector<TEnvOptions> variants(3);
         variants[0] = SecretOptions();
         variants[1].MirrorConfig.MutableCredentials()->SetJwtParamsSecretName("/Root/jwt-secret");
         auto* iam = variants[2].MirrorConfig.MutableCredentials()->MutableIam();

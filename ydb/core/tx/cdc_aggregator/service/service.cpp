@@ -19,28 +19,39 @@ namespace NKikimr::NCdcAggregator {
 
 class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
     static constexpr ui32 MaxBatchSize = 1000;
-    static constexpr ui32 MaxWaiters = 10000;
     static constexpr ui32 PipeRetryLimit = 3;
 
+    struct TOrigin {
+        TActorId Sender;
+        ui64 Cookie = 0;
+    };
+
     struct TCdcAggregatorConnection {
-        TCdcAggregatorHeartbeatDelivery CdcAggregatorHeartbeatDelivery{MaxBatchSize, MaxWaiters};
+        TCdcAggregatorHeartbeatDelivery CdcAggregatorHeartbeatDelivery{MaxBatchSize};
+        THashMap<ui64, TOrigin> Origins;
         TActorId PipeClient;
         bool FlushScheduled = false;
     };
 
     using EStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
 
-    void Reply(const TCdcAggregatorHeartbeatDeliveryReply& reply) {
+    void Reply(const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
         auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeReply(reply);
         YDB_LOG_TRACE("Reply",
             {"ev", ev->ToString()},
-            {"recipient", reply.Waiter.Sender});
-        Send(reply.Waiter.Sender, ev.Release(), 0, reply.Waiter.Cookie);
+            {"recipient", origin.Sender});
+        Send(origin.Sender, ev.Release(), 0, origin.Cookie);
     }
 
-    void Reply(const TVector<TCdcAggregatorHeartbeatDeliveryReply>& replies) {
+    void Reply(TCdcAggregatorConnection& connection, const TVector<TCdcAggregatorHeartbeatDeliveryReply>& replies) {
         for (const auto& reply : replies) {
-            Reply(reply);
+            auto it = connection.Origins.find(reply.SourceDataShardId);
+            if (it == connection.Origins.end()) {
+                continue;
+            }
+
+            Reply(it->second, reply);
+            connection.Origins.erase(it);
         }
     }
 
@@ -69,12 +80,17 @@ class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
             return;
         }
 
-        auto& delivery = it->second.CdcAggregatorHeartbeatDelivery;
         YDB_LOG_NOTICE("Drop connection",
             {"aggregator", tabletId},
-            {"waiters", delivery.GetWaitersCount()},
+            {"origins", it->second.Origins.size()},
             {"error", error});
-        Reply(delivery.RetryAllWaiters(error));
+        for (const auto& [sourceDataShardId, origin] : it->second.Origins) {
+            Reply(origin, TCdcAggregatorHeartbeatDeliveryReply{
+                .SourceDataShardId = sourceDataShardId,
+                .Status = EStatus::Retry,
+                .Error = error,
+            });
+        }
         CdcAggregatorConnections.erase(it);
     }
 
@@ -83,14 +99,14 @@ class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
         YDB_LOG_TRACE("Handle",
             {"ev", msg->ToString()});
 
-        const TCdcAggregatorHeartbeatDeliveryWaiter waiter{
+        const TOrigin origin{
             .Sender = ev->Sender,
             .Cookie = ev->Cookie,
         };
 
         if (!msg->RecipientTabletId) {
-            Reply(TCdcAggregatorHeartbeatDeliveryReply{
-                .Waiter = waiter,
+            Reply(origin, TCdcAggregatorHeartbeatDeliveryReply{
+                .SourceDataShardId = msg->SourceDataShardId,
                 .Status = EStatus::Rejected,
                 .Error = "Recipient tablet id is not set",
             });
@@ -100,17 +116,8 @@ class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
         const ui64 tabletId = msg->RecipientTabletId;
         auto& connection = CdcAggregatorConnections[tabletId];
         auto& delivery = connection.CdcAggregatorHeartbeatDelivery;
-        if (!delivery.AddHeartbeat(msg->SourceDataShardId, msg->Heartbeat, waiter)) {
-            YDB_LOG_WARN("Too many waiters",
-                {"aggregator", tabletId},
-                {"sourceDataShardId", msg->SourceDataShardId});
-            Reply(TCdcAggregatorHeartbeatDeliveryReply{
-                .Waiter = waiter,
-                .Status = EStatus::Retry,
-                .Error = "Too many waiters",
-            });
-            return;
-        }
+        connection.Origins[msg->SourceDataShardId] = origin;
+        delivery.AddHeartbeat(msg->SourceDataShardId, msg->Heartbeat);
 
         if (!connection.FlushScheduled && delivery.HasBatchToSend()) {
             connection.FlushScheduled = true;
@@ -140,7 +147,7 @@ class TCdcAggregatorService: public TActor<TCdcAggregatorService> {
 
         auto& delivery = it->second.CdcAggregatorHeartbeatDelivery;
         auto [result, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseBatchResult(record);
-        Reply(result ? delivery.CompleteBatch(*result) : delivery.FailBatch(error));
+        Reply(it->second, result ? delivery.CompleteBatch(*result) : delivery.FailBatch(error));
         SendHeartbeatBatch(it->first, it->second);
     }
 

@@ -4,23 +4,12 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <algorithm>
-
 namespace NKikimr::NCdcAggregator {
 
 namespace {
 
 using EStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
 using TProtoResult = NKikimrCdcAggregator::TEvWriteHeartbeatsResult;
-
-const TActorId Sender(1, 0, 1, 0);
-
-TCdcAggregatorHeartbeatDeliveryWaiter MakeWaiter(ui64 cookie) {
-    return TCdcAggregatorHeartbeatDeliveryWaiter{
-        .Sender = Sender,
-        .Cookie = cookie,
-    };
-}
 
 NPQ::THeartbeat MakeHeartbeat(ui64 step, const TString& data = {}) {
     return NPQ::THeartbeat{
@@ -45,21 +34,14 @@ TVector<ui64> GetSources(const TVector<TCdcAggregatorHeartbeatDeliveryItem>& bat
     return sources;
 }
 
-TVector<TCdcAggregatorHeartbeatDeliveryReply> SortByCookie(TVector<TCdcAggregatorHeartbeatDeliveryReply> replies) {
-    std::sort(replies.begin(), replies.end(), [](const auto& left, const auto& right) {
-        return left.Waiter.Cookie < right.Waiter.Cookie;
-    });
-    return replies;
-}
-
 } // namespace
 
 Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
 
     Y_UNIT_TEST(BatchesSources) {
-        TCdcAggregatorHeartbeatDelivery delivery(100, 100);
+        TCdcAggregatorHeartbeatDelivery delivery(100);
         for (ui64 sourceDataShardId : {1, 2, 3}) {
-            UNIT_ASSERT(delivery.AddHeartbeat(sourceDataShardId, MakeHeartbeat(100), MakeWaiter(sourceDataShardId)));
+            delivery.AddHeartbeat(sourceDataShardId, MakeHeartbeat(100));
         }
 
         UNIT_ASSERT(delivery.HasBatchToSend());
@@ -67,11 +49,11 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
         UNIT_ASSERT(!delivery.HasBatchToSend());
     }
 
-    Y_UNIT_TEST(MergesVersionsOfSource) {
-        TCdcAggregatorHeartbeatDelivery delivery(100, 100);
-        UNIT_ASSERT(delivery.AddHeartbeat(1, MakeHeartbeat(100, "a"), MakeWaiter(1)));
-        UNIT_ASSERT(delivery.AddHeartbeat(1, MakeHeartbeat(120, "b"), MakeWaiter(2)));
-        UNIT_ASSERT(delivery.AddHeartbeat(1, MakeHeartbeat(110, "c"), MakeWaiter(3)));
+    Y_UNIT_TEST(KeepsNewestHeartbeatOfSource) {
+        TCdcAggregatorHeartbeatDelivery delivery(100);
+        delivery.AddHeartbeat(1, MakeHeartbeat(100, "a"));
+        delivery.AddHeartbeat(1, MakeHeartbeat(120, "b"));
+        delivery.AddHeartbeat(1, MakeHeartbeat(110, "c"));
 
         const auto batch = delivery.TakeBatch();
         UNIT_ASSERT_VALUES_EQUAL(batch.size(), 1);
@@ -79,63 +61,51 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
         UNIT_ASSERT_VALUES_EQUAL(batch[0].Heartbeat.Data, "b");
 
         const auto replies = delivery.CompleteBatch(MakeWritten({{1, 120}}));
-        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 3);
-        for (const auto& reply : replies) {
-            UNIT_ASSERT(reply.Status == EStatus::Written);
-            UNIT_ASSERT_VALUES_EQUAL(reply.WrittenVersion, TRowVersion(120, 0));
-        }
+        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
+        UNIT_ASSERT(replies[0].Status == EStatus::Written);
+        UNIT_ASSERT_VALUES_EQUAL(replies[0].WrittenVersion, TRowVersion(120, 0));
         UNIT_ASSERT(delivery.IsIdle());
     }
 
-    Y_UNIT_TEST(ConfirmsOnlyWrittenVersion) {
-        TCdcAggregatorHeartbeatDelivery delivery(100, 100);
-        UNIT_ASSERT(delivery.AddHeartbeat(1, MakeHeartbeat(100), MakeWaiter(1)));
+    Y_UNIT_TEST(SendsHeartbeatAddedInFlightInNextBatch) {
+        TCdcAggregatorHeartbeatDelivery delivery(100);
+        delivery.AddHeartbeat(1, MakeHeartbeat(100));
         delivery.TakeBatch();
 
-        UNIT_ASSERT(delivery.AddHeartbeat(1, MakeHeartbeat(120), MakeWaiter(2)));
+        delivery.AddHeartbeat(1, MakeHeartbeat(120));
         UNIT_ASSERT(!delivery.HasBatchToSend());
 
-        auto replies = delivery.CompleteBatch(MakeWritten({{1, 100}}));
+        const auto replies = delivery.CompleteBatch(MakeWritten({{1, 100}}));
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(replies[0].Waiter.Cookie, 1);
         UNIT_ASSERT(replies[0].Status == EStatus::Written);
         UNIT_ASSERT_VALUES_EQUAL(replies[0].WrittenVersion, TRowVersion(100, 0));
-        UNIT_ASSERT_VALUES_EQUAL(delivery.GetWaitersCount(), 1);
 
         UNIT_ASSERT(delivery.HasBatchToSend());
-        const auto batch = delivery.TakeBatch();
-        UNIT_ASSERT_VALUES_EQUAL(batch[0].Heartbeat.Version, TRowVersion(120, 0));
-
-        replies = delivery.CompleteBatch(MakeWritten({{1, 120}}));
-        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(replies[0].Waiter.Cookie, 2);
-        UNIT_ASSERT(replies[0].Status == EStatus::Written);
-        UNIT_ASSERT(delivery.IsIdle());
+        UNIT_ASSERT_VALUES_EQUAL(delivery.TakeBatch()[0].Heartbeat.Version, TRowVersion(120, 0));
     }
 
-    Y_UNIT_TEST(KeepsWaitersUntilResult) {
-        TCdcAggregatorHeartbeatDelivery delivery(100, 100);
+    Y_UNIT_TEST(RetriesSourcesWithoutResult) {
+        TCdcAggregatorHeartbeatDelivery delivery(100);
         for (ui64 sourceDataShardId : {1, 2, 3}) {
-            UNIT_ASSERT(delivery.AddHeartbeat(sourceDataShardId, MakeHeartbeat(100), MakeWaiter(sourceDataShardId)));
+            delivery.AddHeartbeat(sourceDataShardId, MakeHeartbeat(100));
         }
 
         delivery.TakeBatch();
-        UNIT_ASSERT_VALUES_EQUAL(delivery.GetWaitersCount(), 3);
         UNIT_ASSERT(!delivery.IsIdle());
 
-        const auto replies = SortByCookie(delivery.CompleteBatch(MakeWritten({{1, 100}, {2, 100}})));
+        const auto replies = delivery.CompleteBatch(MakeWritten({{1, 100}, {2, 100}}));
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 3);
         UNIT_ASSERT(replies[0].Status == EStatus::Written);
         UNIT_ASSERT(replies[1].Status == EStatus::Written);
-        UNIT_ASSERT_VALUES_EQUAL(replies[2].Waiter.Cookie, 3);
+        UNIT_ASSERT_VALUES_EQUAL(replies[2].SourceDataShardId, 3);
         UNIT_ASSERT(replies[2].Status == EStatus::Retry);
         UNIT_ASSERT(delivery.IsIdle());
     }
 
     Y_UNIT_TEST(LimitsBatchSize) {
-        TCdcAggregatorHeartbeatDelivery delivery(2, 100);
+        TCdcAggregatorHeartbeatDelivery delivery(2);
         for (ui64 sourceDataShardId : {1, 2, 3}) {
-            UNIT_ASSERT(delivery.AddHeartbeat(sourceDataShardId, MakeHeartbeat(100), MakeWaiter(sourceDataShardId)));
+            delivery.AddHeartbeat(sourceDataShardId, MakeHeartbeat(100));
         }
 
         UNIT_ASSERT_VALUES_EQUAL(GetSources(delivery.TakeBatch()), TVector<ui64>({1, 2}));
@@ -146,29 +116,11 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
         UNIT_ASSERT_VALUES_EQUAL(GetSources(delivery.TakeBatch()), TVector<ui64>({3}));
     }
 
-    Y_UNIT_TEST(RetriesAboveLimit) {
-        TCdcAggregatorHeartbeatDelivery delivery(100, 2);
-        UNIT_ASSERT(delivery.AddHeartbeat(1, MakeHeartbeat(100), MakeWaiter(1)));
-        UNIT_ASSERT(delivery.AddHeartbeat(2, MakeHeartbeat(100), MakeWaiter(2)));
-        UNIT_ASSERT(!delivery.AddHeartbeat(3, MakeHeartbeat(100), MakeWaiter(3)));
-
+    Y_UNIT_TEST(RetriesAllSourcesWhenBatchFails) {
+        TCdcAggregatorHeartbeatDelivery delivery(100);
+        delivery.AddHeartbeat(1, MakeHeartbeat(100));
         delivery.TakeBatch();
-        UNIT_ASSERT(!delivery.AddHeartbeat(3, MakeHeartbeat(100), MakeWaiter(3)));
-
-        const auto replies = delivery.RetryAllWaiters("Pipe destroyed");
-        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 2);
-        for (const auto& reply : replies) {
-            UNIT_ASSERT(reply.Status == EStatus::Retry);
-        }
-        UNIT_ASSERT(delivery.IsIdle());
-        UNIT_ASSERT(delivery.AddHeartbeat(3, MakeHeartbeat(100), MakeWaiter(3)));
-    }
-
-    Y_UNIT_TEST(RetriesAllWaitersWhenBatchFails) {
-        TCdcAggregatorHeartbeatDelivery delivery(100, 100);
-        UNIT_ASSERT(delivery.AddHeartbeat(1, MakeHeartbeat(100), MakeWaiter(1)));
-        delivery.TakeBatch();
-        UNIT_ASSERT(delivery.AddHeartbeat(2, MakeHeartbeat(100), MakeWaiter(2)));
+        delivery.AddHeartbeat(2, MakeHeartbeat(100));
 
         const auto replies = delivery.FailBatch("NOT_READY: ");
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 2);
@@ -180,17 +132,16 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
     }
 
     Y_UNIT_TEST(IgnoresFailureWithoutBatchInFlight) {
-        TCdcAggregatorHeartbeatDelivery delivery(100, 100);
-        UNIT_ASSERT(delivery.AddHeartbeat(1, MakeHeartbeat(100), MakeWaiter(1)));
+        TCdcAggregatorHeartbeatDelivery delivery(100);
+        delivery.AddHeartbeat(1, MakeHeartbeat(100));
 
         UNIT_ASSERT(delivery.FailBatch("NOT_READY: ").empty());
-        UNIT_ASSERT_VALUES_EQUAL(delivery.GetWaitersCount(), 1);
         UNIT_ASSERT(delivery.HasBatchToSend());
     }
 
     Y_UNIT_TEST(RejectsUnknownSource) {
-        TCdcAggregatorHeartbeatDelivery delivery(100, 100);
-        UNIT_ASSERT(delivery.AddHeartbeat(1, MakeHeartbeat(100), MakeWaiter(1)));
+        TCdcAggregatorHeartbeatDelivery delivery(100);
+        delivery.AddHeartbeat(1, MakeHeartbeat(100));
         delivery.TakeBatch();
 
         TCdcAggregatorHeartbeatDeliveryResult result;

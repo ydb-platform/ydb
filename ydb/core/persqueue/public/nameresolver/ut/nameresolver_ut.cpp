@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TNameResolverTest) {
 
 Y_UNIT_TEST_F(AbsolutePathsWithDatabasePrefixAreCounted, TNameResolverFixture) {
     ActorSystemStub.AppData.Counters = new NMonitoring::TDynamicCounters();
-    auto counter = GetServiceCounters(ActorSystemStub.AppData.Counters, "pqproxy|pathResolution")
+    auto counter = GetServiceCounters(ActorSystemStub.AppData.Counters, "pqproxy|pathResolution", false)
         ->GetSubgroup("database", TString{Database})
         ->GetCounter("AbsolutePathWithDatabasePrefix", true);
 
@@ -94,7 +94,7 @@ Y_UNIT_TEST_F(AbsolutePathsWithDatabasePrefixAreCounted, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 4);
 
     UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName("/Root/OtherDb", "/topic")), "/Root/OtherDb/topic");
-    auto otherCounter = GetServiceCounters(ActorSystemStub.AppData.Counters, "pqproxy|pathResolution")
+    auto otherCounter = GetServiceCounters(ActorSystemStub.AppData.Counters, "pqproxy|pathResolution", false)
         ->GetSubgroup("database", "/Root/OtherDb")
         ->GetCounter("AbsolutePathWithDatabasePrefix", true);
     UNIT_ASSERT_VALUES_EQUAL(otherCounter->Val(), 1);

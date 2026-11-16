@@ -20,7 +20,7 @@ void CountTopicPathWithDatabasePrefix(TStringBuf database, TStringBuf originalPa
     }
 
     if (auto counters = NKikimr::AppData()->Counters) {
-        NKikimr::GetServiceCounters(counters, "pqproxy|pathResolution")
+        NKikimr::GetServiceCounters(counters, "pqproxy|pathResolution", false)
             ->GetSubgroup("database", databasePath)
             ->GetCounter("AbsolutePathWithDatabasePrefix", true)->Inc();
     }

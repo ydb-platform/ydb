@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
     Y_UNIT_TEST_TWIN(AbsolutePathsWithDatabasePrefixAreCounted, firstClass) {
         NKikimr::TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = new NMonitoring::TDynamicCounters();
-        auto counter = NKikimr::GetServiceCounters(actorSystem.AppData.Counters, "pqproxy|pathResolution")
+        auto counter = NKikimr::GetServiceCounters(actorSystem.AppData.Counters, "pqproxy|pathResolution", false)
             ->GetSubgroup("database", "/Root/Db")
             ->GetCounter("AbsolutePathWithDatabasePrefix", true);
         TTopicNamesConverterFactory factory(firstClass, "/Root/PQ", "dc1");
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
     Y_UNIT_TEST(AbsolutePathsPreservedByRelativePathsAreNotCounted) {
         NKikimr::TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = new NMonitoring::TDynamicCounters();
-        auto counter = NKikimr::GetServiceCounters(actorSystem.AppData.Counters, "pqproxy|pathResolution")
+        auto counter = NKikimr::GetServiceCounters(actorSystem.AppData.Counters, "pqproxy|pathResolution", false)
             ->GetSubgroup("database", "/Root/Db")
             ->GetCounter("AbsolutePathWithDatabasePrefix", true);
         TTopicNamesConverterFactory factory(true, "/Root/PQ", "");

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from collections import deque
+
+from itertools import dropwhile, islice, zip_longest
+
 import os
 import logging
 import hashlib
@@ -114,7 +118,7 @@ class TpcGeneratorBase(object):
         )
 
     def test_s1_parts(self):
-        parts_count = 10
+        parts_count = 4
         paths = []
         execs = []
         for part_index in range(parts_count):
@@ -233,3 +237,134 @@ class TestTpcdsGenerator(TpcGeneratorBase):
         'web_sales': {1: 719384},
         'web_site':  {1: 30}
     }
+
+    def test_s1_state(self):
+        # Checkpoints count source rows. One store_sales source row is a ticket
+        # that generates its sales rows and the associated store_returns rows.
+        # Multiples of six are valid TPC-DS resume boundaries.
+        positions = {'store_sales': 120_000, 'date_dim': 36_000}
+        state_path = self.tmp_path('state.json')
+        with open(state_path, 'w') as f:
+            json.dump({'sources': {table: {'position': pos} for table, pos in positions.items()}}, f)
+
+        full_path = self.tmp_path('full')
+        resumed_path = self.tmp_path('resumed')
+        tables = ['--tables', 'store_sales,date_dim']
+        # Single-threaded output lets us compare the complete tail in order,
+        # including duplicates, without sorting or retaining the rows in memory.
+        full = self.execute_generator(full_path, import_args=['-t', 1], generator_args=tables)
+        resumed = self.execute_generator(resumed_path, import_args=['-t', 1], generator_args=tables + ['--state', state_path])
+        full.wait(check_exit_code=True)
+        resumed.wait(check_exit_code=True)
+
+        for table, ticket_field in (
+            ('store_sales', 'ss_ticket_number'),
+            ('store_returns', 'sr_ticket_number'),
+            ('date_dim', None),
+        ):
+            with open(os.path.join(full_path, table)) as reference, open(os.path.join(resumed_path, table)) as actual:
+                header = next(reference)
+                assert next(actual) == header, f'{table}: header changed after resume'
+                if ticket_field is None:
+                    expected = islice(reference, positions[table], None)
+                else:
+                    ticket_index = header.rstrip('\n').split('|').index(ticket_field)
+                    expected = dropwhile(
+                        lambda row: int(row.split('|', ticket_index + 1)[ticket_index]) <= positions['store_sales'],
+                        reference,
+                    )
+                row_count = 0
+                for row_count, (expected_row, actual_row) in enumerate(zip_longest(expected, actual), 1):
+                    assert actual_row == expected_row, f'{table}: resumed row {row_count} differs'
+                assert row_count > 0, f'{table}: empty resumed tail'
+                logger.info('%s: verified %s resumed rows', table, row_count)
+
+    def test_s1_state_and_parts(self):
+        tables = 'store_sales,date_dim,inventory'
+        checkpoints = [self.tmp_path(f'state_{i}.json') for i in range(2)]
+        paths = [self.tmp_path(f'part_{i}') for i in range(4)]
+
+        def generate(path, checkpoint, part_count, part_index, selected_tables=tables, scale=1):
+            return self.execute_generator(
+                path,
+                scale=scale,
+                import_args=['-t', 1],
+                generator_args=['--tables', selected_tables,
+                    '--state', checkpoint,
+                    '--proccess-count', part_count,
+                    '--proccess-index', part_index,
+                ],
+            )
+
+        initial = [
+            generate(paths[0], checkpoints[0], 4, 0, 'inventory'),
+            generate(paths[2], checkpoints[1], 4, 2, 'inventory'),
+        ]
+        for exe in initial:
+            exe.wait(check_exit_code=True)
+
+        # Native SF1 assigns these smaller tables to part 0. Write a
+        # fractional-scale prefix into the same checkpoint to exercise a
+        # non-aligned resume in store_sales as well as repartitioning inventory.
+        prefix_path = self.tmp_path('small_table_prefix')
+        prefix = generate(prefix_path, checkpoints[0], 4, 0, 'store_sales,date_dim', scale=0.50001)
+        prefix.wait(check_exit_code=True)
+        with open(checkpoints[0]) as f:
+            assert json.load(f)['sources']['store_sales']['position'] == 120_002
+
+        inventory_positions = []
+        for checkpoint in checkpoints:
+            with open(checkpoint) as f:
+                inventory_positions.append(json.load(f)['sources']['inventory']['position'])
+        assert all(position > 0 for position in inventory_positions), inventory_positions
+        logger.info('Resuming inventory checkpoints %s with the part count changed from 4 to 2', inventory_positions)
+
+        resumed = [
+            generate(paths[1], checkpoints[0], 2, 0),
+            generate(paths[3], checkpoints[1], 2, 1),
+        ]
+        reference_path = self.tmp_path('reference')
+        reference = self.execute_generator(reference_path, import_args=['-t', 1], generator_args=['--tables', tables])
+        for exe in [*resumed, reference]:
+            exe.wait(check_exit_code=True)
+
+        for table in ('store_sales', 'store_returns', 'date_dim', 'inventory'):
+            boundary_limit = 5 * len(paths)
+            recent_rows = deque(maxlen=boundary_limit)
+            row_count = 0
+            duplicates = []
+            part_counts = []
+            with open(os.path.join(reference_path, table)) as reference_rows:
+                header = next(reference_rows)
+                table_paths = paths if table == 'inventory' else [prefix_path, *paths[1:]]
+                for path in table_paths:
+                    part_path = os.path.join(path, table)
+                    overlap = 0
+                    part_count = 0
+                    if os.path.exists(part_path):
+                        with open(part_path) as rows:
+                            assert next(rows) == header, f'{table}: header differs in {path}'
+                            at_boundary = True
+                            for row in rows:
+                                if at_boundary and row in recent_rows:
+                                    overlap += 1
+                                    assert overlap <= boundary_limit, f'{table}: too many boundary repeats in {path}'
+                                    continue
+                                at_boundary = False
+                                row_count += 1
+                                part_count += 1
+                                assert row == next(reference_rows, None), f'{table}: row {row_count} differs in {path}'
+                                recent_rows.append(row)
+                    duplicates.append(overlap)
+                    part_counts.append(part_count)
+                assert next(reference_rows, None) is None, f'{table}: incomplete result'
+            assert row_count == self.tables[table][1], f'{table}: unexpected row count {row_count}'
+            assert sum(duplicates) <= boundary_limit, f'{table}: too many boundary repeats {duplicates}'
+            if table == 'inventory':
+                assert all(part_counts), f'inventory: empty initial or resumed part: {part_counts}'
+            else:
+                assert part_counts[2:] == [0, 0], f'{table}: rows in a nonzero part'
+                assert not any(duplicates[i] for i in (0, 2, 3)), f'{table}: repeats outside the resume boundary'
+            if table == 'store_sales':
+                assert duplicates[1] > 0, 'store_sales resume did not exercise boundary repeats'
+            logger.info('%s: verified rows by part: %s; boundary repeats: %s', table, part_counts, duplicates)

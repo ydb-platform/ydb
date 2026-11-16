@@ -19,7 +19,7 @@ namespace NKikimr::NCdcAggregator {
 
 class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
     static constexpr ui32 MaxBatchSize = 1000;
-    static constexpr TDuration FlushPeriod = TDuration::MilliSeconds(100);
+    static constexpr TDuration TimerPeriod = TDuration::MilliSeconds(100);
     static constexpr ui32 PipeRetryLimit = 3;
 
     struct TOrigin {
@@ -75,7 +75,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             NTabletPipe::SendData(SelfId(), connection.PipeClient, ev.Release());
         }
 
-        Schedule(FlushPeriod, new TEvents::TEvWakeup());
+        Schedule(TimerPeriod, new TEvents::TEvWakeup());
     }
 
     void DropCdcAggregatorConnection(ui64 tabletId, const TActorId& pipeClient, const TString& error) {
@@ -158,7 +158,7 @@ public:
 
     void Bootstrap() {
         Become(&TThis::StateWork);
-        Schedule(FlushPeriod, new TEvents::TEvWakeup());
+        Schedule(TimerPeriod, new TEvents::TEvWakeup());
     }
 
     STFUNC(StateWork) {

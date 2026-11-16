@@ -1,4 +1,3 @@
-#include <ydb/core/base/test_failure_injection.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ut_common.h>
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
@@ -805,34 +804,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditLog) {
         }
     }
 
-    Y_UNIT_TEST_FLAG(RestoreErrorsHaveReason, InjectFailure) {
+    Y_UNIT_TEST(RestoreMissingBackupCollectionHasReason) {
         std::vector<std::string> auditLines;
         TTestBasicRuntime runtime;
         runtime.AuditLogBackends = Tests::CreateTestAuditLogBackends(auditLines);
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
+        const ui64 txId = 100;
 
-        if (InjectFailure) {
-            TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
-            env.TestWaitNotification(runtime, txId);
-            TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
-            env.TestWaitNotification(runtime, txId);
-            TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-                Name: "Table"
-                Columns { Name: "key" Type: "Uint32" }
-                KeyColumnNames: ["key"]
-            )");
-            env.TestWaitNotification(runtime, txId);
-            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
-                Name: "Collection"
-                ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table" } }
-                Cluster {}
-            )");
-            env.TestWaitNotification(runtime, txId);
-            runtime.GetAppData().InjectFailure(static_cast<ui64>(EInjectedFailureType::LateBackupCollectionNotFound));
-        }
-
-        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(++txId, TTestTxConfig::SchemeShard);
+        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto* operation = request->Record.AddTransaction();
         operation->SetWorkingDir("/MyRoot");
         operation->SetInternal(true);

@@ -22,6 +22,7 @@ ALTER TABLE `<table_name>`
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 When the [`enable_online_add_unique_index`](../../../../reference/configuration/feature_flags.md) flag is enabled, a unique secondary index can be added to an existing table without blocking writes during the build. If the flag is disabled, writes to the table are blocked until the unique index build completes.
 
@@ -33,6 +34,8 @@ This feature is under development and is disabled by default by the [`enable_onl
 {% endnote %}
 {% endif %}
 
+=======
+>>>>>>> 680b0bcc1ab (docs: keep one warning before online unique index description)
 {% if backend_name == "YDB" and oss == true %}
 
 You can also add a secondary index using the [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI command.

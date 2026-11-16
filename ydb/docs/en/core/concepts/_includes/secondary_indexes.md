@@ -55,8 +55,6 @@ JSON indexes allow you to speed up predicates with the [JSON_EXISTS](../../yql/r
 
 In {{ ydb-short-name }}, you can create a secondary index and delete an existing secondary index without stopping service. For one table, only one index can be created at a time.
 
-When the [`enable_online_add_unique_index`](../../reference/configuration/feature_flags.md) flag is enabled, a unique secondary index can be added to an existing table without blocking writes during the build. If the flag is disabled, writes to the table are blocked until the unique index build completes.
-
 {% if feature_flags.enable_online_add_unique_index == false %}
 {% note warning "Experimental feature" %}
 
@@ -64,6 +62,8 @@ This feature is under development and is disabled by default by the [`enable_onl
 
 {% endnote %}
 {% endif %}
+
+When the [`enable_online_add_unique_index`](../../reference/configuration/feature_flags.md) flag is enabled, a unique secondary index can be added to an existing table without blocking writes during the build. If the flag is disabled, writes to the table are blocked until the unique index build completes.
 
 The online index creation operation consists of the following steps:
 

@@ -2,31 +2,54 @@
 
 #include <ydb/core/base/logoblob.h>
 
+#include <optional>
 #include <span>
+#include <vector>
 
 namespace NKikimr::NSyncLog {
 
 // Sort in place and return the prefix of distinct keys.
 std::span<TLogoBlobID> SortPhantomFlagKeys(std::span<TLogoBlobID> keys);
 
-enum class EPhantomFlagRunMerge : ui8 {
-    Union = 0,
-    LeftDifference,
-};
+class TPhantomFlagRunMerger {
+public:
+    struct TProgress {
+        size_t Written = 0;
+        std::optional<size_t> InputToRefill;
+        bool Finished = false;
+    };
 
-struct TPhantomFlagRunMergeProgress {
-    size_t LeftConsumed = 0;
-    size_t RightConsumed = 0;
-    size_t Written = 0;
-};
+    explicit TPhantomFlagRunMerger(size_t inputCount);
 
-// Each input is a block from a strictly increasing run. A final block has eof set.
-// Advance the input spans by the returned counts and refill an exhausted input
-// before resuming if it has more blocks. Output must not overlap either input.
-// LeftDifference can finish with unread right keys once the left run is exhausted.
-TPhantomFlagRunMergeProgress MergeSortedPhantomFlagRuns(
-    std::span<const TLogoBlobID> left, bool leftEof,
-    std::span<const TLogoBlobID> right, bool rightEof,
-    std::span<TLogoBlobID> output, EPhantomFlagRunMerge mode = EPhantomFlagRunMerge::Union);
+    // Supply one block for the input requested by Merge. Blocks in each input
+    // must form a nondecreasing stream. An empty block with eof ends the input.
+    void SetInputBlock(size_t inputIndex, std::vector<TLogoBlobID> keys, bool eof);
+
+    // Fill the output prefix with distinct keys. A missing input blocks further
+    // output until its next block is available. Pass a fresh output span to resume.
+    TProgress Merge(std::span<TLogoBlobID> output);
+
+private:
+    struct TInputBlock {
+        std::vector<TLogoBlobID> Keys;
+        size_t Offset = 0;
+        bool Eof = false;
+    };
+
+    struct TInputHead {
+        TLogoBlobID Key;
+        size_t InputIndex;
+
+        bool operator>(const TInputHead& other) const;
+    };
+
+    std::optional<size_t> GetInputToRefill() const;
+
+    std::vector<TInputBlock> Inputs;
+    std::vector<TInputHead> Heap;
+    size_t NextInitialInput = 0;
+    std::optional<size_t> RefillInput;
+    std::optional<TLogoBlobID> LastEmittedKey;
+};
 
 } // namespace NKikimr::NSyncLog

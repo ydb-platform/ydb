@@ -2100,6 +2100,13 @@ message TImmediateControlsConfig {
             MaxValue: 86400,
             DefaultValue: 0,
         }];
+
+        optional uint64 EnablePhantomFlagStorageReplication = 57 [(ControlOptions) = {
+            Description: "Enable persistent PhantomFlagStorage replication when a VDisk starts",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {

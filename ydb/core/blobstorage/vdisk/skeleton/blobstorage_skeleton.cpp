@@ -2337,48 +2337,54 @@ namespace NKikimr {
             ctx.Send(ev->Forward(Db->SyncFullHandlerID));
         }
 
-        static bool IsCompletePhantomFlagStorageVDiskId(const NKikimrBlobStorage::TVDiskID& id) {
-            // Validate the wire values before the conversion to ui8 coordinates.
-            return id.HasGroupID() && id.HasGroupGeneration() && id.HasRing() && id.HasDomain() && id.HasVDisk()
-                && id.GetRing() <= Max<ui8>() && id.GetDomain() <= Max<ui8>() && id.GetVDisk() <= Max<ui8>();
+        NKikimrProto::EReplyStatus CheckPhantomFlagStorageRequest(const NKikimrBlobStorage::TVDiskID& sourceProto,
+                const NKikimrBlobStorage::TVDiskID& targetProto) const {
+            if (!IsCompleteVDiskID(sourceProto) || !IsCompleteVDiskID(targetProto)) {
+                return NKikimrProto::ERROR;
+            }
+            const TVDiskID source = VDiskIDFromVDiskID(sourceProto);
+            if (Config->BaseInfo.DonorMode || !SelfVDiskId.SameDisk(targetProto)
+                    || !SelfVDiskId.SameGroupAndGeneration(source) || !GInfo->IsValidId(source)
+                    || source == SelfVDiskId) {
+                return NKikimrProto::RACE;
+            }
+            if (!Config->EnablePhantomFlagStorageReplication || !Config->EnablePersistentPhantomFlagStorage) {
+                return NKikimrProto::NODATA;
+            }
+            if (!Db->SyncLogID) {
+                return NKikimrProto::NOTREADY;
+            }
+            return NKikimrProto::OK;
         }
 
-        template<class TRequest>
-        void ReplyPhantomFlagStorage(TAutoPtr<TEventHandle<TRequest>>& ev, NKikimrProto::EReplyStatus status) {
-            std::unique_ptr<typename TRequest::TResult> result = NErrBuilder::PhantomFlagStorageResult(
-                *ev->Get(), status, SelfVDiskId);
+        template<class TRequestPtr>
+        void ReplyPhantomFlagStorageError(TRequestPtr& ev, NKikimrProto::EReplyStatus status) {
+            std::unique_ptr<IEventBase> result = NErrBuilder::ErroneousResult(VCtx, status, {}, ev,
+                TActivationContext::Now(), SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo);
             SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, result.release(), ev->Cookie, VCtx, {});
         }
 
-        template<class TRequest>
-        void HandlePhantomFlagStorage(TAutoPtr<TEventHandle<TRequest>>& ev) {
+        void Handle(TEvBlobStorage::TEvVPhantomFlagStorageListChunks::TPtr& ev) {
             const auto& record = ev->Get()->Record;
-            if (!record.HasSourceVDiskID() || !record.HasVDiskID()
-                    || !IsCompletePhantomFlagStorageVDiskId(record.GetSourceVDiskID())
-                    || !IsCompletePhantomFlagStorageVDiskId(record.GetVDiskID())) {
-                ReplyPhantomFlagStorage(ev, NKikimrProto::ERROR);
+            const NKikimrProto::EReplyStatus status = CheckPhantomFlagStorageRequest(
+                record.GetSourceVDiskID(), record.GetVDiskID());
+            if (status != NKikimrProto::OK) {
+                ReplyPhantomFlagStorageError(ev, status);
                 return;
             }
-            if constexpr (std::is_same_v<TRequest, TEvBlobStorage::TEvVPhantomFlagStorageReadChunk>) {
-                if (!record.HasChunkIndex()) {
-                    ReplyPhantomFlagStorage(ev, NKikimrProto::ERROR);
-                    return;
-                }
-            }
-            const TVDiskID source = VDiskIDFromVDiskID(record.GetSourceVDiskID());
-            if (Config->BaseInfo.DonorMode || !SelfVDiskId.SameDisk(record.GetVDiskID())
-                    || !SelfVDiskId.SameGroupAndGeneration(source) || !GInfo->IsValidId(source)
-                    || source == SelfVDiskId) {
-                ReplyPhantomFlagStorage(ev, NKikimrProto::RACE);
+            Forward(ev, Db->SyncLogID);
+        }
+
+        void Handle(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TPtr& ev) {
+            const auto& record = ev->Get()->Record;
+            if (!record.HasChunkIndex()) {
+                ReplyPhantomFlagStorageError(ev, NKikimrProto::ERROR);
                 return;
             }
-            if (!AppData()->FeatureFlags.GetEnablePhantomFlagStorageReplication()
-                    || !Config->EnablePersistentPhantomFlagStorage) {
-                ReplyPhantomFlagStorage(ev, NKikimrProto::NODATA);
-                return;
-            }
-            if (!Db->SyncLogID) {
-                ReplyPhantomFlagStorage(ev, NKikimrProto::NOTREADY);
+            const NKikimrProto::EReplyStatus status = CheckPhantomFlagStorageRequest(
+                record.GetSourceVDiskID(), record.GetVDiskID());
+            if (status != NKikimrProto::OK) {
+                ReplyPhantomFlagStorageError(ev, status);
                 return;
             }
             Forward(ev, Db->SyncLogID);
@@ -2767,6 +2773,7 @@ namespace NKikimr {
                     Config->BaseInfo.ReadOnly,
                     Config->EnablePhantomFlagStorage,
                     Config->EnablePersistentPhantomFlagStorage,
+                    Config->EnablePhantomFlagStorageReplication,
                     Config->PhantomFlagStorageLimit,
                     Config->VolatilePhantomFlagStorageBlobSizeLimit);
             Db->SyncLogID.Set(ctx.Register(CreateSyncLogActor(slCtx, GInfo, SelfVDiskId, std::move(repairedSyncLog))));
@@ -3765,8 +3772,8 @@ namespace NKikimr {
             HFunc(TEvCallOsiris, Handle)
             HFunc(TEvAnubisOsirisPut, Handle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
-            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, HandlePhantomFlagStorage)
-            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, HandlePhantomFlagStorage)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, Handle)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, Handle)
             HFunc(TEvSyncGuidRecoveryDone, Handle)
             HFunc(TEvLocalSyncData, Handle)
             // TEvBlobStorage::TEvVStatus
@@ -3834,8 +3841,8 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVGetBarrier, Handle)
             HFunc(TEvBlobStorage::TEvVSync, Handle)
             HFunc(TEvBlobStorage::TEvVSyncFull, Handle)
-            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, HandlePhantomFlagStorage)
-            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, HandlePhantomFlagStorage)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, Handle)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, Handle)
             HFunc(TEvOsirisDone, Handle)
             // TEvCallOsiris
             HFunc(TEvAnubisOsirisPut, Handle)

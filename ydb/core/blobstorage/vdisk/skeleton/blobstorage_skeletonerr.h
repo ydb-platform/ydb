@@ -9,6 +9,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 
+#include <concepts>
+
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
 namespace NKikimr {
@@ -233,26 +235,25 @@ namespace NKikimr {
     namespace NErrBuilder {
 
         template<class TRequest>
-        std::unique_ptr<typename TRequest::TResult> PhantomFlagStorageResult(
-                const TRequest& request, NKikimrProto::EReplyStatus status, const TVDiskID& vdiskId) {
-            using TResult = typename TRequest::TResult;
-            std::unique_ptr<TResult> result = std::make_unique<TResult>(status, vdiskId);
-            if constexpr (std::is_same_v<TRequest, TEvBlobStorage::TEvVPhantomFlagStorageReadChunk>) {
-                if (request.Record.HasChunkIndex()) {
-                    result->Record.SetChunkIndex(request.Record.GetChunkIndex());
-                }
-            }
-            return result;
-        }
+        concept CPhantomFlagStorageRequest = std::same_as<TRequest, TEvBlobStorage::TEvVPhantomFlagStorageListChunks>
+            || std::same_as<TRequest, TEvBlobStorage::TEvVPhantomFlagStorageReadChunk>;
 
-        template<class TRequest>
-        requires (std::is_same_v<TRequest, TEvBlobStorage::TEvVPhantomFlagStorageListChunks>
-                || std::is_same_v<TRequest, TEvBlobStorage::TEvVPhantomFlagStorageReadChunk>)
+        template<CPhantomFlagStorageRequest TRequest>
         std::unique_ptr<IEventBase> ErroneousResult(const TVDiskContextPtr&, NKikimrProto::EReplyStatus status,
-                const TString&, TAutoPtr<TEventHandle<TRequest>>& ev, TInstant, const TActorIDPtr&,
-                const TVDiskID& vdiskId, ui64, const TIntrusivePtr<TBlobStorageGroupInfo>&) {
-            return PhantomFlagStorageResult(*ev->Get(), status, vdiskId);
-        }
+                const TString&, TAutoPtr<TEventHandle<TRequest>>& ev, const TInstant&, const TActorIDPtr&,
+                const TVDiskID& vdiskId, ui64, const TIntrusivePtr<TBlobStorageGroupInfo>&);
+
+        template<>
+        std::unique_ptr<IEventBase> ErroneousResult<TEvBlobStorage::TEvVPhantomFlagStorageListChunks>(
+                const TVDiskContextPtr&, NKikimrProto::EReplyStatus status, const TString&,
+                TEvBlobStorage::TEvVPhantomFlagStorageListChunks::TPtr&, const TInstant&, const TActorIDPtr&,
+                const TVDiskID& vdiskId, ui64, const TIntrusivePtr<TBlobStorageGroupInfo>&);
+
+        template<>
+        std::unique_ptr<IEventBase> ErroneousResult<TEvBlobStorage::TEvVPhantomFlagStorageReadChunk>(
+                const TVDiskContextPtr&, NKikimrProto::EReplyStatus status, const TString&,
+                TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TPtr& ev, const TInstant&, const TActorIDPtr&,
+                const TVDiskID& vdiskId, ui64, const TIntrusivePtr<TBlobStorageGroupInfo>&);
 
         template <typename TEvPtr>
         static inline std::unique_ptr<IEventBase>

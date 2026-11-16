@@ -2,6 +2,8 @@
 
 #include <ydb/core/protos/cdc_aggregator.pb.h>
 
+#include <tuple>
+
 namespace NKikimr::NCdcAggregator {
 
 void TCdcAggregatorStreamRepository::InsertCdcAggregatorStream(NIceDb::TNiceDb& db, const TCdcAggregatorStream& stream) const {
@@ -22,8 +24,8 @@ void TCdcAggregatorStreamRepository::ApplyCdcAggregatorStreamPartitioningChange(
         db.Table<Schema::Sources>().Key(dataShardId).Update();
     }
 
-    db.Table<Schema::PartitioningChanges>().Key(change.ParentDataShardIds.front(), change.OperationId).Update(
-        NIceDb::TUpdate<Schema::PartitioningChanges::ParentDataShardIds>(change.ParentDataShardIds),
+    const auto serializedParentDataShardIds = static_cast<TString>(NIceDb::TTypeValue(change.ParentDataShardIds));
+    db.Table<Schema::PartitioningChanges>().Key(std::make_tuple(serializedParentDataShardIds, change.OperationId)).Update(
         NIceDb::TUpdate<Schema::PartitioningChanges::ChildDataShardIds>(change.ChildDataShardIds));
 }
 
@@ -79,13 +81,9 @@ std::optional<TCdcAggregatorStream::TPartitioningChanges> TCdcAggregatorStreamRe
 
     TCdcAggregatorStream::TPartitioningChanges changes;
     while (!rowset.EndOfSet()) {
-        const auto firstParentDataShardId = rowset.GetValue<Schema::PartitioningChanges::FirstParentDataShardId>();
+        auto parentDataShardIds = rowset.GetValue<Schema::PartitioningChanges::ParentDataShardIds>();
         const auto operationId = rowset.GetValue<Schema::PartitioningChanges::OperationId>();
-        changes.emplace(std::make_pair(firstParentDataShardId, operationId), TCdcAggregatorStreamPartitioningChange{
-            .OperationId = operationId,
-            .ParentDataShardIds = rowset.GetValue<Schema::PartitioningChanges::ParentDataShardIds>(),
-            .ChildDataShardIds = rowset.GetValue<Schema::PartitioningChanges::ChildDataShardIds>(),
-        });
+        changes.emplace(std::make_pair(std::move(parentDataShardIds), operationId), rowset.GetValue<Schema::PartitioningChanges::ChildDataShardIds>());
 
         if (!rowset.Next()) {
             return std::nullopt;

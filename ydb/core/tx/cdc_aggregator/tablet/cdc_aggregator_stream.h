@@ -2,8 +2,8 @@
 
 #include <ydb/core/scheme/scheme_pathid.h>
 
-#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/map.h>
 #include <util/generic/vector.h>
 
 #include <optional>
@@ -40,13 +40,11 @@ struct TCdcAggregatorStreamPartitioningChange {
     ui64 OperationId = 0;
     TVector<ui64> ParentDataShardIds;
     TVector<ui64> ChildDataShardIds;
-
-    bool operator==(const TCdcAggregatorStreamPartitioningChange&) const = default;
 };
 
 class TCdcAggregatorStream {
 public:
-    using TPartitioningChanges = THashMap<std::pair<ui64, ui64>, TCdcAggregatorStreamPartitioningChange>;
+    using TPartitioningChanges = TMap<std::pair<TVector<ui64>, ui64>, TVector<ui64>>;
 
     explicit TCdcAggregatorStream(const TCdcAggregatorStreamConfig& config);
     TCdcAggregatorStream(TCdcAggregatorStreamTopic topic, THashSet<ui64> sourceDataShardIds, TPartitioningChanges partitioningChanges);

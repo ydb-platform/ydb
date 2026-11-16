@@ -18,9 +18,9 @@ TCdcAggregatorStream::TCdcAggregatorStream(TCdcAggregatorStreamTopic topic, THas
 }
 
 std::optional<TCdcAggregatorStreamSourcesDiff> TCdcAggregatorStream::ApplyPartitioningChange(const TCdcAggregatorStreamPartitioningChange& change) {
-    const auto key = std::make_pair(change.ParentDataShardIds.front(), change.OperationId);
+    auto key = std::make_pair(change.ParentDataShardIds, change.OperationId);
     if (const auto applied = PartitioningChanges.find(key); applied != PartitioningChanges.end()) {
-        if (applied->second != change) {
+        if (applied->second != change.ChildDataShardIds) {
             return std::nullopt;
         }
         return TCdcAggregatorStreamSourcesDiff{};
@@ -42,7 +42,7 @@ std::optional<TCdcAggregatorStreamSourcesDiff> TCdcAggregatorStream::ApplyPartit
             diff.Inserted.insert(childDataShardId);
         }
     }
-    PartitioningChanges.emplace(key, change);
+    PartitioningChanges.emplace(std::move(key), change.ChildDataShardIds);
 
     return diff;
 }

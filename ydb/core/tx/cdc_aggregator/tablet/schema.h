@@ -37,13 +37,12 @@ struct TCdcAggregatorSchema : NIceDb::Schema {
     };
 
     struct PartitioningChanges : Table<4> {
-        struct FirstParentDataShardId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct OperationId : Column<2, NScheme::NTypeIds::Uint64> {};
         struct ParentDataShardIds : Column<3, NScheme::NTypeIds::String> { using Type = TVector<ui64>; };
         struct ChildDataShardIds : Column<4, NScheme::NTypeIds::String> { using Type = TVector<ui64>; };
 
-        using TKey = TableKey<FirstParentDataShardId, OperationId>;
-        using TColumns = TableColumns<FirstParentDataShardId, OperationId, ParentDataShardIds, ChildDataShardIds>;
+        using TKey = TableKey<ParentDataShardIds, OperationId>;
+        using TColumns = TableColumns<OperationId, ParentDataShardIds, ChildDataShardIds>;
     };
 
     using TTables = SchemaTables<State, Sources, Heartbeats, PartitioningChanges>;

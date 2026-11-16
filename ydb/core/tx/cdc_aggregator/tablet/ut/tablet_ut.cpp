@@ -219,6 +219,8 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
 
         const auto splitAck = env.PartitioningChanged(1, {3, 4});
         UNIT_ASSERT_C(splitAck.GetStatus() == TPartitioningAck::SUCCESS, splitAck.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(splitAck.GetOperationId(), 77u);
+        UNIT_ASSERT_VALUES_EQUAL(splitAck.GetParentDataShardId(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 3, 4}));
 
         const auto repeatedAck = env.PartitioningChanged(1, {3, 4});

@@ -22,6 +22,7 @@ public:
     {
         IgnoreMessages({
             TEvHive::TEvCreateTabletReply::EventType,
+            NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult::EventType,
         });
     }
 

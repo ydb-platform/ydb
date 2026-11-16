@@ -1,4 +1,5 @@
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
+#include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
@@ -225,10 +226,17 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+                const auto describeResult = DescribePrivatePath(runtime, "/MyRoot/Table/Stream");
+                TestDescribeResult(describeResult, {
                     NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated),
                     NLs::StreamHasAggregatorTabletId(true),
                 });
+
+                const ui64 aggregatorTabletId = describeResult.GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId();
+                const auto sender = runtime.AllocateEdgeActor();
+                ForwardToTablet(runtime, aggregatorTabletId, sender, new NCdcAggregator::TEvCdcAggregator::TEvDescribeTracking());
+                const auto trackingResult = runtime.GrabEdgeEvent<NCdcAggregator::TEvCdcAggregator::TEvDescribeTrackingResult>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(trackingResult->Get()->Record.SourcesSize(), 1);
             }
         });
     }

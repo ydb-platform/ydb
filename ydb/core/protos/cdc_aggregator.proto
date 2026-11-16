@@ -88,6 +88,8 @@ message TEvPartitioningChangedAck {
     optional EStatus Status = 1;
     optional string Error = 2;
     optional fixed64 Origin = 3;
+    optional uint64 OperationId = 4;
+    optional fixed64 ParentDataShardId = 5;
 }
 
 message TEvDescribeTracking {

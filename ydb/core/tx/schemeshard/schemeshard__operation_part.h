@@ -45,6 +45,9 @@
     action(NSequenceShard::TEvSequenceShard, TEvRedirectSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_REDIRECT_SEQUENCE_RESULT) \
     action(NSequenceShard::TEvSequenceShard, TEvGetSequenceResult,      NSchemeShard::TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT)      \
 \
+    action(NCdcAggregator::TEvCdcAggregator, TEvConfigureTrackingResult, NSchemeShard::TXTYPE_CDC_AGGREGATOR_CONFIGURE_TRACKING_RESULT) \
+    action(NCdcAggregator::TEvCdcAggregator, TEvPartitioningChangedAck,  NSchemeShard::TXTYPE_CDC_AGGREGATOR_PARTITIONING_CHANGED_ACK)  \
+\
     action(NReplication::TEvController, TEvCreateReplicationResult, NSchemeShard::TXTYPE_CREATE_REPLICATION_RESULT) \
     action(NReplication::TEvController, TEvAlterReplicationResult,  NSchemeShard::TXTYPE_ALTER_REPLICATION_RESULT)  \
     action(NReplication::TEvController, TEvDropReplicationResult,   NSchemeShard::TXTYPE_DROP_REPLICATION_RESULT)   \

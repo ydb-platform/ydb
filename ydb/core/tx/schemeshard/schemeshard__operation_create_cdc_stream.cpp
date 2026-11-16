@@ -25,6 +25,7 @@ public:
     {
         IgnoreMessages({
             TEvHive::TEvCreateTabletReply::EventType,
+            NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult::EventType,
         });
     }
 
@@ -1070,12 +1071,104 @@ TConfigureParts::TConfigureParts(TOperationId id)
 bool TConfigureParts::ProgressState(TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "");
 
-    const auto* txState = context.SS->FindTx(OperationId);
+    auto* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
     Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateCdcStream || txState->TxType == TTxState::TxRotateCdcStream);
 
+    const auto streamPath = TPath::Init(txState->TargetPathId, context.SS);
+    const auto topicPath = streamPath.Child("streamImpl");
+    if (!topicPath.IsResolved() || !context.SS->Topics.contains(topicPath.Base()->PathId)) {
+        YDB_LOG_ERROR_CTX(context.Ctx, "CdcAggregator is left unconfigured because the stream has no topic",
+            {"stream", streamPath.PathString()},
+        );
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
+        return true;
+    }
+
+    txState->ClearShardsInProgress();
+
+    const auto topic = context.SS->Topics.at(topicPath.Base()->PathId);
+    bool topicShardsCreated = true;
+    for (const auto& [shardIdx, _] : topic->Shards) {
+        if (context.SS->ShardInfos.at(shardIdx).TabletID == InvalidTabletId) {
+            context.OnComplete.WaitShardCreated(shardIdx, OperationId);
+            topicShardsCreated = false;
+        }
+    }
+    if (!topicShardsCreated) {
+        return false;
+    }
+
+    auto request = MakeHolder<NCdcAggregator::TEvCdcAggregator::TEvConfigureTracking>();
+    auto& config = *request->Record.MutableConfig();
+    txState->TargetPathId.ToProto(config.MutableStreamPathId());
+    config.SetStreamPath(streamPath.PathString());
+
+    const auto table = context.SS->Tables.at(streamPath.Parent().Base()->PathId);
+    for (const auto* partition : table->GetPartitions()) {
+        config.AddSourceDataShardIds(ui64(context.SS->ShardInfos.at(partition->ShardIdx).TabletID));
+    }
+
+    for (const auto& [shardIdx, shard] : topic->Shards) {
+        const auto tabletId = context.SS->ShardInfos.at(shardIdx).TabletID;
+        for (const auto& partition : shard->Partitions) {
+            auto& targetPartition = *config.AddTargetPartitions();
+            targetPartition.SetPartitionId(partition->PqId);
+            targetPartition.SetTabletId(ui64(tabletId));
+        }
+    }
+
+    const auto stream = context.SS->CdcStreams.at(txState->TargetPathId)->AlterData;
+    Y_ABORT_UNLESS(stream);
+    const auto aggregatorShardIdx = stream->AggregatorShardIdx;
+    const auto aggregatorTabletId = context.SS->ShardInfos.at(aggregatorShardIdx).TabletID;
+    Y_ABORT_UNLESS(aggregatorTabletId != InvalidTabletId);
+
+    YDB_LOG_DEBUG_CTX(context.Ctx, "Send TEvConfigureTracking to CdcAggregator",
+        {"tabletId", aggregatorTabletId},
+        {"message", request->ToString()},
+    );
+    context.OnComplete.BindMsgToPipe(OperationId, aggregatorTabletId, txState->TargetPathId, request.Release());
+    txState->ShardsInProgress.insert(aggregatorShardIdx);
+
+    return false;
+}
+
+bool TConfigureParts::HandleReply(NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult::TPtr& ev, TOperationContext& context) {
+    const auto& record = ev->Get()->Record;
+    const auto tabletId = TTabletId(record.GetOrigin());
+
+    YDB_LOG_INFO_CTX(context.Ctx, "",
+        {"tabletId", tabletId},
+        {"result", record.ShortDebugString()},
+    );
+
+    if (record.GetStatus() != NKikimrCdcAggregator::TEvConfigureTrackingResult::SUCCESS) {
+        YDB_LOG_ERROR_CTX(context.Ctx, "Ignoring unexpected TEvConfigureTrackingResult",
+            {"tabletId", tabletId},
+            {"result", record.ShortDebugString()},
+        );
+        return false;
+    }
+
+    auto* txState = context.SS->FindTx(OperationId);
+    Y_ABORT_UNLESS(txState);
+    Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateCdcStream || txState->TxType == TTxState::TxRotateCdcStream);
+    Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
+
+    if (!txState->ShardsInProgress.erase(context.SS->MustGetShardIdx(tabletId))) {
+        YDB_LOG_WARN_CTX(context.Ctx, "Ignoring duplicate TEvConfigureTrackingResult",
+            {"tabletId", tabletId},
+        );
+        return false;
+    }
+
+    context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, txState->TargetPathId);
+
     NIceDb::TNiceDb db(context.GetDB());
     context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
+    context.OnComplete.ActivateTx(OperationId);
     return true;
 }
 

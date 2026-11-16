@@ -37,6 +37,8 @@ public:
         const auto& record = Ev->Get()->Record;
         Result = MakeHolder<TEvCdcAggregator::TEvPartitioningChangedAck>();
         Result->Record.SetOrigin(Self->TabletID());
+        Result->Record.SetOperationId(record.GetOperationId());
+        Result->Record.SetParentDataShardId(record.GetParentDataShardId());
 
         const ui64 parentDataShardId = record.GetParentDataShardId();
         TVector<ui64> childDataShardIds(record.GetChildDataShardIds().begin(), record.GetChildDataShardIds().end());

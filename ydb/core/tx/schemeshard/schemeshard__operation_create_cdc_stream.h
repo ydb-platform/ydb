@@ -64,6 +64,7 @@ public:
     explicit TConfigureParts(TOperationId id);
 
     bool ProgressState(TOperationContext& context) override;
+    bool HandleReply(NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult::TPtr& ev, TOperationContext& context) override;
 
 private:
     const TOperationId OperationId;

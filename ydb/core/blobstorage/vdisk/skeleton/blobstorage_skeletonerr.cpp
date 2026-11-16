@@ -15,12 +15,8 @@ namespace NKikimr::NErrBuilder {
             const TVDiskContextPtr&, NKikimrProto::EReplyStatus status, const TString&,
             TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TPtr& ev, const TInstant&, const TActorIDPtr&,
             const TVDiskID& vdiskId, ui64, const TIntrusivePtr<TBlobStorageGroupInfo>&) {
-        using TResult = TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult;
-        std::unique_ptr<TResult> result = std::make_unique<TResult>(status, vdiskId);
-        if (ev->Get()->Record.HasChunkIndex()) {
-            result->Record.SetChunkIndex(ev->Get()->Record.GetChunkIndex());
-        }
-        return result;
+        return std::make_unique<TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult>(
+            status, vdiskId, ev->Get()->GetChunkIndex());
     }
 
 } // namespace NKikimr::NErrBuilder

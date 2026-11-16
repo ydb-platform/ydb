@@ -10,8 +10,6 @@ SRCS(
 
 PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib
-    ydb/core/blobstorage/vdisk/chunk_keeper
-    ydb/core/blobstorage/vdisk/synclog
 )
 
 END()

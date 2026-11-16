@@ -2,6 +2,8 @@
 
 #include <util/generic/overloaded.h>
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 
 namespace NKikimr::NSyncLog {
@@ -90,61 +92,82 @@ void TPhantomFlagStorageItem::Serialize(TString* buffer) const {
     }, Data);
 }
 
-TPhantomFlagStorageItem TPhantomFlagStorageItem::DeserializeFromRaw(const char* data) {
-    const EPhantomFlagStorageItem type = *reinterpret_cast<const EPhantomFlagStorageItem*>(data);
-    data += sizeof(type);
-    switch (type) {
-    case EPhantomFlagStorageItem::SkipOneByte: {
-        return TPhantomFlagStorageItem::CreateSkip(1);
-    }
-    case EPhantomFlagStorageItem::Flag: {
-        const TLogoBlobRec rec = ReadUnaligned<TLogoBlobRec>(data);
-        return TPhantomFlagStorageItem::CreateFlag(&rec);
-    }
-    case EPhantomFlagStorageItem::Threshold: {
-        const TThreshold threshold = ReadUnaligned<TThreshold>(data);
-        return TPhantomFlagStorageItem::CreateThreshold(threshold.OrderNumber, threshold.TabletId,
-                threshold.Channel, threshold.Generation, threshold.Step);
-    }
-    case EPhantomFlagStorageItem::Skip:
-    default: {
-        const ui32 size = ReadUnaligned<ui32>(data);
-        return TPhantomFlagStorageItem::CreateSkip(size);
-    }
-    }
-}
-
-std::optional<TPhantomFlagStorageItem> TPhantomFlagStorageItem::TryDeserialize(TStringBuf data) {
+std::optional<TPhantomFlagStorageItem> TPhantomFlagStorageItem::ReadFrom(TStringBuf& data) {
     constexpr size_t typeSize = sizeof(EPhantomFlagStorageItem);
     if (data.size() < typeSize) {
         return std::nullopt;
     }
 
-    size_t size;
+    const char* payload = data.data() + typeSize;
     switch (static_cast<EPhantomFlagStorageItem>(data.front())) {
-        case EPhantomFlagStorageItem::SkipOneByte:
-            size = typeSize;
-            break;
-        case EPhantomFlagStorageItem::Flag:
-            size = typeSize + sizeof(TFlag);
-            break;
-        case EPhantomFlagStorageItem::Threshold:
-            size = typeSize + sizeof(TThreshold);
-            break;
-        default:
-            if (data.size() < typeSize + sizeof(ui32)) {
-                return std::nullopt;
-            }
-            size = ReadUnaligned<ui32>(data.data() + typeSize);
-            if (size < typeSize + sizeof(ui32)) {
-                return std::nullopt;
-            }
-            break;
+    case EPhantomFlagStorageItem::SkipOneByte:
+        data.Skip(typeSize);
+        return CreateSkip(static_cast<ui32>(typeSize));
+    case EPhantomFlagStorageItem::Flag: {
+        constexpr size_t size = typeSize + sizeof(TFlag);
+        if (data.size() < size) {
+            return std::nullopt;
+        }
+        const TFlag flag = ReadUnaligned<TFlag>(payload);
+        data.Skip(size);
+        return CreateFlag(&flag.Record);
     }
-    if (size > data.size()) {
-        return std::nullopt;
+    case EPhantomFlagStorageItem::Threshold: {
+        constexpr size_t size = typeSize + sizeof(TThreshold);
+        if (data.size() < size) {
+            return std::nullopt;
+        }
+        const TThreshold threshold = ReadUnaligned<TThreshold>(payload);
+        data.Skip(size);
+        return CreateThreshold(threshold.OrderNumber, threshold.TabletId,
+                threshold.Channel, threshold.Generation, threshold.Step);
     }
-    return DeserializeFromRaw(data.data());
+    default: {
+        constexpr size_t headerSize = typeSize + sizeof(ui32);
+        if (data.size() < headerSize) {
+            return std::nullopt;
+        }
+        const ui32 size = ReadUnaligned<ui32>(payload);
+        if (size < headerSize || size > data.size()) {
+            return std::nullopt;
+        }
+        data.Skip(size);
+        return CreateSkip(size);
+    }
+    }
+}
+
+bool ReadPhantomFlagStorageKeys(TStringBuf& data, const TBlobStorageGroupType& groupType, size_t maxKeys, TString& keys) {
+    Y_DEBUG_ABORT_UNLESS(maxKeys);
+    constexpr size_t flagItemSize = sizeof(EPhantomFlagStorageItem) + sizeof(TPhantomFlagStorageItem::TFlag);
+    keys.clear();
+    keys.reserve(std::min(maxKeys, data.size() / flagItemSize) * TLogoBlobID::BinarySize);
+    while (!data.empty()) {
+        const TStringBuf recordStart = data;
+        const std::optional<TPhantomFlagStorageItem> item = TPhantomFlagStorageItem::ReadFrom(data);
+        if (!item) {
+            return false;
+        }
+        if (item->GetType() != EPhantomFlagStorageItem::Flag) {
+            continue;
+        }
+        const TLogoBlobRec record = item->GetFlag().Record;
+        if (!record.Ingress.IsDoNotKeep(groupType)) {
+            continue;
+        }
+        if (keys.size() / TLogoBlobID::BinarySize == maxKeys) {
+            data = recordStart;
+            break;
+        }
+        const TLogoBlobID key = record.LogoBlobID().FullID();
+        if (!key.IsValid()) {
+            return false;
+        }
+        std::array<char, TLogoBlobID::BinarySize> encodedKey;
+        key.ToBinary(encodedKey.data());
+        keys.append(encodedKey.data(), encodedKey.size());
+    }
+    return true;
 }
 
 ui32 TPhantomFlagStorageItem::SerializedSize() const {

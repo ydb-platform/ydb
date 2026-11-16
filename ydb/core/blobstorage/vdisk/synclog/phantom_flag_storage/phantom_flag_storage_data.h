@@ -45,8 +45,8 @@ public:
             ui32 generation, ui32 step);
     static TPhantomFlagStorageItem CreateThreshold(ui32 orderNumber, const TLogoBlobID& blobId);
 
-    static TPhantomFlagStorageItem DeserializeFromRaw(const char* data);
-    static std::optional<TPhantomFlagStorageItem> TryDeserialize(TStringBuf data);
+    // Advance data by one complete item on success.
+    static std::optional<TPhantomFlagStorageItem> ReadFrom(TStringBuf& data);
     void Serialize(TString* buffer) const;
     ui32 SerializedSize() const;
     static void AlignWriteBlock(TString* buffer, ui32 appendBlockSize, ui32 sizeLimit); 
@@ -60,6 +60,9 @@ public:
 private:
     std::variant<TSkip, TFlag, TThreshold> Data;
 };
+
+// Encode up to maxKeys DoNotKeep keys. On success, data points to the next key's record or is empty.
+bool ReadPhantomFlagStorageKeys(TStringBuf& data, const TBlobStorageGroupType& groupType, size_t maxKeys, TString& keys);
 
 struct TPhantomFlagStorageData {
     struct TChunk {

@@ -317,13 +317,10 @@ namespace NKikimr {
                     Send(ev->Forward(processorId));
                     return;
                 }
-                const auto& record = ev->Get()->Record;
-                const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-                auto result = std::make_unique<TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult>(
-                        NKikimrProto::NODATA, vdiskId);
-                if (record.HasChunkIndex()) {
-                    result->Record.SetChunkIndex(record.GetChunkIndex());
-                }
+                const TVDiskID vdiskId = VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID());
+                using TResult = TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult;
+                std::unique_ptr<TResult> result = std::make_unique<TResult>(
+                        NKikimrProto::NODATA, vdiskId, ev->Get()->GetChunkIndex());
                 SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, result.release(),
                         ev->Cookie, ev->GetChannel(), SlCtx->VCtx, {});
             }

@@ -145,24 +145,44 @@ namespace NKikimr {
     TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult::TEvVPhantomFlagStorageReadChunkResult() = default;
 
     TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult::TEvVPhantomFlagStorageReadChunkResult(
-            NKikimrProto::EReplyStatus status, const TVDiskID& vdiskId) {
+            NKikimrProto::EReplyStatus status, const TVDiskID& vdiskId, std::optional<ui32> chunkIndex) {
         Record.SetStatus(status);
         VDiskIDFromVDiskID(vdiskId, Record.MutableVDiskID());
+        if (chunkIndex) {
+            Record.SetChunkIndex(*chunkIndex);
+        }
     }
 
     TString TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult::ToString() const {
-        return TStringBuilder() << "{Status# " << Record.GetStatus()
-            << " VDiskId# " << VDiskIDFromVDiskID(Record.GetVDiskID())
-            << " ChunkIndex# " << Record.GetChunkIndex() << " KeyBytes# " << Record.GetKeys().size() << "}";
+        TStringBuilder result;
+        result << "{Status# " << Record.GetStatus() << " VDiskId# " << VDiskIDFromVDiskID(Record.GetVDiskID());
+        if (Record.HasChunkIndex()) {
+            result << " ChunkIndex# " << Record.GetChunkIndex();
+        }
+        if (Record.HasNextCursor()) {
+            result << " NextCursor# " << Record.GetNextCursor();
+        }
+        result << " KeyBytes# " << Record.GetKeys().size() << "}";
+        return result;
     }
 
     TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TEvVPhantomFlagStorageReadChunk() = default;
 
     TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TEvVPhantomFlagStorageReadChunk(
-            const TVDiskID& source, const TVDiskID& target, ui32 chunkIndex) {
+            const TVDiskID& source, const TVDiskID& target, ui32 chunkIndex, std::optional<ui32> cursor) {
         VDiskIDFromVDiskID(source, Record.MutableSourceVDiskID());
         VDiskIDFromVDiskID(target, Record.MutableVDiskID());
         Record.SetChunkIndex(chunkIndex);
+        if (cursor) {
+            Record.SetCursor(*cursor);
+        }
+    }
+
+    std::optional<ui32> TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::GetChunkIndex() const {
+        if (Record.HasChunkIndex()) {
+            return Record.GetChunkIndex();
+        }
+        return std::nullopt;
     }
 
     TEvGetSkeletonStateResult::TEvGetSkeletonStateResult(TActorId chunkKeeperActorId)

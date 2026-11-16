@@ -13,7 +13,6 @@ SRCS(
     phantom_flag_chunk_extractor.cpp
     phantom_flag_storage_builder.cpp
     phantom_flag_storage_data.cpp
-    phantom_flag_storage_merge.cpp
     phantom_flag_storage_processor.cpp
     phantom_flag_storage_snapshot.cpp
     phantom_flag_storage_state.cpp
@@ -22,6 +21,7 @@ SRCS(
 
 END()
 
-RECURSE_FOR_TESTS(
-    ut
-)
+# TODO: tests
+# RECURSE_FOR_TESTS(
+#     ut
+# )

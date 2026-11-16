@@ -855,6 +855,9 @@ message TEvVPhantomFlagStorageReadChunk {
     optional TVDiskID SourceVDiskID = 1;
     optional TVDiskID VDiskID = 2;
     optional uint32 ChunkIndex = 3;
+    // Set to zero for the first page, then pass NextCursor from the preceding reply for this chunk.
+    // Leave unset for a single full reply, which returns TRYLATER_SIZE if the keys do not fit.
+    optional uint32 Cursor = 4;
 }
 
 message TEvVPhantomFlagStorageReadChunkResult {
@@ -863,6 +866,8 @@ message TEvVPhantomFlagStorageReadChunkResult {
     optional uint32 ChunkIndex = 3;
     // Consecutive whole-blob DoNotKeep keys in TLogoBlobID::ToBinary format.
     optional bytes Keys = 4;
+    // Opaque byte offset. On success, absent when the chunk is exhausted.
+    optional uint32 NextCursor = 5;
 }
 
 message THandoffDelLogoBlob {

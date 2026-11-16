@@ -2886,7 +2886,8 @@ namespace NKikimr {
         : TEventPB<TEvVPhantomFlagStorageReadChunkResult, NKikimrBlobStorage::TEvVPhantomFlagStorageReadChunkResult,
                 EvVPhantomFlagStorageReadChunkResult> {
         TEvVPhantomFlagStorageReadChunkResult();
-        TEvVPhantomFlagStorageReadChunkResult(NKikimrProto::EReplyStatus status, const TVDiskID& vdiskId);
+        TEvVPhantomFlagStorageReadChunkResult(NKikimrProto::EReplyStatus status, const TVDiskID& vdiskId,
+                std::optional<ui32> chunkIndex);
 
         TString ToString() const override;
     };
@@ -2897,7 +2898,10 @@ namespace NKikimr {
         using TResult = TEvVPhantomFlagStorageReadChunkResult;
 
         TEvVPhantomFlagStorageReadChunk();
-        TEvVPhantomFlagStorageReadChunk(const TVDiskID& source, const TVDiskID& target, ui32 chunkIndex);
+        TEvVPhantomFlagStorageReadChunk(const TVDiskID& source, const TVDiskID& target, ui32 chunkIndex,
+                std::optional<ui32> cursor = std::nullopt);
+
+        std::optional<ui32> GetChunkIndex() const;
     };
 
     //////////////////////////////////////////////////////////////////////////////////////////////

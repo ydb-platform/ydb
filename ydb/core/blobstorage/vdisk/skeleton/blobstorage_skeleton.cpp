@@ -2380,7 +2380,7 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TPtr& ev) {
             const auto& record = ev->Get()->Record;
-            if (!record.HasChunkIndex()) {
+            if (!ev->Get()->GetChunkIndex()) {
                 ReplyPhantomFlagStorageError(ev, NKikimrProto::ERROR);
                 return;
             }
@@ -2726,8 +2726,9 @@ namespace NKikimr {
             ActiveActors.Insert(MetadataActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             // run chunk keeper actor
+            ChunkKeeperEnabledAtStartup = static_cast<bool>(Config->EnableChunkKeeper);
             IActor* chunkKeeperActor = CreateChunkKeeperActor(TChunkKeeperCtx{logCtx, Db->SkeletonID},
-                    std::move(ev->Get()->ChunkKeeperData), Config->EnableChunkKeeper, Config->BaseInfo.ReadOnly);
+                    std::move(ev->Get()->ChunkKeeperData), ChunkKeeperEnabledAtStartup, Config->BaseInfo.ReadOnly);
             Db->ChunkKeeperActorID.Set(ctx.Register(chunkKeeperActor));
             ActiveActors.Insert(Db->ChunkKeeperActorID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
@@ -2775,7 +2776,7 @@ namespace NKikimr {
                     Db->SyncLogFirstLsnToKeep,
                     Config->BaseInfo.ReadOnly,
                     Config->EnablePhantomFlagStorage,
-                    Config->EnablePersistentPhantomFlagStorage,
+                    Config->EnablePersistentPhantomFlagStorage && ChunkKeeperEnabledAtStartup,
                     Config->EnablePhantomFlagStorageReplication,
                     Config->PhantomFlagStorageLimit,
                     Config->VolatilePhantomFlagStorageBlobSizeLimit);
@@ -4025,6 +4026,7 @@ namespace NKikimr {
         std::unique_ptr<NPDisk::TEvCutLog> CutLogDelayedMsg;
         ui64 StartupDataSyncBlockedUntilCutLsn = 0;
         bool LocalDbInitialized = false;
+        bool ChunkKeeperEnabledAtStartup = false;
         std::shared_ptr<TRopeArena> Arena;
         NMonGroup::TVDiskStateGroup VDiskMonGroup;
         NMonGroup::TReplGroup ReplMonGroup;

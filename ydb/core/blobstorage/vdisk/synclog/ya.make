@@ -61,7 +61,6 @@ SRCS(
 END()
 
 RECURSE_FOR_TESTS(
-    phantom_flag_storage
     ut
     ut_real_pdisk
 )

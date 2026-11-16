@@ -434,6 +434,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         if (CreatePlaceholder) {
             replicationConfig.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
         }
+        if (AssignOwner) {
+            PathId.ToProto(replicationConfig.MutableOwnerPathId());
+        }
     }
 
     void AllocateTxId() {
@@ -617,6 +620,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
+            if (!IsOwnedByThisReplication(desc.GetTable())) {
+                return Error(NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
+                    << "`" << DstPath << "` is owned by another replication");
+            }
             for (const auto& index : desc.GetTable().GetTableIndexes()) {
                 if (ShouldDropVectorIndex(index)) {
                     return PrepareDropIndex(index, record);
@@ -656,6 +663,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
+    }
+
+    bool IsOwnedByThisReplication(const NKikimrSchemeOp::TTableDescription& table) const {
+        const auto& config = table.GetReplicationConfig();
+        // Tables without an owner keep the legacy behavior.
+        return !config.HasOwnerPathId() || TPathId::FromProto(config.GetOwnerPathId()) == PathId;
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
@@ -920,6 +933,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return;
         }
 
+        if (Kind == TReplication::ETargetKind::IndexTable && !IsOwnedByThisReplication(desc.GetPathDescription().GetTable())) {
+            return Error(NKikimrScheme::StatusPreconditionFailed, "Index table is not owned by this replication");
+        }
         DstPathId = ev->Get()->PathId;
         return Success();
     }
@@ -1046,6 +1062,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
+        AssignOwner = AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership();
         switch (Kind) {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::Topic:
@@ -1101,6 +1118,7 @@ private:
     NKikimrSchemeOp::TModifyScheme DropIndexTx;
     TActorId PipeCache;
     bool NeedToCheck = false;
+    bool AssignOwner = false;
     ui64 RetryGeneration = 0;
     TPathId DstPathId;
     TActorId Subscriber;

@@ -16,6 +16,9 @@ It can operate in several modes:
 3. Space-based balancing (--sort-by=space_ratio):
    Redistributes VDisks based on available free space ratios.
 
+4. Group slot-based balancing (--sort-by=group_slots):
+   Equalizes the number of VDisks from selected groups or a storage pool across PDisks.
+
 Use --storage-pool to limit balancing to a specific storage pool, or --group-ids to target
 specific groups. The tool runs iteratively until balance is achieved or no more moves are possible.
 '''
@@ -38,7 +41,7 @@ def add_options(p):
     p.add_argument('--only-from-overpopulated-pdisks', action='store_true', help='Move vdisks out only from pdisks with over expected slot count')
     p.add_argument(
         '--sort-by',
-        choices=['slots', 'space_ratio'],
+        choices=['slots', 'space_ratio', 'group_slots'],
         default='slots',
         help='First to reassign disks with the most slots or with the highest space ratio or with the most vslots in the group'
     )
@@ -545,6 +548,11 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
             if check_pdisk.DriveStatus != 1:
                 continue
 
+            expected_slot_count = self.cluster_info.expected_slot_count_map.get(check_pdisk_id, 0)
+            weight = self.cluster_info.get_vslot_weight_on_pdisk(vslot.GroupId, check_pdisk_id)
+            if expected_slot_count and self.cluster_info.pdisk_usage_w_donors[check_pdisk_id] + weight > expected_slot_count:
+                continue
+
             if current_count < min_pool_vdisks:
                 min_pool_vdisks = current_count
                 target_pdisk = check_pdisk_id
@@ -577,7 +585,7 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
 
         response = common.invoke_bsc_request(request)
         if not common.is_successful_bsc_response(response):
-            common.print_request_result(self.args, request, response)
+            common.print_if_verbose(self.args, f'Reassignment candidate rejected: {response}')
             return False
 
         common.print_if_not_quiet(

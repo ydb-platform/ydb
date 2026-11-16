@@ -529,7 +529,7 @@ public:
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
-        AFL_ENSURE(UserRequestContext);
+        YDB_LOG_ENSURE(UserRequestContext);
         if (UserRequestContext->IsStreamingQuery) {
             // Streaming queries are long-running: held-open read locks would be
             // broken by any concurrent write and abort the query.
@@ -547,7 +547,7 @@ public:
             return false;
         }
 
-        AFL_ENSURE(!TxCtx->TxManager->BrokenLocks());
+        YDB_LOG_ENSURE(!TxCtx->TxManager->BrokenLocks());
         if (TxCtx->LockHandle.GetLockId() && !TxCtx->TxManager->GetLockIssue()) {
             return true;  // Continue to acquire locks
         }

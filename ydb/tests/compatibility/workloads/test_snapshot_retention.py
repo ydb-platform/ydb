@@ -4,8 +4,6 @@ from ydb.tests.library.compatibility.fixtures import (
     MixedClusterFixture,
     RestartToAnotherVersionFixture,
     RollingUpgradeAndDowngradeFixture,
-    current_binary_path,
-    current_name,
 )
 from ydb.tests.library.snapshot_retention import SnapshotRetentionMonitor
 from ydb.tests.stress.snapshot_retention.workload import SnapshotRetentionWorkload, expected_rows
@@ -41,18 +39,19 @@ def _check_split_merge(fixture, generation):
     # Run after the snapshot/copy checks have released all transactions. Old
     # DataShards need to preserve current data across transfers, but are not
     # required to retain an aged snapshot introduced by the new feature.
-    with _workload(fixture) as workload:
+    with _workload(fixture) as workload, SnapshotRetentionMonitor(
+        fixture.cluster, fixture.driver, fixture.database_path,
+    ) as monitor:
         workload.assert_current(generation)
-        monitor = SnapshotRetentionMonitor(fixture.cluster, fixture.driver, fixture.database_path)
         original = monitor.wait_tablets(workload.target_path, count=1)
-        monitor.split(workload.target_path, original[0], boundary=10, timeout=180)
-        split = monitor.wait_tablets(workload.target_path, count=2)
+        split = monitor.split(workload.target_path, original[0], boundary=10, timeout=180)
+        assert len(split) == 2, f"Expected two tablets after split: {split}"
         assert original[0] not in split, "Split must replace the source tablet"
         workload.assert_current(generation)
         workload.assert_current(generation, kind="index")
 
-        monitor.merge(workload.target_path, split, timeout=180)
-        merged = monitor.wait_tablets(workload.target_path, count=1)
+        merged = monitor.merge(workload.target_path, split, timeout=180)
+        assert len(merged) == 1, f"Expected one tablet after merge: {merged}"
         assert not set(merged).intersection(split), "Merge must replace both source tablets"
         workload.assert_current(generation)
         workload.assert_current(generation, kind="index")
@@ -114,58 +113,3 @@ class TestSnapshotRetentionLegacyRolling(RollingUpgradeAndDowngradeFixture):
         assert completed == 1 + 2 * nodes, "Both upgrade and downgrade must finish"
         with _workload(self) as workload:
             workload.assert_current(completed)
-
-
-class TestSnapshotRetentionEnabledCurrent(MixedClusterFixture):
-    @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
-        # A release number is not a capability check: a stable target can
-        # predate the flag even when it shares the current release branch.
-        # Keep the positive case for binaries built from these sources. The
-        # legacy classes above still exercise all mixed/restart/rolling pairs.
-        if current_name != "current" or self.all_binary_paths != [current_binary_path]:
-            pytest.skip("Retained old reads require all nodes built from current sources")
-        yield from self.setup_cluster(
-            extra_feature_flags=[
-                "enable_snapshots_locking",
-                "enable_data_shard_snapshot_locking",
-            ],
-            datashard_config={
-                "keep_snapshot_timeout": 5000,
-                "cleanup_snapshot_period": 200,
-            },
-        )
-
-    def test_first_read_after_watermark_and_copy(self):
-        with _workload(self) as workload:
-            workload.create_tables()
-            workload.write_generation(0)
-            with workload.begin_snapshot() as snapshot:
-                assert snapshot.generation == 0
-                workload.write_generation(1)
-                monitor = SnapshotRetentionMonitor(self.cluster, self.driver, self.database_path)
-
-                def advance():
-                    # Identical upserts may be skipped by index maintenance.
-                    # Commit actual changes in both directions so the index's
-                    # maxWriteVersion can advance, ending at generation 1.
-                    workload.write_generation(2)
-                    workload.write_generation(1)
-
-                # Includes the registry's ordinary 35-second safety margin.
-                # Poll the watermark instead of assuming a sleep expired it.
-                for path in (workload.target_path, workload.index_path):
-                    monitor.wait_past_snapshot(
-                        snapshot,
-                        path,
-                        advance=advance,
-                    )
-                copy_path = f"{workload.anchor_path}_retained_copy"
-                workload.copy_table(workload.anchor_path, copy_path)
-                try:
-                    assert workload.read_current(table_path=copy_path) == expected_rows(1)
-                    for kind in ("range", "point", "index"):
-                        snapshot.assert_matches(kind=kind)
-                    workload.assert_current(1)
-                finally:
-                    workload.drop_table(copy_path)

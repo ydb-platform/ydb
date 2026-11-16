@@ -10,17 +10,22 @@ import queue
 import random
 import threading
 import time
-from contextlib import nullcontext
+from contextlib import contextmanager
 from dataclasses import dataclass
+from urllib.parse import parse_qs, urlparse
 
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 logger = logging.getLogger(__name__)
 
-KEEP_SNAPSHOT_TIMEOUT_MS = 5000
 HOLD_SECONDS = 12
 KEY_COUNT = 20
+
+
+def session_owner_node_id(session_id):
+    """Return the runtime owner node encoded in a Table Service session id."""
+    return int(parse_qs(urlparse(session_id).query)["node_id"][0])
 
 
 def expected_rows(generation):
@@ -80,12 +85,14 @@ def _rows(result_sets):
 class HeldSnapshot:
     """An explicit snapshot transaction whose first query only visits anchor."""
 
-    def __init__(self, workload):
+    def __init__(self, workload, tx_mode=None):
         self.workload = workload
-        self.started_at = time.monotonic()
         self._closed = False
         self.session = workload.driver.table_client.session().create(settings=_settings())
-        self.tx = self.session.transaction(ydb.SnapshotReadOnly(), allow_split_transactions=False)
+        self.tx = self.session.transaction(
+            ydb.SnapshotReadOnly() if tx_mode is None else tx_mode,
+            allow_split_transactions=False,
+        )
         try:
             result = self.tx.execute(
                 f"SELECT generation FROM `{workload.anchor_path}` WHERE key = 0u;",
@@ -102,23 +109,31 @@ class HeldSnapshot:
             self._delete_session_after_error()
             raise
 
+    @property
+    def owner_node_id(self):
+        return session_owner_node_id(self.session_id)
+
     def _delete_session_after_error(self):
         try:
             self.session.delete(settings=_settings())
         except ydb.Error:
             logger.warning("Failed to delete snapshot session during error cleanup", exc_info=True)
 
-    def read(self, kind="range", table_path=None):
+    def execute(self, query):
+        """Execute in the original transaction without retrying or committing."""
         if self._closed:
             raise RuntimeError("Snapshot transaction is already closed")
+        if self.tx.tx_id != self.tx_id:
+            raise AssertionError("Snapshot transaction changed before the retained statement")
+        result = self.tx.execute(query, settings=_settings())
+        if self.tx.tx_id != self.tx_id:
+            raise AssertionError("Snapshot transaction changed during the retained statement")
+        return result
+
+    def read(self, kind="range", table_path=None):
         rows = []
         for query in _read_queries(table_path or self.workload.target_path, kind):
-            if self.tx.tx_id != self.tx_id:
-                raise AssertionError("Snapshot transaction changed before the retained read")
-            result = self.tx.execute(query, settings=_settings())
-            if self.tx.tx_id != self.tx_id:
-                raise AssertionError("Snapshot transaction changed during the retained read")
-            rows.extend(_rows(result))
+            rows.extend(_rows(self.execute(query)))
         return rows
 
     def assert_matches(self, kind="range", table_path=None):
@@ -148,6 +163,10 @@ class HeldSnapshot:
         else:
             self.session.delete(settings=_settings())
 
+    def abandon(self):
+        """Forget a transaction after its owner crashed, without sending a release."""
+        self._closed = True
+
     def __enter__(self):
         return self
 
@@ -166,6 +185,53 @@ class WorkloadStats:
     completed_by_reader: tuple
 
 
+class _BackgroundWriter:
+    def __init__(self, workload, retry_uncertain):
+        self.workload = workload
+        self.retry_uncertain = retry_uncertain
+        self.stop = threading.Event()
+        self._error = None
+        with workload._lock:
+            self.initial_generation = workload._last_generation
+            self._initial_writes = workload._writes
+
+    @property
+    def generation(self):
+        with self.workload._lock:
+            return self.workload._last_generation
+
+    @property
+    def writes(self):
+        with self.workload._lock:
+            return self.workload._writes - self._initial_writes
+
+    def check(self):
+        with self.workload._lock:
+            error = self._error
+        if error is not None:
+            raise error
+
+    def wait(self, timeout):
+        stopped = self.stop.wait(timeout)
+        self.check()
+        return stopped
+
+    def run(self):
+        generation = self.initial_generation + 1
+        try:
+            while not self.stop.is_set():
+                self.workload.write_generation(generation, retry_uncertain=self.retry_uncertain)
+                generation += 1
+                self.stop.wait(0.2)
+        except Exception as error:
+            # A stopped writer cannot recover through a monitoring retry.
+            failure = RuntimeError("Background snapshot retention writer failed")
+            failure.__cause__ = error
+            with self.workload._lock:
+                self._error = failure
+            self.stop.set()
+
+
 class SnapshotRetentionWorkload:
     def __init__(self, driver, database, prefix="snapshot_retention"):
         self.driver = driver
@@ -180,8 +246,6 @@ class SnapshotRetentionWorkload:
         self._lock = threading.Lock()
         self._last_generation = None
         self._writes = 0
-
-    expected_rows = staticmethod(expected_rows)
 
     def close(self):
         self._pool.stop()
@@ -254,8 +318,14 @@ class SnapshotRetentionWorkload:
             self._last_generation = generation
             self._writes += 1
 
-    def begin_snapshot(self):
-        return HeldSnapshot(self)
+    def pulse(self, generation):
+        # Equal rows may skip index maintenance. Commit real changes, then
+        # restore the deterministic current generation in a separate commit.
+        self.write_generation(generation + 1)
+        self.write_generation(generation)
+
+    def begin_snapshot(self, tx_mode=None):
+        return HeldSnapshot(self, tx_mode=tx_mode)
 
     def read_current(self, kind="range", table_path=None):
         queries = _read_queries(table_path or self.target_path, kind)
@@ -281,88 +351,88 @@ class SnapshotRetentionWorkload:
             raise AssertionError(f"Fresh {kind} read: expected generation {generation}: {expected!r}, got {actual!r}")
         return actual
 
-    def run(
-        self, duration, hold_seconds=HOLD_SECONDS, readers=4, seed=1,
-        before_read=None, read_guard=None, retry_uncertain_writes=False,
-    ):
+    @contextmanager
+    def background_writer(self, retry_uncertain=False):
+        """Keep writes running, exposing progress and failures to fault scenarios."""
+        with self._lock:
+            initial_generation = self._last_generation
+        if initial_generation is None:
+            self.write_generation(0)
+        writer = _BackgroundWriter(self, retry_uncertain)
+        thread = threading.Thread(target=writer.run, name="snapshot-retention-writer")
+        thread.start()
+        body_error = None
+        try:
+            yield writer
+        except BaseException as error:
+            body_error = error
+        finally:
+            writer.stop.set()
+            thread.join()
+        try:
+            writer.check()
+        except Exception as writer_error:
+            if body_error is not None and body_error is not writer_error:
+                raise body_error from writer_error
+            raise
+        if body_error is not None:
+            raise body_error
+
+    def run(self, duration, hold_seconds=HOLD_SECONDS, readers=4, seed=1, before_read=None):
         """Run writes and aged reads; propagate every reader failure.
 
         A cluster-aware runner can pass before_read(held) to wait for a measured
         LowWatermark beyond the held version before its first target access.
         The standalone remote workload uses the configured hold duration.
-        An optional read_guard serializes fault injection and checked reads
-        across readers, while the independent writer continues running. Only
-        fault-mode writers opt into retries of uncertain commit responses.
         """
         if duration <= 0 or hold_seconds <= 0 or readers <= 0:
             raise ValueError("Duration, hold duration, and reader count must be positive")
-        with self._lock:
-            initial_generation = self._last_generation
-        if initial_generation is None:
-            self.write_generation(0)
-        with self._lock:
-            first_generation = self._last_generation
-            initial_writes = self._writes
-        deadline = time.monotonic() + duration
-        stop = threading.Event()
         errors = queue.Queue()
         completed = [0] * readers
 
-        def writer():
-            generation = first_generation + 1
-            try:
-                while not stop.is_set():
-                    self.write_generation(generation, retry_uncertain=retry_uncertain_writes)
-                    generation += 1
-                    stop.wait(0.2)
-            except Exception as error:
-                errors.put(error)
-                stop.set()
+        with self.background_writer() as writer:
+            deadline = time.monotonic() + duration
 
-        def reader(index):
-            rng = random.Random(seed + index)
-            try:
-                while not stop.is_set() and (completed[index] == 0 or time.monotonic() + hold_seconds < deadline):
-                    with self.begin_snapshot() as held:
-                        if stop.wait(hold_seconds * rng.uniform(1.0, 1.25)):
-                            break
-                        with (read_guard if read_guard is not None else nullcontext()):
-                            if read_guard is not None and stop.is_set():
+            def reader(index):
+                rng = random.Random(seed + index)
+                try:
+                    while not writer.stop.is_set() and (
+                        completed[index] == 0 or time.monotonic() + hold_seconds < deadline
+                    ):
+                        with self.begin_snapshot() as held:
+                            if writer.wait(hold_seconds * rng.uniform(1.0, 1.25)):
                                 break
                             if before_read is not None:
                                 before_read(held)
                             held.assert_matches(rng.choice(("point", "range", "index")))
-                        with self._lock:
-                            current_generation = self._last_generation
-                        if current_generation <= held.generation:
-                            raise AssertionError("Writer made no progress while the snapshot was held")
-                        completed[index] += 1
-                        held.close(rng.choice(("rollback", "commit", "session")))
-            except Exception as error:
-                errors.put(error)
-                stop.set()
+                            if writer.generation <= held.generation:
+                                raise AssertionError("Writer made no progress while the snapshot was held")
+                            completed[index] += 1
+                            held.close(rng.choice(("rollback", "commit", "session")))
+                except Exception as error:
+                    errors.put(error)
+                    writer.stop.set()
 
-        writer_thread = threading.Thread(target=writer, name="snapshot-retention-writer")
-        reader_threads = [
-            threading.Thread(target=reader, args=(index,), name=f"snapshot-retention-reader-{index}")
-            for index in range(readers)
-        ]
-        writer_thread.start()
-        try:
-            for thread in reader_threads:
-                thread.start()
-            for thread in reader_threads:
-                thread.join()
-        finally:
-            stop.set()
-            writer_thread.join()
-        if not errors.empty():
-            raise errors.get()
+            reader_threads = [
+                threading.Thread(target=reader, args=(index,), name=f"snapshot-retention-reader-{index}")
+                for index in range(readers)
+            ]
+            started_threads = []
+            try:
+                for thread in reader_threads:
+                    thread.start()
+                    started_threads.append(thread)
+                for thread in started_threads:
+                    thread.join()
+            finally:
+                writer.stop.set()
+                for thread in started_threads:
+                    thread.join()
+            if not errors.empty():
+                raise errors.get()
         if any(count == 0 for count in completed):
             raise AssertionError(f"Not all readers completed a retained read: {completed!r}")
-        with self._lock:
-            stats = WorkloadStats(sum(completed), self._writes - initial_writes, tuple(completed))
-            final_generation = self._last_generation
-        self.assert_current(final_generation)
+        stats = WorkloadStats(sum(completed), writer.writes, tuple(completed))
+        self.assert_current(writer.generation)
         logger.info("Snapshot retention workload completed: %s", stats)
         return stats

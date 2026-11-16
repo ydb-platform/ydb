@@ -8,8 +8,15 @@ secondary-index reads use the same explicit transaction without SDK retries.
 
 The local stress runner and functional tests enable both `EnableSnapshotsLocking`
 and `EnableDataShardSnapshotLocking`. They use a five-second `KeepSnapshotTimeout`
-and shorter registry intervals. KQP sessions stay on node 1; target tablets are
-moved to node 2. The test checks the session owner and actual tablet placement.
+and shorter registry intervals. The original three-node fixtures keep KQP
+sessions on node 1 and move target tablets to node 2. The tests check the session
+owner and actual tablet placement.
+
+Both runners use `retention_cluster_config` and `pinned_driver` from
+`ydb.tests.library.snapshot_retention`. Functional fixtures override this common
+configuration for isolation modes, topology, and registry limits. Their
+additional compaction settings remain explicit overrides. `HeldSnapshot.owner_node_id`
+provides the original session owner's runtime node ID, including after close.
 
 `SnapshotRetentionMonitor` reads the persisted DataShard `Sys` table through the
 existing `/tablets/db` inspector. After a subsequent acknowledged generation
@@ -18,17 +25,69 @@ write, it captures that write's MVCC edge, then waits until the target's actual
 fixed sleep or from the client's wall clock. Schema and HTML changes fail the
 monitor explicitly.
 
+Callers capture an explicit bound with `snapshot_bound` and pass it to
+`wait_low_watermark`, sharing one bound across the table and index. A later
+cleanup phase captures a new bound after a fault or release; the monitor keeps
+no per-transaction bound cache.
+
+Each monitor reuses one `QuerySessionPool` for partition polling, including
+concurrent readers. Test cleanup and compatibility context managers close the
+pool before its driver stops. Tablet lists are still queried on every poll.
+Hive placement uses the shared `SwaggerClient` with a ten-second HTTP timeout;
+polling retries transient errors from both HTTP clients.
+
 Functional tests cover first point/range/index reads below the watermark,
 independent held snapshots and release, compaction and tablet restart,
-split/merge, CopyTable, and disabled/default feature flags. Registry counts
-check eventual handle release; they do not prove physical removal of every
-historical row. Exact removed-version ranges remain covered by C++ tests.
+split/merge, CopyTable, rejection of held snapshots after TRUNCATE, and
+disabled/default feature flags. TRUNCATE cases check range, point, and index
+reads independently: a registered old snapshot must fail even when fresh reads
+see an empty table. Registry counts check eventual handle release; they do not
+prove physical removal of every historical row. Exact removed-version ranges
+remain covered by C++ tests.
 
-Stress also covers two controlled remote tablet restarts and a split followed
-by merge while the writer continues running. Checked reads are serialized with
-fault injection; they keep their original transaction and never retry it. Only
-the fault-mode writer may retry an uncertain acknowledgement of its idempotent
-generation replacement.
+The first range/point/index reads also run in a one-node fixture, with the KQP
+owner, target table and index on the same process. These cases require a promoted
+local snapshot in a ready registry and empty remote peer/snapshot sets. They
+check that the local holding disappears after release.
+
+Serializable and SnapshotRW cases also write and commit after the first target
+read below LowWatermark. They check successful commits without a conflict,
+Serializable read conflicts, and SnapshotRW conflicts on the same written key.
+Unrelated marker keys advance cleanup without changing the anchor's read key.
+Fresh reads verify committed data and absence of partial writes after ABORTED.
+
+Isolated overflow cases use `MaxRemoteSnapshots` limits of one and three, with
+three and five distinct held snapshots respectively. They check the explicit
+oldest points and the inclusive `SnapshotBorder` protecting newer versions,
+wait for base/index cleanup to reach that border, compact, and read all held
+generations. Partial releases must advance/remove the border while preserving
+survivors. The three-point limit also checks promotion of a range-protected
+version into the explicit set after releasing a middle point. The final release
+must allow cleanup past a fresh acknowledged write.
+
+Node-process fault cases use one static storage node and three tenant compute
+nodes. They cover a DataShard node restart, abrupt loss of the KQP owner, and
+expiration of an unavailable peer's collection time. Their unavailable-node
+snapshot timeout is 30 seconds. The expiration checks leave the failed process
+down, observe its removal from the surviving registries, and require new cleanup
+progress on both the main table and index before compaction. The restart case
+checks real registry reconstruction and retained reads; deterministic coverage
+of the exact empty-registry startup window remains in C++.
+
+The normal stress profile keeps four concurrent readers for the configured
+duration. Fault profiles are explicit sequences: two remote tablet restarts, or
+a split followed by merge, with a background writer running throughout. Two
+groups of three snapshots are held before the first fault. Each group covers
+point, range and index reads. The second group first accesses target after the
+second restart or merge; the first group is checked after both faults. Actual
+watermarks are checked before the first fault and again with a refreshed write
+bound before each read on the recovered tablets.
+
+Checked reads keep their original transaction and never retry it. Both groups
+exercise rollback, commit and session deletion before checking registry release.
+The shared writer helper propagates failures and stops and joins its thread
+before final fresh reads. Only the fault-mode writer may retry an uncertain
+acknowledgement of its idempotent generation replacement.
 
 The split/merge stress profile disables `EnableDataShardUncommittedWriteSeqNum`:
 the default protocol exposed a separate writer failure, `Ancestor shard ... not
@@ -38,11 +97,10 @@ snapshot-retention flags and checked read policy stay the same in all profiles.
 
 Compatibility tests exercise default flags through mixed clusters, restart to
 another binary, and rolling upgrade/downgrade. Mixed clusters additionally split
-and merge a table and verify its exact current data. The enabled case only runs when
-every binary is built from current sources. Older binaries never receive the
-new flag. A stopped KQP owner invalidates the checked transaction: the tests
-start a new transaction after a full restart rather than claiming the old
-in-memory handle survived it.
+and merge a table and verify its exact current data. These scenarios leave
+`EnableDataShardSnapshotLocking` unspecified. A stopped KQP owner invalidates
+the checked transaction: the tests start a new transaction after a full restart
+rather than claiming the old in-memory handle survived it.
 
 Run the new tests (tests include their build):
 

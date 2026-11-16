@@ -84,7 +84,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
         Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parentFrom, NTableIndex::NKMeans::TClusterId parentTo, ui64 seed, ui64 k,
         NKikimrTxDataShard::EKMeansState upload, VectorIndexSettings::VectorType type,
         VectorIndexSettings::Metric metric, ui32 maxBatchRows = 50000, ui32 overlapClusters = 0, bool expectEmpty = false,
-        std::optional<TSerializedTableRange> keyRange = {})
+        std::optional<TSerializedTableRange> keyRange = {},
+        NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -129,6 +130,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
                 rec.SetEmbeddingColumn("embedding");
                 rec.AddDataColumns("data");
+                rec.SetIndexType(indexType);
 
                 rec.SetDatabaseName(kDatabaseName);
 
@@ -308,6 +310,28 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
             request.SetChild(Max<ui64>() - 100);
         }, "Condition violated: `!HasPostingParentFlag(parent)'", true, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+    }
+
+    Y_UNIT_TEST(HnswRetainsEmbeddingWithoutCover) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root");
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+        InitRoot(server, sender);
+        TShardedTableOptions options;
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+        CreateLevelTable(server, sender, options);
+        CreateBuildTable(server, sender, options, "table-posting");
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table-main` (key, embedding, data)
+            VALUES (1, "ab\x02", "one");
+        )");
+        const auto [level, posting] = DoLocalKMeans(server, sender, 0, 0, 1, 1,
+            NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING, VectorIndexSettings::VECTOR_TYPE_UINT8,
+            VectorIndexSettings::DISTANCE_EUCLIDEAN, 1, 0, false, {}, NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+        UNIT_ASSERT_STRING_CONTAINS(posting, "key = 1, embedding = ab\2, data = one\n");
     }
 
     Y_UNIT_TEST (MainToPosting) {

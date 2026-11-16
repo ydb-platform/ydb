@@ -86,7 +86,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parent, ui64 seed, ui64 k,
         NKikimrTxDataShard::EKMeansState upload, VectorIndexSettings::VectorType type,
         VectorIndexSettings::Metric metric, ui32 maxBatchRows, ui32 overlapClusters = 0,
-        std::optional<TSerializedTableRange> keyRange = {})
+        std::optional<TSerializedTableRange> keyRange = {},
+        NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -125,6 +126,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
                 rec.SetEmbeddingColumn("embedding");
                 rec.AddDataColumns("data");
+                rec.SetIndexType(indexType);
                 rec.SetPrefixColumns(1);
                 rec.AddSourcePrimaryKeyColumns("key");
 
@@ -256,6 +258,29 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
             request.SetK(0);
             request.SetEmbeddingColumn("some");
         }, "[ { <main>: Error: Should be requested at least one cluster } { <main>: Error: Unknown embedding column: some } ]");
+    }
+
+    Y_UNIT_TEST(HnswRetainsEmbeddingWithoutCover) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root");
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+        InitRoot(server, sender);
+        TShardedTableOptions options;
+        options.Shards(1);
+        CreateBuildPrefixTable(server, sender, options, "table-main");
+        CreatePrefixTable(server, sender, options);
+        CreateLevelTable(server, sender, options);
+        CreateBuildTable(server, sender, options, "table-posting");
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table-main` (user, key, embedding, data)
+            VALUES ("user-1", 1, "ab\x02", "one");
+        )");
+        const auto [prefix, level, posting] = DoPrefixKMeans(server, sender, 40, 1, 1,
+            NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING, VectorIndexSettings::VECTOR_TYPE_UINT8,
+            VectorIndexSettings::DISTANCE_EUCLIDEAN, 1, 0, {}, NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+        UNIT_ASSERT_STRING_CONTAINS(posting, "key = 1, embedding = ab\2, data = one\n");
     }
 
     Y_UNIT_TEST (BuildToPosting) {

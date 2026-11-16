@@ -1277,24 +1277,6 @@ private:
         ToTabletSend.emplace(shardId, std::move(ev));
     }
 
-    template <typename TRecord>
-    void FillKMeansDataColumns(TRecord& record, const TIndexBuildInfo& buildInfo) {
-        *record.MutableDataColumns() = {buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()};
-        const auto& embedding = buildInfo.IndexColumns.back();
-        if (buildInfo.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw
-                || std::find(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end(), embedding) != buildInfo.DataColumns.end()) {
-            return;
-        }
-        const auto& table = *Self->Tables.at(buildInfo.TablePathId);
-        // Primary-key embeddings already travel in the output key cells.
-        for (ui32 tag : table.KeyColumnIds) {
-            if (table.Columns.at(tag).Name == embedding) {
-                return;
-            }
-        }
-        record.AddDataColumns(embedding);
-    }
-
     void SendKMeansReshuffleRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
         auto ev = MakeHolder<TEvDataShard::TEvReshuffleKMeansRequest>();
@@ -1324,7 +1306,8 @@ private:
         ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        FillKMeansDataColumns(ev->Record, buildInfo);
+        *ev->Record.MutableDataColumns() = {buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()};
+        ev->Record.SetIndexType(buildInfo.IndexType);
 
         ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
         ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
@@ -1424,7 +1407,8 @@ private:
         ev->Record.SetLevelName(path.PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        FillKMeansDataColumns(ev->Record, buildInfo);
+        *ev->Record.MutableDataColumns() = {buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()};
+        ev->Record.SetIndexType(buildInfo.IndexType);
 
         ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
         ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
@@ -1497,7 +1481,8 @@ private:
 
         ev->Record.SetPrefixColumns(buildInfo.IndexColumns.size() - 1);
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        FillKMeansDataColumns(ev->Record, buildInfo);
+        *ev->Record.MutableDataColumns() = {buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()};
+        ev->Record.SetIndexType(buildInfo.IndexType);
         const auto& tableInfo = *Self->Tables.at(buildInfo.TablePathId);
         for (ui32 keyPos: tableInfo.KeyColumnIds) {
             ev->Record.AddSourcePrimaryKeyColumns(tableInfo.Columns.at(keyPos).Name);

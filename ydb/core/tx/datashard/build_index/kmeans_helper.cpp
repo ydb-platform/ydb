@@ -82,6 +82,34 @@ void AddRowToDataWithForeign(TBufferData& buffer, TClusterId parent, TArrayRef<c
     buffer.AddRow(pk, data, origKey);
 }
 
+google::protobuf::RepeatedPtrField<TProtoStringType> MakeUploadDataColumns(const TUserTable& table,
+    const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
+    NKikimrSchemeOp::EIndexType indexType,
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& pkColumns)
+{
+    auto result = data;
+    if (indexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw
+            || std::find(data.begin(), data.end(), embedding) != data.end()) {
+        return result;
+    }
+    // HNSW builds its graph from the posting-table vectors. Embeddings in the
+    // original primary key already travel in key cells, including prefix scans
+    // whose intermediate table has a different primary key.
+    if (!pkColumns.empty()) {
+        if (std::find(pkColumns.begin(), pkColumns.end(), embedding) != pkColumns.end()) {
+            return result;
+        }
+    } else {
+        for (const auto tag : table.KeyColumnIds) {
+            if (table.Columns.at(tag).Name == embedding) {
+                return result;
+            }
+        }
+    }
+    *result.Add() = embedding;
+    return result;
+}
+
 TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
     const google::protobuf::RepeatedPtrField<TProtoStringType>& data, bool forBuild, NTable::TPos& embeddingPos,
     NTable::TPos& dataPos, NTable::TPos* isForeignPos)

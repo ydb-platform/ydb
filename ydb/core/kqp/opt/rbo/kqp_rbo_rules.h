@@ -419,6 +419,16 @@ class TExtractCommonConjunctsRule : public ISimplifiedRule {
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
+// Remove preservation of either input when ancestors reject its unmatched rows.
+class TReduceOuterJoinRule final : public IRule {
+public:
+    TReduceOuterJoinRule()
+        : IRule("Reduce outer join", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
+
+    bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
 /**
  * Push down filter through joins, adding join conditions to the join operator and potentially
  * converting left join into inner join

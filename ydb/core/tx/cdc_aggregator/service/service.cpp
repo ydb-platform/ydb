@@ -15,6 +15,8 @@
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 
+#include <functional>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CDC_AGGREGATOR
 
 namespace NKikimr::NCdcAggregator {
@@ -47,13 +49,47 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         ui64 Cookie = 0;
     };
 
-    struct TCdcAggregatorConnection {
+    using TSendReply = std::function<void(const TOrigin&, const TCdcAggregatorHeartbeatDeliveryReply&)>;
+
+    class TCdcAggregatorServiceToTabletConnection {
+    public:
+        void RegisterHeartbeat(const TOrigin& origin, ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat) {
+            LastActivity = TActivationContext::Monotonic();
+            Origins[sourceDataShardId] = origin;
+            CdcAggregatorHeartbeatDelivery.AddHeartbeat(sourceDataShardId, heartbeat);
+        }
+
+        void ReplyToOrigins(const TCdcAggregatorHeartbeatBatchResult& batchResult, const TSendReply& sendReply) {
+            for (const auto& [sourceDataShardId, reply] : batchResult) {
+                auto it = Origins.find(sourceDataShardId);
+                if (it == Origins.end()) {
+                    continue;
+                }
+
+                sendReply(it->second, reply);
+                Origins.erase(it);
+            }
+        }
+
+        void ReplyToAllOrigins(const TCdcAggregatorHeartbeatDeliveryReply& reply, const TSendReply& sendReply) {
+            for (const auto& [sourceDataShardId, origin] : Origins) {
+                sendReply(origin, reply);
+            }
+            Origins.clear();
+        }
+
+        size_t GetOriginCount() const {
+            return Origins.size();
+        }
+
         TCdcAggregatorHeartbeatDelivery CdcAggregatorHeartbeatDelivery{MaxBatchSize};
-        THashMap<ui64, TOrigin> Origins;
         TActorId PipeClient;
         ui64 BatchCookie = 0;
         TMonotonic BatchDeadline;
         TMonotonic LastActivity;
+
+    private:
+        THashMap<ui64, TOrigin> Origins;
     };
 
     void AcceptHeartbeat(const TOrigin& origin, const TEvCdcAggregatorService::TEvWriteHeartbeat& msg) {
@@ -65,14 +101,11 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             return;
         }
 
-        auto& connection = CdcAggregatorConnections[msg.RecipientTabletId];
-        connection.LastActivity = TActivationContext::Monotonic();
-        connection.Origins[msg.SourceDataShardId] = origin;
-        connection.CdcAggregatorHeartbeatDelivery.AddHeartbeat(msg.SourceDataShardId, msg.Heartbeat);
+        CdcAggregatorServiceToTabletConnections[msg.RecipientTabletId].RegisterHeartbeat(origin, msg.SourceDataShardId, msg.Heartbeat);
     }
 
     void SendHeartbeatBatches() {
-        for (auto& [tabletId, connection] : CdcAggregatorConnections) {
+        for (auto& [tabletId, connection] : CdcAggregatorServiceToTabletConnections) {
             auto& delivery = connection.CdcAggregatorHeartbeatDelivery;
             auto batch = delivery.PrepareNextBatchIfPossible();
             if (!batch) {
@@ -96,17 +129,17 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         }
     }
 
-    void RemoveExpiredCdcAggregatorConnections() {
+    void RemoveExpiredCdcAggregatorServiceToTabletConnections() {
         const auto now = TActivationContext::Monotonic();
-        for (auto it = CdcAggregatorConnections.begin(); it != CdcAggregatorConnections.end();) {
+        for (auto it = CdcAggregatorServiceToTabletConnections.begin(); it != CdcAggregatorServiceToTabletConnections.end();) {
             const auto current = it++;
             auto& connection = current->second;
             if (connection.BatchCookie && now >= connection.BatchDeadline) {
                 NTabletPipe::CloseClient(SelfId(), connection.PipeClient);
-                DropCdcAggregatorConnection(current->first, connection.PipeClient, "Heartbeat batch timed out");
+                DropCdcAggregatorServiceToTabletConnection(current->first, connection.PipeClient, "Heartbeat batch timed out");
             } else if (connection.CdcAggregatorHeartbeatDelivery.IsIdle() && now - connection.LastActivity >= IdleTimeout) {
                 NTabletPipe::CloseClient(SelfId(), connection.PipeClient);
-                CdcAggregatorConnections.erase(current);
+                CdcAggregatorServiceToTabletConnections.erase(current);
             }
         }
     }
@@ -115,8 +148,8 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         YDB_LOG_DEBUG("Apply batch result",
             {"record", record.ShortDebugString()});
 
-        auto it = CdcAggregatorConnections.find(record.GetOrigin());
-        if (it == CdcAggregatorConnections.end() || !it->second.BatchCookie || it->second.BatchCookie != cookie) {
+        auto it = CdcAggregatorServiceToTabletConnections.find(record.GetOrigin());
+        if (it == CdcAggregatorServiceToTabletConnections.end() || !it->second.BatchCookie || it->second.BatchCookie != cookie) {
             return;
         }
 
@@ -124,35 +157,26 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         it->second.LastActivity = TActivationContext::Monotonic();
         auto& delivery = it->second.CdcAggregatorHeartbeatDelivery;
         auto [writeHeartbeatsResult, error] = ProtoConverter.ParseWriteHeartbeatsResult(record);
-        ReplyToOrigins(it->second, writeHeartbeatsResult ? delivery.CompleteBatch(*writeHeartbeatsResult) : delivery.FailBatch(error));
+        const auto batchResult = writeHeartbeatsResult ? delivery.CompleteBatch(*writeHeartbeatsResult) : delivery.FailBatch(error);
+        it->second.ReplyToOrigins(batchResult, [this](const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
+            Reply(origin, reply);
+        });
     }
 
-    void DropCdcAggregatorConnection(ui64 tabletId, const TActorId& pipeClient, const TString& error) {
-        auto it = CdcAggregatorConnections.find(tabletId);
-        if (it == CdcAggregatorConnections.end() || it->second.PipeClient != pipeClient) {
+    void DropCdcAggregatorServiceToTabletConnection(ui64 tabletId, const TActorId& pipeClient, const TString& error) {
+        auto it = CdcAggregatorServiceToTabletConnections.find(tabletId);
+        if (it == CdcAggregatorServiceToTabletConnections.end() || it->second.PipeClient != pipeClient) {
             return;
         }
 
         YDB_LOG_NOTICE("Drop connection",
             {"aggregator", tabletId},
-            {"origins", it->second.Origins.size()},
+            {"origins", it->second.GetOriginCount()},
             {"error", error});
-        for (const auto& [sourceDataShardId, origin] : it->second.Origins) {
-            Reply(origin, TCdcAggregatorHeartbeatRetry{.Error = error});
-        }
-        CdcAggregatorConnections.erase(it);
-    }
-
-    void ReplyToOrigins(TCdcAggregatorConnection& connection, const TCdcAggregatorHeartbeatBatchResult& repliesBySourceDataShardId) {
-        for (const auto& [sourceDataShardId, reply] : repliesBySourceDataShardId) {
-            auto it = connection.Origins.find(sourceDataShardId);
-            if (it == connection.Origins.end()) {
-                continue;
-            }
-
-            Reply(it->second, reply);
-            connection.Origins.erase(it);
-        }
+        it->second.ReplyToAllOrigins(TCdcAggregatorHeartbeatRetry{.Error = error}, [this](const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
+            Reply(origin, reply);
+        });
+        CdcAggregatorServiceToTabletConnections.erase(it);
     }
 
     void Handle(TEvCdcAggregatorService::TEvWriteHeartbeat::TPtr& ev) {
@@ -166,16 +190,16 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         const auto* msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
-            DropCdcAggregatorConnection(msg->TabletId, msg->ClientId, TStringBuilder() << "Pipe connect failed: " << NKikimrProto::EReplyStatus_Name(msg->Status));
+            DropCdcAggregatorServiceToTabletConnection(msg->TabletId, msg->ClientId, TStringBuilder() << "Pipe connect failed: " << NKikimrProto::EReplyStatus_Name(msg->Status));
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-        DropCdcAggregatorConnection(ev->Get()->TabletId, ev->Get()->ClientId, "Pipe destroyed");
+        DropCdcAggregatorServiceToTabletConnection(ev->Get()->TabletId, ev->Get()->ClientId, "Pipe destroyed");
     }
 
     void HandleTimerFired() {
-        RemoveExpiredCdcAggregatorConnections();
+        RemoveExpiredCdcAggregatorServiceToTabletConnections();
         SendHeartbeatBatches();
         Schedule(TimerPeriod, new TEvPrivate::TEvTimerFired());
     }
@@ -210,7 +234,7 @@ public:
 
 private:
     TCdcAggregatorHeartbeatDeliveryProtoConverter ProtoConverter;
-    THashMap<ui64, TCdcAggregatorConnection> CdcAggregatorConnections;
+    THashMap<ui64, TCdcAggregatorServiceToTabletConnection> CdcAggregatorServiceToTabletConnections;
     ui64 LastBatchCookie = 0;
 };
 

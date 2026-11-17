@@ -33,26 +33,28 @@ class TestYdbWorkload(StressFixture):
         duration = int(self.base_duration)
         errors = []
 
-        with Workload(self.endpoint, self.database, duration, mode) as workload:
-            def run_workload():
-                try:
-                    workload.start()
-                except Exception:
-                    errors.append(traceback.format_exc())
+        stop_event = threading.Event()
 
-            thread = threading.Thread(target=run_workload, name="workload", daemon=True)
-            thread.start()
-            deadline = time.time() + duration + 300
-            cluster_dead = []
+        def run_workload():
             try:
-                while time.time() < deadline and thread.is_alive():
-                    cluster_dead = self._dead_nodes()
-                    if cluster_dead:
-                        break
-                    time.sleep(2)
-            finally:
-                workload.stop()
-                thread.join(timeout=120)
+                with Workload(self.endpoint, self.database, duration, mode, stop_event=stop_event) as workload:
+                    workload.start()
+            except Exception:
+                errors.append(traceback.format_exc())
+
+        thread = threading.Thread(target=run_workload, name="workload", daemon=True)
+        thread.start()
+        deadline = time.time() + duration + 300
+        cluster_dead = []
+        try:
+            while time.time() < deadline and thread.is_alive():
+                cluster_dead = self._dead_nodes()
+                if cluster_dead:
+                    break
+                time.sleep(2)
+        finally:
+            stop_event.set()
+            thread.join(timeout=120)
 
         if not cluster_dead:
             cluster_dead = self._dead_nodes()

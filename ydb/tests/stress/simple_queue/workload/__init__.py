@@ -600,11 +600,11 @@ class WorkloadWorker:
 
 
 class Workload:
-    def __init__(self, endpoint, database, duration, mode):
+    def __init__(self, endpoint, database, duration, mode, *, stop_event=None):
         self.database = database
         self.duration = duration
         self.mode = mode
-        self.stop_event = threading.Event()
+        self.stop_event = stop_event if stop_event is not None else threading.Event()
         self.workload_stats = WorkloadStats(*EventKind.list())
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
         self.driver.wait(timeout=30, fail_fast=True)

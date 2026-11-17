@@ -9813,6 +9813,13 @@
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_select_pg-uncorrelated_asterisk_subquery_scalar_with_source_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-aggregate_list]": [
+        {
+            "checksum": "0e798e8e59233ea07e2638affe5190fb",
+            "size": 11227,
+            "uri": "https://{canondata_backend}/1942415/e21d429b25e4aa8c77f95c5c1166e8e207b52093/resource.tar.gz#test_sql2yql.test_select_yql-aggregate_list_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-aggregate_percentile]": [
         {
             "checksum": "d59c2f33314097774b0c9504a7bc9d16",
@@ -10210,6 +10217,13 @@
             "checksum": "9ccbdf568d30624ea73e5945984d6d56",
             "size": 1115,
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_select_yql-from_values_where_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-group_by_a_agglist_b]": [
+        {
+            "checksum": "0809e7f7e90643293112e0a3c823199c",
+            "size": 1347,
+            "uri": "https://{canondata_backend}/1809005/155a60dc322a5d9a37a5fe4fbea9ac5df4bceeb9/resource.tar.gz#test_sql2yql.test_select_yql-group_by_a_agglist_b_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-group_by_a_avg_b]": [
@@ -11491,13 +11505,6 @@
             "checksum": "ce0515f437add07985fef81d99be7e17",
             "size": 1524,
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_select_yql-window_sum_order_by_distinct_0_/sql.yql"
-        }
-    ],
-    "test_sql2yql.test[select_yql-window_sum_order_by_distinct_1]": [
-        {
-            "checksum": "61640bee6d4f4a6849022c5551012f82",
-            "size": 1536,
-            "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_select_yql-window_sum_order_by_distinct_1_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-window_sum_partition_by_1]": [
@@ -19160,6 +19167,11 @@
             "uri": "file://test_sql_format.test_select_op-select_op_precedence_named_node_/formatted.sql"
         }
     ],
+    "test_sql_format.test[select_yql-aggregate_list]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-aggregate_list_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[select_yql-aggregate_percentile]": [
         {
             "uri": "file://test_sql_format.test_select_yql-aggregate_percentile_/formatted.sql"
@@ -19443,6 +19455,11 @@
     "test_sql_format.test[select_yql-from_values_where]": [
         {
             "uri": "file://test_sql_format.test_select_yql-from_values_where_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-group_by_a_agglist_b]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-group_by_a_agglist_b_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-group_by_a_avg_b]": [
@@ -20353,11 +20370,6 @@
     "test_sql_format.test[select_yql-window_sum_order_by_distinct_0]": [
         {
             "uri": "file://test_sql_format.test_select_yql-window_sum_order_by_distinct_0_/formatted.sql"
-        }
-    ],
-    "test_sql_format.test[select_yql-window_sum_order_by_distinct_1]": [
-        {
-            "uri": "file://test_sql_format.test_select_yql-window_sum_order_by_distinct_1_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-window_sum_partition_by_1]": [
@@ -22260,6 +22272,20 @@
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql_negative.test_select-use_subrequest_as_table-_/err_file.out"
         }
     ],
+    "test_sql_negative.test[select_yql-aggregate_list_column_limit-]": [
+        {
+            "checksum": "fbac2f639dc04bd1ee006bab6d2f7418",
+            "size": 229,
+            "uri": "https://{canondata_backend}/1809005/155a60dc322a5d9a37a5fe4fbea9ac5df4bceeb9/resource.tar.gz#test_sql_negative.test_select_yql-aggregate_list_column_limit-_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[select_yql-aggregate_list_extra_argument-]": [
+        {
+            "checksum": "50ab3bd591bcbe38da218dcad053ebcd",
+            "size": 130,
+            "uri": "https://{canondata_backend}/1809005/155a60dc322a5d9a37a5fe4fbea9ac5df4bceeb9/resource.tar.gz#test_sql_negative.test_select_yql-aggregate_list_extra_argument-_/err_file.out"
+        }
+    ],
     "test_sql_negative.test[select_yql-aggregate_median_missing_value-]": [
         {
             "checksum": "7b8383dc07a7fed417689e808bc857d8",
@@ -22288,13 +22314,6 @@
             "uri": "https://{canondata_backend}/1942525/32ab560d79eb7917da5a3f9de0af8a9e1930ffb4/resource.tar.gz#test_sql_negative.test_select_yql-aggregate_percentile_missing_value-_/err_file.out"
         }
     ],
-    "test_sql_negative.test[select_yql-group_by_a_agglist_b-]": [
-        {
-            "checksum": "c3441a51387784f4325c5128ce57f33d",
-            "size": 242,
-            "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql_negative.test_select_yql-group_by_a_agglist_b-_/err_file.out"
-        }
-    ],
     "test_sql_negative.test[select_yql-select_op_order_by_inner_first-]": [
         {
             "checksum": "f09e73a815bb600b0d5e4de269973566",
@@ -22314,6 +22333,13 @@
             "checksum": "191ad57bc78bf727229a139cb8e3ca9c",
             "size": 321,
             "uri": "https://{canondata_backend}/1599023/241801e76363a0b25de311337680ae3f43a238a1/resource.tar.gz#test_sql_negative.test_select_yql-select_op_order_by_inner_middle-_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[select_yql-window_sum_order_by_distinct_1-]": [
+        {
+            "checksum": "49218e84243f33cd368da2006058637a",
+            "size": 212,
+            "uri": "https://{canondata_backend}/1924537/826f695ee2eca3f959f91594ec042837484ad1c2/resource.tar.gz#test_sql_negative.test_select_yql-window_sum_order_by_distinct_1-_/err_file.out"
         }
     ],
     "test_sql_negative.test[simple_pg-missing-]": [

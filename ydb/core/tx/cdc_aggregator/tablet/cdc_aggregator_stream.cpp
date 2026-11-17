@@ -39,16 +39,16 @@ TCdcAggregatorStream::TCdcAggregatorStream(
 {
 }
 
-TCdcAggregatorStreamHeartbeatsDiff TCdcAggregatorStream::WriteHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatBySourceDataShardId) {
+TCdcAggregatorStreamHeartbeatsDiff TCdcAggregatorStream::WriteHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatsBySourceDataShardId) {
     return {
-        .LastHeartbeatsBySourceDataShardId = RegisterHeartbeats(heartbeatBySourceDataShardId),
+        .LastHeartbeatsBySourceDataShardId = RegisterHeartbeats(heartbeatsBySourceDataShardId),
         .CurrentHeartbeat = UpdateCurrentHeartbeatIfNeeded(),
     };
 }
 
-THashMap<ui64, NPQ::THeartbeat> TCdcAggregatorStream::RegisterHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatBySourceDataShardId) {
+THashMap<ui64, NPQ::THeartbeat> TCdcAggregatorStream::RegisterHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatsBySourceDataShardId) {
     THashMap<ui64, NPQ::THeartbeat> lastHeartbeats;
-    for (const auto& [sourceDataShardId, heartbeat] : heartbeatBySourceDataShardId) {
+    for (const auto& [sourceDataShardId, heartbeat] : heartbeatsBySourceDataShardId) {
         auto lastHeartbeat = LastHeartbeatsBySourceDataShardId.find(sourceDataShardId);
         if (lastHeartbeat == LastHeartbeatsBySourceDataShardId.end()) {
             continue;

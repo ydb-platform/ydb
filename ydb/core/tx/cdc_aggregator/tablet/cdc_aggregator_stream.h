@@ -73,11 +73,11 @@ public:
         return CurrentHeartbeat;
     }
 
-    TCdcAggregatorStreamHeartbeatsDiff WriteHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatBySourceDataShardId);
+    TCdcAggregatorStreamHeartbeatsDiff WriteHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatsBySourceDataShardId);
     std::optional<TCdcAggregatorStreamSourcesDiff> ApplyPartitioningChange(const TCdcAggregatorStreamPartitioningChange& change);
 
 private:
-    THashMap<ui64, NPQ::THeartbeat> RegisterHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatBySourceDataShardId);
+    THashMap<ui64, NPQ::THeartbeat> RegisterHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatsBySourceDataShardId);
     std::optional<NPQ::THeartbeat> UpdateCurrentHeartbeatIfNeeded();
 
 private:

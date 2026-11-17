@@ -15,6 +15,7 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 
+#include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -36,6 +37,7 @@
 #include <util/generic/vector.h>
 #include <util/memory/pool.h>
 #include <util/stream/null.h>
+#include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/join.h>
@@ -43,9 +45,12 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
+#include <cmath>
 #include <functional>
 #include <limits>
 #include <memory>
+#include <type_traits>
 #include <utility>
 
 namespace NKikimr::NDataShard {
@@ -950,6 +955,71 @@ TMaybe<TString> RunImport(IImportS3Engine& engine, const TString& source, const 
 
     UNIT_FAIL("import engine did not finish");
     return Nothing();
+}
+
+template <typename T>
+void CheckCsvFloatingPointRoundTrip(NScheme::TTypeId typeId) {
+    using TBits = std::conditional_t<sizeof(T) == sizeof(ui32), ui32, ui64>;
+    auto scheme = MakeUtf8TableScheme();
+    scheme.MutableColumns(1)->SetTypeId(typeId);
+    const TEngineFixture fixture(std::move(scheme));
+    TYdbDumpExportSettings settings;
+    settings.WithColumns(fixture.UserTable->Columns);
+    const auto format = CreateExportDataFormat(std::move(settings));
+    UNIT_ASSERT_C(format->ColumnsOrder({1, 2}), format->GetError());
+
+    const TVector<TMaybe<T>> values = {
+        std::nextafter(T(1), T(2)),
+        T(0.30000000000000004),
+        T(1.2345678901234567),
+        std::numeric_limits<T>::min(),
+        std::numeric_limits<T>::denorm_min(),
+        std::numeric_limits<T>::max(),
+        std::numeric_limits<T>::lowest(),
+        T(0), T(-0.0),
+        std::numeric_limits<T>::infinity(),
+        -std::numeric_limits<T>::infinity(),
+        std::numeric_limits<T>::quiet_NaN(),
+        Nothing(),
+    };
+    TStringStream csv;
+    for (size_t i = 0; i < values.size(); ++i) {
+        const TString key = ToString(i);
+        NTable::IScan::TRow row;
+        row.Init(2);
+        row.Set(0, NTable::ECellOp::Set, TCell(key.data(), key.size()));
+        if (values[i]) {
+            row.Set(1, NTable::ECellOp::Set, TCell::Make(*values[i]));
+        } else {
+            row.Set(1, NTable::ECellOp::Null, TCell());
+        }
+        UNIT_ASSERT_C(format->Collect(row, csv), format->GetError());
+    }
+
+    const TString source = csv.Str();
+    auto engine = fixture.MakeEngine(EDataFormat::YdbDump, source, /*readBatchSize=*/8_KB);
+    size_t restored = 0;
+    const auto error = RunImport(*engine, source,
+        [&](const TVector<TCell>& keys, const TVector<TCell>& cells) -> std::expected<void, TString> {
+            UNIT_ASSERT(restored < values.size());
+            UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(keys.front().AsBuf(), ToString(restored));
+            UNIT_ASSERT_VALUES_EQUAL(cells.size(), 1);
+            const auto& expected = values[restored];
+            UNIT_ASSERT_VALUES_EQUAL(cells.front().IsNull(), !expected);
+            if (expected) {
+                const T actual = cells.front().AsValue<T>();
+                if (std::isnan(*expected)) {
+                    UNIT_ASSERT(std::isnan(actual));
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(std::bit_cast<TBits>(actual), std::bit_cast<TBits>(*expected), "row " << restored);
+                }
+            }
+            ++restored;
+            return {};
+        });
+    UNIT_ASSERT_C(!error, error.GetOrElse(""));
+    UNIT_ASSERT_VALUES_EQUAL(restored, values.size());
 }
 
 // Takes the rows up to the one with the key, which it rejects.
@@ -1955,6 +2025,97 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         UNIT_FAIL("the incompatible Parquet schema was not rejected");
+    }
+
+    Y_UNIT_TEST(CsvRoundTripsFloatPrecision) {
+        CheckCsvFloatingPointRoundTrip<float>(NScheme::NTypeIds::Float);
+    }
+
+    Y_UNIT_TEST(CsvRoundTripsDoublePrecision) {
+        CheckCsvFloatingPointRoundTrip<double>(NScheme::NTypeIds::Double);
+    }
+
+    Y_UNIT_TEST(CsvPreservesJsonDocumentInfinityStringification) {
+        TYdbDumpExportSettings settings;
+        settings.Columns.emplace(1, TUserTable::TUserColumn(
+            NScheme::TTypeInfo(NScheme::NTypeIds::JsonDocument), "", "doc", false));
+        const auto format = CreateExportDataFormat(std::move(settings));
+        UNIT_ASSERT_C(format->ColumnsOrder({1}), format->GetError());
+
+        for (TStringBuf text : {"1e100000000", R"([1e100000000,{"nested":-1e100000000}])"}) {
+            const auto document = std::get<NBinaryJson::TBinaryJson>(
+                NBinaryJson::SerializeToBinaryJson(text, /*allowInf=*/true));
+            NTable::IScan::TRow row;
+            row.Init(1);
+            row.Set(0, NTable::ECellOp::Set, TCell(document.Data(), document.Size()));
+            TStringStream csv;
+            UNIT_ASSERT_C(format->Collect(row, csv), format->GetError());
+            UNIT_ASSERT_VALUES_EQUAL(csv.Str(),
+                TStringBuilder() << '"' << CGIEscapeRet(NBinaryJson::SerializeToJson(document)) << "\"\n");
+        }
+    }
+
+    Y_UNIT_TEST(CsvRoundTripsJsonDocumentPrecision) {
+        auto scheme = MakeUtf8TableScheme();
+        scheme.MutableColumns(1)->SetTypeId(NScheme::NTypeIds::JsonDocument);
+        const TEngineFixture fixture(std::move(scheme));
+        TYdbDumpExportSettings settings;
+        settings.WithColumns(fixture.UserTable->Columns);
+        const auto format = CreateExportDataFormat(std::move(settings));
+        UNIT_ASSERT_C(format->ColumnsOrder({1, 2}), format->GetError());
+
+        const TVector<TMaybe<TString>> documents = {
+            StoredJsonDocument("0.30000000000000004"),
+            StoredJsonDocument("1.0000000000000002"),
+            StoredJsonDocument(R"([{"value":0.30000000000000004}])"),
+            StoredJsonDocument("-0.0"),
+            Nothing(),
+        };
+        TStringStream csv;
+        for (size_t i = 0; i < documents.size(); ++i) {
+            const TString key = ToString(i);
+            NTable::IScan::TRow row;
+            row.Init(2);
+            row.Set(0, NTable::ECellOp::Set, TCell(key.data(), key.size()));
+            if (documents[i]) {
+                row.Set(1, NTable::ECellOp::Set, TCell(documents[i]->data(), documents[i]->size()));
+            } else {
+                row.Set(1, NTable::ECellOp::Null, TCell());
+            }
+            UNIT_ASSERT_C(format->Collect(row, csv), format->GetError());
+        }
+
+        const TString source = csv.Str();
+        UNIT_ASSERT_STRING_CONTAINS(source, "\"3\",\"0\"\n");
+        auto engine = fixture.MakeEngine(EDataFormat::YdbDump, source, /*readBatchSize=*/8_KB);
+        TVector<TMaybe<TString>> restored;
+        const auto error = RunImport(*engine, source,
+            [&](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
+                UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(keys.front().AsBuf(), ToString(restored.size()));
+                UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+                restored.push_back(values.front().IsNull() ? Nothing() : MakeMaybe(TString(values.front().AsBuf())));
+                return {};
+            });
+        UNIT_ASSERT_C(!error, error.GetOrElse(""));
+        UNIT_ASSERT_VALUES_EQUAL(restored.size(), documents.size());
+        UNIT_ASSERT(!restored.back());
+
+        const auto numberBits = [](TStringBuf document) {
+            const auto root = NBinaryJson::TBinaryJsonReader::Make(document)->GetRootCursor();
+            const double number = root.GetType() == NBinaryJson::EContainerType::TopLevelScalar
+                ? root.GetElement(0).GetNumber()
+                : root.GetElement(0).GetContainer().Lookup("value")->GetNumber();
+            return std::bit_cast<ui64>(number);
+        };
+        for (size_t i = 0; i + 1 < documents.size(); ++i) {
+            UNIT_ASSERT_C(restored[i], "row " << i);
+            const ui64 originalBits = numberBits(*documents[i]);
+            const ui64 expectedBits = originalBits == 0x8000000000000000ULL ? 0 : originalBits;
+            UNIT_ASSERT_VALUES_EQUAL_C(numberBits(*restored[i]), expectedBits, "row " << i);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(numberBits(*documents[3]), 0x8000000000000000ULL);
+        UNIT_ASSERT_VALUES_EQUAL(numberBits(*restored[3]), 0);
     }
 
     Y_UNIT_TEST(ParquetRoundTripsDyNumberAndJsonDocument) {

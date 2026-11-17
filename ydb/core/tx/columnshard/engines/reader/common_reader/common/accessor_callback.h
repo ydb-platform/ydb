@@ -33,8 +33,8 @@ public:
             , Request(std::move(request))
             , Step(step)
         {
-            AFL_VERIFY(Manager);
-            AFL_VERIFY(Request);
+            YDB_LOG_VERIFY(Manager);
+            YDB_LOG_VERIFY(Request);
         }
 
         virtual void Start(std::unique_ptr<TDataSourceLease> sourceLease) override;

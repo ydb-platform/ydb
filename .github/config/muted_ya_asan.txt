@@ -1,3 +1,4 @@
+ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.BatchWriteThenReadMultiTabletInterleaved_Seed42_WithRestarts_PDiskFallback
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.BatchWriteThenReadMultiTabletInterleaved_Sequential_WithRestarts_PDiskFallback
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.BatchWriteThenReadMultiTabletInterleaved_Sequential_WithRestarts_Uring
 ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
@@ -15,6 +16,8 @@ ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.Restore
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.RestoreScriptPhysicalGraphOnRetry-ModernChannels
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateStreamingQueryUnderTimeout
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryDdlRetriesUnderSchemeShardRestarts
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationCreationFailure+LocalTopics
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationCreationFailure-LocalTopics
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationDoubleCommitIsOk+LocalTopics
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationDoubleCommitIsOk-LocalTopics
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationRefreshOnCheckpoint
@@ -33,6 +36,7 @@ ydb/core/kqp/ut/olap KqpOlapTiering.EvictionResetTiering
 ydb/core/kqp/ut/olap KqpOlapTiering.LocksInterference
 ydb/core/kqp/ut/olap KqpOlapTiering.OversizedNGrammIndexOnTiering
 ydb/core/kqp/ut/olap KqpOlapTiering.TieringForIndexes-SchemeObjectDisabled
+ydb/core/kqp/ut/olap KqpOlapTiering.TieringForIndexes-SchemeObjectEnabled
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
@@ -84,6 +88,7 @@ ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.Repla
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery-NewFirst
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery+Drop
 ydb/core/tx/schemeshard/ut_stats TStoragePoolsStatsPersistence.DatabaseUsageAfterRestartDuringMoveWithShardIdxStats
+ydb/core/viewer/ut Viewer.ClusterBridgePileQueryMatrix
 ydb/core/viewer/ut unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]

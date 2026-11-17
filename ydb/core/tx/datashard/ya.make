@@ -530,6 +530,7 @@ ELSE()
     PEERDIR(
         contrib/libs/apache/arrow
         ydb/core/formats/arrow
+        ydb/library/table_digest
     )
 ENDIF()
 

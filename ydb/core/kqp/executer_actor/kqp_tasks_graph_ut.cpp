@@ -737,7 +737,7 @@ private:
     }
 
     // Sends TEvCompileRequest directly to the compile service and returns the
-    // full TKqpCompileResult (including QueryAst).
+    // full TKqpCompileResult (including the prepared physical query).
     // AddObserver cannot be used here: with UseRealThreads=true, actor-to-actor
     // sends bypass the test-runtime observer hook.
     TKqpCompileResult::TConstPtr CompileQueryFull(const TString& sql) {
@@ -762,7 +762,6 @@ private:
                 TMaybe<TKqpQueryId>(std::move(queryId)),
                 /*keepInCache*/          true,
                 /*isQueryActionPrepare*/ false,
-                /*perStatementResult*/   false,
                 /*deadline*/             TInstant::Max(),
                 /*dbCounters*/           nullptr,
                 // GUCSettings must be non-null: compile actor calls ->ExportToJson().

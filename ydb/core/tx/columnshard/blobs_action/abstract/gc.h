@@ -40,7 +40,7 @@ protected:
 
 public:
     void AddSharedBlobToNextIteration(const TUnifiedBlobId& blobId, const TTabletId ownerTabletId) {
-        AFL_VERIFY(BlobsToRemove.RemoveBorrowed(ownerTabletId, blobId));
+        YDB_LOG_VERIFY(BlobsToRemove.RemoveBorrowed(ownerTabletId, blobId));
     }
 
     void OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs);

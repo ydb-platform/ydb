@@ -70,8 +70,20 @@ The cost-based optimizer relies on table statistics and individual column statis
 
 The current set of table statistics includes:
 
+<<<<<<< HEAD
 * Number of records
 * Table size in bytes
+=======
+{% if feature_flags.enable_column_statistics == false %}
+{% note warning "Experimental feature" %}
+
+This feature is under development and is disabled by default by the [`enable_column_statistics`](../../reference/configuration/feature_flags.md) flag. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the flag may cause errors, cluster instability, or make it impossible to change the YDB version. Do not enable this flag in production clusters. [Learn more](../../reference/configuration/feature_flags.md#experimental).
+
+{% endnote %}
+{% endif %}
+
+For more accurate estimates, collect column statistics: which values occur in each column and how often. For example, the optimizer can use them to estimate how many rows match a `WHERE` condition.
+>>>>>>> 6f22a4d5a17 (add description about feature flag enable_column_statistics)
 
 The current set of column statistics includes:
 

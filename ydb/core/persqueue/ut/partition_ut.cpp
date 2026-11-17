@@ -1703,7 +1703,12 @@ private:
 
     TVector<std::pair<TString, TString>> Sessions;
     THashMap<TString, std::pair<TString, ui64>> Owners;
+
+    TPartition* PartitionPtr = nullptr;
+
 public:
+    THolder<TEvKeyValue::TEvRequest> LastKvRequest;
+
     void Init(const TTxBatchingTestParams& params = {})
     {
         TxStep = params.TxStep;
@@ -1733,7 +1738,7 @@ public:
         for (auto i = 0u; i != params.ConsumersCount; i++) {
             partitionParams.Config.Consumers.emplace_back(TCreateConsumerParams{.Consumer="client-" + std::to_string(i), .Offset=0});
         }
-        CreatePartition(std::move(partitionParams));
+        PartitionPtr = CreatePartition(std::move(partitionParams));
         for (const auto& srcId : params.WriterSessions) {
             Owners[srcId] = {GetOwnerCookie(srcId, TActorId{1, Id++}), 0};
         }
@@ -1748,6 +1753,21 @@ public:
         }
 
         ResetBatchCompletion();
+    }
+
+    TPartition& Partition() {
+        UNIT_ASSERT(PartitionPtr != nullptr);
+        return *PartitionPtr;
+    }
+
+    void InjectBodyKeys(ui64 userActId, std::deque<NPQ::TDataKey> bodyKeys) {
+        auto actIter = UserActs.find(userActId);
+        UNIT_ASSERT(!actIter.IsEnd());
+        with_lock(Lock) {
+            auto infoIter = WriteInfoData.find(actIter->second.SupportivePartitionId);
+            UNIT_ASSERT(!infoIter.IsEnd());
+            infoIter->second->BodyKeys = std::move(bodyKeys);
+        }
     }
 
     ui64 GetTxId() {
@@ -1984,7 +2004,9 @@ void TPartitionTxTestHelper::WaitKvRequest() {
         }
     }
     UNIT_ASSERT(ok);
-    return;
+    if (event) {
+        LastKvRequest = std::move(event);
+    }
 }
 
 void TPartitionTxTestHelper::SendKvResponse() {
@@ -4437,6 +4459,13 @@ TClientBlob MakeSinglePartBodyReadBlob(ui64 seqNo, char fill) {
     };
 }
 
+TClientBlob MakeSinglePartBodyReadBlobWithLmc(ui64 seqNo, char fill, ui32 logicalMessageCount) {
+    auto blob = MakeSinglePartBodyReadBlob(seqNo, fill);
+    blob.LogicalMessageCount = logicalMessageCount;
+    blob.IsBatch = true;
+    return blob;
+}
+
 TClientBlob MakeMultipartBodyReadBlob(ui64 seqNo, ui16 partNo, ui16 totalParts, ui32 bytesPerPart, char fill) {
     const ui32 totalSize = bytesPerPart * totalParts;
     TString data(bytesPerPart, fill);
@@ -4458,6 +4487,15 @@ TString SerializePackedBatchForReadBodyTest(TBatch batch) {
     batch.Pack();
     TString raw;
     batch.SerializeTo(raw);
+    return raw;
+}
+
+TString SerializePackedBatchesForReadBodyTest(std::vector<TBatch> batches) {
+    TString raw;
+    for (auto& batch : batches) {
+        batch.Pack();
+        batch.SerializeTo(raw);
+    }
     return raw;
 }
 
@@ -4498,7 +4536,8 @@ TReadInfo MakeReadInfoForAddBlobsFromBodyTest(
     ui16 partNo = 0,
     ui64 messageCountLimit = kAddBlobsFromBodyDefaultMsgLimit,
     ui32 byteSizeLimit = kAddBlobsFromBodyDefaultByteLimit,
-    ui64 readTimestampMs = 0)
+    ui64 readTimestampMs = 0,
+    bool readToBlobEnd = true)
 {
     return {
         TString("user"),
@@ -4508,7 +4547,7 @@ TReadInfo MakeReadInfoForAddBlobsFromBodyTest(
         partNo,
         messageCountLimit,
         byteSizeLimit,
-        true, // readToBlobEnd
+        readToBlobEnd,
         ui64{0},
         readTimestampMs,
         TDuration::Zero(),

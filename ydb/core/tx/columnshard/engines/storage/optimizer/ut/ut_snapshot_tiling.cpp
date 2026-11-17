@@ -100,6 +100,8 @@ struct TFixture {
     TCore Core;
     /// Inputs of running tasks, as the engine's locks manager would report them.
     THashSet<ui64> Locked;
+    /// How often the core asked, for the tests of what a request scans.
+    mutable ui64 LockQueries = 0;
 
     explicit TFixture(TSnapshotTilingSettings settings = TestSettings())
         : Core(std::move(settings), Counters)
@@ -139,6 +141,7 @@ struct TFixture {
     }
 
     bool IsLocked(const TTestPortion::TConstPtr& p) const {
+        ++LockQueries;
         return Locked.contains(p->GetPortionId());
     }
 
@@ -1157,6 +1160,80 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         }
     }
 
+    Y_UNIT_TEST(IdealSweepStopsAtItsStepCap) {
+        // The dry sweep considers at most ideal_sweep_budgets portion budgets of candidates: two budgets of four here.
+        auto settings = TestSettings();
+        settings.SnapshotTaskPortions = 4;
+        settings.IdealSweepBudgets = 2;
+        TFixture f(std::move(settings));
+        f.Load({ Portion(1, 1'000'000, 1'000'009, 10) });
+        for (ui64 i = 0; i < 100; ++i) {
+            f.Add(Portion(100 + i, 10 * i, 10 * i + 15, 11));
+        }
+        const auto task = f.TakeAdvance();
+        UNIT_ASSERT(task);
+        UNIT_ASSERT(task->Reason == ETaskReason::AdvancePrefix);
+        UNIT_ASSERT(task->StopCause == EStopCause::PortionsLimit);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "[40 ");
+        // Four taken, then the one over the cap and seven more considered, with candidates left behind them.
+        UNIT_ASSERT_VALUES_EQUAL(task->IdealBytes, 12 * LARGE);
+        UNIT_ASSERT(task->IdealCapped);
+    }
+
+    Y_UNIT_TEST(WideTargetOverManyNarrowPortionsTakesTheBudget) {
+        // The sweep reads its candidates lazily: the wide target uncovers two hundred narrow portions at once, and the
+        // task takes the fifteen leftmost, in key order, before the budget stops it.
+        TFixture f;
+        f.Load({ Portion(1, 1'000'000, 1'000'009, 10) });
+        f.Add(Portion(2, 0, 10'000, 11));
+        for (ui64 i = 0; i < 200; ++i) {
+            f.Add(Portion(100 + i, 50 * i, 50 * i + 9, 12));
+        }
+        const auto task = f.TakeAdvance();
+        UNIT_ASSERT(task);
+        UNIT_ASSERT(task->Reason == ETaskReason::AdvancePrefix);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 16);
+        std::vector<ui64> expected{ 2 };
+        for (ui64 i = 0; i < 15; ++i) {
+            expected.push_back(100 + i);
+        }
+        UNIT_ASSERT_EQUAL(f.Ids(*task), expected);
+        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "[750 ");
+        UNIT_ASSERT(task->IdealCapped);
+        UNIT_ASSERT_VALUES_EQUAL(task->IdealBytes, 8 * 64'000);
+    }
+
+    Y_UNIT_TEST(BlockedTargetsAreNotScannedAgainUntilSomethingChanges) {
+        TFixture f;
+        f.Load({ Portion(1, 0, 999, 10) });
+        // The first target takes the line portion; a hundred more behind it need the same one.
+        f.Add(Portion(2, 5, 6, 11));
+        const auto first = f.TakeAdvance();
+        UNIT_ASSERT(first);
+        UNIT_ASSERT_EQUAL(f.Ids(*first), (std::vector<ui64>{ 1, 2 }));
+        for (ui64 i = 0; i < 100; ++i) {
+            f.Add(Portion(100 + i, 10 + 2 * i, 11 + 2 * i, 12 + i));
+        }
+        f.LockQueries = 0;
+        UNIT_ASSERT(!f.TakeAdvance());
+        // Each portion is asked about once per request: the two held inputs at the re-sync, then each target.
+        UNIT_ASSERT_C(f.LockQueries <= 103, f.LockQueries);
+        // Fresh arrivals behind the blocked targets do not bring them back into the scan.
+        f.Add(Portion(300, 500, 501, 200));
+        f.LockQueries = 0;
+        UNIT_ASSERT(!f.TakeAdvance());
+        UNIT_ASSERT_C(f.LockQueries <= 5, f.LockQueries);
+        // The first task finishes: everything is scanned again, and the oldest blocked target goes through with the
+        // line portion and the fourteen targets after it that fit.
+        f.Finish(*first, { LinePortion(5, 0, 999, 10) });
+        const auto second = f.TakeAdvance();
+        UNIT_ASSERT(second);
+        UNIT_ASSERT_VALUES_EQUAL(second->Portions.size(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(f.Ids(*second)[0], 5);
+        UNIT_ASSERT_VALUES_EQUAL(f.Ids(*second)[1], 100);
+    }
+
     Y_UNIT_TEST(EveryIntersectingPortionOfTheLevelJoins) {
         TFixture f;
         f.Load({ Portion(1, 1'000, 1'009, 10) });
@@ -1646,6 +1723,35 @@ Y_UNIT_TEST_SUITE(SnapshotTilingBench) {
                 found += take().has_value();
             }
             Cerr << "TakeNextTask x100 more: " << Micros(timer, 100) << " us each, found " << found << Endl;
+        }
+    }
+
+    /// The advance window over a wide target covering many narrow portions (2026-11-12): the sweep gathered all of them
+    /// before taking sixteen. Prints the cost of one composition.
+    Y_UNIT_TEST(AdvanceWindowOverAWideTarget) {
+        for (const ui64 narrow : { 2'000, 20'000 }) {
+            NTiling::TCounters counters;
+            TRowCore core(TestSettings(), counters);
+            core.UpdateClock({ .Now = 1'000, .SettledBefore = 990 });
+            core.ModifyPortions({ RowPortion(1, 100'000'000, 100'000'009, 10, LARGE) }, {});
+            std::vector<TRowPortion::TPtr> added;
+            added.push_back(RowPortion(2, 0, narrow * 100, 11, LARGE));
+            for (ui64 i = 0; i < narrow; ++i) {
+                added.push_back(RowPortion(100 + i, i * 100, i * 100 + 50, 12, LARGE));
+            }
+            THPTimer timer;
+            core.ModifyPortions(added, {});
+            Cerr << "wide target over " << narrow << " narrow portions: add " << timer.Passed() * 1e3 << " ms";
+            const auto isLocked = [](const TRowPortion::TConstPtr&) {
+                return false;
+            };
+            timer.Reset();
+            const auto task = core.TakeAdvanceTask(isLocked);
+            Cerr << ", compose advance " << timer.Passed() * 1e3 << " ms" << Endl;
+            UNIT_ASSERT(task);
+            UNIT_ASSERT(task->Reason == ETaskReason::AdvancePrefix);
+            UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 16);
+            UNIT_ASSERT(task->IdealCapped);
         }
     }
 

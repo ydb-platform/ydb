@@ -19,6 +19,7 @@
 #include <util/string/builder.h>
 
 #include <algorithm>
+#include <bitset>
 #include <concepts>
 #include <iterator>
 #include <optional>
@@ -50,13 +51,64 @@ struct TByEndKey {
     }
 };
 
-/// Order of the set behind S (decision 3): (RecordSnapshotMin, end key, id).
+/// Order by (start key, end key, id): the sweep order of an advance window among the portions starting inside it
+/// (2026-11-12); heterogeneous lookup by a key finds the first portion starting at or after it.
+template <std::totally_ordered TKey, typename TPortion>
+struct TByStartKey {
+    using is_transparent = void;
+
+    bool operator()(const typename TPortion::TConstPtr& left, const typename TPortion::TConstPtr& right) const {
+        const auto leftStart = left->IndexKeyStart();
+        const auto rightStart = right->IndexKeyStart();
+        if (leftStart < rightStart) {
+            return true;
+        }
+        if (rightStart < leftStart) {
+            return false;
+        }
+        const auto leftEnd = left->IndexKeyEnd();
+        const auto rightEnd = right->IndexKeyEnd();
+        if (leftEnd < rightEnd) {
+            return true;
+        }
+        if (rightEnd < leftEnd) {
+            return false;
+        }
+        return left->GetPortionId() < right->GetPortionId();
+    }
+
+    bool operator()(const typename TPortion::TConstPtr& left, const TKey& right) const {
+        return left->IndexKeyStart() < right;
+    }
+
+    bool operator()(const TKey& left, const typename TPortion::TConstPtr& right) const {
+        return left < right->IndexKeyStart();
+    }
+};
+
+/// Order of the set behind S (decision 3): (RecordSnapshotMin, end key, id). The snapshots decide nearly every comparison,
+/// so the end keys, which the engine's accessors build as rows on every call, are read only when they tie (2026-11-12).
 template <typename TPortion>
 struct TBySnapshot {
     template <typename TLeft, typename TRight>
     bool operator()(const TLeft& left, const TRight& right) const {
-        return std::tuple(left->RecordSnapshotMin(), left->IndexKeyEnd(), left->GetPortionId()) <
-               std::tuple(right->RecordSnapshotMin(), right->IndexKeyEnd(), right->GetPortionId());
+        const auto leftSnapshot = left->RecordSnapshotMin();
+        const auto rightSnapshot = right->RecordSnapshotMin();
+        if (leftSnapshot < rightSnapshot) {
+            return true;
+        }
+        if (rightSnapshot < leftSnapshot) {
+            return false;
+        }
+        const auto leftEnd = left->IndexKeyEnd();
+        const auto rightEnd = right->IndexKeyEnd();
+        if (leftEnd < rightEnd) {
+            return true;
+        }
+        if (rightEnd < leftEnd) {
+            return false;
+        }
+        return left->GetPortionId() < right->GetPortionId();
     }
 };
 
@@ -150,6 +202,7 @@ public:
     using TSettings = TSnapshotTilingSettings;
     using TClock = NSnapshotTiling::TClock<TSnapshot>;
     using TEndSorted = TSet<TConstPtr, TByEndKey<TKey, TPortion>>;
+    using TStartSorted = TSet<TConstPtr, TByStartKey<TKey, TPortion>>;
     using TSnapshotSorted = TSet<TConstPtr, TBySnapshot<TPortion>>;
     using TTask = NSnapshotTiling::TTask<TKey, TPortion>;
     using TIsLocked = TFunctionRef<bool(const TConstPtr&)>;
@@ -165,9 +218,15 @@ public:
     struct TTreeLevel {
         /// Unlocked portions by (end key, id): the width walk (decision 10).
         TEndSorted Portions;
+        /// The same by (start key, end key, id): the advance window reads the portions starting inside it in sweep order
+        /// (2026-11-12).
+        TStartSorted Starts;
         /// Unlocked portions: height, overload and stack queries (decision 14).
         TIntersectionTree<TKey, ui64> Tree;
     };
+
+    /// The units a batch of changes touched; their counters are refreshed once, at the end of the batch (2026-11-12).
+    using TTouchedLevels = std::bitset<256>;
 
     TSnapshotTiling(TSettings settings, const NTiling::TCounters& counters)
         : Settings(std::move(settings))
@@ -185,17 +244,19 @@ public:
     /// Engine entry point: one batch of removals and additions. The first batch is the bootstrap load (decisions 11 to 13).
     void ModifyPortions(const std::vector<TPtr>& add, const std::vector<TConstPtr>& remove) {
         UnstallAdvance();
+        TTouchedLevels touched;
         for (const auto& p : remove) {
-            RemovePortion(p);
+            RemovePortion(p, touched);
         }
         if (FirstLoad) {
             FirstLoad = false;
-            InitialAddPortions(add);
+            InitialAddPortions(add, touched);
         } else {
             for (const auto& p : add) {
-                AddPortion(p);
+                AddPortion(p, touched);
             }
         }
+        RefreshCounters(touched);
     }
 
     /// The clock moves the delay source (decision 18), so the node's buckets are refreshed here as well as on portion changes.
@@ -215,12 +276,16 @@ public:
                 restore.push_back(id);
             }
         }
+        if (restore.empty()) {
+            return;
+        }
+        TTouchedLevels touched;
         for (const ui64 id : restore) {
-            Restore(id);
+            Restore(id, touched);
         }
-        if (!restore.empty()) {
-            UnstallAdvance();
-        }
+        RefreshCounters(touched);
+        UnstallAdvance();
+        ResetAdvanceScan();
     }
 
     /// The next task from the accumulator, a tree level or, once S lags the clock by the delay trigger, the advance as a
@@ -228,43 +293,80 @@ public:
     /// and come back only through Resync, which runs first (decision 14). Nothing at or above a trigger means no task;
     /// the idle advance is a separate entry point.
     std::optional<TTask> TakeNextTask(TIsLocked isLocked) {
-        Resync(isLocked);
-        std::optional<TTask> best;
-        TConstPtr advanceTarget;
-        const auto consider = [&best](std::optional<TTask>&& candidate) {
-            if (candidate && (!best || best->Priority < candidate->Priority)) {
-                best = std::move(candidate);
-            }
+        const TLockMemo memo(isLocked);
+        const TIsLocked cached(memo);
+        Resync(cached);
+
+        // The sources at their triggers in priority order, composed one at a time until one succeeds (2026-11-12): before,
+        // every source was composed and the best picked, so a full accumulator task was built on every request only to lose
+        // to a level or to the gap rule. Equal priorities keep the old order: the tree levels from the bottom, then the
+        // accumulator, then the advance. A level or the accumulator below the node's gap is not composed; the advance below
+        // the gap still is, so that a blocked one stalls as before (decision 18), and is discarded afterwards.
+        struct TSource {
+            TOptimizationPriority Priority;
+            /// A tree level, ACCUMULATOR_LEVEL, or LINE_LEVEL for the advance.
+            ui8 Level = 0;
         };
+
+        std::vector<TSource> sources;
         for (ui8 level = FIRST_TREE_LEVEL; level <= Settings.TopLevel(); ++level) {
-            consider(BuildLevelTask(level, isLocked));
-        }
-        consider(BuildAccumulatorTask(isLocked));
-        if (const auto delayPriority = DelayPriority(); delayPriority && (!best || best->Priority < *delayPriority)) {
-            if (auto advance = BuildAdvanceTask(isLocked)) {
-                advance->first.Priority = *delayPriority;
-                best = std::move(advance->first);
-                advanceTarget = advance->second;
-            } else {
-                StallAdvance();
+            if (const auto priority = LevelPriority(level)) {
+                sources.push_back(TSource{ .Priority = *priority, .Level = level });
             }
         }
-        if (!best) {
-            return std::nullopt;
+        if (const auto priority = AccumulatorPriority()) {
+            sources.push_back(TSource{ .Priority = *priority, .Level = ACCUMULATOR_LEVEL });
         }
+        if (const auto priority = DelayPriority()) {
+            sources.push_back(TSource{ .Priority = *priority, .Level = LINE_LEVEL });
+        }
+        std::stable_sort(sources.begin(), sources.end(), [](const TSource& left, const TSource& right) {
+            return right.Priority < left.Priority;
+        });
         const i64 maxOverloadLevel = Counters.GetTilingCounters().Portions->GetMaxOverloadLevel();
-        if (best->Priority.GetLevel() + static_cast<i64>(Settings.MaxPriorityGap) < maxOverloadLevel) {
+        const auto belowGap = [&](const TOptimizationPriority& priority) {
+            return priority.GetLevel() + static_cast<i64>(Settings.MaxPriorityGap) < maxOverloadLevel;
+        };
+        bool heldBack = false;
+        for (const TSource& source : sources) {
+            std::optional<TTask> task;
+            TConstPtr advanceTarget;
+            if (source.Level == LINE_LEVEL) {
+                if (auto advance = BuildAdvanceTask(cached)) {
+                    task = std::move(advance->first);
+                    task->Priority = source.Priority;
+                    advanceTarget = advance->second;
+                } else {
+                    StallAdvance();
+                }
+            } else if (belowGap(source.Priority)) {
+                heldBack = true;
+                continue;
+            } else if (source.Level == ACCUMULATOR_LEVEL) {
+                task = BuildAccumulatorTask(cached);
+            } else {
+                task = BuildLevelTask(source.Level, cached);
+            }
+            if (!task) {
+                continue;
+            }
+            if (belowGap(task->Priority)) {
+                heldBack = true;
+                continue;
+            }
+            Counters.GeneratedTasksPriorityLevel->Collect(task->Priority.GetLevel());
+            if (advanceTarget) {
+                RaisePlacementThreshold(advanceTarget->RecordSnapshotMin());
+                RecordAdvance(*task);
+            }
+            RecordStop(*task);
+            HandOut(*task);
+            return task;
+        }
+        if (heldBack) {
             Counters.TasksSkippedByPriorityGap->Inc();
-            return std::nullopt;
         }
-        Counters.GeneratedTasksPriorityLevel->Collect(best->Priority.GetLevel());
-        if (advanceTarget) {
-            RaisePlacementThreshold(advanceTarget->RecordSnapshotMin());
-            RecordAdvance(*best);
-        }
-        RecordStop(*best);
-        HandOut(*best);
-        return best;
+        return std::nullopt;
     }
 
     /// The advance regardless of the delay trigger (decisions 19 to 21, 26): the first portion of the set that is at least
@@ -272,8 +374,10 @@ public:
     /// through TakeNextTask once S lags the clock by the trigger (decision 18); this entry point serves the tests and, in
     /// PR 2, a forced request. A target whose mandatory input is held by another task is skipped and retried later.
     std::optional<TTask> TakeAdvanceTask(TIsLocked isLocked) {
-        Resync(isLocked);
-        auto advance = BuildAdvanceTask(isLocked);
+        const TLockMemo memo(isLocked);
+        const TIsLocked cached(memo);
+        Resync(cached);
+        auto advance = BuildAdvanceTask(cached);
         if (!advance) {
             StallAdvance();
             return std::nullopt;
@@ -423,22 +527,15 @@ public:
     }
 
     void AddPortion(const TPtr& p) {
-        if (!IsTracked(*p)) {
-            return;
-        }
-        const ui64 id = p->GetPortionId();
-        AFL_VERIFY(!Registry.contains(id))("portion_id", id)("reason", "tiling-s_portion_already_exists");
-        Place(p);
+        TTouchedLevels touched;
+        AddPortion(p, touched);
+        RefreshCounters(touched);
     }
 
     void RemovePortion(const TConstPtr& p) {
-        if (!IsTracked(*p)) {
-            return;
-        }
-        const ui64 id = p->GetPortionId();
-        const auto it = Registry.find(id);
-        AFL_VERIFY(it != Registry.end())("portion_id", id)("reason", "tiling-s_remove_unknown_portion");
-        Erase(it);
+        TTouchedLevels touched;
+        RemovePortion(p, touched);
+        RefreshCounters(touched);
     }
 
     /// S for forced requests (decision 1): the oldest portion outside the line, in-flight inputs included; nothing when
@@ -580,6 +677,10 @@ public:
                         return TConclusionStatus::Fail(TStringBuilder() << "portion " << id << " has level " << (ui32)entry.Level);
                     }
                     found = TreeLevelAt(entry.Level).Portions.contains(entry.Portion);
+                    if (found != TreeLevelAt(entry.Level).Starts.contains(entry.Portion)) {
+                        return TConclusionStatus::Fail(
+                            TStringBuilder() << "portion " << id << " is in only one of the two sets of level " << (ui32)entry.Level);
+                    }
                     break;
             }
             if (found != expectedInStructure) {
@@ -615,6 +716,10 @@ public:
             const auto& treeLevel = TreeLevelAt(level);
             if (treeLevel.Portions.empty() != (treeLevel.Tree.GetMaxCount() == 0)) {
                 return TConclusionStatus::Fail(TStringBuilder() << "level " << (ui32)level << " set and tree disagree on emptiness");
+            }
+            if (treeLevel.Portions.size() != treeLevel.Starts.size()) {
+                return TConclusionStatus::Fail(TStringBuilder() << "level " << (ui32)level << " holds " << treeLevel.Portions.size()
+                                                                << " portions by end key and " << treeLevel.Starts.size() << " by start key");
             }
         }
         return TConclusionStatus::Success();
@@ -668,6 +773,14 @@ private:
     /// Decision 18 (2026-10-28): set when the advance was asked and composed nothing, cleared by any portion change or
     /// restored input.
     bool AdvanceStalled = false;
+    /// Where the advance's scan of the settled targets resumes (2026-11-12): every target before it, in the order of the
+    /// set behind S, was found blocked by the last scan, by a held line portion covering its window's left border, by a
+    /// missing neighbour or by a lock, and stays blocked until something that could free it happens: a removal, a restored
+    /// input, an addition to the line, or an addition that sorts before the position; each of those drops the position.
+    /// The fresh writes that arrive several times a second sort after it and keep it, where before every request scanned
+    /// every blocked target again. A lock released by none of those, an aborted eviction, say, is noticed at the next one.
+    /// Read and set by the const composition path.
+    mutable std::optional<TConstPtr> AdvanceScanFrom;
 
     static bool IsTracked(const TPortion& p) {
         switch (p.GetProduced()) {
@@ -707,6 +820,53 @@ private:
     bool IsSmall(const TPortion& p) const {
         return p.GetTotalBlobBytes() < Settings.AccumulatorPortionSizeLimit;
     }
+
+    void AddPortion(const TPtr& p, TTouchedLevels& touched) {
+        if (!IsTracked(*p)) {
+            return;
+        }
+        const ui64 id = p->GetPortionId();
+        AFL_VERIFY(!Registry.contains(id))("portion_id", id)("reason", "tiling-s_portion_already_exists");
+        Place(p, touched);
+    }
+
+    void RemovePortion(const TConstPtr& p, TTouchedLevels& touched) {
+        if (!IsTracked(*p)) {
+            return;
+        }
+        const ui64 id = p->GetPortionId();
+        const auto it = Registry.find(id);
+        AFL_VERIFY(it != Registry.end())("portion_id", id)("reason", "tiling-s_remove_unknown_portion");
+        Erase(it, touched);
+        // The removed portion may be the held line portion, or the locked target, that blocked the advance's scan.
+        ResetAdvanceScan();
+    }
+
+    void ResetAdvanceScan() const {
+        AdvanceScanFrom.reset();
+    }
+
+    /// The lock state is fixed for one synchronous request, and the same portion is asked about by the re-sync, the level
+    /// stacks, the top-ups and the sweeps: each answer of the engine's locks manager, a walk over its process locks, is
+    /// kept for the request (2026-11-12).
+    class TLockMemo {
+        const TIsLocked IsLocked;
+        mutable THashMap<ui64, bool> Answers;
+
+    public:
+        explicit TLockMemo(TIsLocked isLocked)
+            : IsLocked(isLocked)
+        {
+        }
+
+        bool operator()(const TConstPtr& p) const {
+            const auto [it, inserted] = Answers.try_emplace(p->GetPortionId(), false);
+            if (inserted) {
+                it->second = IsLocked(p);
+            }
+            return it->second;
+        }
+    };
 
     /// Levels 1 to 10 from the trigger to the overload edge, both inclusive (decision 16); at and above the edge the
     /// unit is critical, level 10, and the raw count stays as the weight so that the heavier backlog ranks first.
@@ -788,6 +948,21 @@ private:
         return true;
     }
 
+    /// Whether the task can take nothing more under the budget of its kind, whatever the candidate (2026-11-12): checked
+    /// before a scan, so that a full task does not walk the portions it would reject for other reasons one by one.
+    bool IsFull(TTask& task) const {
+        const TBudget budget = BudgetFor(task);
+        if (task.Portions.size() >= budget.Portions) {
+            task.StopCause = EStopCause::PortionsLimit;
+            return true;
+        }
+        if (task.Bytes >= budget.Bytes) {
+            task.StopCause = EStopCause::BytesLimit;
+            return true;
+        }
+        return false;
+    }
+
     static void Append(TTask& task, const TConstPtr& p) {
         task.Bytes += p->GetTotalRawBytes();
         task.Portions.push_back(p);
@@ -835,6 +1010,9 @@ private:
     /// Decision 17: portions of other tree levels whose whole key range lies inside the task's union range join
     /// while the budget lasts, lower levels first; the line and the accumulator never join.
     void TopUp(TTask& task, const ui8 ownLevel, TIsLocked isLocked) const {
+        if (IsFull(task)) {
+            return;
+        }
         TKey unionStart = task.Portions.front()->IndexKeyStart();
         TKey unionEnd = task.Portions.front()->IndexKeyEnd();
         for (const auto& p : task.Portions) {
@@ -876,6 +1054,9 @@ private:
         task.TargetLevel = ACCUMULATOR_LEVEL;
         task.Priority = *priority;
         for (const auto& p : Accumulator) {
+            if (task.Portions.size() >= 2 && IsFull(task)) {
+                break;
+            }
             if (isLocked(p)) {
                 continue;
             }
@@ -891,9 +1072,13 @@ private:
     }
 
     /// The advance task and its target, not yet handed out: the first settled, unlocked portion of the set that no task
-    /// holds and whose composition succeeds (decisions 19 to 21).
+    /// holds and whose composition succeeds (decisions 19 to 21). The scan resumes where the last one found its target or
+    /// gave up (2026-11-12): everything before is blocked until the set changes in a way that could free it, see
+    /// AdvanceScanFrom.
     std::optional<std::pair<TTask, TConstPtr>> BuildAdvanceTask(TIsLocked isLocked) const {
-        for (const auto& candidate : OutsideUnlocked) {
+        auto it = AdvanceScanFrom ? OutsideUnlocked.lower_bound(*AdvanceScanFrom) : OutsideUnlocked.begin();
+        for (; it != OutsideUnlocked.end(); ++it) {
+            const TConstPtr& candidate = *it;
             if (Clock.SettledBefore < candidate->RecordSnapshotMin()) {
                 break;   // ordered by snapshot: everything from here on is younger than L
             }
@@ -901,8 +1086,16 @@ private:
                 continue;
             }
             if (auto task = ComposeAdvance(Registry.at(candidate->GetPortionId()), isLocked)) {
+                AdvanceScanFrom = candidate;
                 return std::make_pair(std::move(*task), candidate);
             }
+        }
+        // Blocked up to the first unsettled target, or to the end: the last one is looked at again, cheaply, so that
+        // the position stays inside the set.
+        if (it != OutsideUnlocked.end()) {
+            AdvanceScanFrom = *it;
+        } else if (!OutsideUnlocked.empty()) {
+            AdvanceScanFrom = *std::prev(it);
         }
         return std::nullopt;
     }
@@ -949,8 +1142,8 @@ private:
         TConstPtr Portion;
         /// The start clamped to the window's left border: the order of the sweep.
         TKey EffectiveStart;
-        /// The end key and the id, read once when the candidate is pushed (2026-11-08): the engine's key accessors build a
-        /// row on every call, and the comparison below runs on every heap step.
+        /// The end key and the id, read once when the candidate is made (2026-11-08): the engine's key accessors build a
+        /// row on every call, and the comparison below runs on every step.
         TKey End;
         ui64 Id = 0;
         bool Line = false;
@@ -977,38 +1170,139 @@ private:
         return a.Id < b.Id;
     }
 
-    /// The candidates of a sweep, as a heap in sweep order (2026-11-08). Before, a vector scanned with min_element and
-    /// erased from on every step made a sweep quadratic in its candidates, and its comparator built four keys per
-    /// comparison; on the log load, with the dry sweep chaining through thousands of portions, that took thirteen cores
-    /// of write-completion time.
-    class TSweepQueue {
-        std::vector<TCandidate> Heap;
+    /// The candidates of a sweep in sweep order, read lazily (2026-11-12) from three kinds of source: the stack covering the
+    /// left border, read once from every level's tree and sorted; the line from the left border on; and every level's
+    /// start-ordered set from just beyond the left border. Each source yields its portions in sweep order, so the next
+    /// candidate is the least of the sources' heads that starts inside the window. A head beyond the window waits and comes
+    /// out in order once the window has grown to it: everything taken before started no further right than the old border.
+    /// A step costs the sources, a dozen at most, not the candidates. Before (2026-11-08), every portion intersecting the
+    /// window was pushed into a heap before the first was taken, so a wide target over thousands of small portions paid for
+    /// all of them to take sixteen, and every growth of the window read the whole stack at its new border again, which
+    /// made a sweep over nested spans quadratic.
+    class TSweepCursors {
+        const TSnapshotTiling& Owner;
+        const TKey Left;
+        const ui64 TargetId;
+        const TIsLocked IsLocked;
+        std::vector<TCandidate> Stack;
+        size_t StackNext = 0;
+        typename TEndSorted::const_iterator LineNext;
+        std::optional<TCandidate> LineHead;
+        std::vector<typename TStartSorted::const_iterator> StartNext;
+        std::vector<std::optional<TCandidate>> StartHeads;
 
-        static bool After(const TCandidate& a, const TCandidate& b) {
-            return SweepsBefore(b, a);
+        TCandidate Make(const TConstPtr& p, const bool line) const {
+            TKey effectiveStart = p->IndexKeyStart();
+            if (effectiveStart < Left) {
+                effectiveStart = Left;
+            }
+            return TCandidate{ .Portion = p, .EffectiveStart = std::move(effectiveStart), .End = p->IndexKeyEnd(), .Id = p->GetPortionId(),
+                .Line = line };
+        }
+
+        /// Line portions come out whatever their state and are judged when taken: a held one cuts the window.
+        void FillLine() {
+            if (!LineHead && LineNext != Owner.Line.end()) {
+                LineHead = Make(*LineNext, true);
+                ++LineNext;
+            }
+        }
+
+        /// Tree portions come out unlocked only, and never the target.
+        void FillStart(const size_t index) {
+            auto& head = StartHeads[index];
+            auto& next = StartNext[index];
+            const TStartSorted& starts = Owner.TreeLevelAt(static_cast<ui8>(FIRST_TREE_LEVEL + index)).Starts;
+            while (!head && next != starts.end()) {
+                const TConstPtr& p = *next;
+                ++next;
+                if (p->GetPortionId() != TargetId && !IsLocked(p)) {
+                    head = Make(p, false);
+                }
+            }
         }
 
     public:
-        bool Empty() const {
-            return Heap.empty();
+        TSweepCursors(const TSnapshotTiling& owner, const TKey& left, const ui64 targetId, TIsLocked isLocked)
+            : Owner(owner)
+            , Left(left)
+            , TargetId(targetId)
+            , IsLocked(isLocked)
+            , LineNext(owner.Line.lower_bound(left))
+        {
+            for (ui8 level = FIRST_TREE_LEVEL; level <= Owner.Settings.TopLevel(); ++level) {
+                const TTreeLevel& treeLevel = Owner.TreeLevelAt(level);
+                StartNext.push_back(treeLevel.Starts.upper_bound(left));
+                StartHeads.emplace_back();
+                if (treeLevel.Portions.empty()) {
+                    continue;
+                }
+                if (auto range = treeLevel.Tree.FindRange(left)) {
+                    range.ForEachValue([&](const ui64 id) {
+                        if (id != TargetId) {
+                            const TConstPtr& p = Owner.Registry.at(id).Portion;
+                            if (!IsLocked(p)) {
+                                Stack.push_back(Make(p, false));
+                            }
+                        }
+                        return true;
+                    });
+                }
+            }
+            std::sort(Stack.begin(), Stack.end(), SweepsBefore);
         }
 
-        void Push(TCandidate candidate) {
-            Heap.push_back(std::move(candidate));
-            std::push_heap(Heap.begin(), Heap.end(), After);
-        }
-
-        TCandidate Pop() {
-            std::pop_heap(Heap.begin(), Heap.end(), After);
-            TCandidate first = std::move(Heap.back());
-            Heap.pop_back();
-            return first;
+        /// The next candidate starting at or before the border, in sweep order; nothing when every remaining one starts
+        /// beyond it.
+        std::optional<TCandidate> Next(const TKey& right) {
+            TCandidate* best = nullptr;
+            // The source of the least eligible head: -2 the stack, -1 the line, otherwise the index of a tree level.
+            i64 source = 0;
+            const auto offer = [&](TCandidate& candidate, const i64 from) {
+                if (!(right < candidate.EffectiveStart) && (!best || SweepsBefore(candidate, *best))) {
+                    best = &candidate;
+                    source = from;
+                }
+            };
+            if (StackNext < Stack.size()) {
+                offer(Stack[StackNext], -2);
+            }
+            FillLine();
+            if (LineHead) {
+                offer(*LineHead, -1);
+            }
+            for (size_t index = 0; index < StartHeads.size(); ++index) {
+                FillStart(index);
+                if (StartHeads[index]) {
+                    offer(*StartHeads[index], static_cast<i64>(index));
+                }
+            }
+            if (!best) {
+                return std::nullopt;
+            }
+            TCandidate taken = std::move(*best);
+            if (source == -2) {
+                ++StackNext;
+            } else if (source == -1) {
+                LineHead.reset();
+            } else {
+                StartHeads[source].reset();
+            }
+            return taken;
         }
     };
 
     /// How far the dry sweep behind IdealBytes goes: ideal_sweep_budgets snapshot byte budgets, saturating.
     ui64 IdealSweepLimit() const {
         const ui64 budget = Settings.SnapshotTaskBytes;
+        const ui64 factor = Settings.IdealSweepBudgets;
+        return budget > Max<ui64>() / factor ? Max<ui64>() : budget * factor;
+    }
+
+    /// How many candidates the dry sweep considers at most: ideal_sweep_budgets snapshot portion budgets, saturating
+    /// (2026-11-12). The byte cap alone, eight budgets of 256 MB, let it walk tens of thousands of small portions.
+    ui64 IdealSweepSteps() const {
+        const ui64 budget = Settings.SnapshotTaskPortions;
         const ui64 factor = Settings.IdealSweepBudgets;
         return budget > Max<ui64>() / factor ? Max<ui64>() : budget * factor;
     }
@@ -1022,13 +1316,11 @@ private:
     /// held line portion covering the left border blocks the target. When the portion that does not fit covers the left
     /// border itself no cut leaves a non-empty window, so the window closes at the end of the first line portion, the only
     /// one inside, before the first line portion when none was taken yet, or at the target's end without the line.
-    /// The candidates come from cursors that only move right (2026-11-08): the window only grows right, so each level's
-    /// end-ordered set is read on from where the last growth stopped, and only the stack at the new right border is asked
-    /// of the level's tree; a growth step costs the portions it uncovers, not a lookup per level.
+    /// The candidates come from cursors in sweep order (TSweepCursors, 2026-11-12): a step costs the sources, not the
+    /// portions intersecting the window.
     std::optional<TWindow> SweepWindow(TTask& task, const TConstPtr& target, TIsLocked isLocked) const {
         const TKey start = target->IndexKeyStart();
         const TKey end = target->IndexKeyEnd();
-        const ui64 targetId = target->GetPortionId();
         TWindow window{ .Left = start, .Right = end };
         std::optional<TKey> firstLineStart;
         if (const auto first = Line.lower_bound(start); first != Line.end() && !(end < (*first)->IndexKeyStart())) {
@@ -1036,66 +1328,20 @@ private:
             if (*firstLineStart < window.Left) {
                 window.Left = *firstLineStart;
             }
+            // A held line portion covering the left border blocks the target. It is the first candidate the sweep would
+            // take, so it is judged before any candidate is gathered (2026-11-12): behind one held line portion there may
+            // be thousands of blocked targets, and each was scanned on every request.
+            if (!(window.Left < *firstLineStart) && !IsAvailable(*first, isLocked)) {
+                return std::nullopt;
+            }
         }
-        THashSet<ui64> seen{ targetId };
-        TSweepQueue queue;
-        const auto push = [&](const TConstPtr& p, const bool line) {
-            const ui64 id = p->GetPortionId();
-            if (!seen.insert(id).second) {
-                return;
-            }
-            TKey effectiveStart = p->IndexKeyStart();
-            if (effectiveStart < window.Left) {
-                effectiveStart = window.Left;
-            }
-            queue.Push(TCandidate{ .Portion = p, .EffectiveStart = std::move(effectiveStart), .End = p->IndexKeyEnd(), .Id = id, .Line = line });
-        };
-        // Line portions enter the queue whatever their state and are judged when popped: a held one cuts the window.
-        // Tree portions enter unlocked only.
-        auto lineNext = Line.lower_bound(window.Left);
-        std::vector<typename TEndSorted::const_iterator> levelNext;
-        for (ui8 level = FIRST_TREE_LEVEL; level <= Settings.TopLevel(); ++level) {
-            levelNext.push_back(TreeLevelAt(level).Portions.lower_bound(window.Left));
-        }
-        const auto extend = [&](const TKey& to) {
-            for (; lineNext != Line.end() && !(to < (*lineNext)->IndexKeyStart()); ++lineNext) {
-                push(*lineNext, true);
-            }
-            for (ui8 level = FIRST_TREE_LEVEL; level <= Settings.TopLevel(); ++level) {
-                const TTreeLevel& treeLevel = TreeLevelAt(level);
-                if (treeLevel.Portions.empty()) {
-                    continue;
-                }
-                // Portions ending inside the window: the end-ordered set, read on from the last growth.
-                auto& next = levelNext[level - FIRST_TREE_LEVEL];
-                for (; next != treeLevel.Portions.end() && !(to < (*next)->IndexKeyEnd()); ++next) {
-                    if (!isLocked(*next)) {
-                        push(*next, false);
-                    }
-                }
-                // Portions reaching beyond the right border: the stack there. Those that covered the old border too were
-                // pushed by an earlier step and are skipped before their registry lookup.
-                if (auto range = treeLevel.Tree.FindRange(to)) {
-                    range.ForEachValue([&](const ui64 id) {
-                        if (!seen.contains(id)) {
-                            const TConstPtr& p = Registry.at(id).Portion;
-                            if (to < p->IndexKeyEnd() && !isLocked(p)) {
-                                push(p, false);
-                            }
-                        }
-                        return true;
-                    });
-                }
-            }
-        };
-        extend(window.Right);
+        TSweepCursors cursors(*this, window.Left, target->GetPortionId(), isLocked);
         bool neighbourTaken = false;
         std::optional<TKey> lineEnd;
         std::optional<TCandidate> overBudget;
-        while (!queue.Empty()) {
-            TCandidate candidate = queue.Pop();
-            const TConstPtr& p = candidate.Portion;
-            if (candidate.Line && !IsAvailable(p, isLocked)) {
+        while (auto candidate = cursors.Next(window.Right)) {
+            const TConstPtr& p = candidate->Portion;
+            if (candidate->Line && !IsAvailable(p, isLocked)) {
                 if (!(window.Left < p->IndexKeyStart())) {
                     return std::nullopt;
                 }
@@ -1110,41 +1356,42 @@ private:
                 overBudget = std::move(candidate);
                 break;
             }
-            if (candidate.Line) {
+            if (candidate->Line) {
                 window.LineTaken = true;
-                if (!lineEnd || *lineEnd < candidate.End) {
-                    lineEnd = candidate.End;
+                if (!lineEnd || *lineEnd < candidate->End) {
+                    lineEnd = candidate->End;
                 }
             }
-            if (window.Right < candidate.End) {
-                window.Right = candidate.End;
-                extend(window.Right);
+            if (window.Right < candidate->End) {
+                window.Right = candidate->End;
             }
         }
         // The memory shortage (2026-10-26): sweep on without taking anything, to learn what the uncut window would cost,
-        // up to ideal_sweep_budgets budgets (2026-11-08): the walk is diagnostic and must not cost the write path a table.
+        // up to ideal_sweep_budgets budgets of bytes (2026-11-08) and of portions (2026-11-12): the walk is diagnostic and
+        // must not cost the write path a table.
         window.IdealBytes = task.Bytes;
         if (overBudget) {
-            const ui64 limit = IdealSweepLimit();
+            const ui64 bytesLimit = IdealSweepLimit();
+            const ui64 stepsLimit = IdealSweepSteps();
+            ui64 steps = 0;
             TKey dryRight = window.Right;
             const auto consider = [&](const TCandidate& candidate) {
+                ++steps;
                 window.IdealBytes += candidate.Portion->GetTotalRawBytes();
                 if (dryRight < candidate.End) {
                     dryRight = candidate.End;
-                    extend(dryRight);
                 }
             };
             consider(*overBudget);
-            while (!queue.Empty()) {
-                if (window.IdealBytes >= limit) {
+            while (const auto candidate = cursors.Next(dryRight)) {
+                if (window.IdealBytes >= bytesLimit || steps >= stepsLimit) {
                     window.IdealCapped = true;
                     break;
                 }
-                const TCandidate candidate = queue.Pop();
-                if (candidate.Line && !IsAvailable(candidate.Portion, isLocked)) {
+                if (candidate->Line && !IsAvailable(candidate->Portion, isLocked)) {
                     break;
                 }
-                consider(candidate);
+                consider(*candidate);
             }
         }
         if (window.Cut && !(window.Left < *window.Cut)) {
@@ -1370,7 +1617,7 @@ private:
         }
         for (auto it = Accumulator.lower_bound(spanStart); it != Accumulator.end() && !(spanEnd < (*it)->IndexKeyEnd()); ++it) {
             const TConstPtr& p = *it;
-            if (limit && !(p->IndexKeyEnd() < *limit)) {
+            if (IsFull(task) || (limit && !(p->IndexKeyEnd() < *limit))) {
                 break;
             }
             if (p == target || p->IndexKeyStart() < spanStart || isLocked(p)) {
@@ -1390,9 +1637,11 @@ private:
     /// Decision 14: the inputs leave their levels' unlocked structures, and the task's priority is remembered until they
     /// are removed or restored, so that the scheduling pass after an abort still reaches a task request.
     void HandOut(const TTask& task) {
+        TTouchedLevels touched;
         for (const auto& p : task.Portions) {
-            HandOut(p->GetPortionId());
+            HandOut(p->GetPortionId(), touched);
         }
+        RefreshCounters(touched);
         const TOptimizationPriority floor = TOptimizationPriority::Optimization(1);
         const TOptimizationPriority& priority = floor < task.Priority ? task.Priority : floor;
         if (!PendingPriority || *PendingPriority < priority) {
@@ -1402,7 +1651,7 @@ private:
 
     /// Decision 14: an input leaves its level's unlocked structures; the line keeps it visible; the set behind S
     /// keeps it for the forced-request reading.
-    void HandOut(const ui64 id) {
+    void HandOut(const ui64 id, TTouchedLevels& touched) {
         auto& entry = Registry.at(id);
         AFL_VERIFY(!entry.HandedOut)("portion_id", id)("reason", "tiling-s_handed_out_twice");
         entry.HandedOut = true;
@@ -1410,10 +1659,11 @@ private:
         if (entry.Level != LINE_LEVEL) {
             AFL_VERIFY(OutsideUnlocked.erase(entry.Portion))("portion_id", id);
             Detach(entry.Portion, entry.Level);
+            touched.set(entry.Level);
         }
     }
 
-    void Restore(const ui64 id) {
+    void Restore(const ui64 id, TTouchedLevels& touched) {
         auto& entry = Registry.at(id);
         AFL_VERIFY(entry.HandedOut)("portion_id", id)("reason", "tiling-s_restore_not_handed_out");
         entry.HandedOut = false;
@@ -1422,6 +1672,7 @@ private:
         if (entry.Level != LINE_LEVEL) {
             AFL_VERIFY(OutsideUnlocked.insert(entry.Portion).second)("portion_id", id);
             Attach(entry.Portion, entry.Level);
+            touched.set(entry.Level);
         }
     }
 
@@ -1443,11 +1694,11 @@ private:
             default: {
                 auto& treeLevel = TreeLevelAt(level);
                 AFL_VERIFY(treeLevel.Portions.insert(p).second)("portion_id", id);
+                AFL_VERIFY(treeLevel.Starts.insert(p).second)("portion_id", id);
                 treeLevel.Tree.Add(id, p->IndexKeyStart(), p->IndexKeyEnd());
                 break;
             }
         }
-        RefreshCounters(level);
     }
 
     void Detach(const TConstPtr& p, const ui8 level) {
@@ -1462,17 +1713,31 @@ private:
             default: {
                 auto& treeLevel = TreeLevelAt(level);
                 AFL_VERIFY(treeLevel.Portions.erase(p))("portion_id", id);
+                AFL_VERIFY(treeLevel.Starts.erase(p))("portion_id", id);
                 treeLevel.Tree.Remove(id);
                 break;
             }
         }
-        RefreshCounters(level);
     }
 
     /// Height and overload per unit, and the planner's highest unit level in the shared tiling category, which the gap
     /// rule and the node back-off read: its bucket 10 is non-empty exactly while some planner on the node is at its
-    /// overload edge on the unlocked view (decision 25).
-    void RefreshCounters(const ui8 level) const {
+    /// overload edge on the unlocked view (decision 25). Once per batch of changes (2026-11-12): a task's thousand inputs
+    /// leave their unit in one step, and the counters are read from other threads at their own pace, so nobody misses the
+    /// intermediate readings.
+    void RefreshCounters(const TTouchedLevels& touched) const {
+        if (touched.none()) {
+            return;
+        }
+        for (ui32 level = 0; level <= Settings.TopLevel(); ++level) {
+            if (touched.test(level)) {
+                RefreshLevelCounters(static_cast<ui8>(level));
+            }
+        }
+        PublishHighestLevel();
+    }
+
+    void RefreshLevelCounters(const ui8 level) const {
         const auto& counters = LevelCounters(level);
         if (level == ACCUMULATOR_LEVEL) {
             const auto priority = AccumulatorPriority();
@@ -1486,7 +1751,6 @@ private:
             counters.Portions->SetHeight(GetHeight(level));
             counters.Portions->SetOverload(priority ? priority->GetLevel() : 0);
         }
-        PublishHighestLevel();
     }
 
     /// The planner's highest source level in the shared tiling category (decision 25); the delay source moves with the
@@ -1516,7 +1780,7 @@ private:
     }
 
     /// The arrival rule (Placing an arriving portion; decision 26 for a committed metadata move).
-    void Place(const TPtr& p) {
+    void Place(const TPtr& p, TTouchedLevels& touched) {
         // A portion that arrives with the line's level is a committed metadata move (or a line portion at bootstrap).
         const bool committedMove = p->GetCompactionLevel() == LINE_LEVEL;
         ui8 level = ACCUMULATOR_LEVEL;
@@ -1532,7 +1796,12 @@ private:
         if (committedMove) {
             (level == LINE_LEVEL ? Counters.AdvanceMoveLanded : Counters.AdvanceMoveReturned)->Inc();
         }
-        Insert(p, level);
+        // The advance's scan resumes past this arrival only when it cannot free a blocked target: one that sorts before
+        // the position is a target the scan has not judged, one in the line may be the neighbour a small target lacked.
+        if (AdvanceScanFrom && (level == LINE_LEVEL || TBySnapshot<TPortion>()(p, *AdvanceScanFrom))) {
+            ResetAdvanceScan();
+        }
+        Insert(p, level, touched);
     }
 
     /// Rule 3, the descent by width (decision 10): start at the top, stay on level k when the portion is wider than T
@@ -1595,14 +1864,14 @@ private:
 
     /// Bootstrap (decisions 11 and 12): small portions to the accumulator, the rest in snapshot order into the line
     /// until the first one that does not fit, then the tree levels.
-    void InitialAddPortions(const std::vector<TPtr>& add) {
+    void InitialAddPortions(const std::vector<TPtr>& add, TTouchedLevels& touched) {
         std::vector<TPtr> large;
         for (const auto& p : add) {
             if (!IsTracked(*p)) {
                 continue;
             }
             if (IsSmall(*p)) {
-                Insert(p, ACCUMULATOR_LEVEL);
+                Insert(p, ACCUMULATOR_LEVEL, touched);
             } else {
                 large.push_back(p);
             }
@@ -1612,26 +1881,26 @@ private:
         std::vector<TPtr> rest;
         for (const auto& p : large) {
             if (!stopped && !IntersectsLine(*p)) {
-                Insert(p, LINE_LEVEL);
+                Insert(p, LINE_LEVEL, touched);
                 Y = p->RecordSnapshotMin();
             } else {
                 stopped = true;
                 rest.push_back(p);
             }
         }
-        FillTreeLevelsAtBootstrap(std::move(rest));
+        FillTreeLevelsAtBootstrap(std::move(rest), touched);
     }
 
     /// Steps 4 and 5 of the bootstrap, seed-and-fill (decision 10): for each level from 2 up, seed a non-intersecting
     /// layer in snapshot order, then admit every remaining portion at most T wide against that level; the rest go up.
     /// Portions left after the top level stay on the top level and show as its height.
-    void FillTreeLevelsAtBootstrap(std::vector<TPtr> rest) {
+    void FillTreeLevelsAtBootstrap(std::vector<TPtr> rest, TTouchedLevels& touched) {
         for (ui8 level = FIRST_TREE_LEVEL; level <= Settings.TopLevel() && !rest.empty(); ++level) {
             const auto& treeLevel = TreeLevelAt(level);
             std::vector<TPtr> skipped;
             for (const auto& p : rest) {
                 if (!IntersectsDisjointSet(treeLevel.Portions, p->IndexKeyStart(), p->IndexKeyEnd())) {
-                    Insert(p, level);
+                    Insert(p, level, touched);
                 } else {
                     skipped.push_back(p);
                 }
@@ -1639,14 +1908,14 @@ private:
             std::vector<TPtr> next;
             for (const auto& p : skipped) {
                 if (Width(*p, treeLevel) <= Settings.WidthThreshold) {
-                    Insert(p, level);
+                    Insert(p, level, touched);
                 } else {
                     next.push_back(p);
                 }
             }
             if (level == Settings.TopLevel()) {
                 for (const auto& p : next) {
-                    Insert(p, level);
+                    Insert(p, level, touched);
                 }
                 next.clear();
             }
@@ -1654,10 +1923,11 @@ private:
         }
     }
 
-    void Insert(const TPtr& p, const ui8 level) {
+    void Insert(const TPtr& p, const ui8 level, TTouchedLevels& touched) {
         const ui64 id = p->GetPortionId();
         AFL_VERIFY(Registry.emplace(id, TEntry{ .Portion = p, .Level = level }).second)("portion_id", id);
         Attach(p, level);
+        touched.set(level);
         if (level != LINE_LEVEL) {
             AFL_VERIFY(Outside.insert(p).second)("portion_id", id);
             AFL_VERIFY(OutsideUnlocked.insert(p).second)("portion_id", id);
@@ -1667,7 +1937,7 @@ private:
         }
     }
 
-    void Erase(const typename THashMap<ui64, TEntry>::iterator it) {
+    void Erase(const typename THashMap<ui64, TEntry>::iterator it, TTouchedLevels& touched) {
         const TEntry entry = it->second;
         Registry.erase(it);
         const TConstPtr p = entry.Portion;
@@ -1684,6 +1954,7 @@ private:
         }
         if (!entry.HandedOut || entry.Level == LINE_LEVEL) {
             Detach(p, entry.Level);
+            touched.set(entry.Level);
         }
         if constexpr (std::is_same_v<TPortion, NOlap::TPortionInfo>) {
             LevelCounters(entry.Level).Portions->RemovePortion(p);

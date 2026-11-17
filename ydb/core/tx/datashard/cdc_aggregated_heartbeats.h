@@ -5,7 +5,6 @@
 
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/change_exchange/change_record.h>
-#include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/common/heartbeat.h>
 #include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/util/backoff.h>

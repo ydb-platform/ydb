@@ -74,7 +74,7 @@ void TCdcAggregatedHeartbeats::RemovePendingRecordIds(const TVector<ui64>& order
 
 std::pair<TVector<IChangeRecord::TPtr>, TVector<ui64>> TCdcAggregatedHeartbeats::BufferHeartbeats(TVector<IChangeRecord::TPtr> records) {
     TVector<IChangeRecord::TPtr> passed;
-    TVector<ui64> buffered;
+    TVector<ui64> heartbeats;
     for (auto& record : records) {
         if (record->GetKind() != IChangeRecord::EKind::CdcHeartbeat) {
             passed.push_back(std::move(record));
@@ -84,11 +84,11 @@ std::pair<TVector<IChangeRecord::TPtr>, TVector<ui64>> TCdcAggregatedHeartbeats:
         const ui64 order = record->GetOrder();
         PendingRecords.erase(order);
         PendingHeartbeats.emplace(order, MakeHeartbeat(*Serializer, *record));
-        buffered.push_back(order);
+        heartbeats.push_back(order);
     }
 
     SendReadyHeartbeat();
-    return {std::move(passed), std::move(buffered)};
+    return {std::move(passed), std::move(heartbeats)};
 }
 
 TVector<ui64> TCdcAggregatedHeartbeats::HandleHeartbeatEvent(TAutoPtr<IEventHandle>& ev) {

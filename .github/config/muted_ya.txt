@@ -13,6 +13,7 @@ ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/mysql py3test.sole chunk
 ydb/library/yql/providers/generic/connector/tests/join py3test.sole chunk
+ydb/public/sdk/cpp/src/client/topic/ut TxUsage.ReadRuleGeneration
 ydb/services/metadata/secret/ut Secret.Simple
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectReadNotCached
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootBalancerOnlyCombinedStress
@@ -38,7 +39,9 @@ ydb/tests/fq/multi_plane py3test.[test_dispatch.py] chunk
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping_with_row_dispatcher
 ydb/tests/fq/streaming py3test.[*/*] chunk
+ydb/tests/fq/yds py3test.[*/*] chunk
 ydb/tests/fq/yds test_delete_read_rules_after_abort_by_system.py.TestDeleteReadRulesAfterAbortBySystem.test_delete_read_rules_after_abort_by_system
+ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filters_optional_field
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy

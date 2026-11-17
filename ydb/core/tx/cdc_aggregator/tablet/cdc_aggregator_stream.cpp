@@ -1,20 +1,16 @@
 #include "cdc_aggregator_stream.h"
 
+#include <algorithm>
+
 namespace NKikimr::NCdcAggregator {
 
 namespace {
 
-std::optional<NPQ::THeartbeat> FindMinLastHeartbeat(const TCdcAggregatorStream::TLastHeartbeats& lastHeartbeatsBySourceDataShardId) {
-    std::optional<NPQ::THeartbeat> minHeartbeat;
-    for (const auto& [_, lastHeartbeat] : lastHeartbeatsBySourceDataShardId) {
-        if (!lastHeartbeat) {
-            return std::nullopt;
-        }
-        if (!minHeartbeat || lastHeartbeat->Version < minHeartbeat->Version) {
-            minHeartbeat = lastHeartbeat;
-        }
+std::optional<TRowVersion> GetVersion(const std::optional<NPQ::THeartbeat>& heartbeat) {
+    if (!heartbeat) {
+        return std::nullopt;
     }
-    return minHeartbeat;
+    return heartbeat->Version;
 }
 
 } // namespace
@@ -62,12 +58,15 @@ THashMap<ui64, NPQ::THeartbeat> TCdcAggregatorStream::RegisterHeartbeats(const T
 }
 
 std::optional<NPQ::THeartbeat> TCdcAggregatorStream::UpdateCurrentHeartbeatIfNeeded() {
-    auto minHeartbeat = FindMinLastHeartbeat(LastHeartbeatsBySourceDataShardId);
-    if (!minHeartbeat || (CurrentHeartbeat && minHeartbeat->Version <= CurrentHeartbeat->Version)) {
+    const auto& [_, minHeartbeat] = *std::min_element(LastHeartbeatsBySourceDataShardId.begin(), LastHeartbeatsBySourceDataShardId.end(),
+        [](const auto& left, const auto& right) {
+            return GetVersion(left.second) < GetVersion(right.second);
+        });
+    if (GetVersion(minHeartbeat) <= GetVersion(CurrentHeartbeat)) {
         return std::nullopt;
     }
     CurrentHeartbeat = minHeartbeat;
-    return minHeartbeat;
+    return CurrentHeartbeat;
 }
 
 std::optional<TCdcAggregatorStreamSourcesDiff> TCdcAggregatorStream::ApplyPartitioningChange(const TCdcAggregatorStreamPartitioningChange& change) {

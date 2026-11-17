@@ -1,0 +1,2298 @@
+{
+  "checkpoint": "80ef021be0a6ebc4fa76c4c044d080ecaa2f6303",
+  "files": {
+    "ydb/docs/en/core/yql/reference/_assets/builtin_groups.svg": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/_assets/builtin_groups.svg"
+    },
+    "ydb/docs/en/core/yql/reference/_includes/builtin_groups.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/_includes/builtin_groups.md"
+    },
+    "ydb/docs/en/core/yql/reference/_includes/cast_examples.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/_includes/cast_examples.md"
+    },
+    "ydb/docs/en/core/yql/reference/_includes/decimal_args.md": {
+      "blob": "60b818ec59127d8d1d187ebb9dcb2b5931e474c3",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/_includes/decimal_args.md"
+    },
+    "ydb/docs/en/core/yql/reference/_includes/limitation-column-row-in-read-only-tx.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/_includes/limitation-column-row-in-read-only-tx.md"
+    },
+    "ydb/docs/en/core/yql/reference/_includes/permissions_list.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/_includes/permissions_list.md"
+    },
+    "ydb/docs/en/core/yql/reference/_includes/secret_tip.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/_includes/secret_tip.md"
+    },
+    "ydb/docs/en/core/yql/reference/_includes/transfer_flush.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/_includes/transfer_flush.md"
+    },
+    "ydb/docs/en/core/yql/reference/_includes/transfer_lambda.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/_includes/transfer_lambda.md"
+    },
+    "ydb/docs/en/core/yql/reference/_includes/type_literals_examples.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/_includes/type_literals_examples.md"
+    },
+    "ydb/docs/en/core/yql/reference/_includes/vector_search_approximate.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/_includes/vector_search_approximate.md"
+    },
+    "ydb/docs/en/core/yql/reference/_includes/vector_search_exact.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/_includes/vector_search_exact.md"
+    },
+    "ydb/docs/en/core/yql/reference/builtins/aggregation.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/builtins/aggregation.md"
+    },
+    "ydb/docs/en/core/yql/reference/builtins/basic.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/builtins/basic.md"
+    },
+    "ydb/docs/en/core/yql/reference/builtins/codegen.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/builtins/codegen.md"
+    },
+    "ydb/docs/en/core/yql/reference/builtins/dict.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/builtins/dict.md"
+    },
+    "ydb/docs/en/core/yql/reference/builtins/fulltext.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/builtins/fulltext.md"
+    },
+    "ydb/docs/en/core/yql/reference/builtins/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/builtins/index.md"
+    },
+    "ydb/docs/en/core/yql/reference/builtins/json.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/builtins/json.md"
+    },
+    "ydb/docs/en/core/yql/reference/builtins/list.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/builtins/list.md"
+    },
+    "ydb/docs/en/core/yql/reference/builtins/struct.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/builtins/struct.md"
+    },
+    "ydb/docs/en/core/yql/reference/builtins/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/builtins/toc_i.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/builtins/types.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/builtins/types.md"
+    },
+    "ydb/docs/en/core/yql/reference/builtins/window.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/builtins/window.md"
+    },
+    "ydb/docs/en/core/yql/reference/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/index.md"
+    },
+    "ydb/docs/en/core/yql/reference/recipes/accessing-json.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/recipes/accessing-json.md"
+    },
+    "ydb/docs/en/core/yql/reference/recipes/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/recipes/index.md"
+    },
+    "ydb/docs/en/core/yql/reference/recipes/modifying-json.md": {
+      "blob": "3619aa1137e9db7081732466adee164ba9ce5892",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/recipes/modifying-json.md"
+    },
+    "ydb/docs/en/core/yql/reference/recipes/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/recipes/toc_i.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/recipes/ttl.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/recipes/ttl.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_assets/join-YQL-06.png": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/syntax/_assets/join-YQL-06.png"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/async_replication_authentification.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/async_replication_authentification.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/bloom_skip_index_features.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/bloom_skip_index_features.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/bloom_skip_index_limitations.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/bloom_skip_index_limitations.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/bloom_skip_index_parameters.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/bloom_skip_index_parameters.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/column_option_list.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/column_option_list.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/column_option_list_alter.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/column_option_list_alter.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/deprecated_secrets_warning.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/deprecated_secrets_warning.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/fulltext_index_parameters.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/fulltext_index_parameters.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/index_grammar_explanation.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/index_grammar_explanation.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/min_max_index_features.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/min_max_index_features.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/min_max_index_limitations.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/min_max_index_limitations.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/min_max_index_parameters.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/min_max_index_parameters.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/topic_consumer_parameters.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/topic_consumer_parameters.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/_includes/vector_index_parameters.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/_includes/vector_index_parameters.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/action.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/action.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter-async-replication.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter-async-replication.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter-group.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter-group.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter-resource-pool-classifier.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter-resource-pool-classifier.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter-resource-pool.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter-resource-pool.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter-secret.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter-secret.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter-streaming-query.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter-streaming-query.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter-topic.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter-topic.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter-transfer.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter-transfer.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter-user.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter-user.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter-view.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter-view.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_database/index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter_database/index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_database/owner.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter_database/owner.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_database/settings.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter_database/settings.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_database/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/syntax/alter_database/toc_i.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_database/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/syntax/alter_database/toc_p.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_table/changefeed.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter_table/changefeed.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_table/columns.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter_table/columns.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_table/compact.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter_table/compact.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_table/family.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter_table/family.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_table/index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter_table/index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_table/indexes.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter_table/indexes.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_table/not_null.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter_table/not_null.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_table/rename.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter_table/rename.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_table/set.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter_table/set.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_table/statistics.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/alter_table/statistics.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_table/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/syntax/alter_table/toc_i.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/alter_table/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/syntax/alter_table/toc_p.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/analyze.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/analyze.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/backup.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/backup.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/batch-delete.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/batch-delete.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/batch-update.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/batch-update.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/commit.md": {
+      "blob": "eace340a5c82b813e5fd23d5f29930e4898cd644",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/syntax/commit.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/correlated-subqueries.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/correlated-subqueries.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-async-replication.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-async-replication.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-backup-collection.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-backup-collection.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-external-data-source.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-external-data-source.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-external-data-source/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/syntax/create-external-data-source/toc_p.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-external-table.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-external-table.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-group.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-group.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-object-type-secret-access.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-object-type-secret-access.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-object-type-secret.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-object-type-secret.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-resource-pool-classifier.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-resource-pool-classifier.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-resource-pool.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-resource-pool.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-secret.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-secret.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-streaming-query.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-streaming-query.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-topic.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-topic.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-transfer.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-transfer.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-user.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-user.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create-view.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create-view.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create_table/as_select.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create_table/as_select.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create_table/bloom_skip_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create_table/bloom_skip_index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create_table/family.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create_table/family.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create_table/fulltext_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create_table/fulltext_index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create_table/index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create_table/index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create_table/json_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create_table/json_index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create_table/min_max_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create_table/min_max_index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create_table/secondary_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create_table/secondary_index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create_table/statistics.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create_table/statistics.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create_table/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/syntax/create_table/toc_i.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create_table/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/syntax/create_table/toc_p.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create_table/vector_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create_table/vector_index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/create_table/with.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/create_table/with.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/declare.md": {
+      "blob": "93cd978cd41ed2b0175a3f341440b4974a8441aa",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/syntax/declare.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/delete.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/delete.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/discard.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/discard.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-async-replication.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-async-replication.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-backup-collection.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-backup-collection.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-external-data-source.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-external-data-source.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-external-table.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-external-table.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-group.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-group.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-object-type-secret-access.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-object-type-secret-access.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-object-type-secret.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-object-type-secret.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-resource-pool-classifier.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-resource-pool-classifier.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-resource-pool.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-resource-pool.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-secret.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-secret.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-streaming-query.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-streaming-query.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-topic.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-topic.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-transfer.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-transfer.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-user.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-user.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop-view.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop-view.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/drop_table.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/drop_table.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/export_import.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/export_import.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/expressions.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/expressions.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/flatten.md": {
+      "owner": "ydb",
+      "reason": "target-deleted-or-renamed",
+      "source": "yql/essentials/docs/en/syntax/flatten.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/grant.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/grant.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/group_by.md": {
+      "owner": "ydb",
+      "reason": "target-deleted-or-renamed",
+      "source": "yql/essentials/docs/en/syntax/group_by.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/insert_into.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/insert_into.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/into_result.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/into_result.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/join.md": {
+      "owner": "ydb",
+      "reason": "target-deleted-or-renamed",
+      "source": "yql/essentials/docs/en/syntax/join.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/kill-session.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/kill-session.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/lexer.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/lexer.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/not_yet_supported.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/not_yet_supported.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/pragma.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/pragma.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/process.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/process.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/reduce.md": {
+      "blob": "e7c579c7ee5b514952fa06ba28e1b49448e397f7",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/syntax/reduce.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/replace_into.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/replace_into.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/restore-backup-collection.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/restore-backup-collection.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/revoke.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/revoke.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/_assets/join-YQL-06.png": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/syntax/select/_assets/join-YQL-06.png"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/assume_order_by.md": {
+      "blob": "61c9e2419636470709468a8217e3f4074e17a362",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/syntax/select/assume_order_by.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/concat.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/select/concat.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/distinct.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/select/distinct.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/flatten.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/flatten.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/folder.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/folder.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/from.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/select/from.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/from_as_table.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/select/from_as_table.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/from_select.md": {
+      "blob": "76373ca2510c20a24b630dc1b17140ad9c580f5a",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/syntax/select/from_select.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/fulltext_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/fulltext_index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/group-by.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/group-by.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/hybrid_search.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/hybrid_search.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/select/index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/join.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/join.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/json_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/json_index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/limit_offset.md": {
+      "blob": "45e5bd1866e049d3f99164bbe5bb553e06ee466a",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/syntax/select/limit_offset.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/match_recognize.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/match_recognize.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/order_by.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/select/order_by.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/sample.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/select/sample.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/secondary_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/secondary_index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/streaming.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/streaming.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/temporary_table.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/temporary_table.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/syntax/select/toc_i.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/syntax/select/toc_p.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/topics.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/topics.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/union.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/select/union.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/unique_distinct_hints.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/select/unique_distinct_hints.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/vector_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/vector_index.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/view.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/view.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/walk_folders.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/walk_folders.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/where.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/select/where.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/window.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/select/window.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/with.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/select/with.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/with/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/syntax/select/with/toc_p.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/select/without.md": {
+      "blob": "7f85fab3bc2836a884b1414466216246af912f25",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/syntax/select/without.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/show_create.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/show_create.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/subquery.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/subquery.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/syntax/toc_i.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/truncate-table.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/truncate-table.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/update.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/update.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/upsert-object-type-secret.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/upsert-object-type-secret.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/upsert_into.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/syntax/upsert_into.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/use.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/syntax/use.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/values.md": {
+      "blob": "c39805312ccfb587b45ed9bd427e195b2a1911fd",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/syntax/values.md"
+    },
+    "ydb/docs/en/core/yql/reference/syntax/window.md": {
+      "owner": "ydb",
+      "reason": "target-deleted-or-renamed",
+      "source": "yql/essentials/docs/en/syntax/window.md"
+    },
+    "ydb/docs/en/core/yql/reference/toc.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/toc.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/toc_i.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/toc_p.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/types/cast.md": {
+      "blob": "6136c2f5802dcdb3c962427602e3d8e879f2956b",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/types/cast.md"
+    },
+    "ydb/docs/en/core/yql/reference/types/containers.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/types/containers.md"
+    },
+    "ydb/docs/en/core/yql/reference/types/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/types/index.md"
+    },
+    "ydb/docs/en/core/yql/reference/types/json.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/types/json.md"
+    },
+    "ydb/docs/en/core/yql/reference/types/optional.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/types/optional.md"
+    },
+    "ydb/docs/en/core/yql/reference/types/primitive.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/types/primitive.md"
+    },
+    "ydb/docs/en/core/yql/reference/types/serial.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/types/serial.md"
+    },
+    "ydb/docs/en/core/yql/reference/types/special.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/types/special.md"
+    },
+    "ydb/docs/en/core/yql/reference/types/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/types/toc_i.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/types/type_string.md": {
+      "blob": "e8a0c54d7d05649fad21cb19cf14a5d64bfa207c",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/types/type_string.md"
+    },
+    "ydb/docs/en/core/yql/reference/types/yson.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/types/yson.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/datetime.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/udf/list/datetime.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/digest.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/udf/list/digest.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/histogram.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/udf/list/histogram.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/hyperscan.md": {
+      "blob": "9bb32a078d72ae8608ec63031000ec9dc3f8e44e",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/udf/list/hyperscan.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/udf/list/index.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/ip.md": {
+      "blob": "c635d5009e1ea9976fd03122fe25051bd3174345",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/udf/list/ip.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/knn.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/udf/list/knn.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/math.md": {
+      "blob": "dd129399d842f86d2b9b69c9a1a014dfd2c8b214",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/udf/list/math.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/pcre.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/udf/list/pcre.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/pire.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/udf/list/pire.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/re2.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/udf/list/re2.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/roaring.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/en/udf/list/roaring.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/string.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/udf/list/string.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/toc_base.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/udf/list/toc_base.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/en/udf/list/toc_i.yaml"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/unicode.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/udf/list/unicode.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/url.md": {
+      "blob": "0dbe3d5b48d4bb0dc281d91320a5c7baee705317",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en/udf/list/url.md"
+    },
+    "ydb/docs/en/core/yql/reference/udf/list/yson.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/en/udf/list/yson.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/cast_examples.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/_includes/cast_examples.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/decimal_args.md": {
+      "blob": "1b56d44e7017aa48673b7f027e4ec74483c4011d",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/_includes/decimal_args.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/frompg.md": {
+      "blob": "2c0413b7b6e351945d2dd505a3037aacf2e81898",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/_includes/frompg.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/initial_groups_and_users.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/_includes/initial_groups_and_users.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/intro.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/_includes/intro.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/limitation-column-row-in-read-only-tx-warn.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/_includes/limitation-column-row-in-read-only-tx-warn.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/limitation-column-row-in-read-only-tx.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/_includes/limitation-column-row-in-read-only-tx.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/permissions_list.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/_includes/permissions_list.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/secret_tip.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/_includes/secret_tip.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/topg.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/_includes/topg.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/transfer_flush.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/_includes/transfer_flush.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/transfer_lambda.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/_includes/transfer_lambda.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/transfer_metrics_level_internal.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/_includes/transfer_metrics_level_internal.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/type_literals_examples.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/_includes/type_literals_examples.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/vector_search_approximate.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/_includes/vector_search_approximate.md"
+    },
+    "ydb/docs/ru/core/yql/reference/_includes/vector_search_exact.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/_includes/vector_search_exact.md"
+    },
+    "ydb/docs/ru/core/yql/reference/builtins/aggregation.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/builtins/aggregation.md"
+    },
+    "ydb/docs/ru/core/yql/reference/builtins/basic.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/builtins/basic.md"
+    },
+    "ydb/docs/ru/core/yql/reference/builtins/codegen.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/builtins/codegen.md"
+    },
+    "ydb/docs/ru/core/yql/reference/builtins/dict.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/builtins/dict.md"
+    },
+    "ydb/docs/ru/core/yql/reference/builtins/fulltext.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/builtins/fulltext.md"
+    },
+    "ydb/docs/ru/core/yql/reference/builtins/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/builtins/index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/builtins/json.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/builtins/json.md"
+    },
+    "ydb/docs/ru/core/yql/reference/builtins/list.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/builtins/list.md"
+    },
+    "ydb/docs/ru/core/yql/reference/builtins/struct.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/builtins/struct.md"
+    },
+    "ydb/docs/ru/core/yql/reference/builtins/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/builtins/toc_i.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/builtins/types.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/builtins/types.md"
+    },
+    "ydb/docs/ru/core/yql/reference/builtins/window.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/builtins/window.md"
+    },
+    "ydb/docs/ru/core/yql/reference/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/presets.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/presets.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/recipes/accessing-json.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/recipes/accessing-json.md"
+    },
+    "ydb/docs/ru/core/yql/reference/recipes/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/recipes/index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/recipes/modifying-json.md": {
+      "blob": "871662c59bd8a05d7654af5b7eb9e439e45e3f11",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/recipes/modifying-json.md"
+    },
+    "ydb/docs/ru/core/yql/reference/recipes/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/recipes/toc_i.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/recipes/ttl.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/recipes/ttl.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_assets/join-YQL-06.png": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/syntax/_assets/join-YQL-06.png"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/async_replication_authentification.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/async_replication_authentification.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/bloom_skip_index_features.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/bloom_skip_index_features.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/bloom_skip_index_limitations.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/bloom_skip_index_limitations.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/bloom_skip_index_parameters.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/bloom_skip_index_parameters.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/column_option_list.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/column_option_list.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/column_option_list_alter.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/column_option_list_alter.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/deprecated_secrets_warning.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/deprecated_secrets_warning.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/fulltext_index_parameters.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/fulltext_index_parameters.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/index_grammar_explanation.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/index_grammar_explanation.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/min_max_index_features.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/min_max_index_features.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/min_max_index_limitations.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/min_max_index_limitations.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/min_max_index_parameters.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/min_max_index_parameters.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/topic_consumer_parameters.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/topic_consumer_parameters.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/_includes/vector_index_parameters.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/_includes/vector_index_parameters.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/action.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/action.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter-async-replication.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter-async-replication.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter-group.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter-group.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter-resource-pool-classifier.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter-resource-pool-classifier.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter-resource-pool.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter-resource-pool.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter-secret.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter-secret.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter-streaming-query.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter-streaming-query.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter-topic.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter-topic.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter-transfer.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter-transfer.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter-user.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter-user.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter-view.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter-view.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_database/index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter_database/index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_database/owner.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter_database/owner.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_database/settings.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter_database/settings.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_database/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/syntax/alter_database/toc_i.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_database/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/syntax/alter_database/toc_p.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_table/changefeed.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter_table/changefeed.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_table/columns.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter_table/columns.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_table/compact.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter_table/compact.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_table/family.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter_table/family.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_table/index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter_table/index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_table/indexes.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter_table/indexes.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_table/not_null.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter_table/not_null.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_table/rename.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter_table/rename.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_table/set.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter_table/set.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_table/statistics.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/alter_table/statistics.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_table/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/syntax/alter_table/toc_i.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/alter_table/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/syntax/alter_table/toc_p.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/analyze.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/analyze.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/backup.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/backup.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/batch-delete.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/batch-delete.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/batch-update.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/batch-update.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/commit.md": {
+      "blob": "3a6720c882dec92d71f8ea6d80611469dc8d20a0",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/syntax/commit.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/correlated-subqueries.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/correlated-subqueries.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-async-replication.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-async-replication.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-backup-collection.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-backup-collection.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-external-data-source.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-external-data-source.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-external-data-source/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/syntax/create-external-data-source/toc_p.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-external-table.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-external-table.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-group.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-group.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-object-type-secret-access.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-object-type-secret-access.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-object-type-secret.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-object-type-secret.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-resource-pool-classifier.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-resource-pool-classifier.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-resource-pool.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-resource-pool.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-secret.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-secret.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-streaming-query.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-streaming-query.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-topic.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-topic.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-transfer.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-transfer.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-user.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-user.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create-view.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create-view.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create_table/as_select.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create_table/as_select.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create_table/bloom_skip_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create_table/bloom_skip_index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create_table/family.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create_table/family.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create_table/fulltext_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create_table/fulltext_index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create_table/index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create_table/index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create_table/json_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create_table/json_index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create_table/min_max_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create_table/min_max_index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create_table/secondary_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create_table/secondary_index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create_table/statistics.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create_table/statistics.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create_table/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/syntax/create_table/toc_i.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create_table/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/syntax/create_table/toc_p.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create_table/vector_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create_table/vector_index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/create_table/with.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/create_table/with.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/declare.md": {
+      "blob": "704e831a1f072eb30ac706021a8ec1203fc8a49e",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/syntax/declare.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/delete.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/delete.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/discard.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/discard.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-async-replication.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-async-replication.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-backup-collection.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-backup-collection.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-external-data-source.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-external-data-source.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-external-table.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-external-table.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-group.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-group.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-object-type-secret-access.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-object-type-secret-access.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-object-type-secret.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-object-type-secret.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-resource-pool-classifier.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-resource-pool-classifier.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-resource-pool.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-resource-pool.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-secret.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-secret.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-streaming-query.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-streaming-query.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-topic.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-topic.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-transfer.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-transfer.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-user.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-user.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop-view.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop-view.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/drop_table.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/drop_table.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/export_import.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/export_import.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/expressions.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/expressions.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/flatten.md": {
+      "owner": "ydb",
+      "reason": "target-deleted-or-renamed",
+      "source": "yql/essentials/docs/ru/syntax/flatten.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/grant.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/grant.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/group_by.md": {
+      "owner": "ydb",
+      "reason": "target-deleted-or-renamed",
+      "source": "yql/essentials/docs/ru/syntax/group_by.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/insert_into.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/insert_into.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/into_result.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/into_result.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/join.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/join.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/kill-session.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/kill-session.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/lexer.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/lexer.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/not_yet_supported.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/not_yet_supported.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/pragma.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/pragma.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/process.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/process.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/reduce.md": {
+      "blob": "f12aabe3beed9bf68a0a8c962e6ca0d26dfcb402",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/syntax/reduce.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/replace_into.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/replace_into.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/restore-backup-collection.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/restore-backup-collection.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/revoke.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/revoke.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/_assets/join-YQL-06.png": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/syntax/select/_assets/join-YQL-06.png"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/assume_order_by.md": {
+      "blob": "09cf864d4a71cf6be990ad111e29aebb5dfa46c4",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/syntax/select/assume_order_by.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/concat.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/select/concat.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/distinct.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/select/distinct.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/flatten.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/flatten.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/folder.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/folder.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/from.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/select/from.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/from_as_table.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/select/from_as_table.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/from_select.md": {
+      "blob": "2e49c3f101a46112a1800172cf71b615359aef5c",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/syntax/select/from_select.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/fulltext_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/fulltext_index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/group-by.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/group-by.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/hybrid_search.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/hybrid_search.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/select/index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/join.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/join.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/json_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/json_index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/limit_offset.md": {
+      "blob": "e347f4f48ca0eef66c33f21b4d73064e1a977554",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/syntax/select/limit_offset.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/match_recognize.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/match_recognize.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/order_by.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/select/order_by.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/sample.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/select/sample.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/secondary_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/secondary_index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/temporary_table.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/temporary_table.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/syntax/select/toc_i.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/syntax/select/toc_p.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/topics.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/topics.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/union.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/select/union.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/unique_distinct_hints.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/select/unique_distinct_hints.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/vector_index.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/vector_index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/view.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/view.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/walk_folders.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/walk_folders.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/where.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/select/where.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/window.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/select/window.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/with.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/select/with.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/with/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/syntax/select/with/toc_p.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/select/without.md": {
+      "blob": "1f0f47146f10faef376d940049f06255ca5d23b8",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/syntax/select/without.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/show_create.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/show_create.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/subquery.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/subquery.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/syntax/toc_i.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/truncate-table.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/truncate-table.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/update.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/update.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/upsert-object-type-secret.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/upsert-object-type-secret.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/upsert_into.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/syntax/upsert_into.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/use.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/syntax/use.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/values.md": {
+      "blob": "8314c273b6ff0c9fcc1774e505d8a1176735456f",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/syntax/values.md"
+    },
+    "ydb/docs/ru/core/yql/reference/syntax/window.md": {
+      "owner": "ydb",
+      "reason": "target-deleted-or-renamed",
+      "source": "yql/essentials/docs/ru/syntax/window.md"
+    },
+    "ydb/docs/ru/core/yql/reference/toc.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/toc.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/toc_i.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/toc_p.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/toc_p.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/types/cast.md": {
+      "blob": "a3a9ab616fd7d7515f084d6a9b26380bb9dccf68",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/types/cast.md"
+    },
+    "ydb/docs/ru/core/yql/reference/types/containers.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/types/containers.md"
+    },
+    "ydb/docs/ru/core/yql/reference/types/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/types/index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/types/json.md": {
+      "blob": "d13c56004c1500063006a68af6744667e1c7d9e2",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/types/json.md"
+    },
+    "ydb/docs/ru/core/yql/reference/types/optional.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/types/optional.md"
+    },
+    "ydb/docs/ru/core/yql/reference/types/primitive.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/types/primitive.md"
+    },
+    "ydb/docs/ru/core/yql/reference/types/serial.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/types/serial.md"
+    },
+    "ydb/docs/ru/core/yql/reference/types/special.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/types/special.md"
+    },
+    "ydb/docs/ru/core/yql/reference/types/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/types/toc_i.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/types/type_string.md": {
+      "blob": "5b0d6342bc1927aa1dabe1d640c2345f6744486d",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/types/type_string.md"
+    },
+    "ydb/docs/ru/core/yql/reference/types/yson.md": {
+      "blob": "da1b958943136136c1befe4bb2cbd07ba304fc85",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/types/yson.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/datetime.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/udf/list/datetime.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/digest.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/udf/list/digest.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/histogram.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/udf/list/histogram.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/hyperscan.md": {
+      "blob": "54266827a7fa191575296192d6cf697e4ba22bf6",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/udf/list/hyperscan.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/index.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/udf/list/index.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/ip.md": {
+      "blob": "8ec01015c9e2a6aa819aecb46f2df6bc35bc1cf0",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/udf/list/ip.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/knn.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/udf/list/knn.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/math.md": {
+      "blob": "72b60e363bdbf2be45ecc0ca2e44142631f25a82",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/udf/list/math.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/pcre.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/udf/list/pcre.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/pire.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/udf/list/pire.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/postgres.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/udf/list/postgres.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/re2.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/udf/list/re2.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/roaring.md": {
+      "owner": "ydb",
+      "reason": "target-only",
+      "source": "yql/essentials/docs/ru/udf/list/roaring.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/string.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/udf/list/string.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/toc_base.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/udf/list/toc_base.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/toc_i.yaml": {
+      "owner": "ydb",
+      "reason": "navigation-or-asset",
+      "source": "yql/essentials/docs/ru/udf/list/toc_i.yaml"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/unicode.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/udf/list/unicode.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/url.md": {
+      "blob": "3d6e434cf26379089755e20fbfa5043ea7c4746a",
+      "owner": "yql",
+      "revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru/udf/list/url.md"
+    },
+    "ydb/docs/ru/core/yql/reference/udf/list/yson.md": {
+      "owner": "ydb",
+      "reason": "target-modified",
+      "source": "yql/essentials/docs/ru/udf/list/yson.md"
+    }
+  },
+  "roots": [
+    {
+      "initial_revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/ru",
+      "target": "ydb/docs/ru/core/yql/reference"
+    },
+    {
+      "initial_revision": "9cf1bce240d3b7ba00185ee4715c7533ddf91cb9",
+      "source": "yql/essentials/docs/en",
+      "target": "ydb/docs/en/core/yql/reference"
+    }
+  ],
+  "version": 1
+}

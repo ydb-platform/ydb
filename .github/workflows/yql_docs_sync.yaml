@@ -28,7 +28,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          sparse-checkout: ydb/docs/tools/yql_sync
+          sparse-checkout: |
+            ydb/docs/tools/yql_sync
+            yql/essentials/docs/scripts
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -52,6 +54,35 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Preserve reviewer commits on the existing sync branch
+        run: |
+          branch=refs/remotes/origin/automation/yql-docs-sync
+          if git show-ref --verify --quiet "$branch"; then
+            while IFS= read -r committer; do
+              if [[ "$committer" != '41898282+github-actions[bot]@users.noreply.github.com' ]]; then
+                echo '::error::The sync branch contains reviewer commits. Merge or close its PR before updating it.'
+                exit 1
+              fi
+            done < <(git log --format='%ce' "HEAD..$branch")
+          fi
+      - name: Fetch historical source revisions when needed
+        run: |
+          python3 - <<'PYTHON' > "$RUNNER_TEMP/yql-sync-revisions"
+          import json
+          import re
+          state = json.load(open('ydb/docs/tools/yql_sync/ownership.json'))
+          revisions = {state['checkpoint']}
+          revisions.update(entry['revision'] for entry in state['files'].values() if entry['owner'] == 'yql')
+          for revision in sorted(revisions):
+              if not re.fullmatch('[0-9a-f]{40}', revision):
+                  raise SystemExit('Invalid revision in ownership config')
+              print(revision)
+          PYTHON
+          while IFS= read -r revision; do
+            if ! git cat-file -e "$revision^{commit}" 2>/dev/null; then
+              git fetch --no-tags origin "$revision"
+            fi
+          done < "$RUNNER_TEMP/yql-sync-revisions"
       - name: Compare and synchronize unmodified files
         env:
           DRY_RUN: ${{ inputs.dry_run || false }}
@@ -79,6 +110,7 @@ jobs:
           base: main
           branch: automation/yql-docs-sync
           delete-branch: true
+          committer: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
           add-paths: |
             ydb/docs/ru/core/yql/reference
             ydb/docs/en/core/yql/reference

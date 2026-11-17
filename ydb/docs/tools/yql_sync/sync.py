@@ -14,7 +14,7 @@ CONFIG = 'ydb/docs/tools/yql_sync/ownership.json'
 def git(root, *args):
     result = subprocess.run(['git', '-C', str(root), *args], capture_output=True)
     if result.returncode:
-        raise ValueError(result.stderr.decode().strip())
+        raise ValueError(result.stderr.decode().strip() or f'Git command failed: {args}')
     return result.stdout
 
 
@@ -75,7 +75,7 @@ def initialize(root, config=CONFIG, locales=('ru', 'en')):
         revision, source = marker.read_text().strip().split(';')
         if source != f'yql/essentials/docs/{lang}' or not re.fullmatch('[0-9a-f]{40}', revision):
             raise ValueError(f'Invalid baseline: {marker}')
-        git(root, 'merge-base', '--is-ancestor', revision, head)
+        git(root, 'rev-parse', '--verify', revision+'^{commit}')
         old = tree(root, revision, source)
         current = tree(root, head, target)
         state['roots'].append({'source': source, 'target': target, 'initial_revision': revision})
@@ -143,9 +143,14 @@ def config_at(root, revision, config):
 
 
 def locally_touched(root, config, state, dst, head, cache):
-    commits = git(root, 'log', '--first-parent', '--format=%H',
+    commits = git(root, 'log', '--full-history', '--format=%H',
                   state['checkpoint']+'..'+head, '--', dst).decode().splitlines()
     for commit in commits:
+        actual = regular(tree(root, commit, dst), dst)
+        # Full history includes merges without a first-parent change. Their
+        # branch commits are inspected separately, including edits then reverts.
+        if actual == regular(tree(root, commit+'^', dst), dst):
+            continue
         if commit not in cache:
             cache[commit] = (config_at(root, commit, config), config_at(root, commit+'^', config))
         after, before = (s['files'].get(dst) for s in cache[commit])
@@ -154,7 +159,6 @@ def locally_touched(root, config, state, dst, head, cache):
         # still has a non-sync commit in this interval and permanently claims the file.
         if not after or after.get('owner') != 'yql' or after == before:
             return True
-        actual = regular(tree(root, commit, dst), dst)
         source = regular(tree(root, after['revision'], after['source']), after['source'])
         if actual != after['blob'] or source != actual:
             return True

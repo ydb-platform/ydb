@@ -26,7 +26,7 @@ public:
     TRestoreRequestExecutor(
         NActors::TActorSystem* actorSystem,
         IDirectBlockGroupPtr directBlockGroup,
-        THostMask hosts);
+        THostMask hostsToList);
 
     ~TRestoreRequestExecutor();
 
@@ -41,7 +41,7 @@ private:
 
     NActors::TActorSystem const* ActorSystem;
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const THostMask Hosts;
+    const THostMask HostsToList;
 
     NThreading::TPromise<TAggregatedListPBufferResponse> Promise =
         NThreading::NewPromise<TAggregatedListPBufferResponse>();

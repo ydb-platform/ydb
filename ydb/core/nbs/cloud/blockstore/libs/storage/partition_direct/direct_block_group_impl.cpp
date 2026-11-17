@@ -1989,17 +1989,17 @@ TString TDirectBlockGroup::ValidateRemoveHost(THostIndex hostIndex) const
 void TDirectBlockGroup::DoListPBuffers()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    THostMask hosts;
+    THostMask hostsToList;
     for (THostIndex host = 0; host < Connections.GetSlotCount(); ++host) {
         if (!Connections.IsSlotDead(host)) {
-            hosts.Set(host);
+            hostsToList.Set(host);
         }
     }
 
     auto restoreExecutor = std::make_shared<TRestoreRequestExecutor>(
         ActorSystem,
         shared_from_this(),
-        hosts);
+        hostsToList);
 
     auto future = restoreExecutor->GetFuture();
     future.Subscribe(

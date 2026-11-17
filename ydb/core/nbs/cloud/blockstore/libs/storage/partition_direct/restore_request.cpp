@@ -16,10 +16,10 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 TRestoreRequestExecutor::TRestoreRequestExecutor(
     NActors::TActorSystem* actorSystem,
     IDirectBlockGroupPtr directBlockGroup,
-    THostMask hosts)
+    THostMask hostsToList)
     : ActorSystem(actorSystem)
     , DirectBlockGroup(std::move(directBlockGroup))
-    , Hosts(hosts)
+    , HostsToList(hostsToList)
     , Response(std::make_unique<TAggregatedListPBufferResponse>())
 {}
 
@@ -37,9 +37,9 @@ TRestoreRequestExecutor::~TRestoreRequestExecutor()
 
 void TRestoreRequestExecutor::Run()
 {
-    Y_ABORT_UNLESS(!Hosts.Empty());
+    Y_ABORT_UNLESS(!HostsToList.Empty());
 
-    for (const auto host: Hosts) {
+    for (const auto host: HostsToList) {
         DoRun(host);
     }
 }
@@ -72,7 +72,7 @@ void TRestoreRequestExecutor::OnResponse(
     }
 
     Response->Meta[hostIndex] = std::move(response.Meta);
-    if (Response->Meta.size() == Hosts.Count()) {
+    if (Response->Meta.size() == HostsToList.Count()) {
         Reply(MakeError(S_OK));
     }
 }

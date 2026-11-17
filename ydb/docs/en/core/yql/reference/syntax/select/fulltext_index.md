@@ -70,6 +70,8 @@ LIMIT 20;
 
 Using `ILIKE` to search through a fulltext index requires `use_filter_lowercase=true`.
 
+For a [filtered fulltext index](../../../../dev/fulltext-indexes.md#filtered), `WHERE` must include an equality predicate for every filter column.
+
 A pattern can be a parameter or an expression built from parameters. It must not depend on table rows or change during query execution. [`ESCAPE`](../expressions.md#check-match) lets you search for literal `%` and `_` characters.
 
 Example substring search with escaping:

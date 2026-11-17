@@ -177,7 +177,7 @@ Y_UNIT_TEST_TWIN(AnalyzeOptimizerCache, AnalyzeFirst) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
                 UNIT_ASSERT(!response->Get()->Stats.FromCache);
                 UNIT_ASSERT(result->Query);
-                UNIT_ASSERT_VALUES_EQUAL(result->Query->Settings.IsAnalyze, analyzeRequest);
+                UNIT_ASSERT_VALUES_EQUAL(result->Query->Settings().IsAnalyze, analyzeRequest);
                 UNIT_ASSERT_VALUES_EQUAL(successes->Val() - before, analyzeRequest ? 0 : 1);
             }
         }

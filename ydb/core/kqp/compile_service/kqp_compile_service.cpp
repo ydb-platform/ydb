@@ -521,7 +521,7 @@ private:
         const auto& query = ev->Get()->Query;
         LWTRACK(KqpCompileServiceHandleRequest,
             ev->Get()->Orbit,
-            query ? query->UserSid : "");
+            query ? TString(query->UserSid()) : "");
 
         try {
             PerformRequest(ev, ctx);
@@ -545,7 +545,7 @@ private:
         YDB_LOG_DEBUG_CTX(ctx, "Received compile request",
             {"sender", ev->Sender},
             {"queryUid", (request.Uid ? *request.Uid : "<empty>")},
-            {"queryText", (request.Query ? EscapeC(request.Query->Text) : "<empty>")},
+            {"queryText", (request.Query ? EscapeC(request.Query->Text()) : "<empty>")},
             {"keepInCache", request.KeepInCache},
             {"split", request.Split},
             {"userRequestContext", *request.UserRequestContext});
@@ -568,7 +568,7 @@ private:
         if (request.Uid) {
             if (compileResult) {
                 Y_ENSURE(compileResult->Query);
-                if (compileResult->Query->UserSid == userSid) {
+                if (compileResult->Query->UserSid() == userSid) {
                     YDB_LOG_DEBUG_CTX(ctx, "Served query from cache by uid",
                         {"sender", ev->Sender},
                         {"queryUid", *request.Uid});
@@ -579,7 +579,7 @@ private:
                     YDB_LOG_NOTICE_CTX(ctx, "Non-matching user sid for query",
                         {"sender", ev->Sender},
                         {"queryUid", *request.Uid},
-                        {"expectedSid", compileResult->Query->UserSid},
+                        {"expectedSid", compileResult->Query->UserSid()},
                         {"actualSid", userSid});
                 }
             } else {
@@ -607,7 +607,7 @@ private:
 
         LWTRACK(KqpCompileServiceEnqueued,
             ev->Get()->Orbit,
-            ev->Get()->Query ? ev->Get()->Query->UserSid : "");
+            ev->Get()->Query ? TString(ev->Get()->Query->UserSid()) : "");
 
         TKqpCompileSettings compileSettings(
             request.KeepInCache,
@@ -670,7 +670,7 @@ private:
                     : ECompileActorAction::COMPILE);
             auto query = request.Query ? *request.Query : *compileResult->Query;
             if (compileResult) {
-                query.UserSid = compileResult->Query->UserSid;
+                query.SetUserSid(compileResult->Query->UserSid());
                 if (query != *compileResult->Query) {
                     YDB_LOG_WARN_CTX(ctx, "QueryId in recompile request and queryId in cache are different queryId in queryId",
                         {"request", query.SerializeToString()},
@@ -755,7 +755,7 @@ private:
 
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
                 for (auto& request : requests) {
-                    LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
+                    LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, TString(request.Query.UserSid()), compileActorId.ToString());
                     MarkJoinedCompilation(request.CompileServiceSpan, compileRequest.CompileServiceSpan);
                     LinkDependsOn(request.WaitSpan, ev->TraceId);
                     EndQueryTraceSpan(request.WaitSpan, compileResult->Status);
@@ -773,7 +773,7 @@ private:
                 }
             }
 
-            LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileActorId.ToString());
+            LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, TString(compileRequest.Query.UserSid()), compileActorId.ToString());
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
                 compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
         }
@@ -885,7 +885,7 @@ private:
         auto query = *compileResult->Query;
 
         YQL_ENSURE(compileResult->PreparedQuery);
-        YQL_ENSURE(!query.QueryParameterTypes);
+        YQL_ENSURE(!query.QueryParameterTypes());
         if (compileResult->PreparedQuery->GetParameters().empty()) {
             return false;
         }
@@ -895,7 +895,7 @@ private:
             ConvertMiniKQLTypeToYdbType(param.GetType(), paramType);
             queryParameterTypes->insert({param.GetName(), paramType});
         }
-        query.QueryParameterTypes = queryParameterTypes;
+        query.SetQueryParameterTypes(queryParameterTypes);
         if (QueryCache->FindByQuery(query, keepInCache)) {
             return false;
         }
@@ -968,7 +968,7 @@ private:
         const auto& query = compileResult->Query;
         LWTRACK(KqpCompileServiceReply,
             orbit,
-            query ? query->UserSid : "",
+            query ? TString(query->UserSid()) : "",
             compileResult->Issues.ToString());
 
         YDB_LOG_DEBUG_CTX(ctx, "Send response",
@@ -1306,6 +1306,15 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     const TActorContext& ctx,
     EWarmupAttributionMode warmupAttribution)
 {
+    // Rebuilds the key, so it is done before taking the lock.
+    if (!uid && query) {
+        if (query->UserSid().empty()) {
+            query->SetUserSid(userSid);
+        } else {
+            Y_ENSURE(query->UserSid() == userSid);
+        }
+    }
+
     TGuard<TAdaptiveLock> guard(Lock);
 
     *counters->CompileQueryCacheSize = SizeImpl();
@@ -1319,7 +1328,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
 
         if (compileResult) {
             Y_ENSURE(compileResult->Query);
-            if (compileResult->Query->UserSid == userSid) {
+            if (compileResult->Query->UserSid() == userSid) {
                 counters->ReportQueryCacheHit(dbCounters, true);
 
                 YDB_LOG_DEBUG_CTX(ctx, "Served query from cache by uid",
@@ -1332,7 +1341,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
                 YDB_LOG_NOTICE_CTX(ctx, "Non-matching user sid for query",
                     {"sender", sender},
                     {"queryUid", *uid},
-                    {"expectedSid", compileResult->Query->UserSid},
+                    {"expectedSid", compileResult->Query->UserSid()},
                     {"actualSid", userSid});
             }
         }
@@ -1345,12 +1354,6 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     }
 
     Y_ENSURE(query);
-
-    if (query->UserSid.empty()) {
-        query->UserSid = userSid;
-    } else {
-        Y_ENSURE(query->UserSid == userSid);
-    }
 
     YDB_LOG_DEBUG_CTX(ctx, "Try to find query by queryId",
         {"queryId", query->SerializeToString()});

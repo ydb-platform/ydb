@@ -7,14 +7,14 @@
 namespace NKikimr::NKqp {
 
 struct TKqpQueryRef {
-    TKqpQueryRef(const TString& text, std::shared_ptr<std::map<TString, Ydb::Type>> parameterTypes = {})
+    TKqpQueryRef(const TString& text, std::shared_ptr<const std::map<TString, Ydb::Type>> parameterTypes = {})
         : Text(text)
         , ParameterTypes(parameterTypes)
     {}
 
     // Text is owned by TKqpQueryId
     const TString& Text;
-    std::shared_ptr<std::map<TString, Ydb::Type>> ParameterTypes;
+    std::shared_ptr<const std::map<TString, Ydb::Type>> ParameterTypes;
 };
 
 } // namespace NKikimr::NKqp

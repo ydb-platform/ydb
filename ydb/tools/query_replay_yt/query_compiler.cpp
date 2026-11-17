@@ -250,14 +250,14 @@ private:
 private:
 
     TKqpQueryRef MakeQueryRef() {
-        return TKqpQueryRef(Query->Text, Query->QueryParameterTypes);
+        return TKqpQueryRef(Query->Text(), Query->QueryParameterTypes());
     }
 
     void StartCompilation() {
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = false;
 
-        switch (Query->Settings.QueryType) {
+        switch (Query->Settings().QueryType) {
             case NKikimrKqp::QUERY_TYPE_SQL_DML:
                 AsyncCompileResult = KqpHost->PrepareDataQuery(MakeQueryRef(), prepareSettings);
                 break;
@@ -284,7 +284,7 @@ private:
             }
 
             default:
-                YQL_ENSURE(false, "Unexpected query type: " << Query->Settings.QueryType);
+                YQL_ENSURE(false, "Unexpected query type: " << Query->Settings().QueryType);
         }
     }
     void Continue() {
@@ -571,7 +571,7 @@ private:
         GUCSettings->ImportFromJson(ReplayDetails);
 
         Config->Init(KqpSettings.DefaultSettings.GetDefaultSettings(), ReplayDetails["query_cluster"].GetStringSafe(), KqpSettings.Settings, false);
-        if (!Query->Database.empty()) {
+        if (!Query->Database().empty()) {
             Config->_KqpTablePathPrefix = ReplayDetails["query_database"].GetStringSafe();
         }
 
@@ -585,12 +585,12 @@ private:
         counters->Counters = new TKqpCounters(c);
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(c);
 
-        Gateway = CreateKikimrIcGateway(Query->Cluster, queryType, Query->Database, Query->DatabaseId, std::move(loader),
+        Gateway = CreateKikimrIcGateway(TString(Query->Cluster()), queryType, TString(Query->Database()), TString(Query->DatabaseId()), std::move(loader),
             TActivationContext::ActorSystem(), SelfId().NodeId(), counters);
         auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>(TKqpFederatedQuerySetup{
             .HttpGateway = HttpGateway,
         });
-        KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
+        KqpHost = CreateKqpHost(Gateway, TString(Query->Cluster()), TString(Query->Database()), Config, ModuleResolverState->ModuleResolver,
             federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
 
         StartCompilation();

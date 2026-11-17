@@ -19,6 +19,7 @@ SRCS(
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/cgiparam
+    library/cpp/json
     library/cpp/string_utils/base64
     library/cpp/uri
     ydb/core/base
@@ -29,6 +30,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/library/operation_id/protos
     yql/essentials/ast
+    yql/essentials/core/pg_settings
 )
 
 END()

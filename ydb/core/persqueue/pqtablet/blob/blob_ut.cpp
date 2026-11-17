@@ -358,6 +358,31 @@ bool operator ==(const TClientBlob &lhs, const TClientBlob &rhs) {
         lhs.LogicalMessageCount == rhs.LogicalMessageCount;
 }
 
+namespace {
+
+void AssertClientBlobsEqual(const TVector<TClientBlob>& expected, const TVector<TClientBlob>& actual) {
+    UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        UNIT_ASSERT(expected[i] == actual[i]);
+    }
+}
+
+TClientBlob MakeSimpleBlob(
+    TString sourceId, ui64 seqNo, TString data,
+    ui32 logicalMessageCount = 1, bool isBatch = false,
+    ui32 uncompressedSize = 0,
+    TString partitionKey = "", TString explicitHashKey = "")
+{
+    auto ts = TInstant::Seconds(100 + seqNo);
+    return TClientBlob(
+        std::move(sourceId), seqNo, std::move(data), TMaybe<TPartData>(),
+        ts, ts + TDuration::Seconds(1), uncompressedSize,
+        std::move(partitionKey), std::move(explicitHashKey),
+        logicalMessageCount, isBatch);
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
 
     TClientBlob MakeClientBlob(ui64 size, ui64 seqNo, ui64 totalParts,

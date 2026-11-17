@@ -8,6 +8,55 @@
 using namespace NKikimr;
 
 Y_UNIT_TEST_SUITE(ReplicationDescription) {
+    Y_UNIT_TEST(ChecksumStatusPerItem) {
+        NKikimrReplication::TEvDescribeReplicationResult controller;
+        auto* target = controller.AddTargets();
+        target->SetId(10);
+        target->SetSrcPath("/source");
+        target->SetDstPath("/destination");
+        auto* status = target->MutableChecksumStatus();
+        status->set_status(Ydb::StatusIds::TIMEOUT);
+        status->mutable_finished_at()->set_seconds(200);
+        status->mutable_last_result()->mutable_finished_at()->set_seconds(100);
+        status->mutable_last_result()->set_matches(false);
+        status->mutable_last_result()->mutable_source()->set_row_count(1);
+        status->mutable_last_result()->mutable_source()->set_hash("0000000000000011");
+        status->mutable_last_result()->mutable_destination()->set_hash("0000000000000000");
+        controller.AddTargets()->SetId(11);
+        Ydb::Replication::DescribeReplicationResult result;
+        FillReplicationDescription(result, controller);
+        UNIT_ASSERT_VALUES_EQUAL(result.items_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result.items(0).checksum_status().SerializeAsString(), status->SerializeAsString());
+        UNIT_ASSERT(!result.items(1).has_checksum_status());
+    }
+
+    Y_UNIT_TEST(ChecksumInterval) {
+        NKikimrReplication::TEvDescribeReplicationResult controller;
+        NKikimrSchemeOp::TReplicationDescription scheme;
+        scheme.MutableConfig()->MutableSpecific();
+        Ydb::Replication::DescribeReplicationResult fromController;
+        Ydb::Replication::DescribeReplicationResult fromScheme;
+        Ydb::StatusIds_StatusCode status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        UNIT_ASSERT(FillReplicationDescription(fromScheme, scheme, NKikimrSchemeOp::TDirEntry(), status, error));
+        UNIT_ASSERT(fromScheme.has_checksum_interval());
+        UNIT_ASSERT_VALUES_EQUAL(fromScheme.checksum_interval().seconds(), 0);
+        for (const ui64 interval : {0, 3600001}) {
+            controller.SetChecksumIntervalMilliSeconds(interval);
+            scheme.MutableConfig()->SetChecksumIntervalMilliSeconds(interval);
+            FillReplicationDescription(fromController, controller);
+            UNIT_ASSERT(FillReplicationDescription(fromScheme, scheme, NKikimrSchemeOp::TDirEntry(), status, error));
+            UNIT_ASSERT(fromController.has_checksum_interval());
+            UNIT_ASSERT_VALUES_EQUAL(fromController.checksum_interval().SerializeAsString(),
+                fromScheme.checksum_interval().SerializeAsString());
+            UNIT_ASSERT_VALUES_EQUAL(fromController.checksum_interval().seconds(), interval / 1000);
+            UNIT_ASSERT_VALUES_EQUAL(fromController.checksum_interval().nanos(), (interval % 1000) * 1000000);
+        }
+        controller.ClearChecksumIntervalMilliSeconds();
+        FillReplicationDescription(fromController, controller);
+        UNIT_ASSERT(!fromController.has_checksum_interval());
+    }
+
     Y_UNIT_TEST(AvailabilityPeriodPresence) {
         NKikimrReplication::TEvDescribeReplicationResult controller;
         NKikimrSchemeOp::TReplicationDescription scheme;

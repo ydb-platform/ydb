@@ -66,6 +66,12 @@ class TController::TTxInit: public TTxBase {
             if (rowset.GetValueOrDefault<Schema::Replications::SourceOffsetMismatch>(false)) {
                 Self->ReplicationsWithSourceOffsetMismatch.insert(rid);
             }
+            const auto boundary = rowset.GetValueOrDefault<Schema::Replications::ChecksumBoundary>(TString());
+            if (boundary) {
+                NKikimrProto::TRowVersion proto;
+                Y_ABORT_UNLESS(proto.ParseFromString(boundary));
+                Self->ChecksumBoundaries[rid] = TRowVersion::FromProto(proto);
+            }
             replication->SetNextTargetId(nextTid);
             replication->SetDesiredState(desiredState);
             Self->CommittedVersions[rid] = TRowVersion(
@@ -133,6 +139,21 @@ class TController::TTxInit: public TTxBase {
                 : dstState);
             target->SetDstPathId(dstPathId);
             target->SetIssue(issue);
+            const auto key = std::make_pair(rid, tid);
+            const auto execution = rowset.GetValueOrDefault<Schema::Targets::ChecksumExecution>(TString());
+            if (execution) {
+                auto& state = Self->ChecksumExecutions[key];
+                Y_ABORT_UNLESS(state.ParseFromString(execution));
+                Self->ChecksumRuntime[key].Recovery = state.GetPhase() != NKikimrReplication::TTableChecksumExecution::FINISHED;
+            }
+            const auto checksumStatus = rowset.GetValueOrDefault<Schema::Targets::ChecksumStatus>(TString());
+            if (checksumStatus) {
+                Y_ABORT_UNLESS(Self->ChecksumResults[key].ParseFromString(checksumStatus));
+            }
+            const auto schedule = rowset.GetValueOrDefault<Schema::Targets::ChecksumSchedule>(TString());
+            if (schedule) {
+                Y_ABORT_UNLESS(Self->ChecksumSchedules[key].ParseFromString(schedule));
+            }
             const auto indexBuild = rowset.GetValueOrDefault<Schema::Targets::IndexBuild>(TString());
             if (indexBuild) {
                 target->SetIndexBuild(true);
@@ -213,6 +234,9 @@ class TController::TTxInit: public TTxBase {
                 rowset.GetValue<Schema::TxIds::VersionTxId>()
             );
 
+            Self->AssignedTxIdBegins[version] = TRowVersion(
+                rowset.GetValueOrDefault<Schema::TxIds::BeginStep>(0),
+                rowset.GetValueOrDefault<Schema::TxIds::BeginTxId>(0));
             auto res = Self->AssignedTxIds.emplace(version, txId);
             Y_VERIFY_S(res.second, "Duplicate version: " << version);
 

@@ -17,6 +17,10 @@ namespace TEvController {
         EvDropReplicationResult,
         EvDescribeReplication,
         EvDescribeReplicationResult,
+        EvCheckTable,
+        EvCheckTableResult,
+
+        EvCancelCheckTable,
 
         EvEnd,
     };
@@ -50,6 +54,18 @@ namespace TEvController {
 
     struct TEvDescribeReplication
         : public TEventPB<TEvDescribeReplication, NKikimrReplication::TEvDescribeReplication, EvDescribeReplication>
+    {};
+
+    struct TEvCheckTable
+        : public TEventPB<TEvCheckTable, NKikimrReplication::TEvCheckTable, EvCheckTable>
+    {};
+
+    struct TEvCheckTableResult
+        : public TEventPB<TEvCheckTableResult, NKikimrReplication::TEvCheckTableResult, EvCheckTableResult>
+    {};
+
+    struct TEvCancelCheckTable
+        : public TEventPB<TEvCancelCheckTable, NKikimrReplication::TEvCheckTable, EvCancelCheckTable>
     {};
 
     struct TEvDescribeReplicationResult

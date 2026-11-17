@@ -1,3 +1,4 @@
+#include <ydb/core/tx/replication/common/tx_id_range.h>
 #include "service.h"
 #include "table_writer.h"
 #include "topic_reader.h"
@@ -186,6 +187,7 @@ public:
         auto status = MakeHolder<TEvService::TEvStatus>();
         auto& record = status->Record;
         record.SetSupportsSourceOffsets(true);
+        record.SetSupportsChecksumRanges(true);
 
         for (const auto& [id, _] : Workers) {
             id.Serialize(*record.AddWorkers());
@@ -413,12 +415,12 @@ public:
             return;
         }
 
-        TMap<TRowVersion, ui64> result;
+        TMap<TRowVersion, TTxIdRange> result;
         TVector<TRowVersion> versionsWithoutTxId;
 
         for (const auto& v : ev->Get()->Record.GetVersions()) {
             const auto version = TRowVersion::FromProto(v);
-            if (auto it = TxIds.upper_bound(version); it != TxIds.end()) {
+            if (auto it = TxIds.upper_bound(version); it != TxIds.end() && it->second.Begin <= version) {
                 result[it->first] = it->second;
             } else {
                 versionsWithoutTxId.push_back(version);
@@ -454,19 +456,20 @@ public:
             return;
         }
 
-        THashMap<TActorId, TMap<TRowVersion, ui64>> results;
+        THashMap<TActorId, TMap<TRowVersion, TTxIdRange>> results;
 
         for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
             const auto version = TRowVersion::FromProto(kv.GetVersion());
-            TxIds.emplace(version, kv.GetTxId());
+            const auto begin = kv.HasBegin() ? TRowVersion::FromProto(kv.GetBegin()) : TRowVersion::Min();
+            TxIds.emplace(version, TTxIdRange(kv.GetTxId(), begin));
 
-            for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
+            for (auto it = PendingTxId.lower_bound(begin); it != PendingTxId.end();) {
                 if (it->first >= version) {
                     break;
                 }
 
                 for (const auto& actorId : it->second) {
-                    results[actorId].emplace(version, kv.GetTxId());
+                    results[actorId].emplace(version, TTxIdRange(kv.GetTxId(), begin));
                 }
 
                 PendingTxId.erase(it++);
@@ -537,13 +540,16 @@ public:
     }
 
 private:
-    static void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, ui64>& result) {
+    static void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, TTxIdRange>& result) {
         auto ev = MakeHolder<TEvService::TEvTxIdResult>();
 
         for (const auto& [version, txId] : result) {
             auto& item = *ev->Record.AddVersionTxIds();
             version.ToProto(item.MutableVersion());
-            item.SetTxId(txId);
+            item.SetTxId(txId.TxId);
+            if (txId.Begin) {
+                txId.Begin.ToProto(item.MutableBegin());
+            }
         }
 
         ops->Send(recipient, ev.Release());
@@ -562,7 +568,7 @@ private:
     THashSet<TWorkerId> IndexBuildWorkers;
     THashMap<TWorkerId, TSet<TRowVersion>> PendingIndexTxIds;
     THashMap<TWorkerId, NKikimrReplication::TEvWorkerDataEnd> DataEnded;
-    TMap<TRowVersion, ui64> TxIds;
+    TMap<TRowVersion, TTxIdRange> TxIds;
     TMap<TRowVersion, THashSet<TActorId>> PendingTxId;
     THashSet<TWorkerId> WorkersWithHeartbeat;
     TMap<TRowVersion, THashSet<TWorkerId>> WorkersByHeartbeat;

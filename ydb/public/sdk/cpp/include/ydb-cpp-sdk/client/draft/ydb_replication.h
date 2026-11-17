@@ -16,6 +16,7 @@ namespace Ydb::Replication {
     class DescribeReplicationResult_Stats;
     class DescribeTransferResult;
     class DescribeTransferResult_Stats;
+    class DescribeReplicationResult_Item_ChecksumStatus;
 }
 
 namespace NYdb::inline Dev::NDraft {
@@ -33,6 +34,28 @@ struct TDescribeReplicationSettings: public TOperationRequestSettings<TDescribeR
 };
 
 struct TDescribeTransferSettings: public TDescribeReplicationSettings {
+};
+
+struct TTableChecksum {
+    uint64_t RowCount = 0;
+    // Uppercase hexadecimal CityHash64 hash: 16 digits, without a prefix.
+    // An empty table has hash "0000000000000000".
+    std::string Hash;
+};
+
+struct TChecksumStatus {
+    struct TResult {
+        TTableChecksum Source;
+        TTableChecksum Destination;
+        bool Matches = false;
+        TInstant FinishedAt;
+    };
+    EStatus Status;
+    NYdb::NIssue::TIssues Issues;
+    TInstant FinishedAt;
+    std::optional<TResult> LastResult;
+
+    explicit TChecksumStatus(const Ydb::Replication::DescribeReplicationResult_Item_ChecksumStatus& proto);
 };
 
 struct TStaticCredentials {
@@ -143,6 +166,7 @@ public:
         std::string DstPath;
         TStats Stats;
         std::optional<std::string> SrcChangefeedName;
+        std::optional<TChecksumStatus> ChecksumStatus;
     };
 
     enum class EConsistencyLevel {
@@ -173,6 +197,9 @@ public:
     // Contains the effective duration only for Finite.
     const std::optional<TDuration>& GetAvailabilityPeriod() const;
 
+    // Zero disables periodic checks. Missing means the server did not report the setting.
+    const std::optional<TDuration>& GetChecksumInterval() const;
+
     EConsistencyLevel GetConsistencyLevel() const;
     const TGlobalConsistency& GetGlobalConsistency() const;
 
@@ -191,6 +218,7 @@ private:
     std::vector<TItem> Items_;
     EAvailabilityPeriodKind AvailabilityPeriodKind_ = EAvailabilityPeriodKind::Unknown;
     std::optional<TDuration> AvailabilityPeriod_;
+    std::optional<TDuration> ChecksumInterval_;
     std::optional<TTransactions> Transactions_;
 
     std::variant<

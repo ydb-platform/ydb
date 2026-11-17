@@ -64,6 +64,174 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         });
     }
 
+    TString ChecksumIntervalScheme(const TString& name, const TString& settings, bool global = true) {
+        auto scheme = DefaultScheme(name);
+        scheme.insert(scheme.find("Config {") + TStringBuf("Config {").size(), TStringBuilder()
+            << " InitialScan: false " << settings
+            << (global ? " ConsistencySettings { Global {} } " : " "));
+        return scheme;
+    }
+
+    Y_UNIT_TEST(ChecksumAdmissionFifoRecoveryAndExpiry) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableAsyncReplicationChecksumCheck(true);
+        runtime.GetAppData().SchemeShardConfig.SetMaxReplicationChecksumShardsInFlight(2);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        ui64 txId = 100;
+        for (const auto& [name, partitions] : TVector<std::pair<TString, ui32>>{{"Small", 1}, {"Large", 3}}) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "%s"
+                Columns { Name: "key" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: %u
+            )", name.c_str(), partitions));
+            env.TestWaitNotification(runtime, txId);
+        }
+        const auto smallId = DescribePath(runtime, "/MyRoot/Small").GetPathDescription().GetSelf().GetPathId();
+        const auto largeId = DescribePath(runtime, "/MyRoot/Large").GetPathDescription().GetSelf().GetPathId();
+        const auto send = [&](TActorId edge, ui64 controller, const TString& id, ui64 pathId, bool release = false) {
+            auto request = MakeHolder<TEvSchemeShard::TEvChecksumAdmission>();
+            request->Record.SetControllerId(controller);
+            request->Record.SetRequestId(id);
+            request->Record.SetRelease(release);
+            request->Record.MutableDestinationPathId()->SetOwnerId(TTestTxConfig::SchemeShard);
+            request->Record.MutableDestinationPathId()->SetLocalId(pathId);
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, edge, request.Release());
+        };
+        const auto first = runtime.AllocateEdgeActor();
+        const auto large = runtime.AllocateEdgeActor();
+        const auto last = runtime.AllocateEdgeActor();
+        send(first, 1001, "first", smallId);
+        auto granted = runtime.GrabEdgeEvent<TEvSchemeShard::TEvChecksumAdmissionResult>(first);
+        UNIT_ASSERT_VALUES_EQUAL(granted->Get()->Record.GetGrantedShards(), 1);
+        const auto deadline = granted->Get()->Record.GetDeadlineUs();
+        send(large, 1002, "large", largeId);
+        send(last, 1003, "last", smallId);
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvSchemeShard::TEvChecksumAdmissionResult>(last, TDuration::MilliSeconds(10)));
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        send(first, 1001, "first", smallId);
+        granted = runtime.GrabEdgeEvent<TEvSchemeShard::TEvChecksumAdmissionResult>(first);
+        UNIT_ASSERT_VALUES_EQUAL(granted->Get()->Record.GetDeadlineUs(), deadline);
+        UNIT_ASSERT_VALUES_EQUAL(granted->Get()->Record.GetGrantedShards(), 1);
+        send(large, 1002, "large", largeId);
+        send(last, 1003, "last", smallId);
+        send(first, 1001, "first", smallId, true);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvSchemeShard::TEvChecksumAdmissionResult>(first)->Get()->Record.GetReleased());
+        granted = runtime.GrabEdgeEvent<TEvSchemeShard::TEvChecksumAdmissionResult>(large);
+        UNIT_ASSERT_VALUES_EQUAL(granted->Get()->Record.GetGrantedShards(), 2);
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvSchemeShard::TEvChecksumAdmissionResult>(last, TDuration::MilliSeconds(10)));
+        // An abandoned grant expires and admits the next table without a release.
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        send(last, 1003, "last", smallId);
+        granted = runtime.GrabEdgeEvent<TEvSchemeShard::TEvChecksumAdmissionResult>(last);
+        UNIT_ASSERT_VALUES_EQUAL(granted->Get()->Record.GetGrantedShards(), 1);
+        send(large, 1002, "large", largeId);
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvSchemeShard::TEvChecksumAdmissionResult>(large)->Get()->Record.GetStatus(),
+            Ydb::StatusIds::TIMEOUT);
+    }
+
+    Y_UNIT_TEST(ChecksumAdmissionFlagAndQueuedCancellation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto pathId = DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetSelf().GetPathId();
+        const auto edge = runtime.AllocateEdgeActor();
+        NKikimrReplication::TEvChecksumAdmission request;
+        request.SetControllerId(1001);
+        request.SetRequestId("cancelled");
+        request.MutableDestinationPathId()->SetOwnerId(TTestTxConfig::SchemeShard);
+        request.MutableDestinationPathId()->SetLocalId(pathId);
+        const auto send = [&] {
+            auto event = MakeHolder<TEvSchemeShard::TEvChecksumAdmission>();
+            event->Record = request;
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, edge, event.Release());
+        };
+        send();
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvSchemeShard::TEvChecksumAdmissionResult>(edge, TDuration::MilliSeconds(10)));
+        request.SetRelease(true);
+        send();
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvSchemeShard::TEvChecksumAdmissionResult>(edge)->Get()->Record.GetReleased());
+        runtime.GetAppData().FeatureFlags.SetEnableAsyncReplicationChecksumCheck(true);
+        request.SetRelease(false);
+        send();
+        auto response = runtime.GrabEdgeEvent<TEvSchemeShard::TEvChecksumAdmissionResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), Ydb::StatusIds::TIMEOUT);
+        UNIT_ASSERT(!response->Get()->Record.GetReleased());
+    }
+
+    Y_UNIT_TEST(ChecksumIntervalCreateAlterAndReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        TestCreateReplication(runtime, ++txId, "/MyRoot", ChecksumIntervalScheme("Replication", ""));
+        env.TestWaitNotification(runtime, txId);
+        const auto check = [&](ui64 interval) {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication");
+            const auto& path = desc.GetPathDescription();
+            UNIT_ASSERT_VALUES_EQUAL(path.GetReplicationDescription().GetConfig().GetChecksumIntervalMilliSeconds(), interval);
+            using namespace NKikimr::NReplication;
+            const auto edge = runtime.AllocateEdgeActor();
+            auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+            request->Record.MutablePathId()->SetOwnerId(path.GetSelf().GetSchemeshardId());
+            request->Record.MutablePathId()->SetLocalId(path.GetSelf().GetPathId());
+            runtime.SendToPipe(ExtractControllerId(path), edge, request.Release());
+            const auto result = runtime.GrabEdgeEvent<TEvController::TEvDescribeReplicationResult>(edge);
+            UNIT_ASSERT(result->Get()->Record.HasChecksumIntervalMilliSeconds());
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetChecksumIntervalMilliSeconds(), interval);
+        };
+        check(0);
+        for (const ui64 interval : {3600001, 7200000, 0}) {
+            TestAlterReplication(runtime, ++txId, "/MyRoot", TStringBuilder()
+                << "Name: \"Replication\" Config { ChecksumIntervalMilliSeconds: " << interval << " }");
+            env.TestWaitNotification(runtime, txId);
+            check(interval);
+            TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+                Name: "Replication"
+                Config { SrcConnectionParams { StaticCredentials { Password: "new-password" } } }
+            )");
+            env.TestWaitNotification(runtime, txId);
+            const auto controller = ExtractControllerId(DescribePath(runtime, "/MyRoot/Replication").GetPathDescription());
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            RebootTablet(runtime, controller, runtime.AllocateEdgeActor());
+            check(interval);
+        }
+    }
+
+    Y_UNIT_TEST(ChecksumIntervalValidation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        const auto maximum = (NYql::NUdf::MAX_TIMESTAMP - 1) / 1000;
+        for (const bool global : {false, true}) {
+            const TString settings = TStringBuilder() << "ChecksumIntervalMilliSeconds: " << (global ? maximum + 1 : 1);
+            TestCreateReplication(runtime, ++txId, "/MyRoot", ChecksumIntervalScheme("Invalid", settings, global),
+                {NKikimrScheme::StatusInvalidParameter});
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Invalid"), {NLs::PathNotExist});
+
+            const TString name = global ? "Global" : "Row";
+            TestCreateReplication(runtime, ++txId, "/MyRoot", ChecksumIntervalScheme(name, "", global));
+            env.TestWaitNotification(runtime, txId);
+            TestAlterReplication(runtime, ++txId, "/MyRoot", TStringBuilder()
+                << "Name: \"" << name << "\" Config { " << settings << " }", {NKikimrScheme::StatusInvalidParameter});
+            env.TestWaitNotification(runtime, txId);
+            UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/" + name).GetPathDescription()
+                .GetReplicationDescription().GetConfig().GetChecksumIntervalMilliSeconds(), 0);
+        }
+        TestCreateReplication(runtime, ++txId, "/MyRoot", ChecksumIntervalScheme("Maximum",
+            TStringBuilder() << "ChecksumIntervalMilliSeconds: " << maximum));
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Maximum").GetPathDescription()
+            .GetReplicationDescription().GetConfig().GetChecksumIntervalMilliSeconds(), maximum);
+    }
+
     TString AvailabilityScheme(const TString& name, const TString& period) {
         auto scheme = DefaultScheme(name);
         scheme.insert(scheme.find("Config {") + TStringBuf("Config {").size(),

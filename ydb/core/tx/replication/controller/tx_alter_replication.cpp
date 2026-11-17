@@ -367,6 +367,7 @@ public:
                     && desiredState == TReplication::EState::Ready) {
                 // Import replaces the placeholder, so resolve its new path id on attachment.
                 target->SetDstPathId({});
+                Self->RebuildChecksumTargets();
                 db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                     NIceDb::TUpdate<Schema::Targets::DstPathOwnerId>(InvalidOwnerId),
                     NIceDb::TUpdate<Schema::Targets::DstPathLocalId>(InvalidLocalPathId));
@@ -418,6 +419,8 @@ public:
 
         if (Replication) {
             Replication->Progress(ctx);
+            Self->ProgressChecksumSchedule(ctx);
+            Self->ProgressChecksums(ctx);
         }
 
         Self->RunTxIndexBuild(ctx);
@@ -500,6 +503,8 @@ public:
     void Complete(const TActorContext& ctx) override {
         if (Replication) {
             Replication->Progress(ctx);
+            Self->ProgressChecksumSchedule(ctx);
+            Self->ProgressChecksums(ctx);
         }
     }
 };

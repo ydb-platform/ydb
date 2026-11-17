@@ -21,6 +21,7 @@ enum ESimpleCounters {
     COUNTER_UNRESOLVED_DATABASE_REPLICATIONS = 11 [(CounterOpts) = {Name: "UnresolvedDatabaseReplications"}];
     // Includes every replication whose aggregate lag is unavailable, regardless of state.
     COUNTER_DATA_LAG_UNAVAILABLE_REPLICATIONS = 12 [(CounterOpts) = {Name: "DataLagUnavailableReplications"}];
+    COUNTER_CHECKSUM_MISMATCH = 13 [(CounterOpts) = {Name: "ChecksumMismatch"}];
 }
 
 enum ECumulativeCounters {
@@ -69,4 +70,5 @@ enum ETxTypes {
     TXTYPE_PREPARE_ATTACH_DST_DEPRECATED = 24 [deprecated = true];
     TXTYPE_INDEX_BUILD = 25 [(TxTypeOpts) = {Name: "TxIndexBuild"}];
     TXTYPE_SOURCE_OFFSET_REPORT = 26 [(TxTypeOpts) = {Name: "TxSourceOffsetReport"}];
+    TXTYPE_CHECKSUM = 27 [(TxTypeOpts) = {Name: "TxChecksum"}];
 }

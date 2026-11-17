@@ -8,6 +8,7 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/tx/replication/private_client/private_client.h>
 
 #include <optional>
 
@@ -45,6 +46,7 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(CopyTables),
         EV_REQUEST_RESPONSE(RenameTables),
         EV_REQUEST_RESPONSE(DescribeTable),
+        EV_REQUEST_RESPONSE(ChecksumStream),
 
         EvTopic = EvBegin + 2 * 100,
         EV_REQUEST_RESPONSE(CreateTopic),
@@ -308,6 +310,8 @@ struct TEvYdbProxy {
     DEFINE_GENERIC_REQUEST_RESPONSE(CopyTables, NYdb::TStatus, TVector<NYdb::NTable::TCopyItem>, NYdb::NTable::TCopyTablesSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(RenameTables, NYdb::TStatus, TVector<NYdb::NTable::TRenameItem>, NYdb::NTable::TRenameTablesSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeTable, NYdb::NTable::TDescribeTableResult, TString, NYdb::NTable::TDescribeTableSettings);
+    DEFINE_GENERIC_REQUEST_RESPONSE(ChecksumStream, TChecksumTableIterator,
+        Ydb::Replication::StreamChecksumTablesInternalRequest, TDuration);
     // Topic
     DEFINE_GENERIC_REQUEST_RESPONSE(CreateTopic, NYdb::TStatus, TString, NYdb::NTopic::TCreateTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(AlterTopic, NYdb::TStatus, TString, NYdb::NTopic::TAlterTopicSettings);

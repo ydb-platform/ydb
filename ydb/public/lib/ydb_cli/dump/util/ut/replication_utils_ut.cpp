@@ -15,6 +15,18 @@ Y_UNIT_TEST_SUITE(ReplicationDump) {
         return BuildCreateReplicationQuery("/Root", "/backup", "replication", NReplication::TReplicationDescription(proto));
     }
 
+    Y_UNIT_TEST(ChecksumInterval) {
+        Ydb::Replication::DescribeReplicationResult proto;
+        proto.mutable_global_consistency()->mutable_commit_interval()->set_seconds(10);
+        UNIT_ASSERT(!Query(proto).Contains("CHECKSUM_INTERVAL"));
+        proto.mutable_checksum_interval();
+        UNIT_ASSERT(!Query(proto).Contains("CHECKSUM_INTERVAL"));
+        proto.mutable_checksum_interval()->set_seconds(3600);
+        UNIT_ASSERT_STRING_CONTAINS(Query(proto), "CHECKSUM_INTERVAL = Interval('PT3600S')");
+        proto.mutable_checksum_interval()->set_nanos(1000000);
+        UNIT_ASSERT_STRING_CONTAINS(Query(proto), "CHECKSUM_INTERVAL = Interval('PT3600.001S')");
+    }
+
     Y_UNIT_TEST(AvailabilityPeriodUnlimited) {
         Ydb::Replication::DescribeReplicationResult proto;
         proto.mutable_availability_period()->mutable_unlimited();

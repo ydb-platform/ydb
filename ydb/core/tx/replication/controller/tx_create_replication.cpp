@@ -88,6 +88,7 @@ public:
             }
 
             Replication->Progress(ctx);
+            Self->ProgressChecksumSchedule(ctx);
         }
     }
 

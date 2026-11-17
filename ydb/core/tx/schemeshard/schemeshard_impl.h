@@ -2234,6 +2234,16 @@ public:
     void Handle(TEvPrivate::TEvProgressForcedCompaction::TPtr& ev, const TActorContext& ctx);
     // } // NForcedCompaction
 
+    struct TTxChecksumAdmission;
+    using TChecksumAdmissionKey = std::pair<ui64, TString>;
+    TMap<TChecksumAdmissionKey, NKikimrReplication::TChecksumAdmissionState> ChecksumAdmissions;
+    THashMap<TChecksumAdmissionKey, std::pair<TActorId, ui64>> ChecksumAdmissionWaiters;
+    ui64 NextChecksumAdmissionOrder = 0;
+    ui32 MaxReplicationChecksumShardsInFlight = 32;
+    bool ChecksumAdmissionWakeupScheduled = false;
+    void Handle(TEvSchemeShard::TEvChecksumAdmission::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvProgressChecksumAdmission::TPtr& ev, const TActorContext& ctx);
+
     // namespace NCdcStreamScan {
     struct TCdcStreamScan {
         struct TTxProgress;

@@ -3198,6 +3198,9 @@ public:
             if (const auto& availabilityPeriod = settings.Settings.AvailabilityPeriod) {
                 config.MutableAvailabilityPeriod()->CopyFrom(*availabilityPeriod);
             }
+            if (const auto& checksumInterval = settings.Settings.ChecksumInterval) {
+                config.SetChecksumIntervalMilliSeconds(checksumInterval->MilliSeconds());
+            }
 
             if (params.GetDatabase().empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
@@ -3250,6 +3253,10 @@ public:
 
             auto& op = *tx.MutableAlterReplication();
             op.SetName(pathPair.second);
+
+            if (const auto& checksumInterval = settings.Settings.ChecksumInterval) {
+                op.MutableConfig()->SetChecksumIntervalMilliSeconds(checksumInterval->MilliSeconds());
+            }
 
             if (const auto& done = settings.Settings.StateDone) {
                 auto& state = *op.MutableState();

@@ -106,6 +106,9 @@ void ConvertItem(
         *to.mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
             from.GetLagMilliSeconds());
     }
+    if (from.HasChecksumStatus()) {
+        *to.mutable_checksum_status() = from.GetChecksumStatus();
+    }
     if (from.HasInitialScanProgress()) {
         to.mutable_stats()->set_initial_scan_progress(from.GetInitialScanProgress());
     }
@@ -199,6 +202,13 @@ void FillReplicationDescription(
 {
     ConvertConnectionParams(inDesc.GetConnectionParams(), *out.mutable_connection_params());
     ConvertConsistencySettings(inDesc.GetConsistencySettings(), out);
+    if (inDesc.HasChecksumIntervalMilliSeconds()) {
+        const auto interval = inDesc.GetChecksumIntervalMilliSeconds();
+        out.mutable_checksum_interval()->set_seconds(interval / 1000);
+        out.mutable_checksum_interval()->set_nanos((interval % 1000) * 1000000);
+    } else {
+        out.clear_checksum_interval();
+    }
     if (inDesc.HasAvailabilityPeriod()) {
         ConvertAvailabilityPeriod(inDesc.GetAvailabilityPeriod(), *out.mutable_availability_period());
     } else {
@@ -229,6 +239,9 @@ bool FillReplicationDescription(
     ConvertDirectoryEntry(inDirEntry, out.mutable_self(), true);
     ConvertConnectionParams(config.GetSrcConnectionParams(), *out.mutable_connection_params());
     ConvertConsistencySettings(config.GetConsistencySettings(), out);
+    const auto checksumInterval = config.GetChecksumIntervalMilliSeconds();
+    out.mutable_checksum_interval()->set_seconds(checksumInterval / 1000);
+    out.mutable_checksum_interval()->set_nanos((checksumInterval % 1000) * 1000000);
     if (config.HasAvailabilityPeriod()) {
         ConvertAvailabilityPeriod(config.GetAvailabilityPeriod(), *out.mutable_availability_period());
     } else {

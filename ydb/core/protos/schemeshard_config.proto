@@ -47,4 +47,6 @@ message TSchemeShardConfig {
 
     // maximum recent index build operations to maintain (older ones are removed)
     optional uint32 MaxStoredIndexBuilds = 11 [default = 1000];
+    // Shared destination-shard budget per database. Zero pauses checksum admission.
+    optional uint32 MaxReplicationChecksumShardsInFlight = 12 [default = 32];
 }

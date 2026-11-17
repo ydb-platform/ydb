@@ -85,6 +85,7 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
 
     static const TSet<TString> ConfigSettings = [] {
         TSet<TString> settings = {
+            "checksum_interval",
             "connection_string",
             "endpoint",
             "database",
@@ -143,7 +144,7 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
                 return false;
             }
         }
-    } else if (keyName == "commit_interval") {
+    } else if (keyName == "commit_interval" || keyName == "checksum_interval") {
         if (value->GetOpName() != "Interval") {
             ctx.Context().Error() << "Literal of Interval type is expected for " << key.Name;
             return false;

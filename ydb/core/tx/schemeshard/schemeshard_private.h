@@ -66,6 +66,8 @@ namespace TEvPrivate {
         EvKesusResourcesDescribeResult,
         EvKesusSemaphoresDescribeResult,
         EvImportKesusResult,
+        EvProgressChecksumAdmission,
+
         EvEnd
     };
 
@@ -339,6 +341,8 @@ namespace TEvPrivate {
 
     struct TEvConsoleConfigsTimeout: public TEventLocal<TEvConsoleConfigsTimeout, EvConsoleConfigsTimeout> {
     };
+
+    struct TEvProgressChecksumAdmission: public TEventLocal<TEvProgressChecksumAdmission, EvProgressChecksumAdmission> {};
 
     struct TEvRunCdcStreamScan: public TEventLocal<TEvRunCdcStreamScan, EvRunCdcStreamScan> {
         const TPathId StreamPathId;

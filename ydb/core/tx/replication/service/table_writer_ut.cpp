@@ -307,6 +307,28 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(shared), "key = 1, value = local\nkey = 2, value = global");
     }
 
+    Y_UNIT_TEST(ChecksumBoundarySeparatesOutOfOrderAssignments) {
+        TEnv env;
+        CreateIndexBuildTable(env);
+        const auto writer = env.GetRuntime().Register(CreateLocalTableWriter(
+            "/Root", env.GetPathId("/Root/Table"), EWriteMode::Consistent));
+        env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
+        env.Send<TEvService::TEvGetTxId>(writer, new TEvWorker::TEvData(0, "TestSource", {
+            TRecord(1, R"({"key":[1],"update":{"value":"before"},"ts":[209,9]})"),
+            TRecord(2, R"({"key":[2],"update":{"value":"after"},"ts":[210,0]})"),
+        }));
+        auto suffix = MakeTxIdResult({{TRowVersion(220, 0), 124}});
+        TRowVersion(210, 0).ToProto(suffix->Record.MutableVersionTxIds(0)->MutableBegin());
+        env.SendAsync(writer, std::move(suffix));
+        env.Send<TEvWorker::TEvPoll>(writer, MakeTxIdResult({{TRowVersion(210, 0), 123}}));
+        CommitWrites(env.GetRuntime(), {"/Root/Table"}, 123);
+        auto before = ReadShardedTable(env.GetRuntime(), "/Root/Table");
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(before), "key = 1, value = before");
+        CommitWrites(env.GetRuntime(), {"/Root/Table"}, 124);
+        auto after = ReadShardedTable(env.GetRuntime(), "/Root/Table");
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(after), "key = 1, value = before\nkey = 2, value = after");
+    }
+
     Y_UNIT_TEST(ConsistentWrite) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);

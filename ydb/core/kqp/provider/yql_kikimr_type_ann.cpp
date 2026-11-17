@@ -2926,6 +2926,7 @@ private:
                 "commit_interval",
                 "initial_scan",
                 "availability_period",
+                "checksum_interval",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
             return settings;
@@ -2959,6 +2960,7 @@ private:
                 "ca_cert",
                 "state",
                 "failover_mode",
+                "checksum_interval",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
             return settings;

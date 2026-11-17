@@ -11134,6 +11134,81 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         waitAndCheck(1);
     }
 
+    Y_UNIT_TEST_TWIN(AsyncReplicationChecksumInterval, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        NYdb::NReplication::TReplicationClient replication(kikimr.GetDriver());
+        const auto execute = [&](const TString& query) {
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        execute("CREATE TABLE `/Root/table` (Key Uint64, PRIMARY KEY (Key));");
+        const TVector<TString> options = {"", ", CHECKSUM_INTERVAL = Interval('PT0S')",
+            ", CHECKSUM_INTERVAL = Interval('PT0.000001S')", ", CHECKSUM_INTERVAL = Interval('PT3600.001S')"};
+        const TVector<ui64> intervals = {0, 0, 1, 3600001};
+        for (size_t i = 0; i < options.size(); ++i) {
+            const TString path = TStringBuilder() << "/Root/replication" << i;
+            execute(Sprintf(R"(
+                CREATE ASYNC REPLICATION `%s` FOR `/Root/table` AS `/Root/replica%zu`
+                WITH (ENDPOINT = '%s', DATABASE = '/Root', INITIAL_SCAN = FALSE,
+                    CONSISTENCY_LEVEL = 'GLOBAL'%s);
+            )", path.c_str(), i, kikimr.GetEndpoint().c_str(), options[i].c_str()));
+            const auto check = [&](ui64 interval) {
+                const auto result = replication.DescribeReplication(path).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                const auto& actual = result.GetReplicationDescription().GetChecksumInterval();
+                UNIT_ASSERT(actual);
+                UNIT_ASSERT_VALUES_EQUAL(*actual, TDuration::MilliSeconds(interval));
+            };
+            check(intervals[i]);
+            execute(Sprintf("ALTER ASYNC REPLICATION `%s` SET (CHECKSUM_INTERVAL = Interval('PT7200S'));", path.c_str()));
+            check(7200000);
+            execute(Sprintf("ALTER ASYNC REPLICATION `%s` SET (CHECKSUM_INTERVAL = Interval('PT0S'));", path.c_str()));
+            check(0);
+            const auto invalid = ExecuteGeneric<UseQueryService>(queryClient, session,
+                Sprintf("ALTER ASYNC REPLICATION `%s` SET (CHECKSUM_INTERVAL = Interval('-PT1S'));", path.c_str()));
+            UNIT_ASSERT(!invalid.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(invalid.GetIssues().ToString(), "Checksum interval must be non-negative");
+            check(0);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AsyncReplicationInvalidChecksumInterval, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        const auto created = ExecuteGeneric<UseQueryService>(queryClient, session,
+            "CREATE TABLE `/Root/table` (Key Uint64, PRIMARY KEY (Key));");
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto maximum = TDuration::MilliSeconds((NYql::NUdf::MAX_TIMESTAMP - 1) / 1000);
+        const TVector<std::pair<TString, TString>> cases = {
+            {"CHECKSUM_INTERVAL = Interval('-PT1S')", "Checksum interval must be non-negative"},
+            {"CHECKSUM_INTERVAL = Interval('PT1H')", "Periodic checksum checks require GLOBAL consistency"},
+            {"CONSISTENCY_LEVEL = 'ROW', CHECKSUM_INTERVAL = Interval('PT1H')",
+                "Periodic checksum checks require GLOBAL consistency"},
+            {TStringBuilder() << "CONSISTENCY_LEVEL = 'GLOBAL', CHECKSUM_INTERVAL = Interval('PT"
+                << maximum.Seconds() << ".999999S')", "Checksum interval cannot be represented as SQL Interval"},
+        };
+        for (const auto& [options, issue] : cases) {
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
+                CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/table` AS `/Root/replica`
+                WITH (ENDPOINT = '%s', DATABASE = '/Root', INITIAL_SCAN = FALSE, %s);
+            )", kikimr.GetEndpoint().c_str(), options.c_str()));
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), issue);
+        }
+        const auto row = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
+            CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/table` AS `/Root/replica`
+            WITH (ENDPOINT = '%s', DATABASE = '/Root', INITIAL_SCAN = FALSE, CHECKSUM_INTERVAL = Interval('PT0S'));
+        )", kikimr.GetEndpoint().c_str()));
+        UNIT_ASSERT_C(row.IsSuccess(), row.GetIssues().ToString());
+        const auto altered = ExecuteGeneric<UseQueryService>(queryClient, session,
+            "ALTER ASYNC REPLICATION `/Root/replication` SET (CHECKSUM_INTERVAL = Interval('PT1H'));");
+        UNIT_ASSERT(!altered.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(altered.GetIssues().ToString(), "Periodic checksum checks require GLOBAL consistency");
+    }
+
     Y_UNIT_TEST_TWIN(CreateAsyncReplicationAvailabilityPeriod, UseQueryService) {
         NKikimrConfig::TFeatureFlags flags;
         flags.SetEnableTopicDiskSubDomainQuota(true);

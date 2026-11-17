@@ -275,7 +275,10 @@ private:
 
         const auto& params = Request->Record.GetTransaction().GetCommitWrites();
 
-        bool immediate = PerShardStates.size() == 1;
+        // Callers retaining an exact commit snapshot need a coordinator plan
+        // version even when the commit affects a single shard.
+        bool immediate = PerShardStates.size() == 1
+            && !(ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyReportPlanned);
 
         for (auto& kv : PerShardStates) {
             ui64 shardId = kv.first;

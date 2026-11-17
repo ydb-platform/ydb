@@ -1,3 +1,6 @@
+* Added per-item `ChecksumStatus` with hexadecimal hashes, the latest attempt outcome, and a retained comparison result to draft replication Describe.
+* Added `TReplicationDescription::GetChecksumInterval()` to read the configured periodic checksum interval.
+
 * Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
 
 * Added support for tablet reassignment operation IDs.

@@ -9,6 +9,9 @@
 #include "session_info.h"
 #include "sys_params.h"
 #include "worker_lag_expiry_queue.h"
+#include <ydb/core/tx/replication/checksum/checksum.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/defs.h>
@@ -33,7 +36,7 @@
 namespace NKikimr::NReplication::NController {
 
 THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(
-    ui64 writeTxId, const TVector<TString>& tables);
+    ui64 writeTxId, const TVector<TString>& tables, bool reportPlanned = false);
 
 class TController
     : public TActor<TController>
@@ -137,6 +140,14 @@ private:
     void Handle(TEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvController::TEvCheckTable::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvController::TEvCancelCheckTable::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvController::TEvCheckTableResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NSchemeShard::TEvSchemeShard::TEvChecksumAdmissionResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvChecksumSchedule::TPtr& ev, const TActorContext& ctx);
+    void Handle(NChecksum::TEvResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev, const TActorContext& ctx);
+    void HandleChecksumWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAssignStreamName::TPtr& ev, const TActorContext& ctx);
@@ -269,6 +280,29 @@ private:
     void RunTxResolveResourceIdResult(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx);
     void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch = false, TMaybe<ui64> sourceCommittedOffset = Nothing());
     void RunTxAssignTxId(const TActorContext& ctx);
+    using TChecksumKey = std::pair<ui64, ui64>;
+    using TChecksumStatus = Ydb::Replication::DescribeReplicationResult::Item::ChecksumStatus;
+    class TTxChecksum;
+    void RunChecksumTx(std::function<void(NIceDb::TNiceDb&)> execute, std::function<void(const TActorContext&)> complete);
+    void SaveChecksum(NIceDb::TNiceDb& db, TChecksumKey key);
+    void ProgressChecksums(const TActorContext& ctx);
+    void StopChecksum(TChecksumKey key, const TActorContext& ctx);
+    void FinishChecksum(TChecksumKey key, Ydb::StatusIds::StatusCode status, TString issue,
+        bool deferred, const TActorContext& ctx);
+    void StartChecksumSource(TChecksumKey key, bool probe, const TActorContext& ctx);
+    void StartChecksumAdmission(TChecksumKey key, const TActorContext& ctx);
+    void ProgressChecksumSchedule(const TActorContext& ctx);
+    void RebuildChecksumTargets();
+    void RemoveReplicationChecksums(ui64 replicationId, const TActorContext& ctx);
+    TString ValidateChecksum(const TReplication& replication, bool requireSessions) const;
+    bool ChecksumAssignmentPaused() const;
+    bool IsChecksumBoundaryTxId(ui64 writeTxId) const;
+    TRowVersion AdjustTxIdVersion(TRowVersion version) const;
+    void RebuildPendingTxIds();
+    TRowVersion GetChecksumBoundary() const;
+    TRowVersion GetTxIdBegin(TRowVersion end) const;
+    void OnChecksumCommitPlanned(ui64 writeTxId, TRowVersion version, const TActorContext& ctx);
+    void OnChecksumCommitComplete(ui64 writeTxId, TRowVersion version, NIceDb::TNiceDb& db);
     void RunTxHeartbeat(const TActorContext& ctx);
     void RunTxIndexBuild(const TActorContext& ctx);
     void RunTxIndexReadyTxId(TEvPrivate::TEvSchemaChangeDstAlterTxId::TPtr& ev, const TActorContext& ctx);
@@ -379,6 +413,8 @@ private:
     bool IndexBuildTxInFlight = false;
     TMap<ui64, TRowVersion> CommittedVersions; // Completed global frontier per replication.
     TMap<TRowVersion, ui64> AssignedTxIds; // tx ids assigned to version
+    TMap<TRowVersion, TRowVersion> AssignedTxIdBegins;
+    TMap<TRowVersion, THashSet<ui32>> RawPendingTxId;
     TMap<TRowVersion, THashSet<ui32>> PendingTxId;
     bool AssignTxIdInFlight = false;
 
@@ -389,6 +425,41 @@ private:
     ui64 CommittingTxId = 0;
     THashMap<ui64, std::pair<ui64, ui64>> SchemaTargetFlushes;
     std::optional<std::pair<ui64, ui64>> ActiveSchemaTargetFlush;
+
+    TMap<TChecksumKey, NKikimrReplication::TTableChecksumExecution> ChecksumExecutions;
+    TMap<TChecksumKey, TChecksumStatus> ChecksumResults;
+    TMap<ui64, TRowVersion> ChecksumBoundaries;
+    TMap<TPathId, TChecksumKey> ChecksumTargets;
+    TMap<TChecksumKey, NKikimrReplication::TTableChecksumSchedule> ChecksumSchedules;
+    bool ChecksumScheduleWakeupScheduled = false;
+    bool ChecksumScheduleTxInFlight = false;
+
+    struct TChecksumRuntime {
+        TActorId Source;
+        TActorId Destination;
+        TActorId Admission;
+        TVector<std::pair<TActorId, ui64>> Waiters;
+        TVector<THolder<IEventHandle>> PendingEvents;
+        bool SourceDone = false;
+        bool DestinationDone = false;
+        bool TransitionInFlight = false;
+        bool Retaining = false;
+        bool Retained = false;
+        bool Recovery = false;
+        TRowVersion DestinationVersion = TRowVersion::Min();
+        NKqp::TSnapshotHandle DestinationHold;
+        TString SourceSchema;
+        TString DestinationSchema;
+    };
+    TMap<TChecksumKey, TChecksumRuntime> ChecksumRuntime;
+    ui64 NextChecksumCookie = 0;
+    struct TChecksumRetainCookie {
+        TChecksumKey Key;
+        TString RequestId;
+        TRowVersion Version;
+    };
+    THashMap<ui64, TChecksumRetainCookie> ChecksumRetainCookies;
+    bool ChecksumWakeupScheduled = false;
 
 }; // TController
 

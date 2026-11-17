@@ -23,6 +23,12 @@ void TGRpcReplicationService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
     SETUP_REPLICATION_METHOD(DescribeReplication, DoDescribeReplication, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
     SETUP_REPLICATION_METHOD(DescribeTransfer, DoDescribeTransfer, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
 
+    SETUP_RUNTIME_EVENT_METHOD(StreamChecksumTablesInternal, StreamChecksumTablesInternalRequest, StreamChecksumTablesInternalResponse,
+        DoStreamChecksumTablesInternal, RLSWITCH(Rps), UNSPECIFIED,
+        YDB_API_DEFAULT_STREAM_COUNTER_BLOCK(replication, StreamChecksumTablesInternal), TAuditMode::NonModifying(),
+        EEmptyDatabaseMode::EmptyDatabaseForbidden, COMMON, ::NKikimr::NGRpcService::TGrpcRequestNoOperationCall,
+        GRpcRequestProxyId_, CQ_, nullptr, nullptr);
+
 #undef SETUP_REPLICATION_METHOD
 }
 

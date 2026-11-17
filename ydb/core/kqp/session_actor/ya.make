@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/path_aliasing
     ydb/core/tx/schemeshard
     ydb/library/security
+    ydb/library/yql/dq/actors/protos
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/services/workload_manager/service
 )

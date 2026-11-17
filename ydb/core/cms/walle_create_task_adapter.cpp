@@ -41,8 +41,8 @@ public:
             return;
         }
 
-        if (rec.GetEvacuateData() && !Actions.at(rec.GetAction())) {
-            ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "evacuate_data is not supported for this action", ctx);
+        if (rec.GetDrainData() && !Actions.at(rec.GetAction())) {
+            ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "drain_data is not supported for this action", ctx);
             return;
         }
 
@@ -128,7 +128,7 @@ private:
         request->Record.SetUser(WALLE_CMS_USER);
         request->Record.SetSchedule(true);
         request->Record.SetDryRun(task.GetDryRun());
-        request->Record.SetEvictVDisks(task.GetEvacuateData());
+        request->Record.SetEvictVDisks(task.GetDrainData());
         const auto &action = task.GetAction();
         if (action == "temporary-unreachable") {
             request->Record.SetPriority(WALLE_SOFT_MAINTENANCE_PRIORITY);

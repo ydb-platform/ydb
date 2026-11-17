@@ -34,9 +34,9 @@
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/iomgr/port.h"
 #include "src/core/lib/iomgr/resolved_address.h"
+#include "src/core/lib/resolver/endpoint_addresses.h"
 #include "src/core/lib/resolver/resolver.h"
 #include "src/core/lib/resolver/resolver_factory.h"
-#include "src/core/lib/resolver/server_address.h"
 #include "src/core/lib/uri/uri_parser.h"
 
 namespace grpc_core {
@@ -45,7 +45,7 @@ namespace {
 
 class SockaddrResolver : public Resolver {
  public:
-  SockaddrResolver(ServerAddressList addresses, ResolverArgs args);
+  SockaddrResolver(EndpointAddressesList addresses, ResolverArgs args);
 
   void StartLocked() override;
 
@@ -53,11 +53,11 @@ class SockaddrResolver : public Resolver {
 
  private:
   std::unique_ptr<ResultHandler> result_handler_;
-  ServerAddressList addresses_;
+  EndpointAddressesList addresses_;
   ChannelArgs channel_args_;
 };
 
-SockaddrResolver::SockaddrResolver(ServerAddressList addresses,
+SockaddrResolver::SockaddrResolver(EndpointAddressesList addresses,
                                    ResolverArgs args)
     : result_handler_(std::move(args.result_handler)),
       addresses_(std::move(addresses)),
@@ -76,7 +76,7 @@ void SockaddrResolver::StartLocked() {
 
 bool ParseUri(const URI& uri,
               bool parse(const URI& uri, grpc_resolved_address* dst),
-              ServerAddressList* addresses) {
+              EndpointAddressesList* addresses) {
   if (!uri.authority().empty()) {
     gpr_log(GPR_ERROR, "authority-based URIs not supported by the %s scheme",
             uri.scheme().c_str());
@@ -104,7 +104,7 @@ bool ParseUri(const URI& uri,
 
 OrphanablePtr<Resolver> CreateSockaddrResolver(
     ResolverArgs args, bool parse(const URI& uri, grpc_resolved_address* dst)) {
-  ServerAddressList addresses;
+  EndpointAddressesList addresses;
   if (!ParseUri(args.uri, parse, &addresses)) return nullptr;
   // Instantiate resolver.
   return MakeOrphanable<SockaddrResolver>(std::move(addresses),
@@ -113,6 +113,8 @@ OrphanablePtr<Resolver> CreateSockaddrResolver(
 
 class IPv4ResolverFactory : public ResolverFactory {
  public:
+  y_absl::string_view scheme() const override { return "ipv4"; }
+
   bool IsValidUri(const URI& uri) const override {
     return ParseUri(uri, grpc_parse_ipv4, nullptr);
   }
@@ -120,12 +122,12 @@ class IPv4ResolverFactory : public ResolverFactory {
   OrphanablePtr<Resolver> CreateResolver(ResolverArgs args) const override {
     return CreateSockaddrResolver(std::move(args), grpc_parse_ipv4);
   }
-
-  y_absl::string_view scheme() const override { return "ipv4"; }
 };
 
 class IPv6ResolverFactory : public ResolverFactory {
  public:
+  y_absl::string_view scheme() const override { return "ipv6"; }
+
   bool IsValidUri(const URI& uri) const override {
     return ParseUri(uri, grpc_parse_ipv6, nullptr);
   }
@@ -133,13 +135,13 @@ class IPv6ResolverFactory : public ResolverFactory {
   OrphanablePtr<Resolver> CreateResolver(ResolverArgs args) const override {
     return CreateSockaddrResolver(std::move(args), grpc_parse_ipv6);
   }
-
-  y_absl::string_view scheme() const override { return "ipv6"; }
 };
 
 #ifdef GRPC_HAVE_UNIX_SOCKET
 class UnixResolverFactory : public ResolverFactory {
  public:
+  y_absl::string_view scheme() const override { return "unix"; }
+
   bool IsValidUri(const URI& uri) const override {
     return ParseUri(uri, grpc_parse_unix, nullptr);
   }
@@ -147,12 +149,6 @@ class UnixResolverFactory : public ResolverFactory {
   OrphanablePtr<Resolver> CreateResolver(ResolverArgs args) const override {
     return CreateSockaddrResolver(std::move(args), grpc_parse_unix);
   }
-
-  TString GetDefaultAuthority(const URI& /*uri*/) const override {
-    return "localhost";
-  }
-
-  y_absl::string_view scheme() const override { return "unix"; }
 };
 
 class UnixAbstractResolverFactory : public ResolverFactory {
@@ -166,12 +162,24 @@ class UnixAbstractResolverFactory : public ResolverFactory {
   OrphanablePtr<Resolver> CreateResolver(ResolverArgs args) const override {
     return CreateSockaddrResolver(std::move(args), grpc_parse_unix_abstract);
   }
-
-  TString GetDefaultAuthority(const URI& /*uri*/) const override {
-    return "localhost";
-  }
 };
 #endif  // GRPC_HAVE_UNIX_SOCKET
+
+#ifdef GRPC_HAVE_VSOCK
+class VSockResolverFactory : public ResolverFactory {
+ public:
+  y_absl::string_view scheme() const override { return "vsock"; }
+
+  bool IsValidUri(const URI& uri) const override {
+    return ParseUri(uri, grpc_parse_vsock, nullptr);
+  }
+
+  OrphanablePtr<Resolver> CreateResolver(ResolverArgs args) const override {
+    return CreateSockaddrResolver(std::move(args), grpc_parse_vsock);
+  }
+};
+
+#endif  // GRPC_HAVE_VSOCK
 
 }  // namespace
 
@@ -185,6 +193,10 @@ void RegisterSockaddrResolver(CoreConfiguration::Builder* builder) {
       std::make_unique<UnixResolverFactory>());
   builder->resolver_registry()->RegisterResolverFactory(
       std::make_unique<UnixAbstractResolverFactory>());
+#endif
+#ifdef GRPC_HAVE_VSOCK
+  builder->resolver_registry()->RegisterResolverFactory(
+      std::make_unique<VSockResolverFactory>());
 #endif
 }
 

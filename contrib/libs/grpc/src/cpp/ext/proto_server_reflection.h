@@ -19,8 +19,7 @@
 #ifndef GRPC_SRC_CPP_EXT_PROTO_SERVER_REFLECTION_H
 #define GRPC_SRC_CPP_EXT_PROTO_SERVER_REFLECTION_H
 
-#include <util/generic/string.h>
-#include <util/string/cast.h>
+#include <string>
 #include <unordered_set>
 #include <vector>
 

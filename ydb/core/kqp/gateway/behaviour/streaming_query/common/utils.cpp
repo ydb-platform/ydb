@@ -5,6 +5,7 @@
 
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <util/string/cast.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -59,6 +60,13 @@ TStreamingQuerySettings& TStreamingQuerySettings::FromProto(const NKikimrSchemeO
             }
         } else if (name == TStreamingQueryMeta::TProperties::InflightOperation) {
             InflightOperation = value;
+        } else if (name == TStreamingQueryMeta::TProperties::StatsCollectionMode) {
+            if (StatsCollectionModeString = value) {
+                Ydb::Table::QueryStatsCollection::Mode mode;
+                auto parsed = Ydb::Table::QueryStatsCollection::Mode_Parse(StatsCollectionModeString, &mode);
+                Y_VALIDATE(parsed, "Failed to parse StatsCollectionMode");
+                StatsCollectionMode = mode;
+            }
         }
     }
 

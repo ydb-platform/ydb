@@ -7026,7 +7026,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         )");
         const ui64 pinnedBytes = consumer->GetReport().Used;
         limitOverride = 0;
-        runtime.Send(new IEventHandle(shardActor, helper.Sender, new NMemory::TEvConsumerLimit(0)));
+        runtime.Send(new IEventHandle(shardActor, helper.Sender, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, 0)));
         runtime.WaitFor("HNSW cache eviction", [&] { return !cached(); });
         UNIT_ASSERT_VALUES_EQUAL(consumer->GetReport().Used, pinnedBytes);
         UNIT_ASSERT_VALUES_EQUAL(read()->Record.GetStats().GetRows(), 3);
@@ -7788,7 +7788,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             return count;
         };
         auto setLimit = [&] {
-            runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(*limit)));
+            runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, *limit)));
         };
         setLimit();
         runtime.WaitFor("one HNSW graph evicted", [&] { return ready() != fixture.Count; });
@@ -7836,7 +7836,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         const auto used = consumer->GetReport().Used;
         UNIT_ASSERT_GT(used, 0u);
         limit = ZeroLimit ? 0 : used - 1;
-        runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(*limit)));
+        runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, *limit)));
         runtime.WaitFor("HNSW graph evicted", [&] { return !fixture.Index(); });
         const auto before = rebuildRequests;
         fixture.Read();
@@ -7854,7 +7854,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(rebuildRequests, exhausted);
 
         limit = 64_MB;
-        runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(*limit)));
+        runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, *limit)));
         fixture.Warm(); // A real grant increase may start a fresh bounded attempt.
     }
 

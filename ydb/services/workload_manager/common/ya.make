@@ -8,17 +8,12 @@ SRCS(
 )
 
 PEERDIR(
-
+    library/cpp/retry
     ydb/core/base
     ydb/core/resource_pools
     ydb/core/scheme
-
-
     ydb/library/actors/core
-
     ydb/public/sdk/cpp/src/client/types
-
-    library/cpp/retry
 )
 
 END()

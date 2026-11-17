@@ -17,7 +17,6 @@ private:
 
     public:
         NMonitoring::TDynamicCounters::TCounterPtr RegisterTx;
-        NMonitoring::TDynamicCounters::TCounterPtr RegisterTxWithDeadline;
         NMonitoring::TDynamicCounters::TCounterPtr StartProposeOnExecute;
         NMonitoring::TDynamicCounters::TCounterPtr StartProposeOnComplete;
         NMonitoring::TDynamicCounters::TCounterPtr FinishProposeOnExecute;
@@ -31,7 +30,6 @@ private:
         TProgressCounters(const TCommonCountersOwner& owner)
             : TBase(owner)
             , RegisterTx(TBase::GetDeriviative("RegisterTx"))
-            , RegisterTxWithDeadline(TBase::GetDeriviative("RegisterTxWithDeadline"))
             , StartProposeOnExecute(TBase::GetDeriviative("StartProposeOnExecute"))
             , StartProposeOnComplete(TBase::GetDeriviative("StartProposeOnComplete"))
             , FinishProposeOnExecute(TBase::GetDeriviative("FinishProposeOnExecute"))
@@ -62,10 +60,6 @@ public:
 
     void OnRegisterTx(const TOpType& opType) {
         GetSubGroup(opType).RegisterTx->Add(1);
-    }
-
-    void OnRegisterTxWithDeadline(const TOpType& opType) {
-        GetSubGroup(opType).RegisterTxWithDeadline->Add(1);
     }
 
     void OnStartProposeOnExecute(const TOpType& opType) {

@@ -883,10 +883,8 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
     test_env_value = None
 
     if unit.get("_LD_LIBRARY_PATH_ARGS"):
-        tev_raw = unit.get("TEST_ENV_VALUE")
-        unit.set(["TEST_ENV_VALUE", '"LD_LIBRARY_PATH=$LIBATOMIC_1_2_0_RESOURCE_GLOBAL"'])
-        test_env_value = df.TestEnv.value(unit, [], {})
-        unit.set(["TEST_ENV_VALUE", tev_raw])
+        declared_env = unit.get_subst("TEST_ENV_VALUE")
+        test_env_value = df.prepare_env(f'{declared_env} "LD_LIBRARY_PATH=$LIBATOMIC_1_2_0_RESOURCE_GLOBAL"')
 
     pj_scripts = pm.load_package_json_from_dir(pm.sources_path).data.get("scripts", {})
 

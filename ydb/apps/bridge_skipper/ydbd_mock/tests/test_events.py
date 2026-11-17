@@ -57,6 +57,37 @@ class EventLogTest(unittest.TestCase):
         self.assertEqual([e["i"] for e in log.query()], [2, 3, 4])
         self.assertEqual(log.last_seq, 5)
 
+    def test_partial_sink_tail_is_removed_before_two_restarts(self):
+        for tail in (b'{"seq":2,"kind":"interrupted', b'x' * 70000):
+            with self.subTest(tail_size=len(tail)), tempfile.TemporaryDirectory() as d:
+                path = os.path.join(d, "events.jsonl")
+                first = self.make(sink_path=path)
+                first.append("start")
+                first.close()
+                with open(path, "ab") as sink:
+                    sink.write(tail)
+
+                for expected in (2, 3):
+                    reopened = self.make(sink_path=path)
+                    try:
+                        self.assertEqual(reopened.append("restart")["seq"], expected)
+                    finally:
+                        reopened.close()
+                    records = [json.loads(line) for line in read_lines(path)]
+                    self.assertEqual([record["seq"] for record in records], list(range(1, expected + 1)))
+
+    def test_partial_only_sink_recovers_from_empty_history(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "events.jsonl")
+            with open(path, "wb") as sink:
+                sink.write(b'{"seq":1,"kind":"interrupted')
+            log = self.make(sink_path=path)
+            try:
+                self.assertEqual(log.append("restart")["seq"], 1)
+            finally:
+                log.close()
+            self.assertEqual([json.loads(line)["seq"] for line in read_lines(path)], [1])
+
     def test_sink_gets_one_json_line_per_event_and_survives_reopen(self):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "events.jsonl")

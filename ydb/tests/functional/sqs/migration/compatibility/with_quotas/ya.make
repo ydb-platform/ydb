@@ -6,6 +6,5 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/sqs/migration/suites/with_quotas.in
 
 FORK_SUBTESTS()
 SPLIT_FACTOR(20)
-REQUIREMENTS(cpu:1)
 
 END()

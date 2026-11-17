@@ -8,6 +8,7 @@ gRPC port `grpc_base_port + port_stride * p + n`, unless explicit port lists are
 import dataclasses
 import ipaddress
 import math
+import os
 import socket
 import typing
 
@@ -197,6 +198,25 @@ class Topology:
         self.warnings: typing.List[str] = []
         self.validate()
         self._piles = self._build()
+        self._pile_files = self._build_pile_files()
+
+    def _build_pile_files(self) -> typing.Dict[str, str]:
+        separators = [s for s in (os.sep, os.altsep, "\0") if s]
+        safe = {name for name in self.pile_names if name not in ("", ".", "..")
+                and not any(separator in name for separator in separators)}
+        used = set(safe)
+        result = {}
+        for index, name in enumerate(self.pile_names):
+            file_name = name if name in safe else "__pile_%d" % index
+            while file_name in used and name not in safe:
+                file_name = "_" + file_name
+            result[name] = file_name
+            used.add(file_name)
+        return result
+
+    def pile_file_name(self, name: str) -> str:
+        """Map logical identity to a local component, preserving existing safe names."""
+        return self._pile_files[name]
 
     # ----- construction -----
 

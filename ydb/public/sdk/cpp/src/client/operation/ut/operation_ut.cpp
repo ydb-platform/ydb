@@ -57,12 +57,12 @@ namespace NYdb::inline Dev::NOperation {
             }
 
             void CheckGet(const TGetOperationSettings* settings = nullptr,
-                          std::optional<std::chrono::minutes> timeout = std::nullopt) {
+                          std::optional<std::chrono::minutes> timeout = std::nullopt,
+                          std::chrono::system_clock::time_point before = std::chrono::system_clock::now()) {
                 TOperation::TOperationId id;
                 id.SetKind(TOperation::TOperationId::EXPORT);
                 id.AddOptionalValue("id", "42");
                 id.AddOptionalValue("kind", "yt");
-                const auto before = std::chrono::system_clock::now();
                 auto result = settings ? Client_->Get<NExport::TExportToYtResponse>(id, *settings)
                                        : Client_->Get<NExport::TExportToYtResponse>(id);
                 ASSERT_TRUE(result.Wait(TDuration::Seconds(10)));
@@ -100,17 +100,19 @@ namespace NYdb::inline Dev::NOperation {
         }
 
         TEST_F(TOperationClientTest, EarlierDeadlineWins) {
+            const auto before = std::chrono::system_clock::now();
             TGetOperationSettings settings;
             settings.Deadline(TDeadline::AfterDuration(std::chrono::minutes(1)));
             settings.ClientTimeout(TDuration::Minutes(2));
-            CheckGet(&settings, std::chrono::minutes(1));
+            CheckGet(&settings, std::chrono::minutes(1), before);
         }
 
         TEST_F(TOperationClientTest, EarlierClientTimeoutWins) {
+            const auto before = std::chrono::system_clock::now();
             TGetOperationSettings settings;
             settings.ClientTimeout(TDuration::Minutes(1));
             settings.Deadline(TDeadline::AfterDuration(std::chrono::minutes(2)));
-            CheckGet(&settings, std::chrono::minutes(1));
+            CheckGet(&settings, std::chrono::minutes(1), before);
         }
 
     } // namespace

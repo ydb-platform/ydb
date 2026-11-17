@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 4, 5, 6}));
     }
 
-    Y_UNIT_TEST(ShouldAcknowledgeMergeRetryWhenMergedChildSplit) {
+    Y_UNIT_TEST(ShouldForgetMergeWhenMergedChildSplit) {
         // given
         TTestEnv env;
         env.ConfigureTracking({1, 2, 3});
@@ -314,11 +314,11 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         const auto retryAck = env.PartitioningChanged(2, {4});
 
         // then
-        UNIT_ASSERT_C(retryAck.GetStatus() == TPartitioningAck::SUCCESS, retryAck.ShortDebugString());
+        UNIT_ASSERT_C(retryAck.GetStatus() == TPartitioningAck::UNKNOWN_SOURCE, retryAck.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({3, 5, 6}));
     }
 
-    Y_UNIT_TEST(ShouldAcknowledgeMergeRetryWhenTabletRestarted) {
+    Y_UNIT_TEST(ShouldForgetMergeAfterRestartWhenMergedChildSplit) {
         // given
         TTestEnv env;
         env.ConfigureTracking({1, 2, 3});
@@ -331,8 +331,40 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         const auto retryAck = env.PartitioningChanged(1, {4});
 
         // then
-        UNIT_ASSERT_C(retryAck.GetStatus() == TPartitioningAck::SUCCESS, retryAck.ShortDebugString());
+        UNIT_ASSERT_C(retryAck.GetStatus() == TPartitioningAck::UNKNOWN_SOURCE, retryAck.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({3, 5, 6}));
+    }
+
+    Y_UNIT_TEST(ShouldForgetSplitWhenAllChildrenMerged) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        UNIT_ASSERT(env.PartitioningChanged(1, {3, 4}).GetStatus() == TPartitioningAck::SUCCESS);
+        UNIT_ASSERT(env.PartitioningChanged(3, {5}, 78).GetStatus() == TPartitioningAck::SUCCESS);
+        UNIT_ASSERT(env.PartitioningChanged(4, {5}, 78).GetStatus() == TPartitioningAck::SUCCESS);
+
+        // when
+        const auto retryAck = env.PartitioningChanged(1, {3, 4});
+
+        // then
+        UNIT_ASSERT_C(retryAck.GetStatus() == TPartitioningAck::UNKNOWN_SOURCE, retryAck.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 5}));
+    }
+
+    Y_UNIT_TEST(ShouldAcknowledgeMergeRetryWhenTabletRestarted) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2, 3});
+        UNIT_ASSERT(env.PartitioningChanged(1, {4}).GetStatus() == TPartitioningAck::SUCCESS);
+        UNIT_ASSERT(env.PartitioningChanged(2, {4}).GetStatus() == TPartitioningAck::SUCCESS);
+        env.RebootTablet();
+
+        // when
+        const auto retryAck = env.PartitioningChanged(1, {4});
+
+        // then
+        UNIT_ASSERT_C(retryAck.GetStatus() == TPartitioningAck::SUCCESS, retryAck.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({3, 4}));
     }
 
     Y_UNIT_TEST(RejectsUnappliedReplacementWithKnownChildren) {

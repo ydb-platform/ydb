@@ -37,6 +37,7 @@ struct TCdcAggregatorStreamConfig {
 struct TCdcAggregatorStreamSourcesDiff {
     THashSet<ui64> Inserted;
     THashSet<ui64> Deleted;
+    TVector<std::pair<ui64, ui64>> DeletedPartitioningChanges;
 };
 
 struct TCdcAggregatorStreamHeartbeatsDiff {

@@ -1,5 +1,7 @@
 #include "cdc_aggregator_stream.h"
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NCdcAggregator {
 
 TCdcAggregatorStream::TCdcAggregatorStream(const TCdcAggregatorStreamConfig& config)
@@ -91,6 +93,15 @@ std::optional<TCdcAggregatorStreamSourcesDiff> TCdcAggregatorStream::ApplyPartit
         }
     }
     PartitioningChanges.emplace(std::move(key), change.ChildDataShardIds);
+
+    for (auto it = PartitioningChanges.begin(); it != PartitioningChanges.end();) {
+        if (AnyOf(it->second, [this](ui64 childDataShardId) { return LastHeartbeatsBySourceDataShardId.contains(childDataShardId); })) {
+            ++it;
+        } else {
+            diff.DeletedPartitioningChanges.push_back(it->first);
+            it = PartitioningChanges.erase(it);
+        }
+    }
 
     return diff;
 }

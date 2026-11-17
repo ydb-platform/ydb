@@ -364,15 +364,11 @@ struct TMirrorerEnv {
     TPersQueueCounters Counters;
     std::vector<THolder<TEvPersQueue::TEvRequest>> CapturedRequests;
     std::vector<THolder<TEvPQ::TEvPartitionScaleStatusChanged>> CapturedScale;
-<<<<<<< HEAD
-=======
-    std::vector<THolder<TEvPQ::TEvReplicationData>> CapturedReplicationData;
     std::vector<THolder<TEvTxProxySchemeCache::TEvNavigateKeySet>> Navigations;
     std::vector<TActorId> NavigationSenders;
     std::vector<THolder<TEvResolveSecret>> SecretRequests;
     TString Database;
     TString TopicPath;
->>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
     ui32 ErrorCount = 0;
     ui32 CounterEventCount = 0;
     bool TabletPoisoned = false;
@@ -433,12 +429,6 @@ struct TMirrorerEnv {
         );
 
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
-<<<<<<< HEAD
-=======
-            if (ev->Recipient == Partition && ev->GetTypeRewrite() == TEvPQ::TEvReplicationData::EventType) {
-                CapturedReplicationData.emplace_back(ev->Release<TEvPQ::TEvReplicationData>());
-                return TTestActorRuntime::EEventAction::DROP;
-            }
             if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySet::EventType) {
                 NavigationSenders.push_back(ev->Sender);
                 Navigations.emplace_back(ev->Release<TEvTxProxySchemeCache::TEvNavigateKeySet>());
@@ -448,7 +438,6 @@ struct TMirrorerEnv {
                 SecretRequests.emplace_back(ev->Get<TEvResolveSecret>()->MakeCopy());
                 return TTestActorRuntime::EEventAction::DROP;
             }
->>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
             if (ev->Recipient == Tablet && ev->GetTypeRewrite() == TEvPersQueue::TEvRequest::EventType) {
                 CapturedRequests.emplace_back(ev->Release<TEvPersQueue::TEvRequest>());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -472,13 +461,8 @@ struct TMirrorerEnv {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-<<<<<<< HEAD
-        auto converter = MakeTopicConverter();
-=======
         auto converter = MakeTopicConverter(Database, TopicPath);
         auto mirrorConfig = options.MirrorConfig;
-        mirrorConfig.SetMirrorConsumerOffsets(options.MirrorConsumerOffsets);
->>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
         Mirrorer = Runtime.Register(CreateMirrorer(
             TabletId,
             Tablet,
@@ -487,7 +471,7 @@ struct TMirrorerEnv {
             PartitionId,
             options.LocalDC,
             options.EndOffset,
-            MakeMirrorConfig(),
+            mirrorConfig,
             Counters
         ));
         Runtime.EnableScheduleForActor(Mirrorer);

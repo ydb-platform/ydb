@@ -500,67 +500,11 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
     EndPartitionSessionEvent = std::nullopt;
 }
 
-<<<<<<< HEAD
-void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
-=======
-void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
-    if (OffsetsByConsumers.empty() && !MirroredOffsetToSend) {
-        return;
-    }
-
-    y_absl::flat_hash_map<TString, ui64> offsetsByConsumersToSend;
-    for (auto& [consumer, offset] : OffsetsByConsumers) {
-        auto offsetToSend = Min(offset, Max(EndOffset, ConfirmedEndOffset));
-        if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offsetToSend) {
-            continue;
-        }
-        
-        offsetsByConsumersToSend[consumer] = offsetToSend;
-    }
-
-    if (offsetsByConsumersToSend.empty() && !MirroredOffsetToSend.Defined()) {
-        return;
-    }
-
-    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
-    for (const auto& [consumer, offset] : offsetsByConsumersToSend) {
-        (event->OffsetsByConsumers)[consumer] = offset;
-
-        ReplicatedOffsetsByConsumers[consumer] = offset;
-
-        if (offset == OffsetsByConsumers[consumer]) {
-            OffsetsByConsumers.erase(consumer);
-        }
-    }
-
-    LOG_D("Sending replication data to consumers",
-        {"offsetsByConsumersToSend", FormatOffsetsByConsumers(offsetsByConsumersToSend)},
-        {"ReplicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
-        {"OffsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
-        {"MirroredOffsetToSend", MirroredOffsetToSend ? ToString(*MirroredOffsetToSend) : "none"});
-
-    if (MirroredOffsetToSend) {
-        event->MirroredOffset = *MirroredOffsetToSend;
-        MirroredOffsetToSend = Nothing();
-    }
-
-    ctx.Send(PartitionActor, event.Release());
-}
-
-void TMirrorer::Handle(TEvPQ::TEvPersistDone::TPtr& ev, const TActorContext& ctx) {
-    if (ev->Sender != PartitionActor) {
-        return;
-    }
-    ConfirmedEndOffset = Max(ConfirmedEndOffset, ev->Get()->EndOffset);
-    TryToSendReplicationData(ctx);
-}
-
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx) {
     if (ev->Cookie != 0 && ev->Cookie != CredentialsGeneration) {
         LOG_D("Ignoring stale credentials init", {"cookie", ev->Cookie}, {"generation", CredentialsGeneration});
         return;
     }
->>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
     if (CredentialsRequestInFlight) {
         LOG_W("Credentials request already inflight");
         return;

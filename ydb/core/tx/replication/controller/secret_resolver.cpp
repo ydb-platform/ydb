@@ -101,12 +101,10 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         Y_ENSURE(ev->Get()->Description.SecretValues.size() == 1);
         const auto& description = ev->Get()->Description;
         TString revision;
-        if (description.SecretRevisions.size() == 1) {
-            const auto& value = description.SecretRevisions[0];
-            // CREATE SECRET has revision zero; identity distinguishes missing metadata.
-            if (value.OwnerId && value.LocalPathId) {
-                revision = TStringBuilder() << "schema:" << value.OwnerId << ':' << value.LocalPathId << ':' << value.Version;
-            }
+        if (description.SecretRevisions) {
+            const auto& value = description.SecretRevisions->front();
+            // CREATE SECRET has revision zero; metadata presence is explicit.
+            revision = TStringBuilder() << "schema:" << value.PathOwnerId << ':' << value.LocalPathId << ':' << value.Version;
         }
         ReplyValue(description.SecretValues[0], revision);
     }

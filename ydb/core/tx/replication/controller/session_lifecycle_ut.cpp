@@ -21,6 +21,8 @@
 #include <util/string/printf.h>
 
 #include <memory>
+#include <optional>
+#include <vector>
 
 namespace NKikimr::NReplication::NController {
 
@@ -36,7 +38,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
     public:
         bool Hold = false;
         TString Value = "root@builtin";
-        TString Revision = "schema:1:2:0";
+        std::optional<NKqp::TSecretRevision> Revision = NKqp::TSecretRevision{1, 2, 0};
         TAutoPtr<IEventHandle> Pending;
 
         explicit TSecretGate(TTestActorRuntime& runtime)
@@ -54,19 +56,16 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                         return;
                     }
 
-                    auto request = ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySet>()->Request;
-                    request->ResultSet.front().Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
-                    request->ResultSet.front().SecurityObject = nullptr;
+                    using TDescription = NKqp::TEvDescribeSecretsResponse::TDescription;
+                    const std::vector<TString> values{Value};
+                    auto* response = Revision
+                        ? new NKqp::TEvDescribeSecretsResponse(TDescription(values, {*Revision}))
+                        : new NKqp::TEvDescribeSecretsResponse(TDescription(values));
                     Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
-                        new TEvTxProxySchemeCache::TEvNavigateKeySetResult(request)));
+                        response));
                     ev.Reset();
-                } else if (const auto* original = dynamic_cast<TEvPrivate::TEvResolveSecretResult*>(ev->GetBase())) {
+                } else if (dynamic_cast<TEvPrivate::TEvResolveSecretResult*>(ev->GetBase())) {
                     // Private event IDs are shared with unrelated actors, including Hive.
-                    auto result = MakeHolder<TEvPrivate::TEvResolveSecretResult>(
-                        original->ReplicationId, Value);
-                    result->Revision = Revision;
-                    ev.Reset(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
-                        result.Release(), 0, ev->Cookie));
                     if (Hold) {
                         UNIT_ASSERT(!Pending);
                         Pending = std::move(ev);
@@ -382,6 +381,21 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             }
         }
     };
+
+    Y_UNIT_TEST(SecretResolverPreservesValueWithoutRevisionMetadata) {
+        TSetup s(1);
+        auto& runtime = s.Env.GetRuntime();
+        TSecretGate secret(runtime);
+        secret.Revision.reset();
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Register(CreateSecretResolver(edge, 1, s.PathId, "/Root/secret", 42, "/Root"));
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvResolveSecretResult>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT(result->Get()->IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Value, "root@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 42);
+        UNIT_ASSERT(result->Get()->Revision.empty());
+    }
 
     Y_UNIT_TEST(SecretRefreshDoesNotLeaveDetachedResolutionRetries) {
         TSetup s(1);
@@ -780,7 +794,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                 CompleteRegistrarPause(s);
             }
             // Same value, newer secret version must still replace the failed provider.
-            s.Secret->Revision = "schema:1:2:2";
+            s.Secret->Revision->Version = 2;
             runtime.SimulateSleep(TDuration::Seconds(35));
             if (test == ECase::GenericError || test == ECase::OldBinaryGap || test == ECase::Paused) {
                 s.Sync();

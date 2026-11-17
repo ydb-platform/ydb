@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -17,6 +18,7 @@
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
+using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 namespace {
@@ -993,7 +995,7 @@ bool CollectOlapOperationForAliasProjection(const TCoAtom& aliasAtom, const TExp
     const TString sourceColumn(maybeMember.Cast().Name().StringValue());
     const bool aliasIsForcedDistinctKey = forceDistinctKey && *forceDistinctKey == alias;
     const bool sourceStillNeededByPredicate = predicateMembers.contains(sourceColumn);
-    if (!aliasIsForcedDistinctKey && !sourceStillNeededByPredicate) {
+    if (!aliasIsForcedDistinctKey && !sourceStillNeededByPredicate && !alias.StartsWith(KqpJoinJsonValueColumnName)) {
         return false;
     }
     // Alias must be a fresh column: not a stored column and not an already emitted projection.
@@ -1342,10 +1344,193 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
     return newFlatmap;
 }
 
+namespace {
+
+struct TReplicateJsonValueCandidate {
+    TMaybeNode<TCoJsonValue> JsonValue;
+    TString SourceColumn;
+    TString Path;
+    TNodeOnNodeOwnedMap Replacements;
+};
+
+TMaybeNode<TCoLambda> FindReplicateSourceRowLambda(const TCoLambda& branch, const TExprNode& rowArg) {
+    const auto rowOperator = FindNode(branch.Body().Ptr(), [&](const TExprNode::TPtr& candidate) {
+        const auto input = TMaybeNode<TCoInputBase>(candidate);
+        if (!input || candidate->ChildrenSize() < 2) {
+            return false;
+        }
+        const auto inputLambda = TMaybeNode<TCoLambda>(candidate->ChildPtr(1));
+        if (!inputLambda || inputLambda.Cast().Args().Size() != 1 || inputLambda.Cast().Args().Arg(0).Raw() != &rowArg) {
+            return false;
+        }
+        const auto rows = input.Cast().Input();
+        if (rows.Raw() == branch.Args().Arg(0).Raw()) {
+            return true;
+        }
+        const auto extract = rows.Maybe<TCoExtractMembers>();
+        return extract && extract.Cast().Input().Raw() == branch.Args().Arg(0).Raw();
+    });
+    return rowOperator ? TMaybeNode<TCoLambda>(rowOperator->ChildPtr(1)) : TMaybeNode<TCoLambda>();
+}
+
+bool UsesColumnOutsideJsonValue(const TExprNode::TPtr& node, TStringBuf column) {
+    if (TCoJsonValue::Match(node.Get())) {
+        return false;
+    }
+    if (const auto member = TMaybeNode<TCoMember>(node); member && member.Cast().Name().StringValue() == column) {
+        return true;
+    }
+    for (const auto& child : node->Children()) {
+        if (UsesColumnOutsideJsonValue(child, column)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool UsesWholeRow(const TCoLambda& rowLambda, const TExprNode& rowArg) {
+    return !!FindNode(rowLambda.Body().Ptr(), [&rowArg](const TExprNode::TPtr& current) {
+        if (TCoMember::Match(current.Get())) {
+            return false;
+        }
+        for (const auto& child : current->Children()) {
+            if (child.Get() == &rowArg) {
+                return true;
+            }
+        }
+        return false;
+    });
+}
+
+// Handle only a single JSON_VALUE for now
+std::optional<TReplicateJsonValueCandidate> CollectReplicateJsonValueCandidate(const TDqReplicate& replicate) {
+    TReplicateJsonValueCandidate candidate;
+    for (const auto& branch : replicate.FreeArgs()) {
+        const auto lambda = branch.Maybe<TCoLambda>();
+        if (!lambda || lambda.Cast().Args().Size() != 1) {
+            return std::nullopt;
+        }
+        const auto jsonValues = FindNodes(branch.Ptr(), [](const TExprNode::TPtr& item) {
+            return TCoJsonValue::Match(item.Get());
+        });
+        if (jsonValues.size() != 1) {
+            return std::nullopt;
+        }
+
+        const auto jsonValue = TCoJsonValue(jsonValues.front());
+        const auto member = jsonValue.Json().Maybe<TCoMember>();
+        if (!member || !CanBePushedAsOlapJsonValue(jsonValue, member.Cast().Struct().Raw())) {
+            return std::nullopt;
+        }
+
+        const auto& rowArg = member.Cast().Struct().Ref();
+        const auto rowLambda = FindReplicateSourceRowLambda(lambda.Cast(), rowArg);
+        if (!rowLambda) {
+            return std::nullopt;
+        }
+
+        const TString currentColumn(member.Cast().Name().StringValue());
+        const TString currentPath(jsonValue.JsonPath().Cast<TCoUtf8>().Literal().Value());
+        if (candidate.JsonValue.IsValid()) {
+            if (currentColumn != candidate.SourceColumn || currentPath != candidate.Path) {
+                return std::nullopt;
+            }
+        } else {
+            candidate.JsonValue = jsonValue;
+            candidate.SourceColumn = currentColumn;
+            candidate.Path = currentPath;
+        }
+
+        if (UsesColumnOutsideJsonValue(branch.Ptr(), candidate.SourceColumn) || UsesWholeRow(rowLambda.Cast(), rowArg)) {
+            return std::nullopt;
+        }
+        const auto* outputItemType = GetSeqItemType(lambda.Cast().Body().Ref().GetTypeAnn());
+        if (outputItemType->GetKind() == ETypeAnnotationKind::Struct &&
+            outputItemType->Cast<TStructExprType>()->FindItem(candidate.SourceColumn)) {
+            return std::nullopt;
+        }
+
+        candidate.Replacements.emplace(jsonValue.Raw(), member.Cast().Ptr());
+    }
+    return candidate;
+}
+
+TKqpReadOlapTableRanges BuildReadWithJsonValueProjection(
+    const TKqpReadOlapTableRanges& read, const TCoJsonValue& jsonValue, const TString& sourceColumn, TExprContext& ctx, TPositionHandle pos) {
+    const auto olapOperation =
+        BuildOlapJsonValue(jsonValue, jsonValue.Json().Cast<TCoMember>().Struct().Ref(), ctx, pos, TPushdownOptions(false, false, false));
+    // clang-format off
+    const auto projection = Build<TKqpOlapProjection>(ctx, pos)
+        .OlapOperation(olapOperation)
+        .ColumnName().Build(sourceColumn)
+        .Done();
+    const auto process = Build<TKqpOlapProjections>(ctx, pos)
+        .Input(read.Process().Body())
+        .Projections()
+            .Add(projection)
+            .Build()
+        .Done();
+    const auto processLambda = Build<TCoLambda>(ctx, pos)
+        .Args({"arg"})
+        .Body<TExprApplier>()
+            .Apply(process)
+            .With(read.Process().Args().Arg(0), "arg")
+            .Build()
+        .Done();
+    return Build<TKqpReadOlapTableRanges>(ctx, pos)
+        .Table(read.Table())
+        .Ranges(read.Ranges())
+        .Columns(read.Columns())
+        .Settings(read.Settings())
+        .ExplainPrompt(read.ExplainPrompt())
+        .Process(processLambda)
+        .Done();
+    // clang-format on
+}
+
+}   // anonymous namespace
+
+// Move a JSON_VALUE shared by both branches of a replicated OLAP read into the
+// read's projection program. This computes the value once per row before fan-out
+// and sends the scalar in place of the raw JSON column.
+// Replacing the column is valid only if both branches extract the same path and
+// neither uses the raw JSON column for anything else.
+// For example, before: DqReplicate(Read(labels),
+//                     CombineByKey(ExtractMembers(row), JSON_VALUE(row.labels, path)),
+//                     FlatMap(row, JSON_VALUE(row.labels, path)))
+// After:  DqReplicate(Read(Process=KqpOlapProjections(labels := JSON_VALUE(labels, path))),
+//                     CombineByKey(ExtractMembers(row), row.labels),
+//                     FlatMap(row, row.labels))
+TExprBase KqpPushOlapReplicateJsonValue(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!(kqpCtx.Config->HasOptEnableOlapPushdown() && kqpCtx.Config->GetEnableOlapPushdownProjections())) {
+        return node;
+    }
+
+    const auto replicate = node.Cast<TDqReplicate>();
+    // Only 2-branch replicate is supported for now.
+    // The read can be shared only when both consumers use the same projection.
+    if (!replicate.Input().Maybe<TKqpReadOlapTableRanges>() || replicate.FreeArgs().Count() != 2) {
+        return node;
+    }
+
+    const auto read = replicate.Input().Cast<TKqpReadOlapTableRanges>();
+    if (read.Process().Body().Raw() != read.Process().Args().Arg(0).Raw()) {
+        return node;
+    }
+
+    auto candidate = CollectReplicateJsonValueCandidate(replicate);
+    if (!candidate) {
+        return node;
+    }
+
+    const auto newRead = BuildReadWithJsonValueProjection(read, candidate->JsonValue.Cast(), candidate->SourceColumn, ctx, node.Pos());
+    candidate->Replacements.emplace(read.Raw(), newRead.Ptr());
+    return TExprBase(ctx.ReplaceNodes(replicate.Ptr(), candidate->Replacements));
+}
+
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, TTypeAnnotationContext& typesCtx) {
     const TPushdownOptions pushdownOptions(kqpCtx.Config->GetEnableOlapScalarApply(), kqpCtx.Config->GetEnableOlapSubstringPushdown(),
-        /*stripAliasPrefixFromColName=*/false, kqpCtx.Config->GetEnableOlapPushdownRegexp(),
-        kqpCtx.Config->GetEnableOlapFastAsciiIgnoreCase());
+        /*stripAliasPrefixFromColName=*/false, kqpCtx.Config->GetEnableOlapPushdownRegexp(), kqpCtx.Config->GetEnableOlapFastAsciiIgnoreCase());
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }

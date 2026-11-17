@@ -1,4 +1,5 @@
 #include "kqp_opt_cbo.h"
+#include "kqp_opt_log_join_projection.h"
 #include "kqp_opt_log_rules.h"
 
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -6,10 +7,13 @@
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy_olap_filter.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
+#include <ydb/core/kqp/opt/physical/predicate_collector.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
+
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
@@ -20,12 +24,87 @@
 
 #include <yql/essentials/core/yql_aggregate_expander.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_opt_match_recognize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <yql/essentials/utils/log/log.h>
 
+#include <algorithm>
+#include <optional>
+
 namespace NKikimr::NKqp::NOpt {
+
+namespace NPrivate {
+
+using namespace NYql;
+using namespace NYql::NNodes;
+
+TJoinOutputColumns BuildJoinOutputColumns(const TCoEquiJoin& join) {
+    TJoinOutputColumns columns;
+    const size_t inputsCount = join.ArgCount() - 2;
+    const auto renames = LoadJoinRenameMap(join.Arg(inputsCount + 1).Ref());
+
+    for (size_t i = 0; i < inputsCount; ++i) {
+        const auto input = join.Arg(i).Cast<TCoEquiJoinInput>();
+        if (!input.Scope().Ref().IsAtom()) {
+            continue;
+        }
+
+        const TString scope(input.Scope().Ref().Content());
+        const auto* inputType = input.List().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        for (const auto* item : inputType->GetItems()) {
+            const TString originalName = FullColumnName(scope, item->GetName());
+            const TJoinOutputColumn column{ i, TString(item->GetName()), originalName };
+            if (const auto rename = renames.find(originalName); rename != renames.end()) {
+                for (const auto outputName : rename->second) {
+                    columns.emplace(TString(outputName), column);
+                }
+            } else {
+                columns.emplace(originalName, column);
+            }
+        }
+    }
+
+    return columns;
+}
+
+TJoinColumnUsage CollectJoinColumnUsage(const TExprNode::TPtr& body, const TExprNode& joinedRow) {
+    TJoinColumnUsage usage;
+    const auto collectUsed = [&](const auto& self, const TExprNode::TPtr& current) -> void {
+        if (TCoJsonValue::Match(current.Get())) {
+            return;
+        }
+        if (const auto member = TMaybeNode<TCoMember>(current); member && member.Cast().Struct().Raw() == &joinedRow) {
+            usage.OutputFieldNames.insert(member.Cast().Name().StringValue());
+        }
+        for (const auto& child : current->Children()) {
+            if (child.Get() == &joinedRow && !TCoMember::Match(current.Get())) {
+                usage.WholeRow = true;
+            }
+            self(self, child);
+        }
+    };
+    collectUsed(collectUsed, body);
+    return usage;
+}
+
+THashSet<TString> CollectRequiredJoinSources(const TJoinColumnUsage& usage, const TJoinOutputColumns& outputColumns) {
+    THashSet<TString> sources;
+    for (const auto& member : usage.OutputFieldNames) {
+        if (const auto output = outputColumns.find(member); output != outputColumns.end()) {
+            sources.insert(output->second.OriginalName);
+        }
+    }
+    return sources;
+}
+
+bool HasMultipleParents(const TExprNode& node, const TParentsMap& parents) {
+    const auto it = parents.find(&node);
+    return it != parents.end() && it->second.size() > 1;
+}
+
+} // namespace NPrivate
 
 namespace {
 
@@ -33,6 +112,167 @@ using namespace NYql;
 using namespace NYql::NCommon;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
+
+struct TJoinJsonValueProjection {
+    TCoJsonValue JsonValue;
+    TString SourceColumnName;
+    TString ProjectionColumnName;
+};
+
+struct TJoinJsonValueProjectionRewrite {
+    // Indexed by the corresponding EquiJoin input argument.
+    TVector<TVector<TJoinJsonValueProjection>> ProjectionsByInput;
+    TNodeOnNodeOwnedMap Replacements;
+};
+
+// Returns nothing if any JSON_VALUE call cannot be moved to a join input.
+std::optional<TJoinJsonValueProjectionRewrite> CollectJoinJsonValueProjections(const TCoFlatMapBase& node, const TCoEquiJoin& join,
+    const TExprNode::TListType& jsonValues, const NPrivate::TJoinOutputColumns& outputColumns, TExprContext& ctx) {
+    TJoinJsonValueProjectionRewrite rewrite;
+    rewrite.ProjectionsByInput.resize(join.ArgCount() - 2);
+    // Type annotation guarantees List<Struct> for EquiJoin and one row argument for FlatMap.
+    const auto* joinedType = join.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto& joinedRow = node.Lambda().Args().Arg(0).Ref();
+    size_t nextAlias = 0;
+
+    for (const auto& jsonNode : jsonValues) {
+        const auto jsonValue = TCoJsonValue(jsonNode);
+        if (!CanBePushedAsOlapJsonValue(jsonValue, &joinedRow)) {
+            return std::nullopt;
+        }
+
+        const TString fullName = jsonValue.Json().Cast<TCoMember>().Name().StringValue();
+        const auto output = outputColumns.find(fullName);
+        if (output == outputColumns.end() || !joinedType->FindItem(fullName)) {
+            return std::nullopt;
+        }
+        const auto inputIndex = output->second.InputIndex;
+        const auto& source = output->second.SourceColumnName;
+        const auto input = join.Arg(inputIndex).Cast<TCoEquiJoinInput>();
+        const TString scope(input.Scope().Ref().Content());
+        const auto* inputType = input.List().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+        TString alias;
+        do {
+            alias = TStringBuilder() << KqpJoinJsonValueColumnName << nextAlias++;
+        } while (inputType->FindItem(alias) || joinedType->FindItem(FullColumnName(scope, alias)));
+        rewrite.ProjectionsByInput[inputIndex].push_back({ jsonValue, source, alias });
+        rewrite.Replacements.emplace(
+            jsonNode.Get(), ctx.NewCallable(jsonValue.Pos(), "Member",
+                                { node.Lambda().Args().Arg(0).Ptr(), ctx.NewAtom(jsonValue.Pos(), FullColumnName(scope, alias)) }));
+    }
+
+    return rewrite;
+}
+
+TExprNode::TPtr AddJsonValueProjectionsToJoinInput(const TCoEquiJoinInput& input, const TVector<TJoinJsonValueProjection>& projections,
+    const THashSet<TStringBuf>* keys, const NPrivate::TJoinColumnUsage& usage, const THashSet<TString>& requiredSources, TPositionHandle pos,
+    TExprContext& ctx) {
+    const auto* inputType = input.List().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const TString scope(input.Scope().Ref().Content());
+    const auto row = ctx.NewArgument(pos, "row");
+    TExprNode::TListType items;
+    for (const auto* item : inputType->GetItems()) {
+        const auto nameView = item->GetName();
+        const bool projectedSource = std::ranges::any_of(projections, [&](const TJoinJsonValueProjection& projection) {
+            return projection.SourceColumnName == nameView;
+        });
+        // This is a JSON_VALUE and may be replaced
+        if (projectedSource && !usage.WholeRow && !requiredSources.contains(FullColumnName(scope, nameView)) &&
+            (!keys || !keys->contains(nameView))) {
+            continue;
+        }
+        const auto name = ctx.NewAtom(pos, item->GetName());
+        items.push_back(ctx.NewList(pos, { name, ctx.NewCallable(pos, "Member", { row, name }) }));
+    }
+    for (const auto& projection : projections) {
+        TNodeOnNodeOwnedMap jsonSourceReplacer;
+        jsonSourceReplacer.emplace(
+            projection.JsonValue.Json().Raw(), ctx.NewCallable(pos, "Member", { row, ctx.NewAtom(pos, projection.SourceColumnName) }));
+        items.push_back(ctx.NewList(
+            pos, { ctx.NewAtom(pos, projection.ProjectionColumnName), ctx.ReplaceNodes(projection.JsonValue.Ptr(), jsonSourceReplacer) }));
+    }
+    auto value = ctx.NewCallable(pos, "Just", { ctx.NewCallable(pos, "AsStruct", std::move(items)) });
+    auto flatMap = ctx.NewCallable(pos, "FlatMap", { input.List().Ptr(), ctx.NewLambda(pos, ctx.NewArguments(pos, { row }), std::move(value)) });
+    return ctx.ChangeChild(input.Ref(), 0, std::move(flatMap));
+}
+
+TExprBase PushJsonValueProjectionThroughEquiJoin(const TCoFlatMapBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TCoFlatMap>()) {
+        return node;
+    }
+    const auto jsonValues = FindNodes(node.Lambda().Body().Ptr(), [](const TExprNode::TPtr& n) {
+        return TCoJsonValue::Match(n.Get());
+    });
+    if (jsonValues.empty() || !node.Input().Maybe<TCoEquiJoin>()) {
+        return node;
+    }
+
+    const auto join = node.Input().Cast<TCoEquiJoin>();
+    // No-op in case a rewrite has already happened.
+    if (FindNode(join.Ptr(), [](const TExprNode::TPtr& n) {
+            return n->IsAtom() && n->Content().StartsWith(KqpJoinJsonValueColumnName);
+        })) {
+        return node;
+    }
+    // EquiJoin stores the join tree and settings after its input branches.
+    const size_t inputsCount = join.ArgCount() - 2;
+    const auto outputColumns = NPrivate::BuildJoinOutputColumns(join);
+    auto rewrite = CollectJoinJsonValueProjections(node, join, jsonValues, outputColumns, ctx);
+    if (!rewrite) {
+        return node;
+    }
+    const auto& projections = rewrite->ProjectionsByInput;
+    auto& replacements = rewrite->Replacements;
+
+    const auto& joinedRow = node.Lambda().Args().Arg(0).Ref();
+    const auto usage = NPrivate::CollectJoinColumnUsage(node.Lambda().Body().Ptr(), joinedRow);
+    const auto requiredSources = NPrivate::CollectRequiredJoinSources(usage, outputColumns);
+    const auto joinKeys = CollectEquiJoinKeyColumnsByLabel(join.Arg(inputsCount).Ref());
+    auto joinArgs = join.Ref().ChildrenList();
+    for (size_t i = 0; i < inputsCount; ++i) {
+        if (projections[i].empty()) {
+            continue;
+        }
+        const auto input = join.Arg(i).Cast<TCoEquiJoinInput>();
+        const TString scope(input.Scope().Ref().Content());
+        joinArgs[i] =
+            AddJsonValueProjectionsToJoinInput(input, projections[i], joinKeys.FindPtr(scope), usage, requiredSources, node.Pos(), ctx);
+    }
+    replacements.emplace(join.Raw(), ctx.ChangeChildren(join.Ref(), std::move(joinArgs)));
+    return TExprBase(ctx.ReplaceNodes(node.Ptr(), replacements));
+}
+
+class TKqpJoinProjectionTransformer: public TOptimizeTransformerBase {
+public:
+    explicit TKqpJoinProjectionTransformer(const TKqpOptimizeContext& kqpCtx)
+        : TOptimizeTransformerBase(nullptr, NYql::NLog::EComponent::ProviderKqp, {})
+        , KqpCtx(kqpCtx)
+    {
+        AddHandler(0, &TCoFlatMap::Match, "KqpJoinProjection", Hndl(&TKqpJoinProjectionTransformer::PushJsonValueProjectionThroughJoin));
+    }
+
+private:
+    TMaybeNode<TExprBase> PushJsonValueProjectionThroughJoin(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        if (!KqpCtx.Config->HasOptEnableOlapPushdown() || !KqpCtx.Config->GetEnableOlapPushdownProjections() ||
+            !KqpCtx.Config->HasOptEnableOlapJsonValueProjectionThroughJoin()) {
+            return node;
+        }
+        const auto flatMap = node.Cast<TCoFlatMap>();
+        // Other join types are not supported yet, but may be in the future.
+        if (!flatMap.Input().Maybe<TCoEquiJoin>()) {
+            return node;
+        }
+        if (NPrivate::HasMultipleParents(flatMap.Input().Ref(), *getParents())) {
+            return node;
+        }
+        TExprBase output = PushJsonValueProjectionThroughEquiJoin(flatMap, ctx);
+        DumpAppliedRule("PushJsonValueProjectionThroughJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    const TKqpOptimizeContext& KqpCtx;
+};
 
 class TKqpLogicalOptTransformer : public TOptimizeTransformerBase {
 public:
@@ -649,7 +889,11 @@ private:
     const TKikimrConfiguration::TPtr& Config;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
+
+TAutoPtr<IGraphTransformer> CreateKqpJoinProjectionTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) {
+    return THolder<IGraphTransformer>(new TKqpJoinProjectionTransformer(*kqpCtx));
+}
 
 TAutoPtr<IGraphTransformer> CreateKqpLogOptTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config)
@@ -657,4 +901,4 @@ TAutoPtr<IGraphTransformer> CreateKqpLogOptTransformer(TIntrusivePtr<TKqpOptimiz
     return THolder<IGraphTransformer>(new TKqpLogicalOptTransformer(typesCtx, kqpCtx, config));
 }
 
-} // namespace NKikimr::NKqp::NOpt
+}   // namespace NKikimr::NKqp::NOpt

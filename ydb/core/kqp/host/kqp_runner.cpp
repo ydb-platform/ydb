@@ -384,6 +384,7 @@ private:
             .AddTypeAnnotationTransformer()
             .Add(NOpt::CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
+            .Add(CreateKqpJoinProjectionTransformer(OptimizeCtx), "KqpJoinProjection")
             .AddCommonOptimization()
             .Add(CreateKqpConstantFoldingTransformer(OptimizeCtx, *typesCtx, Config), "ConstantFolding")
             .Add(CreateKqpColumnStatisticsRequester(Config, *typesCtx, SessionCtx->Tables(), Cluster, sessionCtx->GetDatabase(), ActorSystem, getTrace), "ColumnStatisticsRequester")

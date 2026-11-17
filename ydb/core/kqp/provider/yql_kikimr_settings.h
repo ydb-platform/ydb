@@ -101,6 +101,7 @@ public:
     NCommon::TConfSetting<TString, Static> OptForceOlapPushdownDistinct;
     NCommon::TConfSetting<ui64, Static> OptForceOlapPushdownDistinctLimit;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownProjections;
+    NCommon::TConfSetting<bool, Static> OptEnableOlapJsonValueProjectionThroughJoin;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownRegexp;
     NCommon::TConfSetting<bool, Static> OptEnableOlapFastAsciiIgnoreCase;
     NCommon::TConfSetting<bool, Static> OptEnableOlapProvideComputeSharding;
@@ -193,6 +194,7 @@ public:
     bool HasOptEnableOlapPushdown() const;
     bool HasOptEnableOlapPushdownAggregate() const;
     bool HasOptEnableOlapPushdownProjections() const;
+    bool HasOptEnableOlapJsonValueProjectionThroughJoin() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
     bool HasMaxSequentialReadsInFlight() const;

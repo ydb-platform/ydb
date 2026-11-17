@@ -2,11 +2,13 @@
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/control.h>
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/executer_actor/kqp_planner.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
@@ -169,6 +171,57 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
         UNIT_ASSERT_GT(rowsAfterResume, 0);
         UNIT_ASSERT_VALUES_EQUAL(rowsWhilePaused + rowsAfterResume, totalRows);
+    }
+
+    // A local CA must not report stats right after start: the first report is due after the report interval.
+    Y_UNIT_TEST(LocalCAsDelayFirstStatsReport) {
+        auto kikimrSettings = TKikimrSettings().SetUseRealThreads(false);
+        kikimrSettings.AppConfig.MutableFeatureFlags()->SetEnableKqpRuntimeStats(true);
+        TKikimrRunner kikimr(kikimrSettings);
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+
+        auto prepareResult = kikimr.RunCall([&] { return session.PrepareDataQuery(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/TwoShard`;
+            )")).GetValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+        auto dataQuery = prepareResult.GetQuery();
+
+        THashSet<TActorId> finishedActors;
+        TActorId executerId;
+        ui32 earlyStatsReports = 0;
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const TInstant started = runtime.GetCurrentTime();
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                const auto& record = ev->Get<NYql::NDq::TEvDqCompute::TEvState>()->Record;
+                executerId = ev->Recipient;
+                if (record.GetState() == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
+                    finishedActors.insert(ev->Sender);
+                } else if (record.GetState() == NYql::NDqProto::COMPUTE_STATE_EXECUTING && record.HasStats()
+                    && runtime.GetCurrentTime() - started < CurrentQueryStatsReportInterval)
+                {
+                    // "Hello" on bootstrap is EXECUTING too, but it carries no stats.
+                    ++earlyStatsReports;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        kikimr.RunInThreadPool([&] { return dataQuery.Execute(TTxControl::BeginTx().CommitTx()).GetValueSync(); });
+
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == TEvKqpExecuter::TEvTxResponse::EventType
+                && ev.Sender == executerId;
+        });
+
+        UNIT_ASSERT(runtime.DispatchEvents(opts));
+        UNIT_ASSERT_C(!finishedActors.empty(), "No local CAs reported to the executer");
+        UNIT_ASSERT_VALUES_EQUAL_C(earlyStatsReports, 0, "Local CA sent stats before the report interval");
     }
 
     // TODO: Test shard write shuffle.

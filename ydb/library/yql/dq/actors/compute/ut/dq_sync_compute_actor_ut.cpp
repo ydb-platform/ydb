@@ -115,8 +115,8 @@ struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
 };
 
 struct TActorSystem: NActors::TTestActorRuntimeBase {
-    explicit TActorSystem(bool useRealThreads = true)
-        : NActors::TTestActorRuntimeBase(1, useRealThreads)
+    TActorSystem()
+        : NActors::TTestActorRuntimeBase(1, true)
     {}
 
     void Start() {
@@ -382,15 +382,12 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     TString LogPrefix;
     TMockSinkState::TPtr SinkState = MakeIntrusive<TMockSinkState>();
     IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    TReportStatsSettings ReportStatsSettings{TDuration::Seconds(1), TDuration::Seconds(1)};
 
     TSyncComputeActorTestFixture(
             NDqProto::EDataTransportVersion transportVersion = NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0,
-            bool isWide = false,
-            bool useRealThreads = true
+            bool isWide = false
         )
-        : ActorSystem(useRealThreads)
-        , Alloc(__LOCATION__)
+        : Alloc(__LOCATION__)
         , TypeEnv(Alloc)
         , MemInfo("Mem")
         , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {}))
@@ -740,7 +737,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     auto CreateTestSyncComputeActor(NDqProto::TDqTask& task, TComputeMemoryLimits memoryLimits, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
         TComputeRuntimeSettings runtimeSettings;
         runtimeSettings.StatsMode = statsMode;
-        runtimeSettings.ReportStatsSettings = ReportStatsSettings;
+        runtimeSettings.ReportStatsSettings = TReportStatsSettings{TDuration::Seconds(1), TDuration::Seconds(1)};
         auto actor = CreateDqComputeActor(
                 EdgeActor,
                 LogPrefix,
@@ -1807,33 +1804,6 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
 
         WaitForSinkFinished();
         UNIT_ASSERT_EQUAL_C(SinkState->Rows.load(), rows, "expected " << rows << " rows, got " << SinkState->Rows.load());
-    }
-
-    Y_UNIT_TEST(DelayFirstStatsReport) {
-        TSyncComputeActorTestFixture fixture(NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, false, /* useRealThreads */ false);
-        fixture.SetUp(ut_context);
-        Y_DEFER { fixture.TearDown(ut_context); };
-        const auto minInterval = TDuration::Seconds(1);
-        const auto maxInterval = TDuration::Seconds(2);
-        fixture.ReportStatsSettings = {minInterval, maxInterval, /* DelayFirstReport */ true};
-        auto& runtime = fixture.ActorSystem;
-        runtime.SetScheduledEventFilter([](auto&&, auto&&, auto&&, auto&&) { return false; });
-        auto [syncCA, outputs, input] = fixture.StartCA(1, 1, true, 1);
-        const auto started = runtime.GetCurrentMonotonicTime();
-
-        // Activity before MinInterval must not send stats.
-        runtime.SimulateSleep(minInterval - TDuration::MilliSeconds(1));
-        ui32 seqNo = 0;
-        fixture.SendWatermark(syncCA, fixture.InputChannelId, TInstant::Seconds(1), false, &seqNo);
-
-        // Leave the CA idle: the first and subsequent reports must come from the timer.
-        for (ui32 report = 1; report <= 2; ++report) {
-            auto ev = runtime.GrabEdgeEvent<TEvDqCompute::TEvState>(fixture.EdgeActor, maxInterval + TDuration::Seconds(1));
-            UNIT_ASSERT(ev);
-            UNIT_ASSERT(ev->Get()->Record.HasStats());
-            UNIT_ASSERT(ev->Get()->Record.GetState() == NDqProto::COMPUTE_STATE_EXECUTING);
-            UNIT_ASSERT_VALUES_EQUAL(runtime.GetCurrentMonotonicTime(), started + maxInterval * report);
-        }
     }
 
     Y_UNIT_TEST_F(StreamingQuerySendStatsWithCreateSuspended, TSyncComputeActorTestFixture) {

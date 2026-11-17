@@ -3,10 +3,13 @@
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tablet_flat/defs.h>
 #include <ydb/core/tablet_flat/flat_redo_player.h>
 #include <ydb/core/tablet_flat/flat_sausage_slicer.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -49,8 +52,8 @@ struct TFreezeEnv {
     ui64 PathId = 1;
     TString Root = "/MyRoot";
 
-    TFreezeEnv()
-        : Env(Runtime, TTestEnvOptions()
+    explicit TFreezeEnv(TTestEnvOptions options = {})
+        : Env(Runtime, options
             .EnableProtoSourceIdInfo(true)
             .EnableChangefeedInitialScan(true)
             .EnableBackgroundCompaction(false))
@@ -153,6 +156,276 @@ struct TFreezeEnv {
         Env.TestWaitNotification(Runtime, TxId, Owner);
     }
 };
+
+// Keep real periodic reports out of these tests so every partitioning decision
+// is driven by a known report and negative assertions have a processing barrier.
+struct TPartitioningFreezeEnv : TFreezeEnv {
+    const TActorId SchemeShardActor;
+    const TActorId StatsSender;
+    TBlockEvents<TEvDataShard::TEvPeriodicTableStats> BackgroundStats;
+    TBlockEvents<TEvDataShard::TEvGetTableStats> StatsRequests;
+    ui64 StatsRound = 0;
+
+    explicit TPartitioningFreezeEnv(bool trackDeferred = false)
+        : TFreezeEnv(TTestEnvOptions()
+            .DisableStatsBatching(true)
+            .EnablePersistentPartitionStats(true)
+            .EnableSplitMergeDemandTracking(trackDeferred))
+        , SchemeShardActor(ResolveTablet(Runtime, Owner))
+        // Edge actors receive replies without dispatching them through observers.
+        , StatsSender(SchemeShardActor)
+        , BackgroundStats(Runtime, [this](const auto& ev) {
+            return ev->GetRecipientRewrite() == SchemeShardActor && ev->Sender != StatsSender;
+        })
+        , StatsRequests(Runtime)
+    {
+        if (trackDeferred) {
+            TControlBoard::SetValue(1, Runtime.GetAppData().Icb->SchemeShardControls.EnableSplitMergeFairScheduling);
+        }
+    }
+
+    TSchemeShard* SchemeShard() {
+        auto* shard = dynamic_cast<TSchemeShard*>(Runtime.FindActor(SchemeShardActor));
+        UNIT_ASSERT(shard);
+        return shard;
+    }
+
+    TPathId TableId(const TString& name = "Table") {
+        return TPathId(Owner, DescribePath(Runtime, Owner, Path(name)).GetPathId());
+    }
+
+    void CreatePartitioningTable(const TString& name = "Table", ui32 partitions = 1) {
+        TestCreateTable(Runtime, Owner, ++TxId, Root, Sprintf(R"(
+            Name: "%s"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: %u
+            PartitionConfig {
+                PartitioningPolicy {
+                    SizeToSplit: 1000
+                    MinPartitionsCount: 1
+                    MaxPartitionsCount: 8
+                    SplitByLoadSettings { Enabled: true CpuPercentageThreshold: 50 }
+                }
+            }
+        )", name.c_str(), partitions));
+        Env.TestWaitNotification(Runtime, TxId, Owner);
+    }
+
+    void SendStats(ui64 dataSize, ui64 cpu = 0, ui32 followerId = 0,
+            ui32 partition = 0, const TString& name = "Table") {
+        const auto tableId = TableId(name);
+        const auto tabletId = Shards(name).at(partition);
+        const auto shardIdx = SchemeShard()->TabletIdToShardIdx.at(TTabletId(tabletId));
+        const auto round = ++StatsRound;
+        bool processed = false;
+        auto observer = Runtime.AddObserver<NSysView::TEvSysView::TEvSendPartitionStats>([&](auto& ev) {
+            const auto& stats = ev->Get()->Stats;
+            if (ev->Get()->PathId == tableId && stats.GetTabletId() == tabletId
+                && stats.GetFollowerId() == followerId && stats.GetRowCount() == round)
+            {
+                processed = true;
+            }
+        });
+
+        auto report = MakeHolder<TEvDataShard::TEvPeriodicTableStats>();
+        auto& record = report->Record;
+        record.SetDatashardId(tabletId);
+        record.SetTableOwnerId(tableId.OwnerId);
+        record.SetTableLocalId(tableId.LocalPathId);
+        record.SetGeneration(Max<ui64>());
+        record.SetRound(round);
+        record.SetFollowerId(followerId);
+        record.SetShardState(NKikimrTxDataShard::Ready);
+        record.AddUserTablePartOwners(tabletId);
+        record.MutableTableStats()->SetDataSize(dataSize);
+        record.MutableTableStats()->SetRowCount(round);
+        record.MutableTabletMetrics()->SetCPU(cpu);
+        Runtime.Send(new IEventHandle(SchemeShardActor, StatsSender, report.Release()));
+        Runtime.WaitFor("controlled periodic statistics committed and forwarded", [&] {
+            return processed;
+        });
+        // Complete() sends the collector update before the optional histogram
+        // request. Dispatch the remaining messages before checking their absence.
+        Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        auto* shard = SchemeShard();
+        const auto* savedStats = shard->Tables.at(tableId)->GetStats().PartitionStats.FindPtr(shardIdx);
+        if (!savedStats) {
+            // An unfrozen report may have already driven a merge that retired
+            // this partition while the runtime dispatched its messages.
+            UNIT_ASSERT(!shard->IsDatabaseFreezeBlocking(tableId));
+            return;
+        }
+        const auto& stats = *savedStats;
+        if (followerId) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetLatestMaxCpuUsagePercent(TInstant::Zero()), 40u);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.SeqNo.Round, round);
+            UNIT_ASSERT_VALUES_EQUAL(stats.DataSize, dataSize);
+        }
+    }
+
+    void CheckMergeCandidate() {
+        const auto tableId = TableId();
+        const auto tabletId = Shards().front();
+        Runtime.RunCall([&] {
+            auto* shard = SchemeShard();
+            auto table = shard->Tables.at(tableId);
+            UNIT_ASSERT_C(table->GetMinPartitionsCount() < table->GetPartitions().size(),
+                table->PartitionConfig().DebugString());
+            for (const auto& [shardIdx, stats] : table->GetStats().PartitionStats) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.ShardState, ui32(NKikimrTxDataShard::Ready));
+                UNIT_ASSERT_C(!stats.PartOwners.empty(), "Missing part owner for " << shardIdx);
+                UNIT_ASSERT(!stats.HasBorrowedData);
+                UNIT_ASSERT(!table->IsShardInSplitMergeOp(shardIdx));
+            }
+            const auto shardIdx = shard->TabletIdToShardIdx.at(TTabletId(tabletId));
+            TVector<TShardIdx> candidates;
+            TString reason;
+            bool byLoad = false;
+            UNIT_ASSERT_C(table->CheckCanMergePartitions(shard->SplitSettings,
+                shard->SplitSettings.GetForceShardSplitSettings(), shardIdx, TTabletId(tabletId),
+                candidates, nullptr, Runtime.GetCurrentTime(), reason, byLoad),
+                reason << "; policy: " << table->PartitionConfig().DebugString());
+            return true;
+        });
+    }
+
+    void DeferPartitioning(const TString& name, bool wantsSplit) {
+        const auto tableId = TableId(name);
+        const auto tabletId = Shards(name).front();
+        Runtime.RunCall([&] {
+            auto* shard = SchemeShard();
+            auto table = shard->Tables.at(tableId);
+            const auto shardIdx = shard->TabletIdToShardIdx.at(TTabletId(tabletId));
+            const auto reason = TPartitionSplitMergeState::EDeferralReason::InFlightLimit;
+            const auto now = Runtime.GetCurrentTime();
+            // Model an existing candidate deferred while the split slot was busy,
+            // using the same bookkeeping entry points as periodic stats.
+            if (wantsSplit) {
+                shard->RecordSplitDemand(tableId, *table, shardIdx, true, now);
+                shard->RecordSplitDeferral(tableId, *table, shardIdx, reason, now, true);
+            } else {
+                shard->RecordMergeDemand(tableId, *table, shardIdx, false, now);
+                shard->RecordMergeDeferral(tableId, *table, shardIdx, reason, now, true);
+            }
+            return true;
+        });
+    }
+};
+
+void CheckFreezePausesAutomaticSplit(bool byLoad, ui32 followerId) {
+    TPartitioningFreezeEnv env;
+    env.CreatePartitioningTable();
+    if (followerId) {
+        env.SendStats(100);
+    }
+    auto sendStats = [&] {
+        env.SendStats(byLoad ? 100 : 2048, byLoad ? 1000000 : 0, followerId);
+        UNIT_ASSERT(env.StatsRequests.empty());
+    };
+
+    TBlockEvents<TEvDataShard::TEvProposeTransaction> creation(env.Runtime);
+    const auto createTx = ++env.TxId;
+    TestCreateTable(env.Runtime, createTx, env.Root, R"(
+        Name: "Pending"
+        Columns { Name: "key" Type: "Uint32" }
+        KeyColumnNames: ["key"]
+    )");
+    env.Runtime.WaitFor("accepted schema work before freeze", [&] { return !creation.empty(); });
+    env.CheckPending();
+    UNIT_ASSERT(!env.SchemeShard()->DatabaseFreezeStates.at(TPathId(env.Owner, env.PathId)).GetParticipantsFixed());
+    sendStats();
+    creation.Stop().Unblock();
+    env.Env.TestWaitNotification(env.Runtime, createTx);
+
+    TBlockEvents<TEvDataShard::TEvDatabaseFreezeResult> fence(env.Runtime, [](const auto& ev) {
+        return ev->Get()->Record.GetStage() == TStage::FENCE_WRITES;
+    });
+    env.CheckPending();
+    env.Runtime.WaitFor("pending freeze fence", [&] { return !fence.empty(); });
+    sendStats();
+    fence.Stop().Unblock();
+    env.Wait(1, true);
+    sendStats();
+
+    TBlockEvents<TEvDataShard::TEvDatabaseFreezeResult> open(env.Runtime, [](const auto& ev) {
+        return ev->Get()->Record.GetStage() == TStage::OPEN;
+    });
+    env.CheckPending(2, false);
+    env.Runtime.WaitFor("pending thaw acknowledgement", [&] { return !open.empty(); });
+    sendStats();
+    open.Stop().Unblock();
+    env.Wait(2, false);
+
+    env.SendStats(byLoad ? 100 : 2048, byLoad ? 1000000 : 0, followerId);
+    env.Runtime.WaitFor("automatic split statistics requested after thaw", [&] {
+        return !env.StatsRequests.empty();
+    });
+    UNIT_ASSERT_VALUES_EQUAL(env.StatsRequests.front()->Get()->Record.GetCollectKeySample(), byLoad);
+}
+
+void CheckFreezePausesDeferredPartitioning(bool wantsSplit) {
+    TPartitioningFreezeEnv env(true);
+    env.CreatePartitioningTable("Table", wantsSplit ? 1 : 2);
+    const auto tableId = env.TableId();
+    TBlockEvents<TEvPrivate::TEvRevisitSplitMerge> revisit(env.Runtime);
+    env.DeferPartitioning("Table", wantsSplit);
+    env.Runtime.WaitFor("partitioning candidate awaiting its turn", [&] { return !revisit.empty(); });
+    env.Wait(1, true);
+    env.SendStats(wantsSplit ? 2048 : 100);
+    if (!wantsSplit) {
+        env.SendStats(100, 0, 0, 1);
+        env.CheckMergeCandidate();
+    }
+    UNIT_ASSERT(env.StatsRequests.empty());
+    const auto cachedTxIds = env.SchemeShard()->CachedTxIds;
+    UNIT_ASSERT(!cachedTxIds.empty());
+
+    revisit.Unblock();
+    env.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT(env.StatsRequests.empty());
+    UNIT_ASSERT(env.SchemeShard()->CachedTxIds == cachedTxIds);
+    const auto& state = env.SchemeShard()->Tables.at(tableId)->GetTableSplitMergeState();
+    UNIT_ASSERT(state.QueuedForRevisit);
+    UNIT_ASSERT_VALUES_EQUAL(state.DeferredShards.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(env.SchemeShard()->SplitMergeRevisitQueue.size(), 1);
+    UNIT_ASSERT(revisit.empty());
+
+    // Only successful thaw may wake the queue. No new periodic stats are sent.
+    TBlockEvents<TEvDataShard::TEvDatabaseFreezeResult> open(env.Runtime, [](const auto& ev) {
+        return ev->Get()->Record.GetStage() == TStage::OPEN;
+    });
+    env.CheckPending(2, false);
+    env.Runtime.WaitFor("pending thaw with a deferred candidate", [&] { return !open.empty(); });
+    UNIT_ASSERT(revisit.empty());
+    auto failure = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreezeResult>([](auto& ev) {
+        if (ev->Get()->Record.GetStage() == TStage::OPEN) {
+            ev->Get()->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+            ev->Get()->Record.SetIssue("Injected thaw failure with a deferred candidate");
+        }
+    });
+    open.Stop().Unblock();
+    env.Wait(2, false, Ydb::StatusIds::UNAVAILABLE);
+    UNIT_ASSERT(revisit.empty());
+    UNIT_ASSERT(env.StatsRequests.empty());
+    UNIT_ASSERT(env.SchemeShard()->CachedTxIds == cachedTxIds);
+    failure.Remove();
+    env.Wait(3, false);
+    env.Runtime.WaitFor("deferred partitioning woken by successful thaw", [&] { return !revisit.empty(); });
+    revisit.Stop().Unblock();
+    if (wantsSplit) {
+        env.Runtime.WaitFor("deferred split statistics requested after thaw", [&] {
+            return !env.StatsRequests.empty();
+        });
+    } else {
+        env.Runtime.WaitFor("deferred merge completed after thaw", [&] {
+            return env.SchemeShard()->Tables.at(tableId)->GetPartitions().size() == 1;
+        });
+    }
+}
 
 // Identify the commit containing this record's actual erase, rather than an
 // unrelated DataShard commit or the earlier TEvRemoveRecords notification.
@@ -824,6 +1097,128 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         env.AdvancePlanStep();
         env.Write("Table", true, 1, 0);
         env.Write("Table", true, 101, 1);
+    }
+
+    Y_UNIT_TEST(AutomaticSplitBySizePausesUntilThaw) {
+        CheckFreezePausesAutomaticSplit(false, 0);
+    }
+
+    Y_UNIT_TEST(AutomaticSplitByLeaderLoadPausesUntilThaw) {
+        CheckFreezePausesAutomaticSplit(true, 0);
+    }
+
+    Y_UNIT_TEST(AutomaticSplitByFollowerLoadPausesUntilThaw) {
+        CheckFreezePausesAutomaticSplit(true, 1);
+    }
+
+    Y_UNIT_TEST(AutomaticMergePausesUntilThaw) {
+        TPartitioningFreezeEnv env;
+        env.CreatePartitioningTable("Table", 2);
+        const auto tableId = env.TableId();
+        env.Wait(1, true);
+        const auto cachedTxIds = env.SchemeShard()->CachedTxIds;
+        UNIT_ASSERT(!cachedTxIds.empty());
+        env.SendStats(100);
+        env.SendStats(100, 0, 0, 1);
+        env.CheckMergeCandidate();
+        // The final split/merge guard already prevents topology changes. Check
+        // that no internal merge proposal was prepared either.
+        UNIT_ASSERT(env.SchemeShard()->CachedTxIds == cachedTxIds);
+        UNIT_ASSERT(env.StatsRequests.empty());
+        UNIT_ASSERT_VALUES_EQUAL(env.Shards().size(), 2);
+
+        env.Wait(2, false);
+        env.SendStats(100);
+        env.Runtime.WaitFor("automatic merge resumed after thaw", [&] {
+            return env.SchemeShard()->Tables.at(tableId)->GetPartitions().size() == 1;
+        });
+    }
+
+    Y_UNIT_TEST(HistogramRequestedBeforeFreezeIsIgnoredUntilThaw) {
+        TPartitioningFreezeEnv env;
+        env.CreatePartitioningTable();
+        const auto tableId = env.TableId();
+        const auto tabletId = env.Shards().front();
+        env.SendStats(2048);
+        env.Runtime.WaitFor("histogram requested before freeze", [&] { return !env.StatsRequests.empty(); });
+
+        auto sendHistogram = [&] {
+            auto result = MakeHolder<TEvDataShard::TEvGetTableStatsResult>(tabletId, tableId.OwnerId, tableId.LocalPathId);
+            result->Record.SetShardState(NKikimrTxDataShard::Ready);
+            result->Record.SetFullStatsReady(true);
+            auto& stats = *result->Record.MutableTableStats();
+            stats.SetDataSize(2048);
+            stats.SetSplitProtocolVersion(2);
+            stats.SetSplitBySizeSuggestedKey(TSerializedCellVec::Serialize({TCell::Make(ui32(100))}));
+            env.Runtime.Send(new IEventHandle(env.SchemeShardActor, env.StatsSender, result.Release()));
+        };
+
+        env.Wait(1, true);
+        const auto cachedTxIds = env.SchemeShard()->CachedTxIds;
+        UNIT_ASSERT(!cachedTxIds.empty());
+        sendHistogram();
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT(env.SchemeShard()->CachedTxIds == cachedTxIds);
+        UNIT_ASSERT_VALUES_EQUAL(env.Shards().size(), 1);
+
+        env.Wait(2, false);
+        // Reuse the same valid boundary to prove the response was eligible for
+        // splitting and was skipped specifically because of the freeze.
+        sendHistogram();
+        env.Runtime.WaitFor("histogram can initiate split after thaw", [&] {
+            return env.SchemeShard()->Tables.at(tableId)->GetPartitions().size() == 2;
+        });
+    }
+
+    Y_UNIT_TEST(DeferredSplitPausesAndResumesAfterThaw) {
+        CheckFreezePausesDeferredPartitioning(true);
+    }
+
+    Y_UNIT_TEST(DeferredMergePausesAndResumesAfterThaw) {
+        CheckFreezePausesDeferredPartitioning(false);
+    }
+
+    Y_UNIT_TEST(DeferredPartitioningSkipsOnlyFrozenDatabase) {
+        TPartitioningFreezeEnv env(true);
+        for (const auto name : {"First", "Second"}) {
+            TestCreateSubDomain(env.Runtime, ++env.TxId, "/MyRoot", Sprintf(R"(
+                Name: "%s" PlanResolution: 50 Coordinators: 1 Mediators: 1 TimeCastBucketsPerMediator: 2
+            )", name));
+            env.Env.TestWaitNotification(env.Runtime, env.TxId);
+            env.Root = TString("/MyRoot/") + name;
+            env.CreatePartitioningTable();
+        }
+        const auto firstId = env.TableId("/MyRoot/First/Table");
+        const auto secondId = env.TableId("/MyRoot/Second/Table");
+        TBlockEvents<TEvPrivate::TEvRevisitSplitMerge> revisit(env.Runtime);
+        env.DeferPartitioning("/MyRoot/First/Table", true);
+        env.DeferPartitioning("/MyRoot/Second/Table", true);
+        env.Runtime.WaitFor("deferred candidates on shared SchemeShard", [&] { return !revisit.empty(); });
+
+        env.Root = "/MyRoot/First";
+        env.PathId = DescribePath(env.Runtime, env.Root).GetPathId();
+        env.Wait(1, true);
+        env.SendStats(2048);
+        UNIT_ASSERT(env.StatsRequests.empty());
+        revisit.Stop().Unblock();
+        env.Runtime.WaitFor("statistics requested from the unfrozen database", [&] {
+            return !env.StatsRequests.empty();
+        });
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        for (const auto& request : env.StatsRequests) {
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.GetTableId(), secondId.LocalPathId);
+        }
+        UNIT_ASSERT(env.SchemeShard()->Tables.at(firstId)->GetTableSplitMergeState().QueuedForRevisit);
+
+        env.Wait(2, false);
+        env.Runtime.WaitFor("statistics requested from the thawed database", [&] {
+            for (const auto& request : env.StatsRequests) {
+                if (request->Get()->Record.GetTableId() == firstId.LocalPathId) {
+                    return true;
+                }
+            }
+            return false;
+        });
     }
 
     Y_UNIT_TEST(NewSplitIsRejectedWhileFrozen) {

@@ -227,7 +227,7 @@ public:
 } // anonymous namespace
 
 bool TSchemeShard::IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme& transaction) {
-    if (DatabaseFreezes.empty()) {
+    if (DatabaseFreezeStates.empty()) {
         return false;
     }
     TVector<TPath> mutationPaths{TPath::Resolve(transaction.GetWorkingDir(), this)};
@@ -397,10 +397,10 @@ bool TSchemeShard::IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme
         path.RiseUntilExisted();
         if (path.IsResolved() && IsDatabaseFreezeBlocking(path.Base()->PathId)) {
             const auto domainId = path.GetPathIdForDomain();
-            const auto freeze = DatabaseFreezes.find(domainId);
+            const auto freeze = DatabaseFreezeStates.find(domainId);
             // Let operations accepted before the fence finish their internal
             // stages. CDC initial scan finalization also needs a scheme tx.
-            const bool continuation = transaction.GetInternal() && freeze != DatabaseFreezes.end()
+            const bool continuation = transaction.GetInternal() && freeze != DatabaseFreezeStates.end()
                 && !freeze->second.GetParticipantsFixed();
             const bool finishCdcScan =
                 transaction.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream
@@ -419,11 +419,11 @@ bool TSchemeShard::IsDatabaseFreezeBlocking(const TPathId& pathId) const {
         return false;
     }
     const auto domainId = ResolvePathIdForDomain(pathId);
-    auto it = DatabaseFreezes.find(domainId);
-    if (it == DatabaseFreezes.end()) {
-        it = DatabaseFreezes.find(pathId);
+    auto it = DatabaseFreezeStates.find(domainId);
+    if (it == DatabaseFreezeStates.end()) {
+        it = DatabaseFreezeStates.find(pathId);
     }
-    return it != DatabaseFreezes.end() && (it->second.GetFreeze() || !it->second.GetReady()
+    return it != DatabaseFreezeStates.end() && (it->second.GetFreeze() || !it->second.GetReady()
         || it->second.GetStatus() != Ydb::StatusIds::SUCCESS);
 }
 
@@ -510,11 +510,11 @@ struct TSchemeShard::TTxDatabaseFreeze : public TSchemeShard::TRwTxBase {
             return fail(Ydb::StatusIds::NOT_FOUND, "Database does not exist at this SchemeShard");
         }
 
-        auto it = Self->DatabaseFreezes.find(PathId);
-        if (it != Self->DatabaseFreezes.end() && request.GetEpoch() < it->second.GetEpoch()) {
+        auto it = Self->DatabaseFreezeStates.find(PathId);
+        if (it != Self->DatabaseFreezeStates.end() && request.GetEpoch() < it->second.GetEpoch()) {
             return fail(Ydb::StatusIds::ABORTED, "Stale database freeze epoch");
         }
-        if (it != Self->DatabaseFreezes.end() && request.GetEpoch() == it->second.GetEpoch()
+        if (it != Self->DatabaseFreezeStates.end() && request.GetEpoch() == it->second.GetEpoch()
             && request.GetFreeze() != it->second.GetFreeze())
         {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Conflicting database freeze request");
@@ -522,7 +522,8 @@ struct TSchemeShard::TTxDatabaseFreeze : public TSchemeShard::TRwTxBase {
 
         // Refuse unsupported participants before closing any write paths.
         for (const auto& tablePathId : Self->ColumnTables.GetAllPathIds()) {
-            if (request.GetFreeze() && !Self->PathsById.at(tablePathId)->Dropped()
+            const auto path = Self->PathsById.find(tablePathId);
+            if (request.GetFreeze() && path != Self->PathsById.end() && !path->second->Dropped()
                 && Self->ResolvePathIdForDomain(tablePathId) == PathId)
             {
                 return fail(Ydb::StatusIds::UNSUPPORTED, "Database freeze supports row tables only");
@@ -538,7 +539,7 @@ struct TSchemeShard::TTxDatabaseFreeze : public TSchemeShard::TRwTxBase {
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        auto& state = Self->DatabaseFreezes[PathId];
+        auto& state = Self->DatabaseFreezeStates[PathId];
         bool changed = false;
         if (request.GetEpoch() > state.GetEpoch()) {
             Self->DatabaseFreezeProgress.erase(PathId);
@@ -593,8 +594,8 @@ struct TSchemeShard::TTxDatabaseFreeze : public TSchemeShard::TRwTxBase {
         // Another request may execute before this transaction's Complete.
         // Never start a superseding epoch using this request's participant
         // readiness, or replace a worker already started by a duplicate poll.
-        const auto state = Self->DatabaseFreezes.find(PathId);
-        if (state != Self->DatabaseFreezes.end()
+        const auto state = Self->DatabaseFreezeStates.find(PathId);
+        if (state != Self->DatabaseFreezeStates.end()
             && state->second.GetEpoch() == Request->Get()->Record.GetEpoch())
         {
             if (RestartWorker) {
@@ -633,9 +634,9 @@ struct TSchemeShard::TTxDatabaseFreezeDone : public TSchemeShard::TRwTxBase {
     void DoExecute(TTransactionContext& txc, const TActorContext&) override {
         const auto& result = Event->Get()->Record;
         PathId = TPathId(Self->TabletID(), result.GetPathId());
-        auto it = Self->DatabaseFreezes.find(PathId);
+        auto it = Self->DatabaseFreezeStates.find(PathId);
         auto worker = Self->DatabaseFreezeWorkers.find(PathId);
-        if (it == Self->DatabaseFreezes.end() || worker == Self->DatabaseFreezeWorkers.end()
+        if (it == Self->DatabaseFreezeStates.end() || worker == Self->DatabaseFreezeWorkers.end()
             || worker->second != Event->Sender || it->second.GetEpoch() != result.GetEpoch())
         {
             PathId = InvalidPathId;
@@ -649,12 +650,15 @@ struct TSchemeShard::TTxDatabaseFreezeDone : public TSchemeShard::TRwTxBase {
             .Update<Schema::DatabaseFreezes::State>(Completed.SerializeAsString());
     }
 
-    void DoComplete(const TActorContext&) override {
-        const auto state = Self->DatabaseFreezes.find(PathId);
-        if (state != Self->DatabaseFreezes.end() && state->second.GetEpoch() == Completed.GetEpoch()) {
+    void DoComplete(const TActorContext& ctx) override {
+        const auto state = Self->DatabaseFreezeStates.find(PathId);
+        if (state != Self->DatabaseFreezeStates.end() && state->second.GetEpoch() == Completed.GetEpoch()) {
             state->second.CopyFrom(Completed);
             Self->DatabaseFreezeProgress.erase(PathId);
             Self->DatabaseFreezeWorkers.erase(PathId);
+            if (!Completed.GetFreeze() && Completed.GetStatus() == Ydb::StatusIds::SUCCESS) {
+                Self->ScheduleSplitMergeRevisit(ctx);
+            }
         }
     }
 };
@@ -667,9 +671,9 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvDatabaseFreezeResult::TPtr& ev, con
     if (!ev->Get()->Record.GetReady()) {
         const auto& result = ev->Get()->Record;
         const TPathId pathId(TabletID(), result.GetPathId());
-        const auto state = DatabaseFreezes.find(pathId);
+        const auto state = DatabaseFreezeStates.find(pathId);
         const auto worker = DatabaseFreezeWorkers.find(pathId);
-        if (state != DatabaseFreezes.end() && worker != DatabaseFreezeWorkers.end()
+        if (state != DatabaseFreezeStates.end() && worker != DatabaseFreezeWorkers.end()
             && worker->second == ev->Sender && state->second.GetEpoch() == result.GetEpoch()
             && !state->second.GetReady() && result.GetStatus() == Ydb::StatusIds::SUCCESS)
         {

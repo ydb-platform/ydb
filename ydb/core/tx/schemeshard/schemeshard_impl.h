@@ -348,10 +348,11 @@ public:
     THashMap<TTxId, TOperation::TPtr> Operations;
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
-    THashMap<TPathId, NKikimrScheme::TDatabaseFreezeState> DatabaseFreezes;
+    // One entry per database domain path; a SchemeShard may serve multiple databases.
+    THashMap<TPathId, NKikimrScheme::TDatabaseFreezeState> DatabaseFreezeStates;
     THashMap<TPathId, TActorId> DatabaseFreezeWorkers;
     // Pending progress is rebuilt by the worker after a restart, unlike the
-    // durable result in DatabaseFreezes.
+    // durable result in DatabaseFreezeStates.
     THashMap<TPathId, TString> DatabaseFreezeProgress;
     bool IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme& transaction);
     bool IsDatabaseFreezeBlocking(const TPathId& pathId) const;

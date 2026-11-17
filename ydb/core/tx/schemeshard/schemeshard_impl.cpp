@@ -2871,7 +2871,7 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
     db.Table<Schema::DatabaseFreezes>().Key(pathId.LocalPathId).Delete();
-    DatabaseFreezes.erase(pathId);
+    DatabaseFreezeStates.erase(pathId);
     DatabaseFreezeProgress.erase(pathId);
     if (const auto worker = DatabaseFreezeWorkers.find(pathId); worker != DatabaseFreezeWorkers.end()) {
         Send(worker->second, new TEvents::TEvPoisonPill);

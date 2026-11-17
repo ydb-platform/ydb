@@ -410,8 +410,8 @@ private:
         if (!request.GetInternal() || !request.GetSettings().has_index()) {
             return false;
         }
-        const auto freeze = Self->DatabaseFreezes.find(domainId);
-        if (freeze == Self->DatabaseFreezes.end() || freeze->second.GetParticipantsFixed()) {
+        const auto freeze = Self->DatabaseFreezeStates.find(domainId);
+        if (freeze == Self->DatabaseFreezeStates.end() || freeze->second.GetParticipantsFixed()) {
             return false;
         }
         const auto importTx = Self->TxIdToImport.find(TTxId(request.GetTxId()));

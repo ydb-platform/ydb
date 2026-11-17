@@ -41,6 +41,26 @@ TEST(TMaybeInfTest, DecreaseBy)
     EXPECT_FALSE(a.CanDecrease(b));
 }
 
+TEST(TMaybeInfTest, ChangeInfinityByZero)
+{
+    auto check = [] <class T> () {
+        auto limit = TMaybeInf<T>::Infinity();
+        EXPECT_TRUE(limit.CanIncrease(TMaybeInf<T>(0)));
+        limit.Increase(0);
+        EXPECT_TRUE(limit.IsInfinite());
+
+        EXPECT_TRUE(limit.CanDecrease(TMaybeInf<T>(0)));
+        limit.Decrease(0);
+        EXPECT_TRUE(limit.IsInfinite());
+
+        EXPECT_FALSE(limit.CanIncrease(TMaybeInf<T>(1)));
+        EXPECT_FALSE(limit.CanDecrease(TMaybeInf<T>(1)));
+        EXPECT_FALSE(limit.CanIncrease(TMaybeInf<T>::Infinity()));
+    };
+    check.operator()<ui32>();
+    check.operator()<ui64>();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

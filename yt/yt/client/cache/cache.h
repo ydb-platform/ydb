@@ -45,7 +45,7 @@ IClientsCachePtr CreateClientsCache(const NApi::TClientOptions& options);
 IClientsCachePtr CreateClientsCache();
 
 //! Clones the cache configuration with normalized cluster names.
-TClientsCacheConfigPtr GetClustersConfigWithNormalClusterName(const TClientsCacheConfigPtr& config);
+TClientsCacheConfigPtr CloneConfigWithNormalizedClusterNames(const TClientsCacheConfigPtr& config);
 
 //! Helper function to get a cluster config by |clusterUrl|.
 NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TClientsCacheConfigPtr& config, TStringBuf clusterUrl);

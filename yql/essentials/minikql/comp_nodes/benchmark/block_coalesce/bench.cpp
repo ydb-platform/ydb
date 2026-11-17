@@ -4,7 +4,7 @@
 #include <yql/essentials/minikql/computation/mkql_block_item.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_block_coalesce.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_block_coalesce_blending_helper.h>
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_test_setup.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/ast/yql_expr_builder.h>

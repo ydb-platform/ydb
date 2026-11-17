@@ -274,6 +274,40 @@ TJoinTestData EmptyRightInnerTestData() {
     return td;
 }
 
+[[maybe_unused]] TJoinTestData LeftJoinNullColumnTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+    TType* keyType = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    TType* nullType = pb.NewNullType();
+    TType* optKeyType = pb.NewOptionalType(keyType);
+
+    const auto key = [&](ui64 value) { return pb.NewDataLiteral<ui64>(value); };
+    const auto optKey = [&](std::optional<ui64> value) {
+        return value ? pb.NewOptional(key(*value)) : pb.NewEmptyOptional(optKeyType);
+    };
+    const auto makeList = [&](TType* rowType, TRuntimeNode::TList items) {
+        const auto list = pb.NewList(rowType, items);
+        return TypeAndValue{list.GetStaticType(), setup.BuildGraph(list)->GetValue()};
+    };
+
+    td.Left = makeList(pb.NewTupleType({keyType, keyType}), {
+        pb.NewTuple({key(1), key(10)}),
+        pb.NewTuple({key(2), key(20)}),
+    });
+    td.Right = makeList(pb.NewTupleType({keyType, nullType}), {
+        pb.NewTuple({key(1), pb.NewNull()}),
+        pb.NewTuple({key(1), pb.NewNull()}),
+    });
+    td.Result = makeList(pb.NewTupleType({keyType, keyType, optKeyType, nullType}), {
+        pb.NewTuple({key(1), key(10), optKey(1), pb.NewNull()}),
+        pb.NewTuple({key(1), key(10), optKey(1), pb.NewNull()}),
+        pb.NewTuple({key(2), key(20), optKey(std::nullopt), pb.NewNull()}),
+    });
+    td.Kind = EJoinKind::Left;
+    return td;
+}
+
 [[maybe_unused]] TJoinTestData LeftJoinTestDataLeftIsBuild() {
     auto td = LeftJoinTestData();
     td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
@@ -2948,6 +2982,15 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestLeftJoinWithMatches, BlockJoin) {
         Test(LeftJoinWithMatchesTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestLeftJoinNullColumn, BlockJoin) {
+        auto td = LeftJoinNullColumnTestData();
+        const auto* rowType = AS_TYPE(TTupleType, AS_TYPE(TListType, td.Result.Type)->GetItemType());
+        UNIT_ASSERT(rowType->GetElementType(2)->IsOptional());
+        UNIT_ASSERT(rowType->GetElementType(3)->IsNull());
+        td.Setup->Alloc.SetLimit(64_MB);
+        Test(std::move(td), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinSpilling, BlockJoin) {

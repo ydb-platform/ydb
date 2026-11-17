@@ -240,7 +240,7 @@ namespace NActors {
         WriteMessageStat(*ev->Get());
 
         const auto& eventData = *ev->Get();
-        OutputRecordToSinks(evLog->Stamp,
+        OutputRecordToSinks(eventData.Stamp,
             eventData.Level.ToPrio(),
             eventData.Component,
             eventData.FileName,

@@ -137,7 +137,6 @@ public:
         , StatsReportingSettings(MakeStatsReportingSettings(*userRequestContext, Request.ProgressStatsPeriod))
         , AsyncIoFactory(std::move(asyncIoFactory))
         , FederatedQuerySetup(federatedQuerySetup)
-        , StreamingQueryControllerFactory(executerConfig.MutableConfig->StreamingQueryControllerFactory)
         , GUCSettings(GUCSettings)
         , BufferActorId(bufferActorId)
         , TxManager(txManager)
@@ -2076,43 +2075,12 @@ protected:
         return !databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler);
     }
 
-    void CreateStreamingQueryController() {
-        if (StreamingQuery || !StreamingQueryControllerFactory) {
-            return;
-        }
-
-        // Scan executers and executers without FQ setup only use streaming counters.
-        const bool enableGraphOperations = ExecType == EExecType::Data && FederatedQuerySetup.has_value();
-
-        bool hasPqSources = false;
-        for (const auto& transaction : Request.Transactions) {
-            hasPqSources |= enableGraphOperations && transaction.Body->GetHasPqSources();
-        }
-
-        StreamingQuery = StreamingQueryControllerFactory->Create({
-            .ExecuterId = SelfId(),
-            .TxId = TxId,
-            .Database = Database,
-            .UserToken = UserToken,
-            .UserRequestContext = GetUserRequestContext(),
-            .KqpCounters = Counters->Counters->GetKqpCounters(),
-            .Graph = Request.QueryPhysicalGraph,
-            .SaveGraph = Request.SaveQueryPhysicalGraph,
-            .HasPqSources = hasPqSources,
-            .EnableGraphOperations = enableGraphOperations,
-        });
-    }
-
     void ProcessStreamingQueryCounters() {
         if (!StreamingQuery) {
-            const auto& context = GetUserRequestContext();
-            if (!context || context->StreamingQueryPath.empty()) {
-                return;
-            }
-            CreateStreamingQueryController();
+            return;
         }
         const auto now = TInstant::Now();
-        if (StreamingQuery && StreamingQuery->NeedsCountersUpdate(now)) {
+        if (StreamingQuery->NeedsCountersUpdate(now)) {
             TAggExecStat stats;
             Stats->ExportAggExecStats(&stats);
             StreamingQuery->UpdateCounters(stats, now);
@@ -2124,7 +2092,6 @@ protected:
     const TKqpStatsReportingSettings StatsReportingSettings;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
-    const std::shared_ptr<IKqpStreamingQueryControllerFactory> StreamingQueryControllerFactory;
     const TGUCSettings::TPtr GUCSettings;
 
     TActorId BufferActorId;

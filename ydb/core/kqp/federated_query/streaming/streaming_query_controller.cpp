@@ -75,8 +75,8 @@ public:
     }
 
     bool NeedsPrepare() const override {
-        return Settings.EnableGraphOperations && AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart() &&
-               Settings.HasPqSources && Settings.Graph && PqGatewayFactory;
+        return AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart() && Settings.HasPqSources && Settings.Graph &&
+               PqGatewayFactory;
     }
 
     void StartPrepare(TVector<std::shared_ptr<const TKqpPhyTxHolder>> transactions, THashMap<TString, TString> secureParams) override {
@@ -106,8 +106,8 @@ public:
 
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> GetGraphToRestore(
         const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, ui32 usableThreadsPerNode) override {
-        if (!Settings.EnableGraphOperations || !Settings.Graph) {
-            return Settings.Graph;
+        if (!Settings.Graph) {
+            return nullptr;
         }
 
         if (Settings.HasPqSources && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
@@ -122,8 +122,7 @@ public:
 
     TStartedActors Start(std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> graph, const TKqpTasksGraph& tasksGraph) override {
         const auto& context = Settings.UserRequestContext;
-        const bool enabled = Settings.EnableGraphOperations && (Settings.Graph || Settings.SaveGraph) &&
-                             AppData()->FeatureFlags.GetEnableStreamingQueries() && graph && context && context->CheckpointId;
+        const bool enabled = AppData()->FeatureFlags.GetEnableStreamingQueries() && graph && context && context->CheckpointId;
         if (!enabled) {
             return {};
         }
@@ -204,9 +203,6 @@ public:
     }
 
     bool IsOwnEvent(const NActors::IEventHandle& ev) const override {
-        if (!Settings.EnableGraphOperations || (!Settings.Graph && !Settings.SaveGraph)) {
-            return false;
-        }
         switch (ev.GetTypeRewrite()) {
             case NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone::EventType:
             case NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues::EventType:
@@ -333,10 +329,7 @@ public:
     }
 
     std::unique_ptr<IKqpStreamingQueryController> Create(TSettings settings) const override {
-        const auto& context = settings.UserRequestContext;
-        const bool needsCounters = context && !context->StreamingQueryPath.empty();
-        const bool needsGraphOperations = settings.EnableGraphOperations && (settings.Graph || settings.SaveGraph);
-        if (!needsGraphOperations && !needsCounters) {
+        if (!settings.Graph && !settings.SaveGraph) {
             return nullptr;
         }
         return std::make_unique<TStreamingQueryController>(std::move(settings), PqGatewayFactory, CheckpointProviderIntegrations);

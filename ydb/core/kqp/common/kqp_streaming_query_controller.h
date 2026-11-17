@@ -30,7 +30,7 @@ class TKqpPhyTxHolder;
 //
 // The executer owns the call sites and knows nothing about the implementation,
 // which lives in kqp/federated_query/streaming and is injected through
-// TExecuterMutableConfig::StreamingQueryControllerFactory.
+// TKqpFederatedQuerySetup::StreamingQueryControllerFactory.
 //
 // All methods are called from the executer actor context; side actors are
 // registered and addressed on behalf of the executer.
@@ -104,13 +104,11 @@ public:
         std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> Graph;
         bool SaveGraph = false;
         bool HasPqSources = false;
-        // Counter-only controllers preserve the graph without preparing or starting it.
-        bool EnableGraphOperations = true;
     };
 
     virtual ~IKqpStreamingQueryControllerFactory() = default;
 
-    // Returns nullptr if neither graph operations nor per-query streaming counters are needed.
+    // Returns nullptr if the request is not a streaming query.
     virtual std::unique_ptr<IKqpStreamingQueryController> Create(TSettings settings) const = 0;
 };
 

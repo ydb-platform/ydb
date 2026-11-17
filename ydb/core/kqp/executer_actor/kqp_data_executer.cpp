@@ -1326,6 +1326,29 @@ private:
         }
     }
 
+    void CreateStreamingQueryController() {
+        if (!FederatedQuerySetup || !FederatedQuerySetup->StreamingQueryControllerFactory) {
+            return;
+        }
+
+        bool hasPqSources = false;
+        for (const auto& transaction : Request.Transactions) {
+            hasPqSources |= transaction.Body->GetHasPqSources();
+        }
+
+        StreamingQuery = FederatedQuerySetup->StreamingQueryControllerFactory->Create({
+            .ExecuterId = SelfId(),
+            .TxId = TxId,
+            .Database = Database,
+            .UserToken = UserToken,
+            .UserRequestContext = GetUserRequestContext(),
+            .KqpCounters = Counters->Counters->GetKqpCounters(),
+            .Graph = Request.QueryPhysicalGraph,
+            .SaveGraph = Request.SaveQueryPhysicalGraph,
+            .HasPqSources = hasPqSources,
+        });
+    }
+
     void StartStreamingQueryPrepare() {
         TVector<std::shared_ptr<const TKqpPhyTxHolder>> transactions;
         transactions.reserve(Request.Transactions.size());

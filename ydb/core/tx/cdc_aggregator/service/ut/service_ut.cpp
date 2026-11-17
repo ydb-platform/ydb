@@ -277,6 +277,53 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorServiceTest) {
         UNIT_ASSERT(written->Get()->Status == TReply::EStatus::Written);
         UNIT_ASSERT_VALUES_EQUAL(written->Cookie, Cookie + 2);
     }
+
+    Y_UNIT_TEST(ShouldReplyToFirstRequestWhenSourceSendsHeartbeatWhileAwaitingReply) {
+        // given
+        TTestEnv env;
+        env.SendHeartbeat(1, 100, Cookie);
+        const auto firstBatch = env.GrabBatch();
+        UNIT_ASSERT(firstBatch);
+        env.SendHeartbeat(1, 200, Cookie + 1);
+
+        // when
+        env.ReplyToBatch(firstBatch);
+
+        // then
+        const auto written = env.GrabReply();
+        UNIT_ASSERT(written);
+        UNIT_ASSERT(written->Get()->Status == TReply::EStatus::Written);
+        UNIT_ASSERT_VALUES_EQUAL(written->Cookie, Cookie);
+        UNIT_ASSERT_VALUES_EQUAL(written->Get()->WrittenVersion, TRowVersion(100, 0));
+        UNIT_ASSERT(!env.GrabReply(TDuration::MilliSeconds(200)));
+    }
+
+    Y_UNIT_TEST(ShouldReplyToEveryRequestOfSourceWhenNewestHeartbeatIsWritten) {
+        // given
+        TTestEnv env;
+        env.SendHeartbeat(1, 100, Cookie);
+        const auto firstBatch = env.GrabBatch();
+        UNIT_ASSERT(firstBatch);
+        env.SendHeartbeat(1, 200, Cookie + 1);
+        env.SendHeartbeat(1, 300, Cookie + 2);
+        env.ReplyToBatch(firstBatch);
+        UNIT_ASSERT(env.GrabReply());
+        const auto secondBatch = env.GrabBatch();
+        UNIT_ASSERT(secondBatch);
+
+        // when
+        env.ReplyToBatch(secondBatch);
+
+        // then
+        TSet<ui64> writtenCookies{Cookie + 1, Cookie + 2};
+        while (!writtenCookies.empty()) {
+            const auto written = env.GrabReply();
+            UNIT_ASSERT(written);
+            UNIT_ASSERT(written->Get()->Status == TReply::EStatus::Written);
+            UNIT_ASSERT_VALUES_EQUAL(written->Get()->WrittenVersion, TRowVersion(300, 0));
+            UNIT_ASSERT_VALUES_EQUAL(writtenCookies.erase(written->Cookie), 1);
+        }
+    }
 }
 
 } // namespace NKikimr::NCdcAggregator

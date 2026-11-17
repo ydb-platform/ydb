@@ -60,7 +60,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
 
         void RegisterHeartbeat(const TOrigin& origin, ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat) {
             LastActivity = TActivationContext::Monotonic();
-            Origins[sourceDataShardId] = origin;
+            PendingOriginsBySourceDataShardId[sourceDataShardId].push_back(origin);
             CdcAggregatorHeartbeatDelivery.AddHeartbeat(sourceDataShardId, heartbeat);
         }
 
@@ -69,6 +69,13 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             if (batch) {
                 BatchCookie = batchCookie;
                 BatchDeadline = TActivationContext::Monotonic() + BatchTimeout;
+                for (const auto& [sourceDataShardId, heartbeat] : *batch) {
+                    auto it = PendingOriginsBySourceDataShardId.find(sourceDataShardId);
+                    if (it != PendingOriginsBySourceDataShardId.end()) {
+                        AwaitingReplyOriginsBySourceDataShardId[sourceDataShardId] = std::move(it->second);
+                        PendingOriginsBySourceDataShardId.erase(it);
+                    }
+                }
             }
             return batch;
         }
@@ -80,20 +87,26 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         void CompleteBatch(const TCdcAggregatorWriteHeartbeatsResult& writeHeartbeatsResult, const TSendReply& sendReply) {
             BatchCookie = 0;
             LastActivity = TActivationContext::Monotonic();
-            ReplyToOrigins(CdcAggregatorHeartbeatDelivery.CompleteBatch(writeHeartbeatsResult), sendReply);
+            ReplyToOrigins(CdcAggregatorHeartbeatDelivery.CompleteBatch(writeHeartbeatsResult), AwaitingReplyOriginsBySourceDataShardId, sendReply);
         }
 
         void FailBatch(const TString& error, const TSendReply& sendReply) {
             BatchCookie = 0;
             LastActivity = TActivationContext::Monotonic();
-            ReplyToOrigins(CdcAggregatorHeartbeatDelivery.FailBatch(error), sendReply);
+            const auto batchResult = CdcAggregatorHeartbeatDelivery.FailBatch(error);
+            ReplyToOrigins(batchResult, AwaitingReplyOriginsBySourceDataShardId, sendReply);
+            ReplyToOrigins(batchResult, PendingOriginsBySourceDataShardId, sendReply);
         }
 
         void ReplyToAllOrigins(const TCdcAggregatorHeartbeatWriteResult& writeResult, const TSendReply& sendReply) {
-            for (const auto& [sourceDataShardId, origin] : Origins) {
-                sendReply(origin, writeResult);
+            for (auto* originsBySourceDataShardId : {&AwaitingReplyOriginsBySourceDataShardId, &PendingOriginsBySourceDataShardId}) {
+                for (const auto& [sourceDataShardId, origins] : *originsBySourceDataShardId) {
+                    for (const auto& origin : origins) {
+                        sendReply(origin, writeResult);
+                    }
+                }
+                originsBySourceDataShardId->clear();
             }
-            Origins.clear();
         }
 
         bool IsBatchExpired(TMonotonic now) const {
@@ -109,25 +122,34 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         }
 
         size_t GetOriginCount() const {
-            return Origins.size();
+            size_t count = 0;
+            for (const auto* originsBySourceDataShardId : {&AwaitingReplyOriginsBySourceDataShardId, &PendingOriginsBySourceDataShardId}) {
+                for (const auto& [sourceDataShardId, origins] : *originsBySourceDataShardId) {
+                    count += origins.size();
+                }
+            }
+            return count;
         }
 
     private:
-        void ReplyToOrigins(const TCdcAggregatorHeartbeatBatchResult& batchResult, const TSendReply& sendReply) {
+        static void ReplyToOrigins(const TCdcAggregatorHeartbeatBatchResult& batchResult, THashMap<ui64, TVector<TOrigin>>& originsBySourceDataShardId, const TSendReply& sendReply) {
             for (const auto& [sourceDataShardId, writeResult] : batchResult) {
-                auto it = Origins.find(sourceDataShardId);
-                if (it == Origins.end()) {
+                auto it = originsBySourceDataShardId.find(sourceDataShardId);
+                if (it == originsBySourceDataShardId.end()) {
                     continue;
                 }
 
-                sendReply(it->second, writeResult);
-                Origins.erase(it);
+                for (const auto& origin : it->second) {
+                    sendReply(origin, writeResult);
+                }
+                originsBySourceDataShardId.erase(it);
             }
         }
 
         const TActorId PipeClient;
         TCdcAggregatorHeartbeatDelivery CdcAggregatorHeartbeatDelivery{MaxBatchSize};
-        THashMap<ui64, TOrigin> Origins;
+        THashMap<ui64, TVector<TOrigin>> PendingOriginsBySourceDataShardId;
+        THashMap<ui64, TVector<TOrigin>> AwaitingReplyOriginsBySourceDataShardId;
         ui64 BatchCookie = 0;
         TMonotonic BatchDeadline;
         TMonotonic LastActivity;
@@ -181,6 +203,8 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
                 NTabletPipe::CloseClient(SelfId(), connection.GetPipeClient());
                 DropCdcAggregatorConnection(current->first, connection.GetPipeClient(), "Heartbeat batch timed out");
             } else if (connection.IsIdleExpired(now)) {
+                YDB_LOG_INFO("Remove idle connection",
+                    {"aggregator", current->first});
                 NTabletPipe::CloseClient(SelfId(), connection.GetPipeClient());
                 CdcAggregatorConnections.erase(current);
             }

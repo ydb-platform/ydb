@@ -298,7 +298,228 @@ namespace {
 
             return status;
         }
+
+        TMap<ui64, TString> CollectShardPrograms(TRuntimeNode pgm, std::function<void(TKeyDesc&)> keyResolver) {
+            TString pgmStr = SerializeRuntimeNode(pgm, Env);
+            TEngineFlatSettings settings(IEngineFlat::EProtocol::V1, FunctionRegistry.Get(), *RandomProvider, *TimeProvider);
+            SettingsConfigurer(settings);
+            const auto unguard = Unguard(Alloc);
+            auto proxyEngine = CreateEngineFlat(settings);
+            UNIT_ASSERT_C(proxyEngine->SetProgram(pgmStr) == IEngineFlat::EResult::Ok, proxyEngine->GetErrors());
+            for (auto& key : proxyEngine->GetDbKeys()) {
+                keyResolver(*key);
+                UNIT_ASSERT_EQUAL(key->Status, TKeyDesc::EStatus::Ok);
+            }
+            UNIT_ASSERT_C(proxyEngine->PrepareShardPrograms() == IEngineFlat::EResult::Ok, proxyEngine->GetErrors());
+            TMap<ui64, TString> shardPrograms;
+            const ui32 affectedShardCount = proxyEngine->GetAffectedShardCount();
+            for (ui32 index = 0; index < affectedShardCount; ++index) {
+                IEngineFlat::TShardData shardData;
+                UNIT_ASSERT_EQUAL(proxyEngine->GetAffectedShard(index, shardData), IEngineFlat::EResult::Ok);
+                shardPrograms[shardData.ShardId] = shardData.Program;
+            }
+            proxyEngine->AfterShardProgramsExtracted();
+            return shardPrograms;
+        }
     };
+}
+
+TString TypeSummary(const TType* type) {
+    if (type->IsCallable()) {
+        return TString(static_cast<const TCallableType*>(type)->GetName());
+    }
+    if (type->IsData()) {
+        const auto schemeType = static_cast<const TDataType*>(type)->GetSchemeType();
+        if (schemeType == NUdf::TDataType<ui64>::Id) {
+            return "Uint64";
+        }
+        if (schemeType == NUdf::TDataType<ui32>::Id) {
+            return "Uint32";
+        }
+        if (schemeType == NUdf::TDataType<char*>::Id) {
+            return "String";
+        }
+        if (schemeType == NUdf::TDataType<NUdf::TUtf8>::Id) {
+            return "Utf8";
+        }
+        return ToString(schemeType);
+    }
+    if (type->IsStruct()) {
+        TStringBuilder summary;
+        summary << "Struct";
+        const auto* structType = static_cast<const TStructType*>(type);
+        for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
+            summary << (index == 0 ? " " : ", ") << structType->GetMemberName(index);
+        }
+        return TString(summary);
+    }
+    if (type->IsOptional()) {
+        return "Optional";
+    }
+    if (type->IsList()) {
+        return "List";
+    }
+    if (type->IsTuple()) {
+        return "Tuple";
+    }
+    if (type->IsVoid()) {
+        return "Void";
+    }
+    return "Other";
+}
+
+TString DataText(const TDataLiteral& data) {
+    const auto schemeType = data.GetType()->GetSchemeType();
+    const auto value = data.AsValue();
+    if (schemeType == NUdf::TDataType<ui64>::Id) {
+        return ToString(value.Get<ui64>());
+    }
+    if (schemeType == NUdf::TDataType<ui32>::Id) {
+        return ToString(value.Get<ui32>());
+    }
+    if (schemeType == NUdf::TDataType<bool>::Id) {
+        return value.Get<bool>() ? "true" : "false";
+    }
+    return TString(value.AsStringRef()).Quote();
+}
+
+void PrintProgram(TStringBuilder& out, const TNode* node, ui32 indent) {
+    for (ui32 pad = 0; pad < indent; ++pad) {
+        out << "  ";
+    }
+    if (node->GetType()->GetKind() == TType::EKind::Type) {
+        out << "Type " << TypeSummary(static_cast<const TType*>(node)) << "\n";
+        return;
+    }
+    switch (node->GetType()->GetKind()) {
+        case TType::EKind::Struct: {
+            const auto& value = static_cast<const TStructLiteral&>(*node);
+            out << "Struct\n";
+            for (ui32 index = 0; index < value.GetValuesCount(); ++index) {
+                for (ui32 pad = 0; pad < indent + 1; ++pad) {
+                    out << "  ";
+                }
+                out << value.GetType()->GetMemberName(index) << "\n";
+                PrintProgram(out, value.GetValue(index).GetNode(), indent + 2);
+            }
+            return;
+        }
+        case TType::EKind::Callable: {
+            const auto& callable = static_cast<const TCallable&>(*node);
+            out << callable.GetType()->GetName() << " #" << callable.GetUniqueId() << "\n";
+            for (ui32 index = 0; index < callable.GetInputsCount(); ++index) {
+                PrintProgram(out, callable.GetInput(index).GetNode(), indent + 1);
+            }
+            return;
+        }
+        case TType::EKind::Data:
+            out << TypeSummary(node->GetType()) << " " << DataText(static_cast<const TDataLiteral&>(*node)) << "\n";
+            return;
+        case TType::EKind::List: {
+            const auto& list = static_cast<const TListLiteral&>(*node);
+            out << "List " << list.GetItemsCount() << "\n";
+            for (ui32 index = 0; index < list.GetItemsCount(); ++index) {
+                PrintProgram(out, list.GetItems()[index].GetNode(), indent + 1);
+            }
+            return;
+        }
+        case TType::EKind::Tuple: {
+            const auto& tuple = static_cast<const TTupleLiteral&>(*node);
+            out << "Tuple\n";
+            for (ui32 index = 0; index < tuple.GetValuesCount(); ++index) {
+                PrintProgram(out, tuple.GetValue(index).GetNode(), indent + 1);
+            }
+            return;
+        }
+        case TType::EKind::Optional: {
+            const auto& optional = static_cast<const TOptionalLiteral&>(*node);
+            out << (optional.HasItem() ? "Optional\n" : "EmptyOptional\n");
+            if (optional.HasItem()) {
+                PrintProgram(out, optional.GetItem().GetNode(), indent + 1);
+            }
+            return;
+        }
+        case TType::EKind::Void:
+            out << "Void\n";
+            return;
+        case TType::EKind::Null:
+            out << "Null\n";
+            return;
+        default:
+            out << "Node\n";
+            return;
+    }
+}
+
+TString ProgramText(const TString& serialized, TTypeEnvironment& env) {
+    TStringBuilder out;
+    PrintProgram(out, DeserializeRuntimeNode(serialized, env).GetNode(), 0);
+    return TString(out);
+}
+
+using TShardsByKey = TMap<std::pair<ui64, TKeyDesc::ERowOperation>, TVector<ui64>>; // (local table id, operation) -> shards
+
+std::function<void(TKeyDesc&)> MakeShardResolver(TShardsByKey shardsByKey) {
+    return [shardsByKey = std::move(shardsByKey)](TKeyDesc& key) {
+        key.Status = TKeyDesc::EStatus::Ok;
+        const TVector<ui64>* shards = shardsByKey.FindPtr(std::make_pair(key.TableId.PathId.LocalPathId, key.RowOperation));
+        UNIT_ASSERT_C(shards, "Unexpected key for table " << key.TableId.PathId.LocalPathId);
+        TVector<TKeyDesc::TPartitionInfo> partitions(Reserve(shards->size()));
+        for (ui64 shard : *shards) {
+            partitions.emplace_back(shard);
+        }
+        key.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
+    };
+}
+
+struct TShardRunCapture {
+    TMap<ui64, TString> Programs;
+    TDriver::TOutgoingReadsets Outgoing;
+    TDriver::TIncomingReadsets Incoming;
+};
+
+void CaptureShardRun(TDriver& driver, TShardRunCapture& capture) {
+    driver.ShardProgramInspector = [&capture](ui64 shard, const TString& program) {
+        capture.Programs[shard] = program;
+    };
+    driver.ReadSetsInspector = [&capture](const TDriver::TOutgoingReadsets& outgoing, const TDriver::TIncomingReadsets& incoming) {
+        capture.Outgoing = outgoing;
+        capture.Incoming = incoming;
+    };
+}
+
+void AssertReadsetsOnlyFrom(const TShardRunCapture& capture, ui64 origin, TArrayRef<const ui64> targets) {
+    UNIT_ASSERT_VALUES_EQUAL(capture.Outgoing.size(), 1);
+    const TMap<ui64, TString>* outgoing = capture.Outgoing.FindPtr(origin);
+    UNIT_ASSERT(outgoing);
+    TVector<ui64> outgoingTargets(Reserve(outgoing->size()));
+    for (const auto& [target, body] : *outgoing) {
+        outgoingTargets.push_back(target);
+    }
+    TVector<ui64> expectedTargets(targets.begin(), targets.end());
+    Sort(expectedTargets);
+    UNIT_ASSERT_EQUAL(outgoingTargets, expectedTargets);
+    TDriver::TIncomingReadsets expectedIncoming;
+    for (ui64 target : targets) {
+        expectedIncoming[target].push_back(origin);
+    }
+    UNIT_ASSERT_EQUAL(capture.Incoming, expectedIncoming);
+}
+
+TRuntimeNode SelectTable1Rows(TKikimrProgramBuilder& pgmBuilder, std::initializer_list<ui32> ids) {
+    TVector<TTypeInfo> keyTypes{TTypeInfo(NUdf::TDataType<ui32>::Id)};
+    TVector<TSelectColumn> columns;
+    columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, TTypeInfo(Schema1::Table1::ID::ColumnType), EColumnTypeConstraint::Nullable);
+    TRuntimeNode::TList rows;
+    for (ui32 id : ids) {
+        TRuntimeNode::TList row{pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(id)};
+        rows.push_back(pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row));
+    }
+    return pgmBuilder.AsList(rows);
+}
+
+TRuntimeNode::TList Table2KeyFromRead(TKikimrProgramBuilder& pgmBuilder, TRuntimeNode item, ui32 shift) {
+    return {pgmBuilder.Add(pgmBuilder.Convert(pgmBuilder.Member(item, "ID"), pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id))), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(shift))};
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) {
@@ -6545,6 +6766,327 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver,
             IEngineFlat::TShardLimits(2, 0)), IEngineFlat::EStatus::Error);
         Cerr << res.DebugString() << Endl;
+    }
+
+    // Point SelectRows on one shard plus one dynamic EraseRow spanning the other shards.
+    // The text is the deserialized program, so sharing must keep the same nodes.
+    Y_UNIT_TEST(DeleteShapedShardProgramsStaySerialized) {
+        TDriver driver;
+        auto& pgmBuilder = driver.PgmBuilder;
+        TVector<TTypeInfo> readKeyTypes{TTypeInfo(NUdf::TDataType<ui64>::Id)};
+        TVector<TSelectColumn> columns;
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType), EColumnTypeConstraint::Nullable);
+        TRuntimeNode::TList effects;
+        for (ui64 key : {ui64(1), ui64(2), ui64(3)}) {
+            TRuntimeNode::TList row{pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(key)};
+            effects.push_back(pgmBuilder.SetResult(TStringBuilder() << "row" << key, pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), readKeyTypes, columns, row)));
+        }
+        TVector<TTypeInfo> eraseKeyTypes{TTypeInfo(NUdf::TDataType<ui64>::Id)};
+        TRuntimeNode::TList eraseRow{pgmBuilder.Add(pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1), pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2))};
+        effects.push_back(pgmBuilder.EraseRow(TTableId(OwnerId, Table2Id), eraseKeyTypes, eraseRow));
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(effects));
+
+        const ui64 writeShardA = 201;
+        const ui64 writeShardB = 202;
+        const ui64 writeShardC = 203;
+        auto programs = driver.CollectShardPrograms(pgm, [&](TKeyDesc& key) {
+            key.Status = TKeyDesc::EStatus::Ok;
+            TVector<TKeyDesc::TPartitionInfo> partitions;
+            if (key.RowOperation == TKeyDesc::ERowOperation::Read) {
+                partitions.push_back(TKeyDesc::TPartitionInfo(Shard1));
+            } else {
+                partitions.push_back(TKeyDesc::TPartitionInfo(writeShardA));
+                partitions.push_back(TKeyDesc::TPartitionInfo(writeShardB));
+                partitions.push_back(TKeyDesc::TPartitionInfo(writeShardC));
+            }
+            key.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
+        });
+
+        UNIT_ASSERT_EQUAL(programs.size(), 4);
+        UNIT_ASSERT(programs.contains(Shard1));
+        UNIT_ASSERT_EQUAL(programs.at(writeShardA), programs.at(writeShardB));
+        UNIT_ASSERT_EQUAL(programs.at(writeShardA), programs.at(writeShardC));
+        UNIT_ASSERT_UNEQUAL(programs.at(Shard1), programs.at(writeShardA));
+
+        const TString readText = ProgramText(programs.at(Shard1), driver.Env);
+        const TString writeText = ProgramText(programs.at(writeShardA), driver.Env);
+        const TStringBuf expectedRead = R"prog(Struct
+  AllReads
+    Struct
+      3
+        SelectRow #3
+          257 "\xC8\0\0\0\0\0\0\0-\1\0\0\0\0\0\0"
+          Type Struct Value
+          Struct
+            Value
+              Uint32 2
+          Tuple
+            Uint64 3
+          Uint32 0
+      5
+        SelectRow #5
+          257 "\xC8\0\0\0\0\0\0\0-\1\0\0\0\0\0\0"
+          Type Struct Value
+          Struct
+            Value
+              Uint32 2
+          Tuple
+            Uint64 2
+          Uint32 0
+      7
+        SelectRow #7
+          257 "\xC8\0\0\0\0\0\0\0-\1\0\0\0\0\0\0"
+          Type Struct Value
+          Struct
+            Value
+              Uint32 2
+          Tuple
+            Uint64 1
+          Uint32 0
+  MyKeys
+    Struct
+      MyReads
+        Struct
+          3
+            SelectRow #3
+              257 "\xC8\0\0\0\0\0\0\0-\1\0\0\0\0\0\0"
+              Type Struct Value
+              Struct
+                Value
+                  Uint32 2
+              Tuple
+                Uint64 3
+              Uint32 0
+          5
+            SelectRow #5
+              257 "\xC8\0\0\0\0\0\0\0-\1\0\0\0\0\0\0"
+              Type Struct Value
+              Struct
+                Value
+                  Uint32 2
+              Tuple
+                Uint64 2
+              Uint32 0
+          7
+            SelectRow #7
+              257 "\xC8\0\0\0\0\0\0\0-\1\0\0\0\0\0\0"
+              Type Struct Value
+              Struct
+                Value
+                  Uint32 2
+              Tuple
+                Uint64 1
+              Uint32 0
+      MyWrites
+        Struct
+  Run
+    Struct
+      Reply
+        Struct
+          3
+            SelectRow #3
+              257 "\xC8\0\0\0\0\0\0\0-\1\0\0\0\0\0\0"
+              Type Struct Value
+              Struct
+                Value
+                  Uint32 2
+              Tuple
+                Uint64 3
+              Uint32 0
+          5
+            SelectRow #5
+              257 "\xC8\0\0\0\0\0\0\0-\1\0\0\0\0\0\0"
+              Type Struct Value
+              Struct
+                Value
+                  Uint32 2
+              Tuple
+                Uint64 2
+              Uint32 0
+          7
+            SelectRow #7
+              257 "\xC8\0\0\0\0\0\0\0-\1\0\0\0\0\0\0"
+              Type Struct Value
+              Struct
+                Value
+                  Uint32 2
+              Tuple
+                Uint64 1
+              Uint32 0
+      Write
+        List 0
+  ShardsForRead
+    Struct
+  ShardsToWrite
+    Struct
+      3
+        List 0
+      5
+        List 0
+      7
+        List 0
+)prog";
+        const TStringBuf expectedWrite = R"prog(Struct
+  AllReads
+    Struct
+      3
+        SelectRow #3
+          257 "\xC8\0\0\0\0\0\0\0-\1\0\0\0\0\0\0"
+          Type Struct Value
+          Struct
+            Value
+              Uint32 2
+          Tuple
+            Uint64 3
+          Uint32 0
+      5
+        SelectRow #5
+          257 "\xC8\0\0\0\0\0\0\0-\1\0\0\0\0\0\0"
+          Type Struct Value
+          Struct
+            Value
+              Uint32 2
+          Tuple
+            Uint64 2
+          Uint32 0
+      7
+        SelectRow #7
+          257 "\xC8\0\0\0\0\0\0\0-\1\0\0\0\0\0\0"
+          Type Struct Value
+          Struct
+            Value
+              Uint32 2
+          Tuple
+            Uint64 1
+          Uint32 0
+  MyKeys
+    Struct
+      MyReads
+        Struct
+      MyWrites
+        Struct
+          2
+            EraseRow #2
+              257 "\xC8\0\0\0\0\0\0\0.\1\0\0\0\0\0\0"
+              Tuple
+                Invoke #1
+                  String "Add"
+                  Uint64 1
+                  Uint64 2
+  Run
+    Struct
+      Reply
+        Struct
+      Write
+        List 1
+          EraseRow #2
+            257 "\xC8\0\0\0\0\0\0\0.\1\0\0\0\0\0\0"
+            Tuple
+              Invoke #1
+                String "Add"
+                Uint64 1
+                Uint64 2
+  ShardsForRead
+    Struct
+  ShardsToWrite
+    Struct
+      3
+        List 0
+      5
+        List 0
+      7
+        List 0
+)prog";
+        UNIT_ASSERT_STRINGS_EQUAL(readText, expectedRead);
+        UNIT_ASSERT_STRINGS_EQUAL(writeText, expectedWrite);
+    }
+
+    // A SelectRow on Shard1 feeds an UpdateRow whose dynamic key spans three write shards with the same program.
+    Y_UNIT_TEST(ReadsFeedWritesAcrossSiblingShards) {
+        const ui64 writeShards[] = {201, 202, 203};
+        TDriver driver;
+        driver.ShardDbState.AddShard<Schema1>(Shard1);
+        for (ui64 shard : writeShards) {
+            driver.ShardDbState.AddShard<Schema2>(shard);
+        }
+        auto& pgmBuilder = driver.PgmBuilder;
+        TVector<TTypeInfo> key2Types{TTypeInfo(NUdf::TDataType<ui64>::Id)};
+        auto mapped = pgmBuilder.Map(SelectTable1Rows(pgmBuilder, {1, 3, 5}), [&](TRuntimeNode item) {
+            auto update = pgmBuilder.GetUpdateRowBuilder();
+            return pgmBuilder.UpdateRow(TTableId(OwnerId, Table2Id), key2Types, Table2KeyFromRead(pgmBuilder, item, 10), update);
+        });
+        auto pgm = pgmBuilder.Build(mapped);
+        const auto resolver = MakeShardResolver({
+            {{Table1Id, TKeyDesc::ERowOperation::Read}, {Shard1}},
+            {{Table2Id, TKeyDesc::ERowOperation::Update}, {writeShards[0], writeShards[1], writeShards[2]}},
+        });
+
+        TShardRunCapture capture;
+        CaptureShardRun(driver, capture);
+        NKikimrMiniKQL::TResult res;
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, resolver, IEngineFlat::TShardLimits(4, 3)), IEngineFlat::EStatus::Complete);
+
+        UNIT_ASSERT_VALUES_EQUAL(capture.Programs.size(), 4);
+        UNIT_ASSERT_EQUAL(capture.Programs.at(writeShards[0]), capture.Programs.at(writeShards[1]));
+        UNIT_ASSERT_EQUAL(capture.Programs.at(writeShards[0]), capture.Programs.at(writeShards[2]));
+        AssertReadsetsOnlyFrom(capture, Shard1, writeShards);
+
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, resolver, IEngineFlat::TShardLimits(4, 2)), IEngineFlat::EStatus::Error);
+    }
+
+    // Shard signatures: Shard1 {read, update1}, Shard2 {update1}, A and D {erase}, B {erase, update2}, C {update2}.
+    // Only A and D may share a program; every write depends on the read, so Shard1 sends a readset to each other shard.
+    Y_UNIT_TEST(MixedShardProgramGroups) {
+        const ui64 shardA = 201;
+        const ui64 shardB = 202;
+        const ui64 shardC = 203;
+        const ui64 shardD = 204;
+        TDriver driver;
+        driver.ShardDbState.AddShard<Schema1>(Shard1);
+        driver.ShardDbState.AddShard<Schema1>(Shard2);
+        for (ui64 shard : {shardA, shardB, shardC, shardD}) {
+            driver.ShardDbState.AddShard<Schema2>(shard);
+        }
+        auto& pgmBuilder = driver.PgmBuilder;
+        TVector<TTypeInfo> key1Types{TTypeInfo(NUdf::TDataType<ui32>::Id)};
+        TVector<TTypeInfo> key2Types{TTypeInfo(NUdf::TDataType<ui64>::Id)};
+        auto rows = SelectTable1Rows(pgmBuilder, {1});
+        auto update1 = pgmBuilder.Map(rows, [&](TRuntimeNode item) {
+            auto update = pgmBuilder.GetUpdateRowBuilder();
+            TRuntimeNode::TList row{pgmBuilder.Add(pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10))};
+            return pgmBuilder.UpdateRow(TTableId(OwnerId, Table1Id), key1Types, row, update);
+        });
+        auto erase = pgmBuilder.Map(rows, [&](TRuntimeNode item) {
+            return pgmBuilder.EraseRow(TTableId(OwnerId, Table2Id), key2Types, Table2KeyFromRead(pgmBuilder, item, 10));
+        });
+        auto update2 = pgmBuilder.Map(rows, [&](TRuntimeNode item) {
+            auto update = pgmBuilder.GetUpdateRowBuilder();
+            return pgmBuilder.UpdateRow(TTableId(OwnerId, Table2Id), key2Types, Table2KeyFromRead(pgmBuilder, item, 20), update);
+        });
+        auto pgm = pgmBuilder.Build(pgmBuilder.Extend({update1, erase, update2}));
+        const auto resolver = MakeShardResolver({
+            {{Table1Id, TKeyDesc::ERowOperation::Read}, {Shard1}},
+            {{Table1Id, TKeyDesc::ERowOperation::Update}, {Shard1, Shard2}},
+            {{Table2Id, TKeyDesc::ERowOperation::Erase}, {shardA, shardB, shardD}},
+            {{Table2Id, TKeyDesc::ERowOperation::Update}, {shardB, shardC}},
+        });
+
+        TShardRunCapture capture;
+        CaptureShardRun(driver, capture);
+        NKikimrMiniKQL::TResult res;
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, resolver, IEngineFlat::TShardLimits(6, 5)), IEngineFlat::EStatus::Complete);
+
+        UNIT_ASSERT_VALUES_EQUAL(capture.Programs.size(), 6);
+        UNIT_ASSERT_EQUAL(capture.Programs.at(shardA), capture.Programs.at(shardD));
+        TSet<TString> distinctPrograms;
+        for (const auto& [shard, program] : capture.Programs) {
+            distinctPrograms.insert(program);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(distinctPrograms.size(), 5);
+        const ui64 readsetTargets[] = {Shard2, shardA, shardB, shardC, shardD};
+        AssertReadsetsOnlyFrom(capture, Shard1, readsetTargets);
+
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, resolver, IEngineFlat::TShardLimits(6, 4)), IEngineFlat::EStatus::Error);
     }
 }
 

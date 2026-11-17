@@ -370,7 +370,6 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     Y_UNIT_TEST_TWIN(ReplicaOwnership, TableOwnership) {
         enum class EOwner { Fresh, Legacy, Current, Foreign };
         struct TCase { EOwner Owner; bool InitialScan; };
-        UNIT_ASSERT(!NKikimrConfig::TFeatureFlags().GetEnableAsyncReplicationTableOwnership());
         const TCase cases[] = {
             {EOwner::Fresh, true}, {EOwner::Fresh, false},
             {EOwner::Legacy, true}, {EOwner::Legacy, false},

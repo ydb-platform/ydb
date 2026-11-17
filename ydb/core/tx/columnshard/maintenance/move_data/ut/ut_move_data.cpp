@@ -354,34 +354,34 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT(wideIndexInfo);
         schema.Index.AddIndex(NOlap::TSnapshot(2, 1), schema.Cache->GetOrInsertIndexInfo(std::move(*wideIndexInfo)));
 
-        // Rotate the wide portion through every id so the check does not depend on hash iteration order.
-        for (ui64 widePortionId = 1; widePortionId <= PortionsCount; ++widePortionId) {
-            THashMap<ui64, NOlap::TPortionInfo::TPtr> portions;
-            ui64 totalMemory = 0;
-            ui64 narrowMemory = 0;
-            ui64 wideMemory = 0;
-            for (ui64 portionId = 1; portionId <= PortionsCount; ++portionId) {
-                auto portion = MakeDefaultTierPortion(portionId);
-                if (portionId == widePortionId) {
-                    portion = MakeTieredPortion(portionId, NOlap::IStoragesManager::DefaultStorageId, schema.GetIndexInfo());
-                }
-                const ui64 memory = portion->PredictAccessorsMemory(portion->GetSchema(schema.Index));
-                totalMemory += memory;
-                if (portionId == widePortionId) {
-                    wideMemory = memory;
-                } else {
-                    narrowMemory = memory;
-                }
-                portions.emplace(portionId, std::move(portion));
+        // One mixed-schema batch is enough: the exact memory sum is independent of hash iteration order.
+        static constexpr ui64 WidePortionId = PortionsCount / 2 + 1;
+        THashMap<ui64, NOlap::TPortionInfo::TPtr> portions;
+        ui64 totalMemory = 0;
+        ui64 narrowMemory = 0;
+        ui64 wideMemory = 0;
+        for (ui64 portionId = 1; portionId <= PortionsCount; ++portionId) {
+            auto portion = MakeDefaultTierPortion(portionId);
+            if (portionId == WidePortionId) {
+                portion = MakeTieredPortion(portionId, NOlap::IStoragesManager::DefaultStorageId, schema.GetIndexInfo());
             }
-            UNIT_ASSERT_GT(wideMemory, (PortionsCount - 1) * narrowMemory);
-            NOlap::NActualizer::TMoveDataMetadataBudget budget(totalMemory + 1);
-            auto actualizer = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(THashSet<ui32>{ 100 }, schema.Index);
-            actualizer->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
-            const auto requests = actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, budget);
-            UNIT_ASSERT_VALUES_EQUAL_C(requests.size(), 1, "the sum of per-portion estimates fits in one batch");
-            UNIT_ASSERT_VALUES_EQUAL(requests.front().GetRequest()->GetSize(), PortionsCount);
+            const ui64 memory = portion->PredictAccessorsMemory(portion->GetSchema(schema.Index));
+            totalMemory += memory;
+            if (portionId == WidePortionId) {
+                wideMemory = memory;
+            } else {
+                narrowMemory = memory;
+            }
+            portions.emplace(portionId, std::move(portion));
         }
+        UNIT_ASSERT_GT(wideMemory, (PortionsCount - 1) * narrowMemory);
+        NOlap::NActualizer::TMoveDataMetadataBudget budget(totalMemory + 1);
+        auto actualizer = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(THashSet<ui32>{ 100 }, schema.Index);
+        actualizer->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
+        const auto requests = actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, budget);
+        UNIT_ASSERT_VALUES_EQUAL(budget.Memory, totalMemory);
+        UNIT_ASSERT_VALUES_EQUAL_C(requests.size(), 1, "the sum of per-portion estimates fits in one batch");
+        UNIT_ASSERT_VALUES_EQUAL(requests.front().GetRequest()->GetSize(), PortionsCount);
     }
 
     Y_UNIT_TEST(MoveDataMetadataRequestsBatching) {

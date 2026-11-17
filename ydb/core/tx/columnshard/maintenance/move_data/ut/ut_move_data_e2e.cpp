@@ -171,6 +171,17 @@ public:
         TabletActorId = BootTablet(Runtime, MakeTabletInfo(TabletId, History), Launcher);
     }
 
+    size_t WriteAndReassignPastData() {
+        Write(1, 0, 1000);
+        Controller->WaitCompactions(TDuration::Seconds(10));
+        return ReassignPastWrittenData();
+    }
+
+    TEvTablet::TEvMoveDataResponse::TPtr StartMoveAndDriveGate() {
+        StartMove();
+        return DriveGateWithWrite(150, 2, 1000, 1001);
+    }
+
     void StartMove(const std::vector<ui32>& groups = { OldGroup }) {
         Runtime.SendToPipe(TabletId, Sender, new TEvTablet::TEvMoveData(groups), 0, GetPipeConfigWithRetries());
     }
@@ -280,12 +291,9 @@ TString TieredSchemaTxBody(const TTestSchema::TTableSpecials& specials) {
 
 void RunMoveDataToCompletion(const bool moveDataEnabled) {
     TMoveDataFixture f(moveDataEnabled);
-    f.Write(1, 0, 1000);
-    f.Controller->WaitCompactions(TDuration::Seconds(10));
-    const size_t oldBlobs = f.ReassignPastWrittenData();
+    const size_t oldBlobs = f.WriteAndReassignPastData();
 
-    f.StartMove();
-    const auto response = f.DriveGateWithWrite(150, 2, 1000, 1001);
+    const auto response = f.StartMoveAndDriveGate();
     f.AssertSuccess(response);
 
     // Success must mean rewritten, not merely empty queues: only the move puts data in NewGroup.
@@ -344,9 +352,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
     Y_UNIT_TEST(CompletedSessionCanStartAnotherWithoutReboot) {
         TMoveDataFixture f;
         f.Controller->DisableBackground(EBackground::TTL);
-        f.Write(1, 0, 1000);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        f.ReassignPastWrittenData();
+        f.WriteAndReassignPastData();
 
         // An empty first request still runs vacuum and leaves a clean session boundary.
         f.StartMove({});
@@ -354,8 +360,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.AssertSuccess(empty);
         UNIT_ASSERT(LivePortionBlobs(*f.NewGroupProxy, TabletId).empty());
 
-        f.StartMove();
-        const auto first = f.DriveGateWithWrite(150, 2, 1000, 1001);
+        const auto first = f.StartMoveAndDriveGate();
         UNIT_ASSERT_C(first, "the first session must complete");
         f.AssertSuccess(first);
 
@@ -377,9 +382,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
     Y_UNIT_TEST(PokeQueuedDuringTabletShutdownDoesNotTouchTheDeadTablet) {
         TMoveDataFixture f;
         f.Controller->DisableBackground(EBackground::TTL);
-        f.Write(1, 0, 1000);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        f.ReassignPastWrittenData();
+        f.WriteAndReassignPastData();
 
         // Rewriting off keeps the session active, so the driver is alive when the tablet dies.
         f.Controller->DisableBackground(EBackground::MoveData);
@@ -405,8 +408,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         // The next incarnation must still be able to run a whole session.
         f.Runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
         f.Controller->EnableBackground(EBackground::MoveData);
-        f.StartMove();
-        const auto response = f.DriveGateWithWrite(150, 2, 1000, 1001);
+        const auto response = f.StartMoveAndDriveGate();
         UNIT_ASSERT_C(response, "no TEvMoveDataResponse from the incarnation after the shutdown race");
         f.AssertSuccess(response);
     }
@@ -414,9 +416,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
     Y_UNIT_TEST(MetadataResultQueuedDuringTabletShutdownDoesNotTouchTheDeadTablet) {
         TMoveDataFixture f;
         f.Controller->DisableBackground(EBackground::TTL);
-        f.Write(1, 0, 1000);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        f.ReassignPastWrittenData();
+        f.WriteAndReassignPastData();
 
         TActorId driver;
         std::vector<TAutoPtr<IEventHandle>> metadata;
@@ -452,8 +452,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.Runtime.DispatchEvents({}, TDuration::Seconds(1));
         UNIT_ASSERT(injected);
         f.Runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
-        f.StartMove();
-        const auto response = f.DriveGateWithWrite(150, 2, 1000, 1001);
+        const auto response = f.StartMoveAndDriveGate();
         UNIT_ASSERT_C(response, "the replacement incarnation must drain independently of the old metadata result");
         f.AssertSuccess(response);
     }
@@ -506,13 +505,10 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
     // An uncommitted write whose blobs are already in the new group must not hold the move back.
     Y_UNIT_TEST(UncommittedWriteInTheNewGroupDoesNotHoldSuccess) {
         TMoveDataFixture f;
-        f.Write(1, 0, 1000);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        f.ReassignPastWrittenData();
+        f.WriteAndReassignPastData();
         f.WriteUncommitted(100, 5000, 5010, 7);
 
-        f.StartMove();
-        const auto response = f.DriveGateWithWrite(150, 2, 1000, 1001);
+        const auto response = f.StartMoveAndDriveGate();
         UNIT_ASSERT_C(response, "an uncommitted write outside the moved group held the answer back");
         f.AssertSuccess(response);
     }
@@ -521,9 +517,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
     Y_UNIT_TEST(SuccessWaitsForTheRunningCleanup) {
         TMoveDataFixture f;
         f.Controller->DisableBackground(EBackground::TTL);
-        f.Write(1, 0, 1000);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        f.ReassignPastWrittenData();
+        f.WriteAndReassignPastData();
 
         THashSet<ui64> rewritten;
         std::vector<TAutoPtr<IEventHandle>> heldCleanups;
@@ -602,9 +596,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         TMoveDataFixture f;
         f.Controller->DisableBackground(EBackground::TTL);
         // No portion written after the move starts is seeded, so its retirement is not the move's to wait for.
-        f.Write(1, 0, 1000);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        f.ReassignPastWrittenData();
+        f.WriteAndReassignPastData();
 
         THashSet<ui64> rewritten;
         THashSet<ui64> laterRetired;

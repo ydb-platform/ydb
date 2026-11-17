@@ -1,6 +1,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/core/testlib/actor_helpers.h>
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NPersQueue::NTests {

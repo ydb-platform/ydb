@@ -233,6 +233,7 @@ public:
 
         hFunc(TEvFetchDatabaseResponse, Handle);
         hFunc(TEvPrivate::TEvFetchPoolResponse, Handle);
+        hFunc(TEvPrivate::TEvRetryPoolSubscription, Handle);
         hFunc(TEvPrivate::TEvResolvePoolResponse, Handle);
         hFunc(TEvPrivate::TEvPlaceRequestIntoPoolResponse, Handle);
         hFunc(TEvPrivate::TEvNodesInfoRequest, Handle);
@@ -348,6 +349,13 @@ private:
         }
 
         GetOrCreateDatabaseState(databaseId)->UpdatePoolInfo(ev, poolHandler);
+    }
+
+    void Handle(TEvPrivate::TEvRetryPoolSubscription::TPtr& ev) {
+        auto it = DatabaseToState.find(ev->Get()->DatabaseId);
+        if (it != DatabaseToState.end()) {
+            it->second.RetryPoolSubscription(*ev->Get());
+        }
     }
 
     void Handle(TEvPrivate::TEvResolvePoolResponse::TPtr& ev) {

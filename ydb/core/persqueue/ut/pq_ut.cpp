@@ -5538,6 +5538,80 @@ Y_UNIT_TEST(TestSizeLag) {
     });
 }
 
+Y_UNIT_TEST(TestBlobsCompactionDefersRetentionForSelectedFwzBlob) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    SetEnableTopicRetentionDeleteLastBlob(tc);
+    tc.Runtime->SetScheduledLimit(5000);
+
+    // Keep the blob in FWZ until compaction is forced explicitly below.
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
+
+    constexpr ui32 retentionSeconds = 5;
+
+    PQTabletPrepare({.deleteTime = retentionSeconds, .partitions = 1, .lowWatermark = 1_MB, .writeSpeed = 50_MB, .AddDefaultConsumer = false}, {}, tc);
+    PQGetPartInfo(0, 0, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(7_MB, 'x'));
+    CmdWrite(0, "sourceid_compaction_retention_race", data, tc, false, {}, true, "", -1, -1, false, false, true);
+    PQGetPartInfo(0, 1, tc);
+
+    TAutoPtr<IEventHandle> runCompactionEvent;
+    ui64 selectedBlobs = 0;
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (!runCompactionEvent && ev->GetTypeRewrite() == TEvPQ::EEv::EvRunCompaction) {
+            selectedBlobs = ev->Get<TEvPQ::TEvRunCompaction>()->BlobsCount;
+            runCompactionEvent = ev;
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    // Select the FWZ blob for compaction explicitly and hold the resulting
+    // self-event. Retention is triggered separately below, so this test does not
+    // depend on a periodic wakeup to start both operations in one actor turn.
+    CmdRunCompaction(0, tc);
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return runCompactionEvent != nullptr; };
+    tc.Runtime->DispatchEvents(options);
+
+    UNIT_ASSERT(runCompactionEvent);
+    UNIT_ASSERT_VALUES_EQUAL(selectedBlobs, 1u);
+
+    const TActorId partitionActor = runCompactionEvent->GetRecipientRewrite();
+    bool retentionWakeupSeen = false;
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvents::TSystem::Wakeup &&
+            ev->GetRecipientRewrite() == partitionActor) {
+            retentionWakeupSeen = true;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(retentionSeconds + 1));
+
+    TDispatchOptions retentionOptions;
+    retentionOptions.CustomFinalCondition = [&] { return retentionWakeupSeen; };
+    UNIT_ASSERT(tc.Runtime->DispatchEvents(retentionOptions));
+    UNIT_ASSERT(retentionWakeupSeen);
+
+    // Retention has run, but cleanup must be deferred while compaction is in progress.
+    PQGetPartInfo(0, 1, tc);
+
+    tc.Runtime->SetObserverFunc([](TAutoPtr<IEventHandle>&) {
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    // Finish compaction and wait until the deferred retention cleanup is applied.
+    tc.Runtime->Send(runCompactionEvent.Release());
+    WaitRetentionCleanup(tc, 1, 1, retentionSeconds);
+
+    PQTabletRestart(tc);
+    PQGetPartInfo(1, 1, tc);
+}
+
 Y_UNIT_TEST(TestRetentionDeletesLastBlob) {
     TTestContext tc;
     TFinalizer finalizer(tc);

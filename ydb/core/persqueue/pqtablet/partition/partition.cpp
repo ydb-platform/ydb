@@ -781,6 +781,12 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
         return false;
     }
 
+    if (CompactionInProgress) {
+        YDB_LOG_DEBUG_COMP(Service, "Skip cleanup while blobs compaction is in progress",
+            {"logPrefix", NPQ_LOG_PREFIX});
+        return false;
+    }
+
     bool haveChanges = CleanUpBlobs(request, ctx);
 
     LOG_T(

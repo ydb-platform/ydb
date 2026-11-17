@@ -16,6 +16,8 @@ DEFINE_ENUM(EUnrecognizedStrategy,
     (ThrowRecursive)
 );
 
+struct TYsonStructLoadOptions;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>

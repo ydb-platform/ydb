@@ -123,8 +123,8 @@ bool TStreamingQueryTranslation::ParseStreamingQueryDefinition(const TRule_strea
     // streaming_query_definition: AS DO (BEGIN define_action_or_subquery_body END DO);
 
     const auto& inlineAction = node.GetRule_inline_action3();
-    const auto& queryBegin = inlineAction.GetToken1();
-    Ctx_.Token(queryBegin);
+    const auto& body = inlineAction.GetRule_define_action_or_subquery_body2();
+    Ctx_.Token(inlineAction.GetToken1());
 
     if (!settings.Features) {
         settings.Features = new TObjectFeatureNode(Ctx_.Pos());
@@ -144,7 +144,7 @@ bool TStreamingQueryTranslation::ParseStreamingQueryDefinition(const TRule_strea
     clearWorldNode->Add("World");
     innerBlocks.push_back(clearWorldNode);
 
-    const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, inlineAction.GetRule_define_action_or_subquery_body2());
+    const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, body);
     auto queryNode = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, /*topLevel=*/false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
     if (!WarnUnusedNodes()) {
         return false;
@@ -160,21 +160,8 @@ bool TStreamingQueryTranslation::ParseStreamingQueryDefinition(const TRule_strea
     blockNode->Add("block", blockNode->Q(queryNode));
     settings.Features->AddFeature(TStreamingQuerySettings::QUERY_AST_FEATURE, Ctx_.Pos()).first = blockNode;
 
-    // Extract whole query text between BEGIN and END tokens
-
-    const auto& queryEnd = inlineAction.GetToken3();
-    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(queryBegin.GetId(), BEGIN));
-    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(queryEnd.GetId(), END));
-
-    auto beginPos = GetQueryPosition(Ctx_.Query, queryBegin);
-    const auto endPos = GetQueryPosition(Ctx_.Query, queryEnd);
-    if (beginPos == std::string::npos || endPos == std::string::npos) {
-        Error() << "Failed to parse streaming query definition";
-        return false;
-    }
-
-    beginPos += queryBegin.value().size();
-    settings.Features->AddFeature(TStreamingQuerySettings::QUERY_TEXT_FEATURE, Ctx_.Pos()).first = BuildQuotedAtom(Ctx_.Pos(), Ctx_.Query.substr(beginPos, endPos - beginPos));
+    settings.Features->AddFeature(TStreamingQuerySettings::QUERY_TEXT_FEATURE, Ctx_.Pos()).first =
+        BuildQuotedAtom(Ctx_.Pos(), Ctx_.QueryText(body, {.IsSurroundingTriviaIncluded = true}));
 
     return true;
 }

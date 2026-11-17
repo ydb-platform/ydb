@@ -127,8 +127,9 @@ Y_UNIT_TEST_SUITE(Splitter) {
                         YDB_LOG_VERIFY(c->GetEntityId());
                         //                        auto& v = entityChunks[c->GetEntityId()];
                         //                        if (v.size()) {
-                        //                            AFL_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified())("v", v.back()->GetChunkIdxVerified())(
-                        //                                                                              "c", c->GetChunkIdxVerified());
+                        //                            YDB_LOG_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified(),
+                        //                              {"v", v.back()->GetChunkIdxVerified()},
+                        //                              {"c", c->GetChunkIdxVerified()});
                         //                        }
                         YDB_LOG_VERIFY(entityChunks[c->GetEntityId()].emplace(c->GetChunkIdxVerified(), c).second);
                     }

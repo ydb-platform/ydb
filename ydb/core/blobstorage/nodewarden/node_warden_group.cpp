@@ -403,6 +403,7 @@ namespace NKikimr::NStorage {
             group.VDisksOfGroup.Clear();
             Groups.erase(groupId);
             Send(SelfId(), new TEvNodeWardenUnsubscribeFromCache(Sprintf("G%08" PRIx32, groupId)));
+            CheckStandbySeals(); // no proxy of the group is started here anymore
 
             // report group deletion to whiteboard
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateDelete(groupId));

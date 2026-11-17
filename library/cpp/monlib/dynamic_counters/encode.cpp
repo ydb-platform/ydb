@@ -36,18 +36,20 @@ namespace NMonitoring {
                     EncoderImpl_->OnUint64(ZERO_TIME, counter->Val());
                 }
 
+                EncoderImpl_->OnMemOnly(counter->IsMemOnly());
                 EncoderImpl_->OnMetricEnd();
             }
 
             void OnHistogram(
                 const TString& labelName, const TString& labelValue,
                 IHistogramSnapshotPtr snapshot, bool derivative) override {
-                NMonitoring::EMetricType metricType = derivative ? EMetricType::HIST_RATE : EMetricType::HIST;
+                EncodeHistogram(labelName, labelValue, std::move(snapshot), derivative, false);
+            }
 
-                EncoderImpl_->OnMetricBegin(metricType);
-                EncodeLabels(labelName, labelValue);
-                EncoderImpl_->OnHistogram(ZERO_TIME, snapshot);
-                EncoderImpl_->OnMetricEnd();
+            void OnHistogramCounter(
+                const TString& labelName, const TString& labelValue,
+                const THistogramCounter* histogram) override {
+                EncodeHistogram(labelName, labelValue, histogram->Snapshot(), histogram->ForDerivative(), histogram->IsMemOnly());
             }
 
             void OnGroupBegin(
@@ -85,6 +87,18 @@ namespace NMonitoring {
                 }
                 EncoderImpl_->OnLabel(labelName, labelValue);
                 EncoderImpl_->OnLabelsEnd();
+            }
+
+            void EncodeHistogram(
+                const TString& labelName, const TString& labelValue,
+                IHistogramSnapshotPtr snapshot, bool derivative, bool memOnly) {
+                NMonitoring::EMetricType metricType = derivative ? EMetricType::HIST_RATE : EMetricType::HIST;
+
+                EncoderImpl_->OnMetricBegin(metricType);
+                EncodeLabels(labelName, labelValue);
+                EncoderImpl_->OnHistogram(ZERO_TIME, snapshot);
+                EncoderImpl_->OnMemOnly(memOnly);
+                EncoderImpl_->OnMetricEnd();
             }
 
         private:

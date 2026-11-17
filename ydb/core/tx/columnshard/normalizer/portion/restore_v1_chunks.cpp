@@ -200,7 +200,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
 
         while (!rowset.EndOfSet()) {
             TColumnChunkLoadContextV1 chunk(rowset);
-            //AFL_VERIFY(!portions0.contains(chunk.GetPortionId()));
+            // YDB_LOG_VERIFY(!portions0.contains(chunk.GetPortionId()));
             if (!existPortions0.contains(chunk.GetPortionId())) {
                 YDB_LOG_VERIFY(columns1Remove.emplace(chunk.GetFullChunkAddress(), chunk).second);
             }

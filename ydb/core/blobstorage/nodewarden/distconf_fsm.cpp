@@ -23,12 +23,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::UpdateQuorums() {
         // update quorum flags, if something has changed
         if (!std::exchange(QuorumValid, true)) {
-            // create a list of connected nodes
-            std::vector<TNodeIdentifier> connected;
-            connected.reserve(AllBoundNodes.size());
-            for (const auto& [nodeId, node] : AllBoundNodes) {
-                connected.push_back(nodeId);
-            }
+            std::vector<TNodeIdentifier> connected = GetConnectedNodes();
 
             // recalculate global and local pile quorums
             Y_ABORT_UNLESS(StorageConfig);
@@ -50,6 +45,15 @@ namespace NKikimr::NStorage {
         }
     }
 
+    std::vector<TNodeIdentifier> TDistributedConfigKeeper::GetConnectedNodes() const {
+        std::vector<TNodeIdentifier> connected;
+        connected.reserve(AllBoundNodes.size());
+        for (const auto& [nodeId, node] : AllBoundNodes) {
+            connected.push_back(nodeId);
+        }
+        return connected;
+    }
+
     void TDistributedConfigKeeper::FillPileConnectivity(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record) {
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
         if (!IsBridged() || !StorageConfig || !Cfg) {
@@ -58,12 +62,10 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        std::vector<TNodeIdentifier> connected;
-        connected.reserve(AllBoundNodes.size());
+        std::vector<TNodeIdentifier> connected = GetConnectedNodes();
         absl::flat_hash_set<ui32> connectedNodeIds;
-        connectedNodeIds.reserve(AllBoundNodes.size());
-        for (const auto& [nodeId, node] : AllBoundNodes) {
-            connected.push_back(nodeId);
+        connectedNodeIds.reserve(connected.size());
+        for (const auto& nodeId : connected) {
             connectedNodeIds.insert(nodeId.NodeId());
         }
 
@@ -286,13 +288,10 @@ namespace NKikimr::NStorage {
         SwitchToError("incorrect response from peer");
     }
 
-    bool TDistributedConfigKeeper::HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config) const {
-        std::vector<TNodeIdentifier> connected;
-        connected.reserve(AllBoundNodes.size());
-        for (const auto& [nodeId, node] : AllBoundNodes) {
-            connected.push_back(nodeId);
-        }
-        return HasNodeQuorum(config, connected, TBridgePileId(), *Cfg, nullptr, true);
+    bool TDistributedConfigKeeper::HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config,
+            TBridgePileId pileId) const {
+        std::vector<TNodeIdentifier> connected = GetConnectedNodes();
+        return HasNodeQuorum(config, connected, pileId, *Cfg, nullptr, true);
     }
 
     bool TDistributedConfigKeeper::RememberAppliedConfig(const TStorageConfigMeta& meta) {

@@ -144,6 +144,10 @@ class WorkloadManagerBase(LoadSuiteBase):
         pass
 
     @classmethod
+    def before_stop_checking(cls):
+        pass
+
+    @classmethod
     def after_workload(cls, result: WorkloadRunResult):
         pass
 
@@ -179,12 +183,11 @@ class WorkloadManagerBase(LoadSuiteBase):
                         pass
             else:
                 results = {}
-            self.stop_checking.set()
-            check_thread.join()
-            self.after_workload(overall_result)
+            self.before_stop_checking()
         finally:
             self.stop_checking.set()
             check_thread.join()
+        self.after_workload(overall_result)
         if len(results) > 0:
             overall_result.merge(*results.values())
         overall_result.iterations.clear()
@@ -456,6 +459,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
     threads = 1
     tpcc_warehouses: int = 4500
     tpcc_threads: int = 0
+    tpcc_warmup: float = 0
     verify_data: bool = False
     _tpcc_executions: list[tuple[str, re.LongRemoteExecution]] = []
     _tpcc_thread: Thread = None
@@ -484,7 +488,12 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
             path=cls.get_tpcc_path(),
             warehouses=cls.tpcc_warehouses,
             users=[user],
+<<<<<<< HEAD
             threads=cls.tpcc_threads
+=======
+            threads=cls.tpcc_threads,
+            warmup=cls.tpcc_warmup,
+>>>>>>> d25fd897524 (Reduce repeated setup in functional TPC tests (#59801))
         )
         cls._tpcc_thread = Thread(target=cls._tpcc_thread_func)
         cls._tpcc_thread.start()

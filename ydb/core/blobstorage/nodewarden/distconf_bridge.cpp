@@ -96,6 +96,7 @@ namespace NKikimr::NStorage {
                         &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId);
                     if (std::ranges::find(switchedPileIds, pileId) != switchedPileIds.end()) {
                         pss.SetBecameUnsyncedGeneration(generation); // BSC resets parts of its groups in the pile
+                        pss.SetFromHotStandby(false); // the writers have skipped the pile while it was NOT_SYNCHRONIZED_1
                         // and has to report them synced anew: BSC may have reported the pile synced while it was out,
                         // when no group needed syncing in it, and groups created since then have parts there too
                         pss.SetUnsyncedBSC(true);
@@ -315,8 +316,8 @@ namespace NKikimr::NStorage {
 
             Y_DEBUG_ABORT_UNLESS(config->HasClusterState());
             const auto& clusterState = config->GetClusterState();
+            const auto& prevClusterState = config->GetPrevConfig().GetClusterState();
 
-            // filter out unsynced piles from config (they become synced when they are the part of the quorum)
             int maxFullySyncedIndex = -1;
             for (int i = 0; i < history->size(); ++i) {
                 auto *unsyncedPiles = history->Mutable(i)->MutableUnsyncedPiles();
@@ -324,15 +325,16 @@ namespace NKikimr::NStorage {
                     const auto unsyncedBridgePileId = TBridgePileId::FromProto(unsyncedPiles,
                         &std::decay_t<decltype(*unsyncedPiles)>::at, j);
                     const auto state = NBridge::GetPileState(clusterState, unsyncedBridgePileId);
+                    const auto prevState = NBridge::GetPileState(prevClusterState, unsyncedBridgePileId);
                     if (state == NKikimrBridge::TClusterState::INACTIVE ||
-                            NBridge::PileStateTraits(state).RequiresConfigQuorum) {
-                        // this pile is a part of quorum we expect to obtain, so it will be config-synced, or it is not
-                        // a part of the cluster anymore and it won't ever need this history
+                            (NBridge::PileStateTraits(state).RequiresConfigQuorum &&
+                                NBridge::PileStateTraits(prevState).RequiresConfigQuorum)) {
                         unsyncedPiles->SwapElements(j--, unsyncedPiles->size() - 1);
                         unsyncedPiles->RemoveLast();
                     }
                 }
-                if (unsyncedPiles->empty()) {
+                if (unsyncedPiles->empty() && history->Get(i).GetClusterState().GetGeneration()
+                        <= prevClusterState.GetGeneration()) {
                     maxFullySyncedIndex = i;
                 }
             }
@@ -406,6 +408,7 @@ namespace NKikimr::NStorage {
                                 case NKikimrBridge::TClusterState::SUSPENDED:
                                     // A suspended pile has left the data quorum. Its metadata replicas must not
                                     // prevent CMS and the other tablets from booting to finish the takedown.
+                                case NKikimrBridge::TClusterState::HOT_STANDBY:
                                     state = T::DISCONNECTED;
                                     break;
 

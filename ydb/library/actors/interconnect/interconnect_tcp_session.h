@@ -678,12 +678,14 @@ namespace NActors {
 
         void OnCloseOnIdleTimerHit() {
             YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "CloseOnIdle timer hit, session terminated",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICS27"});
             Terminate(TDisconnectReason::CloseOnIdle());
         }
 
         void OnLostConnectionTimerHit() {
             YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "LostConnection timer hit, session terminated",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICS28"});
             Terminate(TDisconnectReason::LostConnection());
         }

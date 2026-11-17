@@ -5,7 +5,6 @@ IF (NOT OS_WINDOWS AND NOT SANITIZER_TYPE)
 
 RECURSE(
     pack_num
-    pack_num/metrics
 )
 
 ENDIF()

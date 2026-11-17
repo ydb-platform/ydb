@@ -419,6 +419,7 @@ public:
 
         if (Replication) {
             Replication->Progress(ctx);
+            Self->ProgressChecksumSchedule(ctx);
             Self->ProgressChecksums(ctx);
         }
 
@@ -502,6 +503,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         if (Replication) {
             Replication->Progress(ctx);
+            Self->ProgressChecksumSchedule(ctx);
             Self->ProgressChecksums(ctx);
         }
     }

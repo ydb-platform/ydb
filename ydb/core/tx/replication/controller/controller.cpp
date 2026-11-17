@@ -80,7 +80,9 @@ STFUNC(TController::StateWork) {
         HFunc(TEvController::TEvDescribeReplication, Handle);
         HFunc(TEvController::TEvCheckTable, Handle);
         HFunc(TEvController::TEvCancelCheckTable, Handle);
+        HFunc(TEvController::TEvCheckTableResult, Handle);
         HFunc(NSchemeShard::TEvSchemeShard::TEvChecksumAdmissionResult, Handle);
+        HFunc(TEvPrivate::TEvChecksumSchedule, Handle);
         HFunc(NChecksum::TEvResult, Handle);
         HFunc(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, Handle);
         HFunc(TEvents::TEvWakeup, HandleChecksumWakeup);
@@ -224,6 +226,7 @@ void TController::SwitchToWork(const TActorContext& ctx) {
 
     TabletCounters->Simple()[COUNTER_UNRESOLVED_DATABASE_REPLICATIONS] = unresolvedDatabaseReplications;
     ProgressChecksums(ctx);
+    ProgressChecksumSchedule(ctx);
 }
 
 void TController::Reset() {
@@ -232,6 +235,9 @@ void TController::Reset() {
     ChecksumResults.clear();
     ChecksumBoundaries.clear();
     ChecksumTargets.clear();
+    ChecksumSchedules.clear();
+    ChecksumScheduleWakeupScheduled = false;
+    ChecksumScheduleTxInFlight = false;
     ChecksumRuntime.clear();
     ChecksumRetainCookies.clear();
     RawPendingTxId.clear();

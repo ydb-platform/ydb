@@ -49,10 +49,14 @@ struct TEvPrivate {
         EvCancelDropStream,
         EvExpireWorkerLag,
 
+        EvChecksumSchedule,
+
         EvEnd,
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+
+    struct TEvChecksumSchedule: public TEventLocal<TEvChecksumSchedule, EvChecksumSchedule> {};
 
     struct TEvDiscoveryTargetsResult: public TEventLocal<TEvDiscoveryTargetsResult, EvDiscoveryTargetsResult> {
         struct TAddEntry {

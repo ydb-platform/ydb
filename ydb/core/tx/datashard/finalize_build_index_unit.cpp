@@ -60,7 +60,8 @@ public:
 
             tableInfo = DataShard.AlterTableDropIndex(ctx, txc, pathId, version, indexPathId);
         } else {
-            // Cancelled column builds drop their columns before finalization.
+            // Column builds carry no outcome. Successful builds make their columns ready;
+            // cancelled builds have already dropped their columns.
             tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version, false);
             schemaChanged = tableInfo->FinishColumnBuilding();
             NIceDb::TNiceDb db(txc.DB);

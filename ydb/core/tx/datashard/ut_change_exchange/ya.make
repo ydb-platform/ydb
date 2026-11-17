@@ -1,10 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/datashard)
 
-# Debug information exceeds DWARF32 relocation limits in relwithdebinfo builds.
-IF (OS_LINUX)
-    LDFLAGS(-Wl,--strip-debug)
-ENDIF()
-
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(4)

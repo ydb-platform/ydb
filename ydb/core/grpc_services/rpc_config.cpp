@@ -361,10 +361,18 @@ public:
             return false;
         }
         const auto& yaml = shim.StorageConfig ? *shim.StorageConfig : *shim.MainConfig;
-        const auto json = NYaml::Yaml2Json(YAML::Load(yaml), true);
-        NKikimrConfig::TAppConfig newConfig;
-        NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true), newConfig, /*transform=*/true, nullptr, /*relaxed=*/true);
-        return newConfig.GetSelfManagementConfig().GetEnabled();
+        const auto document = YAML::Load(yaml);
+        Y_ENSURE(document.IsMap(), "YAML root must be an object");
+        const auto nested = document["config"];
+        const auto& config = nested || document["metadata"] ? nested : document;
+        Y_ENSURE(config && config.IsMap(), "'config' must be an object");
+        const auto selfManagement = config["self_management_config"];
+        if (!selfManagement || selfManagement.IsNull()) {
+            return false;
+        }
+        Y_ENSURE(selfManagement.IsMap(), "'self_management_config' must be an object");
+        const auto enabled = selfManagement["enabled"];
+        return enabled && NYaml::Yaml2Json(enabled, false).GetBooleanRobust();
     }
 
     std::unique_ptr<IEventBase> ProcessControllerQuery() override {

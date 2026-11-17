@@ -236,7 +236,8 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
             std::optional<bool> switchDedicatedStorageSection,
             bool dedicatedConfigMode,
             bool dryRun,
-            const std::function<void(const Ydb::Config::ReplaceConfigResponse&)>& checker) {
+            const std::function<void(const Ydb::Config::ReplaceConfigResponse&)>& checker,
+            bool bypassChecks = false) {
 
         std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub;
         stub = Ydb::Config::V1::ConfigService::NewStub(channel);
@@ -271,6 +272,7 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
             Y_ABORT("invariant violation");
         }
         request.set_dry_run(dryRun);
+        request.set_bypass_checks(bypassChecks);
 
         Ydb::Config::ReplaceConfigResponse response;
 
@@ -412,8 +414,9 @@ config:
         const TString yaml = R"(
 metadata: {kind: MainConfig, cluster: "", version: 1}
 config:
-  static_erasure: &erasure none
-  self_management_config: {enabled: true, erasure_species: *erasure}
+  static_erasure: none
+  feature_flags: {switch_to_config_v2: &enabled true}
+  self_management_config: {enabled: *enabled}
   host_configs:
   - host_config_id: 1
     drive: [{path: "SectorMap:1:64", type: ROT}]
@@ -444,15 +447,34 @@ config:
 
     Y_UNIT_TEST(ReplaceConfigRejectsInvalidConfigSection) {
         TKikimrWithGrpcAndRootSchema server;
-        ReplaceConfig(server.GetChannel(), R"(
-metadata: {kind: MainConfig, cluster: "", version: 1}
-config: []
-)", std::nullopt, std::nullopt, false, true,
-            [](const auto& resp) {
-                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::BAD_REQUEST);
-                UNIT_ASSERT_VALUES_EQUAL(resp.operation().issues_size(), 1);
-                UNIT_ASSERT_STRING_CONTAINS(resp.operation().issues(0).message(), "'config' must be an object");
-            });
+        for (const auto* yaml : {"config: []", "metadata: {kind: MainConfig}\nconfig: []"}) {
+            ReplaceConfig(server.GetChannel(), yaml, std::nullopt, std::nullopt, false, true,
+                [](const auto& resp) {
+                    UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::BAD_REQUEST);
+                    UNIT_ASSERT_VALUES_EQUAL(resp.operation().issues_size(), 1);
+                    UNIT_ASSERT_STRING_CONTAINS(resp.operation().issues(0).message(), "'config' must be an object");
+                });
+        }
+    }
+
+    Y_UNIT_TEST(ForceReplaceOnV1WithoutClusterAndVersion) {
+        TKikimrWithGrpcAndRootSchema server;
+        const TString yaml = R"(
+metadata: {kind: MainConfig}
+config: {log_config: {default_level: 5}}
+)";
+        ReplaceConfig(server.GetChannel(), yaml, std::nullopt, std::nullopt, false, false,
+            [](const auto& resp) { UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::UNSUPPORTED); },
+            /*bypassChecks=*/true);
+
+        auto legacy = Ydb::DynamicConfig::V1::DynamicConfigService::NewStub(server.GetChannel());
+        Ydb::DynamicConfig::SetConfigRequest request;
+        request.set_config(yaml);
+        Ydb::DynamicConfig::SetConfigResponse response;
+        grpc::ClientContext ctx;
+        AdjustCtxForDB(ctx);
+        UNIT_ASSERT(legacy->SetConfig(&ctx, request, &response).ok());
+        UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
     }
 
     Y_UNIT_TEST(ReplaceConfigWithInvalidHostConfig) {

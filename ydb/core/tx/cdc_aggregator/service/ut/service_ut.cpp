@@ -51,6 +51,13 @@ public:
                 PipeClient = ev->Get()->ClientId;
             }
         });
+
+        TDispatchOptions serviceBootstrap;
+        serviceBootstrap.FinalEvents.emplace_back([this](IEventHandle& event) {
+            return event.GetRecipientRewrite() == Service
+                && event.GetTypeRewrite() == TEvents::TSystem::Bootstrap;
+        });
+        Runtime.DispatchEvents(serviceBootstrap);
     }
 
     void SendHeartbeat(ui64 sourceDataShardId, ui64 step, ui64 cookie = Cookie) {

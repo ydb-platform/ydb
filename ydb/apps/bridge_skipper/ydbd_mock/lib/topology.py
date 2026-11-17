@@ -110,6 +110,16 @@ def _to_bool(key: str, value) -> bool:
     raise TopologyError("policy %s must be a boolean, got %r" % (key, value))
 
 
+def _host_family(host: str) -> int:
+    if ":" in host:
+        try:
+            ipaddress.IPv6Address(host)
+        except ValueError as error:
+            raise TopologyError("host %r must be an IPv6 literal" % host) from error
+        return socket.AF_INET6
+    return socket.AF_INET
+
+
 def _endpoint(host: str, port: int) -> str:
     return "%s:%d" % ("[%s]" % host if ":" in host else host, port)
 
@@ -287,6 +297,7 @@ class Topology:
     # ----- validation -----
 
     def validate(self) -> None:
+        _host_family(self.host)
         if self.tls is not None:
             if not isinstance(self.tls, dict):
                 raise TopologyError("tls must be a mapping")
@@ -406,14 +417,16 @@ class Topology:
 def _free_ports(count: int, host: str) -> typing.List[int]:
     sockets = []
     ports = []
-    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    family = _host_family(host)
     try:
         for _ in range(count):
             s = socket.socket(family, socket.SOCK_STREAM)
+            sockets.append(s)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((host, 0))
-            sockets.append(s)
             ports.append(s.getsockname()[1])
+    except OSError as error:
+        raise TopologyError("cannot allocate free ports on %r: %s" % (host, error)) from error
     finally:
         for s in sockets:
             s.close()

@@ -166,12 +166,13 @@ public:
 
     void RestoreLocalHnswMetadata(TTransactionContext& txc) {
         // Modern split initialization receives the logical schema from SchemeShard.
-        // Local graph annotations belong to the source DataShard's persisted schema.
+        // Local graph metadata is transferred separately from the table schema.
         const auto& source = Ev->Get()->Record.GetUserTableScheme();
         const ui64 tableId = source.HasPathId() ? source.GetPathId().GetLocalId() : source.GetId_Deprecated();
-        if (source.LocalHnswIndexesSize()) {
+        const auto& descriptions = Ev->Get()->Record.GetLocalHnswIndexes();
+        if (!descriptions.empty()) {
             TUserTable::TPtr updated = new TUserTable(*Self->TableInfos.at(tableId));
-            updated->UpdateLocalHnswIndexes(source);
+            updated->UpdateLocalHnswIndexes(descriptions);
             NIceDb::TNiceDb db(txc.DB);
             Self->PersistUserTable(db, tableId, *updated);
             Self->SetUserTable(TPathId(Self->GetPathOwnerId(), tableId), std::move(updated));
@@ -202,9 +203,8 @@ public:
 
         if (!Self->DstSplitSchemaInitialized) {
             LegacyInitSchema(txc);
-        } else {
-            RestoreLocalHnswMetadata(txc);
         }
+        RestoreLocalHnswMetadata(txc);
 
         bool restoreLegacyRemovedRowVersions = false;
         for (ui32 i = 0 ; i < Ev->Get()->Record.TableSnapshotSize(); ++i) {

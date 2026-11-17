@@ -183,7 +183,9 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             NKikimrSchemeOp::TTableDescription original;
             ss->FillTableDescription(postingId, 0, 1, &original);
             UNIT_ASSERT_VALUES_EQUAL(original.TableIndexesSize(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(original.LocalHnswIndexesSize(), 0);
+            NKikimrTxDataShard::TFlatSchemeTransaction originalMetadata;
+            ss->FillLocalHnswIndexDescriptions(postingId, true, originalMetadata.MutableLocalHnswIndexes());
+            UNIT_ASSERT_VALUES_EQUAL(originalMetadata.LocalHnswIndexesSize(), 0);
             auto index = ss->Indexes.at(indexId);
             if (Pending) {
                 index = index->CreateNextVersion();
@@ -203,22 +205,23 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             const auto table = ss->Tables.at(postingId);
             const auto embeddingId = table->GetColumnIdByNameSlow("custom_embedding");
             UNIT_ASSERT(embeddingId);
-            // A copied table may carry a source graph identity. The serializer
-            // must derive the local graph from the current owning index instead.
-            TPathId(999, 999).ToProto(table->TableDescription.AddLocalHnswIndexes()->MutableIndexId());
-            NKikimrSchemeOp::TTableDescription creation;
-            ss->FillTableDescription(postingId, 0, 1, &creation);
-            UNIT_ASSERT_VALUES_EQUAL(creation.TableIndexesSize(), 0);
+            NKikimrTxDataShard::TFlatSchemeTransaction creation;
+            // Copy operations must derive metadata for the destination owner.
+            TPathId(999, 999).ToProto(creation.AddLocalHnswIndexes()->MutableIndexId());
+            ss->FillTableDescription(postingId, 0, 1, creation.MutableCreateTable());
+            ss->FillLocalHnswIndexDescriptions(postingId, true, creation.MutableLocalHnswIndexes());
+            UNIT_ASSERT_VALUES_EQUAL(creation.GetCreateTable().TableIndexesSize(), 0);
             UNIT_ASSERT_VALUES_EQUAL(creation.LocalHnswIndexesSize(), 1);
             const auto& metadata = creation.GetLocalHnswIndexes(0);
             UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(metadata.GetIndexId()), indexId);
             UNIT_ASSERT_VALUES_EQUAL(metadata.GetHnswIndexDescription().GetEmbeddingColumnId(), embeddingId);
             UNIT_ASSERT_VALUES_EQUAL(metadata.GetHnswIndexDescription().GetSettings().SerializeAsString(), settings.SerializeAsString());
-            NDataShard::TUserTable persisted(1, creation, 2);
+            NDataShard::TUserTable persisted(1, creation.GetCreateTable(), 2);
+            UNIT_ASSERT(persisted.HnswIndexes.empty());
+            persisted.UpdateLocalHnswIndexes(creation.GetLocalHnswIndexes());
             UNIT_ASSERT_VALUES_EQUAL(persisted.HnswIndexes.at(indexId).VectorColumnTag, embeddingId);
             UNIT_ASSERT(persisted.Indexes.empty());
             UNIT_ASSERT(!persisted.HasAsyncIndexes());
-            table->TableDescription.ClearLocalHnswIndexes();
 
             // Publication uses current index metadata, without settings or an
             // embedding-column name passed in the Apply/Alter request.
@@ -233,15 +236,17 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             UNIT_ASSERT(publication.ParseFromString(ss->FillAlterTableTxBody(postingId,
                 table->GetPartitions().front()->ShardIdx, {})));
             UNIT_ASSERT_VALUES_EQUAL(publication.GetAlterTable().TableIndexesSize(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(publication.GetAlterTable().LocalHnswIndexesSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(publication.GetAlterTable().GetLocalHnswIndexes(0)
+            UNIT_ASSERT_VALUES_EQUAL(publication.LocalHnswIndexesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(publication.GetLocalHnswIndexes(0)
                 .GetHnswIndexDescription().GetSettings().SerializeAsString(), settings.SerializeAsString());
             table->AlterData = nullptr;
 
             NKikimrSchemeOp::TTableDescription level;
             ss->FillTableDescription(levelId, 0, 1, &level);
             UNIT_ASSERT_VALUES_EQUAL(level.TableIndexesSize(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(level.LocalHnswIndexesSize(), 0);
+            NKikimrTxDataShard::TFlatSchemeTransaction levelMetadata;
+            ss->FillLocalHnswIndexDescriptions(levelId, true, levelMetadata.MutableLocalHnswIndexes());
+            UNIT_ASSERT_VALUES_EQUAL(levelMetadata.LocalHnswIndexesSize(), 0);
             return true;
         });
     }

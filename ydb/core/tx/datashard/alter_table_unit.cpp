@@ -281,7 +281,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
             break;
         }
     }
-    auto newInfo = DataShard.AlterUserTable(ctx, txc, alterTableTx);
+    auto newInfo = DataShard.AlterUserTable(ctx, txc, alterTableTx, schemeTx.GetLocalHnswIndexes());
     TDataShardLocksDb locksDb(DataShard, txc);
     DataShard.ReplaceUserTable(tableId, newInfo, locksDb);
 

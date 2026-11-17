@@ -70,7 +70,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
         {"tableId", tableId},
         {"version", schemaVersion});
 
-    TUserTable::TPtr info = DataShard.CreateUserTable(txc, schemeTx.GetCreateTable());
+    TUserTable::TPtr info = DataShard.CreateUserTable(txc, schemeTx.GetCreateTable(), schemeTx.GetLocalHnswIndexes());
     DataShard.AddUserTable(tableId, info);
 
     info->ForEachAsyncIndex([&](const auto& indexPathId, const auto&) {

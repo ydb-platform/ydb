@@ -307,6 +307,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
         PRECHARGE_SYS_TABLE(Schema::Sys);
         PRECHARGE_SYS_TABLE(Schema::UserTables);
+        PRECHARGE_SYS_TABLE(Schema::LocalHnswIndexes);
         PRECHARGE_SYS_TABLE(Schema::TxMain);
         PRECHARGE_SYS_TABLE(Schema::OutReadSets);
         PRECHARGE_SYS_TABLE(Schema::PlanQueue);
@@ -415,6 +416,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
     { // Reads user tables metadata
         Self->TableInfos.clear(); // For idempotency
+        THashMap<ui64, TUserTable::TPtr> tables;
         auto rowset = db.Table<Schema::UserTables>().GreaterOrEqual(0).Select();  // TODO[serxa]: this should be Range() but it is not working right now
         if (!rowset.IsReady())
             return false;
@@ -426,9 +428,15 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             NKikimrSchemeOp::TTableDescription descr;
             bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
             Y_ENSURE(parseOk);
-            Self->AddUserTable(TPathId(Self->GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid));
+            tables.emplace(tableId, new TUserTable(localTid, descr, shadowTid));
             if (!rowset.Next())
                 return false;
+        }
+        if (!Self->LoadLocalHnswIndexes(txc, tables)) {
+            return false;
+        }
+        for (auto& [tableId, table] : tables) {
+            Self->AddUserTable(TPathId(Self->GetPathOwnerId(), tableId), std::move(table));
         }
     }
 
@@ -894,6 +902,13 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     // Check if tables changed since last time we synchronized them
     NTable::TDatabase::TChangeCounter lastSysUpdate = txc.DB.Head(Schema::Sys::TableId);
     NTable::TDatabase::TChangeCounter lastSchemeUpdate = txc.DB.Head(Schema::UserTables::TableId);
+    NTable::TDatabase::TChangeCounter lastLocalHnswUpdate;
+    const bool hasLocalHnswTable = scheme.GetTableInfo(Schema::LocalHnswIndexes::TableId);
+    if (hasLocalHnswTable) {
+        lastLocalHnswUpdate = txc.DB.Head(Schema::LocalHnswIndexes::TableId);
+    }
+    const bool tablesChanged = FollowerState.LastSchemeUpdate < lastSchemeUpdate
+        || FollowerState.LastLocalHnswUpdate < lastLocalHnswUpdate;
     NTable::TDatabase::TChangeCounter lastSnapshotsUpdate;
     if (scheme.GetTableInfo(Schema::Snapshots::TableId)) {
         lastSnapshotsUpdate = txc.DB.Head(Schema::Snapshots::TableId);
@@ -909,8 +924,11 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
         }
         updated = true;
     }
-    if (FollowerState.LastSchemeUpdate < lastSchemeUpdate) {
+    if (tablesChanged) {
         if (!db.Table<Schema::UserTables>().Precharge()) {
+            precharged = false;
+        }
+        if (hasLocalHnswTable && !db.Table<Schema::LocalHnswIndexes>().Precharge()) {
             precharged = false;
         }
         updated = true;
@@ -956,18 +974,13 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
         FollowerState.LastSysUpdate = lastSysUpdate;
     }
 
-    if (FollowerState.LastSchemeUpdate < lastSchemeUpdate) {
+    if (tablesChanged) {
         YDB_LOG_DEBUG_CTX(ctx, "Updating tables metadata on follower",
             {"tabletId", TabletID()},
             {"prev", FollowerState.LastSchemeUpdate},
             {"current", lastSchemeUpdate});
 
-        struct TRow {
-            TPathId TableId;
-            TUserTable::TPtr Table;
-        };
-
-        std::vector<TRow> tables;
+        THashMap<ui64, TUserTable::TPtr> tables;
 
         if (userTablesSchema->Columns.contains(Schema::UserTables::ShadowTid::ColumnId)) {
             // New schema with ShadowTid column
@@ -986,10 +999,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
                 NKikimrSchemeOp::TTableDescription descr;
                 bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
                 Y_ENSURE(parseOk);
-                tables.push_back(TRow{
-                    TPathId(GetPathOwnerId(), tableId),
-                    new TUserTable(localTid, descr, shadowTid),
-                });
+                tables.emplace(tableId, new TUserTable(localTid, descr, shadowTid));
                 if (!rowset.Next())
                     return false;
             }
@@ -1009,22 +1019,23 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
                 NKikimrSchemeOp::TTableDescription descr;
                 bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
                 Y_ENSURE(parseOk);
-                tables.push_back(TRow{
-                    TPathId(GetPathOwnerId(), tableId),
-                    new TUserTable(localTid, descr, shadowTid),
-                });
+                tables.emplace(tableId, new TUserTable(localTid, descr, shadowTid));
                 if (!rowset.Next())
                     return false;
             }
         }
 
+        if (!LoadLocalHnswIndexes(txc, tables)) {
+            return false;
+        }
         InvalidateHnswIndexes();
         TableInfos.clear();
-        for (auto& table : tables) {
-            AddUserTable(table.TableId, std::move(table.Table));
+        for (auto& [tableId, table] : tables) {
+            AddUserTable(TPathId(GetPathOwnerId(), tableId), std::move(table));
         }
 
         FollowerState.LastSchemeUpdate = lastSchemeUpdate;
+        FollowerState.LastLocalHnswUpdate = lastLocalHnswUpdate;
     }
 
     // N.B. follower with snapshots support may be loaded in datashard without a snapshots table

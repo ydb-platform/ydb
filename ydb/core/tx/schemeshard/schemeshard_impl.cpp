@@ -8406,23 +8406,19 @@ void TSchemeShard::FillSeqNo(NKikimrTxColumnShard::TSchemaTxBody& tx, TMessageSe
     tx.MutableSeqNo()->SetRound(seqNo.Round);
 }
 
-namespace {
-
 // The owning index is the source of truth for posting-table settings and the
 // embedding column. Use the assigned table column id, including during creation.
-void FillHnswPostingTableDescription(const TSchemeShard& ss, TPathId tableId,
-        bool pendingIndex, NKikimrSchemeOp::TTableDescription* tableDescr) {
-    const auto& path = ss.PathsById.at(tableId);
+void TSchemeShard::FillLocalHnswIndexDescriptions(TPathId tableId, bool pendingIndex,
+        google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TLocalHnswIndexDescription>* descriptions) const {
+    descriptions->Clear();
+    const auto& path = PathsById.at(tableId);
     if (path->Name != NTableIndex::NKMeans::PostingTable) {
         return;
     }
-    const auto indexIt = ss.Indexes.find(path->ParentPathId);
-    if (indexIt == ss.Indexes.end()) {
+    const auto indexIt = Indexes.find(path->ParentPathId);
+    if (indexIt == Indexes.end()) {
         return;
     }
-    // This metadata is derived from the owning index. In particular, a copied
-    // posting table must not retain a graph identity from the source table.
-    tableDescr->ClearLocalHnswIndexes();
     const auto index = pendingIndex && indexIt->second->AlterData
         ? indexIt->second->AlterData : indexIt->second;
     if (index->Type != NKikimrSchemeOp::EIndexTypeGlobalHnsw || index->IndexKeys.empty()) {
@@ -8433,12 +8429,12 @@ void FillHnswPostingTableDescription(const TSchemeShard& ss, TPathId tableId,
     if (!hnsw) {
         return;
     }
-    const auto& table = ss.Tables.at(tableId);
+    const auto& table = Tables.at(tableId);
     for (const auto& [columnId, column] : table->Columns) {
         if (column.Name != index->IndexKeys.back() || column.IsDropped()) {
             continue;
         }
-        auto* description = tableDescr->AddLocalHnswIndexes();
+        auto* description = descriptions->Add();
         path->ParentPathId.ToProto(description->MutableIndexId());
         description->SetSchemaVersion(index->AlterVersion);
         *description->MutableHnswIndexDescription() = *hnsw;
@@ -8446,8 +8442,6 @@ void FillHnswPostingTableDescription(const TSchemeShard& ss, TPathId tableId,
         break;
     }
 }
-
-} // namespace
 
 TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, TMessageSeqNo seqNo) const {
     Y_VERIFY_S(Tables.contains(pathId), "Unknown table " << pathId);
@@ -8537,7 +8531,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
     }
 
     // Refresh derived metadata when index settings have been resolved or changed.
-    FillHnswPostingTableDescription(*this, pathId, true, proto);
+    FillLocalHnswIndexDescriptions(pathId, true, tx.MutableLocalHnswIndexes());
 
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
@@ -8629,8 +8623,6 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
         tinfo->TableDescription.SetPath(PathToString(pinfo));
     }
     tableDescr->CopyFrom(tinfo->TableDescription);
-
-    FillHnswPostingTableDescription(*this, tableId, newTable, tableDescr);
 
     if (rangeBegin.empty()) {
         // First partition starts with <NULL, NULL, ..., NULL> key

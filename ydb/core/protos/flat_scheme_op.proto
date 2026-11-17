@@ -441,8 +441,7 @@ message TTableDescription {
     // results, so clients don't need to request the TablePartitions list.
     optional uint64 PartitionCount = 55;
 
-    // DataShard-local graphs, separate from the logical child indexes in TableIndexes.
-    repeated TLocalHnswIndexDescription LocalHnswIndexes = 56;
+    reserved 56; // Local HNSW metadata is stored in DataShard's NIceDb tables.
 }
 
 message TCompressionOptions {

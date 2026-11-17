@@ -521,6 +521,8 @@ struct TUserTable : public TThrRefBase {
         ui64 SchemaVersion = 0;
     };
     TMap<TPathId, THnswIndexInfo> HnswIndexes;
+    // Full declarations include disabled entries and are persisted in NIceDb.
+    TMap<TPathId, NKikimrSchemeOp::TLocalHnswIndexDescription> LocalHnswIndexDescriptions;
     TMap<ui32, TStorageRoom::TPtr> Rooms;
     TMap<ui32, TUserFamily> Families;
     TMap<ui32, TUserColumn> Columns;
@@ -616,7 +618,9 @@ struct TUserTable : public TThrRefBase {
         return DetailedMetricsLevel;
     }
 
-    void UpdateLocalHnswIndexes(const NKikimrSchemeOp::TTableDescription& description);
+    void UpdateLocalHnswIndex(const NKikimrSchemeOp::TLocalHnswIndexDescription& description);
+    void UpdateLocalHnswIndexes(const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TLocalHnswIndexDescription>& descriptions);
+    void RemapLocalHnswIndexes(const THashMap<TPathId, TPathId>& remap);
 
     void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
     void SwitchIndexState(const TPathId& indexPathId, TTableIndex::EState state);

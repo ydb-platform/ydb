@@ -24,6 +24,7 @@
 #include "hnsw_index/hnsw_index.h"
 #include "hnsw_index/hnsw_index_build_actor.h"
 #include "hnsw_index/hnsw_memory_tracker.h"
+#include <ydb/core/tx/datashard/hnsw_index/hnsw_schema.h>
 #include "incr_restore_scan.h"
 #include "datashard_tli.h"
 #include "multi_txids.h"
@@ -1248,6 +1249,8 @@ class TDataShard
             using TColumns = TableColumns<LockId, TabletId, WriterIndex, WriteSeqNum, WriteResult>;
         };
 
+        using LocalHnswIndexes = THnswSchema::LocalHnswIndexes;
+
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
@@ -1257,7 +1260,7 @@ class TDataShard
             LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
             TxVolatileDetails, TxVolatileParticipants, CdcStreamScans,
             LockVolatileDependencies, CdcStreamHeartbeats, MultiTxIds, MultiTxIdGraph, IndexBuildScans,
-            LockWriteSeqNums, AncestorShardsLocks, AncestorLockWriteSeqNums>;
+            LockWriteSeqNums, AncestorShardsLocks, AncestorLockWriteSeqNums, LocalHnswIndexes>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1661,8 +1664,11 @@ class TDataShard
     void PersistSys(NIceDb::TNiceDb& db, ui64 key, bool value) const;
     void PersistSys(NIceDb::TNiceDb& db, ui64 key, const TActorId& value) const;
     void PersistUserTable(NIceDb::TNiceDb& db, ui64 tableId, const TUserTable& tableInfo);
+    void PersistRemoveLocalHnswIndexes(NIceDb::TNiceDb& db, ui64 tableId, const TUserTable& tableInfo);
+    bool LoadLocalHnswIndexes(NTabletFlatExecutor::TTransactionContext& txc, THashMap<ui64, TUserTable::TPtr>& tables);
     void PersistUserTableFullCompactionTs(NIceDb::TNiceDb& db, ui64 tableId, ui64 ts);
-    void PersistMoveUserTable(NIceDb::TNiceDb& db, ui64 prevTableId, ui64 tableId, const TUserTable& tableInfo);
+    void PersistMoveUserTable(NIceDb::TNiceDb& db, ui64 prevTableId, ui64 tableId,
+        const TUserTable& tableInfo, const TUserTable& oldTableInfo);
 
     void DropAllUserTables(TTransactionContext& txc);
     void PurgeTxTables(TTransactionContext& txc);
@@ -2398,9 +2404,11 @@ public:
         const TPathId& oldStreamPathId,
         const NKikimrSchemeOp::TCdcStreamDescription& newStreamDesc);
 
-    TUserTable::TPtr CreateUserTable(TTransactionContext& txc, const NKikimrSchemeOp::TTableDescription& tableScheme);
+    TUserTable::TPtr CreateUserTable(TTransactionContext& txc, const NKikimrSchemeOp::TTableDescription& tableScheme,
+        const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TLocalHnswIndexDescription>& localIndexes = {});
     TUserTable::TPtr AlterUserTable(const TActorContext& ctx, TTransactionContext& txc,
-                                    const NKikimrSchemeOp::TTableDescription& tableScheme);
+        const NKikimrSchemeOp::TTableDescription& tableScheme,
+        const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TLocalHnswIndexDescription>& localIndexes = {});
     static THashMap<TPathId, TPathId> GetRemapIndexes(const NKikimrTxDataShard::TMoveTable& move);
     TUserTable::TPtr MoveUserTable(TOperation::TPtr op, const NKikimrTxDataShard::TMoveTable& move,
         const TActorContext& ctx, TTransactionContext& txc);
@@ -2987,6 +2995,7 @@ private:
     struct TFollowerState {
         NTable::TDatabase::TChangeCounter LastSysUpdate;
         NTable::TDatabase::TChangeCounter LastSchemeUpdate;
+        NTable::TDatabase::TChangeCounter LastLocalHnswUpdate;
         NTable::TDatabase::TChangeCounter LastSnapshotsUpdate;
     };
 

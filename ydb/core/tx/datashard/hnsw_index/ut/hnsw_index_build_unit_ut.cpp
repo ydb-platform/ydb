@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(HnswIndexBuildExecutionPlan) {
                     auto* alter = scheme.MutableAlterTable();
                     alter->SetName("posting");
                     if (kind == 2 || kind == 4) {
-                        auto* index = alter->AddLocalHnswIndexes();
+                        auto* index = scheme.AddLocalHnswIndexes();
                         index->MutableIndexId()->SetOwnerId(1);
                         index->MutableIndexId()->SetLocalId(2);
                         auto* hnsw = index->MutableHnswIndexDescription();

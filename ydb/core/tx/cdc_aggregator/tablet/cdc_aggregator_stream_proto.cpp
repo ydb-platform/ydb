@@ -101,7 +101,7 @@ TCdcAggregatorStreamHeartbeatsBatch TCdcAggregatorStreamProtoConverter::ParseHea
     for (const auto& sourceHeartbeat : proto.GetHeartbeats()) {
         const ui64 sourceDataShardId = sourceHeartbeat.GetSourceDataShardId();
         auto heartbeat = NPQ::THeartbeat::Parse(sourceHeartbeat.GetHeartbeat());
-        if (!heartbeat.Version.Step) {
+        if (!heartbeat.Version.Step || heartbeat.Data.empty()) {
             batch.InvalidSourceDataShardIds.insert(sourceDataShardId);
             continue;
         }

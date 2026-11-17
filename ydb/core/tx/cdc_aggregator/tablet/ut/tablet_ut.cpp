@@ -473,6 +473,22 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::BAD_REQUEST, writeResult.ShortDebugString());
     }
 
+    Y_UNIT_TEST(ShouldReturnBadRequestWhenHeartbeatDataIsEmpty) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        auto request = MakeWriteHeartbeats({{1, 100}});
+        request->Record.MutableHeartbeats(0)->MutableHeartbeat()->ClearData();
+
+        // when
+        const auto writeResult = env.WriteHeartbeats(std::move(request));
+
+        // then
+        UNIT_ASSERT_C(writeResult.GetStatus() == TWriteResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.ResultsSize(), 1);
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::BAD_REQUEST, writeResult.ShortDebugString());
+    }
+
     Y_UNIT_TEST(ShouldKeepLastHeartbeatWhenOlderHeartbeatArrives) {
         // given
         TTestEnv env;

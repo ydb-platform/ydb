@@ -14,6 +14,7 @@
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 #include <util/string/escape.h>
+#include <util/string/hex.h>
 #include <util/string/subst.h>
 
 namespace NKikimr::NReplication::NChecksum {
@@ -67,24 +68,31 @@ private:
         if (MaxShardsInFlight) {
             query << "PRAGMA ydb.MaxSequentialReadsInFlight = \"" << MaxShardsInFlight << "\";\n";
         }
-        RunDataQuery(query << "SELECT count(*), SUM(Digest::CityHash(StablePickle(TableRow()))) FROM `"
-            << path << "`;", nullptr, TTxControl::BeginAndCommitTx(true), Deadline - now);
+        RunDataQuery(query << "CHECKSUM TABLE `" << path << "` WITH (ALGORITHM = \"CityHash64\");",
+            nullptr, TTxControl::BeginAndCommitTx(true), Deadline - now);
     }
 
     void OnQueryResult() override {
         if (Finished) {
             return;
         }
-        if (ResultSets.size() != 1 || ResultSets[0].RowsCount() != 1 || ResultSets[0].ColumnsCount() != 2) {
+        if (ResultSets.size() != 1 || ResultSets[0].RowsCount() != 1 || ResultSets[0].ColumnsCount() != 4) {
             return Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected checksum result shape");
         }
         NYdb::TResultSetParser parser(ResultSets[0]);
         parser.TryNextRow();
-        Checksum.set_row_count(parser.ColumnParser(0).GetUint64());
-        const auto sum = parser.ColumnParser(1).GetOptionalUint64();
-        if (sum) {
-            Checksum.set_hash(ToString(*sum));
+        if (parser.ColumnParser("version").GetUint32() != 1
+            || parser.ColumnParser("algorithm").GetUtf8() != "CityHash64")
+        {
+            return Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unsupported checksum result format");
         }
+        const auto count = parser.ColumnParser("count").GetUint64();
+        const auto hash = parser.ColumnParser("hash").GetString();
+        if (hash.size() != sizeof(ui64)) {
+            return Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected checksum hash width");
+        }
+        Checksum.set_row_count(count);
+        Checksum.set_hash(HexEncode(hash.data(), hash.size()));
         Finish();
     }
 

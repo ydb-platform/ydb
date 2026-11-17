@@ -492,5 +492,5 @@ message TFeatureFlags {
     // response for the previous blob completes (LOGBROKER-10680). Default true is the fixed
     // behavior; disabling it restores the legacy zeroing that undercounted the consumed
     // write quota, as an emergency lever for a rollout.
-    optional bool EnablePQWriteQuotaAccountingFix = 391 [default = true];
+    optional bool EnablePQWriteQuotaAccountingFix = 391 [default = false];
 }

@@ -545,6 +545,7 @@ RECURSE_FOR_TESTS(
     snapshot_retention
     ut_bloom_filter
     ut_borrowed_compaction
+    ut_cdc_compression
     ut_change_collector
     ut_change_exchange
     ut_compaction

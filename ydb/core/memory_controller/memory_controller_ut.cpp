@@ -1294,7 +1294,7 @@ Y_UNIT_TEST_TWIN(ConsumerUnregisterDropsAccounting, RetainUntilUnused) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 30_MB);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Demand"), 30_MB);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 0);
-        UNIT_ASSERT_GE(fixture.Counter("Stats/ConsumersCommitted"), 30_MB);
+        UNIT_ASSERT_GE(fixture.Counter("Stats/ConsumersCommitted"), i64(30_MB));
         consumer->SetReport({});
         fixture.Tick();
     }

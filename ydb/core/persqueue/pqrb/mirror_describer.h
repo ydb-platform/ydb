@@ -88,6 +88,7 @@ private:
 
     NYdb::TCredentialsProviderFactoryPtr CredentialsProvider;
     TActorId CredentialsInitializer;
+    ui64 DescribeGeneration = 0;
 
     TDuration CredentialsInitInterval = INIT_INTERVAL_START;
     TDuration DescribeRetryTimeout = DESCRIBE_RETRY_TIMEOUT_START;

@@ -37,14 +37,6 @@ void TMirrorDescriber::Bootstrap(const TActorContext& ctx) {
 void TMirrorDescriber::StartInit(const TActorContext& ctx) {
     Become(&TThis::StateInit);
     DescribeRetryTimeout = DESCRIBE_RETRY_TIMEOUT_START;
-<<<<<<< HEAD
-    ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials);
-}
-
-void TMirrorDescriber::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
-    YDB_LOG_NOTICE("Killed",
-        {"logPrefix", NPQ_LOG_PREFIX});
-=======
     ++DescribeGeneration;
     DescribeTopicRequestInFlight = false;
     CredentialsRequestInFlight = false;
@@ -55,11 +47,11 @@ void TMirrorDescriber::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext
 }
 
 void TMirrorDescriber::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
-    LOG_N("Killed");
+    YDB_LOG_NOTICE("Killed",
+        {"logPrefix", NPQ_LOG_PREFIX});
     if (auto initializer = std::exchange(CredentialsInitializer, {})) {
         ctx.Send(initializer, new TEvents::TEvPoisonPill());
     }
->>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
     CredentialsProvider = nullptr;
     Die(ctx);
 }
@@ -70,31 +62,24 @@ void TMirrorDescriber::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr&
         Config,
         tabletConfig.GetPartitionConfig().GetMirrorFrom()
     );
-<<<<<<< HEAD
+    const bool equalPathsContext = Database == tabletConfig.GetYdbDatabasePath() && TopicPath == tabletConfig.GetTopicPath();
     YDB_LOG_DEBUG("Got new config, equal with",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"previous", equalConfigs});
-    if (!equalConfigs) {
-        Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
-        YDB_LOG_INFO("Changing config",
-            {"logPrefix", NPQ_LOG_PREFIX});
-=======
-    const bool equalPathsContext = Database == tabletConfig.GetYdbDatabasePath() && TopicPath == tabletConfig.GetTopicPath();
-    LOG_D(
-        "Got new config, equal with",
-        {"previous", equalConfigs && equalPathsContext}
-    );
+        {"previous", equalConfigs && equalPathsContext});
     if (!equalConfigs || !equalPathsContext) {
         Config = tabletConfig.GetPartitionConfig().GetMirrorFrom();
         Database = tabletConfig.GetYdbDatabasePath();
         TopicPath = tabletConfig.GetTopicPath();
-        LOG_I("Changing config");
->>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
+        YDB_LOG_INFO("Changing config",
+            {"logPrefix", NPQ_LOG_PREFIX});
         StartInit(ctx);
     }
 }
 
 void TMirrorDescriber::HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Cookie != DescribeGeneration) {
+        return;
+    }
     DescribeTopicRequestInFlight = false;
     const auto& description = ev->Get()->Description;
     if (!description.has_value()) {
@@ -137,14 +122,15 @@ void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
     future.Subscribe(
         [
             actorSystem = ctx.ActorSystem(),
-            selfId = SelfId()
+            selfId = SelfId(),
+            generation = DescribeGeneration
         ](const NThreading::TFuture<NYdb::NTopic::TDescribeTopicResult>& result) {
             THolder<TEvPQ::TEvMirrorTopicDescription> ev;
             const bool hasValue = result.HasValue();
             if (hasValue) {
                 const auto& value = result.GetValue();
                 ev = MakeHolder<TEvPQ::TEvMirrorTopicDescription>(value);
-                actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
+                actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release(), 0, generation));
                 return;
             }
             try {
@@ -152,13 +138,16 @@ void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
             } catch (...) {
                 ev = MakeHolder<TEvPQ::TEvMirrorTopicDescription>(CurrentExceptionMessage());
             }
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
+            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release(), 0, generation));
         }
     );
     DescribeTopicRequestInFlight = true;
 }
 
-void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
+void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Cookie != 0 && ev->Cookie != DescribeGeneration) {
+        return;
+    }
     if (CredentialsRequestInFlight) {
         YDB_LOG_WARN("Credentials request already inflight",
             {"logPrefix", NPQ_LOG_PREFIX});
@@ -168,66 +157,30 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     PQ_ENSURE(factory);
-<<<<<<< HEAD
-    auto future = factory->GetCredentialsProvider(Config.GetCredentials());
-    future.Subscribe(
-        [
-            actorSystem = ctx.ActorSystem(),
-            selfId = SelfId()
-        ](const NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr>& result) {
-            THolder<TEvPQ::TEvCredentialsCreated> ev;
-            if (result.HasException()) {
-                TString error;
-                try {
-                    result.TryRethrow();
-                } catch(...) {
-                    error = CurrentExceptionMessage();
-                }
-                ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(error);
-            } else {
-                ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(result.GetValue());
-            }
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
-        }
-    );
-=======
     CredentialsInitializer = ctx.Register(CreateMirrorCredentialsInitializer(
         SelfId(), DescribeGeneration, Config.GetCredentials(), Database, TopicPath, factory
     ));
->>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
     CredentialsRequestInFlight = true;
 }
 
 void TMirrorDescriber::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx) {
-<<<<<<< HEAD
-    CredentialsRequestInFlight = false;
-    if (ev->Get()->Error) {
-        YDB_LOG_WARN("Cannot initialize credentials",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"provider", ev->Get()->Error.value()});
-        ScheduleWithIncreasingTimeout<TEvPQ::TEvInitCredentials>(SelfId(), CredentialsInitInterval, INIT_INTERVAL_MAX, ctx);
-=======
     if (ev->Cookie != DescribeGeneration) {
-        LOG_D(
-            "Ignoring stale credentials",
+        YDB_LOG_DEBUG("Ignoring stale credentials",
+            {"logPrefix", NPQ_LOG_PREFIX},
             {"cookie", ev->Cookie},
-                    {"generation",
-            DescribeGeneration}
-        );
+            {"generation", DescribeGeneration});
         return;
     }
     CredentialsInitializer = {};
     CredentialsRequestInFlight = false;
     if (ev->Get()->Error) {
-        LOG_W(
-            "Cannot initialize credentials",
-            {"provider", ev->Get()->Error.value()}
-        );
+        YDB_LOG_WARN("Cannot initialize credentials",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"provider", ev->Get()->Error.value()});
         ctx.Schedule(CredentialsInitInterval, std::make_unique<IEventHandle>(
             SelfId(), SelfId(), new TEvPQ::TEvInitCredentials(), 0, DescribeGeneration
         ));
         CredentialsInitInterval = Min(CredentialsInitInterval * 2, INIT_INTERVAL_MAX);
->>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
         return;
     }
 

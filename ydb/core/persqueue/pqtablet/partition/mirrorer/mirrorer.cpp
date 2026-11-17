@@ -128,15 +128,11 @@ void TMirrorer::StartInit(const TActorContext& ctx) {
 }
 
 void TMirrorer::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
-<<<<<<< HEAD
     YDB_LOG_NOTICE("Killed",
         {"logPrefix", NPQ_LOG_PREFIX});
-=======
-    LOG_N("Killed");
     if (auto initializer = std::exchange(CredentialsInitializer, {})) {
         ctx.Send(initializer, new TEvents::TEvPoisonPill());
     }
->>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
     if (ReadSession)
         ReadSession->Close(TDuration::Zero());
     ReadSession = nullptr;
@@ -412,28 +408,18 @@ void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, co
         Config,
         tabletConfig.GetPartitionConfig().GetMirrorFrom()
     );
-<<<<<<< HEAD
-    YDB_LOG_NOTICE("Got new config, equal with previous",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"previous", equalConfigs});
-    if (!equalConfigs) {
-        Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
-        YDB_LOG_NOTICE("Changing config",
-            {"logPrefix", NPQ_LOG_PREFIX});
-=======
     const auto& topicConverter = ev->Get()->TopicConverter;
     PQ_ENSURE(topicConverter);
     const bool equalPathsContext = TopicConverter->GetDatabase() == topicConverter->GetDatabase()
         && TopicConverter->GetPrimaryPath() == topicConverter->GetPrimaryPath();
     TopicConverter = topicConverter;
-    LOG_N(
-        "Got new config, equal with previous",
-        {"previous", equalConfigs && equalPathsContext}
-    );
+    YDB_LOG_NOTICE("Got new config, equal with previous",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"previous", equalConfigs && equalPathsContext});
     if (!equalConfigs || !equalPathsContext) {
         Config = tabletConfig.GetPartitionConfig().GetMirrorFrom();
-        LOG_N("Changing config");
->>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
+        YDB_LOG_NOTICE("Changing config",
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         StartInit(ctx);
     }
@@ -515,67 +501,12 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
     EndPartitionSessionEvent = std::nullopt;
 }
 
-<<<<<<< HEAD
-void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
-=======
-void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
-    if (OffsetsByConsumers.empty() && !MirroredOffsetToSend) {
-        return;
-    }
-
-    y_absl::flat_hash_map<TString, ui64> offsetsByConsumersToSend;
-    for (auto& [consumer, offset] : OffsetsByConsumers) {
-        auto offsetToSend = Min(offset, Max(EndOffset, ConfirmedEndOffset));
-        if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offsetToSend) {
-            continue;
-        }
-        
-        offsetsByConsumersToSend[consumer] = offsetToSend;
-    }
-
-    if (offsetsByConsumersToSend.empty() && !MirroredOffsetToSend.Defined()) {
-        return;
-    }
-
-    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
-    for (const auto& [consumer, offset] : offsetsByConsumersToSend) {
-        (event->OffsetsByConsumers)[consumer] = offset;
-
-        ReplicatedOffsetsByConsumers[consumer] = offset;
-
-        if (offset == OffsetsByConsumers[consumer]) {
-            OffsetsByConsumers.erase(consumer);
-        }
-    }
-
-    LOG_D("Sending replication data to consumers",
-        {"offsetsByConsumersToSend", FormatOffsetsByConsumers(offsetsByConsumersToSend)},
-        {"ReplicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
-        {"OffsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
-        {"MirroredOffsetToSend", MirroredOffsetToSend ? ToString(*MirroredOffsetToSend) : "none"});
-
-    if (MirroredOffsetToSend) {
-        event->MirroredOffset = *MirroredOffsetToSend;
-        MirroredOffsetToSend = Nothing();
-    }
-
-    ctx.Send(PartitionActor, event.Release());
-}
-
-void TMirrorer::Handle(TEvPQ::TEvPersistDone::TPtr& ev, const TActorContext& ctx) {
-    if (ev->Sender != PartitionActor) {
-        return;
-    }
-    ConfirmedEndOffset = Max(ConfirmedEndOffset, ev->Get()->EndOffset);
-    TryToSendReplicationData(ctx);
-}
-
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx) {
     if (ev->Cookie != 0 && ev->Cookie != CredentialsGeneration) {
-        LOG_D("Ignoring stale credentials init", {"cookie", ev->Cookie}, {"generation", CredentialsGeneration});
+        YDB_LOG_DEBUG("Ignoring stale credentials init",
+            {"logPrefix", NPQ_LOG_PREFIX}, {"cookie", ev->Cookie}, {"generation", CredentialsGeneration});
         return;
     }
->>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
     if (CredentialsRequestInFlight) {
         YDB_LOG_WARN("Credentials request already inflight",
             {"logPrefix", NPQ_LOG_PREFIX});
@@ -596,7 +527,8 @@ void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const
 
 void TMirrorer::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx) {
     if (ev->Cookie != 0 && ev->Cookie != CredentialsGeneration) {
-        LOG_D("Ignoring stale credentials", {"cookie", ev->Cookie}, {"generation", CredentialsGeneration});
+        YDB_LOG_DEBUG("Ignoring stale credentials",
+            {"logPrefix", NPQ_LOG_PREFIX}, {"cookie", ev->Cookie}, {"generation", CredentialsGeneration});
         return;
     }
     CredentialsInitializer = {};
@@ -641,7 +573,8 @@ void TMirrorer::HandleWakeup(const TActorContext& ctx) {
 
 void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr& ev, const TActorContext& ctx) {
     if (ev->Cookie != CredentialsGeneration) {
-        LOG_D("Ignoring stale consumer creation", {"cookie", ev->Cookie}, {"generation", CredentialsGeneration});
+        YDB_LOG_DEBUG("Ignoring stale consumer creation",
+            {"logPrefix", NPQ_LOG_PREFIX}, {"cookie", ev->Cookie}, {"generation", CredentialsGeneration});
         return;
     }
     if (CredentialsRequestInFlight || !CredentialsProvider) {
@@ -797,14 +730,9 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
 
     Become(&TThis::StateInitConsumer);
 
-<<<<<<< HEAD
     YDB_LOG_NOTICE("Schedule consumer creation",
         {"logPrefix", NPQ_LOG_PREFIX});
-    ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
-=======
-    LOG_N("Schedule consumer creation");
     ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx, CredentialsGeneration);
->>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
 }
 
 TString TMirrorer::BuildLogPrefix() const {

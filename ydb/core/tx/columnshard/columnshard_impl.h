@@ -708,7 +708,7 @@ public:
     }
 
     const NOlap::IColumnEngine& GetIndexVerified() const {
-        AFL_VERIFY(TablesManager.GetPrimaryIndex());
+        YDB_LOG_VERIFY(TablesManager.GetPrimaryIndex());
         return *TablesManager.GetPrimaryIndex();
     }
 
@@ -718,17 +718,17 @@ public:
     }
 
     TTxController& GetProgressTxController() const {
-        AFL_VERIFY(ProgressTxController);
+        YDB_LOG_VERIFY(ProgressTxController);
         return *ProgressTxController;
     }
 
     TOperationsManager& GetOperationsManager() const {
-        AFL_VERIFY(OperationsManager);
+        YDB_LOG_VERIFY(OperationsManager);
         return *OperationsManager;
     }
 
     TWriteGate& GetWriteGate() {
-        AFL_VERIFY(WriteGate);
+        YDB_LOG_VERIFY(WriteGate);
         return *WriteGate;
     }
 
@@ -749,12 +749,12 @@ public:
     }
 
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(StoragesManager);
         return StoragesManager;
     }
 
     const std::shared_ptr<NOlap::NDataLocks::TManager>& GetDataLocksManager() const {
-        AFL_VERIFY(DataLocksManager);
+        YDB_LOG_VERIFY(DataLocksManager);
         return DataLocksManager;
     }
 

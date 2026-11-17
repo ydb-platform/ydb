@@ -206,25 +206,26 @@ class TestImpex(BaseCliTestWithDatabase):
             with path.open("w") as f:
                 f.writelines(data)
 
-    def run_import(self, ftype, data, additional_args=[], add_bom=False):
+    def run_import(self, ftype, data, additional_args=[], add_bom=False, threads=2):
         path = self.tmp_path / "tempinput.{}".format(ftype)
         self.write_data_to_tmp_file(path, add_bom, data)
-        self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path, "-i", str(path)] + self.get_header_flag(ftype) + additional_args)
+        thread_args = ["--threads", str(threads)] if threads is not None else []
+        self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path, "-i", str(path)] + self.get_header_flag(ftype) + thread_args + additional_args)
 
     def run_import_from_stdin(self, ftype, data, additional_args=[], add_bom=False, env=None):
         path = self.tmp_path / "tempinput.{}".format(ftype)
         self.write_data_to_tmp_file(path, add_bom, data)
         with (path).open("r") as f:
-            self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype) + additional_args, stdin=f, env=env)
+            self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path, "--threads", "2"] + self.get_header_flag(ftype) + additional_args, stdin=f, env=env)
 
     def run_import_multiple_files(self, ftype, files_count, additional_args=[]):
-        args = ["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype) + additional_args
+        args = ["import", "file", ftype, "-p", self.table_path, "--threads", "2"] + self.get_header_flag(ftype) + additional_args
         for i in range(files_count):
             args.append(str(self.tmp_path / "tempinput{}.{}".format(i, ftype)))
         self.execute_ydb_cli_command(args)
 
     def run_import_multiple_files_and_stdin(self, ftype, files_count, additional_args=[]):
-        args = ["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype) + additional_args
+        args = ["import", "file", ftype, "-p", self.table_path, "--threads", "2"] + self.get_header_flag(ftype) + additional_args
         for i in range(1, files_count):
             args.append(str(self.tmp_path / "tempinput{}.{}".format(i, ftype)))
         with (self.tmp_path / "tempinput0.{}".format(ftype)).open("r") as f:
@@ -234,7 +235,7 @@ class TestImpex(BaseCliTestWithDatabase):
         path = self.tmp_path / "tempinput.parquet"
         with path.open("w"):
             pq.write_table(data, str(path), version="2.4")
-        self.execute_ydb_cli_command(["import", "file", "parquet", "-p", self.table_path, "-i", str(path)])
+        self.execute_ydb_cli_command(["import", "file", "parquet", "-p", self.table_path, "-i", str(path), "--threads", "2"])
 
     def run_export(self, format):
         if format == "json":
@@ -253,7 +254,9 @@ class TestImpex(BaseCliTestWithDatabase):
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
     def test_simple(self, tmp_path, request, table_type, ftype, additional_args):
         self.init_test(tmp_path, table_type, request.node.name)
-        self.run_import(ftype, DATA[ftype], additional_args)
+        # Keep default parallelism covered for both table types with plain CSV.
+        threads = None if ftype == "csv" and not additional_args else 2
+        self.run_import(ftype, DATA[ftype], additional_args, threads=threads)
         return self.run_export(ftype)
 
     @pytest.mark.parametrize("ftype,additional_args", ONLY_CSV_TSV_PARAMS)
@@ -422,7 +425,8 @@ class TestImpex(BaseCliTestWithDatabase):
         self.run_import(
             ftype,
             data,
-            additional_args=["--threads", "1", "--max-in-flight", "1", "--batch-bytes", "1"]
+            additional_args=["--max-in-flight", "1", "--batch-bytes", "1"],
+            threads=1,
         )
         return self.run_export(ftype)
 

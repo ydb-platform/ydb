@@ -35,7 +35,7 @@ void TBordersFlowController::BuildExclusivePortions() {
         }
 
         openIntervals += currentIt->second.Start.size();
-        AFL_VERIFY(openIntervals >= currentIt->second.Finish.size());
+        YDB_LOG_VERIFY(openIntervals >= currentIt->second.Finish.size());
         openIntervals -= currentIt->second.Finish.size();
     }
 
@@ -93,8 +93,8 @@ TString TBordersFlowController::DebugString() const {
 void TBordersFlowController::AddBatch(const TBordersBatch& batch) {
     for (const auto& border : batch.GetBorders()) {
         auto borderKey = NCommon::TReplaceKeyAdapter(NArrow::TSimpleRow{ border.GetKey()->MakeRecordBatch(), 0 }, IsReversed());
-        AFL_VERIFY(WaitingBorders.erase(borderKey) == 1);
-        AFL_VERIFY(ReadyBorders.insert(borderKey).second);
+        YDB_LOG_VERIFY(WaitingBorders.erase(borderKey) == 1);
+        YDB_LOG_VERIFY(ReadyBorders.insert(borderKey).second);
     }
     Counters->OnWaitingBorders(-1 * static_cast<i64>(batch.GetBorders().size()));
     Counters->OnReadyBorders(static_cast<i64>(batch.GetBorders().size()));

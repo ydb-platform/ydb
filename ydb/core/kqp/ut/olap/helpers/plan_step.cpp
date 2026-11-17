@@ -10,7 +10,8 @@ namespace {
 void ExecuteAlter(TKikimrRunner& kikimr, const TString& alterQuery) {
     auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
     auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-    AFL_VERIFY(alterResult.GetStatus() == NYdb::EStatus::SUCCESS)("error", alterResult.GetIssues().ToString());
+    YDB_LOG_VERIFY(alterResult.GetStatus() == NYdb::EStatus::SUCCESS,
+        {"error", alterResult.GetIssues()});
 }
 }   // namespace
 
@@ -18,7 +19,7 @@ void ExecuteAlter(TKikimrRunner& kikimr, const TString& alterQuery) {
 // on any one column object is enough.
 void AdvancePlanStep(TKikimrRunner& kikimr, const TString& root) {
     auto description = kikimr.GetTestClient().Ls(root);
-    AFL_VERIFY(description);
+    YDB_LOG_VERIFY(description);
     for (const auto& child : description->Record.GetPathDescription().GetChildren()) {
         TString objectType;
         switch (child.GetPathType()) {
@@ -35,7 +36,9 @@ void AdvancePlanStep(TKikimrRunner& kikimr, const TString& root) {
                                               << objectType << ") SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`false`);");
         return;
     }
-    AFL_VERIFY(false)("error", "no column tables/stores found to advance the plan step")("root", root);
+    YDB_LOG_VERIFY(false,
+        {"error", "no column tables/stores found to advance the plan step"},
+        {"root", root});
 }
 
 }   // namespace NKikimr::NKqp

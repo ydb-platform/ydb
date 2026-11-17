@@ -82,7 +82,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             {"reason", "db_reading_not_finished"});
         return;
     }
-    AFL_VERIFY(!WriteGate);
+    YDB_LOG_VERIFY(!WriteGate);
     WriteGate.emplace(*Executor(), TablesManager, *OperationsManager, *SpaceWatcher, Counters, TabletID());
     ProgressTxController->OnTabletInit();
     AbortNotProposedTransactions();
@@ -346,8 +346,9 @@ void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const
     const TDuration stalenessLivetime = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness();
     const TDuration stalenessInMem = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStalenessInMem();
     const TDuration usedLivetime = NYDBTest::TControllers::GetColumnShardController()->GetUsedSnapshotLivetime();
-    AFL_VERIFY(usedLivetime < stalenessInMem || (stalenessInMem == usedLivetime && usedLivetime == TDuration::Zero()))("used", usedLivetime)(
-                                                "staleness", stalenessInMem);
+    YDB_LOG_VERIFY(usedLivetime < stalenessInMem || (stalenessInMem == usedLivetime && usedLivetime == TDuration::Zero()),
+        {"used", usedLivetime},
+        {"staleness", stalenessInMem});
     const TDuration ping = 0.3 * std::min(stalenessInMem - usedLivetime, stalenessLivetime - stalenessInMem);
     if (auto writeTx = InFlightReadsTracker.Ping(this, stalenessInMem, usedLivetime, TInstant::Now())) {
         Execute(writeTx.release(), ctx);

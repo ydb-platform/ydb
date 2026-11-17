@@ -10,7 +10,7 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
     : TBase(sourcesSorting, tabletId)
 {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
-    AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
+    YDB_LOG_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
     std::deque<TDataSourceConstructor> constructors;
     for (auto&& [internalPathId, granuleMeta] : engineImpl->GetTables()) {
         if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != internalPathId) {
@@ -18,7 +18,7 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
         }
         std::vector<TPortionInfo::TConstPtr> portionsAll;
         for (auto&& [_, portionInfo] : granuleMeta->GetPortions()) {
-            AFL_VERIFY(internalPathId == portionInfo->GetPathId());
+            YDB_LOG_VERIFY(internalPathId == portionInfo->GetPathId());
             if (reqSnapshot < portionInfo->RecordSnapshotMin()) {
                 continue;
             }

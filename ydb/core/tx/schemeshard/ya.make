@@ -111,6 +111,8 @@ SRCS(
     schemeshard__init_populator.cpp
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp
+    schemeshard__index_shadow_data_repair.cpp
+    schemeshard__index_shadow_data_repair.h
     schemeshard__list_users.cpp
     schemeshard__local_index_migration.cpp
     schemeshard__local_index_migration.h
@@ -144,6 +146,7 @@ SRCS(
     schemeshard__operation_alter_streaming_query.cpp
     schemeshard__operation_alter_subdomain.cpp
     schemeshard__operation_alter_table.cpp
+    schemeshard__operation_repair_index_shadow_data.cpp
     schemeshard__operation_alter_user_attrs.cpp
     schemeshard__operation_assign_bsv.cpp
     schemeshard__operation_backup_backup_collection.cpp

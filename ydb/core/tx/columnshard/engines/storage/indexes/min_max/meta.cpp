@@ -39,7 +39,8 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     reader.Start();
     TChunkedColumnReader cReader = *reader.begin();
     auto thisChunkIndex = NArrow::NAccessor::TMinMax::MakeNull(cReader.GetCurrentChunk()->GetDataType());
-    AFL_VERIFY(reader.GetColumnsCount() == 1)("got_count", reader.GetColumnsCount());
+    YDB_LOG_VERIFY(reader.GetColumnsCount() == 1,
+        {"gotCount", reader.GetColumnsCount()});
     {
         for (; cReader.IsCorrect(); cReader.ReadNextChunk()) {
             NArrow::NAccessor::TMinMax currentScalar = cReader.GetCurrentChunk()->GetMinMaxScalars();
@@ -53,8 +54,8 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
 }
 
 bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
-    AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
-    AFL_VERIFY(proto.HasMinMaxIndex());
+    YDB_LOG_VERIFY(TBase::DoDeserializeFromProto(proto));
+    YDB_LOG_VERIFY(proto.HasMinMaxIndex());
     auto& minMax = proto.GetMinMaxIndex();
     AddColumnId(minMax.GetColumnId());
     if (!MutableDataExtractor().DeserializeFromProto(minMax.GetDataExtractor())) {
@@ -65,7 +66,8 @@ bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescrip
 
 bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& requestValue,
     const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const {
-    AFL_VERIFY(!cat.has_value())("error", "category shouldn't be passed to min_max index");
+    YDB_LOG_VERIFY(!cat.has_value(),
+        {"error", "category shouldn't be passed to min_max index"});
     auto chunkValue = NArrow::NAccessor::TMinMax::FromBinaryString(data, info.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
     if (chunkValue.ElementType()->Equals(arrow::timestamp(arrow::TimeUnit::MICRO))) {
         chunkValue.Min() = chunkValue.Min()->CastTo(arrow::uint64()).ValueOrDie();

@@ -324,6 +324,9 @@
     "name": "yt.LLVMPerNodeMemSize"
   },
   {
+    "name": "yt.LateFuseOperations"
+  },
+  {
     "name": "yt.LayerCaches"
   },
   {

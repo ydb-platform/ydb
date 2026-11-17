@@ -1,8 +1,8 @@
 #include "mkql_block_serializer_test_utils.h"
-#include "mkql_block_test_helper.h"
 #include "mkql_computation_node_ut.h"
-#include "mkql_program_builder_test_utils.h"
 
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_block_test_helper.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>

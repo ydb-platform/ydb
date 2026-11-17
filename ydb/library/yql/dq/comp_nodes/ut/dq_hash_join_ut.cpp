@@ -972,6 +972,27 @@ TJoinTestData MarkJoinCorrelatedTestData() {
     return td;
 }
 
+TJoinTestData MarkJoinCorrelatedRequiredProbeTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftGroups = {1, 1, 2, 2, 3};
+    TVector<ui64> leftKeys = {10, 20, 10, 30, 10};
+
+    TVector<ui64> rightGroups = {1, 1, 2};
+    TVector<std::optional<ui64>> rightKeys = {10, std::nullopt, 30};
+
+    TVector<std::optional<bool>> expectedMarks = {true, std::nullopt, false, true, false};
+
+    td.Left = ConvertVectorsToTuples(setup, leftGroups, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightGroups);
+    td.Result = ConvertVectorsToTuples(setup, leftGroups, leftKeys, expectedMarks);
+    td.LeftKeyColmns = {1, 0};
+    td.RightKeyColmns = {0, 1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
+    AsMarkJoin(td, {0});
+    return td;
+}
+
 TJoinTestData MarkJoinCorrelatedEqualNullsTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -1018,7 +1039,7 @@ TJoinTestData MarkJoinBigStringGroupsTestData() {
     return td;
 }
 
-TJoinTestData MarkJoinSpillingTestData() {
+TJoinTestData MarkJoinSpillingTestData(bool rightHasNull = false) {
     TJoinTestData td;
     auto& setup = *td.Setup;
 
@@ -1038,11 +1059,17 @@ TJoinTestData MarkJoinSpillingTestData() {
         rightKeys[i] = 2 * i;
     }
     const ui64 maxRightKey = 2 * (rightSize - 1);
+    if (rightHasNull) {
+        rightKeys.push_back(std::nullopt);
+    }
 
     TVector<std::optional<bool>> expectedMarks(leftSize);
     for (int i = 0; i < leftSize; ++i) {
         if (leftKeys[i]) {
-            expectedMarks[i] = *leftKeys[i] % 2 == 0 && *leftKeys[i] <= maxRightKey;
+            const bool found = *leftKeys[i] % 2 == 0 && *leftKeys[i] <= maxRightKey;
+            if (found || !rightHasNull) {
+                expectedMarks[i] = found;
+            }
         }
     }
 
@@ -1214,6 +1241,7 @@ struct TMarkJoinRandomCase {
     ui64 Values = 0;
     int NullPercent = 0;
     bool EqualNullsGroup = false;
+    bool TwoMarks = false;
     bool Spilling = false;
 };
 
@@ -1232,22 +1260,26 @@ TJoinTestData MarkJoinRandomTestData(const TMarkJoinRandomCase& testCase) {
         return next() % range;
     };
     const bool correlated = testCase.Groups > 0;
+    const bool twoMarks = !correlated || testCase.TwoMarks;
     const auto makeRows = [&](int count) {
         TVector<TMarkKeyRow> rows;
         for (int i = 0; i < count; ++i) {
             TMarkKeyRow row;
-            if (correlated) {
-                row.push_back(value(testCase.Groups));
+            row.push_back(correlated ? value(testCase.Groups) : value(testCase.Values));
+            row.push_back(value(testCase.Values));
+            if (correlated && twoMarks) {
+                row.push_back(value(testCase.Values));
             }
-            row.push_back(value(testCase.Values));
-            row.push_back(value(testCase.Values));
             rows.push_back(std::move(row));
         }
         return rows;
     };
     const TVector<TMarkKeyRow> left = makeRows(testCase.LeftRows);
     const TVector<TMarkKeyRow> right = makeRows(testCase.RightRows);
-    const TVector<ui32> markKeys = correlated ? TVector<ui32>{1, 2} : TVector<ui32>{0, 1};
+    TVector<ui32> markKeys = correlated ? TVector<ui32>{1} : TVector<ui32>{0, 1};
+    if (correlated && twoMarks) {
+        markKeys = {1, 2};
+    }
     const TVector<ui32> equalNullsKeys = testCase.EqualNullsGroup ? TVector<ui32>{0} : TVector<ui32>{};
     const auto expectedMarks = ReferenceMarks(left, right, markKeys, equalNullsKeys);
 
@@ -1260,7 +1292,7 @@ TJoinTestData MarkJoinRandomTestData(const TMarkJoinRandomCase& testCase) {
     };
     TVector<ui64> leftIds(testCase.LeftRows);
     std::iota(leftIds.begin(), leftIds.end(), 0);
-    if (correlated) {
+    if (correlated && twoMarks) {
         td.Left = ConvertVectorsToTuples(setup, leftIds, column(left, 0), column(left, 1), column(left, 2));
         td.Right = ConvertVectorsToTuples(setup, column(right, 0), column(right, 1), column(right, 2));
         td.Result = ConvertVectorsToTuples(setup, leftIds, column(left, 0), column(left, 1), column(left, 2),
@@ -1286,23 +1318,27 @@ TJoinTestData MarkJoinRandomTestData(const TMarkJoinRandomCase& testCase) {
     return td;
 }
 
-TMarkJoinRandomCase MarkJoinCorrelatedCase(bool spilling) {
+TMarkJoinRandomCase MarkJoinCorrelatedCase(bool spilling, bool twoMarks = false) {
     return {.LeftRows = 20000, .RightRows = 8000, .Groups = 500, .Values = 40, .NullPercent = 15,
-            .Spilling = spilling};
+            .TwoMarks = twoMarks, .Spilling = spilling};
 }
 
-TMarkJoinRandomCase MarkJoinBigGroupsCase(bool spilling) {
+TMarkJoinRandomCase MarkJoinBigGroupsCase(bool spilling, bool twoMarks = false) {
     return {.LeftRows = 20000, .RightRows = 8000, .Groups = 3, .Values = 3000, .NullPercent = 5,
-            .Spilling = spilling};
+            .TwoMarks = twoMarks, .Spilling = spilling};
 }
 
-TMarkJoinRandomCase MarkJoinEqualNullsGroupCase(bool spilling) {
+TMarkJoinRandomCase MarkJoinEqualNullsGroupCase(bool spilling, bool twoMarks = false) {
     return {.LeftRows = 10000, .RightRows = 4000, .Groups = 50, .Values = 30, .NullPercent = 20,
-            .EqualNullsGroup = true, .Spilling = spilling};
+            .EqualNullsGroup = true, .TwoMarks = twoMarks, .Spilling = spilling};
 }
 
 TMarkJoinRandomCase MarkJoinUncorrelatedCase(bool spilling) {
     return {.LeftRows = 5000, .RightRows = 1500, .Values = 200, .NullPercent = 10, .Spilling = spilling};
+}
+
+TMarkJoinRandomCase MarkJoinBigUncorrelatedCase() {
+    return {.LeftRows = 6000, .RightRows = 6000, .Values = 3000, .NullPercent = 10, .Spilling = true};
 }
 
 [[maybe_unused]] TJoinTestData RightOnlyTestData() {
@@ -3567,6 +3603,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(MarkJoinCorrelatedTestData(), BlockJoin);
     }
 
+    Y_UNIT_TEST_TWIN(TestMarkJoinCorrelatedRequiredProbe, BlockJoin) {
+        Test(MarkJoinCorrelatedRequiredProbeTestData(), BlockJoin);
+    }
+
     Y_UNIT_TEST_TWIN(TestMarkJoinCorrelatedEqualNulls, BlockJoin) {
         Test(MarkJoinCorrelatedEqualNullsTestData(), BlockJoin);
     }
@@ -3581,6 +3621,14 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestMarkJoinSpillingSlowSpiller, BlockJoin) {
         TestWithSlowSpiller(MarkJoinSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinSpillingRightHasNull, BlockJoin) {
+        Test(MarkJoinSpillingTestData(true), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinSpillingRightHasNullSlowSpiller, BlockJoin) {
+        TestWithSlowSpiller(MarkJoinSpillingTestData(true), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestMarkJoinCorrelatedSpilling, BlockJoin) {
@@ -3599,27 +3647,27 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(MarkJoinMultiKeyTestData(true), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyCorrelated, BlockJoin) {
+    Y_UNIT_TEST_TWIN(TestMarkJoinRandomCorrelated, BlockJoin) {
         Test(MarkJoinRandomTestData(MarkJoinCorrelatedCase(false)), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyCorrelatedSpilling, BlockJoin) {
+    Y_UNIT_TEST_TWIN(TestMarkJoinRandomCorrelatedSpilling, BlockJoin) {
         Test(MarkJoinRandomTestData(MarkJoinCorrelatedCase(true)), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyCorrelatedSlowSpiller, BlockJoin) {
+    Y_UNIT_TEST_TWIN(TestMarkJoinRandomCorrelatedSlowSpiller, BlockJoin) {
         TestWithSlowSpiller(MarkJoinRandomTestData(MarkJoinCorrelatedCase(true)), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyBigGroupsSpilling, BlockJoin) {
+    Y_UNIT_TEST_TWIN(TestMarkJoinRandomBigGroupsSpilling, BlockJoin) {
         Test(MarkJoinRandomTestData(MarkJoinBigGroupsCase(true)), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyEqualNullsGroup, BlockJoin) {
+    Y_UNIT_TEST_TWIN(TestMarkJoinRandomEqualNullsGroup, BlockJoin) {
         Test(MarkJoinRandomTestData(MarkJoinEqualNullsGroupCase(false)), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyEqualNullsGroupSpilling, BlockJoin) {
+    Y_UNIT_TEST_TWIN(TestMarkJoinRandomEqualNullsGroupSpilling, BlockJoin) {
         Test(MarkJoinRandomTestData(MarkJoinEqualNullsGroupCase(true)), BlockJoin);
     }
 
@@ -3643,6 +3691,38 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
             ConstructJoinGraphStream(td.Kind, BlockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash,
                                      descr, true, td.JoinSettings),
             yexception, "mark key must not use EqualNulls");
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinTwoMarksCorrelated, BlockJoin) {
+        Test(MarkJoinRandomTestData(MarkJoinCorrelatedCase(false, true)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinTwoMarksCorrelatedSpilling, BlockJoin) {
+        Test(MarkJoinRandomTestData(MarkJoinCorrelatedCase(true, true)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinTwoMarksCorrelatedSlowSpiller, BlockJoin) {
+        TestWithSlowSpiller(MarkJoinRandomTestData(MarkJoinCorrelatedCase(true, true)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinTwoMarksBigGroupsSpilling, BlockJoin) {
+        Test(MarkJoinRandomTestData(MarkJoinBigGroupsCase(true, true)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinTwoMarksEqualNullsGroup, BlockJoin) {
+        Test(MarkJoinRandomTestData(MarkJoinEqualNullsGroupCase(false, true)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinTwoMarksEqualNullsGroupSpilling, BlockJoin) {
+        Test(MarkJoinRandomTestData(MarkJoinEqualNullsGroupCase(true, true)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyBigUncorrelatedSpilling, BlockJoin) {
+        Test(MarkJoinRandomTestData(MarkJoinBigUncorrelatedCase()), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyBigUncorrelatedSlowSpiller, BlockJoin) {
+        TestWithSlowSpiller(MarkJoinRandomTestData(MarkJoinBigUncorrelatedCase()), BlockJoin);
     }
 
     // Y_UNIT_TEST_TWIN(TestRightOnlyKind, BlockJoin) {

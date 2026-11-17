@@ -4,7 +4,6 @@
 #include "dq_join_filters.h"
 #include "dq_mark_join.h"
 #include <algorithm>
-#include <bit>
 #include <numeric>
 #include <string>
 #include <unordered_map>
@@ -39,12 +38,6 @@ struct TPhysicalJoin {
     constexpr bool OutputsPreservedSideOnly() const {
         return LeftSemiOrOnly(Kind) && !Mark;
     }
-};
-
-enum class EMarkValue : ui8 {
-    True = 0,
-    False = 1,
-    Null = 2,
 };
 
 inline constexpr int MarkValuesCount = 3;
@@ -485,11 +478,9 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         TProbeSpiller<Settings>::State ProbeState;
     };
 
-    using TProbeInput = std::conditional_t<Join.Mark, std::variant<Source, TStoredRows>, Source>;
-
     struct Probing {
         Probing(Self& self, TProbeSpiller<Settings>::State&& init)
-            : Probe(self.TakeProbe())
+            : Probe(std::move(self.Sources_).Probe())
             , Spiller(self.Spiller_, self.Layouts_.Probe, std::move(init))
         {
             using SpillerType = TProbeSpiller<Settings>;
@@ -508,7 +499,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                           inMemoryBuckets, spilledBuckets));
         }
 
-        TProbeInput Probe;
+        Source Probe;
         TProbeSpiller<Settings> Spiller;
         std::optional<TPackResult> FetchedPack;
         ui32 ResumeIndex = 0;
@@ -653,34 +644,28 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
 
     struct Finish {};
 
-    TSingleTuple ProbeKey(TSingleTuple tuple) {
-        if constexpr (Join.Mark) {
-            return Mark_->Lookup().Key(tuple);
-        }
-        return tuple;
-    }
-
     bool SkipsProbeRow(TSingleTuple tuple) {
         if constexpr (Join.Mark) {
-            return !Mark_->Lookup().Applicable(tuple);
+            return Mark_->SkipsProbeRow(tuple);
         }
         return false;
     }
 
-    TProbeInput TakeProbe() {
+    void PrepareRows(TPackResult& pack, ESide side) {
         if constexpr (Join.Mark) {
-            if (!Mark_->IsExact()) {
-                return Mark_->TakeProbe();
-            }
+            Mark_->Prepare(pack, side);
         }
-        return std::move(Sources_).Probe();
     }
 
-    static FetchResult<TPackResult> FetchProbe(TProbeInput& probe) {
+    void AddBuildTable(int bucket, const TTable& table) {
         if constexpr (Join.Mark) {
-            return std::visit([](auto& input) -> FetchResult<TPackResult> { return input.FetchRow(); }, probe);
-        } else {
-            return probe.FetchRow();
+            Mark_->AddBuildTable(bucket, table);
+        }
+    }
+
+    void ReleaseMarkGroups() {
+        if constexpr (Join.Mark) {
+            Mark_->ReleaseGroups();
         }
     }
 
@@ -746,9 +731,9 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         auto finishProbeRow = [&](TSingleTuple probeRow, bool found) {
             if constexpr (Join.Mark) {
                 if (found) {
-                    consume(probeRow, Mark_->IsExact() ? EMarkValue::True : EMarkValue::Null);
-                } else if (!Mark_->Defer(probeRow)) {
-                    consume(probeRow, EMarkValue::False);
+                    consume(probeRow, EMarkValue::True);
+                } else if (const std::optional<EMarkValue> mark = Mark_->Unmatched(probeRow)) {
+                    consume(probeRow, *mark);
                 }
             } else if constexpr (PreservedRowsInProbeStream()) {
                 if constexpr (Join.Kind == EJoinKind::Left || Join.Kind == EJoinKind::LeftOnly) {
@@ -763,6 +748,11 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             }
         };
         auto lookupToTable = [&](TTable& table, TSingleTuple probeRow, size_t& buildCursor, bool& found) {
+            if constexpr (Join.Mark) {
+                if (!Mark_->NeedsLookup(probeRow)) {
+                    return true;
+                }
+            }
             if constexpr (HasFilter) {
                 filter->StartProbeRow(probeRow);
             }
@@ -814,12 +804,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.Pack = std::move(GetPayload(var));
+                    PrepareRows(*state.Pack, ESide::Build);
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unhandled status");
                     MKQL_ENSURE(state.Build.Finished(), "sanity check");
-                    if constexpr (Join.Mark) {
-                        Mark_->FinishBuild();
-                    }
                     State_ = BuildingInMemoryTable{*this, std::move(state.Spiller)};
                 }
             } else {
@@ -883,20 +871,23 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 TBucket& buildBucket = state.Spiller.GetBuckets()[*smallestBucket];
 
                 table->BuildWith(Flatten(buildBucket.ReleaseInMemoryPages()));
+                AddBuildTable(*smallestBucket, *table);
                 MKQL_ENSURE(state.Spiller.GetBuckets()[*smallestBucket].Empty(), "this bucket should be empty now");
             }
 
         } else if (auto* s = std::get_if<Probing>(&State_)) {
             Probing& state = *s;
             if (!state.FetchedPack.has_value()) {
-                FetchResult<TPackResult> var = FetchProbe(state.Probe);
+                FetchResult<TPackResult> var = state.Probe.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);
                 if (status == NYql::NUdf::EFetchStatus::Yield) {
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.FetchedPack = std::move(GetPayload(var));
+                    PrepareRows(*state.FetchedPack, ESide::Probe);
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
+                    ReleaseMarkGroups();
                     if constexpr (PreservedRowsInBuildTable()) {
                         if (!EmitPreservedBuildRowsFromInMemoryBuckets(state.Spiller, state.PreservedBucketIndex,
                                                                        state.PreservedResumeIndex, consume, isFull)) {
@@ -982,7 +973,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         continue;
                     }
                     if constexpr (!IsGrid) {
-                        if (idx > batchEnd && (!Join.Mark || Mark_->Lookup().IsIdentity())) {
+                        if (idx > batchEnd) {
                             prefetchBatch(idx - 1);
                         }
                     }
@@ -994,8 +985,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     } else if (SkipsProbeRow(tuple)) {
                         finishProbeRow(tuple, false);
                     } else {
-                        const TSingleTuple key = ProbeKey(tuple);
-                        int bucketIndex = Settings.BucketIndex(key);
+                        int bucketIndex = Settings.BucketIndex(tuple);
                         bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
                         if (thisBucketSpilled) {
                             if constexpr (TracksProbeMatches()) {
@@ -1009,7 +999,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         } else {
                             TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
                             MKQL_ENSURE(thisTable, "sanity check");
-                            if (!lookupToTable(*thisTable, key, state.BuildCursor, state.ProbeRowMatched)) {
+                            if (!lookupToTable(*thisTable, tuple, state.BuildCursor, state.ProbeRowMatched)) {
                                 state.ResumeIndex = idx - 1;
                                 return EFetchResult::One;
                             }
@@ -1084,6 +1074,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         }
                         NJoinTable::TNeumannJoinTable table{Layouts_.Build, PreservedRowsInBuildTable()};
                         table.BuildWith(Flatten(std::move(vec)));
+                        AddBuildTable(state.SelectedPair->BucketIndex, table);
                         state.SelectedPair->Table = TTableAndSomeData{.Table = std::move(table), .Futures = {}};
                     } else {
                         return WaitWhileSpilling();
@@ -1149,7 +1140,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                             "missing current probe page match state");
                                 matched = table->CurrentMatchBits.Get(idx - 1);
                             }
-                            if (!lookupToTable(table->Table, ProbeKey(probeTuple), table->BuildCursor, matched)) {
+                            if (!lookupToTable(table->Table, probeTuple, table->BuildCursor, matched)) {
                                 if constexpr (TracksProbeMatches()) {
                                     table->CurrentMatchBits.Set(idx - 1, matched);
                                 }
@@ -1204,6 +1195,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                 return EFetchResult::One;
                             }
                         }
+                        ReleaseMarkGroups();
                         state.SelectedPair = std::nullopt;
                     } else {
                         const bool matchBitsReady = [&]() {
@@ -1233,15 +1225,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             }
         } else if (std::get_if<Finish>(&State_)) {
             if constexpr (Join.Mark) {
-                switch (Mark_->NextStage()) {
-                case EMarkStage::Wait:
-                    return WaitWhileSpilling();
-                case EMarkStage::Started:
-                    State_ = BuildingInMemoryTable{*this, Mark_->TakeBuild()};
-                    return EFetchResult::One;
-                case EMarkStage::Done:
-                    break;
-                }
+                return Mark_->Refine([&](TSingleTuple row, EMarkValue mark) { consume(row, mark); }, isFull,
+                                     notEnoughMemory);
             }
             return EFetchResult::Finish;
         } else {
@@ -1281,7 +1266,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     TSides<const NPackedTuple::TTupleLayout*> Layouts_;
     ISpiller::TPtr Spiller_;
     Sources Sources_;
-    std::optional<TMarkStages<Settings>> Mark_;
+    std::optional<TMarkJoin<Settings>> Mark_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
 };
@@ -1475,8 +1460,6 @@ TMarkJoinKeys MakeMarkJoinKeys(const TBlockHashJoinSettings& settings, TSides<TC
             keys.BuildNullable |= 1u << index;
         }
     }
-    MKQL_ENSURE(std::popcount(keys.ProbeNullable | keys.BuildNullable) <= MaxNullableMarkKeys,
-                "too many nullable mark keys");
     return keys;
 }
 

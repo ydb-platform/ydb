@@ -3,14 +3,21 @@
 #include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <util/system/spinlock.h>
 #include <util/system/guard.h>
+#include <util/system/spinlock.h>
 
 namespace NYql::NDq {
 
 class IS3ActorStats {
 public:
-    enum class EState { Initializing, WaitingCpu, WaitingHttp, WaitingConsumer, Processing, Finished };
+    enum class EState {
+        Initializing,
+        WaitingCpu,
+        WaitingHttp,
+        WaitingConsumer,
+        Processing,
+        Finished
+    };
 
     struct TSnapshot {
         EState State;
@@ -23,12 +30,18 @@ public:
 
     static TStringBuf StateName(EState state) {
         switch (state) {
-            case EState::Initializing: return "Initializing";
-            case EState::WaitingCpu: return "WaitingCpu";
-            case EState::WaitingHttp: return "WaitingHttp";
-            case EState::WaitingConsumer: return "WaitingConsumer";
-            case EState::Processing: return "Processing";
-            case EState::Finished: return "Finished";
+            case EState::Initializing:
+                return "Initializing";
+            case EState::WaitingCpu:
+                return "WaitingCpu";
+            case EState::WaitingHttp:
+                return "WaitingHttp";
+            case EState::WaitingConsumer:
+                return "WaitingConsumer";
+            case EState::Processing:
+                return "Processing";
+            case EState::Finished:
+                return "Finished";
         }
         Y_ABORT("Unknown S3 reader state");
     }
@@ -62,7 +75,7 @@ public:
 
     TSnapshot GetSnapshot() const override {
         const auto guard = Guard(Lock);
-        return {Phase, StateSince, CpuState == ECpuState::Active};
+        return { Phase, StateSince, CpuState == ECpuState::Active };
     }
 
     void SetState(EState state, TMonotonic now = TMonotonic::Now()) {
@@ -78,11 +91,15 @@ public:
         if (admitted) {
             FinishWaiting(now);
             if (CpuState != ECpuState::Active) {
-                if (Active) Active->Inc();
+                if (Active) {
+                    Active->Inc();
+                }
                 CpuState = ECpuState::Active;
             }
         } else if (CpuState == ECpuState::Idle) {
-            if (Waiting) Waiting->Inc();
+            if (Waiting) {
+                Waiting->Inc();
+            }
             WaitStarted = now;
             CpuState = ECpuState::Waiting;
         }
@@ -98,7 +115,9 @@ public:
     void OnExit(TMonotonic now) {
         const auto guard = Guard(Lock);
         if (CpuState != ECpuState::Idle) {
-            if (UnfinishedOnExit) UnfinishedOnExit->Inc();
+            if (UnfinishedOnExit) {
+                UnfinishedOnExit->Inc();
+            }
             StopLocked(now);
         }
         SetStateLocked(EState::Finished, now);
@@ -114,7 +133,9 @@ private:
 
     void StopLocked(TMonotonic now) {
         if (CpuState == ECpuState::Active) {
-            if (Active) Active->Dec();
+            if (Active) {
+                Active->Dec();
+            }
         } else {
             FinishWaiting(now);
         }
@@ -123,12 +144,20 @@ private:
 
     void FinishWaiting(TMonotonic now) {
         if (CpuState == ECpuState::Waiting) {
-            if (Waiting) Waiting->Dec();
-            if (AdmissionWaitUs) AdmissionWaitUs->Add((now - WaitStarted).MicroSeconds());
+            if (Waiting) {
+                Waiting->Dec();
+            }
+            if (AdmissionWaitUs) {
+                AdmissionWaitUs->Add((now - WaitStarted).MicroSeconds());
+            }
         }
     }
 
-    enum class ECpuState { Idle, Waiting, Active };
+    enum class ECpuState {
+        Idle,
+        Waiting,
+        Active
+    };
     mutable TAdaptiveLock Lock;
     const bool SchedulerEnabled;
     EState Phase = EState::Initializing;

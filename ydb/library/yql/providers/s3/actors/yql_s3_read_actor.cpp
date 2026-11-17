@@ -1,7 +1,7 @@
 #include "yql_arrow_column_converters.h"
 #include "yql_arrow_push_down.h"
-#include "yql_s3_actors_util.h"
 #include "yql_s3_actor_stats.h"
+#include "yql_s3_actors_util.h"
 #include "yql_s3_decompressor_actor.h"
 #include "yql_s3_raw_read_actor.h"
 #include "yql_s3_read_actor.h"
@@ -412,7 +412,6 @@ public:
 
     private:
         bool nextImpl() final {
-
             while (true) {
                 if (Coro->InputBuffer) {
                     RawDataBuffer.swap(Coro->InputBuffer);
@@ -1959,34 +1958,33 @@ private:
     TString GetDebugInfo() const override {
         TStringBuilder out;
         out << "    S3 stream reader, TxId: " << TxId << '\n'
-            << "    Bootstrapped: " << Bootstrapped
-            << " CpuSchedulingEnabled: " << bool(WorkFactory)
-            << " AsyncDecoding: " << AsyncDecoding
+            << "    Bootstrapped: " << Bootstrapped << " CpuSchedulingEnabled: " << bool(WorkFactory) << " AsyncDecoding: " << AsyncDecoding
             << " AsyncDecompressing: " << AsyncDecompressing << '\n'
-            << "    ListedFiles: " << ListedFiles << " CompletedFiles: " << CompletedFiles
-            << " ReadyBlocks: " << Blocks.size() << '\n'
-            << "    FileQueueActor: " << FileQueueActor
-            << " RuntimeListing: " << UseRuntimeListing << '\n'
-            << "    WaitingFileQueueResponse: " << IsWaitingFileQueueResponse
-            << " FileQueueEmpty: " << IsFileQueueEmpty
-            << " FileQueueFinishConfirmed: " << IsConfirmedFileQueueFinish
-            << " PendingFileQueueEvents: " << FileQueueEvents.HasPendingEvents() << '\n'
-            << "    QueuedPathBatches: " << PathBatchQueue.size()
-            << " CurrentBatchEmpty: " << IsCurrentBatchEmpty << '\n';
+            << "    ListedFiles: " << ListedFiles << " CompletedFiles: " << CompletedFiles << " ReadyBlocks: " << Blocks.size() << '\n'
+            << "    FileQueueActor: " << FileQueueActor << " RuntimeListing: " << UseRuntimeListing << '\n'
+            << "    WaitingFileQueueResponse: " << IsWaitingFileQueueResponse << " FileQueueEmpty: " << IsFileQueueEmpty
+            << " FileQueueFinishConfirmed: " << IsConfirmedFileQueueFinish << " PendingFileQueueEvents: " << FileQueueEvents.HasPendingEvents()
+            << '\n'
+            << "    QueuedPathBatches: " << PathBatchQueue.size() << " CurrentBatchEmpty: " << IsCurrentBatchEmpty << '\n';
         size_t readers = 0, waitingCpu = 0, cpuHolders = 0, finished = 0;
         for (const auto& [actorId, stats] : CoroActors) {
             const auto snapshot = stats->GetSnapshot();
-            out << "      ActorId: " << actorId
-                << " State: " << IS3ActorStats::StateName(snapshot.State)
-                << " StateFor: " << (TMonotonic::Now() - snapshot.StateSince)
-                << " CpuHeld: " << snapshot.CpuHeld << '\n';
-            if (snapshot.State == IS3ActorStats::EState::Finished) ++finished;
-            else ++readers;
-            if (snapshot.State == IS3ActorStats::EState::WaitingCpu) ++waitingCpu;
-            if (snapshot.CpuHeld) ++cpuHolders;
+            out << "      ActorId: " << actorId << " State: " << IS3ActorStats::StateName(snapshot.State)
+                << " StateFor: " << (TMonotonic::Now() - snapshot.StateSince) << " CpuHeld: " << snapshot.CpuHeld << '\n';
+            if (snapshot.State == IS3ActorStats::EState::Finished) {
+                ++finished;
+            } else {
+                ++readers;
+            }
+            if (snapshot.State == IS3ActorStats::EState::WaitingCpu) {
+                ++waitingCpu;
+            }
+            if (snapshot.CpuHeld) {
+                ++cpuHolders;
+            }
         }
-        out << "    Readers: " << readers << " Waiting CPU: " << waitingCpu
-            << " CPU holders: " << cpuHolders << " Finished: " << finished << '\n';
+        out << "    Readers: " << readers << " Waiting CPU: " << waitingCpu << " CPU holders: " << cpuHolders << " Finished: " << finished
+            << '\n';
         return out;
     }
 

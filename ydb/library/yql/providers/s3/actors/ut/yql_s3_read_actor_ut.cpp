@@ -311,11 +311,11 @@ public:
             config.DataInflight = dataInflight;
             config.BatchedRowGroupDecode = batched;
             config.BatchDecodeTargetBytes = batchDecodeTargetBytes;
-            auto [input, inputActor] =
-                CreateS3ReadActor(actor.TypeEnv, actor.HolderFactory, std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {
+            auto [input, inputActor] = CreateS3ReadActor(actor.TypeEnv, actor.HolderFactory,
+                std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {
                 }), gateway, std::move(source), 0, TCollectStatsLevel::None,
-                    TTxId{}, {}, {}, { encodedRange.Str() }, FakeActorId, CreateStructuredTokenCredentialsFactory(), GetHTTPDefaultRetryPolicy(),
-                    config, nullptr, nullptr, std::make_shared<TGuaranteeQuotaManager>(dataInflight, dataInflight), false, workFactory, cpuCounters);
+                TTxId{}, {}, {}, { encodedRange.Str() }, FakeActorId, CreateStructuredTokenCredentialsFactory(), GetHTTPDefaultRetryPolicy(),
+                config, nullptr, nullptr, std::make_shared<TGuaranteeQuotaManager>(dataInflight, dataInflight), false, workFactory, cpuCounters);
             actor.InitAsyncInput(input, inputActor);
         });
     }

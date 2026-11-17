@@ -1414,8 +1414,6 @@ public:
                                       const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries,
                                       TString& errStr);
 
-    void FillLocalHnswIndexDescriptions(TPathId tableId, bool pendingIndex,
-        google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TLocalHnswIndexDescription>* descriptions) const;
     TString FillAlterTableTxBody(TPathId tableId, TShardIdx shardIdx, TMessageSeqNo seqNo) const;
     TString FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, ui32 shardNum, TMessageSeqNo seqNo) const;
 

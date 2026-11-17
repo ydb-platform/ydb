@@ -14,6 +14,44 @@ using NTabletFlatExecutor::TTransactionContext;
 
 namespace NDataShard {
 
+namespace {
+
+void MergeLocalHnswIndexes(NKikimrSchemeOp::TTableDescription& schema,
+        const NKikimrSchemeOp::TTableDescription& delta) {
+    for (const auto& index : delta.GetLocalHnswIndexes()) {
+        if (!index.HasIndexId()) {
+            continue;
+        }
+        auto& indexes = *schema.MutableLocalHnswIndexes();
+        auto it = FindIf(indexes, [&](const auto& existing) {
+            return TPathId::FromProto(existing.GetIndexId()) == TPathId::FromProto(index.GetIndexId());
+        });
+        if (it != indexes.end()) {
+            it->CopyFrom(index);
+        } else {
+            indexes.Add()->CopyFrom(index);
+        }
+    }
+}
+
+void ParseLocalHnswSettings(TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr) {
+    table.HnswIndexes.clear();
+    for (const auto& index : descr.GetLocalHnswIndexes()) {
+        if (!index.HasIndexId() || !index.HasHnswIndexDescription()) {
+            continue;
+        }
+        const auto& description = index.GetHnswIndexDescription();
+        if (description.HasSettings() && description.GetSettings().has_settings()
+                && description.HasEmbeddingColumnId()) {
+            table.HnswIndexes.emplace(TPathId::FromProto(index.GetIndexId()),
+                TUserTable::THnswIndexInfo{description.GetSettings().settings(),
+                    description.GetEmbeddingColumnId(), index.GetSchemaVersion()});
+        }
+    }
+}
+
+} // namespace
+
 TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid)
     : LocalTid(localTid)
     , ShadowTid(shadowTid)
@@ -65,39 +103,12 @@ bool TUserTable::ResetTableSchemaVersion()
     return false;
 }
 
-void TUserTable::UpdateLocalHnswIndex(const NKikimrSchemeOp::TLocalHnswIndexDescription& index) {
-    if (!index.HasIndexId()) {
-        return;
-    }
-    const auto id = TPathId::FromProto(index.GetIndexId());
-    LocalHnswIndexDescriptions[id] = index;
-    const auto& description = index.GetHnswIndexDescription();
-    if (description.HasSettings() && description.GetSettings().has_settings()
-            && description.HasEmbeddingColumnId()) {
-        HnswIndexes[id] = {description.GetSettings().settings(),
-            description.GetEmbeddingColumnId(), index.GetSchemaVersion()};
-    } else {
-        HnswIndexes.erase(id);
-    }
-}
-
-void TUserTable::UpdateLocalHnswIndexes(
-        const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TLocalHnswIndexDescription>& descriptions) {
-    for (const auto& description : descriptions) {
-        UpdateLocalHnswIndex(description);
-    }
-}
-
-void TUserTable::RemapLocalHnswIndexes(const THashMap<TPathId, TPathId>& remap) {
-    auto descriptions = std::move(LocalHnswIndexDescriptions);
-    LocalHnswIndexDescriptions.clear();
-    HnswIndexes.clear();
-    for (auto& [id, description] : descriptions) {
-        if (const auto it = remap.find(id); it != remap.end()) {
-            it->second.ToProto(description.MutableIndexId());
-        }
-        UpdateLocalHnswIndex(description);
-    }
+void TUserTable::UpdateLocalHnswIndexes(const NKikimrSchemeOp::TTableDescription& description) {
+    NKikimrSchemeOp::TTableDescription schema;
+    GetSchema(schema);
+    MergeLocalHnswIndexes(schema, description);
+    ParseLocalHnswSettings(*this, schema);
+    SetSchema(schema);
 }
 
 void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
@@ -379,6 +390,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         : NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
+    ParseLocalHnswSettings(*this, descr);
     if (descr.GetPartitionConfig().HasUniqueIndexKeySize()) {
         UniqueIndexKeySize = descr.GetPartitionConfig().GetUniqueIndexKeySize();
     }
@@ -802,6 +814,12 @@ void TUserTable::ApplyAlter(
 
     schema.SetTableSchemaVersion(delta.GetTableSchemaVersion());
 
+    // Local graphs have their own metadata; TableIndexes only describes logical
+    // child indexes maintained by this table (including CDC/change collection).
+    MergeLocalHnswIndexes(schema, delta);
+    // An omitted index preserves its metadata; an explicitly empty HNSW
+    // description disables the graph, including after a restart.
+    ParseLocalHnswSettings(*this, schema);
     SetSchema(schema);
 }
 

@@ -8,8 +8,8 @@ namespace NKikimr::NDataShard {
 namespace {
 
 const NKikimrSchemeOp::TLocalHnswIndexDescription* FindLocalHnswIndexDescription(
-        const NKikimrTxDataShard::TFlatSchemeTransaction& schemeTx) {
-    for (const auto& index : schemeTx.GetLocalHnswIndexes()) {
+        const NKikimrSchemeOp::TTableDescription& alter) {
+    for (const auto& index : alter.GetLocalHnswIndexes()) {
         if (index.HasIndexId()
                 && index.HasHnswIndexDescription()
                 && index.GetHnswIndexDescription().HasEmbeddingColumnId()
@@ -34,7 +34,7 @@ bool IsHnswPostingTablePublication(const NKikimrTxDataShard::TFlatSchemeTransact
 void AddHnswIndexBuildToExecutionPlan(TActiveTransaction& tx, bool hasHnswMetadata) {
     if (!AppData()->FeatureFlags.GetEnableHnswIndex()
             || !IsHnswPostingTablePublication(tx.GetSchemeTx())
-            || (!hasHnswMetadata && !FindLocalHnswIndexDescription(tx.GetSchemeTx()))) {
+            || (!hasHnswMetadata && !FindLocalHnswIndexDescription(tx.GetSchemeTx().GetAlterTable()))) {
         return;
     }
 

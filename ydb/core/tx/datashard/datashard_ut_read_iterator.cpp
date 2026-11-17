@@ -6,7 +6,6 @@
 #include "read_iterator.h"
 
 #include <ydb/core/tx/datashard/hnsw_index/hnsw_index_build_unit.h>
-#include <ydb/core/tx/datashard/hnsw_index/hnsw_schema.h>
 
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -410,7 +409,7 @@ struct TTestHelper {
 
     void CreateCustomTable(const TString & name, TVector<TShardedTableOptions::TColumn> columns, bool hnsw = false,
                            const TVector<TShardedTableOptions::TFamily>& families = {},
-                           std::function<void(NKikimrTxDataShard::TFlatSchemeTransaction&)> customize = {}) {
+                           std::function<void(NKikimrSchemeOp::TTableDescription&)> customize = {}) {
         auto &runtime = *Server->GetRuntime();
         auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (hnsw && ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
@@ -420,7 +419,7 @@ struct TTestHelper {
                     UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
                     if (tx.HasCreateTable() && tx.GetCreateTable().GetName() == name) {
                         auto* table = tx.MutableCreateTable();
-                        auto* index = tx.AddLocalHnswIndexes();
+                        auto* index = table->AddLocalHnswIndexes();
                         TPathId(table->GetPathId().GetOwnerId(), Max<ui64>() - 1).ToProto(index->MutableIndexId());
                         auto* description = index->MutableHnswIndexDescription();
                         description->SetEmbeddingColumnId(columns.size());
@@ -430,7 +429,7 @@ struct TTestHelper {
                         settings->set_vector_dimension(2);
                         settings->set_min_rows(1);
                         settings->set_delta_rows(1000);
-                        if (customize) { customize(tx); }
+                        if (customize) { customize(*table); }
                         UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
                     }
                 }
@@ -6390,12 +6389,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorFastCancel) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
-    Y_UNIT_TEST(HnswMetadataIsIndependentOfTableSchema) {
+    Y_UNIT_TEST(HnswMultipleLocalIndexesSurviveRestartAndDisable) {
         NKikimrSchemeOp::TTableDescription schema;
         schema.SetPath("/Root/posting");
-        NKikimrTxDataShard::TFlatSchemeTransaction metadata;
         for (ui32 id : {2u, 3u}) {
-            auto* index = metadata.AddLocalHnswIndexes();
+            auto* index = schema.AddLocalHnswIndexes();
             TPathId(1, id).ToProto(index->MutableIndexId());
             index->SetSchemaVersion(id + 10);
             auto* description = index->MutableHnswIndexDescription();
@@ -6403,25 +6401,24 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             description->MutableSettings()->mutable_settings()->set_vector_dimension(2);
         }
         TUserTable table(1, schema, 0);
-        table.UpdateLocalHnswIndexes(metadata.GetLocalHnswIndexes());
         UNIT_ASSERT(table.Indexes.empty());
         UNIT_ASSERT(!table.HasAsyncIndexes());
         UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.at(TPathId(1, 2)).VectorColumnTag, 42);
         UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.at(TPathId(1, 3)).SchemaVersion, 13);
-        UNIT_ASSERT_VALUES_EQUAL(table.GetSchema(), schema.SerializeAsString());
-        UNIT_ASSERT(!schema.GetDescriptor()->FindFieldByName("LocalHnswIndexes"));
-        TUserTable schemaOnly(1, schema, 0);
-        UNIT_ASSERT(schemaOnly.HnswIndexes.empty());
-        // Persisted local metadata is loaded separately from the user schema.
-        schemaOnly.UpdateLocalHnswIndexes(metadata.GetLocalHnswIndexes());
-        NKikimrTxDataShard::TFlatSchemeTransaction delta;
-        TPathId(1, 2).ToProto(delta.AddLocalHnswIndexes()->MutableIndexId());
-        schemaOnly.UpdateLocalHnswIndexes(delta.GetLocalHnswIndexes());
-        UNIT_ASSERT_VALUES_EQUAL(schemaOnly.HnswIndexes.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(schemaOnly.HnswIndexes.at(TPathId(1, 3)).VectorColumnTag, 43);
-        UNIT_ASSERT_VALUES_EQUAL(schemaOnly.LocalHnswIndexDescriptions.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(schemaOnly.GetSchema(), schema.SerializeAsString());
+        table.GetSchema(schema);
+        UNIT_ASSERT_VALUES_EQUAL(schema.TableIndexesSize(), 0);
+        TUserTable restored(1, schema, 0);
+        UNIT_ASSERT_VALUES_EQUAL(restored.HnswIndexes.size(), 2);
+        NKikimrSchemeOp::TTableDescription delta;
+        auto* disable = delta.AddLocalHnswIndexes();
+        TPathId(1, 2).ToProto(disable->MutableIndexId());
+        restored.UpdateLocalHnswIndexes(delta);
+        restored.GetSchema(schema);
+        TUserTable disabled(1, schema, 0);
+        UNIT_ASSERT_VALUES_EQUAL(disabled.HnswIndexes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(disabled.HnswIndexes.at(TPathId(1, 3)).VectorColumnTag, 43);
+        UNIT_ASSERT(disabled.Indexes.empty());
     }
 
     Y_UNIT_TEST(HnswLogicalIndexesAreSeparateFromLocalGraphs) {
@@ -6435,18 +6432,21 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         auto* description = child.MutableHnswIndexDescription();
         description->MutableSettings()->mutable_settings()->set_vector_dimension(2);
         description->SetEmbeddingColumnId(42);
+
+        // Even a logical index description carrying graph settings must not
+        // configure a local graph or make its column id meaningful on this table.
         auto baseSchema = schema;
         baseSchema.AddTableIndexes()->CopyFrom(child);
         TUserTable baseTable(1, baseSchema, 0);
         UNIT_ASSERT(baseTable.HnswIndexes.empty());
         UNIT_ASSERT_VALUES_EQUAL(baseTable.Indexes.size(), 1u);
 
-        NKikimrTxDataShard::TFlatSchemeTransaction metadata;
-        auto* local = metadata.AddLocalHnswIndexes();
+        auto* local = schema.AddLocalHnswIndexes();
         TPathId(1, 2).ToProto(local->MutableIndexId());
         *local->MutableHnswIndexDescription() = *description;
         TUserTable table(1, schema, 0);
-        table.UpdateLocalHnswIndexes(metadata.GetLocalHnswIndexes());
+        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.size(), 1u);
+        UNIT_ASSERT(table.Indexes.empty());
         table.AddIndex(child);
         UNIT_ASSERT_VALUES_EQUAL(table.Indexes.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.size(), 1u);
@@ -6455,12 +6455,18 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         table.SwitchIndexState(TPathId(1, 3), NKikimrSchemeOp::EIndexStateWriteOnly);
         table.GetSchema(schema);
         UNIT_ASSERT_VALUES_EQUAL(schema.GetTableIndexes(0).GetState(), NKikimrSchemeOp::EIndexStateWriteOnly);
-        table.DropIndex(TPathId(1, 3));
-        UNIT_ASSERT(table.Indexes.empty());
-        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.size(), 1u);
-        table.GetSchema(schema);
+        UNIT_ASSERT_VALUES_EQUAL(schema.LocalHnswIndexesSize(), 1);
+        TUserTable restored(1, schema, 0);
+        UNIT_ASSERT_VALUES_EQUAL(restored.HnswIndexes.size(), 1u);
+        restored.DropIndex(TPathId(1, 3));
+        UNIT_ASSERT(restored.Indexes.empty());
+        UNIT_ASSERT_VALUES_EQUAL(restored.HnswIndexes.size(), 1u);
+        restored.GetSchema(schema);
         UNIT_ASSERT_VALUES_EQUAL(schema.TableIndexesSize(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(table.LocalHnswIndexDescriptions.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(schema.LocalHnswIndexesSize(), 1);
+        TUserTable dropped(1, schema, 0);
+        UNIT_ASSERT(dropped.Indexes.empty());
+        UNIT_ASSERT_VALUES_EQUAL(dropped.HnswIndexes.size(), 1u);
     }
 
 
@@ -7341,81 +7347,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT(!shard->GetHnswIndex(tid, 2, indexSettings, false, old));
     }
 
-    class THnswStorageTx : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-    public:
-        using TBase = NTabletFlatExecutor::TTransactionBase<TDataShard>;
-        using TCallback = std::function<bool(TDataShard&, NTabletFlatExecutor::TTransactionContext&)>;
-
-        THnswStorageTx(TDataShard* shard, TCallback callback, bool& done)
-            : TBase(shard), Callback(std::move(callback)), Done(done)
-        {}
-
-        bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) override {
-            return Callback(*Self, txc);
-        }
-
-        void Complete(const TActorContext&) override { Done = true; }
-
-    private:
-        TCallback Callback;
-        bool& Done;
-    };
-
-    class TSubmitHnswStorageTx : public TActorBootstrapped<TSubmitHnswStorageTx> {
-    public:
-        TSubmitHnswStorageTx(NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor,
-                TAutoPtr<NTabletFlatExecutor::ITransaction> tx)
-            : Executor(executor), Tx(std::move(tx))
-        {}
-
-        void Bootstrap() {
-            Executor->Enqueue(Tx);
-            PassAway();
-        }
-
-    private:
-        NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* Executor;
-        TAutoPtr<NTabletFlatExecutor::ITransaction> Tx;
-    };
-
-    void RunHnswStorageTx(TTestActorRuntime& runtime, TDataShard* shard, THnswStorageTx::TCallback callback) {
-        auto* executor = dynamic_cast<NTabletFlatExecutor::NFlatExecutorSetup::IExecutor*>(
-            runtime.FindActor(shard->ExecutorID()));
-        UNIT_ASSERT(executor);
-        bool done = false;
-        runtime.Register(new TSubmitHnswStorageTx(executor, new THnswStorageTx(shard, std::move(callback), done)));
-        runtime.WaitFor("HNSW metadata storage transaction", [&] { return done; });
-    }
-
-    struct TStoredHnswMetadata {
-        ui64 TableId;
-        TPathId IndexId;
-        ui64 Version;
-        NKikimrSchemeOp::THnswIndexDescription Description;
-    };
-
-    TVector<TStoredHnswMetadata> ReadHnswMetadata(TTestActorRuntime& runtime, TDataShard* shard) {
-        TVector<TStoredHnswMetadata> result;
-        RunHnswStorageTx(runtime, shard, [&](TDataShard&, NTabletFlatExecutor::TTransactionContext& txc) {
-            result.clear();
-            NIceDb::TNiceDb db(txc.DB);
-            using TTable = THnswSchema::LocalHnswIndexes;
-            auto rows = db.Table<TTable>().Range().Select();
-            if (!rows.IsReady()) { return false; }
-            while (!rows.EndOfSet()) {
-                TStoredHnswMetadata row;
-                row.TableId = rows.GetValue<TTable::TablePathId>();
-                row.IndexId = TPathId(rows.GetValue<TTable::IndexOwnerId>(), rows.GetValue<TTable::IndexLocalId>());
-                row.Version = rows.GetValue<TTable::SchemaVersion>();
-                UNIT_ASSERT(row.Description.ParseFromString(rows.GetValue<TTable::Description>()));
-                result.push_back(std::move(row));
-                if (!rows.Next()) { return false; }
-            }
-            return true;
-        });
-        return result;
-    }
-
     struct THnswLifecycleFixture {
         TPortManager Ports;
         TTestHelper Helper;
@@ -7440,7 +7371,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             if (indexCount > 1 && !sameColumn) { columns.push_back({"emb2", "String", false, false}); }
             Helper.CreateCustomTable("hnsw-lifecycle", columns, annotate, {}, [&](auto& table) {
                 if (shadow) {
-                    table.MutableCreateTable()->MutablePartitionConfig()->SetShadowData(true);
+                    table.MutablePartitionConfig()->SetShadowData(true);
                 }
                 auto first = table.GetLocalHnswIndexes(0);
                 table.ClearLocalHnswIndexes();
@@ -7533,6 +7464,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
     struct THnswMultiFixture : THnswLifecycleFixture {
         ui32 Count;
         bool SameColumn;
+        ui64 IndexIdOffset = 0;
         TVector<Ydb::Table::VectorIndexSettings::Metric> Metrics;
         TVector<ui64> Thresholds;
 
@@ -7542,7 +7474,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         {}
 
         TPathId Id(ui32 index) {
-            return {Helper.Tables.at("hnsw-lifecycle").TableId.PathId.OwnerId, Max<ui64>() - 1 - index};
+            return {Helper.Tables.at("hnsw-lifecycle").TableId.PathId.OwnerId, Max<ui64>() - 1 - index - IndexIdOffset};
         }
 
         ui32 Column(ui32 index) const { return SameColumn ? 3 : 3 + index % 2; }
@@ -7593,7 +7525,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
                         NKikimrTxDataShard::TFlatSchemeTransaction tx;
                         UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
                         if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
-                            auto* description = tx.AddLocalHnswIndexes();
+                            auto* description = tx.MutableAlterTable()->AddLocalHnswIndexes();
                             Id(index).ToProto(description->MutableIndexId());
                             description->SetSchemaVersion(version);
                             auto* hnsw = description->MutableHnswIndexDescription();
@@ -7611,59 +7543,61 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         }
     };
 
-    Y_UNIT_TEST(HnswNiceDbMetadataSurvivesDisableAndRebootAndIsDeletedWithTable) {
-        THnswMultiFixture fixture;
-        auto& runtime = *fixture.Helper.Server->GetRuntime();
-        const auto tableId = fixture.Helper.Tables.at("hnsw-lifecycle").TableId.PathId.LocalPathId;
-        auto rows = ReadHnswMetadata(runtime, fixture.Shard());
-        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2u);
-        for (const auto& row : rows) {
-            UNIT_ASSERT_VALUES_EQUAL(row.TableId, tableId);
-            UNIT_ASSERT_VALUES_EQUAL(row.Description.GetEmbeddingColumnId(), 3u);
-            UNIT_ASSERT_VALUES_EQUAL(row.Description.GetSettings().settings().vector_dimension(), 2u);
-        }
-        fixture.Alter(0, false, 2);
-        rows = ReadHnswMetadata(runtime, fixture.Shard());
-        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2u);
-        const auto disabled = FindIf(rows, [&](const auto& row) { return row.IndexId == fixture.Id(0); });
-        UNIT_ASSERT(disabled != rows.end());
-        UNIT_ASSERT_VALUES_EQUAL(disabled->Version, 2u);
-        UNIT_ASSERT(!disabled->Description.HasSettings());
-        RebootTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId, fixture.Helper.Sender);
-        fixture.Helper.Tables.at("hnsw-lifecycle").ClientId = {};
-        auto* shard = fixture.Shard();
-        const auto& table = *shard->GetUserTables().at(tableId);
-        UNIT_ASSERT_VALUES_EQUAL(table.LocalHnswIndexDescriptions.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(table.HnswIndexes.size(), 1u);
-        UNIT_ASSERT(!table.HnswIndexes.contains(fixture.Id(0)));
-        UNIT_ASSERT(table.Indexes.empty());
-        RunHnswStorageTx(runtime, shard, [&](TDataShard& ds, NTabletFlatExecutor::TTransactionContext& txc) {
-            ds.DropUserTable(txc, tableId);
-            return true;
-        });
-        UNIT_ASSERT(ReadHnswMetadata(runtime, shard).empty());
-    }
-
-    Y_UNIT_TEST(HnswNiceDbMetadataFollowsTableMove) {
+    Y_UNIT_TEST(HnswTableDescriptionMetadataFollowsTableMove) {
         THnswMultiFixture fixture;
         fixture.WarmAll();
         auto& runtime = *fixture.Helper.Server->GetRuntime();
         auto& table = fixture.Helper.Tables.at("hnsw-lifecycle");
-        const auto oldTableId = table.TableId.PathId.LocalPathId;
+        const auto oldTableId = table.TableId.PathId;
+        constexpr ui64 indexIdOffset = 100;
+        bool sawMove = false;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != TEvDataShard::TEvProposeTransaction::EventType) { return; }
+            auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+            if (record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) { return; }
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+            if (!tx.HasMoveTable() || TPathId::FromProto(tx.GetMoveTable().GetPathId()) != oldTableId) { return; }
+            // A physical posting-table move also remaps its owning HNSW index.
+            for (ui32 i = 0; i < fixture.Count; ++i) {
+                const auto id = fixture.Id(i);
+                auto* remap = tx.MutableMoveTable()->AddReMapIndexes();
+                id.ToProto(remap->MutableSrcPathId());
+                TPathId(id.OwnerId, id.LocalPathId - indexIdOffset).ToProto(remap->MutableDstPathId());
+            }
+            UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+            sawMove = true;
+        });
         const auto tx = AsyncMoveTable(fixture.Helper.Server, "/Root/hnsw-lifecycle", "/Root/hnsw-renamed");
         WaitTxNotification(fixture.Helper.Server, fixture.Helper.Sender, tx);
+        observer.Remove();
+        UNIT_ASSERT(sawMove);
+        fixture.IndexIdOffset = indexIdOffset;
         table.TableId = ResolveTableId(fixture.Helper.Server, fixture.Helper.Sender, "/Root/hnsw-renamed");
         table.Name = "hnsw-renamed";
         table.ClientId = {};
-        UNIT_ASSERT(table.TableId.PathId.LocalPathId != oldTableId);
-        auto rows = ReadHnswMetadata(runtime, fixture.Shard());
-        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2u);
-        for (const auto& row : rows) {
-            UNIT_ASSERT_VALUES_EQUAL(row.TableId, table.TableId.PathId.LocalPathId);
-        }
+        UNIT_ASSERT(table.TableId.PathId != oldTableId);
+        auto verifyMetadata = [&] {
+            const auto& metadata = *fixture.Shard()->GetUserTables().at(table.TableId.PathId.LocalPathId);
+            UNIT_ASSERT_VALUES_EQUAL(metadata.HnswIndexes.size(), fixture.Count);
+            NKikimrSchemeOp::TTableDescription schema;
+            metadata.GetSchema(schema);
+            UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(schema.GetPathId()), table.TableId.PathId);
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetId_Deprecated(), table.TableId.PathId.LocalPathId);
+            UNIT_ASSERT_VALUES_EQUAL(schema.LocalHnswIndexesSize(), fixture.Count);
+            UNIT_ASSERT_VALUES_EQUAL(schema.TableIndexesSize(), 0);
+            for (ui32 i = 0; i < fixture.Count; ++i) {
+                UNIT_ASSERT(metadata.HnswIndexes.contains(fixture.Id(i)));
+            }
+            for (const auto& index : schema.GetLocalHnswIndexes()) {
+                UNIT_ASSERT(metadata.HnswIndexes.contains(TPathId::FromProto(index.GetIndexId())));
+            }
+        };
+        verifyMetadata();
+        fixture.WarmAll();
         RebootTablet(runtime, table.TabletId, fixture.Helper.Sender);
         table.ClientId = {};
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetUserTables().at(table.TableId.PathId.LocalPathId)->HnswIndexes.size(), 2u);
+        verifyMetadata();
         fixture.WarmAll();
     }
 
@@ -8072,7 +8006,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             NKikimrSchemeOp::TTableDescription schema;
             fixture.Shard()->GetUserTables().begin()->second->GetSchema(schema);
             UNIT_ASSERT_VALUES_EQUAL(schema.TableIndexesSize(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetUserTables().begin()->second->LocalHnswIndexDescriptions.size(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(schema.LocalHnswIndexesSize(), 2u);
             auto raw = fixture.Request();
             raw->Record.ClearVectorTopK();
             auto rows = fixture.Helper.SendRead("hnsw-lifecycle", raw.release());
@@ -8643,7 +8577,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
                     NKikimrTxDataShard::TFlatSchemeTransaction tx;
                     UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
                     if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
-                        auto* index = tx.AddLocalHnswIndexes();
+                        auto* index = tx.MutableAlterTable()->AddLocalHnswIndexes();
                         TPathId(tx.GetAlterTable().GetPathId().GetOwnerId(), Max<ui64>() - 1)
                             .ToProto(index->MutableIndexId());
                         index->MutableHnswIndexDescription();

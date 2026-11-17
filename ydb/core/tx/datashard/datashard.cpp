@@ -1801,54 +1801,14 @@ void TDataShard::PersistUserTable(NIceDb::TNiceDb& db, ui64 tableId, const TUser
         NIceDb::TUpdate<Schema::UserTables::LocalTid>(tableInfo.LocalTid),
         NIceDb::TUpdate<Schema::UserTables::ShadowTid>(tableInfo.ShadowTid),
         NIceDb::TUpdate<Schema::UserTables::Schema>(tableInfo.GetSchema()));
-    for (const auto& [id, description] : tableInfo.LocalHnswIndexDescriptions) {
-        db.Table<Schema::LocalHnswIndexes>().Key(tableId, id.OwnerId, id.LocalPathId).Update(
-            NIceDb::TUpdate<Schema::LocalHnswIndexes::SchemaVersion>(description.GetSchemaVersion()),
-            NIceDb::TUpdate<Schema::LocalHnswIndexes::Description>(description.GetHnswIndexDescription().SerializeAsString()));
-    }
-}
-
-void TDataShard::PersistRemoveLocalHnswIndexes(NIceDb::TNiceDb& db, ui64 tableId, const TUserTable& tableInfo) {
-    for (const auto& [id, _] : tableInfo.LocalHnswIndexDescriptions) {
-        db.Table<Schema::LocalHnswIndexes>().Key(tableId, id.OwnerId, id.LocalPathId).Delete();
-    }
-}
-
-bool TDataShard::LoadLocalHnswIndexes(TTransactionContext& txc, THashMap<ui64, TUserTable::TPtr>& tables) {
-    if (!txc.DB.GetScheme().GetTableInfo(Schema::LocalHnswIndexes::TableId)) {
-        return true;
-    }
-    NIceDb::TNiceDb db(txc.DB);
-    auto rows = db.Table<Schema::LocalHnswIndexes>().Range().Select();
-    if (!rows.IsReady()) {
-        return false;
-    }
-    while (!rows.EndOfSet()) {
-        const auto table = tables.find(rows.GetValue<Schema::LocalHnswIndexes::TablePathId>());
-        if (table != tables.end()) {
-            NKikimrSchemeOp::TLocalHnswIndexDescription description;
-            TPathId(rows.GetValue<Schema::LocalHnswIndexes::IndexOwnerId>(),
-                rows.GetValue<Schema::LocalHnswIndexes::IndexLocalId>()).ToProto(description.MutableIndexId());
-            description.SetSchemaVersion(rows.GetValue<Schema::LocalHnswIndexes::SchemaVersion>());
-            Y_ENSURE(description.MutableHnswIndexDescription()->ParseFromString(
-                rows.GetValue<Schema::LocalHnswIndexes::Description>()));
-            table->second->UpdateLocalHnswIndex(description);
-        }
-        if (!rows.Next()) {
-            return false;
-        }
-    }
-    return true;
 }
 
 void TDataShard::PersistUserTableFullCompactionTs(NIceDb::TNiceDb& db, ui64 tableId, ui64 ts) {
     db.Table<Schema::UserTablesStats>().Key(tableId).Update<Schema::UserTablesStats::FullCompactionTs>(ts);
 }
 
-void TDataShard::PersistMoveUserTable(NIceDb::TNiceDb& db, ui64 prevTableId, ui64 tableId,
-        const TUserTable& tableInfo, const TUserTable& oldTableInfo) {
+void TDataShard::PersistMoveUserTable(NIceDb::TNiceDb& db, ui64 prevTableId, ui64 tableId, const TUserTable& tableInfo) {
     db.Table<Schema::UserTables>().Key(prevTableId).Delete();
-    PersistRemoveLocalHnswIndexes(db, prevTableId, oldTableInfo);
     PersistUserTable(db, tableId, tableInfo);
 
     db.Table<Schema::UserTablesStats>().Key(prevTableId).Delete();
@@ -2032,8 +1992,7 @@ void TDataShard::PersistLastLoanTableTid(NIceDb::TNiceDb& db, ui32 localTid) {
 }
 
 TUserTable::TPtr TDataShard::CreateUserTable(TTransactionContext& txc,
-    const NKikimrSchemeOp::TTableDescription& tableScheme,
-    const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TLocalHnswIndexDescription>& localIndexes)
+    const NKikimrSchemeOp::TTableDescription& tableScheme)
 {
     const TString mainTableName = TDataShard::Schema::UserTablePrefix + tableScheme.GetName();
     ui64 tableId = tableScheme.GetId_Deprecated();
@@ -2044,7 +2003,6 @@ TUserTable::TPtr TDataShard::CreateUserTable(TTransactionContext& txc,
     ui32 localTid = ++LastLocalTid;
     ui32 shadowTid = tableScheme.GetPartitionConfig().GetShadowData() ? ++LastLocalTid : 0;
     TUserTable::TPtr tableInfo = new TUserTable(localTid, tableScheme, shadowTid);
-    tableInfo->UpdateLocalHnswIndexes(localIndexes);
 
     tableInfo->ApplyCreate(txc, mainTableName, tableScheme.GetPartitionConfig());
 
@@ -2098,7 +2056,6 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
     const auto version = move.GetTableSchemaVersion();
     Y_ENSURE(version);
 
-    const auto oldTableInfo = TableInfos.at(prevId.LocalPathId);
     auto newTableInfo = AlterTableSchemaVersion(ctx, txc, prevId, version, false);
     newTableInfo->SetPath(move.GetDstPath());
 
@@ -2122,7 +2079,23 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
         node.key() = newPathId;
         newTableInfo->Indexes.insert(std::move(node));
     }
-    newTableInfo->RemapLocalHnswIndexes(remap);
+    for (auto& indexDesc : *schema.MutableLocalHnswIndexes()) {
+        if (!indexDesc.HasIndexId()) {
+            continue;
+        }
+        const auto prevPathId = TPathId::FromProto(indexDesc.GetIndexId());
+        const auto it = remap.find(prevPathId);
+        if (it == remap.end()) {
+            continue;
+        }
+        const auto& newPathId = it->second;
+        newPathId.ToProto(indexDesc.MutableIndexId());
+        auto hnswNode = newTableInfo->HnswIndexes.extract(prevPathId);
+        if (!hnswNode.empty()) {
+            hnswNode.key() = newPathId;
+            newTableInfo->HnswIndexes.insert(std::move(hnswNode));
+        }
+    }
     newTableInfo->SetSchema(schema);
 
     //NOTE: Stats building is bound to table id, but move-table changes table id,
@@ -2148,7 +2121,7 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
     }
 
     NIceDb::TNiceDb db(txc.DB);
-    PersistMoveUserTable(db, prevId.LocalPathId, newId.LocalPathId, *newTableInfo, *oldTableInfo);
+    PersistMoveUserTable(db, prevId.LocalPathId, newId.LocalPathId, *newTableInfo);
     PersistOwnerPathId(newId.OwnerId, txc);
 
     return newTableInfo;
@@ -2222,8 +2195,7 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
 }
 
 TUserTable::TPtr TDataShard::AlterUserTable(const TActorContext& ctx, TTransactionContext& txc,
-    const NKikimrSchemeOp::TTableDescription& alter,
-    const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TLocalHnswIndexDescription>& localIndexes)
+                                                   const NKikimrSchemeOp::TTableDescription& alter)
 {
     ui64 tableId = alter.GetId_Deprecated();
     if (alter.HasPathId()) {
@@ -2236,7 +2208,6 @@ TUserTable::TPtr TDataShard::AlterUserTable(const TActorContext& ctx, TTransacti
     TUserTable::TPtr tableInfo = new TUserTable(*oldTable, alter);
     TString strError;
     tableInfo->ApplyAlter(txc, *oldTable, alter, strError);
-    tableInfo->UpdateLocalHnswIndexes(localIndexes);
     if (strError) {
         YDB_LOG_ERROR_CTX(ctx, "Cannot alter datashard for table",
             {"tabletId", TabletID()},
@@ -2300,7 +2271,6 @@ void TDataShard::DropUserTable(TTransactionContext& txc, ui64 tableId) {
     }
     db.Table<Schema::UserTables>().Key(ti->first).Delete();
     db.Table<Schema::UserTablesStats>().Key(ti->first).Delete();
-    PersistRemoveLocalHnswIndexes(db, ti->first, *ti->second);
 
     InvalidateHnswTable(ti->second->LocalTid);
     HnswIndexCache.erase(ti->second->LocalTid);
@@ -2324,7 +2294,6 @@ void TDataShard::DropAllUserTables(TTransactionContext& txc) {
     for (const auto& ti : TableInfos) {
         db.Table<Schema::UserTables>().Key(ti.first).Delete();
         db.Table<Schema::UserTablesStats>().Key(ti.first).Delete();
-        PersistRemoveLocalHnswIndexes(db, ti.first, *ti.second);
     }
 
     InvalidateHnswIndexes();

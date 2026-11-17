@@ -719,9 +719,6 @@ message TFlatSchemeTransaction {
     optional TTruncateTable TruncateTable = 25;
 
     optional TPrepareIndexValidation PrepareIndexValidation = 26;
-
-    // Local graph metadata is persisted separately from the user table schema.
-    repeated NKikimrSchemeOp.TLocalHnswIndexDescription LocalHnswIndexes = 27;
 }
 
 message TDistributedEraseTransaction {
@@ -1021,8 +1018,6 @@ message TEvSplitTransferSnapshot {
     optional uint64 MvccImmediateWriteEdgeTxId = 18;
     optional bool MvccPerformedUnprotectedReads = 19;
     repeated TSplitSrcLockInfo Locks = 20;
-
-    repeated NKikimrSchemeOp.TLocalHnswIndexDescription LocalHnswIndexes = 21;
 }
 
 message TEvSplitTransferSnapshotAck {

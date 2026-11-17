@@ -236,7 +236,6 @@ public:
             auto tableDesc = tx.MutableCreateTable();
             context.SS->FillSeqNo(tx, seqNo);
             context.SS->FillTableDescription(txState->TargetPathId, i, NEW_TABLE_ALTER_VERSION, tableDesc);
-            context.SS->FillLocalHnswIndexDescriptions(txState->TargetPathId, true, tx.MutableLocalHnswIndexes());
 
             auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx);
             if (const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId) {

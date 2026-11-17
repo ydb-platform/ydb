@@ -440,6 +440,9 @@ message TTableDescription {
     // Actual number of table partitions (shards), always filled in describe
     // results, so clients don't need to request the TablePartitions list.
     optional uint64 PartitionCount = 55;
+
+    // DataShard-local graphs, separate from the logical child indexes in TableIndexes.
+    repeated TLocalHnswIndexDescription LocalHnswIndexes = 56;
 }
 
 message TCompressionOptions {

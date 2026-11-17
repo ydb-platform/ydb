@@ -422,9 +422,6 @@ public:
             Y_ENSURE(Self->TableInfos.size() == 1, "Support for more than 1 user table in a datashard is not implemented here");
             const TUserTable& tableInfo = *Self->TableInfos.begin()->second;
             tableInfo.GetSchema(*snapshot->MutableUserTableScheme());
-            for (const auto& [_, description] : tableInfo.LocalHnswIndexDescriptions) {
-                *snapshot->AddLocalHnswIndexes() = description;
-            }
 
             for (ui32 localTableId : SnapContext->TablesToSnapshot()) {
                 TString snapBody;

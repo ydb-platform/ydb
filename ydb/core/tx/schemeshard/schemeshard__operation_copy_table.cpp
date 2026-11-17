@@ -95,7 +95,6 @@ public:
             NKikimrTxDataShard::TFlatSchemeTransaction newShardTx;
             context.SS->FillSeqNo(newShardTx, seqNo);
             context.SS->FillTableDescription(txState->TargetPathId, i, dstSchemaVersion, newShardTx.MutableCreateTable());
-            context.SS->FillLocalHnswIndexDescriptions(txState->TargetPathId, true, newShardTx.MutableLocalHnswIndexes());
             newShardTx.MutableReceiveSnapshot()->SetTableId_Deprecated(txState->TargetPathId.LocalPathId);
             newShardTx.MutableReceiveSnapshot()->MutableTableId()->SetOwnerId(txState->TargetPathId.OwnerId);
             newShardTx.MutableReceiveSnapshot()->MutableTableId()->SetTableId(txState->TargetPathId.LocalPathId);

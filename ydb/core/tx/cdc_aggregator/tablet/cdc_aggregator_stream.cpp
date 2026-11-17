@@ -1,7 +1,5 @@
 #include "cdc_aggregator_stream.h"
 
-#include <algorithm>
-
 namespace NKikimr::NCdcAggregator {
 
 TCdcAggregatorStream::TCdcAggregatorStream(const TCdcAggregatorStreamConfig& config)
@@ -10,31 +8,34 @@ TCdcAggregatorStream::TCdcAggregatorStream(const TCdcAggregatorStreamConfig& con
 {
 }
 
-TCdcAggregatorStream::TCdcAggregatorStream(TCdcAggregatorStreamTopic topic, THashSet<ui64> sourceDataShardIds)
+TCdcAggregatorStream::TCdcAggregatorStream(TCdcAggregatorStreamTopic topic, THashSet<ui64> sourceDataShardIds, TPartitioningChanges partitioningChanges)
     : Topic(std::move(topic))
     , SourceDataShardIds(std::move(sourceDataShardIds))
+    , PartitioningChanges(std::move(partitioningChanges))
 {
 }
 
-std::optional<TCdcAggregatorStreamSourcesDiff> TCdcAggregatorStream::ApplyPartitioningChange(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds) {
-    if (!SourceDataShardIds.contains(parentDataShardId)) {
-        const bool applied = std::all_of(childDataShardIds.begin(), childDataShardIds.end(), [this](ui64 childDataShardId) {
-            return SourceDataShardIds.contains(childDataShardId);
-        });
-        if (!applied) {
+std::optional<TCdcAggregatorStreamSourcesDiff> TCdcAggregatorStream::ApplyPartitioningChange(const TCdcAggregatorStreamPartitioningChange& change) {
+    auto key = std::make_pair(change.ParentDataShardId, change.OperationId);
+    if (const auto applied = PartitioningChanges.find(key); applied != PartitioningChanges.end()) {
+        if (applied->second != change.ChildDataShardIds) {
             return std::nullopt;
         }
         return TCdcAggregatorStreamSourcesDiff{};
     }
 
+    if (!SourceDataShardIds.erase(change.ParentDataShardId)) {
+        return std::nullopt;
+    }
+
     TCdcAggregatorStreamSourcesDiff diff;
-    SourceDataShardIds.erase(parentDataShardId);
-    diff.Deleted.insert(parentDataShardId);
-    for (const auto childDataShardId : childDataShardIds) {
+    diff.Deleted.insert(change.ParentDataShardId);
+    for (const auto childDataShardId : change.ChildDataShardIds) {
         if (SourceDataShardIds.insert(childDataShardId).second) {
             diff.Inserted.insert(childDataShardId);
         }
     }
+    PartitioningChanges.emplace(std::move(key), change.ChildDataShardIds);
 
     return diff;
 }

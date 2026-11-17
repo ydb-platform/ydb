@@ -6,6 +6,7 @@
 #include <ydb/core/protos/counters_cdc_aggregator.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/cdc_aggregator/public/events.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <optional>
@@ -17,7 +18,18 @@ class TCdcAggregator
     , public NTabletFlatExecutor::TTabletExecutedFlat
 {
     using Schema = TCdcAggregatorSchema;
-    using TTxBase = NTabletFlatExecutor::TTransactionBase<TCdcAggregator>;
+
+    class TTxBase : public NTabletFlatExecutor::TTransactionBase<TCdcAggregator> {
+    public:
+        TTxBase(const TString& name, TCdcAggregator* self)
+            : TTransactionBase(self)
+            , TxLogPrefix(YDB_LOG_CREATE_MESSAGE({"tabletId", self->TabletID()}, {"txName", name}))
+        {
+        }
+
+    protected:
+        const NActors::NStructuredLog::TStructuredMessage TxLogPrefix;
+    };
 
     class TTxInitSchema;
     class TTxInit;

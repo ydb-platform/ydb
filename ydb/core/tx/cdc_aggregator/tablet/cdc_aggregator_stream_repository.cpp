@@ -1,5 +1,7 @@
 #include "cdc_aggregator_stream_repository.h"
 
+#include <ydb/core/protos/cdc_aggregator.pb.h>
+
 namespace NKikimr::NCdcAggregator {
 
 void TCdcAggregatorStreamRepository::InsertCdcAggregatorStream(NIceDb::TNiceDb& db, const TCdcAggregatorStream& stream) const {
@@ -21,6 +23,11 @@ void TCdcAggregatorStreamRepository::ApplyCdcAggregatorStreamSourcesDiff(NIceDb:
     }
 }
 
+void TCdcAggregatorStreamRepository::InsertCdcAggregatorStreamPartitioningChange(NIceDb::TNiceDb& db, const TCdcAggregatorStreamPartitioningChange& change) const {
+    db.Table<Schema::PartitioningChanges>().Key(change.ParentDataShardId, change.OperationId).Update(
+        NIceDb::TUpdate<Schema::PartitioningChanges::ChildDataShardIds>(change.ChildDataShardIds));
+}
+
 std::pair<bool, std::optional<TCdcAggregatorStream>> TCdcAggregatorStreamRepository::LoadCdcAggregatorStream(NIceDb::TNiceDb& db) const {
     auto state = db.Table<Schema::State>().Key(Schema::State::Id::Value).Select();
     if (!state.IsReady()) {
@@ -30,8 +37,12 @@ std::pair<bool, std::optional<TCdcAggregatorStream>> TCdcAggregatorStreamReposit
         return {true, std::nullopt};
     }
 
-    THashSet<ui64> sources;
-    if (!LoadSourceDataShardIds(db, sources)) {
+    auto sources = LoadSourceDataShardIds(db);
+    if (!sources) {
+        return {false, std::nullopt};
+    }
+    auto changes = LoadPartitioningChanges(db);
+    if (!changes) {
         return {false, std::nullopt};
     }
 
@@ -40,24 +51,45 @@ std::pair<bool, std::optional<TCdcAggregatorStream>> TCdcAggregatorStreamReposit
     auto [topic, error] = Converter.ParseTopic(proto);
     Y_ENSURE(topic, "Invalid tracking config: " << error);
 
-    return {true, TCdcAggregatorStream(std::move(*topic), std::move(sources))};
+    return {true, TCdcAggregatorStream(std::move(*topic), std::move(*sources), std::move(*changes))};
 }
 
-bool TCdcAggregatorStreamRepository::LoadSourceDataShardIds(NIceDb::TNiceDb& db, THashSet<ui64>& sources) const {
+std::optional<THashSet<ui64>> TCdcAggregatorStreamRepository::LoadSourceDataShardIds(NIceDb::TNiceDb& db) const {
     auto rowset = db.Table<Schema::Sources>().Select();
     if (!rowset.IsReady()) {
-        return false;
+        return std::nullopt;
     }
 
+    THashSet<ui64> sources;
     while (!rowset.EndOfSet()) {
         sources.insert(rowset.GetValue<Schema::Sources::DataShardId>());
 
         if (!rowset.Next()) {
-            return false;
+            return std::nullopt;
         }
     }
 
-    return true;
+    return sources;
+}
+
+std::optional<TCdcAggregatorStream::TPartitioningChanges> TCdcAggregatorStreamRepository::LoadPartitioningChanges(NIceDb::TNiceDb& db) const {
+    auto rowset = db.Table<Schema::PartitioningChanges>().Select();
+    if (!rowset.IsReady()) {
+        return std::nullopt;
+    }
+
+    TCdcAggregatorStream::TPartitioningChanges changes;
+    while (!rowset.EndOfSet()) {
+        const auto parentDataShardId = rowset.GetValue<Schema::PartitioningChanges::ParentDataShardId>();
+        const auto operationId = rowset.GetValue<Schema::PartitioningChanges::OperationId>();
+        changes.emplace(std::make_pair(parentDataShardId, operationId), rowset.GetValue<Schema::PartitioningChanges::ChildDataShardIds>());
+
+        if (!rowset.Next()) {
+            return std::nullopt;
+        }
+    }
+
+    return changes;
 }
 
 } // namespace NKikimr::NCdcAggregator

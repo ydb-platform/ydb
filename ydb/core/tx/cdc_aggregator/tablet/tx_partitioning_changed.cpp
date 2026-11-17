@@ -5,23 +5,9 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
-#include <algorithm>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CDC_AGGREGATOR
 
 namespace NKikimr::NCdcAggregator {
-
-namespace {
-
-bool IsValidPartitioningChange(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds) {
-    return parentDataShardId
-        && !childDataShardIds.empty()
-        && childDataShardIds.front() != 0
-        && std::adjacent_find(childDataShardIds.begin(), childDataShardIds.end()) == childDataShardIds.end()
-        && !std::binary_search(childDataShardIds.begin(), childDataShardIds.end(), parentDataShardId);
-}
-
-} // namespace
 
 class TCdcAggregator::TTxPartitioningChanged : public TTxBase {
     using TResult = NKikimrCdcAggregator::TEvPartitioningChangedAck;
@@ -31,7 +17,7 @@ class TCdcAggregator::TTxPartitioningChanged : public TTxBase {
 
 public:
     explicit TTxPartitioningChanged(TCdcAggregator* self, TEvCdcAggregator::TEvPartitioningChanged::TPtr& ev)
-        : TTxBase(self)
+        : TTxBase("TxPartitioningChanged", self)
         , Ev(ev)
     {
     }
@@ -41,18 +27,20 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG("Execute",
+            {"ev", Ev->Get()->ToString()});
+
         const auto& record = Ev->Get()->Record;
         Result = MakeHolder<TEvCdcAggregator::TEvPartitioningChangedAck>();
         Result->Record.SetOrigin(Self->TabletID());
         Result->Record.SetOperationId(record.GetOperationId());
         Result->Record.SetParentDataShardId(record.GetParentDataShardId());
 
-        const ui64 parentDataShardId = record.GetParentDataShardId();
-        TVector<ui64> childDataShardIds(record.GetChildDataShardIds().begin(), record.GetChildDataShardIds().end());
-        std::sort(childDataShardIds.begin(), childDataShardIds.end());
-        if (!IsValidPartitioningChange(parentDataShardId, childDataShardIds)) {
+        const auto [change, error] = TCdcAggregatorStreamProtoConverter().ParsePartitioningChange(record);
+        if (!change) {
             Result->Record.SetStatus(TResult::BAD_REQUEST);
-            Result->Record.SetError(TStringBuilder() << "Invalid partitioning change of DataShard " << parentDataShardId);
+            Result->Record.SetError(error);
             return true;
         }
 
@@ -62,19 +50,22 @@ public:
             return true;
         }
 
-        const auto diff = Self->CdcAggregatorStream->ApplyPartitioningChange(parentDataShardId, childDataShardIds);
+        const auto diff = Self->CdcAggregatorStream->ApplyPartitioningChange(*change);
         if (!diff) {
             Result->Record.SetStatus(TResult::UNKNOWN_SOURCE);
-            Result->Record.SetError(TStringBuilder() << "Unknown partitioning change of DataShard " << parentDataShardId);
+            Result->Record.SetError(TStringBuilder() << "Unknown partitioning change " << change->OperationId);
             return true;
         }
 
-        NIceDb::TNiceDb db(txc.DB);
-        Self->CdcAggregatorStreamRepository.ApplyCdcAggregatorStreamSourcesDiff(db, *diff);
+        if (!diff->Deleted.empty()) {
+            NIceDb::TNiceDb db(txc.DB);
+            Self->CdcAggregatorStreamRepository.ApplyCdcAggregatorStreamSourcesDiff(db, *diff);
+            Self->CdcAggregatorStreamRepository.InsertCdcAggregatorStreamPartitioningChange(db, *change);
+        }
 
-        YDB_LOG_CREATE_CONTEXT({"tabletId", Self->TabletID()});
         YDB_LOG_INFO("Partitioning change applied",
-            {"parentDataShardId", parentDataShardId},
+            {"operationId", change->OperationId},
+            {"parentDataShardId", change->ParentDataShardId},
             {"inserted", JoinSeq(",", diff->Inserted)},
             {"deleted", JoinSeq(",", diff->Deleted)});
 
@@ -84,8 +75,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_CREATE_CONTEXT({"tabletId", Self->TabletID()});
-        YDB_LOG_DEBUG("Reply",
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG("Complete",
             {"result", Result->ToString()});
 
         ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
@@ -93,9 +84,6 @@ public:
 };
 
 void TCdcAggregator::Handle(TEvCdcAggregator::TEvPartitioningChanged::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_TRACE("Handle",
-        {"ev", ev->Get()->ToString()});
-
     Execute(new TTxPartitioningChanged(this, ev), ctx);
 }
 

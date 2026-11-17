@@ -128,6 +128,9 @@ NYdb::NIssue::TIssues IssuesFromMessage(const ::google::protobuf::RepeatedPtrFie
 TReplicationDescription::TReplicationDescription(const Ydb::Replication::DescribeReplicationResult& desc)
     : ConnectionParams_(desc.connection_params())
 {
+    if (desc.has_checksum_interval()) {
+        ChecksumInterval_ = DurationToDuration(desc.checksum_interval());
+    }
     if (desc.has_availability_period()) {
         const auto& period = desc.availability_period();
         AvailabilityPeriodKind_ = EAvailabilityPeriodKind::Invalid;
@@ -225,6 +228,10 @@ TReplicationDescription::EAvailabilityPeriodKind TReplicationDescription::GetAva
 
 const std::optional<TDuration>& TReplicationDescription::GetAvailabilityPeriod() const {
     return AvailabilityPeriod_;
+}
+
+const std::optional<TDuration>& TReplicationDescription::GetChecksumInterval() const {
+    return ChecksumInterval_;
 }
 
 TReplicationDescription::EConsistencyLevel TReplicationDescription::GetConsistencyLevel() const {

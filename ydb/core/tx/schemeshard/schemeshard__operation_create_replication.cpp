@@ -43,6 +43,16 @@ struct TReplicationStrategy : public IStrategy {
             return true;
         }
 
+        const auto checksumInterval = desc.GetConfig().GetChecksumIntervalMilliSeconds();
+        if (checksumInterval > (NYql::NUdf::MAX_TIMESTAMP - 1) / 1000) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Checksum interval cannot be represented as SQL Interval");
+            return true;
+        }
+        if (checksumInterval && !desc.GetConfig().GetConsistencySettings().HasGlobal()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Periodic checksum checks require GLOBAL consistency");
+            return true;
+        }
+
         if (desc.GetConfig().HasAvailabilityPeriod()) {
             const auto& period = desc.GetConfig().GetAvailabilityPeriod();
             if (period.HasDuration()) {
@@ -88,6 +98,10 @@ struct TTransferStrategy : public IStrategy {
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const override {
         if (!desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong transfer configuration");
+            return true;
+        }
+        if (desc.GetConfig().HasChecksumIntervalMilliSeconds()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Checksum interval is only supported for replication");
             return true;
         }
         if (desc.GetConfig().HasAvailabilityPeriod()) {

@@ -154,6 +154,12 @@ TString BuildCreateReplicationQuery(
     opts.push_back(BuildOption("CONSISTENCY_LEVEL", Quote(ToString(desc.GetConsistencyLevel()))));
     if (desc.GetConsistencyLevel() == NReplication::TReplicationDescription::EConsistencyLevel::Global) {
         opts.push_back(BuildOption("COMMIT_INTERVAL", Interval(desc.GetGlobalConsistency().GetCommitInterval())));
+        if (const auto& interval = desc.GetChecksumInterval(); interval && *interval) {
+            const auto value = interval->MilliSecondsOfSecond()
+                ? TString(std::format("Interval('PT{}.{:03}S')", interval->Seconds(), interval->MilliSecondsOfSecond()))
+                : Interval(*interval);
+            opts.push_back(BuildOption("CHECKSUM_INTERVAL", value));
+        }
     }
 
     return std::format(

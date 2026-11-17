@@ -64,6 +64,14 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         });
     }
 
+    TString ChecksumIntervalScheme(const TString& name, const TString& settings, bool global = true) {
+        auto scheme = DefaultScheme(name);
+        scheme.insert(scheme.find("Config {") + TStringBuf("Config {").size(), TStringBuilder()
+            << " InitialScan: false " << settings
+            << (global ? " ConsistencySettings { Global {} } " : " "));
+        return scheme;
+    }
+
     Y_UNIT_TEST(ChecksumAdmissionFifoRecoveryAndExpiry) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -156,6 +164,72 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         auto response = runtime.GrabEdgeEvent<TEvSchemeShard::TEvChecksumAdmissionResult>(edge);
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), Ydb::StatusIds::TIMEOUT);
         UNIT_ASSERT(!response->Get()->Record.GetReleased());
+    }
+
+    Y_UNIT_TEST(ChecksumIntervalCreateAlterAndReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        TestCreateReplication(runtime, ++txId, "/MyRoot", ChecksumIntervalScheme("Replication", ""));
+        env.TestWaitNotification(runtime, txId);
+        const auto check = [&](ui64 interval) {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication");
+            const auto& path = desc.GetPathDescription();
+            UNIT_ASSERT_VALUES_EQUAL(path.GetReplicationDescription().GetConfig().GetChecksumIntervalMilliSeconds(), interval);
+            using namespace NKikimr::NReplication;
+            const auto edge = runtime.AllocateEdgeActor();
+            auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+            request->Record.MutablePathId()->SetOwnerId(path.GetSelf().GetSchemeshardId());
+            request->Record.MutablePathId()->SetLocalId(path.GetSelf().GetPathId());
+            runtime.SendToPipe(ExtractControllerId(path), edge, request.Release());
+            const auto result = runtime.GrabEdgeEvent<TEvController::TEvDescribeReplicationResult>(edge);
+            UNIT_ASSERT(result->Get()->Record.HasChecksumIntervalMilliSeconds());
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetChecksumIntervalMilliSeconds(), interval);
+        };
+        check(0);
+        for (const ui64 interval : {3600001, 7200000, 0}) {
+            TestAlterReplication(runtime, ++txId, "/MyRoot", TStringBuilder()
+                << "Name: \"Replication\" Config { ChecksumIntervalMilliSeconds: " << interval << " }");
+            env.TestWaitNotification(runtime, txId);
+            check(interval);
+            TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+                Name: "Replication"
+                Config { SrcConnectionParams { StaticCredentials { Password: "new-password" } } }
+            )");
+            env.TestWaitNotification(runtime, txId);
+            const auto controller = ExtractControllerId(DescribePath(runtime, "/MyRoot/Replication").GetPathDescription());
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            RebootTablet(runtime, controller, runtime.AllocateEdgeActor());
+            check(interval);
+        }
+    }
+
+    Y_UNIT_TEST(ChecksumIntervalValidation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        const auto maximum = (NYql::NUdf::MAX_TIMESTAMP - 1) / 1000;
+        for (const bool global : {false, true}) {
+            const TString settings = TStringBuilder() << "ChecksumIntervalMilliSeconds: " << (global ? maximum + 1 : 1);
+            TestCreateReplication(runtime, ++txId, "/MyRoot", ChecksumIntervalScheme("Invalid", settings, global),
+                {NKikimrScheme::StatusInvalidParameter});
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Invalid"), {NLs::PathNotExist});
+
+            const TString name = global ? "Global" : "Row";
+            TestCreateReplication(runtime, ++txId, "/MyRoot", ChecksumIntervalScheme(name, "", global));
+            env.TestWaitNotification(runtime, txId);
+            TestAlterReplication(runtime, ++txId, "/MyRoot", TStringBuilder()
+                << "Name: \"" << name << "\" Config { " << settings << " }", {NKikimrScheme::StatusInvalidParameter});
+            env.TestWaitNotification(runtime, txId);
+            UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/" + name).GetPathDescription()
+                .GetReplicationDescription().GetConfig().GetChecksumIntervalMilliSeconds(), 0);
+        }
+        TestCreateReplication(runtime, ++txId, "/MyRoot", ChecksumIntervalScheme("Maximum",
+            TStringBuilder() << "ChecksumIntervalMilliSeconds: " << maximum));
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Maximum").GetPathDescription()
+            .GetReplicationDescription().GetConfig().GetChecksumIntervalMilliSeconds(), maximum);
     }
 
     TString AvailabilityScheme(const TString& name, const TString& period) {

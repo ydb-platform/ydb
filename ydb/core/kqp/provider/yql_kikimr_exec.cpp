@@ -1211,6 +1211,14 @@ namespace {
                 }
 
                 dstSettings.EnsureGlobalConsistency().CommitInterval = TDuration::FromValue(value);
+            } else if (name == "checksum_interval") {
+                YQL_ENSURE(setting.Value().Maybe<TCoInterval>());
+                const auto value = FromString<i64>(setting.Value().Cast<TCoInterval>().Literal().Value());
+                if (value < 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), "Checksum interval must be non-negative"));
+                    return false;
+                }
+                dstSettings.ChecksumInterval = TDuration::MilliSeconds((value + 999) / 1000);
             } else if (name == "availability_period") {
                 dstSettings.AvailabilityPeriod = NKikimrReplication::TAvailabilityPeriod();
                 auto& period = *dstSettings.AvailabilityPeriod;

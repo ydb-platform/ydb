@@ -28,6 +28,33 @@ Y_UNIT_TEST_SUITE(ReplicationDescription) {
         UNIT_ASSERT(!result.items(1).has_checksum_status());
     }
 
+    Y_UNIT_TEST(ChecksumInterval) {
+        NKikimrReplication::TEvDescribeReplicationResult controller;
+        NKikimrSchemeOp::TReplicationDescription scheme;
+        scheme.MutableConfig()->MutableSpecific();
+        Ydb::Replication::DescribeReplicationResult fromController;
+        Ydb::Replication::DescribeReplicationResult fromScheme;
+        Ydb::StatusIds_StatusCode status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        UNIT_ASSERT(FillReplicationDescription(fromScheme, scheme, NKikimrSchemeOp::TDirEntry(), status, error));
+        UNIT_ASSERT(fromScheme.has_checksum_interval());
+        UNIT_ASSERT_VALUES_EQUAL(fromScheme.checksum_interval().seconds(), 0);
+        for (const ui64 interval : {0, 3600001}) {
+            controller.SetChecksumIntervalMilliSeconds(interval);
+            scheme.MutableConfig()->SetChecksumIntervalMilliSeconds(interval);
+            FillReplicationDescription(fromController, controller);
+            UNIT_ASSERT(FillReplicationDescription(fromScheme, scheme, NKikimrSchemeOp::TDirEntry(), status, error));
+            UNIT_ASSERT(fromController.has_checksum_interval());
+            UNIT_ASSERT_VALUES_EQUAL(fromController.checksum_interval().SerializeAsString(),
+                fromScheme.checksum_interval().SerializeAsString());
+            UNIT_ASSERT_VALUES_EQUAL(fromController.checksum_interval().seconds(), interval / 1000);
+            UNIT_ASSERT_VALUES_EQUAL(fromController.checksum_interval().nanos(), (interval % 1000) * 1000000);
+        }
+        controller.ClearChecksumIntervalMilliSeconds();
+        FillReplicationDescription(fromController, controller);
+        UNIT_ASSERT(!fromController.has_checksum_interval());
+    }
+
     Y_UNIT_TEST(AvailabilityPeriodPresence) {
         NKikimrReplication::TEvDescribeReplicationResult controller;
         NKikimrSchemeOp::TReplicationDescription scheme;

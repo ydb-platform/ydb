@@ -68,9 +68,9 @@ int StartupFailed(TStringBuf category, TStringBuf message) {
 
 class TCaptureBackend final : public TLogBackend {
 public:
-    TCaptureBackend(std::shared_ptr<TDiagnosticStore> store, const TLoadedCredentials& credentials)
+    TCaptureBackend(std::shared_ptr<TDiagnosticStore> store, std::shared_ptr<const TTokenSource> tokens)
         : Store(std::move(store))
-        , Redactor(credentials)
+        , Redactor(std::move(tokens))
         , Stderr(NActors::CreateStderrBackend()) {
     }
 
@@ -119,6 +119,7 @@ int Run(
     auto admission = std::make_shared<TCommandAdmission>();
     const auto bootId = CreateGuidAsString();
     auto diagnostics = std::make_shared<TDiagnosticStore>(bootId, config.Logging.Level);
+    auto tokens = std::make_shared<TTokenSource>(config.Auth.TokenFile, credentials.Token);
     auto seed = std::make_shared<TSkipperSnapshot>();
     seed->ClusterId = config.ClusterId;
     seed->Mode = stateFile->GetState().Mode;
@@ -160,7 +161,7 @@ int Run(
     setup->Scheduler = new TBasicSchedulerThread(TSchedulerConfig(512, 0));
     setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::HTSwap, 0));
     setup->LocalServices.emplace_back(loggerId, TActorSetupCmd(
-        new TLoggerActor(logging, new TCaptureBackend(diagnostics, credentials), MakeIntrusive<NMonitoring::TDynamicCounters>()),
+        new TLoggerActor(logging, new TCaptureBackend(diagnostics, tokens), MakeIntrusive<NMonitoring::TDynamicCounters>()),
         TMailboxType::HTSwap, 0));
     auto system = MakeHolder<TActorSystem>(setup, nullptr, logging);
     std::shared_ptr<IYdbClients> clients;
@@ -202,7 +203,7 @@ int Run(
         // The system object outlives Stop(true) and the client's destruction.
         clients = CreateYdbClients(config, credentials, [actorSystem = system.Get()] {
             return actorSystem->Monotonic();
-        });
+        }, LoadToken, tokens);
         // A failed bind must exit before the controller makes any YDB call.
         const auto proxy = system->Register(NHttp::CreateHttpProxy(), TMailboxType::HTSwap, 0);
         const auto http = system->Register(CreateHttpActor(snapshots, proxy, config.Http, admission), TMailboxType::HTSwap, 0);

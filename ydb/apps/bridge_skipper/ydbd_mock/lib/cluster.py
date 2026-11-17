@@ -270,6 +270,10 @@ class PileInstance:
         accepted: typing.Optional[typing.Callable] = None,
         expected_generation: typing.Optional[int] = None,
     ) -> Outcome:
+        error = validator.validate_request(updates)
+        if error is not None:
+            self.events.append("reject", status=error.status, message=error.message)
+            return Outcome(error=error)
         if self._reset_pending:
             error = MockError(model.INTERNAL_ERROR, "mock: reset is in progress")
             self.events.append("reject", status=error.status, message=error.message)

@@ -24,7 +24,7 @@ SELECT 2 + 2;
 
 The `SELECT` statement retrieves data from [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) and [column-oriented](../../../../concepts/datamodel/table.md#column-oriented-tables) tables, [external tables](../../../../concepts/datamodel/external_table.md) and [data sources](../../../../concepts/datamodel/external_data_source.md), [views](../../../../concepts/datamodel/view.md), and [topics](topics.md). By default, the retrieved data is returned to the user, but `SELECT` can also be part of more complex constructs, such as `UPSERT INTO ... SELECT`, `CREATE TABLE ... AS SELECT ...`, etc.
 
-A `SELECT` query can contain a single selection or multiple selections whose results are combined using `UNION`, `EXCEPT`, and `INTERSECT` operations. Below are the schemas for both forms, followed by details of their constituent parts.
+A `SELECT` query can contain a single selection or multiple selections whose results are combined using `UNION`, `EXCEPT`, and `INTERSECT` operations. Below are the syntax forms for both query types, followed by details of their constituent parts.
 
 ## Syntax {#query-syntax}
 

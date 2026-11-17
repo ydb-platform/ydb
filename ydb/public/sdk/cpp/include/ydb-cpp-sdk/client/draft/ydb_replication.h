@@ -38,6 +38,8 @@ struct TDescribeTransferSettings: public TDescribeReplicationSettings {
 
 struct TTableChecksum {
     uint64_t RowCount = 0;
+    // Uppercase hexadecimal CityHash64 hash: 16 digits, without a prefix.
+    // An empty table has hash "0000000000000000".
     std::string Hash;
 };
 

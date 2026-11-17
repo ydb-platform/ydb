@@ -19,7 +19,9 @@ Y_UNIT_TEST_SUITE(ReplicationDescription) {
         status->mutable_finished_at()->set_seconds(200);
         status->mutable_last_result()->mutable_finished_at()->set_seconds(100);
         status->mutable_last_result()->set_matches(false);
-        status->mutable_last_result()->mutable_source()->set_hash("17");
+        status->mutable_last_result()->mutable_source()->set_row_count(1);
+        status->mutable_last_result()->mutable_source()->set_hash("0000000000000011");
+        status->mutable_last_result()->mutable_destination()->set_hash("0000000000000000");
         controller.AddTargets()->SetId(11);
         Ydb::Replication::DescribeReplicationResult result;
         FillReplicationDescription(result, controller);

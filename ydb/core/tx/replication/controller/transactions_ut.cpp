@@ -10,6 +10,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/hex.h>
 #include <util/string/printf.h>
 #include <util/generic/guid.h>
 
@@ -207,6 +208,23 @@ struct TTransactionsEnv: TEnv<> {
         });
     }
 
+    TString ExpectedChecksumHash(const TString& tablePath) {
+        return RunCall([&] {
+            NYdb::NTable::TTableClient client(GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto result = session.ExecuteDataQuery(
+                Sprintf("CHECKSUM TABLE `%s` WITH (ALGORITHM = \"CityHash64\");", tablePath.c_str()),
+                NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SnapshotRO()).CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            NYdb::TResultSetParser rows(result.GetResultSet(0));
+            UNIT_ASSERT(rows.TryNextRow());
+            const auto hash = rows.ColumnParser("hash").GetString();
+            UNIT_ASSERT_VALUES_EQUAL(hash.size(), sizeof(ui64));
+            UNIT_ASSERT(!rows.TryNextRow());
+            return HexEncode(hash.data(), hash.size());
+        });
+    }
+
     void ChecksumHeartbeat() {
         auto* heartbeat = new TEvService::TEvHeartbeat(TRowVersion(TInstant::Now().MilliSeconds() + 60000, 0));
         heartbeat->Record.MutableWorker()->CopyFrom(Worker);
@@ -379,6 +397,7 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
 
     Y_UNIT_TEST(ChecksumSourceStreamEmptyTable) {
         TTransactionsEnv env;
+        const auto expectedHash = env.ExpectedChecksumHash("/Root/table");
         env.RunCall([&] {
             TPrivateClient client(env.GetDriver(), NYdb::TCommonClientSettings().AuthToken("root@builtin"));
             auto stream = client.StreamChecksumTablesInternal(MakeSourceChecksumRequest(), TDuration::Seconds(30)).ExtractValueSync();
@@ -391,7 +410,7 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
             UNIT_ASSERT(table.Record.has_table());
             UNIT_ASSERT_VALUES_EQUAL(table.Record.table().id(), 1);
             UNIT_ASSERT_VALUES_EQUAL(table.Record.table().checksum().row_count(), 0);
-            UNIT_ASSERT(table.Record.table().checksum().hash().empty());
+            UNIT_ASSERT_VALUES_EQUAL(table.Record.table().checksum().hash(), expectedHash);
             UNIT_ASSERT(!table.Record.table().schema().empty());
             UNIT_ASSERT(stream.ReadNext().ExtractValueSync().Record.complete());
             UNIT_ASSERT_VALUES_EQUAL(stream.ReadNext().ExtractValueSync().GetStatus(), NYdb::EStatus::CLIENT_OUT_OF_RANGE);
@@ -413,6 +432,7 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
 
     Y_UNIT_TEST(ChecksumIdleReplicationMatchesAndPersists) {
         TTransactionsEnv env;
+        const auto expectedHash = env.ExpectedChecksumHash("/Root/table");
         UNIT_ASSERT(!env.SdkChecksum());
         const auto requestId = env.RequestChecksum();
         env.ChecksumHeartbeat();
@@ -422,11 +442,14 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         const auto& result = response.GetChecksumStatus().last_result();
         UNIT_ASSERT(result.matches());
         UNIT_ASSERT_VALUES_EQUAL(result.source().row_count(), 0);
-        UNIT_ASSERT(result.source().hash().empty());
+        UNIT_ASSERT_VALUES_EQUAL(result.source().hash(), expectedHash);
+        UNIT_ASSERT_VALUES_EQUAL(result.destination().hash(), expectedHash);
         UNIT_ASSERT(result.has_finished_at());
         for (const bool stats : {false, true}) {
             const auto status = env.SdkChecksum(stats);
             UNIT_ASSERT(status && status->LastResult && status->LastResult->Matches);
+            UNIT_ASSERT_VALUES_EQUAL(status->LastResult->Source.Hash, expectedHash);
+            UNIT_ASSERT_VALUES_EQUAL(status->LastResult->Destination.Hash, expectedHash);
         }
         env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
         env.Handshake();
@@ -444,19 +467,29 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
         write("UPSERT INTO `/Root/table` (key, value) VALUES (1u, 'one');");
+        const auto expectedHash = env.ExpectedChecksumHash("/Root/table");
+        const auto expectedEmptyHash = env.ExpectedChecksumHash("/Root/replica");
         env.RequestChecksum();
         env.ChecksumHeartbeat();
         const auto mismatch = env.WaitChecksum();
         UNIT_ASSERT_C(mismatch.GetStatus() == Ydb::StatusIds::SUCCESS, mismatch.GetIssue());
         UNIT_ASSERT(!mismatch.GetChecksumStatus().last_result().matches());
         UNIT_ASSERT_VALUES_EQUAL(mismatch.GetChecksumStatus().last_result().source().row_count(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(mismatch.GetChecksumStatus().last_result().source().hash(), expectedHash);
         UNIT_ASSERT_VALUES_EQUAL(mismatch.GetChecksumStatus().last_result().destination().row_count(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(mismatch.GetChecksumStatus().last_result().destination().hash(), expectedEmptyHash);
+        const auto status = env.SdkChecksum();
+        UNIT_ASSERT(status && status->LastResult);
+        UNIT_ASSERT_VALUES_EQUAL(status->LastResult->Source.Hash, expectedHash);
+        UNIT_ASSERT_VALUES_EQUAL(status->LastResult->Destination.Hash, expectedEmptyHash);
         write("DELETE FROM `/Root/table` WHERE key = 1u;");
         env.RequestChecksum();
         env.ChecksumHeartbeat();
         const auto match = env.WaitChecksum();
         UNIT_ASSERT_C(match.GetStatus() == Ydb::StatusIds::SUCCESS, match.GetIssue());
         UNIT_ASSERT(match.GetChecksumStatus().last_result().matches());
+        UNIT_ASSERT_VALUES_EQUAL(match.GetChecksumStatus().last_result().source().hash(), expectedEmptyHash);
+        UNIT_ASSERT_VALUES_EQUAL(match.GetChecksumStatus().last_result().destination().hash(), expectedEmptyHash);
     }
 
     Y_UNIT_TEST(ChecksumSplitsTransactionRangesAtCapacity) {

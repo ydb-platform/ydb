@@ -17,8 +17,9 @@ Y_UNIT_TEST_SUITE(ReplicationDescription) {
         status->mutable_finished_at()->set_seconds(200);
         auto* result = status->mutable_last_result();
         result->mutable_source()->set_row_count(1);
-        result->mutable_source()->set_hash("18446744073709551615");
+        result->mutable_source()->set_hash("00ABCDEF12345678");
         result->mutable_destination()->set_row_count(0);
+        result->mutable_destination()->set_hash("0000000000000000");
         result->set_matches(false);
         result->mutable_finished_at()->set_seconds(100);
         NYdb::NReplication::TReplicationDescription description(proto);
@@ -27,8 +28,8 @@ Y_UNIT_TEST_SUITE(ReplicationDescription) {
         UNIT_ASSERT_VALUES_EQUAL(actual->Status, NYdb::EStatus::TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL(actual->FinishedAt, TInstant::Seconds(200));
         UNIT_ASSERT_VALUES_EQUAL(actual->LastResult->FinishedAt, TInstant::Seconds(100));
-        UNIT_ASSERT_VALUES_EQUAL(actual->LastResult->Source.Hash, "18446744073709551615");
-        UNIT_ASSERT(actual->LastResult->Destination.Hash.empty());
+        UNIT_ASSERT_VALUES_EQUAL(actual->LastResult->Source.Hash, "00ABCDEF12345678");
+        UNIT_ASSERT_VALUES_EQUAL(actual->LastResult->Destination.Hash, "0000000000000000");
         UNIT_ASSERT(!actual->LastResult->Matches);
         UNIT_ASSERT_VALUES_EQUAL(actual->Issues.Size(), 1);
     }

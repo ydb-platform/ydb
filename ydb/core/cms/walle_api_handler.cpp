@@ -79,8 +79,13 @@ private:
         request->Record.SetIssuer(map["issuer"].GetString());
         request->Record.SetAction(map["action"].GetString());
 
-        if (map.contains("data_migration"))
-            request->Record.SetDataMigration(map["data_migration"].GetString());
+        if (map.contains("evacuate_data")) {
+            if (!map["evacuate_data"].IsBoolean()) {
+                ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\nevacuate_data must be a boolean", ctx);
+                return;
+            }
+            request->Record.SetEvacuateData(map["evacuate_data"].GetBoolean());
+        }
 
         auto &hosts = map["hosts"].GetArray();
         for (auto &host : hosts)

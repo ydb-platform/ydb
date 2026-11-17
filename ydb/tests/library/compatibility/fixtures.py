@@ -177,7 +177,16 @@ class RestartToAnotherVersionFixture:
                 settings=settings,
             )
 
+    def _execute_data_query(self, query, settings):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            return session_pool.execute_with_retries(
+                query,
+                retry_settings=ydb.RetrySettings(max_retries=1),
+                settings=settings,
+            )
+
     def _drop_readiness_table(self, table_name, settings):
+        # CREATE can outlive the client timeout; retry DROP to avoid leftover paths.
         query = "DROP TABLE IF EXISTS `%s`" % table_name
         deadline = time.time() + 30
         while True:
@@ -190,6 +199,30 @@ class RestartToAnotherVersionFixture:
                     return
                 logger.warning("Drop readiness table %s failed, retrying: %r", table_name, e)
                 time.sleep(2)
+
+    def _is_path_already_exists(self, error):
+        if isinstance(error, ydb.issues.AlreadyExists):
+            return True
+        message = str(error)
+        return "path exist" in message and "creating right now" not in message
+
+    def _is_path_creating(self, error):
+        return "creating right now" in str(error)
+
+    def _probe_data_plane(self, table_name, settings):
+        # Full stop/start can leave data tablets unresolved after SchemeShard is up.
+        # UPSERT+SELECT catches Failed to resolve tablet that a scheme-only probe misses.
+        self._execute_data_query(
+            "UPSERT INTO `%s` (id) VALUES (1)" % table_name,
+            settings,
+        )
+        result_sets = self._execute_data_query(
+            "SELECT id FROM `%s` WHERE id = 1" % table_name,
+            settings,
+        )
+        rows = result_sets[0].rows if result_sets else []
+        if not rows:
+            raise AssertionError("readiness data probe returned no rows for %s" % table_name)
 
     def _wait_for_readiness(self):
         timeout = 120  # seconds
@@ -207,34 +240,47 @@ class RestartToAnotherVersionFixture:
         last_exception = None
         attempt = 0
         table_name = self._new_readiness_table_name()
-        while time.time() < deadline:
-            attempt += 1
-            query = """
-            CREATE TABLE `%s` (
-                id Int64 NOT NULL,
-                PRIMARY KEY (id)
-            ) """ % table_name
-            try:
-                logger.info("Readiness check attempt %d on %s", attempt, table_name)
-                self._execute_scheme_query(query, settings)
-                self._drop_readiness_table(table_name, settings)
-                return
-            except Exception as e:
-                message = str(e)
-                if "path exist" in message and "creating right now" not in message:
-                    logger.info("Readiness table %s already exists", table_name)
+        abandoned = []
+        try:
+            while True:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    break
+                attempt += 1
+                query = """
+                CREATE TABLE `%s` (
+                    id Int64 NOT NULL,
+                    PRIMARY KEY (id)
+                ) """ % table_name
+                try:
+                    logger.info("Readiness check attempt %d on %s", attempt, table_name)
+                    try:
+                        self._execute_scheme_query(query, settings)
+                    except Exception as e:
+                        if self._is_path_already_exists(e):
+                            logger.info("Readiness table %s already exists", table_name)
+                        elif self._is_path_creating(e):
+                            raise
+                        else:
+                            raise
+                    self._probe_data_plane(table_name, settings)
                     self._drop_readiness_table(table_name, settings)
                     return
-                last_exception = e
-                logger.warning(
-                    "Readiness check attempt %d failed after %.1fs: %r",
-                    attempt,
-                    time.time() - start_time,
-                    e,
-                )
-                if "creating right now" in message:
-                    table_name = self._new_readiness_table_name()
-                time.sleep(interval)
+                except Exception as e:
+                    last_exception = e
+                    logger.warning(
+                        "Readiness check attempt %d failed after %.1fs: %r",
+                        attempt,
+                        time.time() - start_time,
+                        e,
+                    )
+                    if self._is_path_creating(e):
+                        abandoned.append(table_name)
+                        table_name = self._new_readiness_table_name()
+                    time.sleep(min(interval, max(0.0, deadline - time.time())))
+        finally:
+            for name in abandoned:
+                self._drop_readiness_table(name, settings)
 
         raise last_exception or RuntimeError("readiness check timed out")
 

@@ -106,19 +106,25 @@ Y_UNIT_TEST(RenameOntoLargerKeyKeepsSourceBytes) {
     UNIT_ASSERT_VALUES_EQUAL(probe.SizeBytes->Val(), 10);
 }
 
-Y_UNIT_TEST(DuplicateInsertDoesNotGrowSize) {
+Y_UNIT_TEST(RenameOntoSameKeyPreservesSize) {
     TCacheProbe probe;
-    probe.Add(probe.Blob(1, 100));
-    probe.Add(probe.Blob(1, 100));
+    probe.Add(probe.Blob(1, 10));
+    probe.Rename(probe.Blob(1, 10), probe.Blob(1, 10));
     probe.Sync();
 
     UNIT_ASSERT_VALUES_EQUAL(probe.SizeBlobs->Val(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(probe.SizeBytes->Val(), 100);
+    UNIT_ASSERT_VALUES_EQUAL(probe.SizeBytes->Val(), 10);
 }
 
 Y_UNIT_TEST(ReinsertReplacesByteCount) {
     TCacheProbe probe;
     probe.Add(probe.Blob(1, 10));
+    probe.Add(probe.Blob(1, 10));
+    probe.Sync();
+
+    UNIT_ASSERT_VALUES_EQUAL(probe.SizeBlobs->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(probe.SizeBytes->Val(), 10);
+
     probe.Add(probe.Blob(2, 7));
     probe.Add(probe.Blob(1, 30));
     probe.Sync();

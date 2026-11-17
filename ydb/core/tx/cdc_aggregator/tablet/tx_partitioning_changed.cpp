@@ -34,6 +34,8 @@ public:
         const auto& record = Ev->Get()->Record;
         Result = MakeHolder<TEvCdcAggregator::TEvPartitioningChangedAck>();
         Result->Record.SetOrigin(Self->TabletID());
+        Result->Record.SetOperationId(record.GetOperationId());
+        Result->Record.SetParentDataShardId(record.GetParentDataShardId());
 
         const auto [change, error] = TCdcAggregatorStreamProtoConverter().ParsePartitioningChange(record);
         if (!change) {

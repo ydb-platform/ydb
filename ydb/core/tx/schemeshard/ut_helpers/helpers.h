@@ -595,6 +595,9 @@ namespace NSchemeShardUT_Private {
     NKikimrSchemeOp::TTableDescription GetDatashardSchema(TTestActorRuntime& runtime, ui64 tabletId, ui64 tid);
 
     TVector<ui64> GetTableShards(TTestActorRuntime& runtime, ui64 schemeShard,  const TString& path);
+    TVector<ui64> GetSortedTableShards(TTestActorRuntime& runtime, const TString& tablePath);
+    ui64 GetCdcAggregatorTabletId(TTestActorRuntime& runtime, const TString& streamPath);
+    TVector<ui64> DescribeCdcAggregatorSources(TTestActorRuntime& runtime, ui64 aggregatorTabletId);
     NLs::TCheckFunc ShardsIsReady(TTestActorRuntime& runtime);
 
     TLocalPathId GetNextLocalPathId(TTestActorRuntime& runtime, ui64& txId);

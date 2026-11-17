@@ -19,6 +19,7 @@
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -38,6 +39,7 @@
 
 #include <openssl/sha.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/string/split.h>
@@ -1743,6 +1745,32 @@ namespace NSchemeShardUT_Private {
             shards.emplace_back(part.GetDatashardId());
         }
         return shards;
+    }
+
+    TVector<ui64> GetSortedTableShards(TTestActorRuntime& runtime, const TString& tablePath) {
+        auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, tablePath);
+        Sort(shards);
+        return shards;
+    }
+
+    ui64 GetCdcAggregatorTabletId(TTestActorRuntime& runtime, const TString& streamPath) {
+        const ui64 aggregatorTabletId = DescribePrivatePath(runtime, streamPath)
+            .GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId();
+        UNIT_ASSERT(aggregatorTabletId);
+        return aggregatorTabletId;
+    }
+
+    TVector<ui64> DescribeCdcAggregatorSources(TTestActorRuntime& runtime, ui64 aggregatorTabletId) {
+        const auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, aggregatorTabletId, sender, new NCdcAggregator::TEvCdcAggregator::TEvDescribeTracking());
+        const auto result = runtime.GrabEdgeEvent<NCdcAggregator::TEvCdcAggregator::TEvDescribeTrackingResult>(sender);
+
+        TVector<ui64> sources;
+        for (const auto& source : result->Get()->Record.GetSources()) {
+            sources.push_back(source.GetDataShardId());
+        }
+        Sort(sources);
+        return sources;
     }
 
     NLs::TCheckFunc ShardsIsReady(TTestActorRuntime& runtime) {

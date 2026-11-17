@@ -48,6 +48,8 @@ public:
         const auto& record = Ev->Get()->Record;
         Result = MakeHolder<TEvCdcAggregator::TEvConfigureTrackingResult>();
         Result->Record.SetOrigin(Self->TabletID());
+        Result->Record.SetOperationId(record.GetOperationId());
+        Result->Record.SetOperationPartId(record.GetOperationPartId());
 
         const auto [config, error] = TCdcAggregatorStreamProtoConverter().ParseConfig(record.GetConfig());
         if (!config) {

@@ -6161,6 +6161,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult, Handle);
         HFuncTraced(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult, Handle);
 
+        HFuncTraced(NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult, Handle);
+        HFuncTraced(NCdcAggregator::TEvCdcAggregator::TEvPartitioningChangedAck, Handle);
+
         // replication
         HFuncTraced(NReplication::TEvController::TEvCreateReplicationResult, Handle);
         HFuncTraced(NReplication::TEvController::TEvAlterReplicationResult, Handle);
@@ -7678,6 +7681,48 @@ void TSchemeShard::Handle(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult
     TTxId txId = TTxId(ev->Get()->Record.GetTxId());
     TSubTxId partId = TSubTxId(ev->Get()->Record.GetTxPartId());
     Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
+}
+
+void TSchemeShard::Handle(NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult::TPtr& ev, const TActorContext& ctx) {
+    YDB_LOG_DEBUG_CTX(ctx, "Handle TEvConfigureTrackingResult",
+        {"schemeshard", TabletID()},
+        {"message", ev->Get()->Record.ShortDebugString()},
+    );
+
+    const auto txId = TTxId(ev->Get()->Record.GetOperationId());
+    const auto partId = TSubTxId(ev->Get()->Record.GetOperationPartId());
+    const auto operationId = TOperationId(txId, partId);
+    const auto* txState = FindTx(operationId);
+    if (!txState || (txState->TxType != TTxState::TxCreateCdcStream && txState->TxType != TTxState::TxRotateCdcStream)) {
+        YDB_LOG_WARN_CTX(ctx, "Got TEvConfigureTrackingResult for unknown CDC stream operation",
+            {"operationId", operationId},
+            {"tabletId", ev->Get()->Record.GetOrigin()},
+            {"schemeshard", TabletID()},
+        );
+        return;
+    }
+
+    Execute(CreateTxOperationReply(operationId, ev), ctx);
+}
+
+void TSchemeShard::Handle(NCdcAggregator::TEvCdcAggregator::TEvPartitioningChangedAck::TPtr& ev, const TActorContext& ctx) {
+    YDB_LOG_DEBUG_CTX(ctx, "Handle TEvPartitioningChangedAck",
+        {"schemeshard", TabletID()},
+        {"message", ev->Get()->Record.ShortDebugString()},
+    );
+
+    const auto operationId = TOperationId(TTxId(ev->Get()->Record.GetOperationId()), 0);
+    const auto* txState = FindTx(operationId);
+    if (!txState || (txState->TxType != TTxState::TxSplitTablePartition && txState->TxType != TTxState::TxMergeTablePartition)) {
+        YDB_LOG_WARN_CTX(ctx, "Got TEvPartitioningChangedAck for unknown split or merge operation",
+            {"operationId", operationId},
+            {"tabletId", ev->Get()->Record.GetOrigin()},
+            {"schemeshard", TabletID()},
+        );
+        return;
+    }
+
+    Execute(CreateTxOperationReply(operationId, ev), ctx);
 }
 
 void TSchemeShard::Handle(NReplication::TEvController::TEvCreateReplicationResult::TPtr &ev, const TActorContext &ctx) {

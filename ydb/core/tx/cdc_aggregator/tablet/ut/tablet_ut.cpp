@@ -23,6 +23,8 @@ using TDescribeResult = NKikimrCdcAggregator::TEvDescribeTrackingResult;
 
 THolder<TEvCdcAggregator::TEvConfigureTracking> MakeConfigureTracking(const TVector<ui64>& sourceDataShardIds, ui32 partitionCount) {
     auto request = MakeHolder<TEvCdcAggregator::TEvConfigureTracking>();
+    request->Record.SetOperationId(77);
+    request->Record.SetOperationPartId(2);
     auto& config = *request->Record.MutableConfig();
     TPathId(1, 2).ToProto(config.MutableStreamPathId());
     config.SetStreamPath("/Root/Table/Stream");
@@ -180,6 +182,8 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
 
         const auto configureResult = env.ConfigureTracking({2, 1});
         UNIT_ASSERT_C(configureResult.GetStatus() == TConfigureResult::SUCCESS, configureResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(configureResult.GetOperationId(), 77u);
+        UNIT_ASSERT_VALUES_EQUAL(configureResult.GetOperationPartId(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({1, 2}));
 
         const auto writeResult = env.WriteHeartbeats({{1, 100}});
@@ -254,6 +258,8 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
 
         const auto splitAck = env.PartitioningChanged(1, {3, 4});
         UNIT_ASSERT_C(splitAck.GetStatus() == TPartitioningAck::SUCCESS, splitAck.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(splitAck.GetOperationId(), 77u);
+        UNIT_ASSERT_VALUES_EQUAL(splitAck.GetParentDataShardId(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 3, 4}));
 
         const auto repeatedAck = env.PartitioningChanged(1, {3, 4});

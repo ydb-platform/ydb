@@ -1,0 +1,101 @@
+name: Sync untouched YQL documentation
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # 05:00 Europe/Moscow (UTC+3); GitHub may delay scheduled runs.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Report changes without creating or updating a PR'
+        type: boolean
+        default: true
+  pull_request:
+    paths:
+      - 'ydb/docs/tools/yql_sync/**'
+      - 'yql/essentials/docs/scripts/doc_upgrade_git.sh'
+      - '.github/workflows/yql_docs_sync.yaml'
+
+concurrency:
+  group: yql-docs-sync-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'scheduled' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: ydb/docs/tools/yql_sync
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s ydb/docs/tools/yql_sync -v
+
+  sync:
+    needs: test
+    if: github.repository == 'ydb-platform/ydb' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          sparse-checkout: |
+            yql/essentials/docs
+            ydb/docs
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Compare and synchronize unmodified files
+        env:
+          DRY_RUN: ${{ inputs.dry_run || false }}
+        run: |
+          args=(--report "$RUNNER_TEMP/yql-docs-sync.json")
+          if [[ "$DRY_RUN" != true ]]; then
+            args+=(--apply)
+          fi
+          bash yql/essentials/docs/scripts/doc_upgrade_git.sh --selective "${args[@]}"
+          {
+            echo '### YQL documentation synchronization'
+            echo '```json'
+            cat "$RUNNER_TEMP/yql-docs-sync.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yql-docs-sync-report
+          path: ${{ runner.temp }}/yql-docs-sync.json
+      - name: Create or update the review PR
+        if: inputs.dry_run != true
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.YDBOT_TOKEN }}
+          base: main
+          branch: automation/yql-docs-sync
+          delete-branch: true
+          add-paths: |
+            ydb/docs/ru/core/yql/reference
+            ydb/docs/en/core/yql/reference
+            ydb/docs/tools/yql_sync/ownership.json
+          commit-message: 'docs: sync untouched YQL reference files'
+          title: 'docs: sync untouched YQL reference files'
+          body: |
+            ### Changelog entry
+
+            Update unmodified YQL reference pages from `yql/essentials/docs`.
+
+            ### Description for reviewers
+
+            Files changed locally in YDB are permanently excluded in
+            `ydb/docs/tools/yql_sync/ownership.json`. Newly added upstream files
+            are not automatically imported. Upstream deletions and renames
+            preserve the current YDB page and exclude it from future syncs.
+
+            Review the documentation build and the `yql-docs-sync-report`
+            artifact from this workflow run. This PR is never auto-merged.

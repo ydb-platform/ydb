@@ -1,6 +1,14 @@
 #!/bin/bash
 set -eu
 
+# The selective GitHub consumer keeps its state and implementation outside rightlib.
+if [ "${1:-}" = "--selective" ]; then
+    shift
+    SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    REPOSITORY_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
+    exec python3 "$REPOSITORY_ROOT/ydb/docs/tools/yql_sync/sync.py" --repo "$REPOSITORY_ROOT" "$@"
+fi
+
 TARGET_INFO_FILE="$1"
 
 if [ ! -f $TARGET_INFO_FILE ]; then

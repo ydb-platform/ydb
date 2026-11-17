@@ -510,7 +510,7 @@ TQueryPtr TComputeScheduler::EnsureReadQuery(const TPoolPtr& pool, const NHdrf::
     if (const auto it = ReadQueries.find(poolId); it != ReadQueries.end()) {
         return it->second;
     }
-    auto query = std::make_shared<TQuery>(READ_QUERY_ID, &DelayParams, true);
+    auto query = std::make_shared<TQuery>(READ_QUERY_ID, &DelayParams, false);
     pool->AddQuery(query);
     ReadQueries.emplace(poolId, query);
     return query;

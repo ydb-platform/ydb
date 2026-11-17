@@ -16,19 +16,19 @@ TPool* TTreeElement::GetParent() const {
 // TQuery
 ///////////////////////////////////////////////////////////////////////////////
 
-TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMinFairShare)
+TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, bool initializeCpuDemand)
     : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id)
     , TTreeElement(id)
     , NHdrf::TQuery<ETreeType::DYNAMIC>(id)
     , DelayParams(delayParams)
-    , AllowMinFairShare(allowMinFairShare)
+    , InitializeCpuDemand(initializeCpuDemand)
 {
 }
 
 NSnapshot::TQuery* TQuery::TakeSnapshot() {
     auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
 
-    newQuery->CpuMaxDemand = CpuMaxDemand.load();
+    newQuery->CpuMaxDemand = TakeCpuMaxDemand();
 
     // The actual demand is smoothed with the one of the previous snapshot.
     if (const auto prevQuery = GetSnapshot()) {
@@ -54,6 +54,7 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() {
 void TQuery::InitSnapshot(const NSnapshot::TPool& pool) {
     auto snapshot = std::make_shared<NSnapshot::TQuery>(std::get<TQueryId>(GetId()), shared_from_this());
 
+    snapshot->CpuMaxDemand = TakeCpuMaxDemand();
     snapshot->CpuFairShare = pool.CpuFairShare > 0 ? pool.CpuFairShare : GetAllowMinFairShare();
     snapshot->MemoryFairShare = pool.MemoryFairShare;
 
@@ -84,8 +85,45 @@ TFullPoolId TQuery::GetFullPoolId() const {
 }
 
 bool TQuery::GetAllowMinFairShare() const {
+    return GetCpuLimit() > 0;
+}
+
+ui64 TQuery::GetCpuLimit() const {
     const auto* parent = GetParent();
-    return AllowMinFairShare && (!parent || parent->GetConfiguredAttributes().GetCpuLimit() > 0);
+    if (!parent) {
+        return Infinity();
+    }
+
+    TVector<TPoolId> path;
+    while (parent->GetParent()) {
+        path.push_back(std::get<TPoolId>(parent->GetId()));
+        parent = parent->GetParent();
+    }
+    const auto* root = dynamic_cast<const TRoot*>(parent);
+    Y_ENSURE(root, "Query is not attached to the scheduler root");
+
+    // Pin one policy version, including when a retained runtime path has no static counterpart.
+    const auto tree = root->GetStaticTree();
+    ui64 limit = Min(tree->TotalCpuLimit, tree->GetCpuLimit());
+    NStatic::TPoolPtr pool = tree;
+    for (auto it = path.rbegin(); it != path.rend(); ++it) {
+        pool = NStatic::GetPool(pool, *it);
+        if (!pool) {
+            break;
+        }
+        limit = Min(limit, pool->GetCpuLimit());
+    }
+    return limit;
+}
+
+ui64 TQuery::TakeCpuMaxDemand() {
+    const ui64 demand = CpuMaxDemand.load();
+    if (std::exchange(InitializeCpuDemand, false) && demand == 0) {
+        const ui64 limit = GetCpuLimit();
+        // An entirely unbounded policy has no finite headroom estimate; retain a one-slot start.
+        return limit == Infinity() ? 1 : limit;
+    }
+    return demand;
 }
 
 TSchedulableTaskList::iterator TQuery::AddTask(const TSchedulableTaskPtr& task) {

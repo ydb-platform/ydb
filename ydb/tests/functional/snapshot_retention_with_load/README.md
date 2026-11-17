@@ -1,5 +1,8 @@
 # DataShard snapshot retention
 
+The shared workload is in `ydb/tests/library/snapshot_retention/workload`.
+Functional tests, compatibility tests and the standalone CLI use the same implementation.
+
 The reusable workload writes two row tables atomically. A private Table Service
 snapshot transaction reads only the anchor table, then reads the target after
 its ordinary MVCC window. The anchor's generation determines the exact target
@@ -115,10 +118,16 @@ Run the new tests (tests include their build):
     -F '*SnapshotRetention*' 2>&1 | tail -n 100
 ```
 
-The standalone utility can use an existing cluster:
+Build the standalone utility to use it against an existing cluster:
 
 ```bash
-snapshot_retention --endpoint localhost:2135 --database /Root \
+./ya make --build relwithdebinfo \
+    ydb/tests/functional/snapshot_retention_with_load/runner
+```
+
+```bash
+ydb/tests/functional/snapshot_retention_with_load/runner/snapshot_retention \
+    --endpoint localhost:2135 --database /Root \
     --path retention_check --duration 900 --hold-seconds 360
 ```
 

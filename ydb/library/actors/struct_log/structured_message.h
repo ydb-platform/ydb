@@ -16,6 +16,12 @@ namespace NActors::NStructuredLog {
 
 class TCreateMessageArg;
 
+// Kind belongs to a value, and follows the last write when a path is replaced.
+enum class EFieldKind {
+    Metadata,
+    Label,
+};
+
 class TStructuredMessage {
     friend class TCreateMessageArg;
     static const unsigned PreallocatedValueCount = 16;
@@ -31,14 +37,14 @@ public:
     TStructuredMessage& operator=(TStructuredMessage&&) = default;
 
     template <typename T, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type>
-    inline TStructuredMessage& AppendValue(std::vector<TKeyName>&& name, const T& value) {
+    inline TStructuredMessage& AppendValue(std::vector<TKeyName>&& name, const T& value, EFieldKind kind = EFieldKind::Metadata) {
         auto typeCode = TTypesMapping::GetCode<T>();
 
         auto offset = Data.size();
         TTypesMapping::Serialize(value, Data);
         auto length = Data.size() - offset;
 
-        AttachedValues.emplace_back(std::move(name), typeCode, offset, length, ++AddNumber);
+        AttachedValues.emplace_back(std::move(name), typeCode, offset, length, ++AddNumber, kind);
         AttachedValuesSorted = false;
 
         return *this;
@@ -63,7 +69,7 @@ public:
         for (const auto& subItem : message.AttachedValues) {
             auto name = subItem.Name;
             AttachedValues.emplace_back(
-                std::move(name), subItem.TypeCode, subItem.Offset + offset, subItem.Length, ++AddNumber
+                std::move(name), subItem.TypeCode, subItem.Offset + offset, subItem.Length, ++AddNumber, subItem.Kind
             );
         }
 
@@ -76,7 +82,7 @@ public:
         return *this;
     }
 
-    inline TStructuredMessage& AppendSubMessage(TKeyName&& name, const TStructuredMessage& subMessage) {
+    inline TStructuredMessage& AppendSubMessage(TKeyName&& name, const TStructuredMessage& subMessage, EFieldKind kind = EFieldKind::Metadata) {
         auto offset = Data.size();
 
         for (const auto& subItem : subMessage.AttachedValues) {
@@ -84,7 +90,7 @@ public:
             std::copy(begin(subItem.Name), end(subItem.Name), std::back_inserter(addKey));
 
             AttachedValues.emplace_back(
-                std::move(addKey), subItem.TypeCode, subItem.Offset + offset, subItem.Length, ++AddNumber
+                std::move(addKey), subItem.TypeCode, subItem.Offset + offset, subItem.Length, ++AddNumber, kind == EFieldKind::Label ? kind : subItem.Kind
             );
         }
 
@@ -172,11 +178,17 @@ public:
 
     template <typename TCallable>
     void ForEachTyped(const TCallable& callable) const {
-        EnsureSorted();
+        ForEachTypedWithKind([&](const auto& name, const auto& value, EFieldKind) {
+            callable(name, value);
+        });
+    }
 
-        for (auto& item : AttachedValues) {
+    template <typename TCallable>
+    void ForEachTypedWithKind(const TCallable& callable) const {
+        EnsureSorted();
+        for (const auto& item : AttachedValues) {
             TTypesMapping::Invoke(item.TypeCode, Data.data() + item.Offset, item.Length, [&](const auto& value) {
-                callable(item.Name, value);
+                callable(item.Name, value, item.Kind);
             });
         }
     }
@@ -190,6 +202,7 @@ protected:
         std::size_t Offset;
         std::size_t Length;
         unsigned AddNumber;
+        EFieldKind Kind = EFieldKind::Metadata;
 
         TAttachedValue() = default;
         TAttachedValue(const TAttachedValue&) = default;
@@ -200,7 +213,8 @@ protected:
             TNativeTypeCode typeCode,
             std::size_t Offset,
             std::size_t Length,
-            unsigned addNumber
+            unsigned addNumber,
+            EFieldKind kind = EFieldKind::Metadata
         );
 
         TAttachedValue& operator=(const TAttachedValue&) = default;

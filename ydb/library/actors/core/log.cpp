@@ -1,4 +1,5 @@
 #include "log.h"
+#include "log_structured_keys.h"
 
 static_assert(int(NActors::NLog::PRI_EMERG) == int(::TLOG_EMERG), "expect int(NActors::NLog::PRI_EMERG) == int(::TLOG_EMERG)");
 static_assert(int(NActors::NLog::PRI_ALERT) == int(::TLOG_ALERT), "expect int(NActors::NLog::PRI_ALERT) == int(::TLOG_ALERT)");
@@ -561,6 +562,59 @@ namespace NActors {
     try {
         const auto logPrio = ::ELogPriority(ui16(priority));
 
+        if (Settings->Format == NLog::TSettings::STRUCTURED_FORMAT && !json) {
+            // A TString built from a literal allocates; build the constant ones once.
+            static const TString LabelComponent = "labels.component", LabelDatabase = "labels.database",
+                LabelTag = "labels.tag", LabelLogType = "labels.log_type", MetaNodeId = "meta.node_id",
+                MetaRevision = "meta.revision", MetaPriority = "meta.priority", MetaNPriority = "meta.npriority",
+                MetaLocation = "meta.location", HostKey = "host", ClusterKey = "cluster",
+                ComponentKey = "_component", PriorityKey = "_priority", StaticDatabase = "static",
+                Tag = "KIKIMR", LogType = "debug", Revision = ToString(GetProgramSvnRevision());
+            const TString componentName = Settings->ComponentName(component);
+            const TString priorityName = PriorityToString(priority);
+
+            TLogRecord::TMetaFlags metaFlags;
+            metaFlags.reserve((structuredMessage.Defined() ? structuredMessage->GetValuesCount() : 0) + 15);
+            if (structuredMessage.Defined()) {
+                StructuredMetaWriter.WriteCanonical(metaFlags, structuredMessage.GetRef());
+            }
+            // System dimensions take precedence over explicitly labelled user fields.
+            // Ordinary fields cannot collide because their prefix is meta.message.
+            metaFlags.erase(std::remove_if(metaFlags.begin(), metaFlags.end(), [](const auto& item) {
+                return item.first == LabelComponent || item.first == LabelDatabase ||
+                    item.first == LabelTag || item.first == LabelLogType;
+            }), metaFlags.end());
+            metaFlags.push_back({LabelComponent, componentName});
+            metaFlags.push_back({LabelDatabase, Settings->TenantName ? Settings->TenantName : StaticDatabase});
+            metaFlags.push_back({LabelTag, Tag});
+            metaFlags.push_back({LabelLogType, LogType});
+            metaFlags.push_back({MetaNodeId, ToString(Settings->NodeId)});
+            metaFlags.push_back({MetaRevision, Revision});
+            metaFlags.push_back({MetaPriority, priorityName});
+            metaFlags.push_back({MetaNPriority, ToString(static_cast<int>(priority))});
+            if (fileName && Settings->LogSourceLocation) {
+                metaFlags.push_back({MetaLocation, TStringBuilder() << fileName << ":" << lineNumber});
+            }
+            // Preserve the resource-routing names used by the JSON envelope.
+            metaFlags.push_back({HostKey, Settings->ShortHostName});
+            metaFlags.push_back({ClusterKey, Settings->ClusterName});
+            metaFlags.push_back({ComponentKey, componentName});
+            metaFlags.push_back({PriorityKey, priorityName});
+            metaFlags.push_back({NLog::NStructured::MessageKey, formatted});
+            metaFlags.push_back({NLog::NStructured::TimestampKey, ToString(time.MicroSeconds())});
+
+            // The line starts with UTC time even with UseLocalTimestamps; the UA converter strips it.
+            TStringBuilder line;
+            line << time << " :" << componentName << " " << priorityName << ": " << formatted;
+            if (structuredMessage.Defined() && structuredMessage->GetValuesCount() != 0) {
+                line << " (";
+                StructuredTextWriter.Write(line, structuredMessage.GetRef());
+                line << ")";
+            }
+            LogBackend->WriteData(TLogRecord(logPrio, line.data(), line.size(), std::move(metaFlags)));
+            return true;
+        }
+
         TLogRecord::TMetaFlags metaFlags;
         if (structuredMessage.Defined()) {
             StructuredMetaWriter.Write(metaFlags, structuredMessage.GetRef());
@@ -568,6 +622,8 @@ namespace NActors {
 
         char buf[TimeBufSize];
         switch (Settings->Format) {
+            // Raw JSON events have no brief text/field contract. Keep their legacy path.
+            case NActors::NLog::TSettings::STRUCTURED_FORMAT:
             case NActors::NLog::TSettings::PLAIN_FULL_FORMAT: {
                 TStringBuilder logRecord;
                 if (Settings->UseLocalTimestamps) {

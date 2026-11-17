@@ -7,6 +7,12 @@
 
 namespace NActors::NStructuredLog {
 
+// Explicit labels retain the same names in legacy text and JSON output.
+template <typename T, typename K = TKeyName>
+TCreateMessageArg Label(K&& name, const T& value) {
+    return TCreateMessageArg(std::forward<K>(name), value, EFieldKind::Label);
+}
+
 // YDB_LOG_CREATE_MESSAGE and YDB_LOG_UPDATE_MESSAGE use lamdba because of following reasons:
 // 1. YDB_LOG_CREATE_MESSAGE must return created structured message.
 // 2. Lambda is rounded in ( ) - it is necc for working inside another macros. As example,

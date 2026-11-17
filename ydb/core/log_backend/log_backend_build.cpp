@@ -1,6 +1,8 @@
 #include "log_backend_build.h"
+#include "structured/record_converter.h"
 #include <util/system/getpid.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/log_structured_keys.h>
 
 namespace NKikimr {
 
@@ -26,7 +28,8 @@ TAutoPtr<TLogBackend> TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig
                                                                                  NMonitoring::TDynamicCounterPtr uaCounters,
                                                                                  const TString& logName, const TString& nodeType = "static",
                                                                                  const TString& tenant = "",
-                                                                                 const TString& clusterName = "") {
+                                                                                 const TString& clusterName = "",
+                                                                                 bool structuredTechnicalLogs) {
     auto parameters = NUnifiedAgent::TClientParameters(uaClientConfig.GetUri())
         .SetCounters(uaCounters)
         .SetMaxInflightBytes(uaClientConfig.GetMaxInflightBytes());
@@ -67,7 +70,12 @@ TAutoPtr<TLogBackend> TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig
         (*sessionParameters.Meta)["cluster"] = clusterName;
     }
 
-    TAutoPtr<TLogBackend> uaLogBackend = MakeLogBackend(parameters, sessionParameters).Release();
+    if (structuredTechnicalLogs) {
+        (*sessionParameters.Meta)[NActors::NLog::NStructured::FormatKey] = NActors::NLog::NStructured::FormatVersion;
+    }
+
+    TAutoPtr<TLogBackend> uaLogBackend = MakeLogBackend(parameters, sessionParameters,
+        structuredTechnicalLogs ? MakeStructuredLogRecordConverter() : nullptr).Release();
     return uaLogBackend;
 }
 

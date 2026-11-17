@@ -16,20 +16,19 @@ public:
 
     bool Write(TLogRecord::TMetaFlags& metaFlags, const TStructuredMessage& message);
 
+    // Opt-in transport for the structured_v1 producer protocol.
+    void WriteCanonical(TLogRecord::TMetaFlags& metaFlags, const TStructuredMessage& message);
+
 protected:
+    static TString MetaKey(TStringBuf prefix, const std::vector<TKeyName>& name);
+
     TLogRecord::TMetaFlags* MetaFlags{nullptr};
 
     struct TValueWriter : public TBaseValueWriter<TMetaWriter> {
         TValueWriter(TMetaWriter& writer);
 
         void operator()(const auto& value) const {
-            TStringBuilder metakeyName;
-            metakeyName << "meta";
-            for (const auto& keyItem : *KeyName) {
-                metakeyName << ".";
-                metakeyName << keyItem.ToString();
-            }
-            Writer.MetaFlags->push_back({metakeyName, TTypesMapping::ToString(value)});
+            Writer.MetaFlags->push_back({MetaKey("meta", *KeyName), TTypesMapping::ToString(value)});
         }
 
     };

@@ -96,12 +96,14 @@ TStructuredMessage::TAttachedValue::TAttachedValue(
         TNativeTypeCode typeCode,
         std::size_t Offset,
         std::size_t Length,
-        unsigned addNumber)
+        unsigned addNumber,
+        EFieldKind kind)
     : Name(std::move(name))
     , TypeCode(typeCode)
     , Offset(Offset)
     , Length(Length)
     , AddNumber(addNumber)
+    , Kind(kind)
 {}
 
 bool TStructuredMessage::TAttachedValue::operator<(const TAttachedValue& value) const {

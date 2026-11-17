@@ -423,24 +423,20 @@ config:
   hosts: [{host: "::1", port: 12001, host_config_id: 1}]
 )";
         std::optional<TString> forwardedYaml;
-        auto prev = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvBlobStorage::EvNodeConfigInvokeOnRoot) {
-                const auto& record = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
-                if (record.HasReplaceStorageConfig()) {
-                    forwardedYaml = record.GetReplaceStorageConfig().GetYAML();
-                    auto reply = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
-                    reply->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
-                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, reply.release(), 0, ev->Cookie));
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
+        auto observer = runtime.AddObserver<NStorage::TEvNodeConfigInvokeOnRoot>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.HasReplaceStorageConfig()) {
+                forwardedYaml = record.GetReplaceStorageConfig().GetYAML();
+                auto reply = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+                reply->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, reply.release(), 0, ev->Cookie));
+                ev.Reset();
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
         });
         Dispatched(runtime, [&] {
-            ReplaceConfig(server.GetChannel(), yaml, std::nullopt, std::nullopt, false, true,
+            ReplaceConfig(server.GetChannel(), yaml, std::nullopt, std::nullopt, false, false,
                 [](const auto& resp) { UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS); });
         });
-        runtime.SetObserverFunc(prev);
         UNIT_ASSERT(forwardedYaml);
         UNIT_ASSERT_VALUES_EQUAL(*forwardedYaml, yaml);
     }

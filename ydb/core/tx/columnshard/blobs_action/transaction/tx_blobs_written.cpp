@@ -25,17 +25,19 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
     const auto minReadSnapshot = Self->GetMinSnapshotForNewReads();
 
+    const ui64 packOperationId = Pack.GetWriteResults().front().GetWriteMeta().GetWriteId();
+    PackBehaviour = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)packOperationId)->GetBehaviour();
     for (auto&& writeResult : Pack.GetWriteResults()) {
-        const auto& writeMeta = writeResult.GetWriteMeta();
-        YDB_LOG_VERIFY(!writeMeta.HasLongTxId());
-        auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
-        if (!PackBehaviour) {
-            PackBehaviour = op->GetBehaviour();
+        const ui64 operationId = writeResult.GetWriteMeta().GetWriteId();
+        if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
+            YDB_LOG_VERIFY(Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)operationId)->GetBehaviour() == EOperationBehaviour::NoTxWrite);
         } else {
-            YDB_LOG_VERIFY(PackBehaviour == op->GetBehaviour());
+            // InsertWriteIds and PortionIds are the whole pack's, so a tx-write pack belongs to one operation
+            YDB_LOG_VERIFY(operationId == packOperationId,
+                {"packOperationId", packOperationId},
+                {"operationId", operationId});
         }
     }
-    YDB_LOG_VERIFY(!!PackBehaviour);
     auto& granule = index.MutableGranuleVerified(Pack.GetPathId());
     const ui64 firstPKColumnId = Self->TablesManager.GetIndexInfo(*CommitSnapshot).GetPKFirstColumnId();
     NOlap::TDbWrapper dbWrapper(txc.DB, nullptr);
@@ -49,6 +51,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
             granule.CommitImmediateOnExecute(txc, *CommitSnapshot, portion.GetPortionInfo(), firstPKColumnId);
         } else {
+            PortionIds.emplace_back(portion.GetPortionInfo().GetPortionInfo().GetPortionId());
             granule.InsertPortionOnExecute(txc, portion.GetPortionInfoPtr(), firstPKColumnId);
         }
     }
@@ -67,9 +70,9 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         YDB_LOG_VERIFY(Self->TablesManager.IsReadyForFinishWrite(writeMeta.GetPathId().InternalPathId, minReadSnapshot));
         Y_ABORT_UNLESS(op->GetStatus() == EOperationStatus::Started);
         if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
-            op->OnWriteFinish(txc, {}, true);
+            op->OnWriteFinish(txc, {}, {}, true);
         } else {
-            op->OnWriteFinish(txc, InsertWriteIds, false);
+            op->OnWriteFinish(txc, InsertWriteIds, PortionIds, false);
             Self->OperationsManager->LinkInsertWriteIdToOperationWriteId(InsertWriteIds, op->GetWriteId());
         }
         if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {

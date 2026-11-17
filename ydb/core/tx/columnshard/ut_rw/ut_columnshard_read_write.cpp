@@ -2431,6 +2431,35 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2 * 2048);
     }
 
+    Y_UNIT_TEST(UncommittedPortionsAreLoadedOnStart) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto controller = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)) };
+        Y_UNUSED(PrepareTablet(runtime, tableId, schema));
+        const ui64 txId = 111;
+
+        NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
+        AFL_VERIFY(writer.Write(MakeTestBatch<arrow::UInt64Type>({ "key" }, std::vector<ui64>{ 1, 2, 3 }), { 1 }, txId) ==
+                   NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        // a transaction that is not proposed is aborted on start
+        Y_UNUSED(writer.StartCommit(txId));
+
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, runtime.AllocateEdgeActor());
+
+        const TColumnShard& shard = *controller->GetTheOnlyShard();
+        const auto& index = shard.GetIndexAs<NOlap::TColumnEngineForLogs>();
+        const auto uncommittedPortions = shard.GetOperationsManager().GetUncommittedPortionAddresses();
+        UNIT_ASSERT(!uncommittedPortions.empty());
+        for (const auto& address : uncommittedPortions) {
+            const auto portion = index.GetGranuleVerified(address.GetPathId()).GetPortionOptional(address.GetPortionId(), false);
+            UNIT_ASSERT_C(portion, address.DebugString());
+            UNIT_ASSERT(!portion->IsCommitted());
+        }
+    }
+
     Y_UNIT_TEST(WriteIntoReadOnlyTableFails) {
         using namespace NArrow;
 

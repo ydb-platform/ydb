@@ -62,6 +62,7 @@ private:
     YDB_READONLY(ui64, LockId, 0);
     YDB_READONLY(ui64, Cookie, 0);
     YDB_READONLY_DEF(std::vector<TInsertWriteId>, InsertWriteIds);
+    YDB_READONLY_DEF(std::vector<ui64>, PortionIds);
     YDB_ACCESSOR(EOperationBehaviour, Behaviour, EOperationBehaviour::Undefined);
     YDB_ACCESSOR_DEF(std::optional<TMonotonic>, Deadline);
     YDB_READONLY_DEF(std::optional<ui32>, GranuleShardingVersionId);
@@ -83,8 +84,8 @@ public:
     void Start(TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source,
         const NOlap::TWritingContext& context, const std::shared_ptr<NLWTrace::TOrbit>& orbit, const ui64 txId,
         const TMonotonic orbitStartInstant);
-    void OnWriteFinish(
-        NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds, const bool ephemeralFlag);
+    void OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds,
+        const std::vector<ui64>& portionIds, const bool ephemeralFlag);
     void CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const;
     void CommitOnComplete(TColumnShard& owner, const NOlap::TSnapshot& snapshot) const;
     void AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const;

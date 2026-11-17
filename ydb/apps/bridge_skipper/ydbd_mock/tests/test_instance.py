@@ -1,12 +1,15 @@
 """Node gRPC listener ownership across failed starts and cancellation."""
 import asyncio
+import errno
+import socket
 import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from ydb.apps.bridge_skipper.ydbd_mock.lib import instance
-from ydb.apps.bridge_skipper.ydbd_mock.lib.testkit import LiveCluster
+from ydb.apps.bridge_skipper.ydbd_mock.lib import instance, model
+from ydb.apps.bridge_skipper.ydbd_mock.lib.testkit import LiveCluster, tiny_timings, wait_until
 from ydb.apps.bridge_skipper.ydbd_mock.lib.topology import Topology, TopologyError
+from ydb.public.api.protos.draft import ydb_bridge_pb2
 
 
 class ControlledGrpcServer:
@@ -180,6 +183,34 @@ class MockProcessShutdownTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(server.stopped.is_set())
         self.assertIsNone(process.nodes[0].server)
         self.assertIsNone(process._runner)
+
+
+class Ipv6LoopbackTest(unittest.IsolatedAsyncioTestCase):
+    async def test_ipv6_cluster_has_http_grpc_and_peer_heartbeats(self):
+        try:
+            probe = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+            try:
+                probe.bind(("::1", 0))
+            finally:
+                probe.close()
+        except OSError as error:
+            if error.errno in (errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL):
+                self.skipTest("IPv6 loopback is unavailable: %s" % error)
+            raise
+
+        topology = Topology.with_free_ports(["pile1", "pile2"], 1, host="::1", timings=tiny_timings())
+        cluster = LiveCluster(topology=topology)
+        self.addAsyncCleanup(cluster.stop)
+        await cluster.start()
+        for own, peer in (("pile1", 1), ("pile2", 0)):
+            await wait_until(lambda own=own, peer=peer: cluster.inst(own).connected(peer),
+                             message="IPv6 peer heartbeat")
+            status, state = await cluster.http(own, "GET", "/state")
+            self.assertEqual(status, 200, state)
+            self.assertEqual(state["pile"], own)
+            response = await cluster.bridge(cluster.label(own)).GetClusterState(
+                ydb_bridge_pb2.GetClusterStateRequest(), timeout=2)
+            self.assertEqual(response.operation.status, model.SUCCESS, response)
 
 
 if __name__ == "__main__":

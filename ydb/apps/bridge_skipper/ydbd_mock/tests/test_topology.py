@@ -42,6 +42,12 @@ class DefaultsTest(unittest.TestCase):
         with self.assertRaises(TopologyError):
             t.pile_index("zzz")
 
+    def test_ipv6_addresses_have_bracketed_authorities(self):
+        t = Topology(["a", "b"], 1, host="::1")
+        self.assertEqual(t.pile("a").control_endpoint, "[::1]:22000")
+        self.assertEqual(t.control_url("b"), "http://[::1]:22001")
+        self.assertEqual(t.endpoint_map()["mock-a-1"], "[::1]:22100")
+
     def test_per_pile_node_counts_and_warning_for_small_piles(self):
         t = Topology(["a", "b"], {"a": 3, "b": 1})
         self.assertEqual([len(p.nodes) for p in t.piles], [3, 1])

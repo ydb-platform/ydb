@@ -110,6 +110,10 @@ def _to_bool(key: str, value) -> bool:
     raise TopologyError("policy %s must be a boolean, got %r" % (key, value))
 
 
+def _endpoint(host: str, port: int) -> str:
+    return "%s:%d" % ("[%s]" % host if ":" in host else host, port)
+
+
 @dataclasses.dataclass(frozen=True)
 class Node:
     node_id: int          # 1-based, global, stable, in pile order
@@ -123,7 +127,7 @@ class Node:
 
     @property
     def endpoint(self) -> str:
-        return "%s:%d" % (self.host, self.grpc_port)
+        return _endpoint(self.host, self.grpc_port)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -136,7 +140,7 @@ class PileInfo:
 
     @property
     def control_endpoint(self) -> str:
-        return "%s:%d" % (self.control_host, self.control_port)
+        return _endpoint(self.control_host, self.control_port)
 
 
 _KNOWN_KEYS = {
@@ -396,15 +400,16 @@ class Topology:
 
     def control_url(self, ref: typing.Union[str, int]) -> str:
         p = self.pile(ref)
-        return "http://%s:%d" % (p.control_host, p.control_port)
+        return "http://" + p.control_endpoint
 
 
 def _free_ports(count: int, host: str) -> typing.List[int]:
     sockets = []
     ports = []
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
     try:
         for _ in range(count):
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s = socket.socket(family, socket.SOCK_STREAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((host, 0))
             sockets.append(s)

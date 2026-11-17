@@ -1060,6 +1060,37 @@ void PlanCdcAggregatorCreation(
     streamPath.DomainInfo()->AddInternalShards(*txState, context.SS);
 }
 
+namespace {
+
+THolder<NCdcAggregator::TEvCdcAggregator::TEvConfigureTracking> MakeCdcAggregatorConfigureTracking(
+        const TPath& streamPath,
+        const TTableInfo& table,
+        const TTopicInfo& topic,
+        const TSchemeShard& ss)
+{
+    auto request = MakeHolder<NCdcAggregator::TEvCdcAggregator::TEvConfigureTracking>();
+    auto& config = *request->Record.MutableConfig();
+    streamPath.Base()->PathId.ToProto(config.MutableStreamPathId());
+    config.SetStreamPath(streamPath.PathString());
+
+    for (const auto* partition : table.GetPartitions()) {
+        config.AddSourceDataShardIds(ui64(ss.ShardInfos.at(partition->ShardIdx).TabletID));
+    }
+
+    for (const auto& [shardIdx, shard] : topic.Shards) {
+        const auto tabletId = ss.ShardInfos.at(shardIdx).TabletID;
+        for (const auto& partition : shard->Partitions) {
+            auto& targetPartition = *config.AddTargetPartitions();
+            targetPartition.SetPartitionId(partition->PqId);
+            targetPartition.SetTabletId(ui64(tabletId));
+        }
+    }
+
+    return request;
+}
+
+} // anonymous
+
 TConfigureParts::TConfigureParts(TOperationId id)
     : OperationId(id)
 {
@@ -1100,30 +1131,14 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         return false;
     }
 
-    auto request = MakeHolder<NCdcAggregator::TEvCdcAggregator::TEvConfigureTracking>();
-    auto& config = *request->Record.MutableConfig();
-    txState->TargetPathId.ToProto(config.MutableStreamPathId());
-    config.SetStreamPath(streamPath.PathString());
-
-    const auto table = context.SS->Tables.at(streamPath.Parent().Base()->PathId);
-    for (const auto* partition : table->GetPartitions()) {
-        config.AddSourceDataShardIds(ui64(context.SS->ShardInfos.at(partition->ShardIdx).TabletID));
-    }
-
-    for (const auto& [shardIdx, shard] : topic->Shards) {
-        const auto tabletId = context.SS->ShardInfos.at(shardIdx).TabletID;
-        for (const auto& partition : shard->Partitions) {
-            auto& targetPartition = *config.AddTargetPartitions();
-            targetPartition.SetPartitionId(partition->PqId);
-            targetPartition.SetTabletId(ui64(tabletId));
-        }
-    }
-
     const auto stream = context.SS->CdcStreams.at(txState->TargetPathId)->AlterData;
     Y_ABORT_UNLESS(stream);
     const auto aggregatorShardIdx = stream->AggregatorShardIdx;
     const auto aggregatorTabletId = context.SS->ShardInfos.at(aggregatorShardIdx).TabletID;
     Y_ABORT_UNLESS(aggregatorTabletId != InvalidTabletId);
+
+    const auto table = context.SS->Tables.at(streamPath.Parent().Base()->PathId);
+    auto request = MakeCdcAggregatorConfigureTracking(streamPath, *table, *topic, *context.SS);
 
     YDB_LOG_DEBUG_CTX(context.Ctx, "Send TEvConfigureTracking to CdcAggregator",
         {"tabletId", aggregatorTabletId},

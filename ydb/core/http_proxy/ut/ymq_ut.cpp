@@ -5,6 +5,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/auth_factory.h>
 #include <ydb/core/ymq/actor/metering.h>
+#include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
@@ -4102,6 +4103,78 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             json["Messages"].GetType(),
             NJson::EJsonValueType::JSON_UNDEFINED,
             json.GetStringRobust());
+    }
+
+    TString MakeReceiptForMissingPartition(const TString& receiptHandle) {
+        auto receipt = NKikimr::NSQS::DecodeReceiptHandle(receiptHandle);
+        UNIT_ASSERT(receipt.GetSource() == NKikimr::NSQS::TReceipt::Topic);
+        receipt.SetShard(1000);
+        return NKikimr::NSQS::EncodeReceiptHandle(receipt);
+    }
+
+    Y_UNIT_TEST_F(TestChangeMessageVisibilityBatch_TopicReceiptsKeepEntryOrder, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({{"QueueName", "TopicVisibilityBatchOrder"}});
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "body"}});
+
+        const auto message = ReceiveOneMessage(*this, queueUrl, 5);
+        const TString missingReceiptHandle = MakeReceiptForMissingPartition(message["ReceiptHandle"].GetString());
+
+        // Statuses come back grouped by partition, so both entry orders are checked.
+        for (const bool validFirst : {true, false}) {
+            const NJson::TJsonMap valid{
+                {"Id", "valid"},
+                {"ReceiptHandle", message["ReceiptHandle"]},
+                {"VisibilityTimeout", 60},
+            };
+            const NJson::TJsonMap missing{
+                {"Id", "missing"},
+                {"ReceiptHandle", missingReceiptHandle},
+                {"VisibilityTimeout", 60},
+            };
+            NJson::TJsonArray entries;
+            entries.AppendValue(validFirst ? valid : missing);
+            entries.AppendValue(validFirst ? missing : valid);
+
+            json = ChangeMessageVisibilityBatch({{"QueueUrl", queueUrl}, {"Entries", entries}});
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Successful"].GetArray().size(), 1, json.GetStringRobust());
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Successful"][0]["Id"], "valid", json.GetStringRobust());
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Failed"].GetArray().size(), 1, json.GetStringRobust());
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Failed"][0]["Id"], "missing", json.GetStringRobust());
+        }
+    }
+
+    Y_UNIT_TEST_F(TestDeleteMessageBatch_TopicReceiptsKeepEntryOrder, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({{"QueueName", "TopicDeleteBatchOrder"}});
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "body"}});
+
+        const auto message = ReceiveOneMessage(*this, queueUrl, 5);
+        const TString missingReceiptHandle = MakeReceiptForMissingPartition(message["ReceiptHandle"].GetString());
+
+        // Statuses come back grouped by partition, so both entry orders are checked.
+        // The second round deletes an already deleted message, which SQS reports as success.
+        for (const bool validFirst : {true, false}) {
+            const NJson::TJsonMap valid{{"Id", "valid"}, {"ReceiptHandle", message["ReceiptHandle"]}};
+            const NJson::TJsonMap missing{{"Id", "missing"}, {"ReceiptHandle", missingReceiptHandle}};
+            NJson::TJsonArray entries;
+            entries.AppendValue(validFirst ? valid : missing);
+            entries.AppendValue(validFirst ? missing : valid);
+
+            json = DeleteMessageBatch({{"QueueUrl", queueUrl}, {"Entries", entries}});
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Successful"].GetArray().size(), 1, json.GetStringRobust());
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Successful"][0]["Id"], "valid", json.GetStringRobust());
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Failed"].GetArray().size(), 1, json.GetStringRobust());
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Failed"][0]["Id"], "missing", json.GetStringRobust());
+        }
     }
 
     Y_UNIT_TEST_F(TestChangeMessageVisibilityBatch_MixedTableAndTopicReceipts, THttpProxyTestMock) {

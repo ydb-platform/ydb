@@ -12,10 +12,12 @@ FORK_SUBTESTS()
 
 PEERDIR(
     library/cpp/testing/gmock_in_unittest
+    library/cpp/threading/future
     ydb/public/lib/json_value
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/topic
 )
 
 YQL_LAST_ABI_VERSION()

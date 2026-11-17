@@ -399,17 +399,15 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
     TDeferredActions<UseMigrationProtocol> deferred;
     {
         std::lock_guard guard(Lock);
+        if (Aborting) {
+            return false;
+        }
         connectContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
         if (!connectContext || !connectTimeoutContext) {
             return false;
         }
 
-        if (Aborting) {
-            Cancel(connectContext);
-            Cancel(connectTimeoutContext);
-            return false;
-        }
         if (Processor) {
             Processor->Cancel();
         }
@@ -1540,7 +1538,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
     TDeferredActions<false> deferred;
     with_lock (Lock) {
         Ydb::Topic::StreamDirectReadMessage::DirectReadResponse response;
-        if (!responses->Dequeue(&response)) {
+        if (Aborting || !responses->Dequeue(&response)) {
             return;
         }
 
@@ -2101,6 +2099,11 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortSession(TASession
     TDeferredActions<UseMigrationProtocol> deferred;
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Closing session to cluster: " << closeEvent.DebugString());
 
+    {
+        std::lock_guard guard(Lock);
+        AbortImpl(&deferred);
+    }
+
     EventsQueue->Close(closeEvent, deferred);
 }
 
@@ -2113,7 +2116,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl(TDeferredAct
         Aborting = true;
         CallCloseCallbackImpl(deferred);
 
-        // Cancel(ClientContext); // Don't cancel, because this is used only as factory for other contexts.
         Cancel(ConnectContext);
         Cancel(ConnectTimeoutContext);
         Cancel(ConnectDelayContext);
@@ -2121,6 +2123,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl(TDeferredAct
         if (Processor) {
             Processor->Cancel();
         }
+        ConnectContext.reset();
+        ConnectTimeoutContext.reset();
+        ConnectDelayContext.reset();
 
         if constexpr (!UseMigrationProtocol) {
             if (DirectReadSessionManager) {
@@ -2128,6 +2133,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl(TDeferredAct
                 DirectReadSessionManager.reset();
             }
         }
+        Cancel(ClientContext);
+        ClientContext.reset();
     }
 
     if (deferred) {

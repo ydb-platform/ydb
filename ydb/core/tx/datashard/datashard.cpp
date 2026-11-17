@@ -2079,21 +2079,17 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
         node.key() = newPathId;
         newTableInfo->Indexes.insert(std::move(node));
     }
-    for (auto& indexDesc : *schema.MutableLocalHnswIndexes()) {
-        if (!indexDesc.HasIndexId()) {
-            continue;
-        }
+    if (schema.HasLocalHnswIndex() && schema.GetLocalHnswIndex().HasIndexId()) {
+        auto& indexDesc = *schema.MutableLocalHnswIndex();
         const auto prevPathId = TPathId::FromProto(indexDesc.GetIndexId());
-        const auto it = remap.find(prevPathId);
-        if (it == remap.end()) {
-            continue;
-        }
-        const auto& newPathId = it->second;
-        newPathId.ToProto(indexDesc.MutableIndexId());
-        auto hnswNode = newTableInfo->HnswIndexes.extract(prevPathId);
-        if (!hnswNode.empty()) {
-            hnswNode.key() = newPathId;
-            newTableInfo->HnswIndexes.insert(std::move(hnswNode));
+        if (const auto it = remap.find(prevPathId); it != remap.end()) {
+            const auto& newPathId = it->second;
+            newPathId.ToProto(indexDesc.MutableIndexId());
+            auto hnswNode = newTableInfo->HnswIndexes.extract(prevPathId);
+            if (!hnswNode.empty()) {
+                hnswNode.key() = newPathId;
+                newTableInfo->HnswIndexes.insert(std::move(hnswNode));
+            }
         }
     }
     newTableInfo->SetSchema(schema);

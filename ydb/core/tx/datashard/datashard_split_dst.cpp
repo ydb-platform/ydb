@@ -169,9 +169,9 @@ public:
         // Local graph annotations belong to the source DataShard's persisted schema.
         const auto& source = Ev->Get()->Record.GetUserTableScheme();
         const ui64 tableId = source.HasPathId() ? source.GetPathId().GetLocalId() : source.GetId_Deprecated();
-        if (source.LocalHnswIndexesSize()) {
+        if (source.HasLocalHnswIndex()) {
             TUserTable::TPtr updated = new TUserTable(*Self->TableInfos.at(tableId));
-            updated->UpdateLocalHnswIndexes(source);
+            updated->UpdateLocalHnswIndex(source);
             NIceDb::TNiceDb db(txc.DB);
             Self->PersistUserTable(db, tableId, *updated);
             Self->SetUserTable(TPathId(Self->GetPathOwnerId(), tableId), std::move(updated));

@@ -616,7 +616,7 @@ struct TUserTable : public TThrRefBase {
         return DetailedMetricsLevel;
     }
 
-    void UpdateLocalHnswIndexes(const NKikimrSchemeOp::TTableDescription& description);
+    void UpdateLocalHnswIndex(const NKikimrSchemeOp::TTableDescription& description);
 
     void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
     void SwitchIndexState(const TPathId& indexPathId, TTableIndex::EState state);

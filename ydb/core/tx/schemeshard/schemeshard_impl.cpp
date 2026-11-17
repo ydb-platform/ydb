@@ -8422,7 +8422,7 @@ void FillHnswPostingTableDescription(const TSchemeShard& ss, TPathId tableId,
     }
     // This metadata is derived from the owning index. In particular, a copied
     // posting table must not retain a graph identity from the source table.
-    tableDescr->ClearLocalHnswIndexes();
+    tableDescr->ClearLocalHnswIndex();
     const auto index = pendingIndex && indexIt->second->AlterData
         ? indexIt->second->AlterData : indexIt->second;
     if (index->Type != NKikimrSchemeOp::EIndexTypeGlobalHnsw || index->IndexKeys.empty()) {
@@ -8438,7 +8438,7 @@ void FillHnswPostingTableDescription(const TSchemeShard& ss, TPathId tableId,
         if (column.Name != index->IndexKeys.back() || column.IsDropped()) {
             continue;
         }
-        auto* description = tableDescr->AddLocalHnswIndexes();
+        auto* description = tableDescr->MutableLocalHnswIndex();
         path->ParentPathId.ToProto(description->MutableIndexId());
         description->SetSchemaVersion(index->AlterVersion);
         *description->MutableHnswIndexDescription() = *hnsw;

@@ -9,13 +9,15 @@ namespace {
 
 const NKikimrSchemeOp::TLocalHnswIndexDescription* FindLocalHnswIndexDescription(
         const NKikimrSchemeOp::TTableDescription& alter) {
-    for (const auto& index : alter.GetLocalHnswIndexes()) {
-        if (index.HasIndexId()
-                && index.HasHnswIndexDescription()
-                && index.GetHnswIndexDescription().HasEmbeddingColumnId()
-                && index.GetHnswIndexDescription().GetSettings().has_settings()) {
-            return &index;
-        }
+    if (!alter.HasLocalHnswIndex()) {
+        return nullptr;
+    }
+    const auto& index = alter.GetLocalHnswIndex();
+    if (index.HasIndexId()
+            && index.HasHnswIndexDescription()
+            && index.GetHnswIndexDescription().HasEmbeddingColumnId()
+            && index.GetHnswIndexDescription().GetSettings().has_settings()) {
+        return &index;
     }
     return nullptr;
 }

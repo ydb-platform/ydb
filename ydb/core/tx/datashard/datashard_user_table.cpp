@@ -16,37 +16,28 @@ namespace NDataShard {
 
 namespace {
 
-void MergeLocalHnswIndexes(NKikimrSchemeOp::TTableDescription& schema,
+void MergeLocalHnswIndex(NKikimrSchemeOp::TTableDescription& schema,
         const NKikimrSchemeOp::TTableDescription& delta) {
-    for (const auto& index : delta.GetLocalHnswIndexes()) {
-        if (!index.HasIndexId()) {
-            continue;
-        }
-        auto& indexes = *schema.MutableLocalHnswIndexes();
-        auto it = FindIf(indexes, [&](const auto& existing) {
-            return TPathId::FromProto(existing.GetIndexId()) == TPathId::FromProto(index.GetIndexId());
-        });
-        if (it != indexes.end()) {
-            it->CopyFrom(index);
-        } else {
-            indexes.Add()->CopyFrom(index);
-        }
+    if (delta.HasLocalHnswIndex()) {
+        schema.MutableLocalHnswIndex()->CopyFrom(delta.GetLocalHnswIndex());
     }
 }
 
 void ParseLocalHnswSettings(TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr) {
     table.HnswIndexes.clear();
-    for (const auto& index : descr.GetLocalHnswIndexes()) {
-        if (!index.HasIndexId() || !index.HasHnswIndexDescription()) {
-            continue;
-        }
-        const auto& description = index.GetHnswIndexDescription();
-        if (description.HasSettings() && description.GetSettings().has_settings()
-                && description.HasEmbeddingColumnId()) {
-            table.HnswIndexes.emplace(TPathId::FromProto(index.GetIndexId()),
-                TUserTable::THnswIndexInfo{description.GetSettings().settings(),
-                    description.GetEmbeddingColumnId(), index.GetSchemaVersion()});
-        }
+    if (!descr.HasLocalHnswIndex()) {
+        return;
+    }
+    const auto& index = descr.GetLocalHnswIndex();
+    if (!index.HasIndexId() || !index.HasHnswIndexDescription()) {
+        return;
+    }
+    const auto& description = index.GetHnswIndexDescription();
+    if (description.HasSettings() && description.GetSettings().has_settings()
+            && description.HasEmbeddingColumnId()) {
+        table.HnswIndexes.emplace(TPathId::FromProto(index.GetIndexId()),
+            TUserTable::THnswIndexInfo{description.GetSettings().settings(),
+                description.GetEmbeddingColumnId(), index.GetSchemaVersion()});
     }
 }
 
@@ -103,10 +94,10 @@ bool TUserTable::ResetTableSchemaVersion()
     return false;
 }
 
-void TUserTable::UpdateLocalHnswIndexes(const NKikimrSchemeOp::TTableDescription& description) {
+void TUserTable::UpdateLocalHnswIndex(const NKikimrSchemeOp::TTableDescription& description) {
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
-    MergeLocalHnswIndexes(schema, description);
+    MergeLocalHnswIndex(schema, description);
     ParseLocalHnswSettings(*this, schema);
     SetSchema(schema);
 }
@@ -816,7 +807,7 @@ void TUserTable::ApplyAlter(
 
     // Local graphs have their own metadata; TableIndexes only describes logical
     // child indexes maintained by this table (including CDC/change collection).
-    MergeLocalHnswIndexes(schema, delta);
+    MergeLocalHnswIndex(schema, delta);
     // An omitted index preserves its metadata; an explicitly empty HNSW
     // description disables the graph, including after a restart.
     ParseLocalHnswSettings(*this, schema);

@@ -1,8 +1,8 @@
 # Building YDB on an Apple Silicon Mac
 
-This experimental recipe uses YDB's Clang 20 toolchain and macOS SDK 26.5. It pins a source revision and pending fixes checked on November 13, 2026. It is a development setup, not a supported production deployment configuration. Recheck the fix list before using a newer source revision.
+This experimental recipe uses YDB's Clang 20 toolchain and macOS SDK 26.5. It pins a source revision and pending fixes checked on November 17, 2026. It is a development setup, not a supported production deployment configuration. Recheck the fix list before using a newer source revision.
 
-All eight fix commits below apply together to this pinned revision without conflicts. The fixes have been used in local macOS builds and selected tests, but a complete clean server build and full test suite on this pinned revision have not been verified. The SDK override below also resolved the `INFINITY` compilation failure on a second Apple Silicon Mac.
+All seven fix commits below apply together to this pinned revision without conflicts. The fixes have been used in local macOS builds and selected tests, but a complete clean server build and full test suite on this pinned revision have not been verified. The SDK override below also resolved the `INFINITY` compilation failure on a second Apple Silicon Mac.
 
 Run the commands in order in the same terminal. Stop if a command fails.
 
@@ -40,11 +40,11 @@ mkdir -p "$HOME/ydbwork"
 cd "$HOME/ydbwork"
 git clone --origin official https://github.com/ydb-platform/ydb.git ydb
 cd ydb
-git switch -c local/macos-build bd35691c3a8ce87d220ded807a359dcf86054f88
+git switch -c local/macos-build 38a4abcb6a2c2905f80dd37dcfb6f9be56752e6d
 export YA_CACHE_DIR="$HOME/ydbwork/.ya"
 ```
 
-This base is a `main` revision from November 7, 2026. It already includes the int4 SSE/sse2neon type fix merged through [#58044](https://github.com/ydb-platform/ydb/pull/58044) (`dbe0e3e71d2d4319e219dc8a5a1833052d7ac78e`). Do not additionally cherry-pick the equivalent fix from #58144. Pinning the base keeps the prerequisite list reproducible as `main` advances.
+This base is a `main` revision from November 17, 2026. It already includes the int4 SSE/sse2neon type fix merged through [#58044](https://github.com/ydb-platform/ydb/pull/58044) (`dbe0e3e71d2d4319e219dc8a5a1833052d7ac78e`). It also includes the ColumnShard snapshot integer type fix from [#55847](https://github.com/ydb-platform/ydb/pull/55847) (`32d93d2b09c78a3fbb47cb58e325135385251459`). Do not additionally cherry-pick #55847 or the equivalent int4 fix from #58144. Pinning the base keeps the prerequisite list reproducible as `main` advances.
 
 ## 3. Apply the fixes
 
@@ -57,12 +57,11 @@ git config --get user.email
 
 If either value is missing or incorrect, set `git config --local user.name` and `git config --local user.email` with your own name and email before continuing.
 
-All seven PRs in this table were open when checked on November 13, 2026. Fetch their public refs, then cherry-pick the eight exact commits below rather than moving PR heads. These fixes are not included in the pinned revision.
+All six PRs in this table were open when checked on November 17, 2026. Fetch their public refs, then cherry-pick the seven exact commits below rather than moving PR heads. These fixes are not included in the pinned revision.
 
 | PR | Purpose |
 | --- | --- |
 | [#55856](https://github.com/ydb-platform/ydb/pull/55856) | Correct curl's `memrchr` configuration on macOS. |
-| [#55847](https://github.com/ydb-platform/ydb/pull/55847) | Fix the ColumnShard snapshot integer type mismatch on macOS. |
 | [#55768](https://github.com/ydb-platform/ydb/pull/55768) | Fix native MiniKQL JIT code generation on AArch64; includes two commits. |
 | [#55893](https://github.com/ydb-platform/ydb/pull/55893) | Fix PostgreSQL thread cleanup on macOS. |
 | [#56501](https://github.com/ydb-platform/ydb/pull/56501) | Exclude Darwin from the GNU Bison linker workaround; draft pending upstream integration. |
@@ -72,7 +71,6 @@ All seven PRs in this table were open when checked on November 13, 2026. Fetch t
 ```bash
 git fetch official \
   pull/55856/head:refs/remotes/official/pr-55856 \
-  pull/55847/head:refs/remotes/official/pr-55847 \
   pull/55768/head:refs/remotes/official/pr-55768 \
   pull/55893/head:refs/remotes/official/pr-55893 \
   pull/56501/head:refs/remotes/official/pr-56501 \
@@ -81,7 +79,6 @@ git fetch official \
 
 git cherry-pick \
   f9b173456a22932c2da98a96f71d6805a9b52af4 \
-  aebbc75762b294888694259dfee1f7db84ed5246 \
   67619c2e6b6951a965bbcf25b681c9608df36e30 \
   f52f2555703eb120a551d6e9055b6f39072f7290 \
   7596224d366a404202582a89fb46bcaa4dc80375 \

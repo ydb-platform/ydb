@@ -1571,7 +1571,7 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name_));
-            if (IsOverWindow() || IsOverWindowDistinct()) {
+            if (src && (IsOverWindow() || IsOverWindowDistinct())) {
                 src->AddTmpWindowColumn(Name_);
             }
         }

@@ -187,7 +187,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        src/lib/util/ares_math.c [29:29]
+        src/lib/util/ares_math.c [30:30]
 
 KEEP     MIT                  3158a75221c70090b7e127aa7c980dd8
 BELONGS ya.make

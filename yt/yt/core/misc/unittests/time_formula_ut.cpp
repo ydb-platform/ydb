@@ -13,7 +13,7 @@ class TTimeFormulaParseTest
     , public ::testing::WithParamInterface<std::tuple<const char*, bool>>
 { };
 
-TEST_P(TTimeFormulaParseTest, Test)
+TEST_P(TTimeFormulaParseTest, Parse)
 {
     const auto& args = GetParam();
     const auto& formula = std::get<0>(args);
@@ -46,7 +46,7 @@ class TTimeFormulaCorrectnessTest
     , public ::testing::WithParamInterface<std::tuple<const char*, int>>
 { };
 
-TEST_P(TTimeFormulaCorrectnessTest, Test)
+TEST_P(TTimeFormulaCorrectnessTest, CountMatchingInstants)
 {
     const auto& args = GetParam();
     const auto& formula = std::get<0>(args);

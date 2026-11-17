@@ -19,6 +19,9 @@ class FakeUnit:
     def path(self):
         return '$S/project/path'
 
+    def resolve(self, path):
+        return path.removeprefix('$S/')
+
 
 def validate_test(requirement_values):
     return ytest.validate_test(
@@ -190,7 +193,7 @@ def test_validate_test_groups_secret_requirements_by_store_and_preserves_order_w
         'sb_vault:' + ','.join(VALID_SB_VAULT_REQUIREMENTS),
         'yav:' + ','.join(VALID_YAV_REQUIREMENTS),
     ]
-    assert consts.YaTestTags.External in ytest.deserialize_list(valid_kw['TAG'])
+    assert consts.YaTestTags.External not in ytest.deserialize_list(valid_kw.get('TAG', ''))
 
 
 @pytest.mark.parametrize(
@@ -272,3 +275,27 @@ def test_validate_test_rejects_malformed_repeated_secret_requirement(requirement
     assert warnings == []
     assert len(errors) == 1
     assert errors[0].startswith(requirement_name + ' value ')
+
+
+@pytest.mark.parametrize(
+    ('spec', 'expected_tags'),
+    [
+        ('{}', {'ya:yt', 'ya:yt_research_pool'}),
+        ('{pool="own"; cypress_root="//tmp/own";}', {'ya:yt'}),
+    ],
+)
+def test_yt_spec_without_own_pool_gets_research_pool_tag_but_not_external(tmp_path, spec, expected_tags):
+    spec_path = tmp_path / 'spec.yson'
+    spec_path.write_text(spec)
+    valid_kw, warnings, errors = ytest.validate_test(
+        FakeUnit(),
+        {
+            'SCRIPT-REL-PATH': 'py.test',
+            'SOURCE-FOLDER-PATH': 'project/path',
+            'TEST-NAME': 'test',
+            'TAG': ytest.serialize_list(['ya:yt']),
+            'YT-SPEC': ytest.serialize_list([str(spec_path)]),
+        },
+    )
+    assert (warnings, errors) == ([], [])
+    assert set(ytest.deserialize_list(valid_kw['TAG'])) == expected_tags

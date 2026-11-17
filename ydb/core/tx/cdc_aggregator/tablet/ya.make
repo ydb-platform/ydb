@@ -3,9 +3,14 @@ LIBRARY()
 SRCS(
     cdc_aggregator_heartbeat_publication.cpp
     cdc_aggregator_heartbeat_publisher.cpp
+    cdc_aggregator_stream.cpp
+    cdc_aggregator_stream_proto.cpp
+    cdc_aggregator_stream_repository.cpp
     tablet.cpp
+    tx_configure_tracking.cpp
     tx_init.cpp
     tx_init_schema.cpp
+    tx_partitioning_changed.cpp
 )
 
 PEERDIR(
@@ -14,6 +19,7 @@ PEERDIR(
     ydb/core/persqueue/common
     ydb/core/persqueue/events
     ydb/core/protos
+    ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/cdc_aggregator/public

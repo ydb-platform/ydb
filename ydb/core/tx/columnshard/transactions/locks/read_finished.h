@@ -25,7 +25,7 @@ public:
         : PathId(pathId)
         , Conflicts(conflicts)
     {
-        AFL_VERIFY(PathId);
+        YDB_LOG_VERIFY(PathId);
     }
 };
 

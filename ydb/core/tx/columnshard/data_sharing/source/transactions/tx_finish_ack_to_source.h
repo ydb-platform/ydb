@@ -19,7 +19,7 @@ public:
         : TBase(self, info)
         , Session(session)
     {
-        AFL_VERIFY(!Session->GetCursorVerified()->IsValid());
+        YDB_LOG_VERIFY(!Session->GetCursorVerified()->IsValid());
     }
 
     TTxType GetTxType() const override {

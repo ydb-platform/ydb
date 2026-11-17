@@ -5,7 +5,7 @@
 namespace NKikimr::NColumnShard {
 
 void Schema::SaveTxInfo(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo, const TString& txBody) {
-    AFL_VERIFY(txInfo.TxKind != NKikimrTxColumnShard::TX_KIND_NONE);
+    YDB_LOG_VERIFY(txInfo.TxKind != NKikimrTxColumnShard::TX_KIND_NONE);
     db.Table<TxInfo>().Key(txInfo.TxId).Update(NIceDb::TUpdate<TxInfo::TxKind>(txInfo.TxKind), NIceDb::TUpdate<TxInfo::TxBody>(txBody),
         NIceDb::TUpdate<TxInfo::MaxStep>(txInfo.MaxStep), NIceDb::TUpdate<TxInfo::Source>(txInfo.Source),
         NIceDb::TUpdate<TxInfo::Cookie>(txInfo.Cookie), NIceDb::TUpdate<TxInfo::SeqNo>(txInfo.SerializeSeqNoAsString()));

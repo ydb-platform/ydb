@@ -59,7 +59,7 @@ public:
     }
 
     TConclusionStatus AckData(const ui64 packIdxReceived) {
-        AFL_VERIFY(packIdxReceived <= PackIdx);
+        YDB_LOG_VERIFY(packIdxReceived <= PackIdx);
         if (packIdxReceived != PackIdx) {
             return TConclusionStatus::Fail(
                 "incorrect packIdx received for AckData: " + ::ToString(packIdxReceived) + " but expected: " + ::ToString(PackIdx));
@@ -79,7 +79,7 @@ public:
             return TConclusionStatus::Fail(
                 "incorrect packIdx received for AckLinks: " + ::ToString(packIdxReceived) + " but expected: " + ::ToString(PackIdx));
         }
-        AFL_VERIFY(Links.contains(tabletId));
+        YDB_LOG_VERIFY(Links.contains(tabletId));
         if (LinksModifiedTablets.emplace(tabletId).second) {
             YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"event", "SourceAckData"},
@@ -125,7 +125,7 @@ public:
     bool Next(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index);
 
     bool IsValid() {
-        AFL_VERIFY(NextSchemasIntervalBegin <= SchemeHistory.size());
+        YDB_LOG_VERIFY(NextSchemasIntervalBegin <= SchemeHistory.size());
         return NextSchemasIntervalBegin < SchemeHistory.size() || Selected.size();
     }
 

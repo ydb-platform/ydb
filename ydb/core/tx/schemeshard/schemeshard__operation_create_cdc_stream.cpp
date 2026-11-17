@@ -1108,14 +1108,8 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
 
     const auto streamPath = TPath::Init(txState->TargetPathId, context.SS);
     const auto topicPath = streamPath.Child("streamImpl");
-    if (!topicPath.IsResolved() || !context.SS->Topics.contains(topicPath.Base()->PathId)) {
-        YDB_LOG_ERROR_CTX(context.Ctx, "CdcAggregator is left unconfigured because the stream has no topic",
-            {"stream", streamPath.PathString()},
-        );
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-        return true;
-    }
+    Y_ABORT_UNLESS(topicPath.IsResolved() && context.SS->Topics.contains(topicPath.Base()->PathId),
+        "Stream %s has no topic to configure CdcAggregator with", streamPath.PathString().c_str());
 
     txState->ClearShardsInProgress();
 

@@ -10,10 +10,15 @@ import posixpath
 import sys
 
 import ydb
-from ydb import _apis, issues
+from ydb import _apis, convert, issues
 
 
 INDEX_TYPES = {"global_index", "global_async_index", "global_unique_index"}
+PAGE_SIZE = 64
+
+
+def _quote(name):
+    return "`" + name.replace("\\", "\\\\").replace("`", "\\`") + "`"
 
 
 def _describe(driver, session, path):
@@ -38,15 +43,62 @@ class Table:
         self.description = _describe(driver, session, path)
         self.primary_key = list(self.description.primary_key)
         self.columns = [column.name for column in self.description.columns]
-        types = {column.name: column.type for column in self.description.columns}
+        self.types = {column.name: column.type for column in self.description.columns}
         self.key_type = _apis.ydb_value.Type()
         for name in self.primary_key:
-            self.key_type.tuple_type.elements.add().CopyFrom(types[name])
+            self.key_type.tuple_type.elements.add().CopyFrom(self.types[name])
 
     def key(self, row):
         return {name: row[name] for name in self.primary_key}
 
-    def rows(self, session, **kwargs):
+    def _select(self, tx, columns, key=None, after=False, limit=PAGE_SIZE):
+        predicates, equal_prefix, parameters, parameter_types = [], [], {}, {}
+        if key is not None:
+            for position, name in enumerate(self.primary_key):
+                column = _quote(name)
+                value = key[name]
+                if value is None:
+                    equal, greater = f"{column} IS NULL", f"{column} IS NOT NULL"
+                elif isinstance(value, decimal.Decimal) and value.is_nan():
+                    # Storage orders Decimal NaN last, but SQL = and > never match it.
+                    equal, greater = f"{column} != {column}", "FALSE"
+                else:
+                    parameter = f"$key{position}"
+                    parameters[parameter] = value
+                    parameter_types[parameter] = self.types[name]
+                    equal, greater = f"{column} = {parameter}", f"{column} > {parameter}"
+                    kind = self.types[name]
+                    if kind.HasField("optional_type"):
+                        kind = kind.optional_type.item
+                    if kind.HasField("decimal_type"):
+                        greater = f"({greater} OR {column} != {column})"
+                if after:
+                    predicates.append("(" + " AND ".join(equal_prefix + [greater]) + ")")
+                equal_prefix.append(equal)
+        predicate = " OR ".join(predicates) if after else " AND ".join(equal_prefix)
+        declarations = "\n".join(
+            f"DECLARE {name} AS {convert.type_to_native(kind)};" for name, kind in parameter_types.items()
+        )
+        query = f"{declarations}\nSELECT {', '.join(map(_quote, columns))} FROM {_quote(self.path)}"
+        if predicate:
+            query += " WHERE " + predicate
+        query += f" ORDER BY {', '.join(map(_quote, self.primary_key))} LIMIT {limit};"
+        previous_id = tx.tx_id
+        result = tx.execute(ydb.DataQuery(query, parameter_types), parameters)
+        if not tx.tx_id or (previous_id and previous_id != tx.tx_id):
+            raise RuntimeError("Validation snapshot was lost")
+        return result[0].rows
+
+    def rows(self, session, tx=None, **kwargs):
+        if tx is not None:
+            columns = kwargs.get("columns", self.columns)
+            last = None
+            while True:
+                page = self._select(tx, columns, last, after=last is not None)
+                if not page:
+                    return
+                yield from page
+                last = self.key(page[-1])
         stream = session.read_table(self.path, use_snapshot=True, **kwargs)
         try:
             for part in stream:
@@ -54,9 +106,12 @@ class Table:
         finally:
             stream.cancel()
 
-    def point(self, session, row, columns):
-        bound = ydb.KeyBound.inclusive([row[name] for name in self.primary_key], self.key_type)
-        rows = list(self.rows(session, key_range=ydb.KeyRange(bound, bound), row_limit=1, columns=columns))
+    def point(self, session, row, columns, tx=None):
+        if tx is not None:
+            rows = self._select(tx, columns, row, limit=1)
+        else:
+            bound = ydb.KeyBound.inclusive([row[name] for name in self.primary_key], self.key_type)
+            rows = list(self.rows(session, key_range=ydb.KeyRange(bound, bound), row_limit=1, columns=columns))
         return rows[0] if rows else None
 
 
@@ -68,17 +123,20 @@ def _equal(left, right):
     return left == right
 
 
-def _check_index(session, table, index, name):
+def _check_index(session, table, index, name, tx=None):
     mismatches = 0
     counts = []
     for source, target in ((table, index), (index, table)):
         count = 0
-        for key in source.rows(session, columns=source.primary_key):
+        for key in source.rows(session, tx=tx, columns=source.primary_key):
             count += 1
-            row = source.point(session, key, index.columns)
+            row = source.point(session, key, index.columns, tx=tx)
             if row is None:
-                raise ValueError(f"{source.path}: row disappeared during validation; stop writes and retry")
-            other = target.point(session, row, index.columns)
+                if tx is not None:
+                    raise RuntimeError(f"{source.path}: row disappeared from validation snapshot")
+                # Async observations have independent snapshots; deletion is expected under writes.
+                continue
+            other = target.point(session, row, index.columns, tx=tx)
             details = {
                 "index": name,
                 "pk": table.key(row),
@@ -100,7 +158,7 @@ def _check_index(session, table, index, name):
             mismatches += 1
             print(json.dumps(details, ensure_ascii=True, default=repr))
         counts.append(count)
-    status = "inconsistent" if mismatches else "consistent"
+    status = "inconclusive" if tx is None else ("inconsistent" if mismatches else "consistent")
     print(f"{name}: {status} (table rows: {counts[0]}, index rows: {counts[1]}, mismatches: {mismatches})")
     return mismatches == 0
 
@@ -115,16 +173,31 @@ def _validate(driver, session, path):
             continue
         if description.status != _apis.ydb_table.TableIndexDescription.STATUS_READY:
             raise ValueError(f"Index {description.name} is not ready")
-        indexes.append((description.name, Table(driver, session, f"{path}/{description.name}/indexImplTable")))
+        indexes.append((description.name, Table(driver, session, f"{path}/{description.name}/indexImplTable"),
+                        kind == "global_async_index"))
     if not indexes:
         print("No supported indexes to validate")
         return True
     consistent = True
-    for name, index in indexes:
-        if not _check_index(session, table, index, name):
-            consistent = False
-    print(f"{path}: {'consistent' if consistent else 'inconsistent'}")
-    return consistent
+    # All sync indexes, key pages and point reads share this transaction. Never
+    # retry an individual statement in a new transaction after snapshot loss.
+    with session.transaction(ydb.SnapshotReadOnly(), allow_split_transactions=False) as tx:
+        try:
+            for name, index, asynchronous in indexes:
+                if not asynchronous and not _check_index(session, table, index, name, tx=tx):
+                    consistent = False
+        finally:
+            if tx.tx_id:
+                tx.rollback()
+    inconclusive = False
+    for name, index, asynchronous in indexes:
+        if asynchronous:
+            inconclusive = True
+            print(f"{name}: async observations cannot confirm atomic consistency; replication may lag")
+            _check_index(session, table, index, name)
+    status = "inconsistent" if not consistent else ("inconclusive" if inconclusive else "consistent")
+    print(f"{path}: {status}")
+    return False if not consistent else (None if inconclusive else True)
 
 
 def validate(driver, session, path):
@@ -153,7 +226,8 @@ def main(argv=None):
             driver.wait(timeout=30, fail_fast=True)
             with ydb.SessionPool(driver) as pool:
                 with pool.checkout() as session:
-                    return 0 if validate(driver, session, path) else 1
+                    result = validate(driver, session, path)
+                    return 3 if result is None else (0 if result else 1)
     except (ydb.Error, ValueError, RuntimeError) as error:
         print(f"Validation failed: {error}", file=sys.stderr)
         return 2

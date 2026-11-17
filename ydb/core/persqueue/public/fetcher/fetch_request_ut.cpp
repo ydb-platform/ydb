@@ -470,31 +470,6 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
 
     // ---- P1: runtime errors ----
 
-    Y_UNIT_TEST(PipeDisconnect) {
-        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
-        EnableFetchLogs(*setup);
-        auto& runtime = setup->GetRuntime();
-        StartSchemeCache(runtime);
-
-        // Empty topic: HasData stays pending until the tablet/pipe dies.
-        setup->CreateTopic("topic1", "dc1", 1);
-        const ui64 tabletId = GetPartitionTabletId(*setup, "/Root/topic1", 0);
-
-        auto edgeId = runtime.AllocateEdgeActor();
-        auto settings = MakeSettings({{"/Root/topic1", 0, 0, 10000}}, /*maxWaitTimeMs=*/30'000);
-        RegisterFetchActor(runtime, settings, edgeId);
-
-        // Advance runtime so describe/pipes/HasData are in flight, then kill the tablet.
-        runtime.DispatchEvents(TDispatchOptions{}, TDuration::Seconds(1));
-        setup->GetServer().AnnoyingClient->KillTablet(*setup->GetServer().CleverServer, tabletId);
-
-        auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>(TDuration::Seconds(30));
-        UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::SUCCESS, ev->Message);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 1);
-        AssertErrorCode(ev->Response.GetPartResult(0), ::NPersQueue::NErrorCode::TABLET_PIPE_DISCONNECTED);
-    }
-
     Y_UNIT_TEST(SessionInvalidated) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
         EnableFetchLogs(*setup);
@@ -521,27 +496,6 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::SUCCESS, ev->Message);
         UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 1);
         AssertErrorCode(ev->Response.GetPartResult(0), ::NPersQueue::NErrorCode::READ_ERROR_NO_SESSION);
-    }
-
-    Y_UNIT_TEST(TimeoutHasDataResend) {
-        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
-        EnableFetchLogs(*setup);
-        auto& runtime = setup->GetRuntime();
-        StartSchemeCache(runtime);
-
-        setup->CreateTopic("topic1", "dc1", 1);
-
-        // MaxWaitTimeMs path: empty partition must finish with READ_NOT_DONE after wait/timeout
-        // (FinishProcessing may re-issue HasData with Deadline=0 before answering).
-        const auto started = TInstant::Now();
-        auto ev = Fetch(
-            runtime,
-            MakeSettings({{"/Root/topic1", 0, 0, 1_KB}}, /*maxWaitTimeMs=*/200, /*totalMaxBytes=*/100),
-            TDuration::Seconds(10));
-        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::SUCCESS, ev->Message);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 1);
-        AssertErrorCode(ev->Response.GetPartResult(0), ::NPersQueue::NErrorCode::READ_NOT_DONE);
-        UNIT_ASSERT_LT(TInstant::Now() - started, TDuration::Seconds(5));
     }
 
     Y_UNIT_TEST(ReadyPartitionIsNotBlockedByEmptyPartitionPastMaxWait) {

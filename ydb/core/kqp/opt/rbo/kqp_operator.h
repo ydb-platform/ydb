@@ -6,6 +6,7 @@
 #include "kqp_rbo_statistics.h"
 
 #include <cstddef>
+#include <functional>
 #include <iterator>
 #include <memory>
 #include <ranges>
@@ -67,9 +68,26 @@ struct TOrderEnforcer {
 
 enum ESortDir : ui32 { None = 0x00, Asc = 0x01, Desc = 0x02 };
 
-struct TOuterJoinNullRejection {
-    bool RejectsUnmatchedLeft = false;
-    bool RejectsUnmatchedRight = false;
+// Consumer requirements on an operator's output, valid for the current graph.
+// RejectsNulls(S) proves that rows with every column in S NULL may be discarded
+// immediately above this operator without changing the query result. For {x},
+// this permits an x IS NOT NULL filter; for {x, y}, it permits
+// x IS NOT NULL OR y IS NOT NULL. False means rejection has not been proven.
+class TNullRejection {
+public:
+    using TProof = std::function<bool(const TUnorderedIUs&)>;
+
+    explicit TNullRejection(TProof proof)
+        : Proof(std::make_shared<const TProof>(std::move(proof)))
+    {}
+
+    bool RejectsNulls(const TUnorderedIUs& nulls) const {
+        return (*Proof)(nulls);
+    }
+
+private:
+    // Share the composed context rather than copying the ancestor chain.
+    std::shared_ptr<const TProof> Proof;
 };
 
 // Recomputable logical analysis state. std::nullopt means the analysis was not
@@ -79,11 +97,11 @@ struct TOperatorAnalysisProps {
     void Clear() {
         LiveInByChild.reset();
         LiveOut.reset();
-        OuterJoinNullRejection.reset();
+        NullRejection.reset();
     }
 
-    // Proofs from all consumers of this outer join, valid for the current graph.
-    std::optional<TOuterJoinNullRejection> OuterJoinNullRejection;
+    // Requirements from all consumers, including for non-join operators.
+    std::optional<TNullRejection> NullRejection;
 
     // Input requirements per child edge; output demand from all consumers.
     std::optional<TVector<TUnorderedIUs>> LiveInByChild;

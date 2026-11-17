@@ -42,26 +42,87 @@ Y_UNIT_TEST_SUITE(KqpRboReduceOuterJoin) {
         auto root = f.Root(filter, {});
         ComputeRequiredProps(*root, ERuleProperties::RequireNullRejection, f.RboCtx, "Test null rejection");
 
-        UNIT_ASSERT(f.Join->Props.Analysis.OuterJoinNullRejection);
-        UNIT_ASSERT(f.Join->Props.Analysis.OuterJoinNullRejection->RejectsUnmatchedLeft);
-        UNIT_ASSERT(!f.Join->Props.Analysis.OuterJoinNullRejection->RejectsUnmatchedRight);
+        const auto& rejection = f.Join->Props.Analysis.NullRejection;
+        UNIT_ASSERT(rejection);
+        UNIT_ASSERT(rejection->RejectsNulls({f.B, f.B2}));
+        UNIT_ASSERT(!rejection->RejectsNulls({f.B}));
+        UNIT_ASSERT(!rejection->RejectsNulls({f.B2}));
+        UNIT_ASSERT(!rejection->RejectsNulls({f.A}));
         UNIT_ASSERT_VALUES_EQUAL(f.Join->JoinKind, "Full");
-        UNIT_ASSERT(!filter->Props.Analysis.OuterJoinNullRejection);
+        UNIT_ASSERT(root->Props.Analysis.NullRejection);
+        UNIT_ASSERT(!filter->Props.Analysis.NullRejection->RejectsNulls({f.B, f.B2}));
         for (const auto& it : *root) {
+            UNIT_ASSERT(it.Current->Props.Analysis.NullRejection);
             UNIT_ASSERT(!it.Current->Props.Metadata);
         }
 
         // Recomputing under a different consumer derives the opposite proof.
         root->MutableChild(0) = MakeIntrusive<TOpFilter>(f.Join, f.Pos, MakeUnaryCallable("Exists", f.Column(f.A)));
         ComputeRequiredProps(*root, ERuleProperties::RequireNullRejection, f.RboCtx, "Test null rejection");
-        UNIT_ASSERT(!f.Join->Props.Analysis.OuterJoinNullRejection->RejectsUnmatchedLeft);
-        UNIT_ASSERT(f.Join->Props.Analysis.OuterJoinNullRejection->RejectsUnmatchedRight);
+        UNIT_ASSERT(!rejection->RejectsNulls({f.B, f.B2}));
+        UNIT_ASSERT(rejection->RejectsNulls({f.A}));
         ReduceOuterJoins(*root, f.RboCtx);
         UNIT_ASSERT_VALUES_EQUAL(f.Join->JoinKind, "Left");
         root->MutableChild(0) = f.Join;
         ComputeRequiredProps(*root, ERuleProperties::RequireNullRejection, f.RboCtx, "Test null rejection");
-        UNIT_ASSERT(!f.Join->Props.Analysis.OuterJoinNullRejection->RejectsUnmatchedLeft);
-        UNIT_ASSERT(!f.Join->Props.Analysis.OuterJoinNullRejection->RejectsUnmatchedRight);
+        UNIT_ASSERT(!rejection->RejectsNulls({f.B, f.B2}));
+        UNIT_ASSERT(!rejection->RejectsNulls({f.A}));
+    }
+
+    Y_UNIT_TEST(NullRejectionIsAvailableOnMapAndSource) {
+        TIdTestContext f;
+        const auto x = f.Id("x"), y = f.Id("y"), z = f.Id("z");
+        auto source = f.Read({x, y});
+        TMapIUs elements;
+        elements.Add(z, MakeBinaryPredicate("Coalesce", f.Column(x), f.Column(y)));
+        auto map = MakeIntrusive<TOpMap>(source, f.Pos, std::move(elements));
+        auto filter = MakeIntrusive<TOpFilter>(map, f.Pos, MakeUnaryCallable("Exists", f.Column(z)));
+        auto root = f.Root(filter, {{z, "z"}});
+        ComputeRequiredProps(*root, ERuleProperties::RequireNullRejection, f.RboCtx, "Test null rejection");
+
+        UNIT_ASSERT(map->Props.Analysis.NullRejection->RejectsNulls({z}));
+        UNIT_ASSERT(!source->Props.Analysis.NullRejection->RejectsNulls({x}));
+        UNIT_ASSERT(!source->Props.Analysis.NullRejection->RejectsNulls({y}));
+        UNIT_ASSERT(source->Props.Analysis.NullRejection->RejectsNulls({x, y}));
+        // Computing the property does not insert filters or change the plan.
+        UNIT_ASSERT(root->GetInput() == filter);
+        UNIT_ASSERT(filter->GetInput() == map);
+        UNIT_ASSERT(map->GetInput() == source);
+    }
+
+    Y_UNIT_TEST(NullRejectionOnBoundaryOutputDoesNotConstrainItsInput) {
+        TIdTestContext f;
+        const auto x = f.Id("x");
+        auto source = f.Read({x});
+        auto limit = MakeIntrusive<TOpLimit>(source, f.Pos, f.Constant(), EOpPhase::Undefined);
+        auto root = f.Root(MakeIntrusive<TOpFilter>(limit, f.Pos, MakeUnaryCallable("Exists", f.Column(x))), {{x, "x"}});
+        ComputeRequiredProps(*root, ERuleProperties::RequireNullRejection, f.RboCtx, "Test null rejection");
+
+        // An extra x IS NOT NULL is safe above LIMIT, but below it would let
+        // a different row enter the result.
+        UNIT_ASSERT(limit->Props.Analysis.NullRejection->RejectsNulls({x}));
+        UNIT_ASSERT(!source->Props.Analysis.NullRejection->RejectsNulls({x}));
+    }
+
+    Y_UNIT_TEST(SharedSourceCombinesDifferentConsumerRequirements) {
+        TIdTestContext f;
+        const auto x = f.Id("x"), y = f.Id("y"), output = f.Id("output");
+        auto source = f.Read({x, y});
+        auto first = MakeIntrusive<TOpFilter>(source, f.Pos, MakeUnaryCallable("Exists", f.Column(x)));
+        auto second = MakeIntrusive<TOpFilter>(source, f.Pos, MakeUnaryCallable("Exists", f.Column(y)));
+        auto merge = f.Union(first, second, {{output, x, x}});
+        auto root = f.Root(merge, {{output, "output"}});
+        ComputeRequiredProps(*root, ERuleProperties::RequireNullRejection, f.RboCtx, "Test null rejection");
+
+        const auto& rejection = source->Props.Analysis.NullRejection;
+        UNIT_ASSERT(!rejection->RejectsNulls({x}));
+        UNIT_ASSERT(!rejection->RejectsNulls({y}));
+        UNIT_ASSERT(rejection->RejectsNulls({x, y}));
+
+        // One unfiltered consumer prevents discarding any source rows.
+        merge->MutableChild(1) = source;
+        ComputeRequiredProps(*root, ERuleProperties::RequireNullRejection, f.RboCtx, "Test null rejection");
+        UNIT_ASSERT(!rejection->RejectsNulls({x, y}));
     }
 
     Y_UNIT_TEST(NullRejectionIsInvalidatedAndNotCopied) {
@@ -69,19 +130,21 @@ Y_UNIT_TEST_SUITE(KqpRboReduceOuterJoin) {
         auto filter = MakeIntrusive<TOpFilter>(f.Join, f.Pos, MakeUnaryCallable("Exists", f.Column(f.B)));
         auto root = f.Root(filter, {});
         ComputeRequiredProps(*root, ERuleProperties::RequireNullRejection, f.RboCtx, "Test null rejection");
-        UNIT_ASSERT(f.Join->Props.Analysis.OuterJoinNullRejection->RejectsUnmatchedLeft);
+        UNIT_ASSERT(f.Join->Props.Analysis.NullRejection->RejectsNulls({f.B}));
         TPhysicalOpProps copied(f.Join->Props);
-        UNIT_ASSERT(!copied.Analysis.OuterJoinNullRejection);
+        UNIT_ASSERT(!copied.Analysis.NullRejection);
         copied = f.Join->Props;
-        UNIT_ASSERT(!copied.Analysis.OuterJoinNullRejection);
-        UNIT_ASSERT(f.Join->Props.Analysis.OuterJoinNullRejection->RejectsUnmatchedLeft);
+        UNIT_ASSERT(!copied.Analysis.NullRejection);
+        UNIT_ASSERT(f.Join->Props.Analysis.NullRejection->RejectsNulls({f.B}));
 
         FinishLogicalRewrite(*root, f.ExprCtx);
-        UNIT_ASSERT(!f.Join->Props.Analysis.OuterJoinNullRejection);
+        for (const auto& it : *root) {
+            UNIT_ASSERT(!it.Current->Props.Analysis.NullRejection);
+        }
         ReduceOuterJoins(*root, f.RboCtx);
         UNIT_ASSERT_VALUES_EQUAL(f.Join->JoinKind, "Inner");
         ComputeRequiredProps(*root, ERuleProperties::RequireNullRejection, f.RboCtx, "Test null rejection");
-        UNIT_ASSERT(!f.Join->Props.Analysis.OuterJoinNullRejection);
+        UNIT_ASSERT(f.Join->Props.Analysis.NullRejection->RejectsNulls({f.B}));
     }
 
     Y_UNIT_TEST(CtasReadDoesNotPreventOuterJoinReduction) {
@@ -406,10 +469,11 @@ Y_UNIT_TEST_SUITE(KqpRboReduceOuterJoin) {
         auto parent = MakeIntrusive<TOpJoin>(f.Join, f.Read({f.C}), f.Pos, "Inner", TJoinIUs{{f.B, f.C}});
         auto packed = MakeIntrusive<TOpCBOTree>(parent, f.Pos);
         f.Check(packed, "Left");
-        UNIT_ASSERT(f.Join->Props.Analysis.OuterJoinNullRejection);
-        UNIT_ASSERT(!f.Join->Props.Analysis.OuterJoinNullRejection->RejectsUnmatchedLeft);
-        UNIT_ASSERT(!parent->Props.Analysis.OuterJoinNullRejection);
-        UNIT_ASSERT(!packed->Props.Analysis.OuterJoinNullRejection);
+        UNIT_ASSERT(f.Join->Props.Analysis.NullRejection);
+        UNIT_ASSERT(!f.Join->Props.Analysis.NullRejection->RejectsNulls({f.B, f.B2}));
+        UNIT_ASSERT(!parent->Props.Analysis.NullRejection); // Hidden inside the packed tree.
+        UNIT_ASSERT(packed->Props.Analysis.NullRejection);
+        UNIT_ASSERT(!packed->Props.Analysis.NullRejection->RejectsNulls({f.B, f.B2}));
     }
 
     Y_UNIT_TEST(SqlPreservesDuplicatesAndNullSafeMatches) {

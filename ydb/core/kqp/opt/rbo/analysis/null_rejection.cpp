@@ -3,41 +3,33 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 
-#include <functional>
-#include <memory>
-
 namespace NKikimr::NKqp {
 namespace {
 
-// A consumer's condition on its input: true proves rows with these NULL
-// columns cannot affect the result. Compose this condition downward through
-// each operator, then test an outer join's unmatched rows against it.
-// Sharing contexts avoids copying the ancestor chain at every branch.
-using TRejectsNulls = std::function<bool(const TUnorderedIUs&)>;
-using TContext = std::shared_ptr<const TRejectsNulls>;
-
-TContext NoRejection() {
-    static const auto context = std::make_shared<const TRejectsNulls>([](const TUnorderedIUs&) { return false; });
+TNullRejection NoRejection() {
+    static const TNullRejection context([](const TUnorderedIUs&) { return false; });
     return context;
 }
 
-TContext AllConsumers(TVector<TContext> consumers) {
+TNullRejection AllConsumers(TVector<TNullRejection> consumers) {
     Y_ENSURE(!consumers.empty());
     if (consumers.size() == 1) {
         return std::move(consumers.front());
     }
-    return std::make_shared<const TRejectsNulls>([consumers = std::move(consumers)](const TUnorderedIUs& nulls) {
-        return AllOf(consumers, [&](const auto& consumer) { return (*consumer)(nulls); });
+    return TNullRejection([consumers = std::move(consumers)](const TUnorderedIUs& nulls) {
+        return AllOf(consumers, [&](const auto& consumer) { return consumer.RejectsNulls(nulls); });
     });
 }
 
-bool JoinRejectsNulls(const TOpJoin& join, const TUnorderedIUs& nulls) {
-    for (const auto& key : join.JoinKeys.Items()) {
-        if (!key.EqualNulls && (nulls.Contains(key.first) || nulls.Contains(key.second))) {
-            return true;
+TNullRejection JoinCondition(const TOpJoin& join) {
+    return TNullRejection([keys = join.JoinKeys.Items(), filters = join.JoinFilters](const TUnorderedIUs& nulls) {
+        for (const auto& key : keys) {
+            if (!key.EqualNulls && (nulls.Contains(key.first) || nulls.Contains(key.second))) {
+                return true;
+            }
         }
-    }
-    return AnyOf(join.JoinFilters, [&](const auto& filter) { return filter.RejectsNulls(nulls); });
+        return AnyOf(filters, [&](const auto& filter) { return filter.RejectsNulls(nulls); });
+    });
 }
 
 } // namespace
@@ -46,13 +38,13 @@ bool JoinRejectsNulls(const TOpJoin& join, const TUnorderedIUs& nulls) {
 // its inputs. Unhandled inputs keep the conservative, unconstrained context.
 class TNullRejectionContext {
 public:
-    TNullRejectionContext(TContext consumer, size_t inputCount)
+    TNullRejectionContext(TNullRejection consumer, size_t inputCount)
         : Consumer(std::move(consumer))
         , Inputs(inputCount, NoRejection())
     {}
 
-    const TContext Consumer;
-    TVector<TContext> Inputs;
+    const TNullRejection Consumer;
+    TVector<TNullRejection> Inputs;
 };
 
 void IOperator::PropagateNullRejection(TNullRejectionContext& ctx) {
@@ -63,56 +55,48 @@ void IOperator::PropagateNullRejection(TNullRejectionContext& ctx) {
 }
 
 void TOpFilter::PropagateNullRejection(TNullRejectionContext& ctx) {
-    ctx.Inputs[0] = std::make_shared<const TRejectsNulls>([this, consumer = ctx.Consumer](const TUnorderedIUs& nulls) {
-        return GetFilterExpression().RejectsNulls(nulls) || (*consumer)(nulls);
+    ctx.Inputs[0] = TNullRejection([filter = GetFilterExpression(), consumer = ctx.Consumer](const TUnorderedIUs& nulls) {
+        return filter.RejectsNulls(nulls) || consumer.RejectsNulls(nulls);
     });
 }
 
 void TOpMap::PropagateNullRejection(TNullRejectionContext& ctx) {
-    ctx.Inputs[0] = std::make_shared<const TRejectsNulls>([this, consumer = ctx.Consumer](const TUnorderedIUs& nulls) {
+    ctx.Inputs[0] = TNullRejection([elements = GetMapElements().Items(), consumer = ctx.Consumer](const TUnorderedIUs& nulls) {
         auto mappedNulls = nulls;
-        for (const auto& [id, element] : GetMapElements().Items()) {
+        for (const auto& [id, element] : elements) {
             if (element.GetExpression().IsNullWhen(nulls)) {
                 mappedNulls.Add(id);
             }
         }
-        return (*consumer)(mappedNulls);
+        return consumer.RejectsNulls(mappedNulls);
     });
 }
 
 void TOpJoin::PropagateNullRejection(TNullRejectionContext& ctx) {
     const bool outer = JoinKind == "Left" || JoinKind == "Right" || JoinKind == "Full";
-    if (outer) {
-        const auto rejects = [&](size_t nullInput) {
-            const auto& nulls = GetChild(nullInput)->GetOutputIUs();
-            return !nulls.Empty() && (*ctx.Consumer)(nulls);
-        };
-        Props.Analysis.OuterJoinNullRejection = TOuterJoinNullRejection{
-            .RejectsUnmatchedLeft = (JoinKind == "Left" || JoinKind == "Full") && rejects(1),
-            .RejectsUnmatchedRight = (JoinKind == "Right" || JoinKind == "Full") && rejects(0),
-        };
-    }
+    const auto condition = JoinCondition(*this);
 
     for (size_t child = 0; child < GetChildCount(); ++child) {
         // ON rejects rows only on non-preserved inputs.
         const bool rejectsInput = JoinKind == "Inner" || JoinKind == "Cross" || JoinKind == "LeftSemi" || JoinKind == "RightSemi" ||
             (child == 1 && (JoinKind == "Left" || JoinKind == "LeftOnly")) ||
             (child == 0 && (JoinKind == "Right" || JoinKind == "RightOnly"));
-        ctx.Inputs[child] = std::make_shared<const TRejectsNulls>(
-            [this, consumer = ctx.Consumer, child, rejectsInput, outer](const TUnorderedIUs& nulls) {
+        ctx.Inputs[child] = TNullRejection(
+            [condition, consumer = ctx.Consumer, rejectsInput, outer,
+             otherOutput = GetChild(child ^ 1)->GetOutputIUs(), output = GetOutputIUs()](const TUnorderedIUs& nulls) {
                 auto outputNulls = nulls;
-                if (JoinRejectsNulls(*this, nulls)) {
+                if (condition.RejectsNulls(nulls)) {
                     if (rejectsInput) {
                         return true;
                     }
                     // A preserved row that cannot match also null-extends the
                     // other input. The consumer may reject that combined case.
                     if (outer) {
-                        outputNulls.UnionWith(GetChild(child ^ 1)->GetOutputIUs());
+                        outputNulls.UnionWith(otherOutput);
                     }
                 }
-                outputNulls.IntersectWith(GetOutputIUs());
-                return !outputNulls.Empty() && (*consumer)(outputNulls);
+                outputNulls.IntersectWith(output);
+                return !outputNulls.Empty() && consumer.RejectsNulls(outputNulls);
             });
     }
 }
@@ -125,15 +109,16 @@ void TOpSort::PropagateNullRejection(TNullRejectionContext& ctx) {
 
 void ComputePlanNullRejection(TOpRoot& root) {
     auto traversal = root.SnapshotTraversal();
-    THashMap<IOperator*, TVector<TContext>> incoming;
-    incoming[root.GetInput().Get()].push_back(NoRejection());
+    THashMap<IOperator*, TVector<TNullRejection>> incoming;
+    root.Props.Analysis.NullRejection = NoRejection();
+    incoming[root.GetInput().Get()].push_back(*root.Props.Analysis.NullRejection);
 
     // Reverse post-order visits every consumer before its inputs, including
     // shared producers. Ordinary pre-order would visit a shared input too early.
     for (auto it = traversal.rbegin(); it != traversal.rend(); ++it) {
         auto& op = *it->Current;
         TNullRejectionContext ctx(AllConsumers(std::move(incoming.at(&op))), op.GetChildCount());
-        op.Props.Analysis.OuterJoinNullRejection.reset();
+        op.Props.Analysis.NullRejection = ctx.Consumer;
         op.PropagateNullRejection(ctx);
         for (size_t child = 0; child < op.GetChildCount(); ++child) {
             incoming[op.GetChild(child).Get()].push_back(std::move(ctx.Inputs[child]));

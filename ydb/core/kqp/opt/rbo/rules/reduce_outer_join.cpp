@@ -17,12 +17,16 @@ bool TReduceOuterJoinRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOCo
         return false;
     }
     auto& join = *CastOperator<TOpJoin>(input);
-    const auto& rejection = join.Props.Analysis.OuterJoinNullRejection;
+    const auto& rejection = join.Props.Analysis.NullRejection;
     Y_ENSURE(rejection, "Outer-join reduction requires null-rejection analysis");
+    const auto rejects = [&](size_t nullInput) {
+        const auto& nulls = join.GetChild(nullInput)->GetOutputIUs();
+        return !nulls.Empty() && rejection->RejectsNulls(nulls);
+    };
     // Preserving one input means emitting its unmatched rows with NULLs on
     // the other input. FULL preserves both sides; prove rejection separately.
-    const bool preserveLeft = (join.JoinKind == "Left" || join.JoinKind == "Full") && !rejection->RejectsUnmatchedLeft;
-    const bool preserveRight = (join.JoinKind == "Right" || join.JoinKind == "Full") && !rejection->RejectsUnmatchedRight;
+    const bool preserveLeft = (join.JoinKind == "Left" || join.JoinKind == "Full") && !rejects(1);
+    const bool preserveRight = (join.JoinKind == "Right" || join.JoinKind == "Full") && !rejects(0);
     const TString kind = preserveLeft ? (preserveRight ? "Full" : "Left") : (preserveRight ? "Right" : "Inner");
     if (join.JoinKind == kind) {
         return false;

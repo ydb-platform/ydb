@@ -154,7 +154,7 @@ def test_library_configure_preserves_regular_build_script_behavior(
 @pytest.mark.parametrize("check_type", ["lint", "test"])
 def test_ts_check_preserves_data_and_runs_user_recipes_after_setup(monkeypatch, hermetic, check_type):
     image = "docker://registry.yandex.net/test@sha256:" + "a" * 64 + "=test:latest"
-    policy = "arcadia/devtools/frontend_build_platform/nots/constants/src/tier0-settings.yaml"
+    policy = "arcadia/devtools/frontend_build_platform/nots/tier0-settings/src/settings.yaml"
     values = {
         "_TS_CHECK_LIST": f"~~~nots:check {check_type} no",
         "TEST_DATA_VALUE": "arcadia/app/fixture.json",

@@ -657,7 +657,8 @@ TStatus AnnotateDqScalarHashJoinCore(const TExprNode::TPtr& node, TExprContext& 
     TTypeAnnotationNode::TListType resultItems(leftItemTypes.begin(), leftItemTypes.end());
     if (joinType != "LeftSemi" && joinType != "LeftOnly") {
         for (auto itemType : rightItemTypes) {
-            if (joinType == "Left" && itemType->GetKind() != ETypeAnnotationKind::Optional) {
+            // Match MapJoin: Null is already nullable, Optional<Null> is a different type.
+            if (joinType == "Left" && !itemType->IsOptionalOrNull()) {
                 itemType = ctx.MakeType<TOptionalExprType>(itemType);
             }
             resultItems.push_back(itemType);
@@ -711,10 +712,9 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     // Add right side columns
     if (joinType != "LeftSemi" && joinType != "LeftOnly") {
         for (auto itemType : rightItemTypes) {
-            if (joinType == "Left") {
-                if (itemType->GetKind() != ETypeAnnotationKind::Optional) {
-                    itemType = ctx.MakeType<TOptionalExprType>(itemType);
-                }
+            // Match BlockMapJoin: Null is already nullable, Optional<Null> is a different type.
+            if (joinType == "Left" && !itemType->IsOptionalOrNull()) {
+                itemType = ctx.MakeType<TOptionalExprType>(itemType);
             }
             resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
         }
@@ -723,7 +723,7 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     TTypeAnnotationNode::TListType rightFilterItemTypes;
     rightFilterItemTypes.reserve(rightItemTypes.size());
     for (auto itemType : rightItemTypes) {
-        if (joinType == "Left" && itemType->GetKind() != ETypeAnnotationKind::Optional) {
+        if (joinType == "Left" && !itemType->IsOptionalOrNull()) {
             itemType = ctx.MakeType<TOptionalExprType>(itemType);
         }
         rightFilterItemTypes.push_back(itemType);

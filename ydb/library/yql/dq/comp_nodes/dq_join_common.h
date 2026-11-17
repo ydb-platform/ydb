@@ -1413,7 +1413,8 @@ inline TSides<TVector<TType*>> ForceOptionalOnNullableSide(const TSides<TVector<
     TSides<TVector<TType*>> userTypes;
     for (ESide side : EachSide) {
         for (TType* thisType : itemTypes.SelectSide(side)) {
-            if (kind == EJoinKind::Left && side == nullableSide && !thisType->IsOptional()) {
+            // Null is already a null type. Wrapping it makes Optional<Null>, which no longer matches the join type.
+            if (kind == EJoinKind::Left && side == nullableSide && !thisType->IsOptional() && !thisType->IsNull()) {
                 userTypes.SelectSide(side).push_back(TOptionalType::Create(thisType, env));
             } else {
                 userTypes.SelectSide(side).push_back(thisType);

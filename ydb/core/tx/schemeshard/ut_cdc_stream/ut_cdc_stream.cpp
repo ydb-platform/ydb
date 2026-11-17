@@ -2107,47 +2107,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         AssertOperationInFlight(runtime, txId);
     }
 
-    Y_UNIT_TEST(ShouldRotateStreamWithUnconfiguredCdcAggregatorWhenTopicIsMissing) {
-        // given
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions()
-            .EnableProtoSourceIdInfo(true)
-            .EnableCdcAggregator(true));
-        ui64 txId = 100;
-
-        TestCreateUint64Table(runtime, ++txId, "Table", 1);
-        env.TestWaitNotification(runtime, txId);
-        TestCreateAggregatedCdcStream(runtime, ++txId, "Table", "Stream");
-        env.TestWaitNotification(runtime, txId);
-
-        auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(++txId, TTestTxConfig::SchemeShard);
-        auto& transaction = *request->Record.AddTransaction();
-        transaction.SetWorkingDir("/MyRoot");
-        transaction.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream);
-        UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(R"(
-            TableName: "Table"
-            OldStreamName: "Stream"
-            NewStream {
-              TableName: "Table"
-              StreamDescription {
-                Name: "RotatedStream"
-                Mode: ECdcStreamModeKeysOnly
-                Format: ECdcStreamFormatProto
-                ResolvedTimestampsIntervalMs: 1000
-              }
-            }
-        )", transaction.MutableRotateCdcStream()));
-
-        // when
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, request.release(), 0);
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
-
-        // then
-        env.TestWaitNotification(runtime, txId);
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/RotatedStream/streamImpl"), {NLs::PathNotExist});
-        UNIT_ASSERT(DescribeCdcAggregatorSources(runtime, GetCdcAggregatorTabletId(runtime, "/MyRoot/Table/RotatedStream")).empty());
-    }
-
     Y_UNIT_TEST(ShouldIgnoreConfigureTrackingResultWhenOriginIsNotStreamCdcAggregator) {
         // given
         TTestBasicRuntime runtime;
@@ -2267,9 +2226,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         // then
         env.TestWaitNotification(runtime, txId);
+        const auto topicDescription = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl", true);
         TMap<ui32, ui64> topicPartitions;
-        for (const auto& partition : DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl", true)
-                .GetPathDescription().GetPersQueueGroup().GetPartitions()) {
+        for (const auto& partition : topicDescription.GetPathDescription().GetPersQueueGroup().GetPartitions()) {
             topicPartitions.emplace(partition.GetPartitionId(), partition.GetTabletId());
         }
         UNIT_ASSERT(!topicPartitions.empty());

@@ -8684,6 +8684,9 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
             }
 
             case NKikimrSchemeOp::EPathTypeCdcStream: {
+                if (!newTable && !childPath->IsCreateFinished()) {
+                    continue;
+                }
                 Y_VERIFY_S(CdcStreams.contains(childPathId), "Cdc stream not found"
                     << ": pathId# " << childPathId
                     << ", name# " << childName);

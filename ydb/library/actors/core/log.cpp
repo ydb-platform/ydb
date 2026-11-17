@@ -239,6 +239,17 @@ namespace NActors {
     void TLoggerActor::HandleLogEvent(NLog::TEvLog::TPtr& ev, const NActors::TActorContext& ctx) {
         i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds();
         WriteMessageStat(*ev->Get());
+
+        const auto& eventData = *ev->Get();
+        OutputRecordToSinks(evLog->Stamp,
+            eventData.Level.ToPrio(),
+            eventData.Component,
+            eventData.FileName,
+            eventData.LineNumber,
+            eventData.Line,
+            eventData.Json,
+            eventData.StructuredMessage);
+
         if (Settings->AllowDrop) {
             if (PassedCount > 10 && delayMillisec > (i64)Settings->TimeThresholdMs || !LogBuffer.IsEmpty() || LogBuffer.CheckLogIgnoring()) {
                 if (LogBuffer.IsEmpty() && !LogBuffer.CheckLogIgnoring()) {
@@ -571,26 +582,6 @@ namespace NActors {
     }
 
     bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
-        auto sinks = Settings->Sinks.atomic_load();
-        if (sinks && !sinks->empty()) {
-            NStructuredLog::TLogMessage message {
-                .Time = evLog->Stamp,
-                .Priority = evLog->Level.ToPrio(),
-                .Component = evLog->Component,
-                .NodeId = Settings->NodeId,
-                .FileName = evLog->FileName,
-                .LineNumber = evLog->LineNumber,
-                .TextMessage = evLog->Line,
-                .StructuredMessage = evLog->StructuredMessage.GetOrElse({})};
-
-            for(auto& sink: *sinks) {
-                try {
-                    sink.second->Write(message);
-                } catch (...) {
-
-                }
-            }
-        }
         return OutputRecord(
             evLog->Stamp,
             evLog->Level.ToPrio(),
@@ -612,8 +603,6 @@ namespace NActors {
         bool json,
         const TMaybe<NActors::NStructuredLog::TStructuredMessage>& structuredMessage) noexcept
     try {
-        OutputRecordToSinks(time, priority, component, fileName, lineNumber, formatted, structuredMessage);
-
         const auto logPrio = ::ELogPriority(ui16(priority));
 
         TLogRecord::TMetaFlags metaFlags;

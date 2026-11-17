@@ -490,4 +490,5 @@ message TFeatureFlags {
     optional bool EnableCsDefaultValues = 390 [default = false];
     optional bool EnableTopicWriteSessionsInitQuoting = 391 [default = false];
     optional bool EnableAsyncReplicationChecksumCheck = 392 [default = false];
+    optional bool EnableIndexShadowDataRepair = 393 [default = false];
 }

@@ -105,7 +105,10 @@ TCdcAggregatorStreamHeartbeatsBatch TCdcAggregatorStreamProtoConverter::ParseHea
             batch.InvalidSourceDataShardIds.insert(sourceDataShardId);
             continue;
         }
-        batch.HeartbeatsBySourceDataShardId[sourceDataShardId] = std::move(heartbeat);
+        const auto [kept, inserted] = batch.HeartbeatsBySourceDataShardId.emplace(sourceDataShardId, heartbeat);
+        if (!inserted && kept->second.Version < heartbeat.Version) {
+            kept->second = std::move(heartbeat);
+        }
     }
     return batch;
 }

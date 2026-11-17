@@ -536,6 +536,21 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeTracking().GetSources(0).GetLastHeartbeat().GetStep(), 200);
     }
 
+    Y_UNIT_TEST(ShouldKeepNewestHeartbeatWhenBatchRepeatsSource) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+
+        // when
+        const auto writeResult = env.WriteHeartbeats({{1, 300}, {1, 200}});
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL_C(writeResult.ResultsSize(), 1, writeResult.ShortDebugString());
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetResults(0).GetWrittenVersion().GetStep(), 300);
+        UNIT_ASSERT_VALUES_EQUAL(env.DescribeTracking().GetSources(0).GetLastHeartbeat().GetStep(), 300);
+    }
+
     Y_UNIT_TEST(ShouldNotSetCurrentHeartbeatWhenSomeSourceHasNotReported) {
         // given
         TTestEnv env;

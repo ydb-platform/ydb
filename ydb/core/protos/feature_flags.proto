@@ -488,9 +488,10 @@ message TFeatureFlags {
     optional bool EnableRowTableZstdCompression = 388 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
     optional bool EnableCsDefaultValues = 390 [default = false];
+    optional bool EnableTopicWriteSessionsInitQuoting = 391 [default = false];
     // Keep the write-quota consumed sizes of the in-flight quota request when a KV write
-    // response for the previous blob completes (LOGBROKER-10680). Default true is the fixed
-    // behavior; disabling it restores the legacy zeroing that undercounted the consumed
-    // write quota, as an emergency lever for a rollout.
-    optional bool EnablePQWriteQuotaAccountingFix = 391 [default = false];
+    // response for the previous blob completes (LOGBROKER-10680). Default false is
+    // the legacy zeroing behaviour that undercounted the consumed
+    // write quota.
+    optional bool EnablePQWriteQuotaAccountingFix = 392 [default = false];
 }

@@ -694,6 +694,24 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             if (!InitialScan && IsStandby() && !IsImported(got)) {
+                // Fulltext and vector indexes are replicated as their impl tables, so the index table
+                // target refers to an impl table directly (unlike a secondary index one).
+                const auto srcParts = SplitPath(SrcPath);
+                const auto dstParts = SplitPath(DstPath);
+                const bool isIndexImplTable = !srcParts.empty() && !dstParts.empty()
+                    && srcParts.back() == dstParts.back();
+
+                if (Kind == TReplication::ETargetKind::IndexTable && isIndexImplTable) {
+                    // Its impl table is still importing, i.e. the index was built from the restored data
+                    // instead of being imported: its content (segment compaction, clustering) may differ
+                    // from the source one, so it cannot be attached to the replication.
+                    error = TStringBuilder() << "Cannot attach destination index table '" << DstPath
+                        << "': it was built during the import instead of being restored, so its content"
+                        << " may differ from the source one. Restore the index together with its data"
+                        << " (--include-index-data, --index-population-mode Import) before switching to STANDBY";
+                    return false;
+                }
+
                 error = "Destination table import is not complete (expected IMPORTED)";
                 return false;
             }

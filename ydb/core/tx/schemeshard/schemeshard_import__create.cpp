@@ -736,6 +736,25 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
+    // An index of such a type built from the restored data may differ from the source one
+    // (clustering, fulltext segment compaction), so its impl table stays importing and the
+    // replication refuses to attach it.
+    static bool IsBuiltIndexType(NKikimrSchemeOp::EIndexType type) {
+        switch (type) {
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     // Tables that are marked as imported together with the item's table. An impl table is marked
     // together with its whole index, and the index impl tables are marked by the base table item
     // only: an impl table alter creates a new index version, and the index schema version must match
@@ -748,6 +767,10 @@ private:
             return {};
         }
 
+        // An index restored from the dump was created together with its table, while one built from
+        // the restored data was created by the builder in a separate transaction.
+        const auto tableCreateTxId = path.Base()->CreateTxId;
+
         TVector<TPathId> result{item.DstPathId};
         for (const auto& [name, indexId] : path.Base()->GetChildren()) {
             const auto index = TPath::Init(indexId, Self);
@@ -756,6 +779,11 @@ private:
             }
             const auto& indexInfo = Self->Indexes.at(index.Base()->PathId);
             if (!NTableIndex::HasReplicatedImplTables(indexInfo->Type)) {
+                continue;
+            }
+            const bool builtInImport = index.Base()->CreateTxId != tableCreateTxId;
+            if (IsBuiltIndexType(indexInfo->Type) && builtInImport) {
+                // Its impl tables stay importing, so the replication refuses to attach the index.
                 continue;
             }
             for (const auto& implTable : NTableIndex::GetImplTables(indexInfo->Type, indexInfo->IndexKeys)) {
@@ -776,7 +804,7 @@ private:
         TVector<TPathId> result;
         for (const auto& pathId : GetImportItemTablePaths(importInfo, itemIdx)) {
             if (!TPath::Init(pathId, Self).IsUnderOperation() &&
-                Self->Tables.at(pathId)->ReplicationConfig().GetImportState() != NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
+                Self->Tables.at(pathId)->ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING) {
                 result.push_back(pathId);
             }
         }

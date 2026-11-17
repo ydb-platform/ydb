@@ -1003,6 +1003,47 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         }
     }
 
+    // An index built from the restored data (its impl table has no import state) may differ from the
+    // source one (clustering, fulltext segment compaction), so it must not be attached.
+    Y_UNIT_TEST(AttachBuiltIndexTable) {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        TEnv env(flags);
+        auto table = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Uint32"},
+            },
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTableWithIndex("/Root", *MakeTableDescription(table),
+            "by_value", TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal);
+        table.Name = "Dst";
+        env.CreateTableWithIndex("/Root", *MakeTableDescription(table),
+            "by_value", TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal);
+
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+        // An index built from the restored data is never marked as imported.
+        SetImportState(env, "/Root/Dst/by_value/indexImplTable", NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+        UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender())->Get()->IsSuccess());
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 2, TReplication::ETargetKind::IndexTable,
+            "/Root/Source/by_value/indexImplTable", "/Root/Dst/by_value/indexImplTable",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSchemeError);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "was built during the import");
+    }
+
     Y_UNIT_TEST(AttachmentAlterRejectsDroppedIndexAfterRestart) {
         TEnv env;
         auto& runtime = env.GetRuntime();

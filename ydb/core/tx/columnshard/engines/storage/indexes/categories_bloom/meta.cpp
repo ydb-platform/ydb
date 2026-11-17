@@ -25,9 +25,9 @@ public:
     TCategoryBuilder(std::set<ui64>&& categories, const ui32 count, const ui32 hashesCount)
         : Categories(categories)
     {
-        AFL_VERIFY(count);
+        YDB_LOG_VERIFY(count);
         const ui32 bitsCount = hashesCount * std::max<ui32>(count, 10) / std::log(2);
-        AFL_VERIFY(bitsCount);
+        YDB_LOG_VERIFY(bitsCount);
         Filter.Reserve(bitsCount);
     }
 };
@@ -40,14 +40,14 @@ private:
 public:
     TDynBitMap& MutableFilter(const ui64 hashBase) {
         auto it = FiltersByHash.find(hashBase);
-        AFL_VERIFY(it != FiltersByHash.end());
+        YDB_LOG_VERIFY(it != FiltersByHash.end());
         return *it->second;
     }
 
     void AddCategory(std::set<ui64>&& categories, const ui32 count, const ui32 hashesCount) {
         Builders.emplace_back(std::move(categories), count, hashesCount);
         for (auto&& i : Builders.back().GetCategories()) {
-            AFL_VERIFY(FiltersByHash.emplace(i, &Builders.back().MutableFilter()).second);
+            YDB_LOG_VERIFY(FiltersByHash.emplace(i, &Builders.back().MutableFilter()).second);
         }
     }
 };
@@ -69,7 +69,7 @@ public:
         std::map<ui32, std::vector<ui64>> hashesBySize;
         for (auto&& i : CountByHash) {
             hashesBySize[i.second].emplace_back(i.first);
-            AFL_VERIFY(i.second);
+            YDB_LOG_VERIFY(i.second);
         }
         TFiltersBuilder result;
         ui32 currentCount = 0;
@@ -99,7 +99,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     for (reader.Start(); reader.IsCorrect(); reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount())) {
         std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
         TCategoriesBuilder categories;
-        AFL_VERIFY(reader.GetColumnsCount() == 1);
+        YDB_LOG_VERIFY(reader.GetColumnsCount() == 1);
         for (auto&& i : reader) {
             dataOwners.emplace_back(i.GetCurrentChunk());
             const THashMap<ui64, ui32> indexHitsCount = GetDataExtractor()->GetIndexHitsCount(dataOwners.back());
@@ -182,9 +182,10 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
 
 bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category,
     const std::shared_ptr<arrow::Scalar>& value, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
-    AFL_VERIFY(!!category);
-    AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
-    AFL_VERIFY(op.GetCaseSensitive());
+    YDB_LOG_VERIFY(!!category);
+    YDB_LOG_VERIFY(op.GetOperation() == EOperation::Equals,
+        {"op", op.DebugString()});
+    YDB_LOG_VERIFY(op.GetCaseSensitive());
     const ui32 bitsCount = data.GetBitsCount();
     if (!bitsCount) {
         return false;
@@ -201,13 +202,13 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::opt
 std::optional<ui64> TIndexMeta::DoCalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const {
     ui64 result;
     const NRequest::TOriginalDataAddress addr(GetColumnId(), subColumnName);
-    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, &result));
+    YDB_LOG_VERIFY(GetDataExtractor()->CheckForIndex(addr, &result));
     return result;
 }
 
 bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
-    AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
-    AFL_VERIFY(proto.HasBloomFilter());
+    YDB_LOG_VERIFY(TBase::DoDeserializeFromProto(proto));
+    YDB_LOG_VERIFY(proto.HasBloomFilter());
     auto& bFilter = proto.GetBloomFilter();
     {
         auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);

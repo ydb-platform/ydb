@@ -9,15 +9,15 @@ std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
     std::vector<TPortionInfo::TPtr> problems;
     for (auto&& i : remove) {
         auto it = Portions.find(TOrderedPortion(i));
-        AFL_VERIFY(it != Portions.end());
-        AFL_VERIFY(it->GetPortion()->GetPortionId() == i->GetPortionId());
+        YDB_LOG_VERIFY(it != Portions.end());
+        YDB_LOG_VERIFY(it->GetPortion()->GetPortionId() == i->GetPortionId());
         Portions.erase(it);
     }
     TStringBuilder sb;
     for (auto&& i : add) {
         sb << i->GetPortionId() << ",";
         auto info = Portions.emplace(i);
-        AFL_VERIFY(info.second);
+        YDB_LOG_VERIFY(info.second);
         if (StrictOneLayer) {
             {
                 auto it = info.first;
@@ -78,11 +78,11 @@ void TOneLayerPortions::TryAddPortionToTask(
 }
 
 std::vector<TCompactionTaskData> TOneLayerPortions::DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const {
-    AFL_VERIFY(GetNextLevel());
+    YDB_LOG_VERIFY(GetNextLevel());
     ui64 compactedData = 0;
     TCompactionTaskData result(GetNextLevel()->GetLevelId());
     auto itFwd = Portions.begin();
-    AFL_VERIFY(itFwd != Portions.end());
+    YDB_LOG_VERIFY(itFwd != Portions.end());
     auto itBkwd = itFwd;
     if (itFwd != Portions.begin()) {
         --itBkwd;

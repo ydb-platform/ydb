@@ -291,7 +291,8 @@ public:
             const auto oldExternalTableRecord = context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
             YDB_LOG_ENSURE(oldExternalTableRecord,
                 {"path", dstPath.PathString()},
-                {"pathId", dstPath->PathId});
+                {"pathId", dstPath->PathId}
+            );
             const auto oldDataSourcePath = TPath::Resolve(oldExternalTableRecord->DataSourcePath, context.SS);
             RETURN_RESULT_UNLESS(IsDataSourcePathValid(result, oldDataSourcePath));
 
@@ -308,7 +309,8 @@ public:
             context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
         YDB_LOG_ENSURE(oldExternalTableInfo,
             {"path", dstPath.PathString()},
-            {"pathId", dstPath->PathId});
+            {"pathId", dstPath->PathId}
+        );
         auto [externalTableInfo, maybeError] =
             NExternalTable::CreateExternalTable(externalDataSource->SourceType,
                                                 externalTableDescription,

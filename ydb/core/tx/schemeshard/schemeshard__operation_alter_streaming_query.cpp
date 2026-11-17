@@ -146,7 +146,8 @@ class TAlterStreamingQuery : public TSubOperation {
         const auto& oldStreamingQueryInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
         YDB_LOG_ENSURE(oldStreamingQueryInfo,
             {"path", dstPath.PathString()},
-            {"pathId", dstPath->PathId});
+            {"pathId", dstPath->PathId}
+        );
 
         const auto& info = Transaction.GetCreateStreamingQuery();
         auto streamingQueryInfo = MakeIntrusive<TStreamingQueryInfo>(TStreamingQueryInfo{

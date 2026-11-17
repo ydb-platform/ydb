@@ -190,7 +190,8 @@ public:
         const auto oldExternalDataSourceInfo = context.SS->ExternalDataSources.Value(dstPath->PathId, nullptr);
         YDB_LOG_ENSURE(oldExternalDataSourceInfo,
             {"path", dstPath.PathString()},
-            {"pathId", dstPath->PathId});
+            {"pathId", dstPath->PathId}
+        );
         const TExternalDataSourceInfo::TPtr externalDataSourceInfo = NExternalDataSource::CreateExternalDataSource(
             externalDataSourceDescription,
             oldExternalDataSourceInfo->AlterVersion + 1

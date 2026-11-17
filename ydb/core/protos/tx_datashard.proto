@@ -251,6 +251,7 @@ message TKqpTransaction {
         repeated string GroupByColumnNames = 15;
         optional uint32 OptionalSorting = 16;
         optional bool RequireSortedRead = 17;
+        optional NKqpProto.TKqpPhySystemColumnsFilter SystemColumnsFilter = 18;
     }
 
     optional EKqpTransactionType Type = 1;
@@ -2398,6 +2399,7 @@ message TEvKqpScan {
     optional bool UseBatchPool = 31 [default = false];
     optional string DatabaseId = 32;
     optional string PoolId = 33;
+    optional NKqpProto.TKqpPhySystemColumnsFilter SystemColumnsFilter = 34;
 }
 
 message TEvCompactTable {

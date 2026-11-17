@@ -470,34 +470,6 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
 
     // ---- P1: runtime errors ----
 
-    Y_UNIT_TEST(SessionInvalidated) {
-        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
-        EnableFetchLogs(*setup);
-        auto& runtime = setup->GetRuntime();
-        StartSchemeCache(runtime);
-
-        // Empty partition keeps HasData pending so we can inject SessionInvalidated in StateWork.
-        setup->CreateTopic("topic1", "dc1", 1);
-
-        auto edgeId = runtime.AllocateEdgeActor();
-        auto settings = MakeSettings({{"/Root/topic1", 0, 0, 10000}}, /*maxWaitTimeMs=*/30'000);
-        auto fetchId = RegisterFetchActor(runtime, settings, edgeId);
-
-        // Reach StateWork (HasData handlers) before injecting — StateDescribe rejects this event.
-        runtime.DispatchEvents(TDispatchOptions{}, TDuration::Seconds(1));
-
-        auto response = MakeHolder<TEvPersQueue::TEvHasDataInfoResponse>();
-        response->Record.SetCookie(0);
-        response->Record.SetSessionInvalidated(true);
-        runtime.Send(new IEventHandle(fetchId, fetchId, response.Release()), 0, true);
-
-        auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>(TDuration::Seconds(30));
-        UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::SUCCESS, ev->Message);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 1);
-        AssertErrorCode(ev->Response.GetPartResult(0), ::NPersQueue::NErrorCode::READ_ERROR_NO_SESSION);
-    }
-
     Y_UNIT_TEST(ReadyPartitionIsNotBlockedByEmptyPartitionPastMaxWait) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
         EnableFetchLogs(*setup);

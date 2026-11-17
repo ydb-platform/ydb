@@ -1,9 +1,9 @@
-// Port of TDecisionMaker::{VDiskQuorumDecision,HandleQuorum*,CheckLocalAndRemoteGuid}.
-// See MODEL.md for pinned C++ sources and abstraction boundaries.
-fun ReachAVerdict(topology: ETopology, local: TLocalGuidInfo, votes: seq[TGuidReply]): TDecision {
+// TDecisionMaker with durable identity evidence separate from current quorum votes.
+fun ReachAVerdict(topology: ETopology, local: TLocalGuidInfo, votes: seq[TGuidReply], historicalGuid: int): TDecision {
   var reply: TGuidReply;
   var vote: TSyncGuidInfo;
   var finalGuid: int;
+  var knownGuid: int;
   var finalDisks: set[int];
   var progress: map[int, int];
   var guid: int;
@@ -12,7 +12,20 @@ fun ReachAVerdict(topology: ETopology, local: TLocalGuidInfo, votes: seq[TGuidRe
   var step: EFirstRunStep;
   var decision: EDecision;
 
+  knownGuid = historicalGuid;
+  if (local.State == LocalFinal || local.State == Lost) {
+    if (knownGuid != 0 && knownGuid != local.Guid) {
+      return (Decision = Inconsistency, Guid = 0, Step = STATE__Terminated);
+    }
+    knownGuid = local.Guid;
+  }
   foreach (reply in votes) {
+    if (reply.RecoveredGuid != 0) {
+      if (knownGuid != 0 && knownGuid != reply.RecoveredGuid) {
+        return (Decision = Inconsistency, Guid = 0, Step = STATE__Terminated);
+      }
+      knownGuid = reply.RecoveredGuid;
+    }
     vote = reply.Info;
     if (vote.State == RemoteFinal) {
       if (sizeof(finalDisks) > 0 && finalGuid != vote.Guid) {
@@ -25,7 +38,15 @@ fun ReachAVerdict(topology: ETopology, local: TLocalGuidInfo, votes: seq[TGuidRe
       progress[vote.Guid] = progress[vote.Guid] + 1;
     }
   }
-  if (sizeof(finalDisks) > 0) {
+  if (knownGuid != 0) {
+    // Only incompatible Final evidence conflicts with an immutable identity.
+    if (finalGuid != 0 && finalGuid != knownGuid) {
+      return (Decision = Inconsistency, Guid = 0, Step = STATE__Terminated);
+    }
+    finalGuid = knownGuid;
+  }
+  if (sizeof(finalDisks) > 0 || knownGuid != 0) {
+    // A fact selects the old GUID but adds no Final responder IDs.
     step = STATE__Terminated;
     if (!HasGroupQuorum(topology, finalDisks)) { step = ACTION_WriteFinalToQuorum; }
     if (local.State == LocalEmpty) { decision = LostData; }
@@ -34,7 +55,6 @@ fun ReachAVerdict(topology: ETopology, local: TLocalGuidInfo, votes: seq[TGuidRe
       if (HasGroupQuorum(topology, finalDisks)) { step = ACTION_WriteFinalLocally; }
     } else if (local.State == Lost) { decision = LostData; }
     else { decision = Good; }
-    // HandleQuorumFinal(Lost) deliberately has no local/remote GUID check.
     if (local.State == Selected || local.State == LocalFinal ||
         (local.State == Lost && !HasGroupQuorum(topology, finalDisks))) {
       if (local.Guid != finalGuid) { decision = Inconsistency; }
@@ -70,40 +90,57 @@ machine TVDiskGuidRecoveryActor {
   var local: TLocalGuidInfo;
   var seen: set[int];
   var votes: seq[TGuidReply];
+  var history: seq[int];
+  var historyValid: bool;
   var outcome: TDecision;
 
   start state Survey {
-    entry (config: (Storage: machine, Owner: int, Local: TLocalGuidInfo, Topology: ETopology)) {
+    entry (config: (Storage: machine, Owner: int, Local: TLocalGuidInfo, Topology: ETopology, History: seq[int])) {
+      var i: int;
       storage = config.Storage;
       owner = config.Owner;
       local = config.Local;
       topology = config.Topology;
+      history = config.History;
+      historyValid = true;
+      assert sizeof(history) == DiskCount(topology);
+      // Empty slots contribute no evidence; reply order is not protocol state.
+      while (i < DiskCount(topology)) {
+        votes += (i, default(TGuidReply));
+        i = i + 1;
+      }
       send storage, eSurvey, (Source = this, Owner = owner);
     }
     on TEvVDiskGuidObtained do (reply: TGuidReply) {
+      var subject: int;
       if (reply.VDiskId in seen) { return; }
       seen += (reply.VDiskId);
-      votes += (sizeof(votes), reply);
+      seen = CanonicalDisks(seen, DiskCount(topology));
+      votes[reply.VDiskId] = reply;
+      assert sizeof(reply.History) == DiskCount(topology);
+      while (subject < DiskCount(topology)) {
+        if (reply.History[subject] != 0) {
+          if (history[subject] != 0 && history[subject] != reply.History[subject]) { historyValid = false; }
+          history[subject] = reply.History[subject];
+        }
+        subject = subject + 1;
+      }
       announce eSurveyVote, (Owner = owner, Info = reply.Info);
-      if (HasGroupQuorum(topology, seen)) {
-        outcome = ReachAVerdict(topology, local, votes);
-        announce eGuidVerdict, (Owner = owner, Decision = outcome.Decision);
-        if (outcome.Decision == Inconsistency) { Finish(); }
-        if (outcome.Step == ACTION_GenerateGuid) {
-          // Fresh symbolic GUID; disjoint from seeded eternal GUIDs.
-          outcome.Guid = 10000 + owner;
-          outcome.Step = ACTION_WriteInProgressToQuorum;
+      if (HasGroupQuorum(topology, seen) &&
+          HasGuidHistoryCoverage(topology, seen, owner, local.State == LocalFinal)) {
+        if (!historyValid) {
+          outcome = (Decision = Inconsistency, Guid = 0, Step = STATE__Terminated);
+          announce eGuidVerdict, (Owner = owner, Decision = outcome.Decision);
+          Finish();
         }
-        if (outcome.Step == ACTION_WriteInProgressToQuorum) {
-          send storage, ePublishGuid,
-            (Source = this, Owner = owner, Info = (State = InProgress, Guid = outcome.Guid));
-          goto WritingInProgress;
-        }
-        if (outcome.Step == ACTION_WriteFinalToQuorum) { PublishFinal(); }
-        if (outcome.Step == ACTION_WriteFinalLocally) { CommitFinal(); }
-        SettleOrFinish();
+        send storage, eCommitGuidHistory, (Source = this, Owner = owner, History = history);
+        goto CommittingHistory;
       }
     }
+  }
+  state CommittingHistory {
+    ignore TEvVDiskGuidObtained;
+    on TEvSyncerCommitDone do { Decide(); }
   }
   state WritingInProgress {
     ignore TEvVDiskGuidObtained;
@@ -136,6 +173,27 @@ machine TVDiskGuidRecoveryActor {
     ignore TEvVDiskGuidObtained;
     on TEvSyncerCommitDone do { Finish(); }
   }
+  fun Decide() {
+    outcome = ReachAVerdict(topology, local, votes, history[owner]);
+    votes = default(seq[TGuidReply]);
+    seen = default(set[int]);
+    history = default(seq[int]);
+    historyValid = false;
+    announce eGuidVerdict, (Owner = owner, Decision = outcome.Decision);
+    if (outcome.Decision == Inconsistency) { Finish(); }
+    if (outcome.Step == ACTION_GenerateGuid) {
+      outcome.Guid = 10000 + owner;
+      outcome.Step = ACTION_WriteInProgressToQuorum;
+    }
+    if (outcome.Step == ACTION_WriteInProgressToQuorum) {
+      send storage, ePublishGuid,
+        (Source = this, Owner = owner, Info = (State = InProgress, Guid = outcome.Guid));
+      goto WritingInProgress;
+    }
+    if (outcome.Step == ACTION_WriteFinalToQuorum) { PublishFinal(); }
+    if (outcome.Step == ACTION_WriteFinalLocally) { CommitFinal(); }
+    SettleOrFinish();
+  }
   fun PublishFinal() {
     send storage, ePublishGuid,
       (Source = this, Owner = owner, Info = (State = RemoteFinal, Guid = outcome.Guid));
@@ -157,6 +215,16 @@ machine TVDiskGuidRecoveryActor {
   }
   fun Finish() {
     send storage, TEvVDiskGuidRecovered, (Owner = owner, Outcome = outcome);
+    // Finished only discards late replies; none of these fields is read again.
+    storage = default(machine);
+    owner = 0;
+    topology = default(ETopology);
+    local = default(TLocalGuidInfo);
+    seen = default(set[int]);
+    votes = default(seq[TGuidReply]);
+    history = default(seq[int]);
+    historyValid = false;
+    outcome = default(TDecision);
     // A completed/cancelled proxy can still have a reply in flight.
     goto Finished;
   }
@@ -203,6 +271,7 @@ machine SurveyTransport {
         }
         if (hold) { pending += (sizeof(pending), env); return; }
         delivered += (env.Reply.VDiskId);
+        delivered = CanonicalDisks(delivered, DiskCount(topology));
       }
       send env.Target, TEvVDiskGuidObtained, env.Reply;
       if (HasGroupQuorum(topology, delivered)) {
@@ -210,7 +279,70 @@ machine SurveyTransport {
           send buffered.Target, TEvVDiskGuidObtained, buffered.Reply;
         }
         pending = default(seq[TGuidEnvelope]);
+        configured = false;
+        delivered = default(set[int]);
+        mode = default(EScenario);
+        topology = default(ETopology);
       }
     }
   }
+}
+
+// Explore every durable write order, including writes after quorum completion.
+// There is one atomic store: serialize write/ack pairs while choosing their order.
+// The receiver can process TEvVDiskGuidWritten before or after any remaining write.
+machine TGuidPublication {
+  var storage: machine;
+  var notify: machine;
+  var owner: int;
+  var info: TSyncGuidInfo;
+  var topology: ETopology;
+  var pending: set[int];
+  var acks: set[int];
+  var reported: bool;
+  start state Publishing {
+    entry (config: (Storage: machine, Notify: machine, Owner: int, Info: TSyncGuidInfo, Topology: ETopology)) {
+      var peer: int;
+      storage = config.Storage;
+      notify = config.Notify;
+      owner = config.Owner;
+      info = config.Info;
+      topology = config.Topology;
+      while (peer < DiskCount(topology)) { pending += (peer); peer = peer + 1; }
+      Dispatch();
+    }
+    on eGuidWriteAck do (result: (Peer: int, Success: bool)) {
+      if (result.Success) {
+        acks += (result.Peer);
+        acks = CanonicalDisks(acks, DiskCount(topology));
+      }
+      if (!reported && HasGroupQuorum(topology, acks)) {
+        send notify, TEvVDiskGuidWritten, acks;
+        reported = true;
+        notify = default(machine);
+      }
+      Dispatch();
+    }
+  }
+  fun Dispatch() {
+    var peer: int;
+    // C++ cancels unfinished publication proxies after the quorum notification.
+    // Any prefix of the remaining durable writes may already have completed.
+    if (reported && $) { pending = default(set[int]); }
+    if (sizeof(pending) == 0) {
+      storage = default(machine);
+      notify = default(machine);
+      owner = 0;
+      info = default(TSyncGuidInfo);
+      topology = default(ETopology);
+      acks = default(set[int]);
+      reported = false;
+      goto Finished;
+    }
+    peer = choose(pending);
+    pending -= (peer);
+    pending = CanonicalDisks(pending, DiskCount(topology));
+    send storage, eGuidWriteRequest, (Source = this, Owner = owner, Peer = peer, Info = info);
+  }
+  state Finished { }
 }

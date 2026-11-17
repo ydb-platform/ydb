@@ -106,6 +106,9 @@ void ConvertItem(
         *to.mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
             from.GetLagMilliSeconds());
     }
+    if (from.HasChecksumStatus()) {
+        *to.mutable_checksum_status() = from.GetChecksumStatus();
+    }
     if (from.HasInitialScanProgress()) {
         to.mutable_stats()->set_initial_scan_progress(from.GetInitialScanProgress());
     }

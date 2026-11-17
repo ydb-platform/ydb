@@ -4,16 +4,27 @@
 #include <ydb/core/tx/replication/ut_helpers/mock_service.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
+#include <ydb/core/tx/replication/private_client/private_client.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/printf.h>
+#include <util/generic/guid.h>
 
 namespace NKikimr::NReplication::NController {
 namespace {
 using namespace NTestHelpers;
+
+Ydb::Replication::StreamChecksumTablesInternalRequest MakeSourceChecksumRequest(bool probeOnly = false) {
+    Ydb::Replication::StreamChecksumTablesInternalRequest request;
+    auto* table = request.add_tables();
+    table->set_id(1);
+    table->set_path("/Root/table");
+    request.set_probe_only(probeOnly);
+    return request;
+}
 
 // Gate a real actor protocol operation while forwarding unrelated traffic.
 class TEventGate: public TActorBootstrapped<TEventGate> {
@@ -77,6 +88,8 @@ struct TTransactionsEnv: TEnv<> {
     explicit TTransactionsEnv(bool global = true, ERuntimeMode mode = ERuntimeMode::RealThreads)
         : TEnv<>(true, mode)
     {
+        GetRuntime().GetAppData().FeatureFlags.SetEnableDataShardSnapshotLocking(true);
+        GetRuntime().GetAppData().FeatureFlags.SetEnableAsyncReplicationChecksumCheck(true);
         GetRuntime().RegisterService(MakeReplicationServiceId(GetRuntime().GetNodeId(0)),
             GetRuntime().Register(CreateReplicationMockService(GetSender())));
         CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
@@ -106,7 +119,9 @@ struct TTransactionsEnv: TEnv<> {
         auto event = GetRuntime().GrabEdgeEvent<TEvService::TEvHandshake>(GetSender());
         UNIT_ASSERT(event->Sender != Controller);
         Controller = event->Sender;
-        SendAsync(Controller, new TEvService::TEvStatus());
+        auto* status = new TEvService::TEvStatus();
+        status->Record.SetSupportsChecksumRanges(true);
+        SendAsync(Controller, status);
     }
 
     TEvController::TEvDescribeReplication* Request() const {
@@ -155,6 +170,49 @@ struct TTransactionsEnv: TEnv<> {
         GetRuntime().Send(new IEventHandle(Controller, GetSender(), event, 0, txId));
     }
 
+    TString RequestChecksum(TString requestId = {}) {
+        if (requestId.empty()) {
+            requestId = CreateGuidAsString();
+        }
+        auto request = MakeHolder<TEvController::TEvCheckTable>();
+        GetPathId("/Root/replica").ToProto(request->Record.MutableDestinationPathId());
+        request->Record.SetRequestId(requestId);
+        SendAsync(TabletId, request.Release());
+        return requestId;
+    }
+
+    NKikimrReplication::TEvCheckTableResult WaitChecksum() {
+        const auto deadline = TInstant::Now() + TDuration::Seconds(45);
+        for (;;) {
+            auto event = GetRuntime().GrabEdgeEvent<TEvController::TEvCheckTableResult>(GetSender(), TDuration::Seconds(45));
+            UNIT_ASSERT(event);
+            const auto response = event->Get()->Record;
+            if (!response.GetDeferred() || response.GetStatus() != Ydb::StatusIds::OVERLOADED) {
+                return response;
+            }
+            UNIT_ASSERT(TInstant::Now() < deadline);
+            RequestChecksum(response.GetRequestId());
+        }
+    }
+
+    std::optional<NYdb::NReplication::TChecksumStatus> SdkChecksum(bool stats = false) {
+        return RunCall([&] {
+            NYdb::NReplication::TReplicationClient client(GetDriver());
+            auto result = client.DescribeReplication("/Root/replication",
+                NYdb::NReplication::TDescribeReplicationSettings().IncludeStats(stats)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto items = result.GetReplicationDescription().GetItems();
+            UNIT_ASSERT_VALUES_EQUAL(items.size(), 1);
+            return items.at(0).ChecksumStatus;
+        });
+    }
+
+    void ChecksumHeartbeat() {
+        auto* heartbeat = new TEvService::TEvHeartbeat(TRowVersion(TInstant::Now().MilliSeconds() + 60000, 0));
+        heartbeat->Record.MutableWorker()->CopyFrom(Worker);
+        SendAsync(Controller, heartbeat);
+    }
+
     void HoldCommits() {
         auto& runtime = GetRuntime();
         const auto proxy = runtime.GetLocalServiceId(MakeTxProxyID());
@@ -199,6 +257,275 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
                 UNIT_ASSERT_VALUES_EQUAL(result->Pending[i].TxId, 0);
             }
         }
+    }
+
+    Y_UNIT_TEST(ChecksumRejectsRowConsistency) {
+        TTransactionsEnv env(false);
+        env.RequestChecksum();
+        const auto result = env.WaitChecksum();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT(!env.SdkChecksum());
+    }
+
+    Y_UNIT_TEST(ChecksumUnknownDestination) {
+        TTransactionsEnv env;
+        auto request = MakeHolder<TEvController::TEvCheckTable>();
+        env.GetPathId("/Root/table").ToProto(request->Record.MutableDestinationPathId());
+        request->Record.SetRequestId("unknown-destination");
+        env.SendAsync(env.TabletId, request.Release());
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitChecksum().GetStatus(), Ydb::StatusIds::SCHEME_ERROR);
+        UNIT_ASSERT(!env.SdkChecksum());
+    }
+
+    Y_UNIT_TEST(ChecksumBusyAndCancellation) {
+        TTransactionsEnv env;
+        const auto first = env.RequestChecksum();
+        const auto second = env.RequestChecksum();
+        const auto busy = env.GetRuntime().GrabEdgeEvent<TEvController::TEvCheckTableResult>(env.GetSender(), TDuration::Seconds(30));
+        UNIT_ASSERT(busy);
+        UNIT_ASSERT_VALUES_EQUAL(busy->Get()->Record.GetRequestId(), second);
+        UNIT_ASSERT_VALUES_EQUAL(busy->Get()->Record.GetStatus(), Ydb::StatusIds::OVERLOADED);
+        UNIT_ASSERT(busy->Get()->Record.GetDeferred());
+        UNIT_ASSERT(!env.SdkChecksum());
+        auto cancel = MakeHolder<TEvController::TEvCancelCheckTable>();
+        env.GetPathId("/Root/replica").ToProto(cancel->Record.MutableDestinationPathId());
+        cancel->Record.SetRequestId(first);
+        env.SendAsync(env.TabletId, cancel.Release());
+        const auto cancelled = env.WaitChecksum();
+        UNIT_ASSERT_VALUES_EQUAL(cancelled.GetRequestId(), first);
+        UNIT_ASSERT_VALUES_EQUAL(cancelled.GetStatus(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT(!cancelled.GetChecksumStatus().has_last_result());
+    }
+
+    Y_UNIT_TEST(ChecksumWaitsForAdmissionWithoutPausingReplication) {
+        TTransactionsEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        const auto source = env.GetPathId("/Root/table");
+        const auto destination = env.GetPathId("/Root/replica");
+        TVector<NSchemeShard::TEvSchemeShard::TEvChecksumAdmissionResult::TPtr> grants;
+        bool hold = true;
+        auto admissionObserver = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvChecksumAdmissionResult>([&](auto& ev) {
+            if (hold && ev->GetRecipientRewrite() == env.Controller
+                && ev->Get()->Record.GetGrantedShards() && !ev->Get()->Record.GetReleased())
+            {
+                grants.push_back(std::move(ev));
+            }
+        });
+        ui32 snapshots = 0;
+        auto snapshotObserver = runtime.AddObserver<NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot>([&](auto& ev) {
+            for (const auto& table : ev->Get()->TableIds) {
+                if (table.PathId == source || table.PathId == destination) {
+                    ++snapshots;
+                }
+            }
+        });
+        env.RequestChecksum();
+        runtime.WaitFor("checksum admission held", [&] { return !grants.empty(); });
+        UNIT_ASSERT(env.Assign(1));
+        UNIT_ASSERT(!env.SdkChecksum());
+        UNIT_ASSERT_VALUES_EQUAL(snapshots, 0);
+
+        hold = false;
+        for (auto& grant : grants) {
+            runtime.Send(grant.Release());
+        }
+        env.ChecksumHeartbeat();
+        const auto result = env.WaitChecksum();
+        UNIT_ASSERT_C(result.GetStatus() == Ydb::StatusIds::SUCCESS, result.GetIssue());
+        UNIT_ASSERT(result.GetChecksumStatus().last_result().matches());
+        UNIT_ASSERT(snapshots >= 2);
+    }
+
+    Y_UNIT_TEST(ChecksumExpiredAdmission) {
+        TTransactionsEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        auto observer = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvChecksumAdmissionResult>([&](auto& ev) {
+            auto& response = ev->Get()->Record;
+            if (response.GetStatus() == Ydb::StatusIds::SUCCESS && response.GetGrantedShards() && !response.GetReleased()) {
+                response.SetDeadlineUs(runtime.GetCurrentTime().MicroSeconds());
+            }
+        });
+        env.RequestChecksum();
+        const auto result = env.WaitChecksum();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), Ydb::StatusIds::TIMEOUT);
+        UNIT_ASSERT(!result.GetChecksumStatus().has_last_result());
+        UNIT_ASSERT_VALUES_EQUAL(env.SdkChecksum()->Status, NYdb::EStatus::TIMEOUT);
+    }
+
+    Y_UNIT_TEST(ChecksumFeatureFlag) {
+        TTransactionsEnv env;
+        env.GetRuntime().GetAppData().FeatureFlags.SetEnableAsyncReplicationChecksumCheck(false);
+        env.RequestChecksum();
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitChecksum().GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT(!env.SdkChecksum());
+        env.RunCall([&] {
+            TPrivateClient client(env.GetDriver(), NYdb::TCommonClientSettings().AuthToken("root@builtin"));
+            auto stream = client.StreamChecksumTablesInternal(MakeSourceChecksumRequest(), TDuration::Seconds(30)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(stream.ReadNext().ExtractValueSync().GetStatus(), NYdb::EStatus::PRECONDITION_FAILED);
+        });
+    }
+
+    Y_UNIT_TEST(ChecksumRequiresDataShardSnapshotRetention) {
+        TTransactionsEnv env;
+        env.GetRuntime().GetAppData().FeatureFlags.SetEnableDataShardSnapshotLocking(false);
+        env.RequestChecksum();
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitChecksum().GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
+        env.RunCall([&] {
+            TPrivateClient client(env.GetDriver(), NYdb::TCommonClientSettings().AuthToken("root@builtin"));
+            auto stream = client.StreamChecksumTablesInternal(MakeSourceChecksumRequest(), TDuration::Seconds(30)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(stream.ReadNext().ExtractValueSync().GetStatus(), NYdb::EStatus::PRECONDITION_FAILED);
+        });
+    }
+
+    Y_UNIT_TEST(ChecksumSourceStreamEmptyTable) {
+        TTransactionsEnv env;
+        env.RunCall([&] {
+            TPrivateClient client(env.GetDriver(), NYdb::TCommonClientSettings().AuthToken("root@builtin"));
+            auto stream = client.StreamChecksumTablesInternal(MakeSourceChecksumRequest(), TDuration::Seconds(30)).ExtractValueSync();
+            UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+            auto snapshot = stream.ReadNext().ExtractValueSync();
+            UNIT_ASSERT_C(snapshot.IsSuccess(), snapshot.GetIssues().ToString());
+            UNIT_ASSERT(snapshot.Record.has_snapshot());
+            auto table = stream.ReadNext().ExtractValueSync();
+            UNIT_ASSERT_C(table.IsSuccess(), table.GetIssues().ToString());
+            UNIT_ASSERT(table.Record.has_table());
+            UNIT_ASSERT_VALUES_EQUAL(table.Record.table().id(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(table.Record.table().checksum().row_count(), 0);
+            UNIT_ASSERT(table.Record.table().checksum().hash().empty());
+            UNIT_ASSERT(!table.Record.table().schema().empty());
+            UNIT_ASSERT(stream.ReadNext().ExtractValueSync().Record.complete());
+            UNIT_ASSERT_VALUES_EQUAL(stream.ReadNext().ExtractValueSync().GetStatus(), NYdb::EStatus::CLIENT_OUT_OF_RANGE);
+        });
+    }
+
+    Y_UNIT_TEST(ChecksumSourceProbeDoesNotAcquireSnapshot) {
+        TTransactionsEnv env;
+        env.RunCall([&] {
+            TPrivateClient client(env.GetDriver(), NYdb::TCommonClientSettings().AuthToken("root@builtin"));
+            auto stream = client.StreamChecksumTablesInternal(MakeSourceChecksumRequest(true), TDuration::Seconds(30)).ExtractValueSync();
+            const auto result = stream.ReadNext().ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.Record.complete());
+            UNIT_ASSERT(!result.Record.has_snapshot());
+            UNIT_ASSERT(!result.Record.has_table());
+        });
+    }
+
+    Y_UNIT_TEST(ChecksumIdleReplicationMatchesAndPersists) {
+        TTransactionsEnv env;
+        UNIT_ASSERT(!env.SdkChecksum());
+        const auto requestId = env.RequestChecksum();
+        env.ChecksumHeartbeat();
+        const auto response = env.WaitChecksum();
+        UNIT_ASSERT_VALUES_EQUAL(response.GetRequestId(), requestId);
+        UNIT_ASSERT_C(response.GetStatus() == Ydb::StatusIds::SUCCESS, response.GetIssue());
+        const auto& result = response.GetChecksumStatus().last_result();
+        UNIT_ASSERT(result.matches());
+        UNIT_ASSERT_VALUES_EQUAL(result.source().row_count(), 0);
+        UNIT_ASSERT(result.source().hash().empty());
+        UNIT_ASSERT(result.has_finished_at());
+        for (const bool stats : {false, true}) {
+            const auto status = env.SdkChecksum(stats);
+            UNIT_ASSERT(status && status->LastResult && status->LastResult->Matches);
+        }
+        env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
+        env.Handshake();
+        env.RequestChecksum(requestId);
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitChecksum().GetChecksumStatus().SerializeAsString(), response.GetChecksumStatus().SerializeAsString());
+    }
+
+    Y_UNIT_TEST(ChecksumMismatchAndSuccessfulRecheck) {
+        TTransactionsEnv env;
+        const auto write = [&](const TString& sql) {
+            NYdb::NTable::TTableClient client(env.GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx(
+                NYdb::NTable::TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        write("UPSERT INTO `/Root/table` (key, value) VALUES (1u, 'one');");
+        env.RequestChecksum();
+        env.ChecksumHeartbeat();
+        const auto mismatch = env.WaitChecksum();
+        UNIT_ASSERT_C(mismatch.GetStatus() == Ydb::StatusIds::SUCCESS, mismatch.GetIssue());
+        UNIT_ASSERT(!mismatch.GetChecksumStatus().last_result().matches());
+        UNIT_ASSERT_VALUES_EQUAL(mismatch.GetChecksumStatus().last_result().source().row_count(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(mismatch.GetChecksumStatus().last_result().destination().row_count(), 0);
+        write("DELETE FROM `/Root/table` WHERE key = 1u;");
+        env.RequestChecksum();
+        env.ChecksumHeartbeat();
+        const auto match = env.WaitChecksum();
+        UNIT_ASSERT_C(match.GetStatus() == Ydb::StatusIds::SUCCESS, match.GetIssue());
+        UNIT_ASSERT(match.GetChecksumStatus().last_result().matches());
+    }
+
+    Y_UNIT_TEST(ChecksumSplitsTransactionRangesAtCapacity) {
+        TTransactionsEnv env;
+        for (ui64 step = 1; step < 50000; step += 10000) {
+            env.Assign(step);
+        }
+        env.RequestChecksum();
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        TRowVersion boundary;
+        for (;;) {
+            const auto transactions = env.Describe();
+            if (transactions.assigned_size() > 5) {
+                const auto& version = transactions.assigned(transactions.assigned_size() - 1).upper_bound_barrier();
+                boundary = NChecksum::FromProto(version);
+                break;
+            }
+            UNIT_ASSERT(TInstant::Now() < deadline);
+        }
+        auto response = env.Send<TEvService::TEvTxIdResult>(env.TabletId,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{boundary.Prev(), boundary}));
+        const auto& ranges = response->Get()->Record.GetVersionTxIds();
+        UNIT_ASSERT_VALUES_EQUAL(ranges.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(ranges[0].GetVersion()), boundary);
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(ranges[1].GetBegin()), boundary);
+        UNIT_ASSERT(ranges[0].GetTxId() != ranges[1].GetTxId());
+    }
+
+    Y_UNIT_TEST(ChecksumRejectsOldReplicationService) {
+        TTransactionsEnv env;
+        auto* status = new TEvService::TEvStatus();
+        status->Record.SetSupportsChecksumRanges(false);
+        env.SendAsync(env.Controller, status);
+        env.RequestChecksum();
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitChecksum().GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(ChecksumRecoveryPreservesCompletedResult) {
+        TTransactionsEnv env;
+        env.RequestChecksum();
+        env.ChecksumHeartbeat();
+        const auto completed = env.WaitChecksum();
+        UNIT_ASSERT_C(completed.GetStatus() == Ydb::StatusIds::SUCCESS, completed.GetIssue());
+        env.HoldCommits();
+        const auto requestId = env.RequestChecksum();
+        // Wait until a real boundary commit is blocked, then interrupt the tablet.
+        UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender(), TDuration::Seconds(45)));
+        env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
+        env.Handshake();
+        env.RequestChecksum(requestId);
+        const auto interrupted = env.WaitChecksum();
+        UNIT_ASSERT_VALUES_EQUAL(interrupted.GetStatus(), Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(interrupted.GetChecksumStatus().last_result().SerializeAsString(),
+            completed.GetChecksumStatus().last_result().SerializeAsString());
+        const auto status = env.SdkChecksum();
+        UNIT_ASSERT(status && status->LastResult && status->LastResult->Matches);
+        UNIT_ASSERT_VALUES_EQUAL(status->Status, NYdb::EStatus::UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(ChecksumDuplicateRequestReplaysResult) {
+        TTransactionsEnv env;
+        const auto requestId = env.RequestChecksum();
+        env.RequestChecksum(requestId);
+        env.ChecksumHeartbeat();
+        const auto first = env.WaitChecksum();
+        UNIT_ASSERT_C(first.GetStatus() == Ydb::StatusIds::SUCCESS, first.GetIssue());
+        env.RequestChecksum(requestId);
+        const auto replay = env.WaitChecksum();
+        UNIT_ASSERT_VALUES_EQUAL(first.SerializeAsString(), replay.SerializeAsString());
     }
 
     Y_UNIT_TEST(ReportsAssignedTransactionsWithAndWithoutStats) {

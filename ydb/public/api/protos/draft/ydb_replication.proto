@@ -96,6 +96,22 @@ message DescribeReplicationResult {
         optional string source_changefeed_name = 3;
         uint64 id = 4;
         Stats stats = 5;
+
+        message ChecksumStatus {
+            message Result {
+                TableChecksum source = 1;
+                TableChecksum destination = 2;
+                bool matches = 3;
+                google.protobuf.Timestamp finished_at = 4;
+            }
+            // Latest completed attempt. A mismatch is SUCCESS with matches=false.
+            Ydb.StatusIds.StatusCode status = 1;
+            repeated Ydb.Issue.IssueMessage issues = 2;
+            google.protobuf.Timestamp finished_at = 3;
+            // Preserved when a later attempt fails.
+            Result last_result = 4;
+        }
+        ChecksumStatus checksum_status = 6;
     }
 
     message RunningState {

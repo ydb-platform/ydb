@@ -175,6 +175,8 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
             .Stats = TStats(item.stats()),
             .SrcChangefeedName = item.has_source_changefeed_name()
                 ? std::make_optional(item.source_changefeed_name()) : std::nullopt,
+            .ChecksumStatus = item.has_checksum_status()
+                ? std::make_optional(TChecksumStatus(item.checksum_status())) : std::nullopt,
         });
     }
 
@@ -371,6 +373,28 @@ TDescribeTransferResult::TDescribeTransferResult(TStatus&& status, Ydb::Replicat
     *Proto_ = std::move(desc);
 }
 
+
+namespace {
+TTableChecksum ReadChecksum(const Ydb::Replication::TableChecksum& value) {
+    return {value.row_count(), value.hash()};
+}
+}
+
+TChecksumStatus::TChecksumStatus(const Ydb::Replication::DescribeReplicationResult_Item_ChecksumStatus& proto)
+    : Status(static_cast<EStatus>(proto.status()))
+    , Issues(IssuesFromMessage(proto.issues()))
+    , FinishedAt(TInstant::MicroSeconds(google::protobuf::util::TimeUtil::TimestampToMicroseconds(proto.finished_at())))
+{
+    if (proto.has_last_result()) {
+        const auto& result = proto.last_result();
+        LastResult.emplace(TResult{
+            .Source = ReadChecksum(result.source()),
+            .Destination = ReadChecksum(result.destination()),
+            .Matches = result.matches(),
+            .FinishedAt = TInstant::MicroSeconds(google::protobuf::util::TimeUtil::TimestampToMicroseconds(result.finished_at())),
+        });
+    }
+}
 
 class TReplicationClient::TImpl: public TClientImplCommon<TReplicationClient::TImpl> {
 public:

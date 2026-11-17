@@ -8,9 +8,15 @@
 
 namespace NKikimr::NReplication::NController {
 
-THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(ui64 writeTxId, const TVector<TString>& tables) {
+THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(ui64 writeTxId, const TVector<TString>& tables, bool reportPlanned) {
     auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
     auto& tx = *ev->Record.MutableTransaction()->MutableCommitWrites();
+
+    // The checksum controller can retain the planned commit version before a
+    // slow completion reply arrives.
+    if (reportPlanned) {
+        ev->Record.SetProxyFlags(TEvTxUserProxy::TEvProposeTransaction::ProxyReportPlanned);
+    }
 
     tx.SetWriteTxId(writeTxId);
     for (const auto& path : tables) {
@@ -193,7 +199,7 @@ public:
         }
 
         Self->CommittingTxId = Self->AssignedTxIds.begin()->second;
-        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
+        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first), Self->IsChecksumBoundaryTxId(Self->CommittingTxId));
 
         return true;
     }
@@ -281,7 +287,7 @@ public:
             Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
 
             if (!Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-                CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
+                CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first), Self->IsChecksumBoundaryTxId(Self->CommittingTxId));
             } else {
                 Self->CommittingTxId = 0;
             }
@@ -304,6 +310,8 @@ public:
             NIceDb::TUpdate<Schema::Replications::CommittedTxId>(frontier.TxId)
         );
         db.Table<Schema::TxIds>().Key(it->first.Step, it->first.TxId).Delete();
+        Self->OnChecksumCommitComplete(Self->CommittingTxId, TRowVersion(record.GetStep(), record.GetTxId()), db);
+        Self->AssignedTxIdBegins.erase(it->first);
         it = Self->AssignedTxIds.erase(it);
         Self->CommittingTxId = 0;
         if (Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
@@ -333,7 +341,7 @@ public:
         }
 
         Self->CommittingTxId = Self->AssignedTxIds.begin()->second;
-        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
+        CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first), Self->IsChecksumBoundaryTxId(Self->CommittingTxId));
 
         return true;
     }
@@ -355,6 +363,7 @@ public:
         }
 
         Self->RunTxIndexBuild(ctx);
+        Self->ProgressChecksums(ctx);
         if (!Self->PendingTxId.empty()) {
             Self->RunTxAssignTxId(ctx);
         }
@@ -379,6 +388,13 @@ public:
 void TController::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
+
+    if (static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(ev->Get()->Record.GetStatus())
+        == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorPlanned)
+    {
+        OnChecksumCommitPlanned(ev->Cookie, TRowVersion(ev->Get()->Record.GetStep(), ev->Get()->Record.GetTxId()), ctx);
+        return;
+    }
 
     if (auto commit = IndexCommits.find(ev->Cookie); commit != IndexCommits.end()) {
         const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(ev->Get()->Record.GetStatus());

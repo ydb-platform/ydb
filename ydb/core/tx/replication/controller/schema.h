@@ -35,6 +35,7 @@ struct TControllerSchema: NIceDb::Schema {
         struct CommittedTxId: Column<12, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
 
         struct SourceOffsetMismatch: Column<15, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
+        struct ChecksumBoundary: Column<16, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -50,7 +51,8 @@ struct TControllerSchema: NIceDb::Schema {
             DeferredAlter,
             CommittedStep,
             CommittedTxId,
-            SourceOffsetMismatch
+            SourceOffsetMismatch,
+            ChecksumBoundary
         >;
     };
 
@@ -100,6 +102,8 @@ struct TControllerSchema: NIceDb::Schema {
             static constexpr Type Default = InvalidLocalPathId;
         };
         struct IndexBuild: Column<20, NScheme::NTypeIds::String> {};
+        struct ChecksumExecution: Column<21, NScheme::NTypeIds::String> {};
+        struct ChecksumStatus: Column<22, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
@@ -122,7 +126,9 @@ struct TControllerSchema: NIceDb::Schema {
             SchemaBarrierFlushTxIds,
             PendingDstPathOwnerId,
             PendingDstPathLocalId,
-            IndexBuild
+            IndexBuild,
+            ChecksumExecution,
+            ChecksumStatus
         >;
     };
 
@@ -142,9 +148,11 @@ struct TControllerSchema: NIceDb::Schema {
         struct VersionStep: Column<1, NScheme::NTypeIds::Uint64> {};
         struct VersionTxId: Column<2, NScheme::NTypeIds::Uint64> {};
         struct WriteTxId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct BeginStep: Column<4, NScheme::NTypeIds::Uint64> {};
+        struct BeginTxId: Column<5, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<VersionStep, VersionTxId>;
-        using TColumns = TableColumns<VersionStep, VersionTxId, WriteTxId>;
+        using TColumns = TableColumns<VersionStep, VersionTxId, WriteTxId, BeginStep, BeginTxId>;
     };
 
     struct Workers: Table<6> {

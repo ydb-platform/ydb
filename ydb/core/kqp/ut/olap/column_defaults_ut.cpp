@@ -423,18 +423,16 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
     }
 
     Y_UNIT_TEST(ShowCreateSqlDefaultWhenFlagOff) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(DefaultsSettings());
         auto db = kikimr.GetQueryClient();
         ExecScheme(db, R"(
             CREATE TABLE `/Root/CsLegacy` (
                 Key Uint32 NOT NULL,
-                Value Uint32,
+                Value Uint32 DEFAULT 5,
                 PRIMARY KEY (Key)
             ) WITH (STORE = COLUMN);
         )");
-        ExecScheme(db,
-            "ALTER OBJECT `/Root/CsLegacy` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Value, `DEFAULT_VALUE`=`5`);");
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableCsDefaultValues(false);
         auto result = db.GetSession().GetValueSync().GetSession().ExecuteQuery(
             "SHOW CREATE TABLE `/Root/CsLegacy`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -721,7 +719,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Required FROM `/Root/CsKeep` WHERE Key = 1;"), "nn");
     }
 
-    Y_UNIT_TEST(SparsedSetDefaultRejected) {
+    Y_UNIT_TEST(SparsedSetDefault) {
         TKikimrRunner kikimr(DefaultsSettings());
         auto db = kikimr.GetQueryClient();
         ExecScheme(db, R"(
@@ -733,8 +731,12 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         )");
         ExecScheme(db,
             "ALTER OBJECT `/Root/DefSparse` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Value, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
-        ExpectSchemeError(db, "ALTER TABLE `/Root/DefSparse` ALTER COLUMN Value SET DEFAULT 1;",
-            "Changing default value of a sparsed column is not supported");
+        ExecScheme(db, "ALTER TABLE `/Root/DefSparse` ALTER COLUMN Value SET DEFAULT 1;");
+        ExecDml(db, "INSERT INTO `/Root/DefSparse` (Key) VALUES (1);");
+        ExecScheme(db, "ALTER TABLE `/Root/DefSparse` ALTER COLUMN Value SET DEFAULT 2;");
+        ExecDml(db, "INSERT INTO `/Root/DefSparse` (Key) VALUES (2);");
+        CompareYson(R"([[1u;[1u]];[2u;[2u]]])",
+            SelectYson(db, "SELECT Key, Value FROM `/Root/DefSparse` ORDER BY Key;"));
     }
 
     Y_UNIT_TEST(DictionaryCompactionKeepsFill) {

@@ -276,22 +276,7 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
 
 bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
     Y_ABORT_UNLESS(GetName() == diffColumn.GetName());
-    const bool currentSparsed = AccessorConstructor &&
-        AccessorConstructor.GetClassName() == NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
-    bool targetSparsed = currentSparsed;
-    if (diffColumn.GetAccessorConstructor()) {
-        const auto& requested = *diffColumn.GetAccessorConstructor();
-        if (!requested || !requested.GetObjectPtr()) {
-            targetSparsed = false;
-        } else {
-            targetSparsed = requested.GetObjectPtr()->GetClassName() == NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
-        }
-    }
     const bool sqlDefaultChange = diffColumn.GetDefaultScalar() || diffColumn.GetDropDefault().value_or(false);
-    if (sqlDefaultChange && (currentSparsed || targetSparsed)) {
-        errors.AddError("Changing default value of a sparsed column is not supported");
-        return false;
-    }
     if (diffColumn.GetDefaultValue() && IsKeyColumn()) {
         errors.AddError("Default value is not supported for primary key columns in column tables");
         return false;

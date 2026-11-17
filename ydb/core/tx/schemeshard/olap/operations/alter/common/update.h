@@ -73,16 +73,19 @@ protected:
         return result;
     }
 
-    bool CheckTargetSchema(const TOlapSchema& targetSchema) {
-        if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
-            for (auto& [_, column] : targetSchema.GetColumns().GetColumns()) {
-                const bool sparsed = column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
-                if (sparsed || (column.GetDefaultValue().GetValue() && !AppData()->FeatureFlags.GetEnableCsDefaultValues())) {
-                    return false;
-                }
+    TConclusionStatus CheckTargetSchema(const TOlapSchema& targetSchema) {
+        const bool sparsedEnabled = AppData()->FeatureFlags.GetEnableSparsedColumns();
+        const bool defaultsEnabled = AppData()->FeatureFlags.GetEnableCsDefaultValues();
+        for (auto& [_, column] : targetSchema.GetColumns().GetColumns()) {
+            const bool sparsed = column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
+            if (!sparsedEnabled && sparsed) {
+                return TConclusionStatus::Fail("schema update error: sparsed columns are disabled");
+            }
+            if (column.GetDefaultValue().GetValue() && !defaultsEnabled) {
+                return TConclusionStatus::Fail("column table defaults are disabled");
             }
         }
-        return true;
+        return TConclusionStatus::Success();
     }
 
 public:

@@ -2091,7 +2091,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
             AlterSchema {
                 AlterColumns {Name: "data" DefaultValue: "10"}
             }
-        )", {{NKikimrScheme::StatusSchemeError, "sparsed columns are disabled"}});
+        )", {{NKikimrScheme::StatusSchemeError, "column table defaults are disabled"}});
         env.TestWaitNotification(runtime, txId);
     }
 

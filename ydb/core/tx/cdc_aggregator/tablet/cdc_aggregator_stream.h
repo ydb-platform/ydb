@@ -6,6 +6,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
+#include <util/generic/set.h>
 #include <util/generic/vector.h>
 
 #include <optional>
@@ -83,6 +84,7 @@ private:
 private:
     TCdcAggregatorStreamTopic Topic;
     TLastHeartbeats LastHeartbeatsBySourceDataShardId;
+    TSet<std::pair<TRowVersion, ui64>> SourceDataShardIdsByLastHeartbeatVersion;
     std::optional<NPQ::THeartbeat> CurrentHeartbeat;
     TPartitioningChanges PartitioningChanges;
 };

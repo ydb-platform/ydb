@@ -542,6 +542,36 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
     }
 
+    Y_UNIT_TEST(ShouldAdvanceCurrentHeartbeatWhenTabletRestarted) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 100}, {2, 200}});
+        env.RebootTablet();
+
+        // when
+        env.WriteHeartbeats({{1, 300}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldAdvanceCurrentHeartbeatWhenSplitParentHeldMinimum) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 100}, {2, 200}});
+        env.PartitioningChanged(1, {3});
+
+        // when
+        env.WriteHeartbeats({{3, 300}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
+    }
+
     Y_UNIT_TEST(ShouldKeepHeartbeatsWhenTabletRestarted) {
         // given
         TTestEnv env;

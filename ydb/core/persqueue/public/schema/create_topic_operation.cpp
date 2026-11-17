@@ -78,23 +78,7 @@ private:
         Become(&TCreateTopicOperationActor::CreateState);
 
         auto database = CanonizePath(Settings.Database);
-<<<<<<< HEAD
         auto topicName = CanonizePath(Settings.Strategy->GetTopicName());
-=======
-        // Federation create still expects the original legacy name so ForFederation can
-        // extract DC/producer metadata. ResolveName is only for FCC (literal modern path).
-        TString path;
-        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            auto resolved = NNameResolver::ResolveName(database, Settings.Strategy->GetTopicName(), {}, {}, Settings.EnableRelativePaths);
-            if (!resolved) {
-                return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, TString{resolved.error()});
-            }
-            path = std::move(resolved->Path);
-        } else {
-            path = NormalizePath(database, CanonizePath(Settings.Strategy->GetTopicName()));
-            NPersQueue::CountTopicPathWithDatabasePrefix(database, Settings.Strategy->GetTopicName(), path);
-        }
->>>>>>> 9e3c656efd8 (Counter of slash-prefixed topic paths that receive the database prefix (#59492))
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
@@ -105,6 +89,7 @@ private:
         }
 
         auto path = NormalizePath(database, topicName);
+        NPersQueue::CountTopicPathWithDatabasePrefix(database, Settings.Strategy->GetTopicName(), path);
         auto [workingDir, name] = GetWorkingDirAndName(path);
         if (workingDir.empty()) {
             return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");

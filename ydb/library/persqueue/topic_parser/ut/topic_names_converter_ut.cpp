@@ -1,10 +1,6 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
-<<<<<<< HEAD
-=======
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/core/testlib/actor_helpers.h>
-#include <ydb/library/testlib/helpers.h>
->>>>>>> 9e3c656efd8 (Counter of slash-prefixed topic paths that receive the database prefix (#59492))
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NPersQueue::NTests {
@@ -74,8 +70,6 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
-<<<<<<< HEAD
-=======
     Y_UNIT_TEST_TWIN(AbsolutePathsWithDatabasePrefixAreCounted, firstClass) {
         NKikimr::TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = new NMonitoring::TDynamicCounters();
@@ -105,31 +99,6 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
         UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
     }
 
-    Y_UNIT_TEST(AbsolutePathsPreservedByRelativePathsAreNotCounted) {
-        NKikimr::TActorSystemStub actorSystem;
-        actorSystem.AppData.Counters = new NMonitoring::TDynamicCounters();
-        auto counter = NKikimr::GetServiceCounters(actorSystem.AppData.Counters, "pqproxy|pathResolution", false)
-            ->GetSubgroup("database", "/Root/Db")
-            ->GetCounter("AbsolutePathWithDatabasePrefix", true);
-        TTopicNamesConverterFactory factory(true, "/Root/PQ", "");
-        auto converter = factory.MakeDiscoveryConverter("/other/topic", {}, "", "/Root/Db", true);
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(), "/other/topic");
-        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
-    }
-
-    Y_UNIT_TEST_TWIN(FirstClassPathsRespectFeatureFlag, enableRelativePaths) {
-        TTopicNamesConverterFactory factory(true, "/Root/PQ", "");
-        auto converter = factory.MakeDiscoveryConverter("Root/Db/topic", {}, "", "/Root/Db", enableRelativePaths);
-        UNIT_ASSERT_C(converter->IsValid(), converter->GetReason());
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(),
-            enableRelativePaths ? "/Root/Db/Root/Db/topic" : "/Root/Db/topic");
-        converter = factory.MakeDiscoveryConverter("/other/topic", {}, "", "/Root/Db", enableRelativePaths);
-        UNIT_ASSERT_C(converter->IsValid(), converter->GetReason());
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(),
-            enableRelativePaths ? "/other/topic" : "/Root/Db/other/topic");
-    }
-
->>>>>>> 9e3c656efd8 (Counter of slash-prefixed topic paths that receive the database prefix (#59492))
     Y_UNIT_TEST(FullLegacyNames) {
 
         TConverterTestWrapper wrapper(false, "/Root/PQ", TString("dc1"));

@@ -23,14 +23,7 @@ PEERDIR(
     ydb/core/persqueue/public
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/describer
-<<<<<<< HEAD
-=======
-    ydb/core/persqueue/public/nameresolver
-    ydb/core/util
-    ydb/core/ydb_convert
-    ydb/library/aclib
     ydb/library/persqueue/topic_parser
->>>>>>> 9e3c656efd8 (Counter of slash-prefixed topic paths that receive the database prefix (#59492))
 )
 
 END()

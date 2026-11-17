@@ -2318,6 +2318,95 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT_VALUES_EQUAL(second->CpuMaxDemand.load(), 0);
     }
 
+    Y_UNIT_TEST_TWIN(ReadQueryInitialSnapshotUsesPoolBudget, MemoryEnabled) {
+        for (const bool readFirst : {false, true}) {
+            auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+            NScheduler::TComputeScheduler scheduler(counters, {
+                .DelayParams = kDefaultDelayParams, .MemoryEnabled = MemoryEnabled});
+            auto config = std::make_unique<NHdrf::NStatic::TRoot>(4, 1000);
+            config->GetOrCreateDatabase("db").GetOrCreatePool("pool").SetAttributes({
+                .CpuLimit = 1, .MemoryLimit = 300});
+            scheduler.UpdateConfiguration(std::move(config));
+            auto pool = scheduler.GetOrCreateMemoryPool("db", "pool");
+            scheduler.UpdateFairShare();
+
+            // Exercise creation of R both through GetReadQuery and through ordinary Q registration.
+            NHdrf::NDynamic::TQueryPtr readQuery;
+            if (readFirst) {
+                readQuery = scheduler.GetReadQuery("db", "pool");
+            }
+            auto query = scheduler.AddOrUpdateQuery("db", "pool", 1);
+            if (!readQuery) {
+                readQuery = scheduler.GetReadQuery("db", "pool");
+            }
+            const auto initial = readQuery->GetSnapshot();
+            UNIT_ASSERT_VALUES_EQUAL(bool(initial), MemoryEnabled);
+            UNIT_ASSERT_VALUES_EQUAL(readQuery->CpuMaxDemand.load(), 0);
+            if (initial) {
+                UNIT_ASSERT(!initial->GetParent());
+                UNIT_ASSERT_VALUES_EQUAL(initial->CpuMaxDemand.load(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(initial->CpuFairShare, 1);
+                UNIT_ASSERT_VALUES_EQUAL(initial->MemoryFairShare, 300);
+            }
+            UNIT_ASSERT(scheduler.GetReadQuery("db", "pool") == readQuery);
+            UNIT_ASSERT(readQuery->GetSnapshot() == initial);
+
+            TSchedulableTask task(query);
+            UNIT_ASSERT(task.TryIncreaseUsage());
+            UNIT_ASSERT_VALUES_EQUAL(pool->CpuUsage.load(), 1);
+            TSchedulableRead read(readQuery);
+            UNIT_ASSERT_VALUES_EQUAL(read.TryConsumeQuota(TDuration::MilliSeconds(1)), !MemoryEnabled);
+            UNIT_ASSERT_VALUES_EQUAL(pool->CpuUsage.load(), MemoryEnabled ? 1 : 2);
+            if (!MemoryEnabled) {
+                read.ReturnQuota(0);
+            }
+            task.DecreaseUsage(TDuration::Zero(), TSchedulableTask::CPU_DEFAULT);
+
+            UNIT_ASSERT(read.TryConsumeQuota(TDuration::MilliSeconds(1)));
+            read.ReturnQuota(0);
+            scheduler.UpdateFairShare();
+            UNIT_ASSERT(readQuery->GetSnapshot() != initial);
+            UNIT_ASSERT(readQuery->GetSnapshot()->GetParent());
+            UNIT_ASSERT(read.TryConsumeQuota(TDuration::MilliSeconds(1)));
+            read.ReturnQuota(0);
+            UNIT_ASSERT_VALUES_EQUAL(pool->CpuUsage.load(), 0);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ReadQueryWithoutPoolSnapshotKeepsMinimumAdmission, MemoryEnabled) {
+        // No root snapshot, a snapshot without this database, or one without this pool.
+        for (ui32 publishedPath : {0u, 1u, 2u}) {
+            auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+            NScheduler::TComputeScheduler scheduler(counters, {
+                .DelayParams = kDefaultDelayParams, .MemoryEnabled = MemoryEnabled});
+            auto config = std::make_unique<NHdrf::NStatic::TRoot>(4);
+            config->GetOrCreateDatabase("db").GetOrCreatePool("pool").CpuLimit = 1;
+            config->GetOrCreateDatabase("db").GetOrCreatePool("other");
+            config->GetOrCreateDatabase("other").GetOrCreatePool("pool");
+            scheduler.UpdateConfiguration(std::move(config));
+            if (publishedPath == 1) {
+                scheduler.GetOrCreateMemoryPool("other", "pool");
+                scheduler.UpdateFairShare();
+            } else if (publishedPath == 2) {
+                scheduler.GetOrCreateMemoryPool("db", "other");
+                scheduler.UpdateFairShare();
+            }
+
+            auto query = scheduler.GetReadQuery("db", "pool");
+            UNIT_ASSERT(!query->GetSnapshot());
+            TSchedulableRead read(query);
+            for (ui32 attempt = 0; attempt < 2; ++attempt) {
+                UNIT_ASSERT(read.TryConsumeQuota(TDuration::MilliSeconds(1)));
+                read.ReturnQuota(0);
+            }
+            scheduler.UpdateFairShare();
+            UNIT_ASSERT(query->GetSnapshot());
+            UNIT_ASSERT(query->GetSnapshot()->GetParent());
+            UNIT_ASSERT(read.TryConsumeQuota(TDuration::MilliSeconds(1)));
+            read.ReturnQuota(0);
+        }
+    }
+
     Y_UNIT_TEST(ReadQueryDoesNotReserveInitialCpuDemand) {
         auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
         TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});

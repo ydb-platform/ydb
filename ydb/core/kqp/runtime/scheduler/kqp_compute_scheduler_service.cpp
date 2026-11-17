@@ -512,6 +512,14 @@ TQueryPtr TComputeScheduler::EnsureReadQuery(const TPoolPtr& pool, const NHdrf::
     }
     auto query = std::make_shared<TQuery>(READ_QUERY_ID, &DelayParams, false);
     pool->AddQuery(query);
+    // Use the same initial pool shares as ordinary memory-enabled queries.
+    if (const auto snapshot = MemoryEnabled ? Root->GetSnapshot() : nullptr) {
+        if (const auto databaseSnapshot = snapshot->GetDatabase(poolId.DatabaseId)) {
+            if (const auto poolSnapshot = databaseSnapshot->GetPool(poolId.PoolId)) {
+                query->InitSnapshot(*std::static_pointer_cast<NHdrf::NSnapshot::TPool>(poolSnapshot));
+            }
+        }
+    }
     ReadQueries.emplace(poolId, query);
     return query;
 }

@@ -105,8 +105,7 @@ SELECT id FROM articles VIEW ft_idx WHERE EndsWith(body, $text);
 
 Этот подход согласуется с [частичными индексами](https://en.wikipedia.org/wiki/Partial_index), которые хранят только часть строк: если индекс не позволяет выполнить поиск, запрос обращается к таблице.
 
-Переход к сканированию доступен для строковых условий (`LIKE`, `ILIKE`, равенства, `StartsWith`, `EndsWith`) и `FulltextMatch` в режиме `Wildcard`.
-Если запрос использует поиск по словам (`Keywords`) или оценку релевантности (`FulltextScore`), такой переход не выполняется.
+Переход к сканированию доступен для строковых условий (`LIKE`, `ILIKE`, равенства, `StartsWith`, `EndsWith`) и `FulltextMatch` в режиме `Wildcard`. Если запрос использует поиск по словам (`Keywords`) или оценку релевантности (`FulltextScore`), такой переход не выполняется.
 
 ## FulltextScore
 

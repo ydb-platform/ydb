@@ -55,7 +55,7 @@ TTypeInfo TypeInfoFromMiniKQLType(const NMiniKQL::TType* type) {
         AS_TYPE(NMiniKQL::TDataType, static_cast<const NKikimr::NMiniKQL::TOptionalType*>(type)->GetItemType()) :
         AS_TYPE(NMiniKQL::TDataType, type);
     Y_ENSURE(dataType->GetKind() == NMiniKQL::TType::EKind::Data, "data type is expected");
-    
+
     NScheme::TTypeId typeId = dataType->GetSchemeType();
     const NUdf::EDataSlot dataSlot = *dataType->GetDataSlot();
     if (dataSlot == NUdf::EDataSlot::Decimal) {

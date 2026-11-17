@@ -337,10 +337,17 @@ void TController::FinishChecksum(TChecksumKey key, Ydb::StatusIds::StatusCode st
         if (state.GetReleasePending() && runtime.Admission) {
             ctx.Send(runtime.Admission, new TEvents::TEvPoison());
         }
+        bool selfNotified = false;
         for (const auto& [sender, cookie] : std::exchange(runtime.Waiters, {})) {
             auto reply = MakeHolder<TEvController::TEvCheckTableResult>();
             reply->Record = state.GetResponse();
             ctx.Send(sender, reply.Release(), 0, cookie);
+            selfNotified |= sender == SelfId();
+        }
+        if (!selfNotified) {
+            auto reply = MakeHolder<TEvController::TEvCheckTableResult>();
+            reply->Record = state.GetResponse();
+            ctx.Send(SelfId(), reply.Release());
         }
         RunTxAssignTxId(ctx);
         RunTxIndexBuild(ctx);
@@ -552,6 +559,7 @@ void TController::ProgressChecksums(const TActorContext& ctx) {
         ChecksumExecutions.erase(key);
         ChecksumRuntime.erase(key);
         ChecksumResults.erase(key);
+        ChecksumSchedules.erase(key);
     }
     TabletCounters->Simple()[COUNTER_CHECKSUM_MISMATCH] = AnyOf(ChecksumResults, [this](const auto& item) {
         const auto replication = Find(item.first.first);
@@ -780,6 +788,7 @@ void TController::RemoveReplicationChecksums(ui64 rid, const TActorContext& ctx)
     EraseNodesIf(ChecksumExecutions, [rid](const auto& item) { return item.first.first == rid; });
     EraseNodesIf(ChecksumRuntime, [rid](const auto& item) { return item.first.first == rid; });
     EraseNodesIf(ChecksumResults, [rid](const auto& item) { return item.first.first == rid; });
+    EraseNodesIf(ChecksumSchedules, [rid](const auto& item) { return item.first.first == rid; });
     ChecksumBoundaries.erase(rid);
 }
 

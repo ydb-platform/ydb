@@ -343,6 +343,14 @@ message TTableChecksumExecution {
     optional bool ReleasePending = 12;
 }
 
+message TTableChecksumSchedule {
+    optional bool Enabled = 1;
+    optional uint64 IntervalMs = 2;
+    optional uint64 NextDueUs = 3;
+    optional string RequestId = 4;
+    optional uint64 LastFinishedUs = 5;
+}
+
 // SchemeShard admission protocol. Release also cancels a queued request.
 message TEvChecksumAdmission {
     optional uint64 ControllerId = 1;

@@ -104,6 +104,7 @@ struct TControllerSchema: NIceDb::Schema {
         struct IndexBuild: Column<20, NScheme::NTypeIds::String> {};
         struct ChecksumExecution: Column<21, NScheme::NTypeIds::String> {};
         struct ChecksumStatus: Column<22, NScheme::NTypeIds::String> {};
+        struct ChecksumSchedule: Column<23, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
@@ -128,7 +129,8 @@ struct TControllerSchema: NIceDb::Schema {
             PendingDstPathLocalId,
             IndexBuild,
             ChecksumExecution,
-            ChecksumStatus
+            ChecksumStatus,
+            ChecksumSchedule
         >;
     };
 

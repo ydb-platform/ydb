@@ -34,6 +34,7 @@ SRCS(
     controller.cpp
     checksum_source.cpp
     checksum_admission.cpp
+    checksum_scheduler.cpp
     tx_checksum.cpp
     dst_alterer.cpp
     dst_creator.cpp

@@ -142,7 +142,9 @@ private:
     void Handle(TEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvController::TEvCheckTable::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvController::TEvCancelCheckTable::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvController::TEvCheckTableResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NSchemeShard::TEvSchemeShard::TEvChecksumAdmissionResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvChecksumSchedule::TPtr& ev, const TActorContext& ctx);
     void Handle(NChecksum::TEvResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev, const TActorContext& ctx);
     void HandleChecksumWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
@@ -289,6 +291,7 @@ private:
         bool deferred, const TActorContext& ctx);
     void StartChecksumSource(TChecksumKey key, bool probe, const TActorContext& ctx);
     void StartChecksumAdmission(TChecksumKey key, const TActorContext& ctx);
+    void ProgressChecksumSchedule(const TActorContext& ctx);
     void RebuildChecksumTargets();
     void RemoveReplicationChecksums(ui64 replicationId, const TActorContext& ctx);
     TString ValidateChecksum(const TReplication& replication, bool requireSessions) const;
@@ -427,6 +430,9 @@ private:
     TMap<TChecksumKey, TChecksumStatus> ChecksumResults;
     TMap<ui64, TRowVersion> ChecksumBoundaries;
     TMap<TPathId, TChecksumKey> ChecksumTargets;
+    TMap<TChecksumKey, NKikimrReplication::TTableChecksumSchedule> ChecksumSchedules;
+    bool ChecksumScheduleWakeupScheduled = false;
+    bool ChecksumScheduleTxInFlight = false;
 
     struct TChecksumRuntime {
         TActorId Source;

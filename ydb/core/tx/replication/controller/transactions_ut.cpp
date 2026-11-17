@@ -85,7 +85,7 @@ struct TTransactionsEnv: TEnv<> {
     TActorId Controller;
     NKikimrReplication::TWorkerIdentity Worker;
 
-    explicit TTransactionsEnv(bool global = true, ERuntimeMode mode = ERuntimeMode::RealThreads)
+    explicit TTransactionsEnv(bool global = true, ERuntimeMode mode = ERuntimeMode::RealThreads, bool periodic = false)
         : TEnv<>(true, mode)
     {
         GetRuntime().GetAppData().FeatureFlags.SetEnableDataShardSnapshotLocking(true);
@@ -102,10 +102,10 @@ struct TTransactionsEnv: TEnv<> {
             auto session = client.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(Sprintf(R"(
                 CREATE ASYNC REPLICATION `replication` FOR `/Root/table` AS `/Root/replica`
-                WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", %s);
+                WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", %s%s);
             )", GetEndpoint().c_str(), global
                 ? "CONSISTENCY_LEVEL = \"GLOBAL\", COMMIT_INTERVAL = Interval(\"PT10S\")"
-                : "CONSISTENCY_LEVEL = \"ROW\"")).GetValueSync();
+                : "CONSISTENCY_LEVEL = \"ROW\"", periodic ? ", CHECKSUM_INTERVAL = Interval(\"PT2S\")" : "")).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         });
         TabletId = GetDescription("/Root/replication").GetPathDescription().GetReplicationDescription().GetControllerId();
@@ -526,6 +526,27 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         env.RequestChecksum(requestId);
         const auto replay = env.WaitChecksum();
         UNIT_ASSERT_VALUES_EQUAL(first.SerializeAsString(), replay.SerializeAsString());
+    }
+
+    Y_UNIT_TEST(ChecksumPeriodicChecks) {
+        TTransactionsEnv env(true, ERuntimeMode::RealThreads, true);
+        env.ChecksumHeartbeat();
+        const auto deadline = TInstant::Now() + TDuration::Seconds(45);
+        TInstant first;
+        for (;;) {
+            const auto status = env.SdkChecksum();
+            if (status) {
+                UNIT_ASSERT_C(status->Status == NYdb::EStatus::SUCCESS, status->Issues.ToString());
+                UNIT_ASSERT(status->LastResult && status->LastResult->Matches);
+                if (!first) {
+                    first = status->FinishedAt;
+                } else if (status->FinishedAt > first) {
+                    UNIT_ASSERT(status->FinishedAt - first >= TDuration::Seconds(2));
+                    break;
+                }
+            }
+            UNIT_ASSERT(TInstant::Now() < deadline);
+        }
     }
 
     Y_UNIT_TEST(ReportsAssignedTransactionsWithAndWithoutStats) {

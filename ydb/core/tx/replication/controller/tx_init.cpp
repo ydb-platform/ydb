@@ -150,6 +150,10 @@ class TController::TTxInit: public TTxBase {
             if (checksumStatus) {
                 Y_ABORT_UNLESS(Self->ChecksumResults[key].ParseFromString(checksumStatus));
             }
+            const auto schedule = rowset.GetValueOrDefault<Schema::Targets::ChecksumSchedule>(TString());
+            if (schedule) {
+                Y_ABORT_UNLESS(Self->ChecksumSchedules[key].ParseFromString(schedule));
+            }
             const auto indexBuild = rowset.GetValueOrDefault<Schema::Targets::IndexBuild>(TString());
             if (indexBuild) {
                 target->SetIndexBuild(true);

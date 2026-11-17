@@ -5,6 +5,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/system/sanitizers.h>
+
 using namespace NYdb;
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
@@ -112,7 +114,7 @@ Y_UNIT_TEST(OtherConsumerUnaffected) {
 }
 
 Y_UNIT_TEST(ResetLatestAllPartitionsCommitted) {
-    constexpr ui32 partitionCount = 1024;
+    constexpr ui32 partitionCount = NSan::PlainOrUnderSanitizer<ui32>(1024, 64);
     TTopicSdkTestSetup setup("ResetOffsetSdkAllPartitions", TTopicSdkTestSetup::MakeServerSettings(), false);
     setup.CreateTopic("topic1", "consumer", partitionCount);
 

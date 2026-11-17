@@ -246,7 +246,6 @@ namespace NActors {
             eventData.FileName,
             eventData.LineNumber,
             eventData.Line,
-            eventData.Json,
             eventData.StructuredMessage);
 
         if (Settings->AllowDrop) {

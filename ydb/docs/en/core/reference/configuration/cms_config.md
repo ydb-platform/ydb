@@ -51,9 +51,3 @@ cms_config:
 ```
 
 This example is a configuration fragment. [Storage SelfHeal must also be enabled](../../devops/concepts/selfheal-storage.md#on-off) for VDisks to be relocated.
-
-{% note warning "Configuration Compatibility" %}
-
-Before rolling back to a {{ ydb-short-name }} version that does not support `MAINTENANCE`, remove `evict_vdisks_status` from the YAML configuration or change its value to `FAULTY`. Such a version cannot start with an unknown enum value.
-
-{% endnote %}

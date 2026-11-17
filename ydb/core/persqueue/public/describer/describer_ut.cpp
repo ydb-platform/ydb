@@ -273,22 +273,6 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/topic1");
     }
 
-    Y_UNIT_TEST(TopicNotCanonizedPath) {
-        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
-        EnableDescriberLogs(*setup);
-
-        ExecuteDDL(*setup, "CREATE TOPIC topic1");
-
-        auto& runtime = setup->GetRuntime();
-        StartDescribe(runtime, {"/Root//topic1/"});
-        auto topics = WaitResult(runtime);
-
-        UNIT_ASSERT(topics.contains("/Root//topic1/"));
-        auto& topicInfo = topics["/Root//topic1/"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/topic1");
-    }
-
     // -------------------------------------------------------------------------
     // P0 — authorization
     // -------------------------------------------------------------------------

@@ -1317,10 +1317,10 @@ std::pair<IDqComputeActorAsyncOutput*, IActor*> CreateDqPqWriteActor(NPq::NProto
 
 void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters,
-    bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag) {
+    std::function<bool()> getEnableDeduplicationFeatureFlag) {
     factory.RegisterSink<NPq::NProto::TDqPqTopicSink>("PqSink",
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, enableStreamingQueriesCounters,
-            enableStreamingQueriesPqSinkDeduplicationFeatureFlag](
+            getEnableDeduplicationFeatureFlag = std::move(getEnableDeduplicationFeatureFlag)](
             NPq::NProto::TDqPqTopicSink&& settings, IDqAsyncIoFactory::TSinkArguments&& args)
         {
             auto txId = args.TxId;
@@ -1341,7 +1341,7 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
             NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
             return CreateDqPqWriteActor(std::move(settings), args.OutputIndex, args.StatsLevel, txId, args.TaskId, args.SecureParams, driver,
                 credentialsFactory, args.Callback, counters ? counters : args.TaskCounters, pqGateway, enableStreamingQueriesCounters,
-                DqPqDefaultFreeSpace, currentExecutionGeneration, enableStreamingQueriesPqSinkDeduplicationFeatureFlag, hasCheckpoints);
+                DqPqDefaultFreeSpace, currentExecutionGeneration, getEnableDeduplicationFeatureFlag(), hasCheckpoints);
         });
 }
 

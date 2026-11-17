@@ -270,6 +270,8 @@ class PileInstance:
         accepted: typing.Optional[typing.Callable] = None,
         expected_generation: typing.Optional[int] = None,
     ) -> Outcome:
+        # Match YDB's request-only checks before state-dependent fences,
+        # including this mock's reset barrier.
         error = validator.validate_request(updates)
         if error is not None:
             self.events.append("reject", status=error.status, message=error.message)

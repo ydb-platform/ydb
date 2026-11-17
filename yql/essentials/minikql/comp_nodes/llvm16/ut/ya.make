@@ -3,6 +3,7 @@ UNITTEST()
 PEERDIR(
     yql/essentials/minikql/codegen/llvm16
     yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/comp_nodes/test_support/llvm16
     yql/essentials/minikql/invoke_builtins/llvm16
     contrib/libs/llvm16/lib/IR
     contrib/libs/llvm16/lib/ExecutionEngine/MCJIT

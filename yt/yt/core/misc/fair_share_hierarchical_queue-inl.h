@@ -346,36 +346,45 @@ std::partial_ordering TFairShareHierarchicalScheduler<TTag>::CompareConsumptions
         } else {
             auto& lhsLevel = *lhsLevelIt;
             auto& rhsLevel = *rhsLevelIt;
+            auto lhsWeight = lhsLevel.GetWeight();
+            auto rhsWeight = rhsLevel.GetWeight();
 
-            {
+            // Zero-weight buckets may only consume the remaining bandwidth.
+            if ((lhsWeight == 0.0) != (rhsWeight == 0.0)) {
+                return rhsWeight <=> lhsWeight;
+            }
+
+            newLhsBucket = nullptr;
+            if (lhsBucket) {
                 auto lhsGuard = ReaderGuard(lhsBucket->BucketLock);
                 auto lhsBucketChildIt = lhsBucket->Buckets.find(lhsLevel.GetTag());
                 newLhsBucket = lhsBucketChildIt == lhsBucket->Buckets.end()
                     ? nullptr
                     : lhsBucketChildIt->second;
-                lhsStream = newLhsBucket == nullptr
-                    ? 0
-                    : (isSlot ? newLhsBucket->SlotWindowSize.load() : newLhsBucket->RequestWindowSize.load());
             }
+            lhsStream = newLhsBucket == nullptr
+                ? 0
+                : (isSlot ? newLhsBucket->SlotWindowSize.load() : newLhsBucket->RequestWindowSize.load());
 
-            {
+            newRhsBucket = nullptr;
+            if (rhsBucket) {
                 auto rhsGuard = ReaderGuard(rhsBucket->BucketLock);
                 auto rhsBucketChildIt = rhsBucket->Buckets.find(rhsLevel.GetTag());
                 newRhsBucket = rhsBucketChildIt == rhsBucket->Buckets.end()
                     ? nullptr
                     : rhsBucketChildIt->second;
-                rhsStream = newRhsBucket == nullptr
-                    ? 0
-                    : (isSlot ? newRhsBucket->SlotWindowSize.load() : newRhsBucket->RequestWindowSize.load());
             }
+            rhsStream = newRhsBucket == nullptr
+                ? 0
+                : (isSlot ? newRhsBucket->SlotWindowSize.load() : newRhsBucket->RequestWindowSize.load());
 
             if (lhsStream == 0 && rhsStream == 0) {
                 return std::partial_ordering::equivalent;
             }
 
             // Calculate the weighted consumed resources for comparison.
-            auto left = lhsStream * rhsLevel.GetWeight();
-            auto right = rhsStream * lhsLevel.GetWeight();
+            auto left = lhsStream * rhsWeight;
+            auto right = rhsStream * lhsWeight;
 
             if (left < right) {
                 return std::partial_ordering::less;

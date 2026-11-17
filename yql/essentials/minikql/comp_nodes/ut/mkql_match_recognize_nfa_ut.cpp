@@ -1,6 +1,6 @@
 #include "../mkql_match_recognize_nfa.h"
 #include "mkql_computation_node_ut.h"
-#include "mkql_program_builder_test_utils.h"
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/core/sql_types/match_recognize.h>
 #include <library/cpp/testing/unittest/registar.h>

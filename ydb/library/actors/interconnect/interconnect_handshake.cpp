@@ -280,7 +280,7 @@ namespace NActors {
 
                 const int err = errno;
                 YDB_LOG_WARN_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT, "ICH40 Kernel liveness disabled for due to setsockopt( failure",
-                    {"logPrefix", Actor->LogPrefix.data()},
+                    {"logPrefix", Actor->LogPrefix},
                     {"socket", int(*Socket)},
                     {"name", name},
                     {"value", value},
@@ -297,7 +297,7 @@ namespace NActors {
 #if defined(_linux_)
 #if !defined(TCP_KEEPIDLE) || !defined(TCP_KEEPINTVL) || !defined(TCP_KEEPCNT)
                 YDB_LOG_WARN_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT, "ICH42 Kernel liveness requested, but TCP keepalive tuning options are unavailable on this platform",
-                    {"logPrefix", Actor->LogPrefix.data()});
+                    {"logPrefix", Actor->LogPrefix});
                 return false;
 #else
                 auto toSockOptSeconds = [](TDuration value) -> ui64 {
@@ -311,7 +311,7 @@ namespace NActors {
                 const ui64 userTimeoutMs = settings.KernelUserTimeout.MilliSeconds();
                 if (!keepAliveIdleSec || !keepAliveIntervalSec || !settings.KernelKeepAliveProbes || !userTimeoutMs) {
                     YDB_LOG_WARN_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT, "ICH43 Kernel liveness disabled due to invalid settings",
-                        {"logPrefix", Actor->LogPrefix.data()},
+                        {"logPrefix", Actor->LogPrefix},
                         {"keepAliveIdle", settings.KernelKeepAliveIdle},
                         {"keepAliveInterval", settings.KernelKeepAliveInterval},
                         {"keepAliveProbes", settings.KernelKeepAliveProbes},
@@ -338,7 +338,7 @@ namespace NActors {
                 }
 #else
                 YDB_LOG_WARN_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT, "ICH45 Kernel liveness requested, but TCP_USER_TIMEOUT is unavailable on this platform",
-                    {"logPrefix", Actor->LogPrefix.data()});
+                    {"logPrefix", Actor->LogPrefix});
                 return false;
 #endif
 
@@ -346,7 +346,7 @@ namespace NActors {
 #endif
 #else
                 YDB_LOG_WARN_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT, "ICH44 Kernel liveness requested, but this platform is unsupported",
-                    {"logPrefix", Actor->LogPrefix.data()});
+                    {"logPrefix", Actor->LogPrefix});
                 return false;
 #endif
             }
@@ -431,7 +431,10 @@ namespace NActors {
         }
 
         void UpdatePrefix() {
-            SetPrefix(Sprintf("Handshake %s [node %" PRIu32 "]", SelfActorId.ToString().data(), PeerNodeId));
+            SetPrefix(YDB_LOG_CREATE_MESSAGE(
+                {"selfActorKind", "Handshake"},
+                {"selfActorId", SelfActorId},
+                {"peerNodeId", PeerNodeId}));
         }
 
         void Run() override {
@@ -525,6 +528,7 @@ namespace NActors {
                             if (Rdma.HandShakeMemRegion && Rdma.Qp) {
                                 if (WaitRdmaReadResult() == false) {
                                     YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "RDMA memory read failed, disable rdma on the initiator",
+                                        {"logPrefix", LogPrefix},
                                         {"marker", "ICRDMA"});
                                     Rdma.HandShakeMemRegion.Reset();
                                     Rdma.Clear();
@@ -554,6 +558,7 @@ namespace NActors {
 
             if (ProgramInfo) {
                 YDB_LOG_INFO_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Handshake succeeded",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICH04"});
                 Y_ABORT_UNLESS(NextPacketFromPeer);
                 MainChannel.ResetPollerToken();
@@ -694,6 +699,7 @@ namespace NActors {
                 ValidateVersionTag(proto, std::forward<TCallback>(errorCallback));
             } else {
                 YDB_LOG_WARN_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Neither CompatibilityInfo nor VersionTag of the peer can be validated, accepting by default",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICH09"});
             }
         }
@@ -704,6 +710,7 @@ namespace NActors {
             if (Common->VersionInfo) {
                 if (!proto.HasVersionTag()) {
                     YDB_LOG_WARN_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Peer did not report VersionTag, accepting by default",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICH06"});
                 } else if (!Common->VersionInfo->AcceptedTags.count(proto.GetVersionTag())) {
                     // we will not accept peer's tag, so check if remote peer would accept our version tag
@@ -805,6 +812,7 @@ namespace NActors {
                 return s;
             };
             YDB_LOG_DEBUG_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Dump proto",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICH07"},
                 {"msg", msg},
                 {"protobuf", formatString().data()});
@@ -881,6 +889,7 @@ namespace NActors {
             NInterconnect::NRdma::TMemRegionPtr region = Common->RdmaMemPool->Alloc(RdmaHandshakeRegionSize, NInterconnect::NRdma::IMemPool::PAGE_ALIGNED);
             if (!region) {
                 YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Unable to allocate memory region to perform rdma handshake",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"});
                 RunDelayedRdmaHandshake = true;
                 return nullptr;
@@ -911,6 +920,7 @@ namespace NActors {
 
             if (auto err = ev->Get()->Error()) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA send/receive handshake",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", err->data()});
                 Params.AllowRdmaSendReceive = false;
@@ -923,6 +933,7 @@ namespace NActors {
         TRdmaPreinitedSessionPtr RunRdmaOutgoingHandshakePart(const ::NActorsInterconnect::THandshakeSuccess& success) {
             const auto& remoteQpPrepared = success.GetQpPrepared();
             YDB_LOG_TRACE_CTX(this->GetActorContext(), "Peer has prepared",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"},
                 {"qp", remoteQpPrepared.GetQpNum()});
             NInterconnect::NRdma::THandshakeData hd {
@@ -936,6 +947,7 @@ namespace NActors {
                 TStringBuilder sb;
                 sb << hd;
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to promote QP to RTS, handshake",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"err", err},
                     {"strerror", strerror(err)},
@@ -961,6 +973,7 @@ namespace NActors {
                     MainChannel.RegisterInPoller();
                     if (auto err = ev->Get()->Error()) {
                         YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA send/receive handshake",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICRDMA"},
                             {"failed", err->data()});
                         Params.AllowRdmaSendReceive = false;
@@ -976,11 +989,13 @@ namespace NActors {
 
         void PerformOutgoingHandshake(TRdmaPreinitedSessionPtr& rdmaSession) {
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "Starting outgoing handshake",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICH01"});
 
             // perform connection and log its result
             MainChannel.Connect(&PeerAddr);
             YDB_LOG_DEBUG_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Connected to peer",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICH05"});
 
             // Try to create rdma stuff
@@ -1183,6 +1198,7 @@ namespace NActors {
                         rdmaSession = std::move(RunRdmaOutgoingHandshakePart(success));
                     } else {
                         YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Non success qp response from remote side",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICRDMA"});
                         Rdma.HandShakeMemRegion.Reset();
                         Rdma.Clear();
@@ -1268,6 +1284,7 @@ namespace NActors {
 
         void PerformIncomingHandshake(std::optional<NActorsInterconnect::TRdmaCred>& rdma, TRdmaPreinitedSessionPtr& rdmaSession) {
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "Starting incoming handshake",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICH02"});
 
             // set up incoming socket
@@ -1344,6 +1361,7 @@ namespace NActors {
                     ProgramInfo.ConstructInPlace();
                 } else {
                     YDB_LOG_NOTICE_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Continuation request rejected by proxy",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICH08"});
 
                     // report continuation reject to peer
@@ -1638,6 +1656,7 @@ namespace NActors {
                 rdmaCtx = NLinkMgr::GetCtx(address);
                 if (rdmaCtx) {
                     YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Found verbs context for specified RDMA address",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICRDMA"},
                         {"address", Common->Settings.RdmaAddress});
                 } else {
@@ -1645,6 +1664,7 @@ namespace NActors {
                         ? "the specified RDMA interface"
                         : "the local TCP socket address";
                     YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT, "Unable to find verbs context for specified RDMA address. Falling back to " + fallbackTarget,
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICRDMA"},
                         {"address", Common->Settings.RdmaAddress});
                 }
@@ -1654,10 +1674,12 @@ namespace NActors {
                 rdmaCtx = NLinkMgr::GetCtxByInterface(Common->Settings.RdmaInterface);
                 if (rdmaCtx) {
                     YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Found verbs context for specified RDMA interface",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICRDMA"},
                         {"interface", Common->Settings.RdmaInterface});
                 } else {
                     YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT, "Unable to find verbs context for specified RDMA interface. Falling back to the local TCP socket address",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICRDMA"},
                         {"interface", Common->Settings.RdmaInterface});
                 }
@@ -1669,20 +1691,24 @@ namespace NActors {
                     rdmaCtx = NLinkMgr::GetCtx(*addr);
                     if (rdmaCtx) {
                         YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Found verbs context for local TCP address",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICRDMA"},
                             {"address", std::get<0>(sockname)});
                     } else {
                         YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT, "Unable to find verbs context using local TCP address",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICRDMA"},
                             {"address", std::get<0>(sockname)});
                     }
                 } else if (int* err = get_if<int>(&sockname)) {
                     YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "Unable to get local address of the TCP socket. RDMA will not be used",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICRDMA"},
                         {"socket", (int)(*MainChannel.GetSocketRef())},
                         {"err", *err});
                 } else {
                     YDB_LOG_CRIT_COMP(::NActorsServices::INTERCONNECT, "Unknown GetSockName return type. It is a BUG. RDMA will not be used",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICRDMA"},
                         {"socket", (int)(*MainChannel.GetSocketRef())});
                 }
@@ -1702,6 +1728,7 @@ namespace NActors {
             if (rdmaCtx) {
                 if (ICq::TPtr cqPtr = CreateRdmaCq(rdmaCtx)) {
                     YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Got CQ handle",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICRDMA"},
                         {"cqPtr", static_cast<void*>(cqPtr.get())});
 
@@ -1721,6 +1748,7 @@ namespace NActors {
                             if (!ev) {
                                 YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT,
                                     "Timed out waiting for RDMA QP cache, continue handshake without RDMA",
+                                    {"logPrefix", LogPrefix},
                                     {"marker", "ICRDMA"});
                                 RunDelayedRdmaHandshake = true;
                                 break;
@@ -1733,21 +1761,25 @@ namespace NActors {
                             if (ev->GetTypeRewrite() == TEvQpCacheNoResources::EventType) {
                                 YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT,
                                     "Unable to fill RDMA QP cache due to temporary resource exhaustion",
+                                    {"logPrefix", LogPrefix},
                                     {"marker", "ICRDMA"});
                             } else {
                                 Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvQpCacheError::EventType);
                                 YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT,
                                     "Unable to get QP due to RDMA QP cache error",
+                                    {"logPrefix", LogPrefix},
                                     {"marker", "ICRDMA"});
                             }
                         } else if (std::holds_alternative<ICq::TQpNoResources>(result)) {
                             YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT,
                                 "Unable to get QP due to temporary RDMA resource exhaustion",
+                                {"logPrefix", LogPrefix},
                                 {"marker", "ICRDMA"});
                         } else {
                             Y_ABORT_UNLESS(std::holds_alternative<ICq::TQpCacheError>(result));
                             YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT,
                                 "Unable to get QP due to RDMA QP cache error",
+                                {"logPrefix", LogPrefix},
                                 {"marker", "ICRDMA"});
                         }
 
@@ -1756,6 +1788,7 @@ namespace NActors {
                     }
                 } else {
                     YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "Unable to get CQ handle, no more attempt to use RDMA on this session",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICRDMA"});
                     RunDelayedRdmaHandshake = true;
                 }
@@ -1766,12 +1799,14 @@ namespace NActors {
             const bool success = Send(NInterconnect::NRdma::MakeCqActorId(), new NInterconnect::NRdma::TEvGetCqHandle(rdmaCtx));
             if (!success) {
                 YDB_LOG_CRIT_COMP(::NActorsServices::INTERCONNECT, "Cq service is not configured. This is a bug",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"});
                 return nullptr;
             }
             auto ev = WaitForSpecificEvent<NInterconnect::NRdma::TEvGetCqHandle>("TEvGetCqHandle");
             if (!ev) {
                 YDB_LOG_CRIT_COMP(::NActorsServices::INTERCONNECT, "Unable to get response from CQ actor",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"});
                 return nullptr;
             } else {
@@ -1795,6 +1830,7 @@ namespace NActors {
                     sb << hd;
                     success.SetRdmaErr("Unable to promote QP to RTS on the incoming side");
                     YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to promote QP to RTS, handshake",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICRDMA"},
                         {"err", err},
                         {"strerror", strerror(err)},
@@ -1821,6 +1857,7 @@ namespace NActors {
                 TStringBuilder err;
                 err << "Unexpected rdma region size for READ request, sz: " << cred.GetSize();
                 YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, err,
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"});
                 rdmaReadAck.SetErr(err);
                 return rdmaReadAck;
@@ -1830,6 +1867,7 @@ namespace NActors {
             if (!mr) {
                 TString err("Unable to allocate memory region for handshake rdma read");
                 YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, err,
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"});
                 rdmaReadAck.SetErr(err);
                 return rdmaReadAck;
@@ -1861,6 +1899,7 @@ namespace NActors {
                 TStringBuilder sb;
                 sb << "Unable to launch work reqeust";
                 YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, sb,
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"});
                 rdmaReadAck.SetErr(sb);
                 return rdmaReadAck;
@@ -1886,6 +1925,7 @@ namespace NActors {
                         sb << " qp: " << Rdma.Qp;
                     }
                     YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, sb,
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICRDMA"});
                     rdmaReadAck.SetErr(sb);
                 }
@@ -1944,6 +1984,7 @@ namespace NActors {
 
             if (network) {
                 YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_NETWORK, "Network-related error occurred on handshake",
+                    {"logPrefix", LogPrefix},
                     {"selfNodeId", GetActorContext().SelfID.NodeId()},
                     {"peerNodeId", PeerNodeId},
                     {"handshakeKind", HandshakeKind.data()},
@@ -1958,6 +1999,7 @@ namespace NActors {
                                     : NActors::NLog::PRI_DEBUG;
 
                 YDB_LOG_CTX_COMP(this->GetActorContext(), severity, NActorsServices::INTERCONNECT, "Handshake failed",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICH03"},
                     {"explanation", msg.data()});
             }

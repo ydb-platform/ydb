@@ -104,15 +104,23 @@ bool TCheckState::CheckLexer(TIssues* issues) {
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer);
 
-    result.Success = NSQLTranslation::CollectSqlHints(
+    result.Success = NSQLTranslation::Tokenize(
         *lexer,
         Request_.Program,
         Request_.File,
-        Request_.File,
-        result.Hints,
+        result.Tokens,
         result.Issues,
-        NSQLTranslation::SQL_MAX_PARSER_ERRORS,
-        /*utf8Aware=*/true);
+        NSQLTranslation::SQL_MAX_PARSER_ERRORS);
+    if (result.Success) {
+        result.Success = NSQLTranslation::CollectSqlHints(
+            result.Tokens,
+            Request_.File,
+            Request_.File,
+            result.Hints,
+            result.Issues,
+            NSQLTranslation::SQL_MAX_PARSER_ERRORS,
+            /*utf8Aware=*/true);
+    }
 
     LexerCache_ = result;
     AddIssues(issues, result.Issues);
@@ -221,7 +229,7 @@ const TAstParseResult* TCheckState::TranslateSql(TIssues* issues) {
         parsers,
         Request_.Program,
         *protoAst,
-        LexerCache_->Hints,
+        LexerCache_->Tokens,
         settings);
     result.Issues.AddIssues(result.Result.Issues);
 

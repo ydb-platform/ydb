@@ -46,6 +46,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/library/grpc/server
     ydb/library/yql/dq/comp_nodes/llvm16
     ydb/library/yql/udfs/common/clickhouse/client
+    ydb/library/yql/udfs/digest
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
@@ -68,7 +69,6 @@ SET(YDB_REPLAY_PEERDIRS
     yql/essentials/udfs/common/histogram
     yql/essentials/udfs/common/hyperloglog
     yql/essentials/udfs/common/hyperscan
-    yql/essentials/udfs/common/json
     yql/essentials/udfs/common/json2
     yql/essentials/udfs/common/math
     yql/essentials/udfs/common/pire

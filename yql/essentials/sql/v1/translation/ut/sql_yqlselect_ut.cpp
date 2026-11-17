@@ -140,15 +140,17 @@ Y_UNIT_TEST(WindowUnsupportedExpressions) {
              "SELECT ROW_NUMBER() OVER (ORDER BY random(TableRow())) FROM AS_TABLE([<|key: 1|>]);",
              "SELECT ROW_NUMBER() OVER w FROM AS_TABLE([<|key: 1|>]) WINDOW w AS (PARTITION BY random(TableRow()));",
              "SELECT ROW_NUMBER() OVER (ROWS CAST(1 IN COMPACT (1, 2) AS Int32) PRECEDING) FROM AS_TABLE([<|key: 1|>]);",
+             "SELECT SessionStart() OVER w FROM AS_TABLE([<|ts: 1|>]) WINDOW w AS (PARTITION BY SessionWindow(ts, 10));",
+             "SELECT ROW_NUMBER() OVER w FROM AS_TABLE([<|ts: 1|>]) WINDOW w AS (PARTITION BY SessionWindow(ts, 10));",
          }) {
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Auto;
         const auto res = SqlToYqlWithSettings(query, settings);
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-        TWordCountHive stat = {"YqlSelect", "CalcOverWindow"};
+        TWordCountHive stat = {"YqlSelect", "CalcOverWindow", "CalcOverSessionWindow"};
         VerifyProgram(res, stat);
         UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
-        UNIT_ASSERT_GT(stat["CalcOverWindow"], 0);
+        UNIT_ASSERT_GT(stat["CalcOverWindow"] + stat["CalcOverSessionWindow"], 0);
 
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
         const auto forced = SqlToYqlWithSettings(query, settings);

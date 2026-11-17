@@ -15,6 +15,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/engine/minikql
+    ydb/core/persqueue/common
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tablet

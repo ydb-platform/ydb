@@ -150,13 +150,15 @@ NKikimrCdcAggregator::TEvWriteHeartbeatsResult TCdcAggregatorStreamProtoConverte
 NKikimrCdcAggregator::TEvDescribeTrackingResult TCdcAggregatorStreamProtoConverter::SerializeDescribeTrackingResult(const TCdcAggregatorStream& stream) const {
     NKikimrCdcAggregator::TEvDescribeTrackingResult proto;
 
-    const auto& lastHeartbeatsBySourceDataShardId = stream.GetLastHeartbeatsBySourceDataShardId();
-    const TMap<ui64, std::optional<NPQ::THeartbeat>> sortedLastHeartbeats(lastHeartbeatsBySourceDataShardId.begin(), lastHeartbeatsBySourceDataShardId.end());
-    for (const auto& [dataShardId, lastHeartbeat] : sortedLastHeartbeats) {
+    TMap<ui64, std::optional<TRowVersion>> lastVersionsBySourceDataShardId;
+    for (const auto& [dataShardId, lastHeartbeat] : stream.GetLastHeartbeatsBySourceDataShardId()) {
+        lastVersionsBySourceDataShardId.emplace(dataShardId, lastHeartbeat ? std::optional(lastHeartbeat->Version) : std::nullopt);
+    }
+    for (const auto& [dataShardId, lastVersion] : lastVersionsBySourceDataShardId) {
         auto& source = *proto.AddSources();
         source.SetDataShardId(dataShardId);
-        if (lastHeartbeat) {
-            lastHeartbeat->Version.ToProto(source.MutableLastHeartbeat());
+        if (lastVersion) {
+            lastVersion->ToProto(source.MutableLastHeartbeat());
         }
     }
 

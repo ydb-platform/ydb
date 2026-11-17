@@ -110,9 +110,13 @@ public:
         return ConfigureTracking(MakeConfigureTracking(sourceDataShardIds, partitionCount));
     }
 
-    TWriteResult WriteHeartbeats(const TVector<std::pair<ui64, ui64>>& heartbeats) {
-        SendRequest(MakeWriteHeartbeats(heartbeats));
+    TWriteResult WriteHeartbeats(THolder<TEvCdcAggregator::TEvWriteHeartbeats> request) {
+        SendRequest(std::move(request));
         return GrabResult<TEvCdcAggregator::TEvWriteHeartbeatsResult>()->Get()->Record;
+    }
+
+    TWriteResult WriteHeartbeats(const TVector<std::pair<ui64, ui64>>& heartbeats) {
+        return WriteHeartbeats(MakeWriteHeartbeats(heartbeats));
     }
 
     TPartitioningAck PartitioningChanged(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds, ui64 operationId = 77) {
@@ -447,8 +451,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         request->Record.MutableHeartbeats(0)->ClearHeartbeat();
 
         // when
-        env.SendRequest(std::move(request));
-        const auto writeResult = env.GrabResult<TEvCdcAggregator::TEvWriteHeartbeatsResult>()->Get()->Record;
+        const auto writeResult = env.WriteHeartbeats(std::move(request));
 
         // then
         UNIT_ASSERT_C(writeResult.GetStatus() == TWriteResult::SUCCESS, writeResult.ShortDebugString());
@@ -512,7 +515,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 100, describeResult.ShortDebugString());
     }
 
-    Y_UNIT_TEST(ShouldIncludeChildrenWhenParentSplit) {
+    Y_UNIT_TEST(ShouldNotAdvanceCurrentHeartbeatWhenSplitChildHasNotReported) {
         // given
         TTestEnv env;
         env.ConfigureTracking({1, 2});
@@ -520,11 +523,60 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         env.PartitioningChanged(1, {3, 4});
 
         // when
-        env.WriteHeartbeats({{3, 300}, {4, 400}});
+        env.WriteHeartbeats({{3, 300}});
 
         // then
         const auto describeResult = env.DescribeTracking();
-        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 100, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldKeepCurrentHeartbeatWhenOtherSourceHasSameVersion) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 100}, {2, 100}});
+
+        // when
+        env.WriteHeartbeats({{1, 200}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 100, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldKeepMergedChildHeartbeatWhenSecondParentLeaves) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2, 3});
+        env.WriteHeartbeats({{1, 100}, {2, 200}, {3, 300}});
+        env.PartitioningChanged(1, {4});
+        env.WriteHeartbeats({{4, 400}});
+
+        // when
+        env.PartitioningChanged(2, {4});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.SourcesSize(), 2, describeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetSources(1).GetDataShardId(), 4, describeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetSources(1).GetLastHeartbeat().GetStep(), 400, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldAdvanceCurrentHeartbeatWhenSourceReportsAfterMerge) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2, 3});
+        env.WriteHeartbeats({{1, 100}, {2, 200}, {3, 300}});
+        env.PartitioningChanged(1, {4});
+        env.WriteHeartbeats({{4, 400}});
+        env.PartitioningChanged(2, {4});
+
+        // when
+        env.WriteHeartbeats({{3, 500}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 400, describeResult.ShortDebugString());
     }
 
     Y_UNIT_TEST(ShouldNotMoveCurrentHeartbeatBackWhenChildReportsOlderVersion) {
@@ -542,7 +594,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
     }
 
-    Y_UNIT_TEST(ShouldAdvanceCurrentHeartbeatWhenTabletRestarted) {
+    Y_UNIT_TEST(ShouldAdvanceCurrentHeartbeatWhenSourceReportsAfterRestart) {
         // given
         TTestEnv env;
         env.ConfigureTracking({1, 2});
@@ -563,6 +615,22 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         env.ConfigureTracking({1, 2});
         env.WriteHeartbeats({{1, 100}, {2, 200}});
         env.PartitioningChanged(1, {3});
+
+        // when
+        env.WriteHeartbeats({{3, 300}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldAdvanceCurrentHeartbeatWhenSourceReportsAfterSplitAndRestart) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 100}, {2, 200}});
+        env.PartitioningChanged(1, {3});
+        env.RebootTablet();
 
         // when
         env.WriteHeartbeats({{3, 300}});

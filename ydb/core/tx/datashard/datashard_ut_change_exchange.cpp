@@ -1,4 +1,5 @@
 #include "defs.h"
+#include "change_record.h"
 #include "datashard_distributed_erase.h"
 #include "datashard_impl.h"
 #include "datashard_ut_common_kqp.h"
@@ -7063,7 +7064,25 @@ Y_UNIT_TEST_SUITE(Cdc) {
         AssertColumn(droppedTable, "value", "Uint32", "default");
     }
 
-    Y_UNIT_TEST_QUAD(BuildingDefaultColumn, Cancel, Reboot) {
+    ui64 AsyncBuildDefaultColumns(TServer::TPtr server, const TActorId& sender, const TTableId& tableId,
+            const NKikimrIndexBuilder::TColumnBuildSettings& columns)
+    {
+        UNIT_ASSERT(!columns.column().empty());
+        auto& runtime = *server->GetRuntime();
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, new TEvTxUserProxy::TEvAllocateTxId()));
+        const auto buildId = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvAllocateTxIdResult>(sender)->Get()->TxId;
+        const auto& first = columns.column(0);
+        auto request = CreateBuildColumnRequest(buildId, "/Root", "/Root/Table",
+            first.GetColumnName(), first.default_from_literal());
+        request->Record.MutableSettings()->mutable_column_build_operation()->CopyFrom(columns);
+        runtime.SendToPipe(tableId.PathId.OwnerId, sender, request.release(), 0, GetPipeConfigWithRetries());
+        const auto created = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(created->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
+            created->Get()->Record.DebugString());
+        return buildId;
+    }
+
+    Y_UNIT_TEST_OCTET(BuildingDefaultColumn, Cancel, Reboot, DelayedDelivery) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
@@ -7075,8 +7094,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
         const auto edgeActor = runtime.AllocateEdgeActor();
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
-        const auto [shards, tableId] = CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
-        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10), (2, 20);");
+        const auto [shards, tableId] = CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable().Families({
+            {.Name = "default"},
+            {.Name = "archive", .ColumnCodec = NKikimrSchemeOp::ColumnCodecLZ4,
+                .ColumnCacheMode = NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory},
+        }));
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (0, 0), (1, 10), (2, 20);");
 
         const TVector<TCdcStream> streams{
             Updates(NKikimrSchemeOp::ECdcStreamFormatJson, "Updates"),
@@ -7089,18 +7112,19 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         // Hold the acknowledgement of a committed batch so that a row already
-        // contains the default while the column build is still in progress.
+        // contains both defaults while the column build is still in progress.
         TBlockEvents<TEvDataShard::TEvUploadRowsResponse> backfill(runtime);
-        runtime.Send(new IEventHandle(MakeTxProxyID(), edgeActor, new TEvTxUserProxy::TEvAllocateTxId()));
-        const auto buildId = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvAllocateTxIdResult>(edgeActor)->Get()->TxId;
-        Ydb::TypedValue literal;
-        literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
-        literal.mutable_value()->set_uint32_value(42);
-        auto request = CreateBuildColumnRequest(buildId, "/Root", "/Root/Table", "extra", literal);
-        runtime.SendToPipe(tableId.PathId.OwnerId, edgeActor, request.release(), 0, GetPipeConfigWithRetries());
-        const auto created = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(edgeActor);
-        UNIT_ASSERT_VALUES_EQUAL_C(created->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
-            created->Get()->Record.DebugString());
+        NKikimrIndexBuilder::TColumnBuildSettings columns;
+        auto* extra = columns.add_column();
+        extra->SetColumnName("extra");
+        extra->mutable_default_from_literal()->mutable_type()->set_type_id(Ydb::Type::UINT32);
+        extra->mutable_default_from_literal()->mutable_value()->set_uint32_value(42);
+        auto* label = columns.add_column();
+        label->SetColumnName("label");
+        label->SetFamily("archive");
+        label->mutable_default_from_literal()->mutable_type()->set_type_id(Ydb::Type::UTF8);
+        label->mutable_default_from_literal()->mutable_value()->set_text_value("backfilled");
+        const auto buildId = AsyncBuildDefaultColumns(server, edgeActor, tableId, columns);
         runtime.WaitFor("committed column backfill batch", [&] { return !backfill.empty(); });
         UNIT_ASSERT_VALUES_EQUAL(backfill.front()->Get()->Record.GetStatus(), ui32(NKikimrTxDataShard::TError::OK));
         if (Reboot) {
@@ -7108,14 +7132,21 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         const auto building = DescribePath(runtime, tableId.PathId.OwnerId, "/Root/Table");
-        bool foundBuildingColumn = false;
+        TSet<TString> buildingColumns;
         for (const auto& column : building.GetPathDescription().GetTable().GetColumns()) {
-            if (column.GetName() == "extra") {
+            if (column.GetName() == "extra" || column.GetName() == "label") {
                 UNIT_ASSERT(column.GetIsBuildInProgress());
-                foundBuildingColumn = true;
+                buildingColumns.insert(column.GetName());
             }
         }
-        UNIT_ASSERT(foundBuildingColumn);
+        UNIT_ASSERT_VALUES_EQUAL(buildingColumns, (TSet<TString>{"extra", "label"}));
+
+        // Keep bodies with their original schema alive across finalization or cancellation.
+        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvRecords> delivery(runtime, [](const auto& ev) {
+            return DelayedDelivery && AnyOf(ev->Get()->Records, [](const auto& record) {
+                return record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcDataChange;
+            });
+        });
 
         ExecSQL(server, edgeActor, "UPDATE `/Root/Table` SET value = 11 WHERE key = 1;");
         ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (3, 30);");
@@ -7153,8 +7184,32 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 R"({"erase":{},"key":[2],"oldImage":{"value":20}})",
             },
         };
-        for (size_t i = 0; i < streams.size(); ++i) {
-            WaitForContent(server, edgeActor, "/Root/Table/" + streams[i].Name, expected[i]);
+        TVector<TUserTable::TCPtr> queuedSchemas;
+        if (DelayedDelivery) {
+            runtime.WaitFor("CDC bodies for every stream", [&] { return delivery.size() >= streams.size(); });
+            for (const auto& ev : delivery) {
+                for (const auto& record : ev->Get()->Records) {
+                    const auto* change = dynamic_cast<const TChangeRecord*>(record.Get());
+                    UNIT_ASSERT(change);
+                    queuedSchemas.push_back(change->GetSchema());
+                    UNIT_ASSERT_VALUES_EQUAL(change->GetSchemaVersion(),
+                        building.GetPathDescription().GetTable().GetTableSchemaVersion());
+                }
+            }
+            for (const auto& stream : streams) {
+                UNIT_ASSERT(GetRecords(runtime, edgeActor, "/Root/Table/" + stream.Name, 0).empty());
+            }
+        } else {
+            for (size_t i = 0; i < streams.size(); ++i) {
+                WaitForContent(server, edgeActor, "/Root/Table/" + streams[i].Name, expected[i]);
+            }
+        }
+        if (Reboot) {
+            RebootTablet(runtime, tableId.PathId.OwnerId, edgeActor);
+            const auto recovered = DescribePath(runtime, tableId.PathId.OwnerId, "/Root/Table");
+            for (const auto& column : recovered.GetPathDescription().GetTable().GetColumns()) {
+                UNIT_ASSERT_VALUES_EQUAL(column.GetIsBuildInProgress(), buildingColumns.contains(column.GetName()));
+            }
         }
 
         if (Cancel) {
@@ -7164,54 +7219,216 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
         WaitTxNotification(server, edgeActor, buildId);
         backfill.Stop();
-        if (Reboot) {
-            RebootTablet(runtime, shards.at(0), edgeActor);
-        }
         const auto finished = DescribePath(runtime, tableId.PathId.OwnerId, "/Root/Table");
         TestDescribeResult(finished, {
-            NLs::CheckColumns("Table", Cancel ? TSet<TString>{"key", "value"} : TSet<TString>{"key", "value", "extra"},
+            NLs::CheckColumns("Table", Cancel ? TSet<TString>{"key", "value"} : TSet<TString>{"key", "value", "extra", "label"},
                 {}, {"key"}, true),
         });
         for (const auto& column : finished.GetPathDescription().GetTable().GetColumns()) {
             UNIT_ASSERT(!column.GetIsBuildInProgress());
         }
 
-        ExecSQL(server, edgeActor, "UPDATE `/Root/Table` SET value = 13 WHERE key = 1;");
+        // Finalization replaces the live schema; already queued records retain
+        // the building schema even when those columns have since been removed.
+        for (const auto& schema : queuedSchemas) {
+            TSet<TString> unfinished;
+            for (const auto& [tag, column] : schema->Columns) {
+                if (column.IsBuildInProgress) {
+                    unfinished.insert(column.Name);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(unfinished, buildingColumns);
+        }
+        NJson::TJsonValue schemaChange;
+        NJson::ReadJsonTree(R"({"tableChanges":[{"table":{
+            "columns":{"key":{"type":"Uint32","family":"default"},
+                "value":{"type":"Uint32","family":"default"},
+                "extra":{"type":"Uint32","family":"default"},
+                "label":{"type":"Utf8","family":"archive"}},
+            "columnFamilies":{"default":{"compression":"off","cacheMode":"regular"},
+                "archive":{"compression":"lz4","cacheMode":"in_memory"}},
+            "primaryKeyColumnNames":["key"],"indexes":{}}}],"ts":"***"})", &schemaChange, true);
+        schemaChange["tableChanges"][0]["table"]["schemaVersion"] =
+            finished.GetPathDescription().GetTable().GetTableSchemaVersion();
+        if (!Cancel) {
+            for (auto& records : expected) {
+                records.push_back(NJson::WriteJson(schemaChange, false));
+            }
+        }
+        delivery.Stop().Unblock();
+        for (size_t i = 0; i < streams.size(); ++i) {
+            WaitForContent(server, edgeActor, "/Root/Table/" + streams[i].Name, expected[i]);
+        }
+        if (Reboot) {
+            // Check both the persisted DataShard schema and SchemeShard description.
+            RebootTablet(runtime, shards.at(0), edgeActor);
+            RebootTablet(runtime, tableId.PathId.OwnerId, edgeActor);
+            const auto recovered = DescribePath(runtime, tableId.PathId.OwnerId, "/Root/Table");
+            UNIT_ASSERT_VALUES_EQUAL(recovered.GetPathDescription().GetTable().GetTableSchemaVersion(),
+                finished.GetPathDescription().GetTable().GetTableSchemaVersion());
+            TestDescribeResult(recovered, {
+                NLs::CheckColumns("Table", Cancel ? TSet<TString>{"key", "value"} : TSet<TString>{"key", "value", "extra", "label"},
+                    {}, {"key"}, true),
+            });
+            for (const auto& column : recovered.GetPathDescription().GetTable().GetColumns()) {
+                UNIT_ASSERT(!column.GetIsBuildInProgress());
+            }
+        }
+
+        TStringBuilder expectedRows;
+        for (const auto [key, value] : {std::pair{0, 0}, {1, 12}, {3, 30}, {4, 40}}) {
+            expectedRows << "key = " << key << ", value = " << value;
+            if (!Cancel) {
+                expectedRows << ", extra = 42, label = backfilled";
+            }
+            expectedRows << '\n';
+        }
+        // Row 0 was backfilled and never touched; rows 1, 3 and 4 were written during the build.
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/Table"), expectedRows);
+
+        ExecSQL(server, edgeActor, Cancel
+            ? "UPDATE `/Root/Table` SET value = 13 WHERE key = 1;"
+            : "UPDATE `/Root/Table` SET value = 13, extra = 43, label = 'changed' WHERE key = 1;");
         ExecSQL(server, edgeActor, "INSERT INTO `/Root/Table` (key, value) VALUES (5, 50);");
+        ExecSQL(server, edgeActor, "UPDATE `/Root/Table` SET value = 1 WHERE key = 0;");
         for (size_t i = 0; i < streams.size(); ++i) {
             const auto mode = streams[i].Mode;
-            if (!Cancel) {
-                expected[i].push_back(R"({"tableChanges":"***","ts":"***"})");
-            }
-            NJson::TJsonValue update, insert;
+            NJson::TJsonValue update, insert, backfilled;
             NJson::ReadJsonTree(R"({"update":{},"key":[1]})", &update, true);
             NJson::ReadJsonTree(R"({"update":{},"key":[5]})", &insert, true);
-            auto setValues = [&](NJson::TJsonValue& values, ui32 value) {
+            NJson::ReadJsonTree(R"({"update":{},"key":[0]})", &backfilled, true);
+            auto setValues = [&](NJson::TJsonValue& values, ui32 value, bool changed = false) {
                 values["value"] = value;
                 if (!Cancel) {
-                    values["extra"] = 42;
+                    values["extra"] = changed ? 43 : 42;
+                    values["label"] = changed ? "changed" : "backfilled";
                 }
             };
             if (mode == NKikimrSchemeOp::ECdcStreamModeUpdate) {
-                update["update"]["value"] = 13;
+                setValues(update["update"], 13, true);
                 setValues(insert["update"], 50);
+                backfilled["update"]["value"] = 1;
             }
             if (mode == NKikimrSchemeOp::ECdcStreamModeOldImage || mode == NKikimrSchemeOp::ECdcStreamModeNewAndOldImages) {
                 setValues(update["oldImage"], 12);
+                setValues(backfilled["oldImage"], 0);
             }
             if (mode == NKikimrSchemeOp::ECdcStreamModeNewImage || mode == NKikimrSchemeOp::ECdcStreamModeNewAndOldImages) {
-                setValues(update["newImage"], 13);
+                setValues(update["newImage"], 13, true);
                 setValues(insert["newImage"], 50);
+                setValues(backfilled["newImage"], 1);
             }
             expected[i].push_back(NJson::WriteJson(update, false));
             expected[i].push_back(NJson::WriteJson(insert, false));
+            expected[i].push_back(NJson::WriteJson(backfilled, false));
             const auto records = WaitForContent(server, edgeActor, "/Root/Table/" + streams[i].Name, expected[i]);
-            if (!Cancel) {
-                const auto& table = records[5]["tableChanges"][0]["table"];
-                UNIT_ASSERT_VALUES_EQUAL(table["columns"].GetMap().size(), 3);
-                AssertColumn(table, "extra", "Uint32", "default");
+            size_t schemaEvents = 0;
+            for (size_t n = 0; n < records.size(); ++n) {
+                if (records[n].Has("tableChanges")) {
+                    ++schemaEvents;
+                    UNIT_ASSERT_VALUES_EQUAL(n, 5);
+                }
             }
+            UNIT_ASSERT_VALUES_EQUAL(schemaEvents, Cancel ? 0 : 1);
         }
+    }
+
+    Y_UNIT_TEST_TWIN(BuildingDefaultColumnThenCancel, Reboot) {
+        TTestPqEnv env(SimpleTable(), WithSchemaChanges(
+            NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson, "Stream", false, false)), false);
+        auto server = env.GetServer();
+        auto& runtime = *server->GetRuntime();
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(true);
+        const auto sender = env.GetEdgeActor();
+        const auto tableId = ResolveTableId(server, sender, "/Root/Table");
+        const auto shard = GetTableShards(server, sender, "/Root/Table").at(0);
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+
+        NKikimrIndexBuilder::TColumnBuildSettings columns;
+        auto* a = columns.add_column();
+        a->SetColumnName("a");
+        a->mutable_default_from_literal()->mutable_type()->set_type_id(Ydb::Type::UINT32);
+        a->mutable_default_from_literal()->mutable_value()->set_uint32_value(42);
+        WaitTxNotification(server, sender, AsyncBuildDefaultColumns(server, sender, tableId, columns));
+        const auto readyA = DescribePath(runtime, tableId.PathId.OwnerId, "/Root/Table");
+        for (const auto& column : readyA.GetPathDescription().GetTable().GetColumns()) {
+            UNIT_ASSERT(!column.GetIsBuildInProgress());
+        }
+        ExecSQL(server, sender, "UPDATE `/Root/Table` SET value = 11, a = 43 WHERE key = 1;");
+
+        NJson::TJsonValue schemaChange;
+        NJson::ReadJsonTree(R"({"tableChanges":[{"table":{
+            "columns":{"key":{"type":"Uint32","family":"default"},
+                "value":{"type":"Uint32","family":"default"},
+                "a":{"type":"Uint32","family":"default"}},
+            "columnFamilies":{"default":{"compression":"off","cacheMode":"regular"}},
+            "primaryKeyColumnNames":["key"],"indexes":{}}}],"ts":"***"})", &schemaChange, true);
+        schemaChange["tableChanges"][0]["table"]["schemaVersion"] =
+            readyA.GetPathDescription().GetTable().GetTableSchemaVersion();
+        TVector<TString> expected{
+            R"({"update":{},"key":[1],"newImage":{"value":10}})",
+            NJson::WriteJson(schemaChange, false),
+            R"({"update":{},"key":[1],"oldImage":{"value":10,"a":42},"newImage":{"value":11,"a":43}})",
+        };
+        WaitForContent(server, sender, "/Root/Table/Stream", expected);
+        if (Reboot) {
+            RebootTablet(runtime, shard, sender);
+        }
+
+        // B must not hide A again, including when recovering a partially backfilled build.
+        TBlockEvents<TEvDataShard::TEvUploadRowsResponse> backfill(runtime);
+        columns.clear_column();
+        auto* b = columns.add_column();
+        b->SetColumnName("b");
+        b->mutable_default_from_literal()->mutable_type()->set_type_id(Ydb::Type::UTF8);
+        b->mutable_default_from_literal()->mutable_value()->set_text_value("cancelled");
+        const auto buildB = AsyncBuildDefaultColumns(server, sender, tableId, columns);
+        runtime.WaitFor("committed B backfill batch", [&] { return !backfill.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(backfill.front()->Get()->Record.GetStatus(), ui32(NKikimrTxDataShard::TError::OK));
+        if (Reboot) {
+            RebootTablet(runtime, tableId.PathId.OwnerId, sender);
+        }
+        const auto buildingB = DescribePath(runtime, tableId.PathId.OwnerId, "/Root/Table");
+        TestDescribeResult(buildingB, {NLs::CheckColumns("Table", {"key", "value", "a", "b"}, {}, {"key"}, true)});
+        for (const auto& column : buildingB.GetPathDescription().GetTable().GetColumns()) {
+            UNIT_ASSERT_VALUES_EQUAL(column.GetIsBuildInProgress(), column.GetName() == "b");
+        }
+        ExecSQL(server, sender, "UPDATE `/Root/Table` SET value = 12 WHERE key = 1;");
+        ExecSQL(server, sender, "INSERT INTO `/Root/Table` (key, value) VALUES (2, 20);");
+        ExecSQL(server, sender, "REPLACE INTO `/Root/Table` (key, value, a) VALUES (1, 13, 44);");
+        expected.insert(expected.end(), {
+            R"({"update":{},"key":[1],"oldImage":{"value":11,"a":43},"newImage":{"value":12,"a":43}})",
+            R"({"update":{},"key":[2],"newImage":{"value":20,"a":42}})",
+            R"({"reset":{},"key":[1],"oldImage":{"value":12,"a":43},"newImage":{"value":13,"a":44}})",
+        });
+        WaitForContent(server, sender, "/Root/Table/Stream", expected);
+
+        CancelAddIndex(server, "/Root", buildB);
+        WaitTxNotification(server, sender, buildB);
+        backfill.Stop();
+        if (Reboot) {
+            RebootTablet(runtime, shard, sender);
+            RebootTablet(runtime, tableId.PathId.OwnerId, sender);
+        }
+        const auto cancelledB = DescribePath(runtime, tableId.PathId.OwnerId, "/Root/Table");
+        TestDescribeResult(cancelledB, {NLs::CheckColumns("Table", {"key", "value", "a"}, {}, {"key"}, true)});
+        for (const auto& column : cancelledB.GetPathDescription().GetTable().GetColumns()) {
+            UNIT_ASSERT(!column.GetIsBuildInProgress());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/Table"),
+            "key = 1, value = 13, a = 44\nkey = 2, value = 20, a = 42\n");
+        ExecSQL(server, sender, "UPDATE `/Root/Table` SET value = 14, a = 45 WHERE key = 1;");
+        ExecSQL(server, sender, "INSERT INTO `/Root/Table` (key, value) VALUES (3, 30);");
+        ExecSQL(server, sender, "DELETE FROM `/Root/Table` WHERE key = 2;");
+        expected.insert(expected.end(), {
+            R"({"update":{},"key":[1],"oldImage":{"value":13,"a":44},"newImage":{"value":14,"a":45}})",
+            R"({"update":{},"key":[3],"newImage":{"value":30,"a":42}})",
+            R"({"erase":{},"key":[2],"oldImage":{"value":20,"a":42}})",
+        });
+        const auto records = WaitForContent(server, sender, "/Root/Table/Stream", expected);
+        UNIT_ASSERT_VALUES_EQUAL(CountIf(records, [](const auto& record) { return record.Has("tableChanges"); }), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/Table"),
+            "key = 1, value = 14, a = 45\nkey = 3, value = 30, a = 42\n");
     }
 
     Y_UNIT_TEST(SchemaChangesIndexes) {

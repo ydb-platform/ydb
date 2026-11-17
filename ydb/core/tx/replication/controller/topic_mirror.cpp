@@ -5,32 +5,26 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
+#include <library/cpp/string_utils/url/url.h>
+
 #include <util/generic/algorithm.h>
-#include <util/string/cast.h>
 
 namespace NKikimr::NReplication::NController {
 
 namespace {
 
-TString ParseEndpoint(TStringBuf endpoint, TStringBuf& host, ui32& parsedPort) {
-    TStringBuf port;
-    if (endpoint.StartsWith('[')) {
-        const auto close = endpoint.find(']');
-        if (close == TStringBuf::npos || close == 1 || close + 1 >= endpoint.size() || endpoint[close + 1] != ':') {
-            return "Invalid source endpoint";
-        }
-        host = endpoint.substr(0, close + 1);
-        port = endpoint.substr(close + 2);
-    } else {
-        const auto colon = endpoint.rfind(':');
-        if (colon == TStringBuf::npos) {
-            return "Source endpoint must include a port";
-        }
-        host = endpoint.substr(0, colon);
-        port = endpoint.substr(colon + 1);
+TString ParseEndpoint(TStringBuf endpoint, TStringBuf& host, ui16& port) {
+    TStringBuf scheme;
+    if (!TryGetSchemeHostAndPort(endpoint, scheme, host, port)
+        || !scheme.empty()
+        || host.empty()
+        || !port
+        || GetHostAndPort(endpoint) != endpoint)
+    {
+        return "Invalid source endpoint";
     }
 
-    if (host.empty() || !TryFromString<ui32>(port, parsedPort) || !parsedPort || parsedPort > 65535) {
+    if (host.StartsWith('[') && (host.size() <= 2 || host.find(']') != host.size() - 1)) {
         return "Invalid source endpoint";
     }
 
@@ -45,7 +39,7 @@ TString PatchMirrorConfig(NKikimrPQ::TMirrorPartitionConfig& config,
     }
 
     TStringBuf host;
-    ui32 parsedPort = 0;
+    ui16 parsedPort = 0;
     if (auto error = ParseEndpoint(params.GetEndpoint(), host, parsedPort)) {
         return error;
     }

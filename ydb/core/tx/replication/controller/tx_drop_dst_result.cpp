@@ -77,7 +77,8 @@ public:
             return true;
         }
         if (target->GetKind() == TReplication::ETargetKind::Topic
-            && target->GetStreamState() != TReplication::EStreamState::Removed) {
+            && target->GetStreamState() != TReplication::EStreamState::Removed)
+        {
             target->SetDstState(TReplication::EDstState::Done);
             db.Table<Schema::Targets>().Key(rid, tid).Update<Schema::Targets::DstState>(target->GetDstState());
         } else {

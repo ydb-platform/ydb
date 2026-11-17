@@ -5,15 +5,15 @@
 #include <util/generic/string.h>
 
 namespace NKikimrReplication {
-class TConnectionParams;
+    class TConnectionParams;
 }
 
 namespace NYdb::inline Dev::NTopic {
-class TTopicDescription;
+    class TTopicDescription;
 }
 
 namespace Ydb::Topic {
-class CreateTopicRequest;
+    class CreateTopicRequest;
 }
 
 namespace NKikimr::NReplication::NController {

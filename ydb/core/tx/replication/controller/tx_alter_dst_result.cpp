@@ -106,7 +106,8 @@ public:
         );
 
         if (Replication->GetState() != TReplication::EState::Ready
-            && Replication->GetState() != TReplication::EState::Removing) {
+            && Replication->GetState() != TReplication::EState::Removing)
+        {
             Replication.Reset();
         }
 

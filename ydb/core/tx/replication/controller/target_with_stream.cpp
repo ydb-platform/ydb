@@ -241,8 +241,8 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
 
     if (GetKind() == TReplication::ETargetKind::Topic
-        && replication->GetState() == TReplication::EState::Removing) {
-
+        && replication->GetState() == TReplication::EState::Removing)
+    {
         switch (GetDstState()) {
         case EDstState::Alter:
         case EDstState::Removing:

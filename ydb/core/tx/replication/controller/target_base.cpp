@@ -18,7 +18,8 @@ namespace {
 
 bool CanAttachDestination(const TReplication* replication, ETargetKind kind) {
     if (replication->GetState() == TReplication::EState::Removing
-        || replication->GetDesiredState() == TReplication::EState::Done) {
+        || replication->GetDesiredState() == TReplication::EState::Done)
+    {
         return false;
     }
 

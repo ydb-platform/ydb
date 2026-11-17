@@ -3,8 +3,8 @@
 #include "private_events.h"
 #include "topic_mirror.h"
 
-#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -63,32 +63,39 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         const auto& record = ev->Get()->GetRecord();
         if (record.GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
             return DestinationMissing();
-        }
-        if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
+        } else if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
             return Error(record.GetStatus(), record.GetReason());
         }
-        if (!record.GetPathDescription().HasPersQueueGroup()) {
+
+        const auto& desc = record.GetPathDescription();
+        if (!desc.HasPersQueueGroup()) {
             return Error(NKikimrScheme::StatusSchemeError, "Destination is not a topic");
         }
+
         TopicTx.Clear();
         TopicTx.SetWorkingDir(TString(ExtractParent(record.GetPath())));
         TopicTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup);
+
         auto& alter = *TopicTx.MutableAlterPersQueueGroup();
-        alter.SetName(record.GetPathDescription().GetSelf().GetName());
+        alter.SetName(desc.GetSelf().GetName());
         alter.SetPathId(DstPathId.LocalPathId);
-        alter.MutablePQTabletConfig()->CopyFrom(record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig());
+        alter.MutablePQTabletConfig()->CopyFrom(desc.GetPersQueueGroup().GetPQTabletConfig());
+
         auto& partition = *alter.MutablePQTabletConfig()->MutablePartitionConfig();
         if (DesiredState == TReplication::EState::Ready) {
             if (TopicMirror.Error) {
                 return Error(NKikimrScheme::StatusInvalidParameter, TopicMirror.Error);
             }
+
             partition.MutableMirrorFrom()->CopyFrom(TopicMirror.Config);
         } else {
             partition.ClearMirrorFrom();
         }
+
         auto& condition = *TopicTx.AddApplyIf();
         condition.SetPathId(DstPathId.LocalPathId);
-        condition.SetPathVersion(record.GetPathDescription().GetSelf().GetPathVersion());
+        condition.SetPathVersion(desc.GetSelf().GetPathVersion());
+
         AlterDst();
     }
 
@@ -223,7 +230,8 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
 
     void DestinationMissing() {
         if (Kind == TReplication::ETargetKind::Topic && DesiredState == TReplication::EState::Ready) {
-            return Error(NKikimrScheme::StatusPathDoesNotExist, "Cannot resume mirroring: destination topic does not exist");
+            return Error(NKikimrScheme::StatusPathDoesNotExist,
+                "Cannot resume mirroring: destination topic does not exist");
         }
         // PAUSE, DONE and DROP have nothing left to detach.
         Success();

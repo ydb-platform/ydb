@@ -27,6 +27,7 @@ PEERDIR(
     yql/essentials/public/issue
     library/cpp/json
     library/cpp/html/pcdata
+    library/cpp/string_utils/url
 )
 
 SRCS(

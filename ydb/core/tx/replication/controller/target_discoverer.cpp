@@ -217,7 +217,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"path", path.first});
 
             if (IsReplication()) {
-                if (const auto error = CheckTopic(result.GetTopicDescription())) {
+                TString error;
+                if (!CheckTopic(result.GetTopicDescription(), error)) {
                     return RejectTarget(ev->Cookie, error);
                 }
                 ToAdd.emplace_back(TReplication::ETargetKind::Topic,
@@ -243,28 +244,32 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         MaybeReply();
     }
 
-    TString CheckTopic(const NYdb::NTopic::TTopicDescription& description) const {
+    bool CheckTopic(const NYdb::NTopic::TTopicDescription& description, TString& error) const {
         if (Config.GetConsistencySettings().GetLevelCase() != NKikimrReplication::TConsistencySettings::kRow) {
-            return "Topic replication supports row consistency only";
+            error = "Topic replication supports row consistency only";
+            return false;
         }
         if (description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy()
             != NYdb::NTopic::EAutoPartitioningStrategy::Disabled)
         {
-            return "Topic replication requires fixed partitions";
+            error = "Topic replication requires fixed partitions";
+            return false;
         }
 
         const auto& partitions = description.GetPartitions();
         if (partitions.empty()) {
-            return "Source topic has no partitions";
+            error = "Source topic has no partitions";
+            return false;
         }
         const auto invalidPartition = FindIf(partitions, [&](const auto& partition) {
             return !partition.GetActive() || partition.GetPartitionId() >= partitions.size()
                 || !partition.GetParentPartitionIds().empty() || !partition.GetChildPartitionIds().empty();
         });
         if (invalidPartition != partitions.end()) {
-            return "Topic replication requires unsplit contiguous partitions";
+            error = "Topic replication requires unsplit contiguous partitions";
+            return false;
         }
-        return {};
+        return true;
     }
 
     void RejectTarget(ui32 idx, const TString& error) {

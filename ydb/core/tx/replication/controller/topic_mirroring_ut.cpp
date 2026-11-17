@@ -1,7 +1,9 @@
 #include "private_events.h"
 #include "dst_alterer.h"
+#include "stream_remover.h"
 #include "topic_mirror.h"
 
+#include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -126,7 +128,62 @@ public:
     }
 };
 
+class TConsumerRemovalFixture {
+public:
+    TConsumerRemovalFixture() {
+        Runtime.Initialize(TAppPrepare().Unwrap());
+        Parent = Runtime.AllocateEdgeActor();
+        Proxy = Runtime.AllocateEdgeActor();
+        Remover = Runtime.Register(CreateStreamRemover(Parent, Proxy, 1, 1,
+            TReplication::ETargetKind::Topic, "/Root/topic", "consumer"));
+        Runtime.EnableScheduleForActor(Remover);
+        Runtime.GrabEdgeEvent<TEvPrivate::TEvRequestDropStream>(Parent);
+        Runtime.Send(Remover, Parent, new TEvPrivate::TEvAllowDropStream());
+    }
+
+    void DenyAndWaitForRetry() {
+        Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(Proxy);
+        const auto start = Runtime.GetCurrentTime();
+        Reply(NYdb::EStatus::UNAUTHORIZED);
+        Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(Proxy);
+        UNIT_ASSERT(Runtime.GetCurrentTime() - start >= TDuration::Seconds(10));
+    }
+
+    void FinishWithMissingConsumer() {
+        Reply(NYdb::EStatus::NOT_FOUND);
+        const auto result = Runtime.GrabEdgeEvent<TEvPrivate::TEvDropStreamResult>(Parent);
+        UNIT_ASSERT(result->Get()->IsSuccess());
+    }
+
+    void Cancel() {
+        Runtime.Send(Remover, Parent, new TEvents::TEvPoison());
+        Runtime.GrabEdgeEvent<TEvPrivate::TEvCancelDropStream>(Parent);
+    }
+
+private:
+    void Reply(NYdb::EStatus status) {
+        Runtime.Send(Remover, Proxy, new TEvYdbProxy::TEvAlterTopicResponse(NYdb::TStatus(status, {})));
+    }
+
+    TTestActorRuntime Runtime;
+    TActorId Parent;
+    TActorId Proxy;
+    TActorId Remover;
+};
+
 Y_UNIT_TEST_SUITE(TopicMirroring) {
+    Y_UNIT_TEST(ConsumerCleanupRetriesUnauthorizedAndAcceptsMissing) {
+        TConsumerRemovalFixture test;
+        test.DenyAndWaitForRetry();
+        test.FinishWithMissingConsumer();
+    }
+
+    Y_UNIT_TEST(ConsumerCleanupCanBeCancelledAfterFailure) {
+        TConsumerRemovalFixture test;
+        test.DenyAndWaitForRetry();
+        test.Cancel();
+    }
+
     Y_UNIT_TEST(DoneBeforeCreateResultDoesNotStartMirroring) {
         TTopicMirroringFixture test("localhost", true);
         test.Done();

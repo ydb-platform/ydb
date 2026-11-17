@@ -35,7 +35,7 @@ When both `sys_log` and `uaclient_config` are enabled simultaneously, logs will 
 | `default_sampling_rate` | uint32 | 0 | Default sampling rate for all components. If set to N (where N > 0), approximately 1 out of every N log messages with priority between `default_level` and `default_sampling_level` will be logged. For example, to log every 10th message, set to 10. A value of 0 means that messages in this range will not be logged (all of them are dropped). |
 | `sys_log` | bool | false | Enable logging via syslog. |
 | `sys_log_to_stderr` | bool | false | Copy logs to stderr in addition to syslog. |
-| `format` | string | "full" | Log output format. Possible values: "full", "short", "json". |
+| `format` | string | "full" | Log output format. Possible values: "full", "short", "json", "structured" (see [{#T}](#structured-format)). |
 | `cluster_name` | string | — | Cluster name to include in log records. The `cluster_name` field is added to logs only when using the `json` format or when sending to Unified Agent. In the `full` or `short` formats, this field is not displayed. |
 | `allow_drop_entries` | bool | true | Allow dropping log entries if the logging system is overloaded. When this option is enabled, log entries are buffered in memory and written to the output when 10 messages accumulate or the time specified in `time_threshold_ms` elapses. If the buffer becomes full, low-priority messages may be dropped to make room for higher-priority messages. |
 | `use_local_timestamps` | bool | false | Use local time zone for log timestamps (UTC is used by default). |
@@ -81,6 +81,24 @@ The `uaclient_config` field configures integration with [Unified Agent](https://
 | `client_log_file` | string | — | Log file for the UA client itself. |
 | `client_log_priority` | uint32 | — | Logging level for the UA client itself. |
 | `log_name` | string | — | Log name that is passed in session metadata. |
+
+### Structured Format {#structured-format}
+
+With `format: "structured"`, {{ ydb-short-name }} sends each record to Unified Agent as a text line plus message metadata, so the agent does not need to parse JSON:
+
+| Part | Content |
+| --- | --- |
+| Payload | `:<COMPONENT> <PRIORITY>: <message> (<field>=<value> ...)`, the line without the leading time |
+| `labels.*` | Fields that the code marks as labels, plus `labels.component`, `labels.database`, `labels.tag`, `labels.log_type` |
+| `meta.message.*` | Other structured fields |
+| `meta.*` | `node_id`, `revision`, `priority`, `npriority`, `location` |
+| `host`, `cluster` | Short host name and `cluster_name` |
+| `_component`, `_priority` | Component and priority names |
+| `_ydb_log_format` | `structured_v1`, in session metadata |
+| `_ydb_message` | Message text without fields |
+| `_ydb_timestamp_us` | Event time in microseconds since the epoch; also the message timestamp |
+
+Other outputs (file, syslog, stderr) receive the full line with the UTC time in front: `<UTC time> :<COMPONENT> <PRIORITY>: ...`. `use_local_timestamps` does not apply.
 
 ## Log Levels {#log-levels}
 
@@ -193,7 +211,7 @@ This configuration outputs logs in JSON format and sends them to Unified Agent.
 
 - Log levels are specified in the configuration as numeric values, not strings. Use the [table above](#log-levels) to map between numeric values and their meanings.
 - If the `backend_file_name` parameter is specified, logs are written to this file. If the `sys_log` parameter is true, logs are sent to the system logger.
-- The `format` parameter determines how log entries are formatted. The "full" format includes all available information, "short" provides a more compact format, and "json" outputs logs in JSON format, which is convenient for parsing by logging services.
+- The `format` parameter determines how log entries are formatted. The "full" format includes all available information, "short" provides a more compact format, and "json" outputs logs in JSON format, which is convenient for parsing by logging services. The "structured" format is described in [{#T}](#structured-format).
 - The internal log buffer has the following size limits:
   - Default total size: 10MB (10 &ast; 1024 &ast; 1024 bytes)
   - Default grain size: 64KB (1024 &ast; 64 bytes)

@@ -1167,7 +1167,7 @@ bool TConfigureParts::HandleReply(NCdcAggregator::TEvCdcAggregator::TEvConfigure
     Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
 
     if (!txState->ShardsInProgress.erase(context.SS->MustGetShardIdx(tabletId))) {
-        YDB_LOG_WARN_CTX(context.Ctx, "Ignoring duplicate TEvConfigureTrackingResult",
+        YDB_LOG_INFO_CTX(context.Ctx, "Ignoring duplicate TEvConfigureTrackingResult",
             {"tabletId", tabletId},
         );
         return false;
@@ -1177,7 +1177,6 @@ bool TConfigureParts::HandleReply(NCdcAggregator::TEvCdcAggregator::TEvConfigure
 
     NIceDb::TNiceDb db(context.GetDB());
     context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-    context.OnComplete.ActivateTx(OperationId);
     return true;
 }
 

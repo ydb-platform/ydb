@@ -291,6 +291,14 @@ class Cluster:
 
     def record_macro(self, entry: dict) -> None:
         macros = self._macros()
+        if entry.get("kind") == "keeper_split":
+            pile = entry["pile"]
+            previous = [macro for macro in macros
+                        if macro.get("kind") == "keeper_split" and macro.get("pile") == pile]
+            if previous:
+                entry = previous[0]  # A retry must retain the original pre-fault snapshot.
+            macros = [macro for macro in macros
+                      if not (macro.get("kind") == "keeper_split" and macro.get("pile") == pile)]
         if entry not in macros:
             macros.append(entry)
         self._save_macros(macros)
@@ -701,9 +709,18 @@ def cmd_keeper_split(cluster: Cluster, args) -> int:
     # what was already unavailable before the macro is not the macro's to undo
     already = [n["label"] for n in cluster.request(pile, "GET", "/state")["nodes"]
                if n["faults"].get("unavailable")]
-    cluster.request(pile, "POST", "/control", {"all": True, "op": "unavailable", "on": True})
-    cluster.record_macro({"kind": "keeper_split", "pile": pile, "already": already})
-    _scenario(cluster, "keeper_split", pile)
+    progress = _MutationReport("keeper_split", [pile])
+    # A lost fault reply must remain undoable by a later heal.
+    progress.step("record", "supervisor", lambda: cluster.record_macro(
+        {"kind": "keeper_split", "pile": pile, "already": already}))
+    progress.data["recorded_intent"] = True
+    progress.data["recovery"] = "keeper-split intent remains recorded: revive re-applies it; cluster heal undoes it"
+    try:
+        progress.step("keeper_faults", pile, lambda: cluster.request(
+            pile, "POST", "/control", {"all": True, "op": "unavailable", "on": True}))
+        progress.step("scenario", "supervisor", lambda: _scenario(cluster, "keeper_split", pile))
+    except PartialMutationError as error:
+        raise PartialMutationError("%s; %s" % (error, progress.data["recovery"]), progress.data) from error
     return 0
 
 

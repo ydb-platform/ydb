@@ -649,7 +649,7 @@ void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId
 
     std::vector<TString> secretValues;
     secretValues.resize(responseCtx.Secrets.size());
-    std::vector<NKqp::TSecretRevision> revisions(responseCtx.Secrets.size());
+    std::vector<std::optional<NKqp::TSecretRevision>> revisions(responseCtx.Secrets.size());
     for (const auto& secret : responseCtx.Secrets) {
         const auto& secretPath = secret.first;
         auto it = VersionedSecrets.find(secret.first);
@@ -670,7 +670,7 @@ void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId
 
         Y_ENSURE(secret.second < secretValues.size());
         secretValues[secret.second] = it->second.Value;
-        revisions[secret.second] = {it->second.PathOwnerId, it->second.PathId, it->second.SecretVersion};
+        revisions[secret.second] = NKqp::TSecretRevision{it->second.PathOwnerId, it->second.PathId, it->second.SecretVersion};
     }
     FillResponse(requestId, NKqp::TEvDescribeSecretsResponse::TDescription(std::move(secretValues), std::move(revisions)));
 }

@@ -18,6 +18,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
+#include <util/generic/yexception.h>
 #include <util/system/types.h>
 
 #include <optional>
@@ -492,7 +493,7 @@ struct TEvSaveScriptFinalStatusResponse : public TEventLocal<TEvSaveScriptFinalS
 
 // Process-local metadata returned atomically with the corresponding secret value.
 struct TSecretRevision {
-    ui64 OwnerId = 0;
+    ui64 PathOwnerId = 0;
     ui64 LocalPathId = 0;
     ui64 Version = 0;
 };
@@ -504,14 +505,23 @@ struct TEvDescribeSecretsResponse : public TEventLocal<TEvDescribeSecretsRespons
             , Issues(std::move(issues))
         {}
 
-        explicit TDescription(std::vector<TString> secretValues, std::vector<TSecretRevision> revisions = {})
+        explicit TDescription(std::vector<TString> secretValues)
             : SecretValues(std::move(secretValues))
-            , SecretRevisions(std::move(revisions))
+            , SecretRevisions(SecretValues.size())
             , Status(Ydb::StatusIds::SUCCESS)
         {}
 
+        TDescription(std::vector<TString> secretValues, std::vector<std::optional<TSecretRevision>> revisions)
+            : SecretValues(std::move(secretValues))
+            , SecretRevisions(std::move(revisions))
+            , Status(Ydb::StatusIds::SUCCESS)
+        {
+            Y_ENSURE(SecretValues.size() == SecretRevisions.size(), "Secret values and revisions must have the same size");
+        }
+
         const std::vector<TString> SecretValues;
-        const std::vector<TSecretRevision> SecretRevisions;
+        // One revision per value; nullopt when the resolver provides no metadata.
+        const std::vector<std::optional<TSecretRevision>> SecretRevisions;
         const Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         const NYql::TIssues Issues;
     };

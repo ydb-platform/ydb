@@ -13,6 +13,22 @@ using NKqp::TKikimrSettings;
 using TDescriptionPromise = NThreading::TPromise<NKqp::TEvDescribeSecretsResponse::TDescription>;
 
 Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
+    Y_UNIT_TEST(DescriptionRequiresMatchingRevisions) {
+        using TDescription = NKqp::TEvDescribeSecretsResponse::TDescription;
+        const std::vector<TString> values = {"first", "second"};
+        const TDescription legacy(values);
+        UNIT_ASSERT_VALUES_EQUAL(legacy.Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(legacy.SecretValues, values);
+        UNIT_ASSERT_VALUES_EQUAL(legacy.SecretRevisions.size(), values.size());
+        for (const auto& revision : legacy.SecretRevisions) {
+            UNIT_ASSERT(!revision.has_value());
+        }
+
+        const std::vector<std::optional<NKqp::TSecretRevision>> incomplete = {NKqp::TSecretRevision{1, 2, 0}};
+        UNIT_ASSERT_EXCEPTION(TDescription(values, incomplete), yexception);
+        UNIT_ASSERT_EXCEPTION(TDescription(values, {}), yexception);
+    }
+
     Y_UNIT_TEST(GetNewValue) {
         TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
@@ -59,16 +75,22 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         CreateSchemaSecret(name, "first", session);
         const auto first = ResolveSecret(name, kikimr).GetFuture().GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(first.SecretRevisions.size(), 1);
-        UNIT_ASSERT(first.SecretRevisions[0].OwnerId && first.SecretRevisions[0].LocalPathId);
-        UNIT_ASSERT_VALUES_EQUAL(first.SecretRevisions[0].Version, 0);
+        UNIT_ASSERT(first.SecretRevisions[0]);
+        const auto& firstRevision = *first.SecretRevisions[0];
+        UNIT_ASSERT(firstRevision.PathOwnerId && firstRevision.LocalPathId);
+        UNIT_ASSERT_VALUES_EQUAL(firstRevision.Version, 0);
+        ui64 previousVersion = firstRevision.Version;
         for (const auto& value : {TString("first"), TString("second")}) {
             AlterSchemaSecret(name, value, session);
             const auto next = ResolveSecret(name, kikimr).GetFuture().GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(next.SecretValues[0], value);
             UNIT_ASSERT_VALUES_EQUAL(next.SecretRevisions.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(next.SecretRevisions[0].OwnerId, first.SecretRevisions[0].OwnerId);
-            UNIT_ASSERT_VALUES_EQUAL(next.SecretRevisions[0].LocalPathId, first.SecretRevisions[0].LocalPathId);
-            UNIT_ASSERT_GT(next.SecretRevisions[0].Version, first.SecretRevisions[0].Version);
+            UNIT_ASSERT(next.SecretRevisions[0]);
+            const auto& nextRevision = *next.SecretRevisions[0];
+            UNIT_ASSERT_VALUES_EQUAL(nextRevision.PathOwnerId, firstRevision.PathOwnerId);
+            UNIT_ASSERT_VALUES_EQUAL(nextRevision.LocalPathId, firstRevision.LocalPathId);
+            UNIT_ASSERT_GT(nextRevision.Version, previousVersion);
+            previousVersion = nextRevision.Version;
         }
     }
 

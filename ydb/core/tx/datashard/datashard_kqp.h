@@ -21,13 +21,16 @@ void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
     const NKikimrDataEvents::TKqpLocks& kqpLocks, ui64 tabletId);
 
 std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 tabletId, TSysLocks& sysLocks,
-    const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets);
+    const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets,
+    const TInputOpData::TInReadSets& inReadSets, bool requireReadOnlyLocks);
 std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 tabletId, TSysLocks& sysLocks,
     const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets,
-    TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets);
+    TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets,
+    bool requireReadOnlyLocks);
 void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks* kqpLocks,
     NKikimrTx::TReadSetData::EDecision decision, ui64 origin);
-void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, TSysLocks& sysLocks, ui64 tabletId);
+void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks,
+    bool useGenericReadSets, TSysLocks& sysLocks, ui64 tabletId, bool requireReadOnlyLocks);
 
 
 bool KqpLocksHasArbiter(const NKikimrDataEvents::TKqpLocks* kqpLocks);

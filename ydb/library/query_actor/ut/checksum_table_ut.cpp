@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor_factory.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -40,10 +41,12 @@ struct TResult {
 
 class TChecksumQuery: public TQueryBase {
 public:
-    explicit TChecksumQuery(TString sessionId)
+    explicit TChecksumQuery(TString sessionId, TString sql = ReadSql, TMaybe<TRowVersion> snapshot = Nothing())
         : TQueryBase(NKikimrServices::KQP_PROXY, std::move(sessionId), "/Root")
+        , Sql(std::move(sql))
     {
         RequestType = TString(NRequestTypes::ChecksumTable);
+        MvccVersion = snapshot;
     }
 
     NThreading::TFuture<TResult> GetResult() const {
@@ -52,7 +55,7 @@ public:
 
 private:
     void OnRunQuery() override {
-        RunDataQuery(ReadSql, nullptr, TTxControl::BeginAndCommitTx(true), TDuration::Seconds(30));
+        RunDataQuery(Sql, nullptr, TTxControl::BeginAndCommitTx(true), TDuration::Seconds(30));
     }
 
     void OnQueryResult() override {
@@ -63,6 +66,7 @@ private:
         Result.SetValue(TResult{ status, std::move(issues), std::move(ResultSets) });
     }
 
+    const TString Sql;
     NThreading::TPromise<TResult> Result = NThreading::NewPromise<TResult>();
 };
 
@@ -92,6 +96,18 @@ public:
 
     TTestActorRuntime& Runtime() {
         return *Kikimr.GetTestServer().GetRuntime();
+    }
+
+    void WriteNewValues() {
+        Kikimr.RunCall([&] {
+            auto session = Kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            const auto result = session
+                                    .ExecuteDataQuery("UPSERT INTO `/Root/Objects` (Key, Value) VALUES (1u, 999u)",
+                                        NYdb::NTable::TTxControl::BeginTx().CommitTx())
+                                    .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return true;
+        });
     }
 
     TString CreateSession() {
@@ -170,6 +186,72 @@ Ydb::Table::ExecuteQueryResult AssertAggregate(const Ydb::Table::ExecuteDataQuer
 }   // namespace
 
 Y_UNIT_TEST_SUITE(QueryActorChecksumTable) {
+    Y_UNIT_TEST_TWIN(ChecksumCommandRetainsSnapshotAndTimeoutPolicy, Remote) {
+        TTestEnv env(Remote);
+        auto& runtime = env.Runtime();
+        const auto session = env.CreateSession();
+        const TString sql =
+            "PRAGMA ydb.MaxSequentialReadsInFlight = \"1\";\n"
+            "CHECKSUM TABLE `/Root/Objects` WITH (ALGORITHM = \"CityHash64\");";
+        const auto start = [&](TMaybe<TRowVersion> snapshot = Nothing()) {
+            auto actor = std::make_unique<TChecksumQuery>(session, sql, snapshot);
+            auto future = actor->GetResult();
+            runtime.Register(actor.release());
+            return future;
+        };
+        const auto hash = [](const TResult& result) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::SUCCESS, result.Issues.ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.ResultSets.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.ResultSets.front().ColumnsCount(), 4);
+            NYdb::TResultSetParser rows(result.ResultSets.front());
+            UNIT_ASSERT(rows.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("version").GetUint32(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("algorithm").GetUtf8(), "CityHash64");
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("count").GetUint64(), 3);
+            const TString value(rows.ColumnParser("hash").GetString());
+            UNIT_ASSERT_VALUES_EQUAL(value.size(), sizeof(ui64));
+            UNIT_ASSERT(!rows.TryNextRow());
+            return value;
+        };
+        const auto original = hash(runtime.WaitFuture(start()));
+
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto manager = runtime.Register(CreateKqpSnapshotManager("/Root", TDuration::Minutes(5)));
+        runtime.Send(new IEventHandle(manager, edge, new TEvKqpSnapshot::TEvCreateSnapshotRequest(TVector<TTableId>{}, 1)), 0, true);
+        auto retained = runtime.GrabEdgeEventRethrow<TEvKqpSnapshot::TEvCreateSnapshotResponse>(edge);
+        UNIT_ASSERT_C(retained->Get()->Status == NKikimrIssues::TStatusIds::SUCCESS, retained->Get()->Issues.ToString());
+        const TRowVersion version(retained->Get()->Snapshot.Step, retained->Get()->Snapshot.TxId);
+
+        env.WriteNewValues();
+        UNIT_ASSERT_VALUES_UNEQUAL(hash(runtime.WaitFuture(start())), original);
+
+        ui32 newSnapshots = 0;
+        auto snapshotObserver = runtime.AddObserver<TEvKqpSnapshot::TEvCreateSnapshotRequest>([&](auto&) {
+            ++newSnapshots;
+        });
+        ui32 readCount = 0;
+        auto readObserver = runtime.AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetHints(), ChecksumHints);
+            UNIT_ASSERT(!record.HasLockTxId());
+            UNIT_ASSERT_VALUES_EQUAL(record.GetSnapshot().GetStep(), version.Step);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetSnapshot().GetTxId(), version.TxId);
+            ++readCount;
+        });
+        TBlockEvents<TEvDataShard::TEvRead> reads(runtime);
+        auto future = start(version);
+        runtime.WaitFor("checksum command read", [&] {
+            return !reads.empty();
+        });
+        // Exceed the configured ten-second ceiling while keeping the explicit deadline.
+        runtime.SimulateSleep(TDuration::Seconds(11));
+        UNIT_ASSERT(!future.HasValue());
+        reads.Stop().Unblock();
+        UNIT_ASSERT_VALUES_EQUAL(hash(runtime.WaitFuture(future)), original);
+        UNIT_ASSERT_GT(readCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(newSnapshots, 0);
+    }
+
     Y_UNIT_TEST_TWIN(QueryActorExceedsDefaultTimeout, Remote) {
         TTestEnv env(Remote);
         const auto session = env.CreateSession();

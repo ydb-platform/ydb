@@ -422,7 +422,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         UNIT_ASSERT(!yson.Contains("ALTER OBJECT"));
     }
 
-    Y_UNIT_TEST(ShowCreateKeepsStringDefaultWhenFlagOff) {
+    Y_UNIT_TEST(ShowCreateSqlDefaultWhenFlagOff) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
@@ -439,8 +439,31 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
             "SHOW CREATE TABLE `/Root/CsLegacy`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         const auto yson = FormatResultSetYson(result.GetResultSet(0));
-        UNIT_ASSERT_STRING_CONTAINS(yson, "DEFAULT_VALUE");
-        UNIT_ASSERT(!yson.Contains("DEFAULT 5"));
+        UNIT_ASSERT_STRING_CONTAINS(yson, "DEFAULT 5");
+        UNIT_ASSERT(!yson.Contains("DEFAULT_VALUE"));
+    }
+
+    Y_UNIT_TEST(StoredDefaultIsHonoredWhenFlagOff) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        auto table = kikimr.GetTableClient();
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/CsFlagOff` (
+                Key Uint32 NOT NULL,
+                Value Uint32 DEFAULT 5,
+                PRIMARY KEY (Key)
+            ) WITH (STORE = COLUMN);
+        )");
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableCsDefaultValues(false);
+        ExecDml(db, "INSERT INTO `/Root/CsFlagOff` (Key) VALUES (1);");
+        CompareYson(R"([[1u;[5u]]])", SelectYson(db, "SELECT Key, Value FROM `/Root/CsFlagOff` ORDER BY Key;"));
+        TValueBuilder rows;
+        rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(2).EndStruct().EndList();
+        auto bulk = table.BulkUpsert("/Root/CsFlagOff", rows.Build()).ExtractValueSync();
+        UNIT_ASSERT_C(!bulk.IsSuccess(), bulk.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(bulk.GetIssues().ToString(), "Missing default columns");
+        ExpectSchemeError(db, "ALTER TABLE `/Root/CsFlagOff` ALTER COLUMN Value SET DEFAULT 6;",
+            "Default values are not supported in column tables");
     }
 
     Y_UNIT_TEST(ShowCreateBytesDefaultWhenFlagOff) {

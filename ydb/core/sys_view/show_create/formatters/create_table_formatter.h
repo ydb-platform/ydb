@@ -82,8 +82,6 @@ private:
     void FormatValue(NYdb::TValueParser& parser, bool isPartition = false, TString del = "");
     void FormatPrimitive(NYdb::TValueParser& parser);
 
-    TString ValueToString(const NKikimrColumnShardColumnDefaults::TColumnDefault& defaultValue);
-
     const bool SeparateGlobalIndexes;
     TStringStream Stream;
     NMiniKQL::TScopedAlloc Alloc;

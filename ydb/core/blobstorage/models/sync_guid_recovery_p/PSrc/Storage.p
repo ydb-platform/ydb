@@ -35,6 +35,7 @@ machine TRecoveryStorage {
             disk.PeerGuidInfo += (j, (State = RemoteFinal, Guid = j + 1));
           }
           disk.Cursors += (j, (Guid = j + 1, SyncedLsn = 0));
+          disk.KnownGuids += (j, 0);
           j = j + 1;
         }
         disks += (i, disk);
@@ -59,6 +60,7 @@ machine TRecoveryStorage {
       while (i < diskCount) {
         disks[owner].PeerGuidInfo[i] = default(TSyncGuidInfo);
         disks[owner].Cursors[i] = default(TSyncState);
+        disks[owner].KnownGuids[i] = 0;
         i = i + 1;
       }
       send driver, eAck;
@@ -91,6 +93,7 @@ machine TRecoveryStorage {
             if (disks[peer].Online) {
               disks[peer].PeerGuidInfo[source] =
                 (State = RemoteFinal, Guid = disks[source].Local.Guid);
+              RememberGuid(peer, source, disks[source].Local.Guid);
             }
             peer = peer + 1;
           }
@@ -103,7 +106,8 @@ machine TRecoveryStorage {
       disks[owner].Online = true;
       disks[owner].Ready = false;
       announce eGuidRecoveryStarted, (Owner = owner, Local = disks[owner].Local);
-      new TVDiskGuidRecoveryActor((Storage = this, Owner = owner, Local = disks[owner].Local, Topology = topology));
+      new TVDiskGuidRecoveryActor((Storage = this, Owner = owner, Local = disks[owner].Local,
+        Topology = topology, History = disks[owner].KnownGuids));
     }
     on eSurvey do (req: (Source: machine, Owner: int)) {
       var i: int;
@@ -112,28 +116,45 @@ machine TRecoveryStorage {
         if (disks[i].Online) {
           new TVDiskGuidProxy((Transport = transport,
             Envelope = (Target = req.Source, Owner = req.Owner,
-              Reply = (VDiskId = i, Info = disks[i].PeerGuidInfo[req.Owner]))));
+              Reply = (VDiskId = i, Info = disks[i].PeerGuidInfo[req.Owner],
+                RecoveredGuid = disks[i].KnownGuids[req.Owner], History = ReadHistory(i)))));
         }
         i = i + 1;
       }
     }
     on ePublishGuid do (req: (Source: machine, Owner: int, Info: TSyncGuidInfo)) {
-      var i: int;
-      var acks: set[int];
-      while (i < diskCount) {
-        if (disks[i].Online) {
-          // TSyncer::Handle(TEvVSyncGuid) does not veto a different old Final.
-          disks[i].PeerGuidInfo[req.Owner] = req.Info;
-          acks += (i);
-        }
-        i = i + 1;
+      new TGuidPublication((Storage = this, Notify = req.Source, Owner = req.Owner,
+        Info = req.Info, Topology = topology));
+    }
+    on eGuidWriteRequest do (req: TGuidWriteRequest) {
+      if (!disks[req.Peer].Online) {
+        send req.Source, eGuidWriteAck, (Peer = req.Peer, Success = false);
+        return;
       }
-      assert HasGroupQuorum(topology, acks);
-      send req.Source, TEvVDiskGuidWritten, acks;
+      // Same immutable-identity rejection as TSyncer::Handle(TEvVSyncGuid).
+      if ((disks[req.Peer].KnownGuids[req.Owner] != 0 &&
+          disks[req.Peer].KnownGuids[req.Owner] != req.Info.Guid) ||
+          (disks[req.Peer].PeerGuidInfo[req.Owner].State == RemoteFinal &&
+          disks[req.Peer].PeerGuidInfo[req.Owner].Guid != req.Info.Guid)) {
+        send req.Source, eGuidWriteAck, (Peer = req.Peer, Success = false);
+        return;
+      }
+      disks[req.Peer].PeerGuidInfo[req.Owner] = req.Info;
+      // Final is durable in PeerGuidInfo; it is exposed by ReadHistory.
+      send req.Source, eGuidWriteAck, (Peer = req.Peer, Success = true);
     }
     on TEvSyncerCommit do (req: (Source: machine, Owner: int, Local: TLocalGuidInfo)) {
       disks[req.Owner].Local = req.Local;
       announce eLocalCommitted, (Owner = req.Owner, Local = req.Local);
+      send req.Source, TEvSyncerCommitDone;
+    }
+    on eCommitGuidHistory do (req: (Source: machine, Owner: int, History: seq[int])) {
+      var subject: int;
+      assert sizeof(req.History) == diskCount;
+      while (subject < diskCount) {
+        RememberGuid(req.Owner, subject, req.History[subject]);
+        subject = subject + 1;
+      }
       send req.Source, TEvSyncerCommitDone;
     }
     on TEvVDiskGuidRecovered do (result: TGuidRecovered) {
@@ -163,12 +184,14 @@ machine TRecoveryStorage {
         // Imported Hull metadata is NOT appended to the outgoing SyncLog.
         announce eLocalCommitted, (Owner = owner, Local = disks[owner].Local);
       }
-      if (result.Outcome.Decision != Inconsistency) { disks[owner].Ready = true; }
+      // Good settles identity only; the following synchronization round gates Ready.
+      disks[owner].Ready = result.Outcome.Decision == LostData || result.Outcome.Decision == FirstRun;
       send driver, eRecoveryReady, result;
     }
     on eStartRound do (owner: int) {
       var i: int;
-      assert disks[owner].Online && disks[owner].Ready;
+      assert disks[owner].Online && disks[owner].Local.State == LocalFinal;
+      disks[owner].Ready = false;
       roundOwner = owner;
       roundPeers = default(set[int]);
       roundDone = default(set[int]);
@@ -176,11 +199,10 @@ machine TRecoveryStorage {
       while (i < diskCount) {
         if (i != owner && disks[i].Online && disks[i].Ready) {
           roundPeers += (i);
-          new TSyncerJobTask((Storage = this, Owner = owner, Peer = i, Current = disks[owner].Cursors[i]));
+          new TSyncerJobTask((Storage = this, Owner = owner, Peer = i, Current = disks[owner].Cursors[i], FullRecovery = false));
         }
         i = i + 1;
       }
-      assert HasGroupQuorum(topology, roundPeers);
     }
     on TEvVSync do (req: TVSyncRequest) {
       var peer: TVDisk;
@@ -215,12 +237,42 @@ machine TRecoveryStorage {
       assert result.Status == SyncDone || result.Status == DisksSynced;
       disks[result.Owner].Cursors[result.Peer] = result.SyncState;
       roundDone += (result.Peer);
+      roundDone = CanonicalDisks(roundDone, diskCount);
       announce eSyncPeerDone, (Owner = result.Owner, Peer = result.Peer, Status = result.Status);
-      if (sizeof(roundDone) == sizeof(roundPeers)) {
+      if (!disks[roundOwner].Ready && HasCatchupQuorum(topology, roundDone, roundOwner)) {
+        disks[roundOwner].Ready = true;
         send driver, eRoundFinished,
           (Owner = roundOwner, HullBlock = disks[roundOwner].HullBlock, Peers = sizeof(roundDone));
       }
+      // Pending jobs still apply their data/cursors after the one-shot readiness notification.
+      if (sizeof(roundDone) == sizeof(roundPeers)) {
+        roundPeers = default(set[int]);
+        roundDone = default(set[int]);
+      }
     }
+  }
+  fun ReadHistory(source: int): seq[int] {
+    var result: seq[int];
+    var subject: int;
+    result = disks[source].KnownGuids;
+    while (subject < diskCount) {
+      if (disks[source].PeerGuidInfo[subject].State == RemoteFinal) {
+        assert result[subject] == 0 || result[subject] == disks[source].PeerGuidInfo[subject].Guid;
+        result[subject] = disks[source].PeerGuidInfo[subject].Guid;
+      }
+      subject = subject + 1;
+    }
+    if (disks[source].Local.State == LocalFinal) {
+      assert result[source] == 0 || result[source] == disks[source].Local.Guid;
+      result[source] = disks[source].Local.Guid;
+    }
+    return result;
+  }
+  fun RememberGuid(owner: int, subject: int, guid: int) {
+    if (guid == 0) { return; }
+    assert disks[owner].KnownGuids[subject] == 0 || disks[owner].KnownGuids[subject] == guid,
+      "Conflicting immutable GUID records";
+    disks[owner].KnownGuids[subject] = guid;
   }
 }
 
@@ -229,22 +281,24 @@ machine TSyncerJobTask {
   var owner: int;
   var peer: int;
   var current: TSyncState;
+  var old: TSyncState;
+  var fullRecovery: bool;
   start state EWaitRemote {
-    entry (config: (Storage: machine, Owner: int, Peer: int, Current: TSyncState)) {
+    entry (config: (Storage: machine, Owner: int, Peer: int, Current: TSyncState, FullRecovery: bool)) {
       storage = config.Storage;
       owner = config.Owner;
       peer = config.Peer;
       current = config.Current;
+      old = current;
+      fullRecovery = config.FullRecovery;
+      if (fullRecovery) { RequestFullSync(current); }
       NextRequest();
     }
     on TEvVSyncResult do (result: TVSyncResult) {
-      if (result.Status == RESTART) {
-        // HandleRestart: EJustSync remains EJustSync; no metadata imported.
-        current = result.SyncState;
-        NextRequest();
-      } else if (result.Status == NODATA) {
-        // PrepareToFullRecovery/ContinueInFullRecoveryMode, unlike RESTART.
-        send storage, eFullSyncRequest, (Job = this, Owner = owner, Peer = peer, SyncState = result.SyncState);
+      if (result.Status == RESTART || result.Status == NODATA) {
+        // A new incarnation cannot certify coverage of the old metadata history.
+        // The new cursor is persisted only after the snapshot's local apply ack.
+        RequestFullSync(result.SyncState);
       } else if (result.Status == ALREADY) {
         current = result.SyncState;
         ReplyAndDie(DisksSynced);
@@ -256,6 +310,27 @@ machine TSyncerJobTask {
       }
     }
   }
+  state EWaitFullRemote {
+    on eFullSyncFragment do (result: TVSyncResult) {
+      // An unordered partial snapshot may advance the working cursor.
+      current = result.SyncState;
+    }
+    on TEvVSyncResult do (result: TVSyncResult) {
+      if (result.Status == INTERRUPTED) {
+        ReplyAndDie(Error);
+      }
+      assert result.Status == OK;
+      current = result.SyncState;
+      send storage, eImportMetadata,
+        (Job = this, Owner = owner, Peer = peer, Block = result.Block, SyncState = current);
+      goto EWaitLocal;
+    }
+  }
+  fun RequestFullSync(syncState: TSyncState) {
+    fullRecovery = true;
+    send storage, eFullSyncRequest, (Job = this, Owner = owner, Peer = peer, SyncState = syncState);
+    goto EWaitFullRemote;
+  }
   state EWaitLocal {
     on TEvLocalSyncDataResult do { ReplyAndDie(SyncDone); }
   }
@@ -263,7 +338,15 @@ machine TSyncerJobTask {
     send storage, TEvVSync, (Job = this, Owner = owner, Peer = peer, SyncState = current);
   }
   fun ReplyAndDie(status: ESyncStatus) {
+    if (fullRecovery && status == Error) { current = old; }
     send storage, TEvSyncerJobDone, (Owner = owner, Peer = peer, SyncState = current, Status = status);
+    // Halted machines remain in PEx's state key; the sent payload is independent.
+    storage = default(machine);
+    owner = 0;
+    peer = 0;
+    current = default(TSyncState);
+    old = default(TSyncState);
+    fullRecovery = false;
     raise halt;
   }
 }

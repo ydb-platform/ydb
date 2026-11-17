@@ -6,11 +6,12 @@ enum EFirstRunStep {
   ACTION_GenerateGuid, ACTION_WriteInProgressToQuorum,
   ACTION_WriteFinalToQuorum, ACTION_WriteFinalLocally, STATE__Terminated
 }
-enum EReplyStatus { OK, RESTART, ALREADY, NODATA }
-enum ESyncStatus { SyncDone, DisksSynced }
+enum EReplyStatus { OK, RESTART, ALREADY, NODATA, INTERRUPTED }
+enum ESyncStatus { SyncDone, DisksSynced, Error }
 enum EScenario {
   StaleMetadata, DelayedSelfGuid, FalseFirstRun,
-  NoWipes, RetainedSource, WipedWithWitnesses, FreshGroup
+  NoWipes, RetainedSource, WipedWithWitnesses, FreshGroup,
+  DegradedRestart, DegradedFreshGroup
 }
 type TSyncGuidInfo = (State: ESyncGuidState, Guid: int);
 type TLocalGuidInfo = (State: ELocalGuidState, Guid: int, DbBirthLsn: int);
@@ -18,8 +19,9 @@ type TSyncState = (Guid: int, SyncedLsn: int);
 type TDecision = (Decision: EDecision, Guid: int, Step: EFirstRunStep);
 type TVDisk = (Online: bool, Ready: bool, Local: TLocalGuidInfo,
   Incarnation: int, HullBlock: int, LogBlock: int, LogLsn: int,
-  LogStartLsn: int, PeerGuidInfo: seq[TSyncGuidInfo], Cursors: seq[TSyncState]);
-type TGuidReply = (VDiskId: int, Info: TSyncGuidInfo);
+  LogStartLsn: int, PeerGuidInfo: seq[TSyncGuidInfo], Cursors: seq[TSyncState],
+  KnownGuids: seq[int]);
+type TGuidReply = (VDiskId: int, Info: TSyncGuidInfo, RecoveredGuid: int, History: seq[int]);
 type TGuidEnvelope = (Target: machine, Owner: int, Reply: TGuidReply);
 type TGuidRecovered = (Owner: int, Outcome: TDecision);
 type TVSyncRequest = (Job: machine, Owner: int, Peer: int, SyncState: TSyncState);
@@ -41,6 +43,7 @@ event ePublishGuid: (Source: machine, Owner: int, Info: TSyncGuidInfo);
 event TEvVDiskGuidWritten: set[int];
 event TEvSyncerCommit: (Source: machine, Owner: int, Local: TLocalGuidInfo);
 event TEvSyncerCommitDone;
+event eCommitGuidHistory: (Source: machine, Owner: int, History: seq[int]);
 event TEvVDiskGuidRecovered: TGuidRecovered;
 event TEvVSync: TVSyncRequest;
 event TEvVSyncResult: TVSyncResult;
@@ -62,3 +65,9 @@ event eBlockCommitted: int;
 event eRoundStarted: int;
 event eSyncPeerDone: (Owner: int, Peer: int, Status: ESyncStatus);
 event eCallOsiris: int;
+
+type TGuidWriteRequest = (Source: machine, Owner: int, Peer: int, Info: TSyncGuidInfo);
+event eGuidWriteRequest: TGuidWriteRequest;
+event eGuidWriteAck: (Peer: int, Success: bool);
+
+event eFullSyncFragment: TVSyncResult;

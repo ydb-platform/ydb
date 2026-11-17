@@ -906,6 +906,56 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         )");
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldTrackChildShardsInCdcAggregatorWhenTableIsSplit, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        t.GetTestEnvOptions().EnableCdcAggregator(true);
+
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
+            // given
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Uint32" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableName: "Table"
+                    StreamDescription {
+                      Name: "Stream"
+                      Mode: ECdcStreamModeKeysOnly
+                      Format: ECdcStreamFormatProto
+                      ResolvedTimestampsIntervalMs: 1000
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            // when
+            TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary {
+                    KeyPrefix {
+                        Tuple { Optional { Uint32: 2 } }
+                    }
+                }
+            )", TTestTxConfig::FakeHiveTablets));
+
+            // then
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            {
+                TInactiveZone inactive(activeZone);
+                const auto shards = GetSortedTableShards(runtime, "/MyRoot/Table");
+                UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    DescribeCdcAggregatorSources(runtime, GetCdcAggregatorTabletId(runtime, "/MyRoot/Table/Stream")),
+                    shards);
+            }
+        });
+    }
+
     void MergeTable(TTestWithReboots& t, const TString& cdcStreamDesc) {
         RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             NKikimrScheme::TEvDescribeSchemeResult initialTableDesc;
@@ -968,6 +1018,72 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
               ResolvedTimestampsIntervalMs: 1000
             }
         )");
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldTrackMergedShardInCdcAggregatorWhenTableIsMerged, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        t.GetTestEnvOptions().EnableCdcAggregator(true);
+
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
+            // given
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Uint32" }
+                    KeyColumnNames: ["key"]
+                    UniformPartitionsCount: 2
+                    PartitionConfig {
+                      PartitioningPolicy {
+                        MinPartitionsCount: 1
+                      }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableName: "Table"
+                    StreamDescription {
+                      Name: "Stream"
+                      Mode: ECdcStreamModeKeysOnly
+                      Format: ECdcStreamFormatProto
+                      ResolvedTimestampsIntervalMs: 1000
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            THashMap<ui64, NKikimrCdcAggregator::TEvPartitioningChanged> partitioningChanges;
+            auto observePartitioningChanges = runtime.AddObserver<NCdcAggregator::TEvCdcAggregator::TEvPartitioningChanged>([&](auto& ev) {
+                const auto& record = ev->Get()->Record;
+                partitioningChanges[record.GetParentDataShardId()] = record;
+            });
+
+            // when
+            TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu
+                SourceTabletId: %lu
+            )", TTestTxConfig::FakeHiveTablets + 0, TTestTxConfig::FakeHiveTablets + 1));
+
+            // then
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            {
+                TInactiveZone inactive(activeZone);
+                const auto shards = GetSortedTableShards(runtime, "/MyRoot/Table");
+                UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    DescribeCdcAggregatorSources(runtime, GetCdcAggregatorTabletId(runtime, "/MyRoot/Table/Stream")),
+                    shards);
+
+                UNIT_ASSERT_VALUES_EQUAL(partitioningChanges.size(), 2u);
+                for (const auto parentDataShardId : {TTestTxConfig::FakeHiveTablets + 0, TTestTxConfig::FakeHiveTablets + 1}) {
+                    const auto& change = partitioningChanges.at(parentDataShardId);
+                    UNIT_ASSERT_VALUES_EQUAL(change.GetOperationId(), t.TxId);
+                    UNIT_ASSERT_VALUES_EQUAL(change.ChildDataShardIdsSize(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(change.GetChildDataShardIds(0), shards.front());
+                }
+            }
+        });
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RacySplitTableAndCreateStream, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {

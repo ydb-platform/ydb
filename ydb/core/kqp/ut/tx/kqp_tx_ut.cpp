@@ -1789,6 +1789,37 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(SchemeChangeAddNotNullDefaultBeforeFirstRead) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+        const auto execute = [&](const std::string& query) {
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+        execute("CREATE TABLE Anchor (k Int32 NOT NULL, PRIMARY KEY(k));");
+        execute("CREATE TABLE Target (k Int32 NOT NULL, a Int32, PRIMARY KEY(k));");
+        execute("UPSERT INTO Anchor(k) VALUES(1); UPSERT INTO Target(k,a) VALUES(1,10);");
+
+        // Pin the data snapshot without resolving Target's schema in this transaction.
+        const auto started = session.ExecuteQuery("SELECT k FROM Anchor;",
+            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRO())).GetValueSync();
+        UNIT_ASSERT_C(started.IsSuccess(), started.GetIssues().ToString());
+        UNIT_ASSERT(started.GetTransaction());
+
+        execute("UPDATE Target SET a=20 WHERE k=1;");
+        execute("ALTER TABLE Target ADD COLUMN d Int32 NOT NULL DEFAULT 42;");
+        CompareYson("[[1;[20];42]]",
+            FormatResultSetYson(execute("SELECT k,a,d FROM Target;").GetResultSet(0)));
+
+        const auto result = session.ExecuteQuery("SELECT k,a,d FROM Target;",
+            NYdb::NQuery::TTxControl::Tx(*started.GetTransaction()).CommitTx()).GetValueSync();
+        // Reject the new column before reading its pre-backfill NULL.
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED,
+            result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(SchemeChangeViewReadAddColumn) {
         TSchemeChangeInTxTester tester;
         tester.Operation = ESchemeOp::ViewReadAddColumn;

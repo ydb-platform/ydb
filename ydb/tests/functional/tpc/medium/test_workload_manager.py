@@ -62,8 +62,13 @@ class TestClickbenchWMComputeSchedulerP1T1(wm.TestWorkloadManagerClickbenchCompu
 #         super().setup_class()
 
 class TestWMOltp50(wm.TestWorkloadManagerOltp50, FunctionalTestBase):
-    timeout: float = 60
+    timeout: float = 30
     tpcc_warehouses: int = 10
+    tpcc_warmup: float = 2
+
+    @classmethod
+    def before_stop_checking(cls):
+        cls.wait_tpcc()
 
     @classmethod
     def setup_class(cls) -> None:
@@ -79,7 +84,7 @@ class TestWMOltpTpchS0_1(wm.WorkloadManagerOltpTpch20Base, FunctionalTestBase):
     }
     scale: float = 0.1
     iterations: int = 1
-    tpcc_warehouses: int = 10
+    tpcc_warehouses: int = 5
 
     @classmethod
     def get_resource_pools(cls) -> list[wm.ResourcePool]:

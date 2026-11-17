@@ -32,6 +32,13 @@ completed 50 schedules without bugs. Tested working-tree base Git SHA:
 
 ## Work to complete
 
+The [C++ protocol fix](05-protocol-fix.md) passed both existing rolling-wipe
+regressions on `mr006` on 2026-11-13 at snapshot
+`b22755429b087d71f05b31260ee4e6c418a4299a` (commit date
+2026-11-13T20:06:04+03:00), whose tree matches implementation revision
+`7605b01dcffeb16e985971863aadf26e5ad2f792`. The historical failure evidence below
+is retained.
+
 - [ ] Prevent synchronization cursors from advancing past historical metadata that has not been applied locally when a peer's incarnation changes.
 - [ ] Preserve or reconstruct durable eternal-GUID witnesses across peer wipe recovery, while retaining detection of genuinely conflicting `Final` GUIDs.
 - [ ] Validate the conditional `FirstRun` scenario with a focused end-to-end C++ regression and resolve the wrong classification confirmed in P.
@@ -42,8 +49,8 @@ completed 50 schedules without bugs. Tested working-tree base Git SHA:
 
 ## Acceptance criteria
 
-- [ ] `RollingWipeWithPreservedLocalState` passes: the returned VDisk reads generation 42 for the committed `Block` after the tested operation/replication checkpoint, with the recovered-peer control still passing.
-- [ ] `RollingWipeWithDelayedSelfGuid` passes: finite delays of valid witnesses do not turn preserved local `Final` state into `Inconsistency` solely because peers lost their witness copies.
+- [x] `RollingWipeWithPreservedLocalState` passes: the returned VDisk reads generation 42 for the committed `Block` after the tested operation/replication checkpoint, with the recovered-peer control still passing.
+- [x] `RollingWipeWithDelayedSelfGuid` passes: finite delays of valid witnesses do not turn preserved local `Final` state into `Inconsistency` solely because peers lost their witness copies.
 - [ ] A focused test distinguishes genuine initialization from an existing locally empty VDisk after witness erosion; the existing slot retains its identity and takes the required lost-data recovery path.
 - [ ] The chosen protocol establishes metadata coverage rather than treating a changed incarnation or a completed synchronization attempt as proof of transferred history.
 - [ ] Scope and limitations for `Erasure4Plus2Block`, mirror-3-dc realm recovery, legacy peers, and already-affected VDisks are documented with the implementation.

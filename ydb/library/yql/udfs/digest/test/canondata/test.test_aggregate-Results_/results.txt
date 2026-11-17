@@ -123,25 +123,19 @@
                         [
                             "CityHash64";
                             "3";
-                            [
-                                "Lb2uWR5fiYc="
-                            ];
+                            "2DBDAE591E5F8987";
                             "1"
                         ];
                         [
                             "CityHash128";
                             "3";
-                            [
-                                "fDnE/hJ1MAzvmhWGUdlC9w=="
-                            ];
+                            "7C39C4FE1275300CEF9A158651D942F7";
                             "1"
                         ];
                         [
                             "Sha256";
                             "3";
-                            [
-                                "VAR3PZtvdaiJWSbXnnRu3Jy7iN3oR2HiWIk0ipBOnZU="
-                            ];
+                            "5404773D9B6F75A8895926D79E746EDC9CBB88DDE84761E25889348A904E9D95";
                             "1"
                         ]
                     ]
@@ -274,25 +268,19 @@
                         [
                             "CityHash64";
                             "3";
-                            [
-                                "Lb2uWR5fiYc="
-                            ];
+                            "2DBDAE591E5F8987";
                             "1"
                         ];
                         [
                             "CityHash128";
                             "3";
-                            [
-                                "fDnE/hJ1MAzvmhWGUdlC9w=="
-                            ];
+                            "7C39C4FE1275300CEF9A158651D942F7";
                             "1"
                         ];
                         [
                             "Sha256";
                             "3";
-                            [
-                                "VAR3PZtvdaiJWSbXnnRu3Jy7iN3oR2HiWIk0ipBOnZU="
-                            ];
+                            "5404773D9B6F75A8895926D79E746EDC9CBB88DDE84761E25889348A904E9D95";
                             "1"
                         ]
                     ]
@@ -425,19 +413,19 @@
                         [
                             "CityHash64";
                             "0";
-                            "\0\0\0\0\0\0\0\0";
+                            "0000000000000000";
                             "1"
                         ];
                         [
                             "CityHash128";
                             "0";
-                            "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+                            "00000000000000000000000000000000";
                             "1"
                         ];
                         [
                             "Sha256";
                             "0";
-                            "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+                            "0000000000000000000000000000000000000000000000000000000000000000";
                             "1"
                         ]
                     ]
@@ -570,25 +558,19 @@
                         [
                             "CityHash64";
                             "3";
-                            [
-                                "gzFMqJUbNH8="
-                            ];
+                            "83314CA8951B347F";
                             "1"
                         ];
                         [
                             "CityHash128";
                             "3";
-                            [
-                                "7UZvo73T1YKUKRU9MfRTpQ=="
-                            ];
+                            "ED466FA3BDD3D5829429153D31F453A5";
                             "1"
                         ];
                         [
                             "Sha256";
                             "3";
-                            [
-                                "DrLk/oblXxH97D0fnKrh9oKf5Ep3LOULYTHn7UXGHa0="
-                            ];
+                            "0EB2E4FE86E55F11FDEC3D1F9CAAE1F6829FE44A772CE50B6131E7ED45C61DAD";
                             "1"
                         ]
                     ]

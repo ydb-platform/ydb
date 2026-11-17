@@ -379,6 +379,43 @@ public:
     }
 };
 
+TPipeMessageId MakeCdcAggregatorPipeMessageId(TTabletId parentDataShardId) {
+    return TPipeMessageId(0, ui64(parentDataShardId));
+}
+
+TVector<TTabletId> FindCdcAggregatorTabletIds(const TPath& tablePath, const TSchemeShard& ss) {
+    TVector<TTabletId> aggregatorTabletIds;
+    for (const auto& [_, streamPathId] : tablePath.Base()->GetChildren()) {
+        const auto* stream = ss.CdcStreams.FindPtr(streamPathId);
+        if (!stream || (*stream)->HeartbeatMode != NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated) {
+            continue;
+        }
+
+        const auto aggregatorShardIdx = (*stream)->AggregatorShardIdx;
+        const auto* aggregator = ss.ShardInfos.FindPtr(aggregatorShardIdx);
+        if (!aggregator || aggregator->TabletID == InvalidTabletId || ss.ShardDeleter.Has(aggregatorShardIdx)) {
+            continue;
+        }
+
+        aggregatorTabletIds.push_back(aggregator->TabletID);
+    }
+    return aggregatorTabletIds;
+}
+
+THolder<NCdcAggregator::TEvCdcAggregator::TEvPartitioningChanged> MakeCdcAggregatorPartitioningChanged(
+        TTabletId parentDataShardId,
+        const NKikimrTxDataShard::TSplitMergeDescription& splitDescription,
+        TTxId txId)
+{
+    auto event = MakeHolder<NCdcAggregator::TEvCdcAggregator::TEvPartitioningChanged>();
+    event->Record.SetParentDataShardId(ui64(parentDataShardId));
+    for (const auto& destination : splitDescription.GetDestinationRanges()) {
+        event->Record.AddChildDataShardIds(destination.GetTabletID());
+    }
+    event->Record.SetOperationId(ui64(txId));
+    return event;
+}
+
 class TNotifySrc: public TSubOperationState {
 public:
     virtual const char* Name() const override final { return "TNotifySrc"; }
@@ -389,48 +426,25 @@ private:
     TOperationId OperationId;
     TSet<std::pair<TTabletId, TTabletId>> CdcAggregatorPartitioningChangesInProgress;
 
-    static TPipeMessageId MakeCdcAggregatorPipeMessageId(TTabletId parentDataShardId) {
-        return TPipeMessageId(0, ui64(parentDataShardId));
-    }
-
     void SendCdcAggregatorPartitioningChanges(const TTxState& txState, TOperationContext& context) {
         CdcAggregatorPartitioningChangesInProgress.clear();
 
         Y_ABORT_UNLESS(txState.SplitDescription);
-        const auto& splitDescription = *txState.SplitDescription;
         const auto tablePath = TPath::Init(txState.TargetPathId, context.SS);
 
-        for (const auto& [_, streamPathId] : tablePath.Base()->GetChildren()) {
-            const auto* stream = context.SS->CdcStreams.FindPtr(streamPathId);
-            if (!stream || (*stream)->HeartbeatMode != NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated) {
-                continue;
-            }
-
-            const auto aggregatorShardIdx = (*stream)->AggregatorShardIdx;
-            const auto* aggregator = context.SS->ShardInfos.FindPtr(aggregatorShardIdx);
-            if (!aggregator || aggregator->TabletID == InvalidTabletId || context.SS->ShardDeleter.Has(aggregatorShardIdx)) {
-                continue;
-            }
-
-            for (const auto& source : splitDescription.GetSourceRanges()) {
+        for (const auto aggregatorTabletId : FindCdcAggregatorTabletIds(tablePath, *context.SS)) {
+            for (const auto& source : txState.SplitDescription->GetSourceRanges()) {
                 const auto parentDataShardId = TTabletId(source.GetTabletID());
-
-                auto event = MakeHolder<NCdcAggregator::TEvCdcAggregator::TEvPartitioningChanged>();
-                event->Record.SetParentDataShardId(ui64(parentDataShardId));
-                for (const auto& destination : splitDescription.GetDestinationRanges()) {
-                    event->Record.AddChildDataShardIds(destination.GetTabletID());
-                }
-                event->Record.SetOperationId(ui64(OperationId.GetTxId()));
+                auto event = MakeCdcAggregatorPartitioningChanged(parentDataShardId, *txState.SplitDescription, OperationId.GetTxId());
 
                 YDB_LOG_DEBUG_CTX(context.Ctx, "Notify CdcAggregator on partitioning changed",
-                    {"tabletId", aggregator->TabletID},
-                    {"stream", streamPathId},
+                    {"tabletId", aggregatorTabletId},
                     {"message", event->ToString()},
                 );
 
-                context.OnComplete.BindMsgToPipe(OperationId, aggregator->TabletID,
+                context.OnComplete.BindMsgToPipe(OperationId, aggregatorTabletId,
                     MakeCdcAggregatorPipeMessageId(parentDataShardId), event.Release());
-                CdcAggregatorPartitioningChangesInProgress.emplace(aggregator->TabletID, parentDataShardId);
+                CdcAggregatorPartitioningChangesInProgress.emplace(aggregatorTabletId, parentDataShardId);
             }
         }
     }
@@ -457,6 +471,14 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
         Y_ABORT_UNLESS(txState->State == TTxState::NotifyPartitioningChanged);
 
+        if (!CdcAggregatorPartitioningChangesInProgress.erase(std::make_pair(aggregatorTabletId, parentDataShardId))) {
+            YDB_LOG_INFO_CTX(context.Ctx, "Ignoring duplicate TEvPartitioningChangedAck",
+                {"tabletId", aggregatorTabletId},
+                {"parentDataShardId", parentDataShardId},
+            );
+            return false;
+        }
+
         switch (record.GetStatus()) {
         case TPartitioningChangedAck::SUCCESS:
             break;
@@ -474,14 +496,6 @@ public:
             break;
         }
 
-        if (!CdcAggregatorPartitioningChangesInProgress.erase(std::make_pair(aggregatorTabletId, parentDataShardId))) {
-            YDB_LOG_INFO_CTX(context.Ctx, "Ignoring duplicate TEvPartitioningChangedAck",
-                {"tabletId", aggregatorTabletId},
-                {"parentDataShardId", parentDataShardId},
-            );
-            return false;
-        }
-
         context.OnComplete.UnbindMsgFromPipe(OperationId, aggregatorTabletId, MakeCdcAggregatorPipeMessageId(parentDataShardId));
 
         if (!txState->ShardsInProgress.empty() || !CdcAggregatorPartitioningChangesInProgress.empty()) {
@@ -493,7 +507,6 @@ public:
         context.OnComplete.DoneOperation(OperationId);
         return true;
     }
-
 
     bool HandleReply(TEvDataShard::TEvSplitPartitioningChangedAck::TPtr& ev, TOperationContext& context) override {
         auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());

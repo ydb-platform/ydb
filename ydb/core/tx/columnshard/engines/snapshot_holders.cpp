@@ -6,8 +6,8 @@ namespace NKikimr::NOlap {
 
 namespace {
 void VerifyBelow(const std::vector<TSnapshot>& snapshots, const TSnapshot& border) {
-    AFL_VERIFY(std::is_sorted(snapshots.begin(), snapshots.end()));
-    AFL_VERIFY(snapshots.empty() || snapshots.back() < border);
+    YDB_LOG_VERIFY(std::is_sorted(snapshots.begin(), snapshots.end()));
+    YDB_LOG_VERIFY(snapshots.empty() || snapshots.back() < border);
 }
 }   // namespace
 
@@ -20,7 +20,7 @@ TRegistrySnapshotHolders::TRegistrySnapshotHolders(const TSnapshot minSnapshotFo
     , PathIdTranslator(pathIdTranslator)
     , LocalActiveSnapshots(std::move(localActiveSnapshots))
 {
-    AFL_VERIFY(Registry);
+    YDB_LOG_VERIFY(Registry);
     VerifyBelow(LocalActiveSnapshots.ForAllTables, MinSnapshotForNewReads);
     for (const auto& [_, snapshots] : LocalActiveSnapshots.ByPathId) {
         VerifyBelow(snapshots, MinSnapshotForNewReads);

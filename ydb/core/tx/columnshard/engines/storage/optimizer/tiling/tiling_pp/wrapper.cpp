@@ -287,7 +287,7 @@ public:
         , PortionExpectedSize(settings.PortionExpectedSize)
         , CompactionThreads(settings.CompactionThreads)
     {
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(StoragesManager);
     }
 };
 

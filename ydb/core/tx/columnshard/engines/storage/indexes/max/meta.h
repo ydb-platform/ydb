@@ -27,8 +27,8 @@ protected:
         TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
-        AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
-        AFL_VERIFY(proto.HasMaxIndex());
+        YDB_LOG_VERIFY(TBase::DoDeserializeFromProto(proto));
+        YDB_LOG_VERIFY(proto.HasMaxIndex());
         auto& bFilter = proto.GetMaxIndex();
         if (!bFilter.GetColumnId()) {
             YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",

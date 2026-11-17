@@ -14,7 +14,7 @@ bool TSyncPointResult::IsSourcePrepared(const NCommon::IDataSource& source) cons
         return source.IsSyncSection() && source.HasStageResult() &&
                (source.GetStageResult().HasResultChunk() || source.GetStageResult().IsEmpty());
     } else if (source.IsSyncSection()) {
-        AFL_VERIFY(source.HasStageData() || (source.HasStageResult() && source.GetStageResult().IsEmpty()));
+        YDB_LOG_VERIFY(source.HasStageData() || (source.HasStageResult() && source.GetStageResult().IsEmpty()));
         return true;
     } else {
         return false;

@@ -20,8 +20,14 @@ std::optional<TInstant> TTierInfo::ScalarToInstant(const std::shared_ptr<arrow::
     }
 }
 
+<<<<<<< HEAD
 TTiering::TTieringContext TTiering::GetTierToMove(const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction) const {
     AFL_VERIFY(OrderedTiers.size());
+=======
+TTiering::TTieringContext TTiering::GetTierToMove(
+    const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction, NScheme::TTypeId columnType) const {
+    YDB_LOG_VERIFY(OrderedTiers.size());
+>>>>>>> cad11bc393f (Draft [YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/tx/columnshard/engines (#59535))
     std::optional<TString> nextTierName;
     std::optional<TDuration> nextTierDuration;
     for (auto& tierRef : GetOrderedTiers()) {

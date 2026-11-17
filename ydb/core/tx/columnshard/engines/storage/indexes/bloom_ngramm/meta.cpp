@@ -105,7 +105,7 @@ private:
             } else if (CharsCount > nGrammSize) {
                 THashesSelector<HashesCount, CharsCount - 1>::BuildHashes(data, dataSize, hashesCount, nGrammSize, op, actor);
             } else {
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             }
         }
     };
@@ -116,7 +116,7 @@ private:
         template <class TActor>
         static void BuildHashes(const ui8* /*data*/, const ui32 /*dataSize*/, const ui32 /*hashesCount*/, const ui32 /*nGrammSize*/,
             const std::optional<NRequest::TLikePart::EOperation> /*op*/, TActor& /*actor*/) {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
     };
 
@@ -126,7 +126,7 @@ private:
         template <class TActor>
         static void BuildHashes(const ui8* /*data*/, const ui32 /*dataSize*/, const ui32 /*hashesCount*/, const ui32 /*nGrammSize*/,
             const std::optional<NRequest::TLikePart::EOperation> /*op*/, TActor& /*actor*/) {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
     };
 
@@ -136,7 +136,7 @@ private:
         template <class TActor>
         static void BuildHashes(const ui8* /*data*/, const ui32 /*dataSize*/, const ui32 /*hashesCount*/, const ui32 /*nGrammSize*/,
             const std::optional<NRequest::TLikePart::EOperation> /*op*/, TActor& /*actor*/) {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
     };
 
@@ -157,7 +157,8 @@ public:
 
     template <class TFiller>
     void FillNGrammHashes(const ui32 nGrammSize, const std::shared_ptr<arrow::Array>& array, TFiller& fillData) {
-        AFL_VERIFY(array->type_id() == arrow::utf8()->id() || array->type_id() == arrow::binary()->id())("id", array->type()->ToString());
+        YDB_LOG_VERIFY(array->type_id() == arrow::utf8()->id() || array->type_id() == arrow::binary()->id(),
+            {"id", array->type()->ToString()});
         NArrow::SwitchType(array->type_id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
             using T = typename TWrap::T;
@@ -172,7 +173,7 @@ public:
                     auto value = typedArray.GetView(row);
                     BuildNGramms(value.data(), value.size(), {}, nGrammSize, fillData);
                 } else {
-                    AFL_VERIFY(false);
+                    YDB_LOG_VERIFY(false);
                 }
             }
             return true;
@@ -193,7 +194,7 @@ template <class TBuilder, class TFiller>
 void VisitAllChunksWithBuilder(
     TChunkedBatchReader& reader, const TReadDataExtractorContainer& dataExtractor, const ui32 nGrammSize, TBuilder& builder, TFiller& filler) {
     for (reader.Start(); reader.IsCorrect();) {
-        AFL_VERIFY(reader.GetColumnsCount() == 1);
+        YDB_LOG_VERIFY(reader.GetColumnsCount() == 1);
         for (auto&& r : reader) {
             dataExtractor->VisitAll(
                 r.GetCurrentChunk(),
@@ -218,7 +219,8 @@ void VisitAllChunksWithBuilder(
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
-    AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
+    YDB_LOG_VERIFY(reader.GetColumnsCount() == 1,
+        {"count", reader.GetColumnsCount()});
     const ui32 hashesCount = Request.ResolvedHashesCount();
     const bool caseSensitive = Request.ResolvedCaseSensitive();
     const bool useOldSizing = Request.IsOldSizingMode();
@@ -267,7 +269,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     size = std::max<ui32>(16, size);
     TArrayPower2BitsStorage storage(size);
     for (reader.Start(); reader.IsCorrect();) {
-        AFL_VERIFY(reader.GetColumnsCount() == 1);
+        YDB_LOG_VERIFY(reader.GetColumnsCount() == 1);
         for (auto&& r : reader) {
             GetDataExtractor()->VisitAll(
                 r.GetCurrentChunk(),
@@ -296,8 +298,9 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::opt
     const ui32 hashesCount = Request.ResolvedHashesCount();
     const bool caseSensitive = Request.ResolvedCaseSensitive();
     const ui32 ngramSize = Request.ResolvedNGrammSize();
-    AFL_VERIFY(!category);
-    AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
+    YDB_LOG_VERIFY(!category);
+    YDB_LOG_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id(),
+        {"id", value->type->ToString()});
     bool result = true;
     const ui32 bitsCount = data.GetBitsCount();
     const auto predSet = [&](const ui64 hashSecondary) {
@@ -307,7 +310,7 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::opt
     };
 
     TNGrammBuilder builder(hashesCount, caseSensitive);
-    AFL_VERIFY(!caseSensitive || op.GetCaseSensitive());
+    YDB_LOG_VERIFY(!caseSensitive || op.GetCaseSensitive());
 
     NRequest::TLikePart::EOperation opLike;
     switch (op.GetOperation()) {
@@ -324,7 +327,7 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::opt
             opLike = NRequest::TLikePart::EOperation::EndsWith;
             break;
         default:
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
     }
     auto strVal = std::static_pointer_cast<arrow::BinaryScalar>(value);
     const TString valString((const char*)strVal->value->data(), strVal->value->size());

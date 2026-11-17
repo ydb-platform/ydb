@@ -96,7 +96,7 @@ std::shared_ptr<TPortionInfo> MakeTestPortionWithBlobBytes(const ui64 portionId,
 
     TPortionMetaConstructor metaConstructor;
     TFakeGroupSelector groupSelector;
-    AFL_VERIFY(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
+    YDB_LOG_VERIFY(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
 
     TCompactedPortionInfoConstructor constructor(pathId, portionId);
     constructor.SetSchemaVersion(1);

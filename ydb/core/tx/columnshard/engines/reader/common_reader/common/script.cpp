@@ -63,7 +63,7 @@ void TFetchingScriptBuilder::AddAllocation(
                 break;
             }
         }
-        AFL_VERIFY(addIndex);
+        YDB_LOG_VERIFY(addIndex);
         InsertStep<TAllocateMemoryStep>(*addIndex, entityIds, mType, stage);
     }
 }

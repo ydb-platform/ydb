@@ -696,6 +696,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
     constexpr ui32 EvCloseFile = EventSpaceBegin(TEvents::ES_PRIVATE) + 1;
     constexpr ui32 EvWriteFileResponse = EventSpaceBegin(TEvents::ES_PRIVATE) + 3;
     constexpr ui32 EvReadFileResponse = EventSpaceBegin(TEvents::ES_PRIVATE) + 4;
+    constexpr ui32 EvDeleteFiles = EventSpaceBegin(TEvents::ES_PRIVATE) + 7;
 
     class TRejectingThreadPool: public IThreadPool {
     public:
@@ -733,6 +734,13 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
 
         TRejectingSetup() {
             Runtime.Initialize();
+            Runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
+                if (runtime.IsScheduleForActorEnabled(event->GetRecipientRewrite())) {
+                    deadline = runtime.GetTimeProvider()->Now() + delay;
+                    return false;
+                }
+                return true;
+            });
             auto pool = MakeHolder<TRejectingThreadPool>();
             Reject = &pool->Reject;
             Service = Runtime.StartSpillingService(1000, 500, 100, 1000, TFsPath::Cwd() / Runtime.GetSpillingPrefix(), std::move(pool));
@@ -749,11 +757,22 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             UNIT_ASSERT(Runtime.DispatchEvents(options));
         }
 
-        void AssertFileClosed() {
-            UNIT_ASSERT(!NFs::Exists((Runtime.GetSpillingNodeDir() / "1_test_0").GetPath()));
+        TFsPath SpilledFile() const {
+            return Runtime.GetSpillingNodeDir() / "1_test_0";
+        }
+
+        void AssertCountersCleared() {
             UNIT_ASSERT_VALUES_EQUAL(CounterVal(Runtime, "Spilling/Compute/FileDescriptors", false), 0);
             UNIT_ASSERT_VALUES_EQUAL(CounterVal(Runtime, "Spilling/Compute/StoredBlobs", false), 0);
             UNIT_ASSERT_VALUES_EQUAL(CounterVal(Runtime, "Spilling/Compute/TotalSpaceUsed", false), 0);
+        }
+
+        void WaitFileDeleted() {
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&]() {
+                return !NFs::Exists(SpilledFile().GetPath());
+            };
+            UNIT_ASSERT(Runtime.DispatchEvents(options));
         }
     };
 
@@ -789,7 +808,19 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
 
         *setup.Reject = true;
         runtime.Send(response.Release());
-        setup.AssertFileClosed();
+        setup.AssertCountersCleared();
+        UNIT_ASSERT(NFs::Exists(setup.SpilledFile().GetPath()));
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(EvDeleteFiles);
+            UNIT_ASSERT(runtime.DispatchEvents(options));
+        }
+        UNIT_ASSERT(NFs::Exists(setup.SpilledFile().GetPath()));
+
+        *setup.Reject = false;
+        setup.WaitFileDeleted();
+        setup.AssertCountersCleared();
     }
 
     Y_UNIT_TEST(CloseBehindRejectedRead) {
@@ -804,7 +835,19 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         TRejectingSetup setup;
         *setup.Reject = true;
         setup.CloseFile();
-        setup.AssertFileClosed();
+        setup.AssertCountersCleared();
+        UNIT_ASSERT(NFs::Exists(setup.SpilledFile().GetPath()));
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(EvDeleteFiles);
+            UNIT_ASSERT(setup.Runtime.DispatchEvents(options));
+        }
+        UNIT_ASSERT(NFs::Exists(setup.SpilledFile().GetPath()));
+
+        *setup.Reject = false;
+        setup.WaitFileDeleted();
+        setup.AssertCountersCleared();
     }
 
     Y_UNIT_TEST(ThreadPoolQueueOverflow) {

@@ -383,8 +383,8 @@ TPipeMessageId MakeCdcAggregatorPipeMessageId(TTabletId parentDataShardId) {
     return TPipeMessageId(0, ui64(parentDataShardId));
 }
 
-TVector<TTabletId> FindCdcAggregatorTabletIds(const TPath& tablePath, const TSchemeShard& ss) {
-    TVector<TTabletId> aggregatorTabletIds;
+TMap<TPathId, TTabletId> FindCdcAggregatorTabletIds(const TPath& tablePath, const TSchemeShard& ss) {
+    TMap<TPathId, TTabletId> aggregatorTabletIds;
     for (const auto& [_, streamPathId] : tablePath.Base()->GetChildren()) {
         const auto* stream = ss.CdcStreams.FindPtr(streamPathId);
         if (!stream || (*stream)->HeartbeatMode != NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated) {
@@ -397,7 +397,7 @@ TVector<TTabletId> FindCdcAggregatorTabletIds(const TPath& tablePath, const TSch
             continue;
         }
 
-        aggregatorTabletIds.push_back(aggregator->TabletID);
+        aggregatorTabletIds.emplace(streamPathId, aggregator->TabletID);
     }
     return aggregatorTabletIds;
 }
@@ -424,7 +424,7 @@ private:
     using TPartitioningChangedAck = NKikimrCdcAggregator::TEvPartitioningChangedAck;
 
     TOperationId OperationId;
-    TSet<std::pair<TTabletId, TTabletId>> CdcAggregatorPartitioningChangesInProgress;
+    TMap<std::pair<TTabletId, TTabletId>, TPathId> CdcAggregatorPartitioningChangesInProgress;
 
     void SendCdcAggregatorPartitioningChanges(const TTxState& txState, TOperationContext& context) {
         CdcAggregatorPartitioningChangesInProgress.clear();
@@ -432,19 +432,20 @@ private:
         Y_ABORT_UNLESS(txState.SplitDescription);
         const auto tablePath = TPath::Init(txState.TargetPathId, context.SS);
 
-        for (const auto aggregatorTabletId : FindCdcAggregatorTabletIds(tablePath, *context.SS)) {
+        for (const auto& [streamPathId, aggregatorTabletId] : FindCdcAggregatorTabletIds(tablePath, *context.SS)) {
             for (const auto& source : txState.SplitDescription->GetSourceRanges()) {
                 const auto parentDataShardId = TTabletId(source.GetTabletID());
                 auto event = MakeCdcAggregatorPartitioningChanged(parentDataShardId, *txState.SplitDescription, OperationId.GetTxId());
 
                 YDB_LOG_DEBUG_CTX(context.Ctx, "Notify CdcAggregator on partitioning changed",
                     {"tabletId", aggregatorTabletId},
+                    {"stream", streamPathId},
                     {"message", event->ToString()},
                 );
 
                 context.OnComplete.BindMsgToPipe(OperationId, aggregatorTabletId,
                     MakeCdcAggregatorPipeMessageId(parentDataShardId), event.Release());
-                CdcAggregatorPartitioningChangesInProgress.emplace(aggregatorTabletId, parentDataShardId);
+                CdcAggregatorPartitioningChangesInProgress.emplace(std::make_pair(aggregatorTabletId, parentDataShardId), streamPathId);
             }
         }
     }
@@ -471,27 +472,34 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
         Y_ABORT_UNLESS(txState->State == TTxState::NotifyPartitioningChanged);
 
-        if (!CdcAggregatorPartitioningChangesInProgress.erase(std::make_pair(aggregatorTabletId, parentDataShardId))) {
+        const auto change = CdcAggregatorPartitioningChangesInProgress.find(std::make_pair(aggregatorTabletId, parentDataShardId));
+        if (change == CdcAggregatorPartitioningChangesInProgress.end()) {
             YDB_LOG_INFO_CTX(context.Ctx, "Ignoring duplicate TEvPartitioningChangedAck",
                 {"tabletId", aggregatorTabletId},
                 {"parentDataShardId", parentDataShardId},
             );
             return false;
         }
+        const auto streamPathId = change->second;
+        CdcAggregatorPartitioningChangesInProgress.erase(change);
 
         switch (record.GetStatus()) {
         case TPartitioningChangedAck::SUCCESS:
             break;
         case TPartitioningChangedAck::NOT_READY:
             YDB_LOG_WARN_CTX(context.Ctx, "CdcAggregator does not track the stream, partitioning change is skipped",
+                {"stream", streamPathId},
                 {"tabletId", aggregatorTabletId},
                 {"parentDataShardId", parentDataShardId},
             );
             break;
         default:
-            YDB_LOG_ERROR_CTX(context.Ctx, "CdcAggregator rejected partitioning change, the stream heartbeat may stall",
+            YDB_LOG_ERROR_CTX(context.Ctx, "CdcAggregator rejected partitioning change, the stream heartbeat stops until the stream is recreated",
+                {"stream", streamPathId},
                 {"tabletId", aggregatorTabletId},
-                {"result", record.ShortDebugString()},
+                {"parentDataShardId", parentDataShardId},
+                {"status", TPartitioningChangedAck::EStatus_Name(record.GetStatus())},
+                {"error", record.GetError()},
             );
             break;
         }

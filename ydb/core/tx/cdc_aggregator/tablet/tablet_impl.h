@@ -35,6 +35,7 @@ class TCdcAggregator
     class TTxInit;
     class TTxConfigureTracking;
     class TTxPartitioningChanged;
+    class TTxWriteHeartbeats;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -63,6 +64,7 @@ private:
 
 private:
     std::optional<TCdcAggregatorStream> CdcAggregatorStream;
+    TCdcAggregatorStreamProtoConverter CdcAggregatorStreamProtoConverter;
     TCdcAggregatorStreamRepository CdcAggregatorStreamRepository;
 };
 

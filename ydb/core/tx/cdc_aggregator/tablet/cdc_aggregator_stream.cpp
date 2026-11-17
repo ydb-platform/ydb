@@ -6,15 +6,65 @@ namespace NKikimr::NCdcAggregator {
 
 TCdcAggregatorStream::TCdcAggregatorStream(const TCdcAggregatorStreamConfig& config)
     : Topic(config.Topic)
-    , SourceDataShardIds(config.SourceDataShardIds.begin(), config.SourceDataShardIds.end())
 {
+    for (const auto sourceDataShardId : config.SourceDataShardIds) {
+        LastHeartbeatsBySourceDataShardId.emplace(sourceDataShardId, std::nullopt);
+    }
 }
 
-TCdcAggregatorStream::TCdcAggregatorStream(TCdcAggregatorStreamTopic topic, THashSet<ui64> sourceDataShardIds, TPartitioningChanges partitioningChanges)
+TCdcAggregatorStream::TCdcAggregatorStream(
+        TCdcAggregatorStreamTopic topic,
+        TLastHeartbeats lastHeartbeatsBySourceDataShardId,
+        std::optional<NPQ::THeartbeat> currentHeartbeat,
+        TPartitioningChanges partitioningChanges)
     : Topic(std::move(topic))
-    , SourceDataShardIds(std::move(sourceDataShardIds))
+    , LastHeartbeatsBySourceDataShardId(std::move(lastHeartbeatsBySourceDataShardId))
+    , CurrentHeartbeat(std::move(currentHeartbeat))
     , PartitioningChanges(std::move(partitioningChanges))
 {
+    for (const auto& [sourceDataShardId, lastHeartbeat] : LastHeartbeatsBySourceDataShardId) {
+        if (lastHeartbeat) {
+            SourceDataShardIdsByLastHeartbeatVersion.emplace(lastHeartbeat->Version, sourceDataShardId);
+        }
+    }
+}
+
+TCdcAggregatorStreamHeartbeatsDiff TCdcAggregatorStream::WriteHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatsBySourceDataShardId) {
+    return {
+        .LastHeartbeatsBySourceDataShardId = RegisterHeartbeats(heartbeatsBySourceDataShardId),
+        .CurrentHeartbeat = UpdateCurrentHeartbeatIfNeeded(),
+    };
+}
+
+THashMap<ui64, NPQ::THeartbeat> TCdcAggregatorStream::RegisterHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatsBySourceDataShardId) {
+    THashMap<ui64, NPQ::THeartbeat> lastHeartbeats;
+    for (const auto& [sourceDataShardId, heartbeat] : heartbeatsBySourceDataShardId) {
+        auto lastHeartbeat = LastHeartbeatsBySourceDataShardId.find(sourceDataShardId);
+        if (lastHeartbeat == LastHeartbeatsBySourceDataShardId.end()) {
+            continue;
+        }
+        if (!lastHeartbeat->second || lastHeartbeat->second->Version < heartbeat.Version) {
+            if (lastHeartbeat->second) {
+                SourceDataShardIdsByLastHeartbeatVersion.erase({lastHeartbeat->second->Version, sourceDataShardId});
+            }
+            SourceDataShardIdsByLastHeartbeatVersion.emplace(heartbeat.Version, sourceDataShardId);
+            lastHeartbeat->second = heartbeat;
+        }
+        lastHeartbeats.emplace(sourceDataShardId, *lastHeartbeat->second);
+    }
+    return lastHeartbeats;
+}
+
+std::optional<NPQ::THeartbeat> TCdcAggregatorStream::UpdateCurrentHeartbeatIfNeeded() {
+    if (SourceDataShardIdsByLastHeartbeatVersion.size() != LastHeartbeatsBySourceDataShardId.size()) {
+        return std::nullopt;
+    }
+    const auto& [minVersion, minSourceDataShardId] = *SourceDataShardIdsByLastHeartbeatVersion.begin();
+    if (CurrentHeartbeat && minVersion <= CurrentHeartbeat->Version) {
+        return std::nullopt;
+    }
+    CurrentHeartbeat = LastHeartbeatsBySourceDataShardId.at(minSourceDataShardId);
+    return CurrentHeartbeat;
 }
 
 std::optional<TCdcAggregatorStreamSourcesDiff> TCdcAggregatorStream::ApplyPartitioningChange(const TCdcAggregatorStreamPartitioningChange& change) {
@@ -26,21 +76,26 @@ std::optional<TCdcAggregatorStreamSourcesDiff> TCdcAggregatorStream::ApplyPartit
         return TCdcAggregatorStreamSourcesDiff{};
     }
 
-    if (!SourceDataShardIds.erase(change.ParentDataShardId)) {
+    const auto parent = LastHeartbeatsBySourceDataShardId.find(change.ParentDataShardId);
+    if (parent == LastHeartbeatsBySourceDataShardId.end()) {
         return std::nullopt;
     }
+    if (const auto& lastHeartbeat = parent->second) {
+        SourceDataShardIdsByLastHeartbeatVersion.erase({lastHeartbeat->Version, change.ParentDataShardId});
+    }
+    LastHeartbeatsBySourceDataShardId.erase(parent);
 
     TCdcAggregatorStreamSourcesDiff diff;
     diff.Deleted.insert(change.ParentDataShardId);
     for (const auto childDataShardId : change.ChildDataShardIds) {
-        if (SourceDataShardIds.insert(childDataShardId).second) {
+        if (LastHeartbeatsBySourceDataShardId.emplace(childDataShardId, std::nullopt).second) {
             diff.Inserted.insert(childDataShardId);
         }
     }
     PartitioningChanges.emplace(std::move(key), change.ChildDataShardIds);
 
     for (auto it = PartitioningChanges.begin(); it != PartitioningChanges.end();) {
-        if (AnyOf(it->second, [this](ui64 childDataShardId) { return SourceDataShardIds.contains(childDataShardId); })) {
+        if (AnyOf(it->second, [this](ui64 childDataShardId) { return LastHeartbeatsBySourceDataShardId.contains(childDataShardId); })) {
             ++it;
         } else {
             diff.DeletedPartitioningChanges.push_back(it->first);

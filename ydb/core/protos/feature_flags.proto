@@ -365,4 +365,8 @@ message TFeatureFlags {
     optional bool EnableSourceTopicMutateRestricted = 376 [default = false];
     optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
     optional bool EnableMLPConsumerInFlightMutateDisabled = 378 [default = false];
+    // Keep the write-quota consumed sizes of the in-flight quota request when a KV write
+    // response for the previous blob completes. Default false preserves the legacy
+    // behavior of zeroing them, which undercounts the consumed write quota.
+    optional bool EnablePQWriteQuotaAccountingFix = 379 [default = false];
 }

@@ -622,8 +622,10 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
-    BlobQuotaSize = 0;
-    MessagesQuotaSize = 0;
+    if (!AppData(ctx)->FeatureFlags.GetEnablePQWriteQuotaAccountingFix()) {
+        BlobQuotaSize = 0;
+        MessagesQuotaSize = 0;
+    }
     WriteNewSizeFromSupportivePartitions = 0;
     WriteNewMessagesFromSupportivePartitions = 0;
     UpdateWriteBufferIsFullState(now);

@@ -63,7 +63,7 @@ This feature is under development and is disabled by default by the [`enable_onl
 {% endnote %}
 {% endif %}
 
-When the [`enable_online_add_unique_index`](../../reference/configuration/feature_flags.md) flag is enabled, a unique secondary index can be added to an existing table without blocking writes during the build. If the flag is disabled, writes to the table are blocked until the unique index build completes.
+A [unique secondary index](#unique) can also be created online on an existing table without blocking writes during the build. Unlike a regular secondary index, it not only speeds up lookups but also enforces uniqueness of the indexed column values. Adding it therefore involves both building the index table and checking the uniqueness constraint.
 
 The online index creation operation consists of the following steps:
 

@@ -43,5 +43,9 @@ DATA(
 )
 
 FORK_TEST_FILES()
+<<<<<<< HEAD
 FORK_SUBTESTS()
+=======
+REQUIREMENTS(cpu:2)
+>>>>>>> d25fd897524 (Reduce repeated setup in functional TPC tests (#59801))
 END()

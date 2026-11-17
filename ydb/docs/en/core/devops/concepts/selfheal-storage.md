@@ -12,6 +12,26 @@ The [Blob Storage Controller](../../concepts/glossary.md#ds-controller) executes
 
 Storage SelfHeal is enabled by default for [dynamic groups](../../concepts/glossary.md#dynamic-group). On clusters with configuration V2, you can also enable [static group SelfHeal](../configuration-management/configuration-v2/static-group-self-heal.md). With configuration V1, static group SelfHeal cannot be enabled.
 
+## Planned VDisk Relocation Before Maintenance {#planned-maintenance}
+
+SelfHeal can relocate VDisks of dynamic groups before prolonged host maintenance while the host's disks are still healthy. CMS accepts a request with `EvictVDisks` enabled, and Sentinel initiates relocation according to the [`cms_config.sentinel_config.evict_vdisks_status`](../../reference/configuration/cms_config.md#evict-vdisks-status) parameter.
+
+In the default `FAULTY` mode, the PDisks of the host being maintained are marked as faulty. If several of these disks belong to the same storage group, failure model checks can block relocation because all of them count as faulty at the same time.
+
+In `MAINTENANCE` mode, Sentinel sends a separate status, `LONG_TERM_MAINTENANCE_PLANNED`, to the Blob Storage Controller. A healthy PDisk remains `ACTIVE`. The maintenance status triggers VDisk relocation and prevents new VDisks from being placed on that PDisk, but does not itself increase the group's faulty disk count. This allows eviction to be requested for several healthy PDisks in the same group without artificially exceeding the failure model.
+
+Relocation within a group proceeds sequentially. Before each relocation, the other VDisks in the group must be ready. If the group has faulty VDisks or replication is in progress, SelfHeal first waits for the group to recover. Spare resources are also required to place new VDisks. The `MAINTENANCE` mode retains fault tolerance checks and does not grant permission to shut down the host before relocation is complete.
+
+Sentinel continues monitoring the actual PDisk state, so real faults are handled independently of the maintenance status. When CMS removes the VDisk eviction request, Sentinel resets the maintenance status to `NO_REQUEST`.
+
+To check the statuses during relocation, run the following [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md) command:
+
+```bash
+ydb-dstool -e <bs_endpoint> pdisk list
+```
+
+Here, `<bs_endpoint>` is the endpoint of any [storage node](../../concepts/glossary.md#storage-node) in the cluster. Healthy PDisks of the host being evacuated are expected to show `Status = ACTIVE` and `MaintenanceStatus = LONG_TERM_MAINTENANCE_PLANNED`. These statuses indicate a maintenance request rather than completed relocation. For the host shutdown procedure, see [Safe restart and shutdown of nodes](../../maintenance/manual/node_restarting.md#replace-hardware).
+
 ## Enabling and disabling SelfHeal {#on-off}
 
 You can enable and disable SelfHeal using the [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md) utility.

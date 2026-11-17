@@ -32,6 +32,8 @@ Before replacing equipment, make sure that the {{ ydb-short-name }} process is [
 If the replacement is going to take a long time, first move all the VDisks from this node and wait until replication is complete.
 After replication is complete, you can safely shut down the node.
 
+To relocate VDisks through CMS, use a request with `EvictVDisks` enabled, which is set by the `--evict-vdisks` flag in the `ydbd cms request` command. The [`MAINTENANCE`](../../devops/concepts/selfheal-storage.md#planned-maintenance) mode performs this relocation while keeping healthy PDisks `ACTIVE`. For configuration details, see [`cms_config`](../../reference/configuration/cms_config.md#evict-vdisks-status). Do not shut down the host until CMS grants permission.
+
 To make sure that disabling the dynamic node doesn't affect query handling, drain the tablets from this node first.
 
 Go to the [Hive web-viewer](../../reference/ydb-ui/hive.md) page.

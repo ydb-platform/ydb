@@ -2668,7 +2668,7 @@ IGraphTransformer::TStatus MinMaxWrapper(const TExprNode::TPtr& input, TExprNode
     return IGraphTransformer::TStatus::Ok;
 }
 
-template <bool Equal, bool Order>
+template <bool Equal, bool Order, bool Optional = false>
 IGraphTransformer::TStatus AggrCompareWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -2697,6 +2697,19 @@ IGraphTransformer::TStatus AggrCompareWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
+    if constexpr (Optional) {
+        const auto kind = input->Head().GetTypeAnn()->GetKind();
+        if (kind == ETypeAnnotationKind::Null) {
+            output = MakeBoolNothing(input->Pos(), ctx.Expr);
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        if (kind == ETypeAnnotationKind::Optional) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool)));
+            input->SetUnorderedChildren();
+            return IGraphTransformer::TStatus::Ok;
+        }
+    }
+
     if (IsInstantEqual(*input->Head().GetTypeAnn())) {
         output = MakeBool(input->Pos(), Equal, ctx.Expr);
         return IGraphTransformer::TStatus::Repeat;
@@ -2707,6 +2720,27 @@ IGraphTransformer::TStatus AggrCompareWrapper(const TExprNode::TPtr& input, TExp
         input->SetUnorderedChildren();
     }
     return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus JoinEqualsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureArgsCount(*input, 2, ctx.Expr) ||
+        !EnsureComputable(input->Head(), ctx.Expr) || !EnsureComputable(input->Tail(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    const TTypeAnnotationNode* type = input->Head().GetTypeAnn();
+    if (type->HasUniversal() || input->Tail().GetTypeAnn()->HasUniversal()) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+    if (!EnsureEquatableType(input->Pos(), *type, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!IsSameAnnotation(*type, *input->Tail().GetTypeAnn())) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                                                                         << "Type mismatch, left: " << *type << ", right: " << *input->Tail().GetTypeAnn()));
+        return IGraphTransformer::TStatus::Error;
+    }
+    return CompareWrapper<true>(input, output, ctx);
 }
 
 IGraphTransformer::TStatus AggrMinMaxWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -16201,7 +16235,10 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     ExtFunctions["Min"] = &MinMaxWrapper;
     ExtFunctions["Max"] = &MinMaxWrapper;
     Functions["AggrEquals"] = &AggrCompareWrapper<true, false>;
+    Functions["JoinEquals"] = &JoinEqualsWrapper;
     Functions["AggrNotEquals"] = &AggrCompareWrapper<false, false>;
+    Functions["OptAggrEquals"] = &AggrCompareWrapper<true, false, true>;
+    Functions["OptAggrNotEquals"] = &AggrCompareWrapper<false, false, true>;
     Functions["AggrLess"] = &AggrCompareWrapper<false, true>;
     Functions["AggrLessOrEqual"] = &AggrCompareWrapper<true, true>;
     Functions["AggrGreater"] = &AggrCompareWrapper<false, true>;
@@ -16978,6 +17015,7 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     ExtFunctions["YqlValuesList"] = &SqlValuesListWrapper;
     Functions["YqlColumnRef"] = &SqlColumnRefWrapper;
     Functions["YqlColumnRefOrType"] = &SqlColumnRefWrapper;
+    Functions["YqlColumnRefOrDefault"] = &SqlColumnRefWrapper;
     Functions["YqlColumnOrType"] = &YqlColumnOrTypeWrapper;
     Functions["YqlSubLink"] = &SqlSubLinkWrapper;
     Functions["YqlSelf"] = &SqlSelfWrapper;

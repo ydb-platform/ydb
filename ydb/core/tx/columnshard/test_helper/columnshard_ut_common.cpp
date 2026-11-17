@@ -558,7 +558,8 @@ NKikimrMiniKQL::TResult LocalMiniKQL(TTestBasicRuntime& runtime, ui64 tabletId, 
 
     auto event = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(sender);
     UNIT_ASSERT(event);
-    UNIT_ASSERT_VALUES_EQUAL_C(event->Get()->Record.GetStatus(), NKikimrProto::OK, event->Get()->Record.GetMiniKQLErrors());
+    UNIT_ASSERT_VALUES_EQUAL_C(event->Get()->Record.GetStatus(), NKikimrProto::OK,
+        TStringBuilder() << event->Get()->Record.GetMiniKQLErrors() << event->Get()->Record.GetCompileResults().ShortDebugString());
     return event->Get()->Record.GetExecutionEngineEvaluatedResponse();
 }
 

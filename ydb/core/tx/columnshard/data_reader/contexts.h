@@ -14,7 +14,6 @@ enum class EFetchingStage: ui32 {
     Created = 0,
     AskAccessorResources,
     AskDataResources,
-    AskGeneralResources,
     AskAccessors,
     ReadBlobs,
     Finished,

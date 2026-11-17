@@ -1895,6 +1895,10 @@ struct TShardInfo {
     static TShardInfo TestShardSetInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::TestShard);
     }
+
+    static TShardInfo CdcAggregatorInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::CdcAggregator);
+    }
 };
 
 /**
@@ -4034,6 +4038,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TMaybe<Ydb::Table::CreateTableRequest> Table;
         TMaybe<Ydb::Topic::CreateTopicRequest> Topic;
         TMaybe<Ydb::Table::DescribeSystemViewResult> SysView;
+        TMaybe<NKikimrSchemeOp::TImportKesus> Kesus;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
@@ -4048,6 +4053,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
+        TActorId KesusRestorer;
         int NextIndexIdx = 0;
         int NextChangefeedIdx = 0;
         TString Issue;
@@ -4088,6 +4094,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TMaybe<NBackup::TEncryptionIV> ExportIV;
     TMaybe<NBackup::TSchemaMapping> SchemaMapping;
     TActorId SchemaMappingGetter;
+    bool CanRestoreRateLimiterMetering = false;
 
     EState State = EState::Invalid;
     TString Issue;

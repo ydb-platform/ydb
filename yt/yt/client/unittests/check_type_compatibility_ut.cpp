@@ -629,7 +629,7 @@ TEST_P(TCommonStructTypesTest, ReorderingFields)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TStructsTest, TestRemovingFields)
+TEST(TStructsTest, RemovingFields)
 {
     // Removing fields is not as simple as that.
     EXPECT_EQ(ESchemaCompatibility::Incompatible,
@@ -773,7 +773,7 @@ TEST_P(TCommonStructTypesTest, RemovedFieldNames)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TVariantStructsTest, TestRemovingFields)
+TEST(TVariantStructsTest, RemovingFields)
 {
     // Removing fields is simpler than with structs...
     EXPECT_EQ(ESchemaCompatibility::RequireValidation,
@@ -802,7 +802,7 @@ TEST(TVariantStructsTest, TestRemovingFields)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TAggregateStateTest, TestCompatibility)
+TEST(TAggregateStateTest, Compatibility)
 {
     // The same aggregation state.
     EXPECT_EQ(ESchemaCompatibility::FullyCompatible,

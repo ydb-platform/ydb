@@ -126,14 +126,14 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
             auto rows = CollectRows(it);
-            AFL_VERIFY(rows.size() == 3);
-            AFL_VERIFY(0 == GetUint64(rows[0].at("LEVEL")));
-            AFL_VERIFY(GetUint64(rows[0].at("RECORDS_COUNT")) == 0);
-            AFL_VERIFY(1 == GetUint64(rows[1].at("LEVEL")));
-            AFL_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT")) >= 440000);
-            AFL_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT")) <= 550000);
-            AFL_VERIFY(2 == GetUint64(rows[2].at("LEVEL")));
-            AFL_VERIFY(GetUint64(rows[2].at("RECORDS_COUNT")) == 0);
+            YDB_LOG_VERIFY(rows.size() == 3);
+            YDB_LOG_VERIFY(0 == GetUint64(rows[0].at("LEVEL")));
+            YDB_LOG_VERIFY(GetUint64(rows[0].at("RECORDS_COUNT")) == 0);
+            YDB_LOG_VERIFY(1 == GetUint64(rows[1].at("LEVEL")));
+            YDB_LOG_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT")) >= 440000);
+            YDB_LOG_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT")) <= 550000);
+            YDB_LOG_VERIFY(2 == GetUint64(rows[2].at("LEVEL")));
+            YDB_LOG_VERIFY(GetUint64(rows[2].at("RECORDS_COUNT")) == 0);
 
             for (auto&& i : rows) {
                 Cerr << GetUint64(i.at("LEVEL")) << "/" << GetUint64(i.at("RECORDS_COUNT")) << Endl;
@@ -200,12 +200,12 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
                 Cerr << GetUint64(i.at("LEVEL")) << "/" << GetUint64(i.at("RECORDS_COUNT_DEFAULT")) << "/"
                      << GetUint64(i.at("RECORDS_COUNT_SLICE")) << Endl;
             }
-            AFL_VERIFY(0 == GetUint64(rows[0].at("LEVEL")));
-            AFL_VERIFY(GetUint64(rows[0].at("RECORDS_COUNT_DEFAULT")) == 0);
-            AFL_VERIFY(1 == GetUint64(rows[1].at("LEVEL")));
-            AFL_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT_DEFAULT")) == 0);
-            AFL_VERIFY(2 == GetUint64(rows[2].at("LEVEL")));
-            AFL_VERIFY(GetUint64(rows[2].at("RECORDS_COUNT_SLICE")) == 109000);
+            YDB_LOG_VERIFY(0 == GetUint64(rows[0].at("LEVEL")));
+            YDB_LOG_VERIFY(GetUint64(rows[0].at("RECORDS_COUNT_DEFAULT")) == 0);
+            YDB_LOG_VERIFY(1 == GetUint64(rows[1].at("LEVEL")));
+            YDB_LOG_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT_DEFAULT")) == 0);
+            YDB_LOG_VERIFY(2 == GetUint64(rows[2].at("LEVEL")));
+            YDB_LOG_VERIFY(GetUint64(rows[2].at("RECORDS_COUNT_SLICE")) == 109000);
         }
     }
     Y_UNIT_TEST(MultiLayersOptimization) {
@@ -272,8 +272,8 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             ui32 levelIdx = 0;
             const std::vector<ui32> maxVal = { 100000, 100000, 200000, 300000, 100000000 };
             for (auto&& i : rows) {
-                AFL_VERIFY(levelIdx == GetUint64(i.at("LEVEL")));
-                AFL_VERIFY(GetUint64(i.at("BYTES")) < maxVal[levelIdx]);
+                YDB_LOG_VERIFY(levelIdx == GetUint64(i.at("LEVEL")));
+                YDB_LOG_VERIFY(GetUint64(i.at("BYTES")) < maxVal[levelIdx]);
                 Cerr << GetUint64(i.at("LEVEL")) << "/" << GetUint64(i.at("BYTES")) << Endl;
                 ++levelIdx;
             }

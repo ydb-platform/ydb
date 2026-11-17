@@ -813,22 +813,22 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TProfiledFairShareInvokerPoolProfilingTest, TestProfilerGenericFairShareInvokerPool1)
+TEST_F(TProfiledFairShareInvokerPoolProfilingTest, ProfilerGenericFairShareInvokerPool1)
 {
     TestProfiler(1);
 }
 
-TEST_F(TProfiledFairShareInvokerPoolProfilingTest, TestProfilerGenericFairShareInvokerPool2)
+TEST_F(TProfiledFairShareInvokerPoolProfilingTest, ProfilerGenericFairShareInvokerPool2)
 {
     TestProfiler(2);
 }
 
-TEST_F(TProfiledFairShareInvokerPoolProfilingTest, TestProfilerGenericFairShareInvokerPool4)
+TEST_F(TProfiledFairShareInvokerPoolProfilingTest, ProfilerGenericFairShareInvokerPool4)
 {
     TestProfiler(4);
 }
 
-TEST_F(TProfiledFairShareInvokerPoolProfilingTest, TestProfilerGenericFairShareInvokerPool10)
+TEST_F(TProfiledFairShareInvokerPoolProfilingTest, ProfilerGenericFairShareInvokerPool10)
 {
     TestProfiler(10);
 }
@@ -842,7 +842,7 @@ DEFINE_ENUM(EInvokerBuckets,
     ((Watermelon)           (4))
 );
 
-TEST_F(TProfiledFairShareInvokerPoolProfilingTest, TestEnumIndexedProfilerGenericFairShareInvokerPool)
+TEST_F(TProfiledFairShareInvokerPoolProfilingTest, EnumIndexedProfilerGenericFairShareInvokerPool)
 {
     auto registry = New<TSolomonRegistry>();
     auto invokerPool = CreateEnumIndexedProfiledFairShareInvokerPool<EInvokerBuckets>(

@@ -2226,6 +2226,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 0 }];
+
+        optional uint64 BridgeStandbyMaxBytesInFlight = 19 [(ControlOptions) = {
+            Description: "Memory the writes to HOT_STANDBY Bridge piles may hold on a node, bytes; the writes beyond it are dropped and recovered when the pile rejoins (0 drops every such write)",
+            MinValue: 0,
+            MaxValue: 68719476736,
+            DefaultValue: 268435456 }];
     }
 
     message TBlobDepotControls {
@@ -2595,6 +2601,12 @@ message TImmediateControlsConfig {
                 MaxValue: 1,
                 DefaultValue: 0 }];
 
+            optional uint64 EnableKesusImport = 12 [(ControlOptions) = {
+                Description: "Enable Kesus import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 0 }];
+
         }
 
         optional TBackupToS3Controls S3Controls = 1;
@@ -2825,6 +2837,13 @@ message THiveConfig {
         HIVE_BOOT_STRATEGY_FAST = 1 [(EnumDescription) = "when the per-node startup limit is reached on one node, continue starting tablets on other nodes"];
     }
 
+    enum ECountersExportMode {
+        COUNTERS_EXPORT_MODE_BASIC = 0 [(EnumDescription) = "only the basic Hive counters"];
+        COUNTERS_EXPORT_MODE_PER_RESOURCE_COUNTERS = 10 [(EnumDescription) = "also per-resource balancing counters (BalanceScatterCpu, BalancerExecuted by balancer type etc.)"];
+        COUNTERS_EXPORT_MODE_LOCAL_PER_NODE_COUNTERS = 20 [(EnumDescription) = "also node usage counters in Locals of this Hive, each node exports its own"];
+        COUNTERS_EXPORT_MODE_HIVE_PER_NODE_COUNTERS = 30 [(EnumDescription) = "also counters per node in Hive itself: all of them on the Hive node, the heaviest mode"];
+    }
+
     message TBootPriority {
         optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
         optional double Priority = 2;
@@ -2951,6 +2970,8 @@ message THiveConfig {
         optional uint64 DefaultMaximum = 4 [(ParamDescription) = "Node capacity for the resource when the node does not report one. Without it such nodes are ignored when balancing the resource."];
     }
     repeated TNamedResourceSettings NamedResources = 97 [(ParamDescription) = "Settings of named resources (e.g. resource broker queues). Entries override built-in defaults."];
+
+    optional ECountersExportMode CountersExportMode = 98 [default = COUNTERS_EXPORT_MODE_BASIC, (ParamDescription) = "Which balancing counters Hive and Locals of its nodes export. Each mode includes the previous ones. Per-node counters produce one counter group per node."];
 }
 
 message THealthCheckConfig {

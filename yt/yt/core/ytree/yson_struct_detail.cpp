@@ -131,24 +131,29 @@ void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const std::func
 void TYsonStructMeta::LoadStruct(
     TYsonStructBase* target,
     INodePtr node,
-    bool postprocess,
-    bool setDefaults,
-    const std::function<TYPath()>& pathGetter) const
+    const TYsonStructLoadOptions& options) const
 {
     YT_VERIFY(*StructType_ == typeid(*target));
     YT_VERIFY(node);
 
-    if (setDefaults) {
+    if (options.SetDefaults) {
         SetDefaultsOfInitializedStruct(target);
     }
 
+    const auto& pathGetter = options.PathGetter;
     auto mapNode = node->AsMap();
     auto unrecognizedStrategy = target->InstanceUnrecognizedStrategy_.template value_or(MetaUnrecognizedStrategy_);
+    auto isExternallyConsumed = [&] (const std::string& key) {
+        return options.ExternallyConsumedKey && *options.ExternallyConsumedKey == key;
+    };
+    auto findUnconsumedChild = [&] (const std::string& key) {
+        return isExternallyConsumed(key) ? INodePtr{} : mapNode->FindChild(key);
+    };
     for (const auto& [name, parameter] : SortedParameters_) {
         std::string key = name;
-        auto child = mapNode->FindChild(name); // can be NULL
+        auto child = findUnconsumedChild(name); // can be NULL
         for (const auto& alias : parameter->GetAliases()) {
-            auto otherChild = mapNode->FindChild(alias);
+            auto otherChild = findUnconsumedChild(alias);
             if (child && otherChild && !AreNodesEqual(child, otherChild)) {
                 THROW_ERROR_EXCEPTION("Different values for aliased parameters %Qv and %Qv", key, alias)
                     .With("struct", TypeName(GetStructType()))
@@ -175,7 +180,7 @@ void TYsonStructMeta::LoadStruct(
             target->LocalUnrecognized_ = GetEphemeralNodeFactory()->CreateMap();
         }
         for (const auto& [key, child] : mapNode->GetChildren()) {
-            if (!registeredKeys.contains(key)) {
+            if (!registeredKeys.contains(key) && !isExternallyConsumed(key)) {
                 if (ShouldThrow(unrecognizedStrategy)) {
                     auto path = (pathGetter ? pathGetter() : TYPath(""));
                     THROW_ERROR_EXCEPTION("Unrecognized field %Qv has been encountered", path + "/" + ToYPathLiteral(key))
@@ -189,7 +194,7 @@ void TYsonStructMeta::LoadStruct(
         }
     }
 
-    if (postprocess) {
+    if (options.Postprocess) {
         PostprocessStruct(target, pathGetter);
     }
 }
@@ -197,18 +202,20 @@ void TYsonStructMeta::LoadStruct(
 void TYsonStructMeta::LoadStruct(
     TYsonStructBase* target,
     NYson::TYsonPullParserCursor* cursor,
-    bool postprocess,
-    bool setDefaults,
-    const std::function<TYPath()>& pathGetter) const
+    const TYsonStructLoadOptions& options) const
 {
     YT_VERIFY(*StructType_ == typeid(*target));
     YT_VERIFY(cursor);
 
-    if (setDefaults) {
+    if (options.SetDefaults) {
         SetDefaultsOfInitializedStruct(target);
     }
 
+    const auto& pathGetter = options.PathGetter;
     auto unrecognizedStrategy = target->InstanceUnrecognizedStrategy_.template value_or(MetaUnrecognizedStrategy_);
+    auto isExternallyConsumed = [&] (const std::string& key) {
+        return options.ExternallyConsumedKey && *options.ExternallyConsumedKey == key;
+    };
 
     auto createLoadOptions = [&] (TStringBuf key) {
         return TLoadParameterOptions{
@@ -280,6 +287,10 @@ void TYsonStructMeta::LoadStruct(
 
     cursor->ParseMap([&] (NYson::TYsonPullParserCursor* cursor) {
         auto key = ExtractTo<std::string>(cursor);
+        if (isExternallyConsumed(key)) {
+            cursor->SkipComplexValue();
+            return;
+        }
         auto it = RegisteredParametersIndexes_.find(key);
         if (it == RegisteredParametersIndexes_.end()) {
             processUnrecognized(key, cursor);
@@ -309,7 +320,7 @@ void TYsonStructMeta::LoadStruct(
         }
     }
 
-    if (postprocess) {
+    if (options.Postprocess) {
         PostprocessStruct(target, pathGetter);
     }
 }

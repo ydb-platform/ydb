@@ -7860,6 +7860,13 @@
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_pg-pg_corr_count_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-pg_corr_count_null]": [
+        {
+            "checksum": "099510ad010d4a0c99e2ac5d3e8c3593",
+            "size": 1402,
+            "uri": "https://{canondata_backend}/1847551/452b8fc6cea70fec3b846d39e9eced02b8ab5254/resource.tar.gz#test_sql2yql.test_pg-pg_corr_count_null_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-pg_corr_limit]": [
         {
             "checksum": "22d3e6d7989af46f9b506b6411775d16",
@@ -9904,6 +9911,27 @@
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_select_yql-correlated_asterisk_subquery_scalar_with_source_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-correlated_count_empty]": [
+        {
+            "checksum": "1d814bfdd2d0acd9a3ae00c56779c9fb",
+            "size": 1570,
+            "uri": "https://{canondata_backend}/1942525/ad3b94a50b3a11c3541121eaca170f85f573adb1/resource.tar.gz#test_sql2yql.test_select_yql-correlated_count_empty_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-correlated_in_sort_extra_column]": [
+        {
+            "checksum": "c89082f2ffeb5e101878b9f20116b64e",
+            "size": 1651,
+            "uri": "https://{canondata_backend}/1689644/dc63fd41c633fbd798ccc49362c8a29b94af3929/resource.tar.gz#test_sql2yql.test_select_yql-correlated_in_sort_extra_column_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-correlated_key_types]": [
+        {
+            "checksum": "6c3bcd4a6f84853b614f96efc2ec7a73",
+            "size": 7949,
+            "uri": "https://{canondata_backend}/1597364/bb22fa55a90bbf0a484cf0371f220545fb2490a2/resource.tar.gz#test_sql2yql.test_select_yql-correlated_key_types_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-correlated_order_by_trivial]": [
         {
             "checksum": "aec84df239d4660ab1d5ade7ff35a428",
@@ -9923,13 +9951,6 @@
             "checksum": "b11b34035e7717d03c832d863e9f87cc",
             "size": 1903,
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_select_yql-correlated_projection_group_by_/sql.yql"
-        }
-    ],
-    "test_sql2yql.test[select_yql-correlated_projection_in]": [
-        {
-            "checksum": "841d7472e20f75dc4b99e60924f3bc67",
-            "size": 1957,
-            "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_select_yql-correlated_projection_in_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-correlated_projection_trivial]": [
@@ -19209,6 +19230,21 @@
             "uri": "file://test_sql_format.test_select_yql-correlated_asterisk_subquery_scalar_with_source_/formatted.sql"
         }
     ],
+    "test_sql_format.test[select_yql-correlated_count_empty]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-correlated_count_empty_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-correlated_in_sort_extra_column]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-correlated_in_sort_extra_column_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-correlated_key_types]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-correlated_key_types_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[select_yql-correlated_order_by_trivial]": [
         {
             "uri": "file://test_sql_format.test_select_yql-correlated_order_by_trivial_/formatted.sql"
@@ -19242,6 +19278,16 @@
     "test_sql_format.test[select_yql-correlated_where_group_by]": [
         {
             "uri": "file://test_sql_format.test_select_yql-correlated_where_group_by_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-correlated_where_in]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-correlated_where_in_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-correlated_where_in_group_by]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-correlated_where_in_group_by_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-correlated_where_trivial]": [

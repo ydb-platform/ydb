@@ -5217,6 +5217,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         importInfo->UserSID = rowset.GetValue<Schema::Imports::UserSID>();
                     }
                     importInfo->SanitizedToken = rowset.GetValueOrDefault<Schema::Imports::SanitizedToken>();
+                    importInfo->CanRestoreRateLimiterMetering = rowset.GetValueOrDefault<Schema::Imports::CanRestoreRateLimiterMetering>(false);
 
                     ui32 items = rowset.GetValue<Schema::Imports::Items>();
                     importInfo->Items.resize(items);
@@ -5321,6 +5322,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());
+                    if (rowset.HaveValue<Schema::ImportItems::Kesus>()) {
+                        NKikimrSchemeOp::TImportKesus kesus;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(kesus, rowset.GetValue<Schema::ImportItems::Kesus>()));
+                        item.Kesus = std::move(kesus);
+                    }
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ImportItems::WaitTxId>(InvalidTxId);
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);
                     item.NextChangefeedIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextChangefeedIdx>(0);

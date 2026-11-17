@@ -6,6 +6,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/sqs/migration/suites/common.inc)
 
 FORK_SUBTESTS()
 SPLIT_FACTOR(60)
+REQUIREMENTS(cpu:1)
 
 TEST_SRCS(
     ydb/tests/functional/sqs/common/test_garbage_collection.py

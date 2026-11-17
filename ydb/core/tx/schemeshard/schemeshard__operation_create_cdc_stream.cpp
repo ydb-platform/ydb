@@ -79,10 +79,6 @@ private:
 }; // TPropose
 
 class TNewCdcStream: public TSubOperation {
-    static TTxState::ETxState NextState() {
-        return TTxState::Propose;
-    }
-
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::CreateParts:
@@ -272,7 +268,7 @@ public:
         }
 
         if (streamDesc.HasHeartbeatMode() || streamDesc.HasAggregatorTabletId()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "HeartbeatMode and AggregatorTabletId are assigned by SchemeShard and cannot be set in a request");
             return result;
         }
@@ -347,6 +343,14 @@ public:
             return result;
         }
 
+        TMaybe<TChannelsBindings> aggregatorChannels;
+        if (ShouldAggregateHeartbeats(streamDesc)) {
+            aggregatorChannels = CheckCdcAggregatorCanBeCreated(op, streamPath, context, result);
+            if (!aggregatorChannels) {
+                return result;
+            }
+        }
+
         auto stream = TCdcStreamInfo::Create(streamDesc);
         Y_ABORT_UNLESS(stream);
 
@@ -384,12 +388,16 @@ public:
 
         context.SS->CdcStreams.Set(pathId, stream);
 
+        if (aggregatorChannels) {
+            PlanCdcAggregatorCreation(OperationId, streamPath, *aggregatorChannels, context);
+        }
+
         streamPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, tablePath, context); // for correct discard of ChildrenExist prop
 
         context.OnComplete.ActivateTx(OperationId);
 
-        SetState(NextState());
+        SetState(txState.State);
         return result;
     }
 
@@ -988,6 +996,68 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
 }
 
 } // anonymous
+
+bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
+    return AppData()->FeatureFlags.GetEnableCdcAggregator()
+        // DataShards emit heartbeats only with a resolved timestamps interval, otherwise there is nothing to aggregate
+        && streamDesc.GetResolvedTimestampsIntervalMs() > 0;
+}
+
+TMaybe<TChannelsBindings> CheckCdcAggregatorCanBeCreated(
+        const NKikimrSchemeOp::TCreateCdcStream& op,
+        const TPath& streamPath,
+        TOperationContext& context,
+        const THolder<TProposeResponse>& result)
+{
+    const auto checks = streamPath.Check();
+    checks.ShardsLimit(1);
+
+    if (!checks) {
+        result->SetError(checks.GetStatus(), checks.GetError());
+        return Nothing();
+    }
+
+    if (op.GetTopicAutoPartitioning()) {
+        result->SetError(NKikimrScheme::StatusInvalidParameter,
+            "RESOLVED_TIMESTAMPS with topic autopartitioning are not supported when CDC heartbeats are aggregated");
+        return Nothing();
+    }
+
+    TChannelsBindings channelsBindings;
+    if (!context.SS->ResolveTabletChannels(0, streamPath.GetPathIdForDomain(), channelsBindings)) {
+        result->SetError(NKikimrScheme::StatusInvalidParameter,
+            "Unable to construct channel binding for CDC aggregator with the storage pool");
+        return Nothing();
+    }
+
+    return channelsBindings;
+}
+
+void PlanCdcAggregatorCreation(
+        const TOperationId& opId,
+        const TPath& streamPath,
+        const TChannelsBindings& channelsBindings,
+        TProposeContext& context)
+{
+    auto* txState = context.SS->FindTx(opId);
+    Y_ABORT_UNLESS(txState);
+    const auto& stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
+
+    const auto shardIdx = context.SS->RegisterShardInfo(
+        TShardInfo::CdcAggregatorInfo(opId.GetTxId(), streamPath.Base()->PathId)
+            .WithBindedChannels(channelsBindings));
+    context.MemChanges.GrabNewShard(context.SS, shardIdx);
+    context.DbChanges.PersistShard(shardIdx);
+
+    stream->AlterData->HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated;
+    stream->AlterData->AggregatorShardIdx = shardIdx;
+
+    txState->Shards.emplace_back(shardIdx, ETabletType::CdcAggregator, TTxState::CreateParts);
+    txState->State = TTxState::CreateParts;
+
+    streamPath.Base()->IncShardsInside();
+    streamPath.DomainInfo()->AddInternalShards(*txState, context.SS);
+}
 
 TConfigureParts::TConfigureParts(TOperationId id)
     : OperationId(id)

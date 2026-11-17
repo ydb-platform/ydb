@@ -770,10 +770,7 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     ctx.Send(TabletActorId, request.Release());
 }
 
-void TMirrorer::AddMessagesToQueue(
-    std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages,
-    const TActorContext& ctx
-) {
+void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
         if (NYdb::NTopic::IsReplicationServiceMessage(offset, msg.GetMessageMeta()->Fields)) {
@@ -785,7 +782,6 @@ void TMirrorer::AddMessagesToQueue(
                 for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
                     OffsetsByConsumers[consumer] = offset;
                 }
-                TryToSendReplicationData(ctx);
             } else {
                 LOG_E("Failed to parse replication service message", {"payloadSize", msg.GetData().size()});
             }

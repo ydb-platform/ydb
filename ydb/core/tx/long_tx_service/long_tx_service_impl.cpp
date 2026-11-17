@@ -534,13 +534,33 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
     auto* state = DatabaseSnapshots.FindPtr(databaseName);
     Y_ABORT_UNLESS(state && state->ActiveRequests.contains(ev->Cookie), "Unexpected database snapshot state");
 
-    if (Settings.Counters) {
-        Settings.Counters->AcquireReadSnapshotOutInFlight->Dec();
+    auto status = msg->Status;
+    NYql::TIssues issues = msg->Issues;
+    const bool snapshotsLockingEnabled = AppData()->FeatureFlags.GetEnableSnapshotsLocking();
+    if (status == Ydb::StatusIds::SUCCESS && snapshotsLockingEnabled) {
+        const ui64 oldestAllowedStep = GetOldestAllowedSnapshotStep();
+        // Validate in the parent before replying or registering retention:
+        // even a fresh coordinator result may become unsafe while delayed.
+        if (msg->Snapshot.Step < oldestAllowedStep) {
+            YDB_LOG_DEBUG("Acquired snapshot is outside the safe registration window,",
+                {"logPrefix", LogPrefix},
+                {"snapshot", msg->Snapshot},
+                {"minimumStep", oldestAllowedStep},
+                {"freshnessRetries", req->FreshnessRetries});
+            if (req->FreshnessRetries < MaxAcquireSnapshotFreshnessRetries) {
+                ++req->FreshnessRetries;
+                Schedule(AcquireSnapshotRetryDelay, new TEvPrivate::TEvAcquireSnapshotRetry(ev->Cookie));
+                return;
+            }
+            status = Ydb::StatusIds::UNAVAILABLE;
+            issues.AddIssue(TStringBuilder() << "Cannot acquire a snapshot within the safe registration window"
+                                            << " after " << req->FreshnessRetries << " freshness retries"
+                                            << " (retry delay: " << AcquireSnapshotRetryDelay.MilliSeconds() << " ms)"
+                                            << "; snapshot: " << msg->Snapshot << "; minimum step: " << oldestAllowedStep);
+        }
     }
 
-    if (msg->Status == Ydb::StatusIds::SUCCESS) {
-        // Legacy BeginTx requests do not register retention handles. Complete
-        // them with the original coordinator result, even when readers retry.
+    if (status == Ydb::StatusIds::SUCCESS) {
         for (auto& beginReq : req->BeginTxRequests) {
             auto txId = beginReq.TxId;
             txId.Snapshot = msg->Snapshot;
@@ -560,35 +580,6 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
             }
             Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(txId), 0, beginReq.Cookie);
         }
-        req->BeginTxRequests.clear();
-    }
-
-    auto status = msg->Status;
-    NYql::TIssues issues = msg->Issues;
-    const bool snapshotsLockingEnabled = AppData()->FeatureFlags.GetEnableSnapshotsLocking();
-    if (status == Ydb::StatusIds::SUCCESS && !req->UserRequests.empty()
-        && snapshotsLockingEnabled) {
-        const ui64 oldestAllowedStep = GetOldestAllowedSnapshotStep();
-        // Validate in the parent immediately before insertion: even a fresh
-        // coordinator result may become unsafe while its reply is delayed.
-        if (msg->Snapshot.Step < oldestAllowedStep) {
-            YDB_LOG_DEBUG("Acquired snapshot is outside the safe registration window,",
-                {"logPrefix", LogPrefix},
-                {"snapshot", msg->Snapshot},
-                {"minimumStep", oldestAllowedStep},
-                {"freshnessRetries", req->FreshnessRetries});
-            if (req->FreshnessRetries < MaxAcquireSnapshotFreshnessRetries) {
-                ++req->FreshnessRetries;
-                Schedule(AcquireSnapshotRetryDelay, new TEvPrivate::TEvAcquireSnapshotRetry(ev->Cookie));
-                return;
-            }
-            status = Ydb::StatusIds::UNAVAILABLE;
-            issues.AddIssue(TStringBuilder() << "Cannot acquire a snapshot within the safe registration window"
-                                            << "; snapshot: " << msg->Snapshot << "; minimum step: " << oldestAllowedStep);
-        }
-    }
-
-    if (status == Ydb::StatusIds::SUCCESS) {
         for (auto& userReq : req->UserRequests) {
             NKqp::TSnapshotHandle snapshotHandle;
             if (snapshotsLockingEnabled) {
@@ -618,6 +609,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
 
     if (Settings.Counters) {
         Settings.Counters->AcquireReadSnapshotInInFlight->Sub(req->UserRequests.size());
+        Settings.Counters->AcquireReadSnapshotOutInFlight->Dec();
     }
 
     state->ActiveRequests.erase(ev->Cookie);

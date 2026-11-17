@@ -13,15 +13,16 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/kqp/tracing
     ydb/core/docapi
     ydb/core/engine
     ydb/core/kqp/common
+    ydb/core/kqp/common/simple
     ydb/core/kqp/federated_query
+    ydb/core/kqp/tracing
     ydb/core/path_aliasing
+    ydb/core/tx/schemeshard
     ydb/library/security
     ydb/public/sdk/cpp/src/library/operation_id
-    ydb/core/tx/schemeshard
     ydb/services/workload_manager/service
 )
 

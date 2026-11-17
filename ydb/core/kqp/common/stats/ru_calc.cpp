@@ -1,6 +1,6 @@
-#include "kqp_ru_calc.h"
+#include "ru_calc.h"
 
-#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
 #include <util/generic/size_literals.h>
 

@@ -3,7 +3,7 @@
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>

@@ -19,7 +19,7 @@
 
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 
-#include <ydb/core/kqp/common/dynamic_function_registry.h>
+#include <ydb/core/kqp/common/dynamic_function_registry/dynamic_function_registry.h>
 
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/log_settings.h>

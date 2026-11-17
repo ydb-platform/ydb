@@ -1,4 +1,4 @@
-#include "kqp_user_request_context.h"
+#include "user_request_context.h"
 
 namespace NKikimr::NKqp {
 

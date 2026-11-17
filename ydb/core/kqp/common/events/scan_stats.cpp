@@ -1,4 +1,4 @@
-#include "kqp_compute_events_stats.h"
+#include "scan_stats.h"
 #include <util/string/builder.h>
 
 namespace NKikimr::NKqp {

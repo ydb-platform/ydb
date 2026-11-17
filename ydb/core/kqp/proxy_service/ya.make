@@ -26,10 +26,10 @@ PEERDIR(
     ydb/core/kqp/script_executions/finalization
     ydb/core/kqp/script_executions/table_queries
     ydb/core/kqp/tracing
-    ydb/services/workload_manager/service
     ydb/core/mind
     ydb/core/mon
     ydb/core/protos
+    ydb/core/security/iam_delegation
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
@@ -48,6 +48,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/services/workload_manager
     ydb/services/workload_manager/metadata_subscription/resource_pool_classifier
+    ydb/services/workload_manager/service
     yql/essentials/providers/common/proto
     yql/essentials/public/issue
 )

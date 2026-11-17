@@ -41,6 +41,7 @@ SRCS(
     hive.h
     http_database_param.cpp
     http_database_param.h
+    iam_delegation.h
     interconnect_channels.h
     kmeans_clusters.cpp
     local_user_token.cpp
@@ -142,6 +143,7 @@ PEERDIR(
     ydb/library/vector_distance
     ydb/library/ydb_issue
     ydb/public/api/protos/out
+    yql/essentials/public/issue
     contrib/libs/apache/arrow
     yql/essentials/minikql/aligned_page_pool
 )

@@ -208,6 +208,7 @@ struct TKikimrEvents : TEvents {
         ES_WASM_COMPILE_CTL = 4285,
         ES_CDC_AGGREGATOR = 4286,
         ES_REASSIGN_TABLETS = 4287,
+        ES_IAM_DELEGATION = 4288,
     };
 };
 

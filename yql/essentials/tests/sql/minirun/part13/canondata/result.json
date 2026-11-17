@@ -1534,6 +1534,20 @@
             "uri": "https://{canondata_backend}/1871002/ca56f1bd9a2cc1daa18e63133158c480accb5db7/resource.tar.gz#test.test_select_yql-named_node_auto_subquery_join-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-nested_column_access_flatten_scope-default.txt-Debug]": [
+        {
+            "checksum": "43fd3b096fd3fa88f467247bb055a91f",
+            "size": 427,
+            "uri": "https://{canondata_backend}/1917492/5256f6d693a34066b6dbc246538e44d9b08dc2f9/resource.tar.gz#test.test_select_yql-nested_column_access_flatten_scope-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-nested_column_access_flatten_scope-default.txt-Results]": [
+        {
+            "checksum": "8dc8f98746bc27fbf34973521b7c8d1d",
+            "size": 689,
+            "uri": "https://{canondata_backend}/1917492/5256f6d693a34066b6dbc246538e44d9b08dc2f9/resource.tar.gz#test.test_select_yql-nested_column_access_flatten_scope-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-select_op_precedence_complicated-default.txt-Debug]": [
         {
             "checksum": "e3d3cca1056fa36f7db9619a5a42c220",

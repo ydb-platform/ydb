@@ -1,0 +1,9 @@
+PRAGMA YqlSelect = 'force';
+
+$rows = [<|x: <|a: 1|>|>];
+
+SELECT x.x.a AS alias_priority
+FROM AS_TABLE($rows) AS x;
+
+SELECT x.a AS member_after_alias
+FROM AS_TABLE($rows);

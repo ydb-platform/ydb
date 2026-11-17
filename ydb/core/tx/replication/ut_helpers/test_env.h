@@ -198,6 +198,12 @@ public:
         }
     }
 
+    ~TEnv() {
+        RunCall([&] {
+            Server.ShutdownGRpc();
+        });
+    }
+
     template <typename... Args>
     auto ModifyOwner(Args&&... args) {
         return Client.ModifyOwner(std::forward<Args>(args)...);

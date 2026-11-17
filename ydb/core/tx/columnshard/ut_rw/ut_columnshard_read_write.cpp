@@ -2727,11 +2727,19 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             }
             return versions;
         };
+        // "version:count,..." for the assertion messages
+        const auto portionVersionsString = [&]() {
+            TStringBuilder sb;
+            for (const auto& [version, count] : portionsByVersion()) {
+                sb << (sb.empty() ? "" : ",") << version << ":" << count;
+            }
+            return TString(sb);
+        };
 
         // Plain forced compaction: every portion settles into the last level with schema version 1.
         sendCompact(std::nullopt, 0);
         UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
-        UNIT_ASSERT_EQUAL(portionSchemaVersions(), std::set<ui64>({ 1 }));
+        UNIT_ASSERT_EQUAL_C(portionSchemaVersions(), std::set<ui64>({ 1 }), portionVersionsString());
 
         // Registers schema version `version` = the previous one plus a column; SCHEME_NEED_ACTUALIZATION stays off.
         auto schemaVN = schema;
@@ -2750,7 +2758,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         // Without CASCADE nothing is rewritten: there are no intersections, so the request completes at once.
         sendCompact(false, 1);
         UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
-        UNIT_ASSERT_EQUAL(portionSchemaVersions(), std::set<ui64>({ 1 }));
+        UNIT_ASSERT_EQUAL_C(portionSchemaVersions(), std::set<ui64>({ 1 }), portionVersionsString());
         UNIT_ASSERT_VALUES_EQUAL(queuedForActualization(), 0);
 
         // CASCADE with the rewrites (TTL tasks) disabled: the portions are queued and the request is held.
@@ -2778,21 +2786,21 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT_VALUES_EQUAL(queuedForActualization(), 0);
         UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
         UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1)));
-        UNIT_ASSERT_EQUAL(portionSchemaVersions(), std::set<ui64>({ 1 }));
+        UNIT_ASSERT_EQUAL_C(portionSchemaVersions(), std::set<ui64>({ 1 }), portionVersionsString());
 
         // A batch written with the current schema (3) in another key range: a plain forced compaction settles it into
         // the last level next to the old portions, which keep version 1.
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(
-                WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 100 * 1000, 175 * 1000 }, schemaVN), schemaVN, true, &writeIds));
+            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 100 * 1000, 175 * 1000 }, schemaVN), schemaVN, true,
+                &writeIds, NEvWrite::EModificationType::Upsert, /*lockId=*/1, /*schemaVersion=*/3));
             const ui64 commitTxId = ++txId;
             auto planStep = ProposeCommit(runtime, sender, commitTxId, writeIds);
             PlanCommit(runtime, sender, planStep, commitTxId);
         }
         sendCompact(false, 5);
         UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
-        UNIT_ASSERT_EQUAL(portionSchemaVersions(), std::set<ui64>({ 1, 3 }));
+        UNIT_ASSERT_EQUAL_C(portionSchemaVersions(), std::set<ui64>({ 1, 3 }), portionVersionsString());
 
         // CASCADE for real, with a schema change in the middle: only the portions older than the schema current at
         // the request (3) are queued, the change to 4 neither drops nor extends the queue, and the queued portions are
@@ -2813,7 +2821,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         });
         UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
         UNIT_ASSERT(versionsOnReply);
-        UNIT_ASSERT_EQUAL(*versionsOnReply, std::set<ui64>({ 3, 4 }));
+        UNIT_ASSERT_EQUAL_C(*versionsOnReply, std::set<ui64>({ 3, 4 }), portionVersionsString());
 
         // Yet another schema version and another CASCADE: the shard takes the new current schema as the threshold
         // rather than reporting the portions at the previous one as done.
@@ -2822,7 +2830,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         sendCompact(true, 7);
         UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
         UNIT_ASSERT(versionsOnReply);
-        UNIT_ASSERT_EQUAL(*versionsOnReply, std::set<ui64>({ 5 }));
+        UNIT_ASSERT_EQUAL_C(*versionsOnReply, std::set<ui64>({ 5 }), portionVersionsString());
     }
 
     Y_UNIT_TEST(WriteReadDuplicate) {

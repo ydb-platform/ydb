@@ -204,7 +204,7 @@ ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>
 
 bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 tableId, const ui64 writeId, const TString& data,
     const std::shared_ptr<arrow::Schema>& schema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType, const ui64 lockId,
-    const std::optional<TDuration>& timeout = std::nullopt) {
+    const std::optional<TDuration>& timeout = std::nullopt, const ui64 schemaVersion = 1) {
     const TString dedupId = ToString(writeId);
 
     auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(writeId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
@@ -216,8 +216,8 @@ bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shar
         // queue until this timeout elapses and then rejects it with OVERLOADED; set it so a blocked write fails fast.
         write->Record.SetTimeoutSeconds(timeout->Seconds());
     }
-    auto& operation = write->AddOperation(TEnumOperator<NEvWrite::EModificationType>::SerializeToWriteProto(mType), TTableId(0, tableId, 1), {},
-        0, NKikimrDataEvents::FORMAT_ARROW);
+    auto& operation = write->AddOperation(TEnumOperator<NEvWrite::EModificationType>::SerializeToWriteProto(mType),
+        TTableId(0, tableId, schemaVersion), {}, 0, NKikimrDataEvents::FORMAT_ARROW);
     *operation.MutablePayloadSchema() = NArrow::SerializeSchema(*schema);
     NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(*write);
     auto dataCopy = data;
@@ -238,14 +238,14 @@ bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId,
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult, std::vector<ui64>* writeIds,
-    const NEvWrite::EModificationType mType, const ui64 lockId) {
+    const NEvWrite::EModificationType mType, const ui64 lockId, const ui64 schemaVersion) {
     if (writeIds) {
-        return WriteDataImpl(
-            runtime, sender, TTestTxConfig::TxTablet0, tableId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds, mType, lockId);
+        return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds,
+            mType, lockId, std::nullopt, schemaVersion);
     }
     std::vector<ui64> ids;
     return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, writeId, data, NArrow::MakeArrowSchema(ydbSchema),
-        waitResult ? &ids : nullptr, mType, lockId);
+        waitResult ? &ids : nullptr, mType, lockId, std::nullopt, schemaVersion);
 }
 
 void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds, NOlap::TSnapshot snap, ui64 scanId) {

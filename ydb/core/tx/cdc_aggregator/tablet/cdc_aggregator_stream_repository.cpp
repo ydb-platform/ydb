@@ -21,6 +21,10 @@ void TCdcAggregatorStreamRepository::ApplyCdcAggregatorStreamSourcesDiff(NIceDb:
     for (const auto dataShardId : diff.Inserted) {
         db.Table<Schema::Sources>().Key(dataShardId).Update();
     }
+
+    for (const auto& [parentDataShardId, operationId] : diff.DeletedPartitioningChanges) {
+        db.Table<Schema::PartitioningChanges>().Key(parentDataShardId, operationId).Delete();
+    }
 }
 
 void TCdcAggregatorStreamRepository::InsertCdcAggregatorStreamPartitioningChange(NIceDb::TNiceDb& db, const TCdcAggregatorStreamPartitioningChange& change) const {

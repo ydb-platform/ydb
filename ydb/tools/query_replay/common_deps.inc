@@ -69,7 +69,6 @@ SET(YDB_REPLAY_PEERDIRS
     yql/essentials/udfs/common/histogram
     yql/essentials/udfs/common/hyperloglog
     yql/essentials/udfs/common/hyperscan
-    yql/essentials/udfs/common/json
     yql/essentials/udfs/common/json2
     yql/essentials/udfs/common/math
     yql/essentials/udfs/common/pire

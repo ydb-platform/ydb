@@ -8,6 +8,8 @@ SRCS(
     flat_boot_lease.cpp
     flat_boot_misc.cpp
     flat_comp.cpp
+    flat_compaction_context.cpp
+    flat_compaction_keyspace.cpp
     flat_comp_create.cpp
     flat_comp_gen.cpp
     flat_cxx_database.h

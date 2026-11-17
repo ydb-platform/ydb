@@ -45,7 +45,9 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         } else if (i->GetProduced() == NPortion::EProduced::SPLIT_COMPACTED) {
             compactedPortions.AddPortion(i);
         } else {
-            AFL_VERIFY(false)("portion_prod", i->GetProduced())("portion_type", i->GetPortionType());
+            YDB_LOG_VERIFY(false,
+                {"portionProd", i->GetProduced()},
+                {"portionType", i->GetPortionType()});
         }
     }
     NChanges::TGeneralCompactionCounters::OnRepackPortions(insertedPortions + compactedPortions);
@@ -66,10 +68,10 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
 
         std::vector<TReadPortionInfoWithBlobs> portions = TReadPortionInfoWithBlobs::RestorePortions(accessors, Blobs, context.SchemaVersions);
         THashSet<ui64> usedPortionIds;
-        AFL_VERIFY(PortionsIndexSnapshot);
+        YDB_LOG_VERIFY(PortionsIndexSnapshot);
         std::vector<std::shared_ptr<ISubsetToMerge>> currentToMerge;
         for (auto&& i : portions) {
-            AFL_VERIFY(usedPortionIds.emplace(i.GetPortionInfo().GetPortionId()).second);
+            YDB_LOG_VERIFY(usedPortionIds.emplace(i.GetPortionInfo().GetPortionId()).second);
             currentToMerge.emplace_back(std::make_shared<TReadPortionToMerge>(std::move(i), GranuleMeta, PortionsIndexSnapshot));
         }
 
@@ -164,7 +166,7 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
 }
 
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
-    AFL_VERIFY(PrioritiesAllocationGuard);
+    YDB_LOG_VERIFY(PrioritiesAllocationGuard);
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
     self.Counters.GetCSCounters().OnSplitCompactionInfo(

@@ -53,7 +53,6 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             query, // TKqpQueryId
             false, // keep in query cache
             true, // is query action prepare?
-            false, // per statement result
             deadline, // deadline
             kqpCounters.GetDbCounters(Database), // db counters
             GUCSettings, // GUC settings

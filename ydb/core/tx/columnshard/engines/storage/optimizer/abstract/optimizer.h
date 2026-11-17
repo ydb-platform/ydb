@@ -97,7 +97,7 @@ public:
             return TOptimizationPriority(0, weight);
         }
 
-        AFL_VERIFY(min < max);
+        YDB_LOG_VERIFY(min < max);
 
         ui64 range = max - min;
         ui64 normalizedWeight = weight - min;
@@ -469,7 +469,8 @@ public:
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault(const TString& defaultCompactionName) {
         auto result = TFactory::MakeHolder(defaultCompactionName);
-        AFL_VERIFY(!!result)("name", defaultCompactionName);
+        YDB_LOG_VERIFY(!!result,
+            {"name", defaultCompactionName});
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }
 
@@ -521,7 +522,7 @@ public:
     }
 
     bool IsEqualTo(const std::shared_ptr<IOptimizerPlannerConstructor>& item) const {
-        AFL_VERIFY(!!item);
+        YDB_LOG_VERIFY(!!item);
         if (GetClassName() != item->GetClassName()) {
             return false;
         }

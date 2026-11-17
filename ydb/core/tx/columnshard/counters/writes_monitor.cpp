@@ -19,8 +19,8 @@ NOverload::EResourcesStatus TWritesMonitor::OnStartWrite(const ui64 dataSize) {
 }
 
 void TWritesMonitor::OnFinishWrite(const ui64 dataSize, const ui32 writesCount /*= 1*/, const bool onDestroy /*= false*/) {
-    AFL_VERIFY(writesCount <= WritesInFlightLocal);
-    AFL_VERIFY(dataSize <= WritesSizeInFlightLocal);
+    YDB_LOG_VERIFY(writesCount <= WritesInFlightLocal);
+    YDB_LOG_VERIFY(dataSize <= WritesSizeInFlightLocal);
     WritesSizeInFlightLocal -= dataSize;
     WritesInFlightLocal -= writesCount;
     NOverload::TOverloadManagerServiceOperator::ReleaseResources(writesCount, dataSize);

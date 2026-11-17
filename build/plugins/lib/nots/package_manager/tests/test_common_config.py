@@ -434,3 +434,61 @@ def test_effective_config_rebases_common_and_local_before_merge(tmp_path, extern
         }
         assert settings["patchedDependencies"] == {"common": "../patches/common.patch", "local": "patches/local.patch"}
     assert pj.data == original
+
+
+@pytest.mark.parametrize("legacy_section", ["pnpm", "nots"])
+def test_nots_yaml_rejects_mixed_configuration(tmp_path, legacy_section):
+    from build.plugins.lib.nots.package_manager.common_config import common_config_inputs
+
+    pj, _ = fixture(tmp_path)
+    pj.data = {legacy_section: {}}
+    (Path(pj.path).parent / "nots.yaml").write_text("overrides: {colors: '2'}")
+    with pytest.raises(ValueError, match="move package.json#pnpm and package.json#nots settings to nots.yaml"):
+        common_config_inputs(pj, str(tmp_path))
+
+
+def test_nots_yaml_tracks_local_shared_configs_and_effective_patches(tmp_path):
+    from build.plugins.lib.nots.package_manager.common_config import common_config_inputs, load_local_config
+
+    pj, config = fixture(tmp_path, "overrides: {shared: '1'}\npatchedDependencies: {colors: old.patch}\n")
+    pj.data.pop("nots")
+    local = Path(pj.path).parent / "nots.yaml"
+    local.write_text(
+        "nots: {commonConfigPath: ../common.yaml}\n"
+        "overrides: {colors: '2'}\n"
+        "patchedDependencies: {colors: patches/colors.patch}\n"
+    )
+    assert load_common_config(pj, str(tmp_path), include_settings=True)[2]["overrides"] == {"shared": "1"}
+    assert load_local_config(pj)["overrides"] == {"colors": "2"}
+    assert common_config_inputs(pj, str(tmp_path)) == [
+        "project/common.yaml",
+        "project/pkg/nots.yaml",
+        "project/pkg/patches/colors.patch",
+    ]
+
+
+@pytest.mark.parametrize("content", ["", "[]", "nots: []", "overrides: ["])
+def test_nots_yaml_does_not_fall_back_on_invalid_yaml(tmp_path, content):
+    from build.plugins.lib.nots.package_manager.common_config import load_local_config
+
+    pj, _ = fixture(tmp_path)
+    pj.data = {}
+    (Path(pj.path).parent / "nots.yaml").write_text(content)
+    with pytest.raises(Exception):
+        load_local_config(pj)
+
+
+@pytest.mark.parametrize("catalogs", ["catalogs: {}", "catalogs: null", "catalogs: {project/common: {colors: 1.4.0}}"])
+def test_local_nots_yaml_rejects_catalogs(tmp_path, catalogs):
+    pj, _ = fixture(tmp_path)
+    pj.data.pop("nots")
+    (Path(pj.path).parent / "nots.yaml").write_text("nots: {commonConfigPath: ../common.yaml}\n" + catalogs)
+    with pytest.raises(ValueError, match="catalogs are only allowed in a common config"):
+        load_common_config(pj, str(tmp_path))
+
+
+@pytest.mark.parametrize("metadata", ["nots: {}", "nots: {commonConfigPath: other.yaml}", "nots: null"])
+def test_common_config_rejects_nots_metadata(tmp_path, metadata):
+    pj, _ = fixture(tmp_path, metadata + "\ncatalogs: {}")
+    with pytest.raises(ValueError, match="nots is only allowed in the module nots.yaml"):
+        load_common_config(pj, str(tmp_path))

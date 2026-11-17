@@ -15,7 +15,7 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
         if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != internalPathId) {
             continue;
         }
-        AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
+        YDB_LOG_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
         if (unifiedPathId.HasInternalPathId()) {
             constructors.emplace_back(unifiedPathId.GetSchemeShardLocalPathIdVerified(), TabletId, granuleMeta, sourcesSorting);
             if (!constructors.back().IsUsedBy(*pkFilter)) {

@@ -79,7 +79,7 @@ protected:
 
 public:
     const std::shared_ptr<IBitsStorageConstructor>& GetBitsStorageConstructor() const {
-        AFL_VERIFY(BitsStorageConstructor);
+        YDB_LOG_VERIFY(BitsStorageConstructor);
         return BitsStorageConstructor;
     }
 
@@ -91,7 +91,7 @@ public:
         : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, extractor)
         , BitsStorageConstructor(bitsStorageConstructor)
     {
-        AFL_VERIFY(!!BitsStorageConstructor);
+        YDB_LOG_VERIFY(!!BitsStorageConstructor);
     }
 };
 

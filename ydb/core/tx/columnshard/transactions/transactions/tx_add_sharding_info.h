@@ -24,7 +24,7 @@ public:
         , PathId(pathId)
         , ShardingVersion(version)
     {
-        AFL_VERIFY(!!GranuleShardingLogic);
+        YDB_LOG_VERIFY(!!GranuleShardingLogic);
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

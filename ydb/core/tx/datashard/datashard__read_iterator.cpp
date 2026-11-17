@@ -255,13 +255,16 @@ public:
 public:
     void FlushBatch(TOwnedCellVecBatch & result) {
         result = std::move(Batch);
-        Batch = {};
+        Batch = TOwnedCellVecBatch(std::make_unique<TMemoryPool>(InitialPoolSize));
     }
 
 private:
+    // Reserve 256 bytes for the private pool chunk header so the first allocation rounds to 8 KiB.
+    static constexpr size_t InitialPoolSize = 8 * 1024 - 256;
+
     std::vector<std::pair<TString, NScheme::TTypeInfo>> Columns;
 
-    TOwnedCellVecBatch Batch;
+    TOwnedCellVecBatch Batch{std::make_unique<TMemoryPool>(InitialPoolSize)};
     ui64 BytesCount = 0;
 
     std::unique_ptr<IBlockBuilder> Clone() const override {

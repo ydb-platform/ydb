@@ -3025,11 +3025,8 @@ TFuture<TQuery> TClient::GetQuery(
     if (options.Timestamp) {
         req->set_timestamp(ToProto(options.Timestamp));
     }
-
-    ToProto(req->mutable_progress_parts(), options.ProgressParts);
-
-    if (options.MinProgressRevision) {
-        req->set_min_progress_revision(*options.MinProgressRevision);
+    if (options.ProgressOptions) {
+        req->set_progress_options(ToProto(ConvertToYsonString(options.ProgressOptions)));
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryPtr& rsp) {

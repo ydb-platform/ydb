@@ -89,6 +89,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/http
     ydb/library/actors/interconnect
+    ydb/library/actors/struct_log/otel
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/blobstorage/base

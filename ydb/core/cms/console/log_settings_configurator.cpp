@@ -2,15 +2,19 @@
 #include "console.h"
 #include "log_settings_configurator.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <util/system/file.h>
-#include <util/system/fs.h>
-#include <util/stream/file.h>
-#include <google/protobuf/text_format.h>
 #include <ydb/core/cms/console/grpc_library_helper.h>
 #include <ydb/core/kqp/event_log/audit_event_log_writer.h>
 #include <ydb/core/kqp/event_log/kqp_event_log_writer.h>
 #include <ydb/core/kqp/event_log/tli_event_log_writer.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+
+#include <ydb/library/actors/struct_log/otel/otel_log_sink.h>
+
+#include <util/system/file.h>
+#include <util/system/fs.h>
+#include <util/stream/file.h>
+#include <google/protobuf/text_format.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
@@ -52,6 +56,9 @@ public:
 
     static NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings
     GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink, const NKikimrConfig::TLogConfig_TSink* defaultSink);
+
+    static NActors::NStructuredLog::TOtelLogSink::TOtelSettings
+    GetOtelSettings(const NKikimrConfig::TLogConfig_TSink& sink, const NKikimrConfig::TLogConfig_TSink* defaultSink);
 
     NStructuredLog::ILogSinkSPtr CreateLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
         const NKikimrConfig::TLogConfig_TSink* defaultSink);
@@ -250,18 +257,28 @@ std::pair<TString, TString> TLogSettingsConfigurator::GetDefaultStoreTableName(c
     return it->second;
 }
 
+#define SET_PROPERTY_FROM(P, FROM)                                          \
+    if (sink.Has##FROM()) {                                                 \
+        settings.P = sink.Get##FROM();                                      \
+    } else if (defaultSink != nullptr && defaultSink->Has##FROM()) {        \
+        settings.P = defaultSink->Get##FROM();                              \
+    }
+
+#define SET_MS_PROPERTY_FROM(P, FROM)                                       \
+    if (sink.Has##FROM()) {                                                 \
+        settings.P = TDuration::MilliSeconds(sink.Get##FROM());             \
+    } else if (defaultSink != nullptr && defaultSink->Has##FROM()) {        \
+        settings.P = TDuration::MilliSeconds(defaultSink->Get##FROM());     \
+    }
+
+#define SET_PROPERTY(P) SET_PROPERTY_FROM(P, P)
+#define SET_MS_PROPERTY(P) SET_MS_PROPERTY_FROM(P, P)
+
 NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings
 TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink,
     const NKikimrConfig::TLogConfig_TSink* defaultSink) {
 
     NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings settings;
-
-#define SET_PROPERTY(X)                                             \
-    if (sink.Has##X()) {                                            \
-        settings.X = sink.Get##X();                                 \
-    } else if (defaultSink != nullptr && defaultSink->Has##X()) {   \
-        settings.X = defaultSink->Get##X();                         \
-    }
 
     SET_PROPERTY(DatabasePath);
     SET_PROPERTY(StoreName);
@@ -269,24 +286,14 @@ TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TL
     SET_PROPERTY(MaxBatchSize);
     SET_PROPERTY(FlushBatchSize);
 
-    if (!sink.HasFlushTimeout()) {
-        settings.FlushTimeout = TDuration::MilliSeconds(sink.GetFlushTimeout());
-    } else if (defaultSink != nullptr && defaultSink->HasFlushTimeout()) {
-        settings.FlushTimeout = TDuration::MilliSeconds(defaultSink->GetFlushTimeout());
-    }
+    SET_MS_PROPERTY_FROM(FlushTimeout, FlushBatchTimeout);
 
     SET_PROPERTY(StoreShardsCount);
     SET_PROPERTY(TableShardsCount);
     SET_PROPERTY(MaxWriteAttempts);
     SET_PROPERTY(MaxActiveWrites);
 
-    if (!sink.HasTryCreateTimeout()) {
-        settings.TryCreateTimeout = TDuration::MilliSeconds(sink.GetTryCreateTimeout());
-    } else if (defaultSink != nullptr && defaultSink->HasFlushTimeout()) {
-        settings.TryCreateTimeout = TDuration::MilliSeconds(defaultSink->GetTryCreateTimeout());
-    }
-
-#undef SET_PROPERTY
+    SET_MS_PROPERTY(TryCreateTimeout);
 
     // Apply default store and table name
     if (settings.StoreName.empty() || settings.TableName.empty()) {
@@ -302,6 +309,33 @@ TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TL
     }
     return settings;
 }
+
+NActors::NStructuredLog::TOtelLogSink::TOtelSettings
+TLogSettingsConfigurator::GetOtelSettings(const NKikimrConfig::TLogConfig_TSink& sink, const NKikimrConfig::TLogConfig_TSink* defaultSink) {
+
+    NActors::NStructuredLog::TOtelLogSink::TOtelSettings settings;
+
+    SET_PROPERTY(CollectorUri);
+    SET_PROPERTY(ScopeName);
+
+    SET_MS_PROPERTY(RpcTimeout);
+
+    SET_PROPERTY_FROM(MaxFlushBatchSize, MaxBatchSize);
+    SET_PROPERTY_FROM(AutoFlushBatchSize, FlushBatchSize);
+    SET_MS_PROPERTY_FROM(AutoFlushInterval, FlushBatchTimeout);
+    SET_PROPERTY_FROM(MaxActiveRequests, MaxActiveWrites);
+    SET_PROPERTY_FROM(MaxQueuedMessages, MaxQueueSize);
+
+    SET_MS_PROPERTY_FROM(FirstRetryBackoff, FirstRetryTimeout);
+    SET_MS_PROPERTY_FROM(LastRetryBackoff, MaxRetryTimeout);
+
+    return settings;
+}
+
+#undef SET_PROPERTY_FROM
+#undef SET_PROPERTY
+#undef SET_MS_PROPERTY_FROM
+#undef SET_MS_PROPERTY
 
 NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
     const NKikimrConfig::TLogConfig_TSink* defaultSink) {
@@ -336,6 +370,8 @@ NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateLogSink(const NKiki
     CHECK_SINK("audit-distconf", "local-db", NAudit::NToColumnShard::TDistconfEventLogWriter, GetColumnShardDatabaseSettings);
     CHECK_SINK("audit-web-login", "local-db", NAudit::NToColumnShard::TWebLoginEventLogWriter, GetColumnShardDatabaseSettings);
     CHECK_SINK("audit-console", "local-db", NAudit::NToColumnShard::TConsoleEventLogWriter, GetColumnShardDatabaseSettings);
+
+    CHECK_SINK("full", "simple-otel", NActors::NStructuredLog::TOtelLogSink, GetOtelSettings);
 
 #undef CHECK
     return nullptr;

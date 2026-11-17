@@ -6,11 +6,16 @@ namespace NKikimr::NCdcAggregator {
 
 namespace {
 
-std::optional<TRowVersion> GetVersion(const std::optional<NPQ::THeartbeat>& heartbeat) {
-    if (!heartbeat) {
-        return std::nullopt;
-    }
-    return heartbeat->Version;
+bool HaveAllSourcesReported(const TCdcAggregatorStream::TLastHeartbeats& lastHeartbeatsBySourceDataShardId) {
+    return std::all_of(lastHeartbeatsBySourceDataShardId.begin(), lastHeartbeatsBySourceDataShardId.end(), [](const auto& source) {
+        return source.second.has_value();
+    });
+}
+
+const NPQ::THeartbeat& FindMinLastHeartbeat(const TCdcAggregatorStream::TLastHeartbeats& lastHeartbeatsBySourceDataShardId) {
+    return *std::min_element(lastHeartbeatsBySourceDataShardId.begin(), lastHeartbeatsBySourceDataShardId.end(), [](const auto& left, const auto& right) {
+        return left.second->Version < right.second->Version;
+    })->second;
 }
 
 } // namespace
@@ -58,11 +63,11 @@ THashMap<ui64, NPQ::THeartbeat> TCdcAggregatorStream::RegisterHeartbeats(const T
 }
 
 std::optional<NPQ::THeartbeat> TCdcAggregatorStream::UpdateCurrentHeartbeatIfNeeded() {
-    const auto& [_, minHeartbeat] = *std::min_element(LastHeartbeatsBySourceDataShardId.begin(), LastHeartbeatsBySourceDataShardId.end(),
-        [](const auto& left, const auto& right) {
-            return GetVersion(left.second) < GetVersion(right.second);
-        });
-    if (GetVersion(minHeartbeat) <= GetVersion(CurrentHeartbeat)) {
+    if (!HaveAllSourcesReported(LastHeartbeatsBySourceDataShardId)) {
+        return std::nullopt;
+    }
+    const auto& minHeartbeat = FindMinLastHeartbeat(LastHeartbeatsBySourceDataShardId);
+    if (CurrentHeartbeat && minHeartbeat.Version <= CurrentHeartbeat->Version) {
         return std::nullopt;
     }
     CurrentHeartbeat = minHeartbeat;

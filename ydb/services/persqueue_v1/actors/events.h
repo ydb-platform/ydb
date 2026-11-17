@@ -15,6 +15,7 @@
 #include <ydb/services/lib/actors/type_definitions.h>
 
 #include <util/generic/guid.h>
+#include <util/generic/maybe.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -455,12 +456,13 @@ struct TEvPQProxy {
 
     struct TEvPartitionStatus : public NActors::TEventLocal<TEvPartitionStatus, EvPartitionStatus> {
         TEvPartitionStatus(const TPartitionId& partition,
-                           const ui64 offset, const ui64 endOffset, const ui64 writeTimestampEstimateMs, ui64 nodeId, ui64 generation,
+                           const ui64 offset, TMaybe<ui64> retainedStartOffset, const ui64 endOffset, const ui64 writeTimestampEstimateMs, ui64 nodeId, ui64 generation,
                            const TExplicitType<bool> clientHasAnyCommits,
                            const TExplicitType<ui64> readOffset,
                            const TExplicitType<bool> init = true)
             : Partition(partition)
             , Offset(offset)
+            , RetainedStartOffset(std::move(retainedStartOffset))
             , EndOffset(endOffset)
             , ClientHasAnyCommits(clientHasAnyCommits)
             , WriteTimestampEstimateMs(writeTimestampEstimateMs)
@@ -472,6 +474,7 @@ struct TEvPQProxy {
 
         TPartitionId Partition;
         ui64 Offset;
+        TMaybe<ui64> RetainedStartOffset;
         ui64 EndOffset;
         bool ClientHasAnyCommits;
         ui64 WriteTimestampEstimateMs;

@@ -133,8 +133,32 @@ namespace NKikimr {
                 return groupId;
             }
 
+            // The pile new bridged groups are inline piles in: the implicit one, which is the original pile of the cluster
+            // converted from ordinary one. Such group keeps the id of its physical group in this pile whatever piles are
+            // added and removed later, like the groups converted along with the cluster do, so it can become ordinary
+            // one again when the original pile is the only one left. Groups of the cluster bridged from the very
+            // beginning with several piles have no implicit pile, and get separate bridge proxy groups.
+            TBridgePileId GetInlinePileIdForNewGroup() const {
+                const auto& bridgeInfo = State.BridgeInfo;
+                const TBridgePileId pileId = NBridge::GetImplicitPileId(bridgeInfo.get());
+                if (!pileId) {
+                    return {};
+                }
+                const auto *pile = bridgeInfo->GetPile(pileId);
+                if (pile->State == NKikimrBridge::TClusterState::INACTIVE ||
+                        State.Self.IsBridgePileBeingRemoved(pileId) ||
+                        State.Self.IsBridgePileAwaitingParts(pileId)) {
+                    return {}; // the group gets no part in this pile
+                }
+                return pileId;
+            }
+
             void CreateGroup() {
-                if (StoragePool.BridgeMode) {
+                if (!StoragePool.BridgeMode) {
+                    CreateGroup(TBridgePileId(), std::nullopt); // regular single group
+                } else if (const TBridgePileId inlinePileId = GetInlinePileIdForNewGroup()) {
+                    CreateInlinePileGroup(inlinePileId);
+                } else {
                     const TGroupId mainGroupId = AllocateGroupId();
 
                     TGroupInfo *groupInfo = State.Groups.ConstructInplaceNewEntry(
@@ -168,47 +192,73 @@ namespace NKikimr {
                     auto& index = State.IndexGroupSpeciesToGroup.Unshare();
                     index[species].push_back(mainGroupId);
 
-                    NKikimrBlobStorage::TGroupInfo& mainGroup = groupInfo->BridgeGroupInfo.emplace();
-                    NKikimrBridge::TGroupState *mainGroupState = mainGroup.MutableBridgeGroupState();
-                    const auto& bridgeInfo = State.BridgeInfo;
-                    Y_ABORT_UNLESS(bridgeInfo);
-                    bridgeInfo->ForEachPile([&](TBridgePileId bridgePileId) {
-                        NKikimrBridge::TGroupState::TPile *pile = mainGroupState->AddPile();
-                        if (bridgeInfo->GetPile(bridgePileId)->State == NKikimrBridge::TClusterState::INACTIVE ||
-                                State.Self.IsBridgePileBeingRemoved(bridgePileId)) {
-                            pile->SetAbsent(true); // there are no resources in this pile (or they are going away)
-                            return;
-                        } else if (State.Self.IsBridgePileAwaitingParts(bridgePileId)) {
-                            // the addition of the pile places parts of every group lacking them, so this group doesn't
-                            // take the resources the dry run of the addition has counted on
-                            pile->SetAbsent(true);
-                            return;
-                        }
-                        const TGroupId groupId = CreateGroup(bridgePileId, mainGroupId);
-                        groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
-                        pile->SetGroupGeneration(1);
-                        // the part belongs to the current sync of the pile, if there is one going
-                        if (const auto *pss = State.Self.FindPileSyncState(bridgePileId)) {
-                            pile->SetBecameUnsyncedGeneration(pss->GetBecameUnsyncedGeneration());
-                        }
-                        if (NBridge::PileStateTraits(bridgeInfo->GetPile(bridgePileId)->State).RequiresDataQuorum) {
-                            pile->SetStage(NKikimrBridge::TGroupState::SYNCED); // gets every write from the very beginning
-                        } else {
-                            // writes skip the pile, so its part is to be synced when the pile gets back
-                            State.Callbacks.push_back([&self = State.Self, mainGroupId, groupId] {
-                                const auto [it, inserted] = self.TargetGroupToSyncerState.try_emplace(groupId,
-                                    mainGroupId, groupId);
-                                if (inserted) {
-                                    self.SyncersRequiringAction.PushBack(&it->second);
-                                }
-                            });
-                        }
-                    });
-                    while (mainGroupState->PileSize() && mainGroupState->GetPile(mainGroupState->PileSize() - 1).GetAbsent()) {
-                        mainGroupState->MutablePile()->RemoveLast(); // absent piles at the end are not stored
+                    // bridge proxy group without VDisks of its own, all of its parts are separate groups
+                    FillNewBridgeGroupParts(mainGroupId, groupInfo->BridgeGroupInfo.emplace().MutableBridgeGroupState(),
+                        TBridgePileId());
+                }
+            }
+
+            // new bridged group is the physical group in the designated pile, serving as its own bridge proxy group, with
+            // separate parts in other piles; it is created this way at once, never being an ordinary group
+            void CreateInlinePileGroup(TBridgePileId inlinePileId) {
+                const TGroupId mainGroupId = CreateGroup(inlinePileId, std::nullopt);
+                TGroupInfo *groupInfo = State.Groups.FindForUpdate(mainGroupId);
+                Y_ABORT_UNLESS(groupInfo);
+                groupInfo->BridgeProxyGroupId = mainGroupId;
+                Y_ABORT_UNLESS(groupInfo->IsInlinePile() && groupInfo->BridgePileId == inlinePileId);
+                FillNewBridgeGroupParts(mainGroupId, groupInfo->BridgeGroupInfo.emplace().MutableBridgeGroupState(),
+                    inlinePileId);
+            }
+
+            // fill in the state of new bridged group, creating its parts in every pile having resources; the part in the
+            // pile of the inline pile group (if set) is the group itself, which has its VDisks already
+            void FillNewBridgeGroupParts(TGroupId mainGroupId, NKikimrBridge::TGroupState *mainGroupState,
+                    TBridgePileId inlinePileId) {
+                const auto& bridgeInfo = State.BridgeInfo;
+                Y_ABORT_UNLESS(bridgeInfo);
+                if (State.StorageConfig) {
+                    // New groups bypass GroupContentChanged, but their initial SYNCED parts already depend on
+                    // this cluster state: a proxy with an older view must not acknowledge writes skipping a part.
+                    mainGroupState->SetClusterStateGeneration(State.StorageConfig->GetClusterState().GetGeneration());
+                }
+                bridgeInfo->ForEachPile([&](TBridgePileId bridgePileId) {
+                    NKikimrBridge::TGroupState::TPile *pile = mainGroupState->AddPile();
+                    if (bridgePileId == inlinePileId) {
+                        // the pile has resources for the group, as GetInlinePileIdForNewGroup has checked
+                    } else if (bridgeInfo->GetPile(bridgePileId)->State == NKikimrBridge::TClusterState::INACTIVE ||
+                            State.Self.IsBridgePileBeingRemoved(bridgePileId)) {
+                        pile->SetAbsent(true); // there are no resources in this pile (or they are going away)
+                        return;
+                    } else if (State.Self.IsBridgePileAwaitingParts(bridgePileId)) {
+                        // the addition of the pile places parts of every group lacking them, so this group doesn't
+                        // take the resources the dry run of the addition has counted on
+                        pile->SetAbsent(true);
+                        return;
                     }
-                } else {
-                    CreateGroup(TBridgePileId(), std::nullopt); // regular single group
+                    const TGroupId groupId = bridgePileId == inlinePileId
+                        ? mainGroupId
+                        : CreateGroup(bridgePileId, mainGroupId);
+                    groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
+                    pile->SetGroupGeneration(1); // the same as the one of the group, the inline pile one included
+                    // the part belongs to the current sync of the pile, if there is one going
+                    if (const auto *pss = State.Self.FindPileSyncState(bridgePileId)) {
+                        pile->SetBecameUnsyncedGeneration(pss->GetBecameUnsyncedGeneration());
+                    }
+                    if (NBridge::PileStateTraits(bridgeInfo->GetPile(bridgePileId)->State).RequiresDataQuorum) {
+                        pile->SetStage(NKikimrBridge::TGroupState::SYNCED); // gets every write from the very beginning
+                    } else {
+                        // writes skip the pile, so its part is to be synced when the pile gets back
+                        State.Callbacks.push_back([&self = State.Self, mainGroupId, groupId] {
+                            const auto [it, inserted] = self.TargetGroupToSyncerState.try_emplace(groupId,
+                                mainGroupId, groupId);
+                            if (inserted) {
+                                self.EnqueueSyncer(it->second);
+                            }
+                        });
+                    }
+                });
+                while (mainGroupState->PileSize() && mainGroupState->GetPile(mainGroupState->PileSize() - 1).GetAbsent()) {
+                    mainGroupState->MutablePile()->RemoveLast(); // absent piles at the end are not stored
                 }
             }
 
@@ -230,8 +280,13 @@ namespace NKikimr {
                 const TGroupId groupId = CreateGroup(bridgePileId, proxyGroupId, groupSizeInUnits);
 
                 TGroupInfo *mutableProxyGroup = State.Groups.FindForUpdate(proxyGroupId);
-                auto *pile = NBridge::AddGroupPile(mutableProxyGroup->BridgeGroupInfo->MutableBridgeGroupState(),
-                    bridgePileId);
+                auto *state = mutableProxyGroup->BridgeGroupInfo->MutableBridgeGroupState();
+                if (const auto authorityPileId = NBridge::GetAuthorityPileId(*state); authorityPileId &&
+                        !state->GetAuthorityPileId()) {
+                    // the only part of the group remains the one the group relies on until the new part is synced
+                    authorityPileId.CopyToProto(state, &NKikimrBridge::TGroupState::SetAuthorityPileId);
+                }
+                auto *pile = NBridge::AddGroupPile(state, bridgePileId);
                 groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
                 pile->SetGroupGeneration(1); // gets adjusted along with generation bump on commit
                 pile->SetBecameUnsyncedGeneration(becameUnsyncedGeneration);
@@ -318,10 +373,7 @@ namespace NKikimr {
                 }
 
                 SelectPile(groupInfo->BridgePileId);
-                if (!groupInfo->VDisksInGroup.empty() && (groupInfo->ErasureSpecies != Geometry.GetErasure()
-                        || groupInfo->Topology->GetTotalFailRealmsNum() != Geometry.GetNumFailRealms()
-                        || groupInfo->Topology->GetNumFailDomainsPerFailRealm() != Geometry.GetNumFailDomainsPerFailRealm()
-                        || groupInfo->Topology->GetNumVDisksPerFailDomain() != Geometry.GetNumVDisksPerFailDomain())) {
+                if (!groupInfo->VDisksInGroup.empty() && !Geometry.MatchesGroup(*groupInfo)) {
                     throw TExFitGroupError() << "can't change erasure or topology of existing GroupId# " << groupId;
                 }
 
@@ -728,10 +780,10 @@ namespace NKikimr {
             }
 
             TGroupMapper::TPileScope GetPlacementScope(TBridgePileId groupPileId) const {
-                if (UsesCrossPilePlacement()) {
-                    Y_ABORT_UNLESS(!groupPileId && !StoragePool.BridgeMode);
+                if (UsesCrossPilePlacement() && !groupPileId) {
                     return TGroupMapper::TPileScope::AcrossPiles();
                 }
+                // the part of bridged group stays in its pile, even when the group is being made ordinary one
                 return NBridge::GetPlacementPileId(groupPileId, State.BridgeInfo.get());
             }
 
@@ -915,7 +967,7 @@ namespace NKikimr {
 
                 groupInfo->FinishVDisksInGroup();
                 groupInfo->CalculateGroupStatus();
-                groupInfo->CalculateLayoutStatus(&State.Self, groupInfo->Topology.get(), [&] {
+                groupInfo->CalculateLayoutStatus(&State.Self, [&] {
                     const auto& pools = State.StoragePools.Get();
                     if (const auto it = pools.find(groupInfo->StoragePoolId); it != pools.end()) {
                         return TGroupGeometryInfo::FromStoragePool(groupInfo->Topology->GType,
@@ -1077,17 +1129,36 @@ namespace NKikimr {
 
         void TBlobStorageController::AddBridgePileGroups(TConfigState& state, TBridgePileId pileId,
                 ui64 becameUnsyncedGeneration, std::vector<std::tuple<TGroupId, TGroupId>> *added) {
-            // bridged groups lacking their part in the pile, by storage pool
-            std::map<TBoxStoragePoolId, std::vector<TGroupId>> groups;
+            // bridged groups of bridged pools lacking their part in the pile; the ones of ordinary pools are going to
+            // lose their parts but the authority one
+            std::vector<TBridgeGroupPart> parts;
+            const auto& storagePools = state.StoragePools.Get();
             state.Groups.ForEach([&](TGroupId groupId, const TGroupInfo& group) {
-                if (group.BridgeGroupInfo && !NBridge::GetGroupPile(group.BridgeGroupInfo->GetBridgeGroupState(), pileId)) {
-                    groups[group.StoragePoolId].push_back(groupId);
+                if (!group.BridgeGroupInfo ||
+                        NBridge::GetGroupPile(group.BridgeGroupInfo->GetBridgeGroupState(), pileId)) {
+                    return;
+                } else if (const auto it = storagePools.find(group.StoragePoolId); it != storagePools.end() &&
+                        !it->second.BridgeMode) {
+                    return;
                 }
+                parts.push_back({groupId, pileId, becameUnsyncedGeneration});
             });
+            AddBridgeGroupParts(state, parts, added);
+        }
+
+        void TBlobStorageController::AddBridgeGroupParts(TConfigState& state,
+                const std::vector<TBridgeGroupPart>& parts, std::vector<std::tuple<TGroupId, TGroupId>> *added) {
+            // parts to add by storage pool of their groups
+            std::map<TBoxStoragePoolId, std::vector<const TBridgeGroupPart*>> partsByPool;
+            for (const auto& part : parts) {
+                const TGroupInfo *group = state.Groups.Find(part.ProxyGroupId);
+                Y_ABORT_UNLESS(group && group->BridgeGroupInfo);
+                partsByPool[group->StoragePoolId].push_back(&part);
+            }
 
             const NKikimrBlobStorage::TConfigRequest cmd; // default allocation settings
             const auto availabilityDomainId = AppData()->DomainsInfo->GetDomain()->DomainUid;
-            for (const auto& [storagePoolId, groupIds] : groups) {
+            for (const auto& [storagePoolId, poolParts] : partsByPool) {
                 const auto& storagePools = state.StoragePools.Get();
                 const auto it = storagePools.find(storagePoolId);
                 if (it == storagePools.end()) {
@@ -1099,14 +1170,15 @@ namespace NKikimr {
                 std::deque<ui64> expectedSlotSize;
                 TGroupFitter fitter(state, availabilityDomainId, cmd, expectedSlotSize, {}, PDiskSpaceMarginPromille, storagePoolId,
                     it->second, status, VSlotReadyTimestampQ, false);
-                for (const TGroupId groupId : groupIds) {
+                for (const TBridgeGroupPart *part : poolParts) {
                     try {
-                        added->emplace_back(groupId, fitter.AddPileToGroup(groupId, pileId, becameUnsyncedGeneration));
+                        added->emplace_back(part->ProxyGroupId, fitter.AddPileToGroup(part->ProxyGroupId, part->PileId,
+                            part->BecameUnsyncedGeneration));
                     } catch (const TExFitGroupError& ex) {
                         throw TExError() << "Group fit error"
                             << " BoxId# " << std::get<0>(storagePoolId)
                             << " StoragePoolId# " << std::get<1>(storagePoolId)
-                            << " GroupId# " << groupId
+                            << " GroupId# " << part->ProxyGroupId
                             << " Error# " << ex.what();
                     }
                 }

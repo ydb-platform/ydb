@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_INITIAL_TS = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
 
 
+@pytest.mark.usefixtures("wait_initial_resources")
 class TestWatermarksInYdb(StreamingTestBase):
     idle_timeout_seconds = 5
 

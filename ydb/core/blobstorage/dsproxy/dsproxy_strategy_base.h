@@ -26,7 +26,8 @@ protected:
             TBlobStorageGroupInfo::EBlobState *optimisticState, TBlobStorageGroupInfo::EBlobState *altruisticState,
             bool considerSlowAsError);
     bool IsUnrecoverableAltruistic(TBlobStorageGroupInfo::EBlobState recoveryState);
-    std::optional<EStrategyOutcome> SetAbsentForUnrecoverableAltruistic(TBlobStorageGroupInfo::EBlobState recoveryState, TBlobState &state);
+    std::optional<EStrategyOutcome> SetAbsentForUnrecoverableAltruistic(TBlobStorageGroupInfo::EBlobState recoveryState, TBlobState &state,
+            const TBlobStorageGroupInfo &info);
     static void LogDisintegrated(TLogContext &logCtx, const char *marker, const char *context,
             const TBlobState &state, const TBlobStorageGroupInfo &info, const TIntrusivePtr<TGroupQueues> &groupQueues);
     std::optional<EStrategyOutcome> ProcessOptimistic(TLogContext &logCtx,

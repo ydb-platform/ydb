@@ -92,12 +92,14 @@ def build_step_series(
     return xs, tracks
 
 
-def build_active_series(runs: list[dict[str, Any]]) -> tuple[list[float], list[float]]:
-    events: list[tuple[float, float]] = []
-    for r in runs:
-        events.append((float(r["start_us"]), +1.0))
-        events.append((float(r["end_us"]), -1.0))
-    events.sort(key=lambda x: x[0])
+def build_active_series_from_deltas(
+    deltas: list[tuple[float, int]],
+) -> tuple[list[float], list[float]]:
+    """Sweep per-kind +1/-1 deltas into a concurrency step series (seconds)."""
+    if not deltas:
+        return [], []
+    # Closes before opens at the same timestamp keep the step series stable.
+    events = sorted(deltas, key=lambda item: (item[0], item[1]))
     xs: list[float] = []
     ys: list[float] = []
     cur = 0.0
@@ -105,11 +107,19 @@ def build_active_series(runs: list[dict[str, Any]]) -> tuple[list[float], list[f
     while i < len(events):
         ts = events[i][0]
         while i < len(events) and events[i][0] == ts:
-            cur += events[i][1]
+            cur += float(events[i][1])
             i += 1
         xs.append(ts / 1_000_000.0)
         ys.append(cur)
     return xs, ys
+
+
+def build_active_series(runs: list[dict[str, Any]]) -> tuple[list[float], list[float]]:
+    events: list[tuple[float, int]] = []
+    for r in runs:
+        events.append((float(r["start_us"]), +1))
+        events.append((float(r["end_us"]), -1))
+    return build_active_series_from_deltas(events)
 
 
 def downsample_step_series(
@@ -138,14 +148,21 @@ def downsample_active_series(
 ) -> tuple[list[float], list[float]]:
     if not xs or max_points <= 0 or len(xs) <= max_points:
         return xs, ys
-    t_min, t_max = xs[0], xs[-1]
-    if t_max <= t_min:
-        return xs, ys
-    xs_sampled = [
-        t_min + (t_max - t_min) * i / (max_points - 1) if max_points > 1 else t_min
-        for i in range(max_points)
-    ]
-    ys_sampled = [
-        ys[bisect.bisect_right(xs, t) - 1] if xs[0] <= t else 0.0 for t in xs_sampled
-    ]
-    return xs_sampled, ys_sampled
+    if max_points < 4:
+        return [xs[0], xs[-1]], [ys[0], ys[-1]]
+
+    # Preserve local extrema. Uniform time-grid sampling can completely miss
+    # short concurrency spikes (for example report=77 versus TM=63).
+    internal_count = len(xs) - 2
+    bucket_count = max(1, (max_points - 2) // 2)
+    selected = {0, len(xs) - 1}
+    for bucket in range(bucket_count):
+        lo = 1 + internal_count * bucket // bucket_count
+        hi = 1 + internal_count * (bucket + 1) // bucket_count
+        if lo >= hi:
+            continue
+        indexes = range(lo, hi)
+        selected.add(min(indexes, key=lambda i: ys[i]))
+        selected.add(max(indexes, key=lambda i: ys[i]))
+    ordered = sorted(selected)
+    return [xs[i] for i in ordered], [ys[i] for i in ordered]

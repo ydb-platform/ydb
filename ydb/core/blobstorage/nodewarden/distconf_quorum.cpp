@@ -10,23 +10,6 @@ namespace NKikimr::NStorage {
             TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, bool allowUnformatted,
             IOutputStream *out, const char *name);
 
-    // generate set of mandatory pile ids for quorum
-    THashSet<TBridgePileId> GetMandatoryPileIds(const NKikimrBlobStorage::TStorageConfig& config,
-            const THashSet<TBridgePileId>& pileIdQuorumOverride) {
-        THashSet<TBridgePileId> mandatoryPileIds;
-        if (pileIdQuorumOverride) { // we are requested to process quorum from specific pile
-            mandatoryPileIds = pileIdQuorumOverride;
-        } else if (config.HasClusterState()) {
-            const auto& clusterState = config.GetClusterState();
-            for (size_t i = 0; i < clusterState.PerPileStateSize(); ++i) {
-                if (NBridge::PileStateTraits(clusterState.GetPerPileState(i)).RequiresConfigQuorum) {
-                    mandatoryPileIds.insert(TBridgePileId::FromPileIndex(i));
-                }
-            }
-        }
-        return mandatoryPileIds;
-    }
-
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     static THashMap<TBridgePileId, THashMap<TString, std::tuple<ui32, ui32>>> PrepareStatusMap(

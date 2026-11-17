@@ -7,6 +7,75 @@
 
 namespace NKikimr::NSchemeShard::NCdcStreamAtTable {
 
+bool IsIndexTypeSupportedForCdc(NKikimrSchemeOp::EIndexType type) {
+    return type == NKikimrSchemeOp::EIndexTypeGlobal
+        || type == NKikimrSchemeOp::EIndexTypeGlobalUnique
+        || type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+}
+
+void MaybeGuardIndexWithBaseCdcScanLock(
+    NKikimrSchemeOp::TModifyScheme& tx,
+    const TPath& indexPath,
+    TOperationContext& context)
+{
+    const auto index = context.SS->Indexes.at(indexPath.Base()->PathId);
+    const bool readySupportedIndex = index->State == NKikimrSchemeOp::EIndexStateReady
+        && IsIndexTypeSupportedForCdc(index->Type);
+    const bool idleIndex = !index->AlterData && !indexPath.IsUnderOperation();
+
+    if (!readySupportedIndex || !idleIndex) {
+        return;
+    }
+
+    const auto basePath = indexPath.Parent();
+
+    if (basePath.IsUnderOperation()) {
+        return;
+    }
+
+    const auto baseId = basePath.Base()->PathId;
+    const auto lock = context.SS->LockedPaths.find(baseId);
+    const bool hasLock = lock != context.SS->LockedPaths.end();
+    const auto snapshots = context.SS->TablesWithSnapshots.find(baseId);
+    const bool hasSnapshots = snapshots != context.SS->TablesWithSnapshots.end();
+
+    if (!hasLock || !hasSnapshots) {
+        return;
+    }
+
+    bool matchingSnapshot = false;
+    for (const auto& snap: snapshots->second) {
+        if (snap == lock->second && context.SS->SnapshotsStepIds.contains(snap)) {
+            matchingSnapshot = true;
+            break;
+        }
+    }
+
+    if (!matchingSnapshot) {
+        return;
+    }
+
+    for (const auto& [name, childId] : basePath.Base()->GetChildren()) {
+        const auto child = context.SS->PathsById.at(childId);
+        const bool liveCdcStream = child->IsCdcStream() && !child->Dropped();
+        const bool ownsLock = child->CreateTxId == lock->second;
+        const bool idleStream = child->PathState == NKikimrSchemeOp::EPathStateNoChanges;
+
+        if (!liveCdcStream || !ownsLock || !idleStream) {
+            continue;
+        }
+
+        const auto stream = context.SS->CdcStreams.at(childId);
+        if (stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan) {
+            // The index CDC operation owns only its implementation table's lock
+            // and snapshot. Borrow the verified base scan guard for the index
+            // metadata update, without changing or releasing the base lock.
+            tx.MutableLockGuard()->SetOwnerTxId(ui64(lock->second));
+            return;
+        }
+    }
+}
+
 void FillNotice(const TPathId& pathId, TOperationContext& context, NKikimrTxDataShard::TCreateCdcStreamNotice& notice) {
     Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
     auto path = context.SS->PathsById.at(pathId);
@@ -63,8 +132,9 @@ void CheckWorkingDirOnPropose(const TPath::TChecker& checks, bool isTableIndex) 
 
 void CheckSrcDirOnPropose(
     const TPath::TChecker& checks,
-    bool isInsideTableIndexPath,
-    TTxId op)
+    const TPath& path,
+    TTxId op,
+    bool internal)
 {
     checks
         .NotEmpty()
@@ -73,11 +143,14 @@ void CheckSrcDirOnPropose(
         .IsResolved()
         .NotDeleted()
         .IsTable()
-        .NotAsyncReplicaTable()
         .NotUnderDeleting();
 
     if (checks) {
-        if (!isInsideTableIndexPath) {
+        if (!internal || !path.IsImportingReplica()) {
+            checks.NotAsyncReplicaTable();
+        }
+
+        if (!path.IsInsideTableIndexPath(false)) {
             checks.IsCommonSensePath();
         }
 

@@ -8,9 +8,11 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSequenceReboots) {
     Y_UNIT_TEST_WITH_REBOOTS(CreateSequence) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -30,9 +32,11 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
     }
 
     void DoCreateMultipleSequences(TTestWithReboots& t, bool withInitialSequenceShard) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -84,9 +88,11 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDropRecreate, 2, 1, false) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -131,8 +137,8 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateSequencesWithIndexedTable, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -184,8 +190,8 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableWithSequence, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -228,9 +234,11 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(AlterSequence) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -262,8 +270,8 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
     // Issue #33764: ConsistentCopyTables + DropTable with sequences and reboots
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ConsistentCopyThenDropTableWithSequenceAndReboots, 8, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
 
             {
                 TInactiveZone inactive(activeZone);

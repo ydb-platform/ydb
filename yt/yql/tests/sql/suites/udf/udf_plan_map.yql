@@ -1,0 +1,10 @@
+USE plato;
+PRAGMA config.flags("ShowLinksInPlan");
+
+-- AsciiToLower is used twice, but must appear in Udfs only once.
+INSERT INTO Output WITH TRUNCATE
+SELECT
+    String::AsciiToLower(key) AS key,
+    String::AsciiToLower(value) AS lower_value,
+    String::AsciiToUpper(value) AS upper_value
+FROM Input;

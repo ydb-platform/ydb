@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/kqp)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -17,6 +15,5 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     kqp_read_null_ut.cpp
 )
-
 
 END()

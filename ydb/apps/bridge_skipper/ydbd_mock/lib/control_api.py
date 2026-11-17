@@ -13,7 +13,9 @@ from ydb.apps.bridge_skipper.ydbd_mock.lib.peers import PEER_OPS, PeerBlocked
 from ydb.apps.bridge_skipper.ydbd_mock.lib.topology import TopologyError
 
 SELF_CHECK_VALUES = ("GOOD", "DEGRADED", "MAINTENANCE_REQUIRED", "EMERGENCY")
-NODE_OPS = ("storage", "connectivity", "down", "unavailable", "silence", "delay", "self_check", "clear")
+HEALTHCHECK_STATUS_VALUES = ("YELLOW", "ORANGE", "RED")
+NODE_OPS = ("storage", "connectivity", "down", "unavailable", "silence", "delay", "self_check", "clear",
+            "binding_flap", "healthcheck_status")
 
 
 class ApiError(Exception):
@@ -63,7 +65,6 @@ def build_app(process) -> web.Application:
     # ----- views -----
 
     async def get_state(request):
-        # the pid lets the supervisor tell its own child from a stranger that holds the port
         return web.json_response(dict(inst.state_json(), pid=os.getpid()))
 
     async def get_events(request):
@@ -110,6 +111,10 @@ def build_app(process) -> web.Application:
             value = body.get("value")
             if value is not None and value not in SELF_CHECK_VALUES:
                 raise ApiError("self_check value must be one of %s or null" % ", ".join(SELF_CHECK_VALUES))
+        if op == "healthcheck_status":
+            value = body.get("value")
+            if value is not None and value not in HEALTHCHECK_STATUS_VALUES:
+                raise ApiError("healthcheck_status value must be one of %s or null" % ", ".join(HEALTHCHECK_STATUS_VALUES))
         if op == "delay":
             try:
                 seconds = float(body.get("seconds", 0))
@@ -121,7 +126,7 @@ def build_app(process) -> web.Application:
         if op in ("delay", "silence") and methods is not None and not (
                 isinstance(methods, list) and all(isinstance(m, str) for m in methods)):
             raise ApiError("methods must be a list of names")
-        if op in ("down", "unavailable", "silence"):
+        if op in ("down", "unavailable", "silence", "binding_flap"):
             on = body.get("on", True)
             if not isinstance(on, bool):
                 raise ApiError('"on" must be a boolean')
@@ -131,6 +136,10 @@ def build_app(process) -> web.Application:
                     max_seconds = float(max_seconds)
                 except (TypeError, ValueError):
                     raise ApiError('"max" must be a number')
+        duty = body.get("duty") if op == "binding_flap" else None
+        if duty is not None and (
+                isinstance(duty, bool) or not isinstance(duty, (int, float)) or not 0 <= duty <= 1):
+            raise ApiError('"duty" must be a number between 0 and 1')
 
         for i in targets:
             node = inst.pile_info.nodes[i]
@@ -151,6 +160,12 @@ def build_app(process) -> web.Application:
                 faults.delay_methods = set(methods) if methods else None
             elif op == "self_check":
                 faults.self_check = body.get("value")
+            elif op == "healthcheck_status":
+                faults.healthcheck_status = body.get("value")
+            elif op == "binding_flap":
+                faults.binding_flap = on
+                if duty is not None:
+                    faults.binding_flap_duty = float(duty)
             elif op == "clear":
                 was_down = faults.down
                 runtime.clear()

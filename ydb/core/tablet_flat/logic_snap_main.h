@@ -8,7 +8,7 @@
 #include "flat_exec_commit.h"
 #include "logic_snap_waste.h"
 
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

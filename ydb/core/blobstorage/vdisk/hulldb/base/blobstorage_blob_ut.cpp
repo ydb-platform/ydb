@@ -16,10 +16,9 @@ namespace NKikimr {
         Y_UNIT_TEST(CreateFromDistinctParts) {
             for (auto addHeader1 : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER, EBlobHeaderMode::XXH3_64BIT_HEADER}) {
                 for (auto addHeader2 : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER, EBlobHeaderMode::XXH3_64BIT_HEADER}) {
-                    const ui8 totalParts = MaxTotalPartCount;
                     const ui32 partSize = 6;
                     const ui64 fullDataSize = partSize;
-                    const char *data[totalParts] = {
+                    const char *data[] = {
                         "111111",
                         "222222",
                         "333333",
@@ -28,6 +27,7 @@ namespace NKikimr {
                         "666666",
                         "777777",
                     };
+                    const ui8 totalParts = std::size(data);
 
                     for (ui32 mask = 1; mask < (1 << totalParts); ++mask) {
                         std::array<TRope, MaxTotalPartCount> partsData;

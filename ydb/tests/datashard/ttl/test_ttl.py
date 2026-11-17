@@ -142,10 +142,8 @@ class TestTTLBase(TestBase):
         sql_select = dml.create_select_sql_request(
             table_name, all_types, value, pk_types, value, index, value, "", value
         )
-        wait_for(self.create_predicate(sql_select, expected_count_rows), timeout_seconds=200)
-        rows = dml.query(sql_select)
-        assert (
-            len(rows) == 1 and rows[0].count == expected_count_rows
+        assert wait_for(
+            self.create_predicate(sql_select, expected_count_rows), timeout_seconds=200
         ), f"Expected {expected_count_rows} rows, error when deleting {value} lines, table {table_name}"
 
     def alter_database_quotas(self, node, database_path, database_quotas):

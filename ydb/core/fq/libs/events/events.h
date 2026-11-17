@@ -8,10 +8,13 @@
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
+#include <library/cpp/threading/future/future.h>
 #include <util/digest/multi.h>
-#include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NFq {
@@ -103,9 +106,11 @@ struct TEvents {
     };
 
     struct TEvAsyncContinue: NActors::TEventLocal<TEvAsyncContinue, TEventIds::EvAsyncContinue> {
-        const NYql::TProgram::TFutureStatus Future;
+        using TFutureStatus = NThreading::TFuture<NYql::IGraphTransformer::TStatus>;
 
-        explicit TEvAsyncContinue(const NYql::TProgram::TFutureStatus& future)
+        const TFutureStatus Future;
+
+        explicit TEvAsyncContinue(const TFutureStatus& future)
             : Future(future)
         {
         }

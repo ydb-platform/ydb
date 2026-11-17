@@ -14,6 +14,8 @@ namespace NKikimr::NCms {
 struct TNodeLockContext {
     i32 Priority = 0;
     TString RequestId;
+    TString PermissionId;
+    TString Owner;
     NKikimrCms::EAvailabilityMode Mode = NKikimrCms::MODE_MAX_AVAILABILITY;
 
     TNodeLockContext(i32 priority, const TString& requestId, NKikimrCms::EAvailabilityMode mode = NKikimrCms::MODE_MAX_AVAILABILITY);
@@ -35,9 +37,11 @@ public:
     };
 
     struct TLock {
-        TLock(i32 priority);
+        TLock(const TNodeLockContext& ctx);
 
         i32 Priority = 0;
+        TString PermissionId;
+        TString Owner;
     };
 
     struct TNodeInfo {
@@ -69,6 +73,8 @@ protected:
     THashMap<ui32, TNodeInfo> Nodes;
     ui32 LockedNodesCount;
     ui32 DownNodesCount;
+
+    TString GetNodeStateDescription(ui32 nodeId) const;
 
 public:
     TNodesCounterBase()

@@ -15,6 +15,7 @@ struct TClientContext
 {
     TString ServerName;
     TString Token;
+    TString UserTicket;
     TMaybe<TString> ImpersonationUser;
     NAuth::IServiceTicketAuthPtrWrapperPtr ServiceTicketAuth;
     NHttpClient::IHttpClientPtr HttpClient;

@@ -66,6 +66,9 @@ public:
         fullName.SkipPrefix("NSQLv1Generated.");
         for (int i = 0; i < descr->field_count(); ++i) {
             const NProtoBuf::FieldDescriptor* fd = descr->field(i);
+            if (fd->name() == "StartTokenIndex" || fd->name() == "EndTokenIndex") {
+                continue;
+            }
             NProtoBuf::TConstField field(msg, fd);
             if (!field.HasValue()) {
                 continue;
@@ -287,6 +290,9 @@ private:
     void VisitAllFields(const NProtoBuf::Message& msg, const NProtoBuf::Descriptor* descr) {
         for (int i = 0; i < descr->field_count(); ++i) {
             const NProtoBuf::FieldDescriptor* fd = descr->field(i);
+            if (fd->cpp_type() != NProtoBuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+                continue;
+            }
             NProtoBuf::TConstField field(msg, fd);
             if (field.IsMessage()) {
                 for (size_t j = 0; j < field.Size(); ++j) {
@@ -307,6 +313,7 @@ bool GetParseTree(
     NYql::TIssues& issues,
     NSQLTranslationV1::TLexers& lexers,
     NSQLTranslationV1::TParsers& parsers,
+    NSQLTranslation::TParsedTokenList& tokens,
     google::protobuf::Message*& message,
     bool isAmbiguityError = false)
 {
@@ -317,11 +324,7 @@ bool GetParseTree(
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer);
-    auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
-        Y_UNUSED(token);
-    };
-
-    if (!lexer->Tokenize(query, "", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+    if (!NSQLTranslation::Tokenize(*lexer, query, "", tokens, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
         return false;
     }
 
@@ -378,12 +381,13 @@ SIMPLE_UDF(TRuleFreq, TOptional<TRuleFreqResult>(TAutoMap<char*>)) {
         NSQLTranslationV1::TLexers lexers;
         NSQLTranslationV1::TParsers parsers;
 
+        NSQLTranslation::TParsedTokenList tokens;
         google::protobuf::Message* tree;
-        if (!GetParseTree(query, settings, issues, lexers, parsers, tree)) {
+        if (!GetParseTree(query, settings, issues, lexers, parsers, tokens, tree)) {
             return {};
         }
 
-        TContext ctx(lexers, parsers, settings, {}, issues, query);
+        TContext ctx(lexers, parsers, settings, {}, tokens, issues, query);
         TRuleFreqVisitor visitor(ctx);
         visitor.Visit(*tree);
 
@@ -415,8 +419,9 @@ try {
     NSQLTranslationV1::TLexers lexers;
     NSQLTranslationV1::TParsers parsers;
 
+    NSQLTranslation::TParsedTokenList tokens;
     google::protobuf::Message* tree;
-    if (!GetParseTree(query, settings, issues, lexers, parsers, tree, /*isAmbiguityError=*/true)) {
+    if (!GetParseTree(query, settings, issues, lexers, parsers, tokens, tree, /*isAmbiguityError=*/true)) {
         return valueBuilder->NewString(issues.ToString());
     }
 

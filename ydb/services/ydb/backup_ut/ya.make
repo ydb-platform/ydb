@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/services/ydb)
 
 FORK_SUBTESTS()
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -23,6 +23,8 @@ PEERDIR(
     contrib/libs/fmt
     library/cpp/streams/zstd
     ydb/core/testlib/pg
+    ydb/core/tx/columnshard/hooks/testing
+    ydb/core/tx/columnshard/test_helper
     ydb/core/util
     ydb/core/wrappers/ut_helpers
     ydb/library/aws_init

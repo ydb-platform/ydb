@@ -5,6 +5,10 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/bridge.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
+#include <array>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -85,6 +89,273 @@ Y_UNIT_TEST_SUITE(BootstrapperTest) {
             ui64 tabletId = TTestTxConfig::TxTablet0)
     {
         return StartSimpleTabletBootstrappers(runtime, {nodeIdx}, tabletId).at(0);
+    }
+
+    struct TBridgeBootstrapperCase {
+        NKikimrBridge::TClusterState::EPileState PeerState = NKikimrBridge::TClusterState::DISCONNECTED;
+        bool PeerKnown = true;
+        bool WithStorageConfig = true;
+        bool WithBridgeInfo = true;
+        bool SuppressBridgeLogic = false;
+        bool LookupHasLeader = true;
+        bool WithOtherPrimaryBootstrappers = false;
+        bool OnlyOneSurvivor = false;
+        bool LateExcludedWatch = false;
+        ui64 LookupGeneration = 2;
+        ui64 LookupGuid = 22;
+        bool ExpectReady = true;
+    };
+
+    void CheckBridgeBootstrapperRecovery(const TBridgeBootstrapperCase& c) {
+        TTestBasicRuntime runtime(4);
+        SetupTabletServices(runtime);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NLog::PRI_DEBUG);
+
+        // The survivor's StateStorage still advertises the old leader after
+        // committing the pile disconnect, as observed in the RAM freeze run.
+        auto oldLauncher = runtime.AllocateEdgeActor(0);
+        auto oldLeader = StartSimpleTablet(runtime, oldLauncher, 0);
+        auto initial = runtime.GrabEdgeEventRethrow<TEvTablet::TEvReady>(oldLauncher);
+        ui32 oldGeneration = initial->Get()->Generation;
+
+        auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+        config->MutableClusterState()->SetGeneration(2);
+        config->MutableClusterState()->SetGuid(22);
+        config->MutableClusterState()->AddPerPileState(c.PeerState);
+        config->MutableClusterState()->AddPerPileState(NKikimrBridge::TClusterState::SYNCHRONIZED);
+        TBridgePileId::FromPileIndex(1).CopyToProto(config->MutableClusterState(), &NKikimrBridge::TClusterState::SetPrimaryPile);
+        TBridgePileId::FromPileIndex(1).CopyToProto(config->MutableClusterState(), &NKikimrBridge::TClusterState::SetPromotedPile);
+
+        std::array<std::shared_ptr<TBridgeInfo>, 4> bridge;
+        for (ui32 i = 1; i < 4; ++i) {
+            runtime.GetAppData(i).BridgeModeEnabled = true;
+            runtime.GetAppData(i).SuppressBridgeModeBootstrapperLogic = c.SuppressBridgeLogic;
+            bridge[i] = std::make_shared<TBridgeInfo>();
+            bridge[i]->Piles.resize(2);
+            auto& excluded = bridge[i]->Piles[0];
+            excluded.BridgePileId = TBridgePileId::FromPileIndex(0);
+            excluded.State = c.PeerState;
+            excluded.StaticNodeIds = {runtime.GetNodeId(0)};
+            auto& primary = bridge[i]->Piles[1];
+            primary.BridgePileId = TBridgePileId::FromPileIndex(1);
+            primary.State = NKikimrBridge::TClusterState::SYNCHRONIZED;
+            primary.IsPrimary = true;
+            primary.StaticNodeIds = {runtime.GetNodeId(1), runtime.GetNodeId(2), runtime.GetNodeId(3)};
+            bridge[i]->SelfNodePile = &primary;
+            bridge[i]->PrimaryPile = &primary;
+            if (c.PeerKnown) {
+                bridge[i]->StaticNodeIdToPile.emplace(runtime.GetNodeId(0), &excluded);
+            }
+            for (ui32 j = 1; j < 4; ++j) {
+                bridge[i]->StaticNodeIdToPile.emplace(runtime.GetNodeId(j), &primary);
+            }
+        }
+
+        THashSet<TActorId> bootstrappers;
+        auto configObserver = runtime.AddObserver<TEvNodeWardenQueryStorageConfig>(
+            [&](TEvNodeWardenQueryStorageConfig::TPtr& ev) {
+                if (!bootstrappers.contains(ev->Sender)) {
+                    return;
+                }
+                ui32 index = ev->Sender.NodeId() - runtime.GetNodeId(0);
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new TEvNodeWardenStorageConfig(c.WithStorageConfig ? config : nullptr, true,
+                        c.WithBridgeInfo ? bridge[index] : nullptr)), index);
+                ev.Reset();
+            });
+        ui32 lookupCount = 0;
+        auto lookupObserver = runtime.AddObserver<TEvStateStorage::TEvLookup>(
+            [&](TEvStateStorage::TEvLookup::TPtr& ev) {
+                if (!bootstrappers.contains(ev->Sender)) {
+                    return;
+                }
+                ++lookupCount;
+                auto reply = MakeHolder<TEvStateStorage::TEvInfo>(
+                    c.LookupHasLeader ? NKikimrProto::OK : NKikimrProto::NODATA,
+                    TTestTxConfig::TxTablet0, ev->Get()->Cookie,
+                    c.LookupHasLeader ? oldLeader : TActorId{}, TActorId{},
+                    oldGeneration, 0, false, 0, TEvStateStorage::TSignature{},
+                    TVector<TEvStateStorage::TEvInfo::TFollowerInfo>{});
+                reply->ClusterStateGeneration = c.LookupGeneration;
+                reply->ClusterStateGuid = c.LookupGuid;
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, reply.Release(), 0, ev->Cookie),
+                    ev->Sender.NodeId() - runtime.GetNodeId(0));
+                ev.Reset();
+            });
+
+        // Model the unavailable pile by withholding responses. A successful
+        // recovery must not need either old leader connect or watch completion.
+        const auto excludedBootstrapper = runtime.AllocateEdgeActor(0);
+        runtime.RegisterService(MakeBootstrapperID(TTestTxConfig::TxTablet0, runtime.GetNodeId(0)),
+            excludedBootstrapper, 0);
+        TActorId firstBootstrapper;
+        TBlockEvents<TEvents::TEvUndelivered> blockedSurvivorResult(runtime,
+            [&](const auto& ev) {
+                return c.LateExcludedWatch && ev->Recipient == firstBootstrapper
+                    && ev->Sender.NodeId() == runtime.GetNodeId(2)
+                    && ev->Get()->SourceType == TEvBootstrapper::TEvWatch::EventType;
+            });
+        TBlockEvents<TEvTabletPipe::TEvConnect> blockedConnect(runtime,
+            [&](const auto& ev) {
+                return ev->GetRecipientRewrite().NodeId() == runtime.GetNodeId(0)
+                    && ev->Get()->Record.GetTabletId() == TTestTxConfig::TxTablet0;
+            });
+        TBlockEvents<TEvBootstrapper::TEvWatch> blockedWatch(runtime,
+            [&](const auto& ev) {
+                return ev->GetRecipientRewrite().NodeId() == runtime.GetNodeId(0);
+            });
+
+        bool replacementReady = false;
+        auto readyObserver = runtime.AddObserver<TEvTablet::TEvReady>(
+            [&](TEvTablet::TEvReady::TPtr& ev) {
+                if (ev->Get()->TabletID == TTestTxConfig::TxTablet0
+                        && ev->Sender.NodeId() != runtime.GetNodeId(0)) {
+                    UNIT_ASSERT_C(ev->Get()->Generation > oldGeneration, "replacement must fence the old generation");
+                    replacementReady = true;
+                }
+            });
+
+        auto storageInfo = CreateSimpleTabletStorageInfo();
+        auto setup = CreateSimpleTabletSetupInfo();
+        auto bootInfo = MakeIntrusive<TBootstrapperInfo>(setup.Get());
+        bootInfo->Nodes = c.WithOtherPrimaryBootstrappers
+            ? TVector<ui32>{runtime.GetNodeId(0), runtime.GetNodeId(1), runtime.GetNodeId(2), runtime.GetNodeId(3)}
+            : TVector<ui32>{runtime.GetNodeId(1)};
+        for (ui32 i = 1; i < (c.WithOtherPrimaryBootstrappers && !c.OnlyOneSurvivor ? 4 : 2); ++i) {
+            auto actor = runtime.Register(CreateBootstrapper(storageInfo.Get(), bootInfo.Get()), i);
+            if (!firstBootstrapper) {
+                firstBootstrapper = actor;
+            }
+            bootstrappers.insert(actor);
+            runtime.EnableScheduleForActor(actor);
+            runtime.RegisterService(MakeBootstrapperID(TTestTxConfig::TxTablet0, runtime.GetNodeId(i)), actor, i);
+        }
+
+        // Less than the one-second interconnect pending-message deadline and
+        // the three-second no-quorum OfflineDelay. The production timeout
+        // values remain unchanged; blocked messages are never released.
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_C(lookupCount > 0, "bootstrapper must have processed a lookup before the outcome is checked");
+        if (c.LateExcludedWatch) {
+            // Hold the answer about another primary-pile peer so this round
+            // is still in StateFree when the delayed excluded Watch arrives.
+            UNIT_ASSERT_C(!blockedSurvivorResult.empty(), "the voting round must still have an outstanding peer");
+            // A delayed request from the excluded peer must not make that
+            // peer online for bootstrap quorum, even after it was classified
+            // Disconnected when this round started. This seed leaves us the
+            // winner if a buggy handler accepts the peer as Free.
+            runtime.Send(new IEventHandle(firstBootstrapper,
+                MakeBootstrapperID(TTestTxConfig::TxTablet0, runtime.GetNodeId(0)),
+                new TEvBootstrapper::TEvWatch(TTestTxConfig::TxTablet0, Max<ui64>() - 1, 77)), 1);
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            blockedSurvivorResult.Stop().Unblock();
+        }
+        runtime.SimulateSleep(TDuration::MilliSeconds(400));
+        UNIT_ASSERT_VALUES_EQUAL(replacementReady, c.ExpectReady);
+        if (c.ExpectReady) {
+            UNIT_ASSERT_VALUES_EQUAL(blockedConnect.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(blockedWatch.size(), 0);
+            auto sender = runtime.AllocateEdgeActor(1);
+            auto client = runtime.ConnectToPipe(TTestTxConfig::TxTablet0, sender, 1,
+                NTabletPipe::TClientRetryPolicy::WithoutRetries());
+            auto connected = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(connected->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT(connected->Get()->ServerId.NodeId() != runtime.GetNodeId(0));
+            runtime.SendToPipe(client, sender, new TEvents::TEvPing, 1);
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvents::TEvPong>(sender));
+        } else if (!c.OnlyOneSurvivor && c.LookupHasLeader) {
+            UNIT_ASSERT_C(!blockedConnect.empty(), "unsafe shortcut must retain the existing leader connection path");
+        } else if (!c.OnlyOneSurvivor) {
+            UNIT_ASSERT_C(!blockedWatch.empty(), "unsafe shortcut must retain the existing peer watch path");
+        }
+    }
+
+    Y_UNIT_TEST(BridgeDisconnectedOldLeaderDoesNotDelayRecovery) {
+        CheckBridgeBootstrapperRecovery({});
+    }
+
+    Y_UNIT_TEST(BridgeInactiveOldLeaderDoesNotDelayRecovery) {
+        CheckBridgeBootstrapperRecovery({.PeerState = NKikimrBridge::TClusterState::INACTIVE});
+    }
+
+    Y_UNIT_TEST(BridgeDisconnectedWatchPeersDoNotDelayRecovery) {
+        CheckBridgeBootstrapperRecovery({.LookupHasLeader = false, .WithOtherPrimaryBootstrappers = true});
+    }
+
+    Y_UNIT_TEST(BridgeUnknownOldLeaderKeepsConnectionPath) {
+        CheckBridgeBootstrapperRecovery({.PeerKnown = false, .ExpectReady = false});
+    }
+
+    Y_UNIT_TEST(BridgeSynchronizedOldLeaderKeepsConnectionPath) {
+        CheckBridgeBootstrapperRecovery({.PeerState = NKikimrBridge::TClusterState::SYNCHRONIZED, .ExpectReady = false});
+    }
+
+    Y_UNIT_TEST(BridgeSuspendedOldLeaderKeepsConnectionPath) {
+        CheckBridgeBootstrapperRecovery({.PeerState = NKikimrBridge::TClusterState::SUSPENDED, .ExpectReady = false});
+    }
+
+    Y_UNIT_TEST(BridgeExcludedPeerKeepsOfflineDelay) {
+        CheckBridgeBootstrapperRecovery({.LookupHasLeader = false, .WithOtherPrimaryBootstrappers = true,
+            .OnlyOneSurvivor = true, .ExpectReady = false});
+    }
+
+    Y_UNIT_TEST(BridgeLateExcludedWatchKeepsOfflineDelay) {
+        CheckBridgeBootstrapperRecovery({.LookupHasLeader = false, .WithOtherPrimaryBootstrappers = true,
+            .OnlyOneSurvivor = true, .LateExcludedWatch = true, .ExpectReady = false});
+    }
+
+    Y_UNIT_TEST(BridgeNewerLookupKeepsConnectionPath) {
+        CheckBridgeBootstrapperRecovery({.LookupGeneration = 3, .LookupGuid = 33, .ExpectReady = false});
+    }
+
+    Y_UNIT_TEST(BridgeConflictingLookupKeepsConnectionPath) {
+        CheckBridgeBootstrapperRecovery({.LookupGuid = 23, .ExpectReady = false});
+    }
+
+    Y_UNIT_TEST(BridgeUnversionedLookupKeepsConnectionPath) {
+        CheckBridgeBootstrapperRecovery({.LookupGeneration = 0, .LookupGuid = 0, .ExpectReady = false});
+    }
+
+    Y_UNIT_TEST(BridgeMissingLookupGuidKeepsConnectionPath) {
+        CheckBridgeBootstrapperRecovery({.LookupGuid = 0, .ExpectReady = false});
+    }
+
+    Y_UNIT_TEST(BridgeOlderLookupKeepsConnectionPath) {
+        CheckBridgeBootstrapperRecovery({.LookupGeneration = 1, .LookupGuid = 11, .ExpectReady = false});
+    }
+
+    Y_UNIT_TEST(BridgeMissingStorageConfigKeepsConnectionPath) {
+        CheckBridgeBootstrapperRecovery({.WithStorageConfig = false, .ExpectReady = false});
+    }
+
+    Y_UNIT_TEST(BridgeMissingBridgeInfoKeepsConnectionPath) {
+        CheckBridgeBootstrapperRecovery({.WithBridgeInfo = false, .ExpectReady = false});
+    }
+
+    Y_UNIT_TEST(BridgeSuppressedLogicKeepsConnectionPath) {
+        CheckBridgeBootstrapperRecovery({.SuppressBridgeLogic = true, .ExpectReady = false});
+    }
+
+    Y_UNIT_TEST(BridgeFallbackKeepsWatchPath) {
+        const TBridgeBootstrapperCase cases[] = {
+            {.LookupGeneration = 3, .LookupGuid = 33},
+            {.LookupGeneration = 1, .LookupGuid = 11},
+            {.LookupGuid = 23},
+            {.LookupGeneration = 0, .LookupGuid = 0},
+            {.LookupGuid = 0},
+            {.WithStorageConfig = false},
+            {.WithBridgeInfo = false},
+            {.SuppressBridgeLogic = true},
+            {.PeerKnown = false},
+            {.PeerState = NKikimrBridge::TClusterState::SYNCHRONIZED},
+            {.PeerState = NKikimrBridge::TClusterState::SUSPENDED},
+        };
+        for (auto c : cases) {
+            c.LookupHasLeader = false;
+            c.WithOtherPrimaryBootstrappers = true;
+            c.ExpectReady = false;
+            CheckBridgeBootstrapperRecovery(c);
+        }
     }
 
     Y_UNIT_TEST(LoneBootstrapper) {

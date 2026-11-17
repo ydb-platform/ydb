@@ -31,10 +31,14 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
             auto &family = it.second;
 
             delta.AddFamily(table, it.first, family.Room);
-            delta.SetFamilyCompression(table, it.first, family.Codec);
+            delta.SetFamilyCompression(table, it.first, family.Codec, family.CodecLevel);
             delta.SetFamilyCacheMode(table, it.first, family.CacheMode);
             delta.SetFamilyCache(table, it.first, family.Cache);
             delta.SetFamilyBlobs(table, it.first, family.Small, family.Large);
+            if (!family.KeyIndexInDescriptor || !family.GroupIndexesInDescriptor) {
+                // Only when changed, so that snapshots of tables without tiers stay as they were
+                delta.SetFamilyIndexPlacement(table, it.first, family.KeyIndexInDescriptor, family.GroupIndexesInDescriptor);
+            }
         }
 
         for(const auto& it : itTable.second.Columns) {
@@ -91,6 +95,11 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
 
         if (itTable.second.SpecialTableType != 0) {
             delta.SetSpecialTableType(table, itTable.second.SpecialTableType);
+        }
+
+        // The policy refers to families and to a column
+        if (itTable.second.TieringPolicy) {
+            delta.SetTieringPolicy(table, *itTable.second.TieringPolicy);
         }
     }
 
@@ -212,12 +221,15 @@ TAlter& TAlter::AddColumnToKey(ui32 table, ui32 column)
     return ApplyLastRecord();
 }
 
-TAlter& TAlter::SetFamilyCompression(ui32 table, ui32 family, ECodec codec) {
+TAlter& TAlter::SetFamilyCompression(ui32 table, ui32 family, ECodec codec, ui32 codecLevel) {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::SetFamily);
     delta.SetTableId(table);
     delta.SetFamilyId(family);
     delta.SetCodec(ui32(codec));
+    if (codecLevel != 1) {
+        delta.SetCodecLevel(codecLevel);
+    }
 
     return ApplyLastRecord();
 }
@@ -263,6 +275,29 @@ TAlter& TAlter::SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large)
     delta.SetFamilyId(family);
     delta.SetSmall(small);
     delta.SetLarge(large);
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetFamilyIndexPlacement(ui32 table, ui32 family, bool keyIndexInDescriptor, bool groupIndexesInDescriptor)
+{
+    TAlterRecord& delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetFamily);
+    delta.SetTableId(table);
+    delta.SetFamilyId(family);
+    delta.SetKeyIndexInDescriptor(keyIndexInDescriptor);
+    delta.SetGroupIndexesInDescriptor(groupIndexesInDescriptor);
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::DropFamily(ui32 table, ui32 family)
+{
+    // A SetTable record instead of a new delta type: older versions ignore it and keep the family
+    TAlterRecord& delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(table);
+    delta.AddDropFamilies(family);
 
     return ApplyLastRecord();
 }
@@ -421,6 +456,26 @@ TAlter& TAlter::SetSpecialTableType(ui32 tableId, ui32 type)
     delta.SetDeltaType(TAlterRecord::SetTable);
     delta.SetTableId(tableId);
     delta.SetSpecialTableType(type);
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetTieringPolicy(ui32 tableId, const TTieringPolicy& policy)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    TieringPolicyToProto(policy, *delta.MutableTieringPolicy());
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::ResetTieringPolicy(ui32 tableId)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    delta.SetResetTieringPolicy(true);
 
     return ApplyLastRecord();
 }

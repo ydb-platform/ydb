@@ -71,6 +71,9 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& c
     (*out.mutable_attributes())["_service_type"] = serviceType;
 
     switch (in.GetType()) {
+        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION: {
+            break;
+        }
         case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING: {
             out.mutable_streaming_consumer_type();
             break;

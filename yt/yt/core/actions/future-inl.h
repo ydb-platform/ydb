@@ -12,6 +12,8 @@
 #include <yt/yt/core/concurrency/thread_affinity.h>
 #include <yt/yt/core/concurrency/context_switch.h>
 
+#include <library/cpp/yt/cpu_clock/clock.h>
+
 #include <library/cpp/yt/system/event_count.h>
 #include <library/cpp/yt/system/spin_lock.h>
 
@@ -39,7 +41,7 @@ class TFiberCanceledException
 } // namespace NConcurrency
 
 // Forward declaration from invoker_util.h.
-IInvokerPtr GetSyncInvoker();
+const IInvokerPtr& GetSyncInvoker();
 
 namespace NDetail {
 
@@ -920,10 +922,26 @@ TFuture<R> ApplyUniqueHelper(const TIntrusivePtr<TFutureState<T>>& impl, TCallba
     return promise;
 }
 
-template <class T, class D>
+template <class TTimeoutOrDeadline>
+TError MakeFutureTimeoutError(TTimeoutOrDeadline timeoutOrDeadline, const TFutureTimeoutOptions& options)
+{
+    auto error = TError(NYT::EErrorCode::Timeout, "Operation timed out");
+    if constexpr (std::is_same_v<TTimeoutOrDeadline, TDuration>) {
+        error.Add("timeout", timeoutOrDeadline);
+    }
+    if constexpr (std::is_same_v<TTimeoutOrDeadline, TInstant>) {
+        error.Add("deadline", timeoutOrDeadline);
+    }
+    if (!options.Error.IsOK()) {
+        error = options.Error.With(std::move(error));
+    }
+    return error;
+}
+
+template <class T, class TTimeoutOrDeadline>
 TFuture<T> ApplyTimeoutHelper(
     const TFutureBase<T>& this_,
-    D timeoutOrDeadline,
+    TTimeoutOrDeadline timeoutOrDeadline,
     TFutureTimeoutOptions options)
 {
     auto promise = NewPromise<T>();
@@ -933,17 +951,11 @@ TFuture<T> ApplyTimeoutHelper(
             TError error;
             if (aborted) {
                 error = TError(NYT::EErrorCode::Canceled, "Operation aborted");
+                if (!options.Error.IsOK()) {
+                    error = options.Error.With(std::move(error));
+                }
             } else {
-                error = TError(NYT::EErrorCode::Timeout, "Operation timed out");
-                if constexpr (std::is_same_v<D, TDuration>) {
-                    error = error.With("timeout", timeoutOrDeadline);
-                }
-                if constexpr (std::is_same_v<D, TInstant>) {
-                    error = error.With("deadline", timeoutOrDeadline);
-                }
-            }
-            if (!options.Error.IsOK()) {
-                error = options.Error.With(std::move(error));
+                error = MakeFutureTimeoutError(timeoutOrDeadline, options);
             }
             promise.TrySet(error);
             cancelable.Cancel(error);
@@ -1207,11 +1219,39 @@ TFuture<T> TFutureBase<T>::WithDeadline(
 {
     YT_ASSERT(Impl_);
 
+    if (deadline <= GetInstant()) {
+        if (IsSet()) {
+            if (GetOrCrash().IsOK()) {
+                return MakeFuture<T>(NYT::NDetail::MakeFutureTimeoutError(deadline, options));
+            }
+
+            return TFuture<T>(Impl_);
+        }
+
+        auto error = NYT::NDetail::MakeFutureTimeoutError(deadline, options);
+        if (options.Invoker) {
+            options.Invoker->Invoke(BIND_NO_PROPAGATE([cancelable = AsCancelable(), error] {
+                cancelable.Cancel(error);
+            }));
+        } else {
+            Cancel(error);
+        }
+        return MakeFuture<T>(std::move(error));
+    }
+
     if (IsSet()) {
         return TFuture<T>(Impl_);
     }
 
     return NYT::NDetail::ApplyTimeoutHelper(*this, deadline, std::move(options));
+}
+
+template <class T>
+TFuture<T> TFutureBase<T>::WithDeadline(
+    std::optional<TInstant> deadline,
+    TFutureTimeoutOptions options) const
+{
+    return deadline ? WithDeadline(*deadline, std::move(options)) : TFuture<T>(Impl_);
 }
 
 template <class T>

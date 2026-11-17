@@ -1,0 +1,15 @@
+# Platform
+.DS_Store
+
+# Editors
+*#
+*~
+[._]*.sw?
+
+# Cargo
+Cargo.lock
+.cargo/
+target/
+
+# Rustfmt
+*.bk

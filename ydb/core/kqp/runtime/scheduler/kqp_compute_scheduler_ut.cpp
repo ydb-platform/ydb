@@ -2,6 +2,7 @@
 
 #include "kqp_schedulable_base.h"
 #include "kqp_schedulable_memory.h"
+#include "kqp_schedulable_read.h"
 #include "kqp_schedulable_task.h"
 #include "tree/dynamic.h"
 #include "tree/snapshot.h"
@@ -51,6 +52,91 @@ namespace {
         tasks.resize(demand);
     }
 } // namespace
+
+Y_UNIT_TEST_SUITE(KqpReadQuotaRegression) {
+    struct TFixture {
+        TComputeSchedulerPtr Scheduler = std::make_shared<TComputeScheduler>(
+            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            TOptions{.DelayParams = kDefaultDelayParams});
+        TSchedulableReadFactory Factory{Scheduler};
+
+        explicit TFixture(TDuration limit = TDuration::MilliSeconds(5)) {
+            Scheduler->ToggleEnabled(true);
+            Scheduler->AddOrUpdateDatabase("db", {});
+            Scheduler->AddOrUpdatePool("db", "pool", {.ReadLimit = limit});
+        }
+
+        TSchedulableReadPtr Read() {
+            auto read = Factory.Get("db", "pool");
+            UNIT_ASSERT(read);
+            return read;
+        }
+
+        static NHPTimer::STime Cycles(TDuration duration) {
+            return std::ceil(duration.SecondsFloat() * NHPTimer::GetCyclesPerSecond());
+        }
+    };
+
+    Y_UNIT_TEST(FrequentPollingDoesNotLoseRefill) {
+        TFixture f;
+        auto read = f.Read();
+        UNIT_ASSERT(read->TryConsumeQuota(TDuration::MilliSeconds(5)));
+        read->ReturnQuota(TFixture::Cycles(TDuration::MilliSeconds(6)));
+        const auto deadline = TMonotonic::Now() + TDuration::Seconds(2);
+        bool available = false;
+        do {
+            Sleep(TDuration::MilliSeconds(1));
+            available = read->HasAvailableQuota();
+        } while (!available && TMonotonic::Now() < deadline);
+        UNIT_ASSERT_C(available, "Positive quota must refill even when polled every millisecond");
+    }
+
+    Y_UNIT_TEST(DebtSurvivesLastIteratorAndCacheCleanup) {
+        TFixture f;
+        {
+            auto read = f.Read();
+            UNIT_ASSERT(read->TryConsumeQuota(TDuration::MilliSeconds(5)));
+            read->ReturnQuota(TFixture::Cycles(TDuration::Seconds(2)));
+            UNIT_ASSERT(!read->HasAvailableQuota());
+        }
+        f.Factory.CleanupReadsCache();
+        UNIT_ASSERT_C(!f.Read()->HasAvailableQuota(), "A new request must not receive a fresh burst over outstanding debt");
+    }
+
+    Y_UNIT_TEST(RetainedDebtDoesNotKeepReaderOrDemandAlive) {
+        TFixture f;
+        auto read = f.Read();
+        auto query = read->Query;
+        TSchedulableReadPtr::weak_type previousRead = read;
+        UNIT_ASSERT(read->TryConsumeQuota(TDuration::MilliSeconds(5)));
+        read->ReturnQuota(TFixture::Cycles(TDuration::Seconds(2)));
+        read.reset();
+
+        f.Factory.CleanupReadsCache();
+        UNIT_ASSERT_C(previousRead.expired(), "Retaining debt must not retain the schedulable reader");
+        UNIT_ASSERT_VALUES_EQUAL(query->CpuMaxDemand.load(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(query->CpuUsage.load(), 0u);
+
+        auto next = f.Read();
+        UNIT_ASSERT_VALUES_EQUAL(next->Query.get(), query.get());
+        UNIT_ASSERT_C(!next->HasAvailableQuota(), "A new reader must inherit the retained debt");
+    }
+
+    Y_UNIT_TEST(PartiallySpentQuotaSurvivesSequentialReaders) {
+        TFixture f(TDuration::MilliSeconds(100));
+        {
+            auto read = f.Read();
+            UNIT_ASSERT(read->TryConsumeQuota(TDuration::MilliSeconds(5)));
+            read->ReturnQuota(TFixture::Cycles(TDuration::MilliSeconds(90)));
+            UNIT_ASSERT(read->HasAvailableQuota());
+        }
+        f.Factory.CleanupReadsCache();
+        auto next = f.Read();
+        UNIT_ASSERT(next->TryConsumeQuota(TDuration::MilliSeconds(5)));
+        next->ReturnQuota(TFixture::Cycles(TDuration::MilliSeconds(90)));
+        UNIT_ASSERT_C(!next->HasAvailableQuota(), "Sequential one-shot reads must share the same budget");
+    }
+}
 
 Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 

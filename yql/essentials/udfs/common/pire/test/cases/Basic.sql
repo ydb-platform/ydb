@@ -1,4 +1,14 @@
-/* syntax version 1 */
+$input = [
+    <|value: ""|>,
+    <|value: "a"|>,
+    <|value: "aax"|>,
+    <|value: "xaax"|>,
+    <|value: "xaaxaaxaa"|>,
+    <|value: "XAXA"|>,
+    <|value: "7"|>,
+    <|value: "QC transfer task JAVA"|>,
+];
+
 $match = Pire::Match("a.*");
 $grep = Pire::Grep("axa");
 $insensitive_grep = Pire::Grep("(?i)axa");
@@ -29,4 +39,4 @@ SELECT
     $capture_many(value) AS capture_many,
     $replace(value, "b") AS replace,
     $multi_match2(Nothing(String?))
-FROM Input;
+FROM AS_TABLE($input);

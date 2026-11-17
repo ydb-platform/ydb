@@ -1,0 +1,163 @@
+# Native Rust build POC; dependencies and features follow Cargo.lock.
+
+CRATE(glib)
+
+CRATE_VERSION(0.22.0)
+CRATE_EDITION(2024)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+VERSION(0.22.0)
+LICENSE("MIT")
+
+CRATE_SOURCES(
+    src/auto/alias.rs
+    src/auto/checksum.rs
+    src/auto/constants.rs
+    src/auto/date_time.rs
+    src/auto/enums.rs
+    src/auto/flags.rs
+    src/auto/functions.rs
+    src/auto/key_file.rs
+    src/auto/main_context.rs
+    src/auto/main_loop.rs
+    src/auto/markup_parse_context.rs
+    src/auto/mod.rs
+    src/auto/regex.rs
+    src/auto/source.rs
+    src/auto/time_zone.rs
+    src/auto/uri.rs
+    src/boxed.rs
+    src/boxed_any_object.rs
+    src/boxed_inline.rs
+    src/bridged_logging.rs
+    src/byte_array.rs
+    src/bytes.rs
+    src/char.rs
+    src/checksum.rs
+    src/clone.rs
+    src/closure.rs
+    src/collections/list.rs
+    src/collections/mod.rs
+    src/collections/ptr_slice.rs
+    src/collections/slice.rs
+    src/collections/slist.rs
+    src/collections/strv.rs
+    src/control_flow.rs
+    src/convert.rs
+    src/date.rs
+    src/date_time.rs
+    src/enums.rs
+    src/error.rs
+    src/exit_code.rs
+    src/functions.rs
+    src/future_with_timeout.rs
+    src/gobject/auto/binding.rs
+    src/gobject/auto/binding_group.rs
+    src/gobject/auto/flags.rs
+    src/gobject/auto/mod.rs
+    src/gobject/auto/signal_group.rs
+    src/gobject/binding.rs
+    src/gobject/binding_group.rs
+    src/gobject/dynamic_object.rs
+    src/gobject/flags.rs
+    src/gobject/interface_info.rs
+    src/gobject/mod.rs
+    src/gobject/signal_group.rs
+    src/gobject/type_info.rs
+    src/gobject/type_module.rs
+    src/gobject/type_plugin.rs
+    src/gobject/type_value_table.rs
+    src/gstring.rs
+    src/gstring_builder.rs
+    src/key_file.rs
+    src/log.rs
+    src/main_context.rs
+    src/main_context_futures.rs
+    src/match_info.rs
+    src/object.rs
+    src/param_spec.rs
+    src/prelude.rs
+    src/property.rs
+    src/quark.rs
+    src/regex.rs
+    src/shared.rs
+    src/signal.rs
+    src/source.rs
+    src/source_futures.rs
+    src/subclass/basic.rs
+    src/subclass/boxed.rs
+    src/subclass/interface.rs
+    src/subclass/mod.rs
+    src/subclass/object.rs
+    src/subclass/object_impl_ref.rs
+    src/subclass/shared.rs
+    src/subclass/signal.rs
+    src/subclass/type_module.rs
+    src/subclass/type_plugin.rs
+    src/subclass/types.rs
+    src/thread_guard.rs
+    src/thread_pool.rs
+    src/time_span.rs
+    src/time_zone.rs
+    src/translate.rs
+    src/types.rs
+    src/unichar.rs
+    src/unicollate.rs
+    src/utils.rs
+    src/value.rs
+    src/value_array.rs
+    src/variant.rs
+    src/variant_dict.rs
+    src/variant_iter.rs
+    src/variant_type.rs
+    src/wrapper.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    COPYRIGHT
+    Cargo.lock
+    Gir.toml
+    Gir_GObject.toml
+    LICENSE
+    README.md
+    src/auto/versions.txt
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    default
+    futures
+    futures-channel
+    futures-core
+    futures-executor
+    futures-task
+    futures-util
+    gio
+    gio-sys
+)
+PEERDIR(
+    contrib/crates/bitflags-2.13.2
+    contrib/crates/futures-channel-0.3.34
+    contrib/crates/futures-core-0.3.34
+    contrib/crates/futures-executor-0.3.34
+    contrib/crates/futures-task-0.3.34
+    contrib/crates/futures-util-0.3.34
+    contrib/crates/gio-sys-0.22.0
+    contrib/crates/glib-sys-0.22.0
+    contrib/crates/gobject-sys-0.22.0
+    contrib/crates/libc-0.2.191
+    contrib/crates/memchr-2.8.3
+    contrib/crates/smallvec-1.16.4
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/glib-macros-0.22.0
+    contrib/crates/serde_derive-1.0.229
+)
+
+END()

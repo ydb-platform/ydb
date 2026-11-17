@@ -273,7 +273,7 @@ std::shared_ptr<TReadContext> MakeTestReadContext(const TSnapshot& requestSnapsh
     const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NActors::TActorId& scanActorId,
     const ERequestSorting sorting = ERequestSorting::NONE) {
     auto indexInfoCache = std::make_shared<TObjectCache<TSchemaVersionId, TIndexInfo>>();
-    auto entryGuard = indexInfoCache->Upsert(TSchemaVersionId(1, 1), MakeTestIndexInfo());
+    auto entryGuard = indexInfoCache->GetOrInsert(TSchemaVersionId(1, 1), MakeTestIndexInfo());
     auto versionedIndex = std::make_shared<TVersionedIndex>();
     versionedIndex->AddIndex(TSnapshot(1, 1), std::move(entryGuard));
 

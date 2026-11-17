@@ -2,6 +2,7 @@
 
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard_cdc_stream_common.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -51,6 +52,10 @@ public:
         path->SetDropped(step, OperationId.GetTxId());
 
         NIceDb::TNiceDb db(context.GetDB());
+
+        for (const auto& shard : txState->Shards) {
+            context.OnComplete.DeleteShard(shard.Idx);
+        }
 
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         context.SS->PersistRemoveCdcStream(db, pathId);
@@ -170,9 +175,13 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
-                .NotAsyncReplicaTable()
                 .IsUnderOperation()
                 .IsUnderTheSameOperation(OperationId.GetTxId());
+
+            // Dropping the table must also remove its CDC streams.
+            if (checks && !tablePath.IsUnderDeleting()) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (checks && !tablePath.IsInsideTableIndexPath()) {
                 checks.IsCommonSensePath();
@@ -196,6 +205,15 @@ public:
         txState.CdcPathId = streamPath.Base()->PathId;
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);
+
+        Y_ABORT_UNLESS(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
+        if (const auto shardIdx = context.SS->CdcStreams.at(streamPath.Base()->PathId)->AggregatorShardIdx) {
+            txState.Shards.emplace_back(shardIdx, ETabletType::CdcAggregator, txState.State);
+
+            context.MemChanges.GrabShard(context.SS, shardIdx);
+            context.SS->ShardInfos.at(shardIdx).CurrentTxId = OperationId.GetTxId();
+            context.DbChanges.PersistShard(shardIdx);
+        }
 
         streamPath.Base()->PathState = TPathElement::EPathState::EPathStateDrop;
         streamPath.Base()->DropTxId = OperationId.GetTxId();
@@ -273,9 +291,7 @@ protected:
     void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
         TConfigurePartsAtTable::FillNotice(pathId, tx, context);
 
-        Y_ABORT_UNLESS(context.SS->TablesWithSnapshots.contains(pathId));
-        const auto snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
-
+        const auto snapshotTxId = context.SS->GetSingleTableSnapshot(pathId);
         Y_ABORT_UNLESS(context.SS->SnapshotsStepIds.contains(snapshotTxId));
         const auto snapshotStep = context.SS->SnapshotsStepIds.at(snapshotTxId);
 
@@ -425,7 +441,7 @@ public:
             return result;
         }
 
-        if (DropSnapshot && !context.SS->TablesWithSnapshots.contains(tablePath.Base()->PathId)) {
+        if (DropSnapshot && !context.SS->HasTableSnapshot(tablePath.Base()->PathId)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, TStringBuilder() << "Table has no snapshots"
                 << ": pathId# " << tablePath.Base()->PathId);
             return result;
@@ -614,6 +630,7 @@ void DoDropStream(
         auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
         outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
         outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+        NCdcStreamAtTable::MaybeGuardIndexWithBaseCdcScanLock(outTx, workingDirPath, context);
 
         result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
     }

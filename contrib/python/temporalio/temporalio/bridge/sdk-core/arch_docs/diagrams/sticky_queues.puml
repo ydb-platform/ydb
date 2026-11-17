@@ -1,0 +1,40 @@
+@startuml
+
+title "Sticky Task Queue Interactions"
+
+participant "Worker 1" as w1
+participant "Server" as fe
+queue "some_tq" as gq
+queue "some_tq_worker_1_xxx" as sq
+
+w1 -> fe : Poll on ""some_tq""
+fe <- gq : grab next task
+fe --> w1 : Workflow Task (entire history)
+
+w1 -> w1 : Process task
+w1 -> fe : Task complete, use task queue ""some_tq_worker_1_xxx""
+
+fe -> fe : An event, like a timer firing
+fe -> sq ** : Enqueue task
+
+loop Processing workflow tasks on a specific queue
+w1 -> fe : Poll on ""some_tq_worker_1_xxx""
+fe <- sq : grab next task
+fe --> w1 : Workflow Task (only new events)
+w1 -> w1 : Process task
+w1 -> fe : Task complete, use task queue ""some_tq_worker_1_xxx""
+fe -> fe : An event, like a timer firing
+fe -> sq : Enqueue task
+end
+
+w1 -> w1 : Evict workflow from cache
+note right : Eviction happens of this workflow for some reason
+
+w1 -> fe : ResetSticky (includes which workflow execution)
+
+fe -> fe : An event, like a timer firing
+fe -> gq : Enqueue task
+note left : We go back to the shared queue
+
+
+@enduml

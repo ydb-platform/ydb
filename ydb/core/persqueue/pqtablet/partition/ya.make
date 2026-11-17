@@ -15,6 +15,7 @@ SRCS(
     partition_mlp.cpp
     partition_monitoring.cpp
     partition_read.cpp
+    partition_replication.cpp
     partition_reset_offset.cpp
     partition_sourcemanager.cpp
     partition_write.cpp
@@ -41,8 +42,10 @@ PEERDIR(
     ydb/core/persqueue/pqtablet/partition/mlp
     ydb/core/persqueue/pqtablet/quota
     ydb/core/persqueue/public
+    ydb/core/persqueue/public/metrics
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/write_meta
+    ydb/core/persqueue/public/write_sessions_quoter
     ydb/core/protos
     ydb/library/actors/core
     ydb/library/kll_median

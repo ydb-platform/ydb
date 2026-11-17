@@ -44,6 +44,7 @@ PEERDIR(
     ydb/services/ydb
     ydb/core/metering
     ydb/core/persqueue/public
+    ydb/core/persqueue/public/metrics
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/mlp
     ydb/core/persqueue/public/ru_quoter

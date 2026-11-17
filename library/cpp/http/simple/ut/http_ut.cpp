@@ -382,6 +382,21 @@ Y_UNIT_TEST_SUITE(SimpleHttp) {
         }
     }
 
+    Y_UNIT_TEST(keepAliveDefaultAndPreCancelledToken) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(80);
+        NMock::TMockServer server(createOptions(port, true), []() { return new TPong; });
+
+        TKeepAliveHttpClient cl("localhost", port);
+        TStringStream response;
+        UNIT_ASSERT_VALUES_EQUAL(200, cl.DoGet("/ping", &response));
+        UNIT_ASSERT_VALUES_EQUAL("pong", response.Str());
+
+        NThreading::TCancellationTokenSource cancel;
+        cancel.Cancel();
+        UNIT_ASSERT_EXCEPTION(cl.DoGet("/ping", nullptr, {}, nullptr, cancel.Token()), NThreading::TOperationCancelledException);
+    }
+
     Y_UNIT_TEST(simpleMessages) {
         TPortManager pm;
         ui16 port = pm.GetPort(80);

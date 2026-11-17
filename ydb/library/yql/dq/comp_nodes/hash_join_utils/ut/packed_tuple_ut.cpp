@@ -8,6 +8,7 @@
 #include <vector>
 #include <random>
 
+#include <util/system/cpu_id.h>
 #include <util/system/fs.h>
 #include <util/system/compiler.h>
 #include <util/stream/null.h>
@@ -56,53 +57,7 @@ void TestCalculateCRC32_Impl() {
 }
 }
 
-Y_UNIT_TEST_SUITE(TestHash) {
-
-Y_UNIT_TEST(TestCalculateCRC32Fallback) {
-    TestCalculateCRC32_Impl<NSimd::TSimdFallbackTraits>();
-}
-
-Y_UNIT_TEST(TestCalculateCRC32SSE42) {
-    if (NX86::HaveSSE42())
-        TestCalculateCRC32_Impl<NSimd::TSimdSSE42Traits>();
-    else
-        CTEST << "Skipped SSE42 test\n";
-}
-
-Y_UNIT_TEST(TestCalculateCRC32AVX2) {
-    if (NX86::HaveAVX2())
-        TestCalculateCRC32_Impl<NSimd::TSimdAVX2Traits>();
-    else
-        CTEST << "Skipped AVX2 test\n";
-}
-
-}
-
-Y_UNIT_TEST_SUITE(TupleLayout) {
-Y_UNIT_TEST(CreateLayout) {
-
-    TColumnDesc kc1, kc2,  pc1, pc2, pc3;
-
-    kc1.Role = EColumnRole::Key;
-    kc1.DataSize = 8;
-
-    kc2.Role = EColumnRole::Key;
-    kc2.DataSize = 4;
-
-    pc1.Role = EColumnRole::Payload;
-    pc1.DataSize = 16;
-
-    pc2.Role = EColumnRole::Payload;
-    pc2.DataSize = 4;
-
-    pc3.Role = EColumnRole::Payload;
-    pc3.DataSize = 8;
-
-    std::vector<TColumnDesc> columns{kc1, kc2, pc1, pc2, pc3};
-
-    auto tl = TTupleLayout::Create(columns);
-    UNIT_ASSERT(tl->TotalRowSize == 45);
-}
+namespace {
 
 template <size_t ColsNum>
 static void TestPackFixedColumnsRoundTrip(
@@ -165,6 +120,54 @@ static void TestPackFixedColumnsRoundTrip(
 static void TestPackNarrowRowWithManySmallColumns(
     THolder<TTupleLayout> (*createLayout)(const std::vector<TColumnDesc>&)) {
     TestPackFixedColumnsRoundTrip(createLayout, std::array<size_t, 6>{4, 1, 4, 1, 4, 1}, 20);
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(TestHash) {
+
+Y_UNIT_TEST(TestCalculateCRC32Fallback) {
+    TestCalculateCRC32_Impl<NSimd::TSimdFallbackTraits>();
+}
+
+Y_UNIT_TEST(TestCalculateCRC32SSE42) {
+    if (NX86::HaveSSE42()) {
+        TestCalculateCRC32_Impl<NSimd::TSimdSSE42Traits>();
+    }
+}
+
+Y_UNIT_TEST(TestCalculateCRC32AVX2) {
+    if (NX86::HaveAVX2()) {
+        TestCalculateCRC32_Impl<NSimd::TSimdAVX2Traits>();
+    }
+}
+
+}
+
+Y_UNIT_TEST_SUITE(TupleLayout) {
+Y_UNIT_TEST(CreateLayout) {
+
+    TColumnDesc kc1, kc2,  pc1, pc2, pc3;
+
+    kc1.Role = EColumnRole::Key;
+    kc1.DataSize = 8;
+
+    kc2.Role = EColumnRole::Key;
+    kc2.DataSize = 4;
+
+    pc1.Role = EColumnRole::Payload;
+    pc1.DataSize = 16;
+
+    pc2.Role = EColumnRole::Payload;
+    pc2.DataSize = 4;
+
+    pc3.Role = EColumnRole::Payload;
+    pc3.DataSize = 8;
+
+    std::vector<TColumnDesc> columns{kc1, kc2, pc1, pc2, pc3};
+
+    auto tl = TTupleLayout::Create(columns);
+    UNIT_ASSERT(tl->TotalRowSize == 45);
 }
 
 Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {

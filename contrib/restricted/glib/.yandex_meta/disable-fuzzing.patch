@@ -1,0 +1,4 @@
+--- a/meson.build
++++ b/meson.build
+@@ -2097 +2096,0 @@ subdir('gio')
+-subdir('fuzzing')

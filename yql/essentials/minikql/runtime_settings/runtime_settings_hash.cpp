@@ -1,42 +1,64 @@
 #include "runtime_settings_hash.h"
-#include "runtime_settings_configuration.h"
+#include "runtime_settings_reflection.h"
+
+#include <util/string/hex.h>
 
 #include <openssl/sha.h>
 
-namespace NYql {
+#include <array>
+#include <concepts>
 
+namespace NYql {
 namespace {
 
-void HashString(SHA256_CTX& sha, TStringBuf str) {
-    const ui64 length = str.size();
-    SHA256_Update(&sha, &length, sizeof(length));
-    SHA256_Update(&sha, str.data(), length);
+template <std::integral TValue>
+void HashValue(SHA256_CTX& sha, TValue value) {
+    SHA256_Update(&sha, &value, sizeof(value));
 }
 
-void HashCount(SHA256_CTX& sha, ui64 count) {
-    SHA256_Update(&sha, &count, sizeof(count));
+void HashValue(SHA256_CTX& sha, TStringBuf value) {
+    HashValue(sha, value.size());
+    SHA256_Update(&sha, value.data(), value.size());
 }
 
-void HashHostSettings(SHA256_CTX& sha, const TRuntimeSettings& config) {
-    const auto& dispatcher = TRuntimeSettingsConfiguration::Get();
-    HashCount(sha, dispatcher.CountSerializableStaticSettings(config));
-    dispatcher.SerializeStaticSettings(config, [&](const TString& name, const TString& value) {
-        HashString(sha, name);
-        HashString(sha, value);
-    });
+void HashValue(SHA256_CTX& sha, TDuration value) {
+    HashValue(sha, value.MicroSeconds());
 }
 
-void HashUdfSettings(SHA256_CTX& sha, const TRuntimeSettings& config) {
-    const auto& udfSettings = config.GetUdfSettings();
-    HashCount(sha, udfSettings.size());
-    for (const auto& [module, settings] : udfSettings) {
-        HashString(sha, module);
-        HashCount(sha, settings.size());
-        for (const auto& [name, value] : settings) {
-            HashString(sha, name);
-            HashString(sha, value);
-        }
+template <typename TEnum>
+    requires std::is_enum_v<TEnum>
+void HashValue(SHA256_CTX& sha, TEnum value) {
+    HashValue(sha, static_cast<ui64>(value));
+}
+
+void HashValue(SHA256_CTX& sha, const TUdfModuleSet& values) {
+    HashValue(sha, values.size());
+    for (const auto& value : values) {
+        HashValue(sha, value);
     }
+}
+
+template <typename TKey, typename TValue, typename TCompare, typename TAllocator>
+void HashValue(SHA256_CTX& sha, const TMap<TKey, TValue, TCompare, TAllocator>& values) {
+    HashValue(sha, values.size());
+    for (const auto& [key, value] : values) {
+        HashValue(sha, key);
+        HashValue(sha, value);
+    }
+}
+
+void HashHostSettings(SHA256_CTX& sha, const NPrivate::TRuntimeHostSettings& settings) {
+    constexpr auto reflection = NReflection::TReflection<NPrivate::TRuntimeHostSettings>::SelfType();
+    std::array<ui8, FieldsCount<NPrivate::TRuntimeHostSettings>()> presence;
+    reflection.ForEachFieldValue(settings, [&]<size_t Index, auto>(const auto& setting) {
+        presence[Index] = setting.IsSet();
+    });
+    SHA256_Update(&sha, presence.data(), presence.size());
+    reflection.ForEachFieldValue(settings, [&]<size_t, auto>(const auto& setting) {
+        if (setting.IsSet()) {
+            HashValue(sha, setting.Get());
+        }
+    });
 }
 
 } // namespace
@@ -44,13 +66,17 @@ void HashUdfSettings(SHA256_CTX& sha, const TRuntimeSettings& config) {
 TRuntimeSettingsStableHash StableHashRuntimeSettings(const TRuntimeSettings& config) {
     SHA256_CTX sha;
     SHA256_Init(&sha);
-
     HashHostSettings(sha, config);
-    HashUdfSettings(sha, config);
+    HashValue(sha, config.GetUdfSettings());
 
-    std::array<ui8, SHA256_DIGEST_LENGTH> hash_array;
-    SHA256_Final(hash_array.data(), &sha);
-    return TRuntimeSettingsStableHash(TString(reinterpret_cast<const char*>(hash_array.data()), sizeof(hash_array)));
+    TRuntimeSettingsStableHash digest;
+    static_assert(std::tuple_size_v<TRuntimeSettingsStableHash::TUnderlying> == SHA256_DIGEST_LENGTH);
+    SHA256_Final(digest->data(), &sha);
+    return digest;
+}
+
+IOutputStream& operator<<(IOutputStream& out, const TRuntimeSettingsStableHash& hash) {
+    return out << HexEncode(hash->data(), hash->size());
 }
 
 } // namespace NYql

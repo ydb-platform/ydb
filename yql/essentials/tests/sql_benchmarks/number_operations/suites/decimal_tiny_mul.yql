@@ -1,0 +1,2 @@
+SELECT tiny_left * tiny_right AS tiny
+FROM Input;

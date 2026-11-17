@@ -1,0 +1,27 @@
+image: "rust:latest"
+
+test:cargo:
+  script:
+  - rustc --version && cargo --version
+  - cargo build --all && cargo build --examples
+  - cargo test --all --verbose
+
+deploy:
+  before_script:
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client coreutils -y )'
+    - eval $(ssh-agent -s)
+    - echo "$SSH_DEPLOY_KEY" | base64 --decode | ssh-add - > /dev/null
+  script:
+    - ssh $(echo $DEPLOY_SERVER | base64 --decode) ./deploy.sh futures-retry $CI_COMMIT_TAG
+  only:
+    - tags
+
+pages:
+  script:
+  - cargo doc
+  - mv target/doc/ public/
+  artifacts:
+    paths:
+    - public
+  only:
+    - master

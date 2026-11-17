@@ -1,11 +1,21 @@
+#include <ydb/core/mon/counters_adapter_impl.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/mon/ut_utils/ut_utils.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/client/server/msgbus_http_server.h>
 #include <ydb/core/testlib/test_client.h>
 
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/http/simple/http_client.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/monlib/consumers/collecting_consumer.h>
+#include <library/cpp/monlib/dynamic_counters/encode.h>
+#include <library/cpp/monlib/encode/spack/spack_v1.h>
+#include <library/cpp/monlib/metrics/histogram_collector.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/algorithm.h>
+#include <util/generic/is_in.h>
+#include <util/system/datetime.h>
 
 namespace NMonitoring::NTests {
 
@@ -497,6 +507,160 @@ Y_UNIT_TEST_SUITE(Other) {
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 0);
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketFails, 1);
+    }
+}
+
+Y_UNIT_TEST_SUITE(MessageBusHttp) {
+    Y_UNIT_TEST(RejectsInvalidJsonAndKeepsServingRequests) {
+        TPortManager ports;
+        const ui16 monPort = ports.GetPort();
+        TServerSettings settings(ports.GetPort());
+        settings.InitKikimrRunConfig()
+            .SetNodeCount(1)
+            .SetUseRealThreads(true)
+            .SetDomainName("Root")
+            .SetUseSectorMap(true)
+            .SetMonitoringPortOffset(monPort);
+        TServer server(settings);
+        server.EnableGRpc(ports.GetPort());
+        TClient busClient(settings);
+        busClient.InitRootScheme();
+        NMsgBusProxy::IMessageBusHttpServer* httpServer = nullptr;
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (!httpServer && TInstant::Now() < deadline) {
+            httpServer = dynamic_cast<NMsgBusProxy::IMessageBusHttpServer*>(
+                server.GetRuntime()->GetAppData().Mon->FindPage("CLI_MB"));
+            if (!httpServer) {
+                Sleep(TDuration::MilliSeconds(10));
+            }
+        }
+        UNIT_ASSERT_C(httpServer, "MessageBus HTTP page was not registered within 30 seconds");
+        TKeepAliveHttpClient client("localhost", monPort);
+        const TKeepAliveHttpClient::THeaders headers{{"Content-Type", "application/json"}};
+
+        TStringStream invalidJsonResponse;
+        UNIT_ASSERT_VALUES_EQUAL(
+            client.DoPost("/CLI_MB/TypesRequest", "TypesRequest", &invalidJsonResponse, headers), HTTP_BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(invalidJsonResponse.Str(), "Invalid JSON request body");
+
+        TStringStream invalidProtoResponse;
+        UNIT_ASSERT_VALUES_EQUAL(
+            client.DoPost("/CLI_MB/TypesRequest", R"({"ETag":{}})", &invalidProtoResponse, headers), HTTP_BAD_REQUEST);
+
+        TStringStream validResponse;
+        UNIT_ASSERT_VALUES_EQUAL(client.DoPost("/CLI_MB/TypesRequest", "{}", &validResponse, headers), HTTP_OK);
+        UNIT_ASSERT_STRING_CONTAINS(validResponse.Str(), "TypeMetadata");
+
+        UNIT_ASSERT_VALUES_EQUAL(httpServer->RequestsActive->Val(), 0);
+        // LabelsMaintainer can reset derivative counters during startup; histograms retain their samples.
+        const auto sampleCount = [](const THistogramPtr& histogram) {
+            UNIT_ASSERT(histogram);
+            const auto snapshot = histogram->Snapshot();
+            ui64 count = 0;
+            for (ui32 i = 0; i < snapshot->Count(); ++i) {
+                count += snapshot->Value(i);
+            }
+            return count;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(sampleCount(httpServer->RequestTotalTimeHistogram), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sampleCount(httpServer->RequestPrepareTimeHistogram), 1);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TMemOnlyCountersTest) {
+    Y_UNIT_TEST(MarkedMetricsExportMemOnly) {
+        auto counters = MakeIntrusive<TDynamicCounters>();
+        TMetricFactoryForDynamicCounters factory(counters->GetSubgroup("subsystem", "mon"));
+        auto labels = [](TStringBuf sensor) {
+            return MakeLabels({{"sensor", sensor}, {"direction", "in"}, {"url", "/a"}});
+        };
+        factory.RateWithOpts(labels("count"), {.MemOnly = true})->Inc();
+        factory.HistogramRateWithOpts(labels("time_ms"), ExplicitHistogram({1, 10}), {.MemOnly = true})->Record(5);
+        factory.Rate(labels("plain"))->Inc();
+        // Same value under another label name: another counter, not marked.
+        const auto otherName = counters->GetSubgroup("subsystem", "mon")->GetSubgroup("url", "/a")->GetNamedCounter("name", "count");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(factory.Rate(labels("count")), yexception, "memOnly=");
+
+        auto encode = [](const TDynamicCounters& tree) {
+            TStringStream out;
+            auto encoder = NMemOnlyShim::CreateEncoder(&out, EFormat::JSON);
+            tree.Accept(TString(), TString(), *encoder);
+            return out.Str();
+        };
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(encode(*counters), &json));
+        THashMap<TString, bool> memOnly;
+        for (const auto& sensor : json["sensors"].GetArray()) {
+            memOnly[sensor["labels"]["sensor"].GetString()] = sensor["memOnly"].GetBooleanSafe(false);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(memOnly.size(), 4);
+        UNIT_ASSERT(memOnly["count"]);
+        UNIT_ASSERT(memOnly["time_ms"]);
+        UNIT_ASSERT(!memOnly["plain"]);
+        UNIT_ASSERT(!memOnly[""]); // name=count
+
+        // A plain metric accepted without its group encodes without memOnly.
+        TStringStream bare;
+        otherName->Accept("name", "count", *NMemOnlyShim::CreateEncoder(&bare, EFormat::JSON));
+        NJson::TJsonValue bareJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(bare.Str(), &bareJson));
+        UNIT_ASSERT(!bareJson.Has("memOnly"));
+
+        // Without memOnly the encoder writes what the TDynamicCountersPage encoder writes.
+        auto plainTree = MakeIntrusive<TDynamicCounters>();
+        TMetricFactoryForDynamicCounters plainFactory(plainTree->GetSubgroup("subsystem", "mon"));
+        plainFactory.Rate(labels("count"))->Inc();
+        plainFactory.HistogramRate(labels("time_ms"), ExplicitHistogram({1, 10}))->Record(5);
+        plainFactory.Rate(labels("plain"))->Inc();
+        UNIT_ASSERT_VALUES_EQUAL(encode(*plainTree), ToJson(*plainTree));
+    }
+
+    // Fails if /counters does not export the HTTP proxy sensors memOnly.
+    Y_UNIT_TEST(CountersPageExportsProxySensorsMemOnly) {
+        THttpMonTestEnv env;
+        auto fetch = [&](TStringBuf format) {
+            TStringStream body;
+            const auto status = env.GetHttpClient().DoGet(TStringBuilder() << "/counters/counters=utils/" << format,
+                &body, env.MakeAuthHeaders());
+            UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+            return body.ReadAll();
+        };
+        // (subsystem is mon, memOnly) of each metric.
+        using TFlags = TVector<std::pair<bool, bool>>;
+        auto fromJson = [](const TString& body) {
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(body, &json));
+            TFlags flags;
+            for (const auto& sensor : json["sensors"].GetArray()) {
+                flags.emplace_back(sensor["labels"]["subsystem"].GetString() == "mon", sensor["memOnly"].GetBooleanSafe(false));
+            }
+            return flags;
+        };
+        auto fromSpack = [](const TString& body) {
+            TStringInput in(body);
+            TCollectingConsumer consumer;
+            DecodeSpackV1(&in, &consumer);
+            TFlags flags;
+            for (const auto& metric : consumer.Metrics) {
+                const auto subsystem = metric.Labels.Find("subsystem");
+                flags.emplace_back(subsystem && subsystem->Value() == "mon", metric.Opts.MemOnly);
+            }
+            return flags;
+        };
+        auto check = [](const TFlags& flags, TStringBuf format) {
+            UNIT_ASSERT_C(IsIn(flags, std::pair(true, true)), format << ": no memOnly mon metric");
+            UNIT_ASSERT_C(!IsIn(flags, std::pair(true, false)), format << ": a mon metric without memOnly");
+            UNIT_ASSERT_C(IsIn(flags, std::pair(false, false)), format << ": no plain metric");
+        };
+
+        // A request's sensors are recorded once its reply is built, so a scrape never shows its own request.
+        const auto hasMon = [&] { return AnyOf(fromJson(fetch("json")), [](const auto& flag) { return flag.first; }); };
+        for (const TInstant deadline = TInstant::Now() + TDuration::Seconds(30); !hasMon() && TInstant::Now() < deadline;) {
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        // The series may be registered during the last poll scrape; it gets memOnly from the next scrape on.
+        check(fromJson(fetch("json")), "json");
+        check(fromSpack(fetch("spack")), "spack");
     }
 }
 

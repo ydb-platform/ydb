@@ -97,11 +97,46 @@ namespace NSchemeShardUT_Private {
         return result;
     }
 
+    static void ConfigureRuntimeForS3Request(TTestActorRuntime& runtime, const IEventBase& request) {
+        bool usesS3 = false;
+        switch (request.Type()) {
+        case TEvSchemeShard::EvModifySchemeTransaction: {
+            const auto& record = static_cast<const TEvSchemeShard::TEvModifySchemeTransaction&>(request).Record;
+            for (const auto& tx : record.GetTransaction()) {
+                if (tx.GetBackup().HasS3Settings() || tx.GetRestore().HasS3Settings()) {
+                    usesS3 = true;
+                    break;
+                }
+            }
+            break;
+        }
+        case TEvExport::EvCreateExportRequest: {
+            const auto& record = static_cast<const TEvExport::TEvCreateExportRequest&>(request).Record;
+            usesS3 = record.GetRequest().HasExportToS3Settings();
+            break;
+        }
+        case TEvImport::EvCreateImportRequest: {
+            const auto& record = static_cast<const TEvImport::TEvCreateImportRequest&>(request).Record;
+            usesS3 = record.GetRequest().HasImportFromS3Settings();
+            break;
+        }
+        }
+
+        if (usesS3) {
+            // The S3 mock serves real HTTP on another thread. Fast simulated
+            // timers can exhaust the scheduling limit before its replies arrive.
+            // Keep this mode for subsequent waits, cancellation, and reboots.
+            runtime.SetFastSimulatedTime(false);
+        }
+    }
+
     template <typename TEvResponse, typename TEvRequest, typename TStatus>
     static ui32 ReliableProposeImpl(
         NActors::TTestActorRuntime& runtime, const TActorId& proposer,
         TEvRequest* evRequest, const TVector<TStatus>& expectedStatuses)
     {
+        ConfigureRuntimeForS3Request(runtime, *evRequest);
+
         TActorId sender = runtime.AllocateEdgeActor();
         ui64 txId = evRequest->Record.GetTxId();
         runtime.Send(new IEventHandle(proposer, sender, evRequest));
@@ -3093,6 +3128,8 @@ namespace NSchemeShardUT_Private {
 
     void AsyncSend(TTestActorRuntime &runtime, ui64 targetTabletId, IEventBase *ev,
             ui32 nodeIndex, TActorId sender) {
+        ConfigureRuntimeForS3Request(runtime, *ev);
+
         if (sender == TActorId()) {
             ForwardToTablet(runtime, targetTabletId, runtime.AllocateEdgeActor(nodeIndex), ev);
         } else {
@@ -3204,7 +3241,11 @@ namespace NSchemeShardUT_Private {
 
     void UploadRow(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<TCell>& keys, const TVector<TCell>& values)
     {
-        auto tableDesc = DescribePath(runtime, tablePath, true, true);
+        UploadRow(runtime, DescribePath(runtime, tablePath, true, true), partitionIdx, keyTags, valueTags, keys, values);
+    }
+
+    void UploadRow(TTestActorRuntime& runtime, const NKikimrScheme::TEvDescribeSchemeResult& tableDesc, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<TCell>& keys, const TVector<TCell>& values)
+    {
         const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
         UNIT_ASSERT(partitionIdx < tablePartitions.size());
         const ui64 datashardTabletId = tablePartitions[partitionIdx].GetDatashardId();

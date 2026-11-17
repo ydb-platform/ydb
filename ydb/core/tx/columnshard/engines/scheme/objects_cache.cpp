@@ -4,9 +4,13 @@
 
 namespace NKikimr::NOlap {
 
-TSchemaObjectsCache::TSchemasCache::TEntryGuard TSchemaObjectsCache::UpsertIndexInfo(TIndexInfo&& indexInfo) {
+TSchemaObjectsCache::TSchemasCache::TEntryGuard TSchemaObjectsCache::GetOrInsertIndexInfo(TIndexInfo&& indexInfo) {
     const TSchemaVersionId versionId(indexInfo.GetPresetId(), indexInfo.GetVersion());
-    return SchemasByVersion.Upsert(versionId, std::move(indexInfo));
+    return SchemasByVersion.GetOrInsert(versionId, std::move(indexInfo));
+}
+
+std::optional<TSchemaObjectsCache::TSchemasCache::TEntryGuard> TSchemaObjectsCache::FindIndexInfo(const ui64 presetId, const ui64 version) {
+    return SchemasByVersion.Find(TSchemaVersionId(presetId, version));
 }
 
 }   // namespace NKikimr::NOlap

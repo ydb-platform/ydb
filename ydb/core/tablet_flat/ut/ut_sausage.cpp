@@ -658,6 +658,11 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
                 return it != Map.end() ? &it->second : nullptr;
             }
 
+            const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
+            {
+                return TryGetPage(part, location, groupId);
+            }
+
             TResult Locate(const TMemTable*, ui64, ui32) override
             {
                 return {false, nullptr};

@@ -7,6 +7,7 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/base/tablet_types.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/message_seqno.h>
 
@@ -87,6 +88,8 @@ struct TTxState {
     // uses ExtraData through proto
     TPathId CdcPathId = InvalidPathId;
     TMaybe<NKikimrSchemeOp::EPathState> TargetPathTargetState;
+    // Persisted in TxInFlightV2::ExtraBytes for DROP replay.
+    NKikimrReplication::ESourceCleanupPolicy ReplicationSourceCleanup = NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP;
 
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them

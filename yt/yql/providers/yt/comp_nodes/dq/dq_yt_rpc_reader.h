@@ -9,7 +9,7 @@ namespace NYql::NDqs {
 
 using namespace NKikimr::NMiniKQL;
 
-struct TSettingsHolder;
+class TSettingsHolder;
 
 class TParallelFileInputState: public IInputState {
 public:

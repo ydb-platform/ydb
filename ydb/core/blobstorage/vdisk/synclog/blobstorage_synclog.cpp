@@ -208,8 +208,8 @@ namespace NKikimr {
             }
 
             void Handle(TEvSyncLogDbBirthLsn::TPtr &ev, const TActorContext &ctx) {
-                Y_UNUSED(ctx);
                 DbBirthLsn = ev->Get()->DbBirthLsn;
+                ctx.Send(ev->Forward(KeeperId));
             }
 
             void CutLog(const TActorContext &ctx, const TVDiskID &vdisk, ui64 syncedLsn) {

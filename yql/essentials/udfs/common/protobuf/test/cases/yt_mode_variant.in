@@ -1,4 +1,0 @@
-{"TestField"="{\"Name\":\"n1\"}"};
-{"TestField"="{\"Name\":\"n1\",\"a\":\"a1\"}"};
-{"TestField"="{\"Name\":\"n1\",\"test\":{\"Name\":\"n2\",\"a\":\"a2\"}}"};
-{"TestField"="{\"Name\":\"n1\",\"test\":{\"Name\":\"n2\",\"test\":{\"Name\":\"n3\"}}}"};

@@ -30,9 +30,11 @@ PEERDIR(
     library/cpp/string_utils/base64
     library/cpp/unified_agent_client
     ydb/core/base
+    ydb/core/kqp/common
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/protos
     ydb/core/ymq/proto
-    ydb/core/kqp/common
     ydb/library/aclib
     ydb/library/http_proxy/authorization
     ydb/library/http_proxy/error

@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/blobstorage/vdisk/ingress)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -15,6 +13,7 @@ PEERDIR(
 
 SRCS(
     blobstorage_ingress_matrix_ut.cpp
+    blobstorage_ingress_widevector_ut.cpp
     blobstorage_ingress_ut.cpp
 )
 

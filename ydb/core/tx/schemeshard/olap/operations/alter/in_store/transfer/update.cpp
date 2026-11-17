@@ -5,13 +5,11 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdateInitializationContext& context) {
-    if (!context.GetModification()->GetAlterColumnTable().GetAlterShards().GetTransfer().GetTransfers().size()) {
-        return TConclusionStatus::Fail("hasn't data about shards transfer");
-    }
-    auto& table = context.GetOriginalEntityAsVerified<TInStoreTable>();
+void TInStoreShardsTransfer::InitializeTransfers(
+    const TUpdateRestoreContext& context, const NKikimrSchemeOp::TAlterColumnTable& alterTable) {
+    const auto& table = *TargetInStoreTable;
     auto sharding = table.GetTableInfo()->GetShardingVerified(table.GetTableSchemaVerified());
-    for (auto&& alter : context.GetModification()->GetAlterColumnTable().GetAlterShards().GetTransfer().GetTransfers()) {
+    for (auto&& alter : alterTable.GetAlterShards().GetTransfer().GetTransfers()) {
         NKikimrColumnShardDataSharingProto::TDestinationSession destinationSession;
         destinationSession.SetSessionId(alter.GetSessionId());
         *destinationSession.MutableInitiatorController() = NKikimr::NOlap::NDataSharing::TInitiatorControllerContainer(
@@ -33,11 +31,28 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
         AFL_VERIFY(DestinationSessions.emplace(destinationSession.GetTransferContext().GetDestinationTabletId(), destinationSession).second);
         AFL_VERIFY(ShardIdsUsage.emplace(alter.GetDestinationTabletId()).second);
     }
+}
+
+TConclusionStatus TInStoreShardsTransfer::DoRestoreImpl(
+    const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) {
+    TEntityInitializationContext eContext(context.GetSSOperationContext());
+    TargetInStoreTable = std::make_shared<TInStoreTable>(context.GetOriginalEntity().GetPathId(), alterData, eContext);
+    InitializeTransfers(context, *alterData->AlterBody);
+    return TConclusionStatus::Success();
+}
+
+NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdateInitializationContext& context) {
+    const auto& alter = context.GetModification()->GetAlterColumnTable();
+    if (!alter.GetAlterShards().GetTransfer().GetTransfers().size()) {
+        return TConclusionStatus::Fail("hasn't data about shards transfer");
+    }
+
     const auto& inStoreOriginal = context.GetOriginalEntityAsVerified<TInStoreTable>();
     auto targetInfo = std::make_shared<TColumnTableInfo>(inStoreOriginal.GetTableInfoVerified().AlterVersion,
         inStoreOriginal.GetTableInfoVerified().Description, TMaybe<NKikimrSchemeOp::TColumnStoreSharding>(), context.GetModification()->GetAlterColumnTable());
     TEntityInitializationContext eContext(context.GetSSOperationContext());
     TargetInStoreTable = std::make_shared<TInStoreTable>(context.GetOriginalEntity().GetPathId(), targetInfo, eContext);
+    InitializeTransfers(context, alter);
 
     return TConclusionStatus::Success();
 }

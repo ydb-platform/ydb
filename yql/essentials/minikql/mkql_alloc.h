@@ -8,6 +8,9 @@
 #include <yql/essentials/parser/pg_wrapper/interface/context.h>
 #include <yql/essentials/public/udf/udf_allocator.h>
 #include <yql/essentials/public/udf/udf_value.h>
+#ifndef MKQL_DISABLE_UDF_SERVICE_DISPATCH
+    #include <yql/essentials/public/udf/service/dispatch/udf_service_dispatch.h>
+#endif
 
 #include <util/string/builder.h>
 #include <util/system/align.h>
@@ -59,6 +62,7 @@ struct TAllocLocation {
         return 0;
     }
 
+    // NOLINTNEXTLINE(readability-identifier-naming): std::source_location compatibility.
     static TAllocLocation current() {
         return {};
     }
@@ -192,18 +196,27 @@ static_assert(sizeof(TMkqlPAllocHeader) ==
                       sizeof(void*), "Padding is not allowed");
 
 constexpr size_t ArrowAlignment = 64;
+
+enum class EMkqlArrowPageKind: ui8 {
+    ArenaPage = 0xA1,
+    MkqlPoolBlock = 0xB2,
+    DefaultPoolBlock = 0xC3,
+};
+
 struct TMkqlArrowHeader {
     TAllocState::TListEntry Entry;
     ui64 Size;
     ui64 Offset;
     std::atomic<ui64> UseCount;
+    EMkqlArrowPageKind Kind;
     std::array<
         char,
         ArrowAlignment -
             sizeof(TAllocState::TListEntry) -
             sizeof(ui64) -
             sizeof(ui64) -
-            sizeof(std::atomic<ui64>)>
+            sizeof(std::atomic<ui64>) -
+            sizeof(EMkqlArrowPageKind)>
         Padding;
 };
 
@@ -288,6 +301,11 @@ private:
     TAllocState MyState_;
     size_t AttachedCount_ = 0;
     TAllocState* PrevState_ = nullptr;
+#ifndef MKQL_DISABLE_UDF_SERVICE_DISPATCH
+    // This define must agree across MiniKQL and all TScopedAlloc consumers.
+    NYql::NUdf::TUdfSymbolsExchange UdfSymbolsExchange_ = nullptr;
+    const NYql::NUdf::TStaticSymbols* PreviousUdfSymbols_ = nullptr;
+#endif
 };
 
 class TPagedArena {

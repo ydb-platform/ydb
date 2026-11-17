@@ -10,6 +10,7 @@ namespace NKikimr {
 namespace NTable {
     class TRowState;
     class TSpent;
+    struct TSubset;
 
     /*_ IScan, the generic scan interface. Scan life cycle starts with
         invocation of Prepare(..) method after which it has to progress
@@ -120,6 +121,19 @@ namespace NTable {
         };
 
         virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) = 0;
+
+        /**
+         * Called before the first Seek(..) to let the scan decide whether the
+         * subset it is about to scan contains any rows it might be interested
+         * in. Returning true skips the iteration entirely and finishes the
+         * scan with EStatus::Done right away.
+         *
+         * The default is to return false (the subset has to be scanned).
+         */
+        virtual bool ShouldSkipSubset(const TSubset&) const {
+            return false;
+        }
+
         virtual EScan Seek(TLead&, ui64 seq) = 0;
         virtual EScan Feed(TArrayRef<const TCell>, const TRow&) = 0;
         virtual TAutoPtr<IDestructable> Finish(const std::exception&) {
@@ -150,6 +164,27 @@ namespace NTable {
     };
 
 
+    using TVersionScanSource = TRowSource;
+
+    /**
+     * For each key, Feed(const TRow&, TRowVersion&) receives committed rows
+     * in strictly descending TRowVersion order: newest first, then older versions.
+     * The first committed row is the newest row reconstructed from the fixed subset.
+     *
+     * Keys are visited in scan order. During uninterrupted traversal, row, delta
+     * and lock callbacks for a key are enclosed by BeginKey/EndKey.
+     * Reset or Final may terminate that traversal without EndKey.
+     * Uncommitted deltas and locks may precede that first committed row, and a
+     * key may contain only such events. Feed(const TRow&, TRowVersion&) receives
+     * reconstructed committed row states, not individual fragments from parts.
+     * Feed(const TRow&, ui64) may deliver separate uncommitted fragments for the
+     * same transaction from different sources.
+     *
+     * The consumer may lower the version passed to Feed(TRow, TRowVersion&),
+     * asking the driver to continue below that version instead of the original
+     * one. A consumer never needs to wait for EOF to know that later callbacks
+     * for the current key cannot contain a newer committed row.
+     */
     class IVersionScan : public IScan {
     private:
         EScan Feed(TArrayRef<const TCell>, const TRow&) override final {
@@ -157,6 +192,18 @@ namespace NTable {
         }
 
     public:
+        // Called immediately before each Feed overload. The variant contains a
+        // non-null pointer to the source of the lock/delta or, for a reconstructed row,
+        // the source of its newest fragment. Other cells may come from older
+        // sources: this metadata does not provide per-cell provenance.
+        // Interpret blob cells by their ELargeObj representation, not by the
+        // reported source. Unmaterialized external blob cells contain TGlobId
+        // for both memtables and parts (see TConf::LargeEdge).
+        // The pointer is borrowed from the scan and must not be retained
+        // beyond its lifetime. Existing consumers may ignore this metadata.
+        virtual void SetSource(const TVersionScanSource&) {
+        }
+
         virtual EScan BeginKey(TArrayRef<const TCell>) = 0;
         virtual EScan BeginDeltas() = 0;
         virtual EScan Feed(const TRow&, ui64) = 0;

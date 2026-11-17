@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/kqp/tracing/kqp_shard_rendering.h>
 #include <ydb/core/kqp/tracing/kqp_task_rendering.h>
@@ -7,9 +8,13 @@
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+
+#include <thread>
+#include <stdexcept>
 
 namespace NKikimr {
 
@@ -17,6 +22,207 @@ using namespace NWilson;
 using namespace NKqp::NTest;
 
 Y_UNIT_TEST_SUITE(TKqpTrace) {
+    TFakeWilsonUploader* RegisterUploader(NActors::TTestActorRuntimeBase& runtime);
+
+    Y_UNIT_TEST(RegionsPreserveParentsAcrossRestarts) {
+        NActors::TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        auto* uploader = RegisterUploader(runtime);
+        NWilson::TSpan query(15, NWilson::TTraceId::NewTraceId(15, 4095), "Query",
+            NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+        NKqp::TCompileTrace trace(query.GetTraceId(), runtime.GetActorSystem(0));
+        const int pipeline = 0, nested = 0;
+        trace.BeginRegion(15, "First", &pipeline);
+        {
+            NKqp::TCompileTraceScope work(&trace, 15, "First work");
+        }
+        std::thread worker([&] {
+            {
+                NKqp::TCompileTraceScope work(&trace, 15, "Resumed first work");
+            }
+            trace.BeginRegion(15, "Host", &pipeline);
+            trace.BeginRegion(15, "Nested", &nested);
+            trace.EndRegion("Nested", &pipeline); // A different group cannot close it.
+            {
+                NKqp::TCompileTraceScope work(&trace, 15, "Resumed work");
+            }
+            trace.BeginRegion(15, "Host", &pipeline); // Already open.
+            trace.BeginRegion(15, "First", &pipeline); // Restart closes Host and Nested.
+            trace.EndRegion("First", &pipeline);
+        });
+        worker.join();
+        trace.Finish(true);
+        query.EndOk();
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        AssertDescendant(*uploader, "First work", "First");
+        AssertDescendant(*uploader, "Resumed first work", "First");
+        AssertDescendant(*uploader, "Resumed work", "Nested");
+        AssertDescendant(*uploader, "Nested", "Host");
+        for (const auto& [name, count] : {std::pair{"First", 2}, {"Host", 1}, {"Nested", 1}}) {
+            UNIT_ASSERT_VALUES_EQUAL(std::ranges::count_if(uploader->Spans, [&](const auto& span) {
+                return span.name() == name;
+            }), count);
+            AssertStatus(*uploader, name, NTraceProto::Status::STATUS_CODE_OK);
+        }
+        UNIT_ASSERT(uploader->BuildTraceTrees());
+    }
+
+    Y_UNIT_TEST(DependenciesPreserveResultsAndFailures) {
+        NActors::TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        auto* uploader = RegisterUploader(runtime);
+        NKqp::TCompileTrace trace(NWilson::TTraceId::NewTraceId(15, 4095), runtime.GetActorSystem(0));
+        auto failure = NThreading::NewPromise<int>();
+        NKqp::TCompileTraceDependencies dependencies(&trace, "Exception wait");
+        auto failed = dependencies.Await(NKqp::TraceCompileDependency(failure.GetFuture(), dependencies.Start("Exception")),
+            [](int) { return true; });
+        failure.SetException(std::make_exception_ptr(std::runtime_error("expected")));
+        UNIT_ASSERT_EXCEPTION(failed.GetValue(), std::runtime_error);
+        trace.ResumeWaits();
+
+        const auto shared = NThreading::MakeFuture(TString("shared"));
+        auto copied = NKqp::TraceCompileDependency(shared, trace.StartSpan(14, "Copy"));
+        UNIT_ASSERT_VALUES_EQUAL(copied.GetValue(), "shared");
+        UNIT_ASSERT_VALUES_EQUAL(shared.GetValue(), "shared");
+        for (bool success : {true, false}) {
+            const TString name = success ? "Success" : "Operation failure";
+            NKqp::TCompileTraceDependencies ready(&trace, name + " wait");
+            auto result = ready.Await(NKqp::TraceCompileDependency(NThreading::MakeFuture(success),
+                ready.Start(name), [](bool ok) { return ok; }), [](bool ok) { return ok; });
+            UNIT_ASSERT(result.IsReady());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetValue(), success); // Failure remains a value, not an exception.
+            trace.ResumeWaits();
+        }
+        NKqp::TraceCompileDependency(NThreading::MakeFuture(), trace.StartSpan(14, "Void failure"),
+            [] { return false; }).GetValue();
+        trace.Finish(true);
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        for (const TStringBuf name : {"Copy", "Success", "Success wait"}) {
+            AssertStatus(*uploader, name, NTraceProto::Status::STATUS_CODE_OK);
+        }
+        for (const TStringBuf name : {"Exception", "Exception wait", "Operation failure", "Operation failure wait", "Void failure"}) {
+            AssertStatus(*uploader, name, NTraceProto::Status::STATUS_CODE_ERROR);
+        }
+    }
+
+    Y_UNIT_TEST(DependencyWaitsEndOnResume) {
+        NActors::TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        auto* uploader = RegisterUploader(runtime);
+        NKqp::TCompileTraceDependencies disabled(nullptr, "Disabled");
+        UNIT_ASSERT(!disabled.Start("Disabled request"));
+        UNIT_ASSERT(disabled.Await(NThreading::MakeFuture()).IsReady());
+        NKqp::TCompileTrace trace(NWilson::TTraceId::NewTraceId(NKqp::TCompileTraceLevels::Phase, 4095), runtime.GetActorSystem(0));
+        NKqp::TCompileTraceDependencies dependencies(&trace, "Await dependencies");
+        auto first = NThreading::NewPromise<void>();
+        auto last = NThreading::NewPromise<void>();
+        auto a = NKqp::TraceCompileDependency(first.GetFuture(), dependencies.Start("First request"));
+        auto b = NKqp::TraceCompileDependency(last.GetFuture(), dependencies.Start("Last request"));
+        auto ready = dependencies.Await(NThreading::WaitAll(a, b));
+        first.SetValue();
+        trace.ResumeWaits();
+        UNIT_ASSERT(!ready.IsReady());
+        std::thread worker([&] { last.SetValue(); });
+        worker.join();
+        ready.GetValue();
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT(!FindSpan(*uploader, "Await dependencies"));
+        trace.ResumeWaits();
+        trace.Finish(true);
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        AssertStatus(*uploader, "Await dependencies", NTraceProto::Status::STATUS_CODE_OK);
+        const auto& wait = *FindSpan(*uploader, "Await dependencies");
+        UNIT_ASSERT(!FindAttribute(wait, NKqp::ParentRelationAttribute));
+        UNIT_ASSERT_VALUES_EQUAL(wait.links_size(), 2);
+        for (const TStringBuf name : {"First request", "Last request"}) {
+            AssertStatus(*uploader, name, NTraceProto::Status::STATUS_CODE_OK);
+            const auto& request = *FindSpan(*uploader, name);
+            UNIT_ASSERT_VALUES_EQUAL(request.parent_span_id(), wait.parent_span_id());
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(request, NKqp::ParentRelationAttribute)->value().string_value(), NKqp::SpawnRelation);
+            UNIT_ASSERT(std::ranges::any_of(wait.links(), [&](const auto& link) {
+                return link.span_id() == request.span_id()
+                    && FindAttribute(link, NKqp::RelationAttribute)->value().string_value() == NKqp::DependsOnRelation;
+            }));
+        }
+    }
+
+    Y_UNIT_TEST(AbandonedCompilationKeepsRequestsAlive) {
+        NActors::TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        auto* uploader = RegisterUploader(runtime);
+        for (bool finish : {true, false}) {
+            ClearUploader(*uploader);
+            auto promise = NThreading::NewPromise<void>();
+            NThreading::TFuture<void> ready;
+            {
+                NKqp::TCompileTrace trace(NWilson::TTraceId::NewTraceId(15, 4095), runtime.GetActorSystem(0));
+                const int group = 0;
+                trace.BeginRegion(15, "Phase", &group);
+                NKqp::TCompileTraceDependencies dependencies(&trace, "Abandoned wait");
+                ready = dependencies.Await(NKqp::TraceCompileDependency(promise.GetFuture(), dependencies.Start("Late request")));
+                if (finish) {
+                    trace.Finish(false);
+                    trace.BeginRegion(15, "After finish", &group);
+                }
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            AssertStatus(*uploader, "Phase", NTraceProto::Status::STATUS_CODE_ERROR);
+            AssertStatus(*uploader, "Abandoned wait", NTraceProto::Status::STATUS_CODE_ERROR);
+            UNIT_ASSERT(!FindSpan(*uploader, "After finish"));
+            UNIT_ASSERT(!ready.IsReady());
+            promise.SetValue();
+            ready.GetValue();
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            AssertStatus(*uploader, "Late request", NTraceProto::Status::STATUS_CODE_OK);
+        }
+    }
+
+    Y_UNIT_TEST(RuleScopesPreserveParentsWithoutExportingEmptyAttempts) {
+        // Rules are emitted once their outcome is known, on the compiling actor's thread.
+        class TCompiler : public NActors::TActorBootstrapped<TCompiler> {
+        public:
+            void Bootstrap(const NActors::TActorContext& ctx) {
+                NWilson::TSpan root(15, NWilson::TTraceId::NewTraceId(15, 4095), "Query");
+                NKqp::TCompileTrace trace(root.GetTraceId(), ctx.ActorSystem());
+                {
+                    NKqp::TCompileTraceScope stage(&trace, 15, "Stage");
+                    {
+                        NKqp::TCompileTraceRuleScope rule(&trace, "Applied");
+                        NKqp::TCompileTraceScope child(&trace, 15, "CBO work");
+                        rule.SetApplied(true);
+                    }
+                    {
+                        NKqp::TCompileTraceRuleScope rule(&trace, "Empty attempt");
+                    }
+                    {
+                        NKqp::TCompileTraceRuleScope rule(&trace, "Unapplied with work");
+                        NKqp::TCompileTraceScope child(&trace, 15, "Unapplied child");
+                    }
+                    try {
+                        NKqp::TCompileTraceRuleScope rule(&trace, "Throwing");
+                        throw std::runtime_error("expected");
+                    } catch (const std::runtime_error&) {
+                    }
+                }
+                root.EndOk();
+                PassAway();
+            }
+        };
+        NActors::TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        auto* uploader = RegisterUploader(runtime);
+        runtime.Register(new TCompiler());
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        AssertDescendant(*uploader, "CBO work", "Rule: Applied");
+        AssertDescendant(*uploader, "Rule: Applied", "Stage");
+        AssertDescendant(*uploader, "Unapplied child", "Rule: Unapplied with work (not applied)");
+        AssertStatus(*uploader, "Rule: Throwing", NTraceProto::Status::STATUS_CODE_ERROR);
+        UNIT_ASSERT(!FindSpan(*uploader, "Rule: Empty attempt"));
+        UNIT_ASSERT(uploader->BuildTraceTrees());
+    }
+
     TFakeWilsonUploader* RegisterUploader(NActors::TTestActorRuntimeBase& runtime) {
         auto* uploader = new TFakeWilsonUploader();
         runtime.RegisterService(MakeWilsonUploaderId(), runtime.Register(uploader));

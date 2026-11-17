@@ -37,6 +37,8 @@ Sessions are long-lived objects. One of their important tasks is efficient load 
 
 In practice, you don't need to manually create, reuse, and delete sessions. All official SDKs for {{ ydb-short-name }} provide a built-in session pool: the SDK itself manages the session lifecycle, creating them as needed, reusing them, and returning them to the pool — all of this is transparent to the user and requires no additional logic in the application.
 
+To forcibly terminate a session, for example one running a long query, use [`KILL SESSION`](../../yql/reference/syntax/kill-session.md). Find its identifier in the [`.sys/query_sessions`](../../dev/system-views.md#query-sessions) system view.
+
 ## Transactions
 
 Each query in YDB is executed in the context of a transaction, which ensures consistency and reliable data storage. Transactions can be managed explicitly (through separate SDK calls) or by specifying the appropriate flags during query execution.

@@ -1,0 +1,120 @@
+[package]
+name = "librsvg"
+documentation = "https://gnome.pages.gitlab.gnome.org/librsvg/doc/rsvg/index.html"
+version = "2.62.0"
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+exclude = ["tests/fixtures", "tests/resources"]
+
+[package.metadata.docs.rs]
+rustc-args = ["--cfg", "docsrs"]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.system-deps]
+cairo = "1.18"
+cairo-gobject = "1.18"
+cairo-png = "1.18"
+cairo-pdf = { version = "1.18", optional = true }
+cairo-ps = { version = "1.18", optional = true }
+cairo-svg = { version = "1.18", optional = true }
+freetype2 = "20.0.14"
+gio = { name = "gio-2.0", version = "2.24" }
+glib = { name = "glib-2.0", version = "2.50" }
+harfbuzz = "2.0"
+libxml2 = { name = "libxml-2.0", fallback-names = ["libxml2"], version = "2.9" }
+pangocairo = "1.50"
+
+[package.metadata.system-deps.'cfg(any(target_os = "macos", target_os = "windows"))']
+fontconfig = { version = "1.7", optional = true }
+pangoft2 = { version = "1.50", optional = true }
+
+[package.metadata.system-deps.'cfg(all(not(target_os = "macos"), not(target_os = "windows")))']
+fontconfig = { version = "1.7" }
+pangoft2 = { version = "1.50" }
+
+[features]
+avif = ["image/avif-native"]
+capi = []
+test-utils = ["yeslogic-fontconfig-sys"]
+
+[lib]
+name = "rsvg"
+
+[dependencies]
+# Keep these in sync with respect to the cairo-rs version:
+#   src/lib.rs - toplevel example in the docs
+cairo-rs = { workspace = true, features = ["v1_16", "png", "pdf", "ps", "svg"] }
+cast.workspace = true
+cssparser.workspace = true
+cssparser-color.workspace = true
+data-url.workspace = true
+encoding_rs.workspace = true
+float-cmp.workspace = true
+gio.workspace = true
+glib.workspace = true
+image = { workspace = true, features = ["jpeg", "png", "gif", "webp"] }
+itertools.workspace = true
+language-tags.workspace = true
+libc.workspace = true
+locale_config.workspace = true
+markup5ever.workspace = true
+mutants.workspace = true
+nalgebra.workspace = true
+num-traits.workspace = true
+pango = { workspace = true, features = ["v1_46"] }
+pangocairo.workspace = true
+precomputed-hash.workspace = true
+rayon.workspace = true
+rctree.workspace = true
+regex.workspace = true
+rgb = { workspace = true, features = ["argb"] }
+selectors.workspace = true
+string_cache.workspace = true
+tinyvec = { workspace = true, features = ["alloc", "rustc_1_55"] }
+url.workspace = true
+xml5ever.workspace = true
+
+[target.'cfg(all(not(target_os = "macos"), not(target_os = "windows")))'.dependencies]
+yeslogic-fontconfig-sys = { workspace = true, optional = true }
+
+[build-dependencies]
+system-deps.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(system_deps_have_fontconfig)',
+    'cfg(system_deps_have_pangoft2)',
+] }
+
+[[bench]]
+name = "box_blur"
+harness = false
+
+[[bench]]
+name = "composite"
+harness = false
+
+[[bench]]
+name = "lighting"
+harness = false
+
+[[bench]]
+name = "path_parser"
+harness = false
+
+[[bench]]
+name = "pixel_iterators"
+harness = false
+
+[[bench]]
+name = "pixel_ops"
+harness = false
+
+[[bench]]
+name = "srgb"
+harness = false

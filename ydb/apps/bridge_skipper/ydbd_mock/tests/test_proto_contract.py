@@ -35,6 +35,7 @@ class PileStateContractTest(unittest.TestCase):
             "SUSPENDED": 5,
             "DISCONNECTED": 6,
             "INACTIVE": 7,
+            "HOT_STANDBY": 8,
         }
         self.assertEqual(actual, expected)
 
@@ -107,6 +108,14 @@ class MessageShapeContractTest(unittest.TestCase):
         req.updates.add(pile_name="a", state=PileState.DISCONNECTED)
         req.quorum_piles.append("b")
         self.assertEqual(req.updates[0].state, PileState.DISCONNECTED)
+
+    def test_update_expected_generation_has_presence(self):
+        req = ydb_bridge_pb2.UpdateClusterStateRequest()
+        self.assertFalse(req.HasField("expected_generation"))
+        req.expected_generation = 0
+        self.assertTrue(req.HasField("expected_generation"))
+        self.assertEqual(ydb_bridge_pb2.UpdateClusterStateRequest.DESCRIPTOR.fields_by_name[
+            "expected_generation"].number, 4)
 
     def test_discovery_endpoint_fields(self):
         info = ydb_discovery_pb2.EndpointInfo(

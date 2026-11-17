@@ -113,6 +113,9 @@ inline void AssertIdInvariants(IOperator& root, TPlanProps& props) {
             case EOperator::Map:
                 own = CastOperator<TOpMap>(op).GetMapElements().Keys();
                 break;
+            case EOperator::Sequencer:
+                own = CastOperator<TOpSequencer>(op).GetGeneratedColumns().Unordered();
+                break;
             case EOperator::AddDependencies:
                 own = CastOperator<TOpAddDependencies>(op).GetDependencies().Keys();
                 break;

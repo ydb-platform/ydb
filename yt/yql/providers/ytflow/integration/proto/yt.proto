@@ -6,6 +6,7 @@ message TYtQueueSourceMessage {
    optional string Cluster = 1;
    optional string Path = 2;
    optional bytes RowType = 3;
+   optional string ConsumerPath = 4;
 }
 
 message TYtQueueSinkMessage {
@@ -14,6 +15,7 @@ message TYtQueueSinkMessage {
    optional bytes RowType = 3;
    optional bool DoesExist = 5;
    optional bool Truncate = 6;
+   optional string ProducerPath = 7;
 }
 
 message TYtSortedTableSinkMessage {

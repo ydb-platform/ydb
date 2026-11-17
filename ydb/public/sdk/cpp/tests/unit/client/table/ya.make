@@ -7,8 +7,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-FORK_SUBTESTS()
-
 PEERDIR(
     library/cpp/testing/common
     library/cpp/testing/gtest

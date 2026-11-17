@@ -2456,6 +2456,24 @@
       "labels": {
         "user_counters": "PersQueue",
         "topic": "rt3.dc1--asdfgs--topic",
+        "sensor": "PQ/WriteInitSessionsLimit"
+      },
+      "value": 1000
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "topic": "rt3.dc1--asdfgs--topic",
+        "sensor": "PQ/WriteInitSessionsUsage"
+      },
+      "value": 0
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/WriteMessagesQuota"
       },
       "value": 1048576
@@ -2873,6 +2891,24 @@
         "sensor": "PQ/WriteBytesQuota"
       },
       "value": 50000000
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "topic": "total",
+        "sensor": "PQ/WriteInitSessionsLimit"
+      },
+      "value": 1000
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "topic": "total",
+        "sensor": "PQ/WriteInitSessionsUsage"
+      },
+      "value": 0
     },
     {
       "kind": "GAUGE",

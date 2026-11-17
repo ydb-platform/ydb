@@ -1,0 +1,167 @@
+--- a/temporalio/bridge/sdk-core/crates/sdk-core/src/worker/tuner/resource_based.rs
++++ b/temporalio/bridge/sdk-core/crates/sdk-core/src/worker/tuner/resource_based.rs
+@@ -519,7 +519,7 @@
+     total_mem: AtomicU64,
+     cur_mem_usage: AtomicU64,
+     cur_cpu_usage: AtomicU64,
+-    cgroup_cpu_info: CGroupCpuInfo<CgroupV2CpuFileSystem>,
++    cgroup_cpu_info: CGroupCpuInfo<CgroupCpuFileSystem>,
+ }
+ 
+ impl RealSysInfoInner {
+@@ -586,7 +586,7 @@
+             cur_mem_usage: AtomicU64::new(0),
+             cur_cpu_usage: AtomicU64::new(0),
+             total_mem: AtomicU64::new(total_mem),
+-            cgroup_cpu_info: CGroupCpuInfo::new(CgroupV2CpuFileSystem),
++            cgroup_cpu_info: CGroupCpuInfo::new(CgroupCpuFileSystem::default()),
+         });
+         inner.refresh();
+ 
+@@ -705,12 +705,16 @@
+         }
+     }
+ 
+-    /// Reads the usage_usec value from the cpu.stat file as a u64.
++    /// Reads CPU usage in microseconds from cpu.stat (v2) or cpuacct.usage (v1).
+     /// Returns None if the file cannot be read or if the value cannot be parsed into u64.
+     ///
+     /// The cpu.stat file is expected to be a multiline file where each line is `key value`
+     fn read_cpu_usage(&self) -> Option<u64> {
+         let stat = self.fs.read_cpu_stat_file()?;
++        // cpuacct.usage reports nanoseconds; the existing calculation uses microseconds.
++        if let Ok(usage_ns) = stat.trim().parse::<u64>() {
++            return Some(usage_ns / 1000);
++        }
+         stat.lines().find_map(|line| {
+             let mut parts = line.split_whitespace();
+             match (parts.next(), parts.next()) {
+@@ -720,7 +724,7 @@
+         })
+     }
+ 
+-    /// Reads the cpu quota and period from the cpu.max file.
++    /// Reads the CPU quota and period from cpu.max (v2) or cpu.cfs_* (v1).
+     /// Returns None if the file cannot be read, or the quota/limit cannot be parsed
+     ///
+     /// The cpu.max file is expected to be in the format 'quota period'
+@@ -730,7 +734,7 @@
+         let quota_str = parts.next()?;
+         let period_str = parts.next()?;
+ 
+-        let quota = if quota_str == "max" {
++        let quota = if quota_str == "max" || quota_str == "-1" {
+             CpuQuota::Unlimited
+         } else {
+             CpuQuota::Limited(quota_str.parse().ok()?)
+@@ -742,23 +746,42 @@
+ }
+ 
+ /// Implementation of the `CGroupCpuFileSystem` that reads directly
+-/// from the host cgroup v2 hierarchy.
++/// from the host cgroup v1 or v2 hierarchy.
+ #[derive(Debug)]
+-struct CgroupV2CpuFileSystem;
+-
+-impl CgroupV2CpuFileSystem {
+-    const BASE_PATH: &'static str = "/sys/fs/cgroup";
+-}
+-
+-impl CGroupCpuFileSystem for CgroupV2CpuFileSystem {
++struct CgroupCpuFileSystem {
++    base_path: PathBuf,
++}
++
++impl Default for CgroupCpuFileSystem {
++    fn default() -> Self {
++        Self {
++            base_path: PathBuf::from("/sys/fs/cgroup"),
++        }
++    }
++}
++
++impl CGroupCpuFileSystem for CgroupCpuFileSystem {
+     fn read_cpu_stat_file(&self) -> Option<String> {
+-        let path = PathBuf::from(Self::BASE_PATH).join("cpu.stat");
+-        fs::read_to_string(path).ok()
++        [
++            "cpu.stat",
++            "cpuacct/cpuacct.usage",
++            "cpu,cpuacct/cpuacct.usage",
++        ]
++        .iter()
++        .find_map(|path| fs::read_to_string(self.base_path.join(path)).ok())
+     }
+ 
+     fn read_cpu_limit_file(&self) -> Option<String> {
+-        let path = PathBuf::from(Self::BASE_PATH).join("cpu.max");
+-        fs::read_to_string(path).ok()
++        fs::read_to_string(self.base_path.join("cpu.max"))
++            .ok()
++            .or_else(|| {
++                ["cpu", "cpu,cpuacct"].iter().find_map(|controller| {
++                    let path = self.base_path.join(controller);
++                    let quota = fs::read_to_string(path.join("cpu.cfs_quota_us")).ok()?;
++                    let period = fs::read_to_string(path.join("cpu.cfs_period_us")).ok()?;
++                    Some(format!("{} {}", quota.trim(), period.trim()))
++                })
++            })
+     }
+ }
+ 
+@@ -1041,6 +1064,46 @@
+     }
+ 
+     #[test]
++    fn cgroup_cpu_files_support_v1_and_v2() {
++        let base_path = env::temp_dir().join(format!("temporal-cgroup-cpu-{}", std::process::id()));
++        fs::create_dir_all(&base_path).unwrap();
++        let cgroup_info = CGroupCpuInfo::new(CgroupCpuFileSystem {
++            base_path: base_path.clone(),
++        });
++        for (accounting, cpu) in [("cpuacct", "cpu"), ("cpu,cpuacct", "cpu,cpuacct")] {
++            fs::create_dir_all(base_path.join(accounting)).unwrap();
++            fs::create_dir_all(base_path.join(cpu)).unwrap();
++            fs::write(base_path.join(accounting).join("cpuacct.usage"), "500000\n").unwrap();
++            fs::write(base_path.join(cpu).join("cpu.cfs_quota_us"), "200000\n").unwrap();
++            fs::write(base_path.join(cpu).join("cpu.cfs_period_us"), "100000\n").unwrap();
++            assert_eq!(cgroup_info.read_cpu_usage(), Some(500));
++            let limits = cgroup_info.read_cpus_limit().unwrap();
++            assert!(matches!(limits.quota, CpuQuota::Limited(200000)));
++            assert_eq!(limits.period, 100000);
++            fs::write(base_path.join(cpu).join("cpu.cfs_quota_us"), "-1\n").unwrap();
++            assert!(matches!(
++                cgroup_info.read_cpus_limit().unwrap().quota,
++                CpuQuota::Unlimited
++            ));
++            fs::remove_dir_all(base_path.join(accounting)).unwrap();
++            if accounting != cpu {
++                fs::remove_dir_all(base_path.join(cpu)).unwrap();
++            }
++        }
++        fs::write(
++            base_path.join("cpu.stat"),
++            "usage_usec 750\nuser_usec 500\n",
++        )
++        .unwrap();
++        fs::write(base_path.join("cpu.max"), "200000 100000\n").unwrap();
++        assert_eq!(cgroup_info.read_cpu_usage(), Some(750));
++        let limits = cgroup_info.read_cpus_limit().unwrap();
++        assert!(matches!(limits.quota, CpuQuota::Limited(200000)));
++        assert_eq!(limits.period, 100000);
++        fs::remove_dir_all(base_path).unwrap();
++    }
++
++    #[test]
+     fn cgroup_quota_respected() {
+         let stat = Rc::new(RefCell::new(Some("usage_usec 500".into())));
+         let limit = Rc::new(RefCell::new(Some("1000 1000".into())));
+@@ -1127,7 +1190,7 @@
+         }
+ 
+         let sys_info = RealSysInfo::new(RealSysInfo::MIN_REFRESH_INTERVAL);
+-        let cgroup_info = CGroupCpuInfo::new(CgroupV2CpuFileSystem);
++        let cgroup_info = CGroupCpuInfo::new(CgroupCpuFileSystem::default());
+         let CGroupCpuLimits { quota, period } = cgroup_info
+             .read_cpus_limit()
+             .expect("unable to read cpu quota.");

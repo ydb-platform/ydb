@@ -11,7 +11,9 @@
 namespace NActors {
     TInterconnectListenerTCP::TInterconnectListenerTCP(const TString& address, ui16 port, TInterconnectProxyCommon::TPtr common, const TMaybe<SOCKET>& socket)
         : TActor(&TThis::Initial)
-        , TInterconnectLoggingBase(Sprintf("ICListener: %s", SelfId().ToString().data()))
+        , TInterconnectLoggingBase(YDB_LOG_CREATE_MESSAGE(
+            {"selfActorKind", "ICListener"},
+            {"selfActorId", SelfId()}))
         , Address(address)
         , Port(port)
         , Listener(
@@ -32,6 +34,7 @@ namespace NActors {
 
     void TInterconnectListenerTCP::Die(const TActorContext& ctx) {
         YDB_LOG_DEBUG("Dying",
+            {"logPrefix", LogPrefix},
             {"marker", "ICL08"});
         TActor::Die(ctx);
     }
@@ -81,6 +84,7 @@ namespace NActors {
         if (!Listener) {
             if (const int err = Bind()) {
                 YDB_LOG_ERROR("Bind",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICL01"},
                     {"failed", strerror(err)},
                     {"address", Address.data()},
@@ -109,6 +113,7 @@ namespace NActors {
             const int r = Listener->Accept(address);
             if (r >= 0) {
                 YDB_LOG_DEBUG("Accepted",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICL04"},
                     {"from", address});
                 auto socket = MakeIntrusive<NInterconnect::TStreamSocket>(static_cast<SOCKET>(r));
@@ -117,6 +122,7 @@ namespace NActors {
             } else if (-r != EAGAIN && -r != EWOULDBLOCK) {
                 Y_ABORT_UNLESS(-r != ENFILE && -r != EMFILE && !ExternalSocket);
                 YDB_LOG_ERROR("Listen",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICL06"},
                     {"failed", strerror(-r)},
                     {"address", Address.data()},

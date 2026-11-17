@@ -122,7 +122,9 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
 
         const ui64 restoreId = ++txId;
         TBlockEvents<TEvPrivate::TEvProgressOperation> blockedProgress(runtime, [&](const auto& ev) {
-            return ev->Get()->TxId == restoreId;
+            // Private event ids can collide with events from other actors, e.g. TEvActivateExecution.
+            const auto* progress = dynamic_cast<const TEvPrivate::TEvProgressOperation*>(ev->GetBase());
+            return progress && progress->TxId == restoreId;
         });
         TestRestoreBackupCollection(runtime, restoreId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");

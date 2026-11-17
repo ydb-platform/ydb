@@ -292,6 +292,10 @@ def _GO_PROCESS_SRCS(unit: ymake.Unit):
         vet_report_file_name = os.path.join(unit_path, '{}{}'.format(unit.filename(), unit.get('GO_VET_REPORT_EXT')))
         unit.onadd_check(["govet", '$(BUILD_ROOT)/' + tobuilddir(vet_report_file_name)[3:]])
 
+    # No lint config scope or migration entry matches vendor/contrib packages and their vet report is never checked
+    if not need_lint(unit_path):
+        unit.set(['_GO_VET_LINT_CONFIGS', ''])
+
     for f in ev_files:
         ev_proto_file = '{}.proto'.format(f)
         unit.oncopy_file_with_context([f, ev_proto_file])

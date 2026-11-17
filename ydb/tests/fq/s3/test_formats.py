@@ -1,28 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import json
 import logging
 
 import pytest
 
 import ydb.public.api.protos.ydb_value_pb2 as ydb
-import ydb.public.api.protos.draft.fq_pb2 as fq
 
 import ydb.tests.fq.s3.s3_helpers as s3_helpers
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, YQ_STATS_FULL
 
 
 class TestS3Formats:
     def create_bucket_and_upload_file(self, filename, s3, kikimr):
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data")
-        kikimr.control_plane.wait_bootstrap(1)
 
     def create_bucket_and_upload_file_body(
         self, body, object_key, s3, kikimr, content_type="text/plain", bucket_name="fbucket"
     ):
         s3_helpers.create_bucket_and_put_object(s3.s3_url, bucket_name, object_key, body, content_type)
-        kikimr.control_plane.wait_bootstrap(1)
 
     def validate_result(self, result_set):
         logging.debug(str(result_set))
@@ -34,15 +29,15 @@ class TestS3Formats:
         assert result_set.columns[2].name == "Weight"
         assert result_set.columns[2].type.type_id == ydb.Type.INT32
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].bytes_value == b"Banana"
-        assert result_set.rows[0].items[1].int32_value == 3
-        assert result_set.rows[0].items[2].int32_value == 100
-        assert result_set.rows[1].items[0].bytes_value == b"Apple"
-        assert result_set.rows[1].items[1].int32_value == 2
-        assert result_set.rows[1].items[2].int32_value == 22
-        assert result_set.rows[2].items[0].bytes_value == b"Pear"
-        assert result_set.rows[2].items[1].int32_value == 15
-        assert result_set.rows[2].items[2].int32_value == 33
+        assert result_set.rows[0][0] == b"Banana"
+        assert result_set.rows[0][1] == 3
+        assert result_set.rows[0][2] == 100
+        assert result_set.rows[1][0] == b"Apple"
+        assert result_set.rows[1][1] == 2
+        assert result_set.rows[1][2] == 22
+        assert result_set.rows[2][0] == b"Pear"
+        assert result_set.rows[2][1] == 15
+        assert result_set.rows[2][2] == 33
 
     def validate_pg_result(self, result_set):
         logging.debug(str(result_set))
@@ -54,18 +49,16 @@ class TestS3Formats:
         assert result_set.columns[2].name == "Weight"
         assert result_set.columns[2].type.pg_type.oid == 20
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].text_value == "Banana"
-        assert result_set.rows[0].items[1].text_value == "3"
-        assert result_set.rows[0].items[2].text_value == "100"
-        assert result_set.rows[1].items[0].text_value == "Apple"
-        assert result_set.rows[1].items[1].text_value == "2"
-        assert result_set.rows[1].items[2].text_value == "22"
-        assert result_set.rows[2].items[0].text_value == "Pear"
-        assert result_set.rows[2].items[1].text_value == "15"
-        assert result_set.rows[2].items[2].text_value == "33"
+        assert result_set.rows[0][0] == "Banana"
+        assert result_set.rows[0][1] == "3"
+        assert result_set.rows[0][2] == "100"
+        assert result_set.rows[1][0] == "Apple"
+        assert result_set.rows[1][1] == "2"
+        assert result_set.rows[1][2] == "22"
+        assert result_set.rows[2][0] == "Pear"
+        assert result_set.rows[2][1] == "15"
+        assert result_set.rows[2][2] == "33"
 
-    @yq_all
-    @pytest.mark.parametrize("kikimr_settings", [{"stats_mode": YQ_STATS_FULL}], indirect=True)
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -76,10 +69,10 @@ class TestS3Formats:
             ("test.parquet", "parquet"),
         ],
     )
-    def test_format(self, kikimr, s3, client, filename, type_format, yq_version, unique_prefix):
+    def test_format(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -91,28 +84,21 @@ class TestS3Formats:
             ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         self.validate_result(result_set)
 
-        stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
-        if yq_version == "v1":
-            assert stat["Graph=0"]["TaskRunner"]["Stage=Total"]["IngressBytes"]["sum"] > 0
-            if type_format != "json_list":
-                assert stat["Graph=0"]["TaskRunner"]["Stage=Total"]["IngressRows"]["sum"] == 3
-        else:  # v2
-            assert stat["ResultSet"]["IngressBytes"]["sum"] > 0
-            if type_format != "json_list":
-                assert stat["ResultSet"]["IngressRows"]["sum"] == 3
+        assert query.metric('IngressBytes') > 0
+        if type_format != "json_list":
+            assert query.metric('IngressRows') == 3
 
-    @yq_all
     def test_btc(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("btct.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "btct"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "btct")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT
@@ -137,15 +123,13 @@ class TestS3Formats:
             );
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
-        issues = describe_result.query.issue[0].issues
-        assert "Error while reading file btct.parquet" in issues[0].message
-        assert "File contains LIST field outputs and can\'t be parsed" in issues[0].issues[0].message
+        query = client.execute(sql)
+        query.check(False)
+        describe_result = query
+        issues = describe_result.error
+        assert "Error while reading file btct.parquet" in issues
+        assert "File contains LIST field outputs and can\'t be parsed" in issues
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_format(self, kikimr, s3, client, unique_prefix):
         fruits = '''Fruit,Price,Weight
 Banana,3,100
@@ -153,8 +137,8 @@ Apple,2,22
 Pear,15,33'''
         self.create_bucket_and_upload_file_body(fruits, "fruits.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -166,19 +150,17 @@ Pear,15,33'''
             ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
+        query = client.execute(sql)
+        query.check(False)
+        describe_result = query
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
         assert "Unknown format: invalid_type_format. Use one of: " in describe_string
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_input_compression(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file_body("blahblahblah", "fruits", s3, kikimr, bucket_name="ibucket")
-        storage_connection_name = unique_prefix + "input_bucket"
-        client.create_storage_connection(storage_connection_name, "ibucket")
+        storage_connection_name = client.path(unique_prefix + "input_bucket")
+        client.create_external_data_source(storage_connection_name, "ibucket")
 
         sql = f'''
             SELECT *
@@ -190,17 +172,15 @@ Pear,15,33'''
             ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
+        query = client.execute(sql)
+        query.check(False)
+        describe_result = query
         assert "External compression for parquet is not supported" in str(describe_result)
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_output_compression(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file_body("blahblahblah", "fruits", s3, kikimr, bucket_name="obucket")
-        storage_connection_name = unique_prefix + "output_bucket"
-        client.create_storage_connection(storage_connection_name, "obucket")
+        storage_connection_name = client.path(unique_prefix + "output_bucket")
+        client.create_external_data_source(storage_connection_name, "obucket")
 
         sql = f'''
             INSERT INTO `{storage_connection_name}`.`path/` with (format=parquet, compression=abvgzip)
@@ -213,13 +193,11 @@ Pear,15,33'''
             ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
+        query = client.execute(sql)
+        query.check(False)
+        describe_result = query
         assert "External compression for parquet is not supported" in str(describe_result)
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_custom_csv_delimiter_csv_with_names(self, kikimr, s3, client, unique_prefix):
         fruits = '''Fruit;Price;Weight
     Banana;3;100
@@ -227,8 +205,8 @@ Pear,15,33'''
     Pear;15;33'''
         self.create_bucket_and_upload_file_body(fruits, "fruits.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
                 SELECT *
@@ -244,14 +222,12 @@ Pear,15,33'''
                 );
                 '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
         self.validate_result(result_set)
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_custom_csv_delimiter_csv(self, kikimr, s3, client, unique_prefix):
         """Same as test_custom_csv_delimiter_csv_with_names but format=csv (no header row; SCHEMA defines order)."""
         fruits = '''Banana;3;100
@@ -259,8 +235,8 @@ Apple;2;22
 Pear;15;33'''
         self.create_bucket_and_upload_file_body(fruits, "fruits_sep.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket_csv"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket_csv")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
                 SELECT *
@@ -276,19 +252,17 @@ Pear;15;33'''
                 );
                 '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
         self.validate_result(result_set)
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_delimiter_invalid_format_rejected(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file_body('{"time":"lunch"}\n', "one_row.jsonl", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "delimiterinvalidbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "delimiterinvalidbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
             SELECT *
@@ -300,19 +274,17 @@ Pear;15;33'''
             );
             """
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
+        query = client.execute(sql)
+        query.check(False)
+        describe_result = query
         describe_string = "{}".format(describe_result)
         assert "csv_delimiter can only be used with csv_with_names or csv format" in describe_string
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_delimiter_must_be_single_character_rejected(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file_body("x\n", "one_col.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "delimitersizebucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "delimitersizebucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
             SELECT *
@@ -324,14 +296,12 @@ Pear;15;33'''
             );
             """
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
+        query = client.execute(sql)
+        query.check(False)
+        describe_result = query
         describe_string = "{}".format(describe_result)
         assert "csv_delimiter must be single character" in describe_string
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_with_names_projection_column_order(self, kikimr, s3, client, unique_prefix):
         """csv_with_names: header order b,a in file; SCHEMA lists a,b; SELECT a,b checks values by name.
 
@@ -339,8 +309,8 @@ Pear;15;33'''
         """
         self.create_bucket_and_upload_file_body("b,a\nbb,aa\n", "two_cols.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "twocolbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "twocolbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
             SELECT a, b
@@ -354,25 +324,23 @@ Pear;15;33'''
             );
             """
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
         assert len(result_set.columns) == 2
         assert result_set.columns[0].name == "a"
         assert result_set.columns[1].name == "b"
         assert len(result_set.rows) == 1
-        assert result_set.rows[0].items[0].bytes_value == b"aa"
-        assert result_set.rows[0].items[1].bytes_value == b"bb"
+        assert result_set.rows[0][0] == b"aa"
+        assert result_set.rows[0][1] == b"bb"
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_projection_column_order(self, kikimr, s3, client, unique_prefix):
         """csv (no header row): SCHEMA fixes field order; SELECT b, a only reorders output columns."""
         self.create_bucket_and_upload_file_body("aa,bb", "headerless_two_cols.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "headerless_twocolbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "headerless_twocolbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
             SELECT b, a
@@ -386,25 +354,23 @@ Pear;15;33'''
             );
             """
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
         assert len(result_set.columns) == 2
         assert result_set.columns[0].name == "b"
         assert result_set.columns[1].name == "a"
         assert len(result_set.rows) == 1
-        assert result_set.rows[0].items[0].bytes_value == b"bb"
-        assert result_set.rows[0].items[1].bytes_value == b"aa"
+        assert result_set.rows[0][0] == b"bb"
+        assert result_set.rows[0][1] == b"aa"
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_empty_schema_rejected(self, kikimr, s3, client, unique_prefix):
         """Headerless csv: SCHEMA = () must be rejected (no column names to define field order in the file)."""
         self.create_bucket_and_upload_file_body("x", "empty_schema.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "emptyschemabucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "emptyschemabucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
             SELECT *
@@ -415,17 +381,15 @@ Pear;15;33'''
             );
             """
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
+        query = client.execute(sql)
+        query.check(False)
+        describe_result = query
         describe_string = "{}".format(describe_result)
         assert (
             "csv format requires SCHEMA with explicitly listed column names to determine column order"
             in describe_string
         )
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_projection_single_column(self, kikimr, s3, client, unique_prefix):
         """csv (no header): full SCHEMA (a,b) and two fields in file; SELECT only one column (b).
 
@@ -433,8 +397,8 @@ Pear;15;33'''
         """
         self.create_bucket_and_upload_file_body("aa,bb", "headerless_select_one_col.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "headerless_onecolbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "headerless_onecolbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
             SELECT b
@@ -448,17 +412,15 @@ Pear;15;33'''
             );
             """
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
         assert len(result_set.columns) == 1
         assert result_set.columns[0].name == "b"
         assert len(result_set.rows) == 1
-        assert result_set.rows[0].items[0].bytes_value == b"bb"
+        assert result_set.rows[0][0] == b"bb"
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_projection_column_order_non_alphabetical_schema(self, kikimr, s3, client, unique_prefix):
         """Same as test_csv_projection_column_order but SCHEMA lists b, a (not alphabetical a, b).
 
@@ -466,8 +428,8 @@ Pear;15;33'''
         """
         self.create_bucket_and_upload_file_body("bb,aa", "headerless_b_a.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "headerless_ba_bucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "headerless_ba_bucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
             SELECT a, b
@@ -481,24 +443,22 @@ Pear;15;33'''
             );
             """
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
         assert len(result_set.columns) == 2
         assert result_set.columns[0].name == "a"
         assert result_set.columns[1].name == "b"
         assert len(result_set.rows) == 1
-        assert result_set.rows[0].items[0].bytes_value == b"aa"
-        assert result_set.rows[0].items[1].bytes_value == b"bb"
+        assert result_set.rows[0][0] == b"aa"
+        assert result_set.rows[0][1] == b"bb"
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_no_not_nullable_column(self, kikimr, s3, client, unique_prefix):
         filename = "test_wrong_type.csv"
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -509,17 +469,15 @@ Pear;15;33'''
             ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
+        query = client.execute(sql)
+        query.check(False)
+        describe_result = query
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
         assert (
             "Column `AMOGUS` is marked as not null, but was not found in the csv file" in describe_string
         ), describe_string
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_with_names_header_missing_not_null_column(self, kikimr, s3, client, unique_prefix):
         """NOT NULL column from SCHEMA is absent from the file header (CSVRowInputFormat readPrefix)."""
         # Header lists only Fruit and Price; Weight is required by SCHEMA but not in the CSV header row.
@@ -530,8 +488,8 @@ Pear,15
 """
         self.create_bucket_and_upload_file_body(csv_body, "fruits_missing_col.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -543,22 +501,20 @@ Pear,15
             ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
+        query = client.execute(sql)
+        query.check(False)
+        describe_result = query
         describe_string = "{}".format(describe_result)
         logging.debug("Describe result: {}".format(describe_result))
         assert (
             "Column `Weight` is marked as not null, but was not found in the csv file" in describe_string
         ), describe_string
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_no_nullable_column(self, kikimr, s3, client, unique_prefix):
         filename = "test_wrong_type.csv"
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -569,19 +525,17 @@ Pear,15
             ));
             '''
 
-        query_id = client.create_query("simple", sql).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
-        assert result_set.rows[0].items[0].HasField("null_flag_value")
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
+        assert result_set.rows[0][0] is None
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_column_type_in_csv(self, kikimr, s3, client, unique_prefix):
         filename = "test_wrong_type.csv"
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql1 = f'''
             SELECT *
@@ -601,29 +555,27 @@ Pear,15
             ));
             '''
 
-        def check_result(query_id, corrupted_col_name):
-            client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-            describe_result = client.describe_query(query_id).result
+        def check_result(query, corrupted_col_name):
+            query.check(False)
+            describe_result = query
             logging.debug("Describe result: {}".format(describe_result))
             describe_string = "{}".format(describe_result)
             assert (
-                "failed to parse data in column `{}\\' from row 0, probably data type differs from specified in schema".format(
+                "failed to parse data in column `{}' from row 0, probably data type differs from specified in schema".format(
                     corrupted_col_name
                 )
                 in describe_string
             ), describe_string
 
-        query1_id = client.create_query("simple", sql1, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        query2_id = client.create_query("simple", sql2, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        query1_id = client.execute(sql1)
+        query2_id = client.execute(sql2)
         check_result(query1_id, "Owner")
         check_result(query2_id, "Fruit")
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_column_in_parquet(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -635,20 +587,18 @@ Pear,15
             ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
+        query = client.execute(sql)
+        query.check(False)
+        describe_result = query
         logging.debug("Describe result: {}".format(describe_result))
-        issues = describe_result.query.issue[0].issues
-        assert '''Error while reading file test.parquet''' in issues[0].message
-        assert "Missing field: ZZZZZ" in issues[0].issues[0].message
+        issues = describe_result.error
+        assert '''Error while reading file test.parquet''' in issues
+        assert "Missing field: ZZZZZ" in issues
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_missing_optional_column_in_parquet(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT Fruit, Price, ZZZZZ, Missing
@@ -662,10 +612,10 @@ Pear,15
             ORDER BY Price;
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 4
         assert result_set.columns[2].name == "ZZZZZ"
@@ -673,22 +623,20 @@ Pear,15
         assert result_set.columns[3].name == "Missing"
         assert result_set.columns[3].type.optional_type.item.type_id == ydb.Type.JSON
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].bytes_value == b"Apple"
-        assert result_set.rows[0].items[1].int32_value == 2
-        assert result_set.rows[1].items[0].bytes_value == b"Banana"
-        assert result_set.rows[1].items[1].int32_value == 3
-        assert result_set.rows[2].items[0].bytes_value == b"Pear"
-        assert result_set.rows[2].items[1].int32_value == 15
+        assert result_set.rows[0][0] == b"Apple"
+        assert result_set.rows[0][1] == 2
+        assert result_set.rows[1][0] == b"Banana"
+        assert result_set.rows[1][1] == 3
+        assert result_set.rows[2][0] == b"Pear"
+        assert result_set.rows[2][1] == 15
         for row in result_set.rows:
-            assert row.items[2].HasField("null_flag_value")
-            assert row.items[3].HasField("null_flag_value")
+            assert row[2] is None
+            assert row[3] is None
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_only_missing_optional_columns_in_parquet(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT COUNT(*) AS cnt, COUNT(Missing) AS cnt_missing
@@ -698,21 +646,19 @@ Pear,15
             ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.rows) == 1
-        assert result_set.rows[0].items[0].uint64_value == 3
-        assert result_set.rows[0].items[1].uint64_value == 0
+        assert result_set.rows[0][0] == 3
+        assert result_set.rows[0][1] == 0
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_simple_pg_types(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -724,18 +670,16 @@ Pear,15
             ));
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
         self.validate_pg_result(result_set)
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_precompute(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             $maxPrice = SELECT MAX(Price)
@@ -756,11 +700,11 @@ Pear,15
             WHERE Price == $maxPrice;
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 2
         assert result_set.columns[0].name == "Fruit"
@@ -768,35 +712,29 @@ Pear,15
         assert result_set.columns[1].name == "Price"
         assert result_set.columns[1].type.type_id == ydb.Type.INT32
         assert len(result_set.rows) == 1
-        assert result_set.rows[0].items[0].bytes_value == b"Pear"
-        assert result_set.rows[0].items[1].int32_value == 15
+        assert result_set.rows[0][0] == b"Pear"
+        assert result_set.rows[0][1] == 15
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_raw_empty_schema_query(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
         sql = f'''
             SELECT * FROM `{storage_connection_name}`.`*`
             WITH (format=raw, SCHEMA ());
             '''
 
-        query_id = client.create_query(
-            "test_raw_empty_schema", sql, type=fq.QueryContent.QueryType.ANALYTICS
-        ).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
+        query = client.execute(sql)
+        query.check(False)
+        describe_result = query
         describe_string = "{}".format(describe_result)
         assert r"Only one column in schema supported in raw format" in describe_string
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_no_header_three_rows(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test_no_header.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -811,22 +749,20 @@ Pear,15
             );
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
         self.validate_result(result_set)
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_no_header_select_price(self, kikimr, s3, client, unique_prefix):
         # Same file as test_csv_no_header_three_rows (3 columns, no header row).
         # Request a single column that is not the first in alphabetical order
         # (Fruit < Price < Weight тЖТ Price is the middle column).
         self.create_bucket_and_upload_file("test_no_header.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT Price
@@ -841,21 +777,19 @@ Pear,15
             );
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 1
         assert result_set.columns[0].name == "Price"
         assert result_set.columns[0].type.type_id == ydb.Type.INT32
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].int32_value == 3
-        assert result_set.rows[1].items[0].int32_value == 2
-        assert result_set.rows[2].items[0].int32_value == 15
+        assert result_set.rows[0][0] == 3
+        assert result_set.rows[1][0] == 2
+        assert result_set.rows[2][0] == 15
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_physical_column_order(self, kikimr, s3, client, unique_prefix):
         # Physical file columns are Weight,Price,Fruit (first row 100,3,Banana).
         # SCHEMA lists Weight, Price, Fruit тАФ parser must map by position, not by name
@@ -866,8 +800,8 @@ Pear,15
 33,15,Pear'''
         self.create_bucket_and_upload_file_body(fruits, "fruits_reversed.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -882,22 +816,20 @@ Pear,15
             );
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
         col = {c.name: i for i, c in enumerate(result_set.columns)}
         for name in ("Weight", "Price", "Fruit"):
             assert name in col
-        row0 = result_set.rows[0].items
-        assert row0[col["Weight"]].int32_value == 100
-        assert row0[col["Price"]].int32_value == 3
-        assert row0[col["Fruit"]].bytes_value == b"Banana"
+        row0 = result_set.rows[0]
+        assert row0[col["Weight"]] == 100
+        assert row0[col["Price"]] == 3
+        assert row0[col["Fruit"]] == b"Banana"
 
-    @yq_all
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_format_custom_delimiter(self, kikimr, s3, client, unique_prefix):
         """csv + csv_delimiter (same scenario as `test_custom_csv_delimiter_csv`)."""
         # csv format with custom delimiter (semicolon)
@@ -906,8 +838,8 @@ Apple;2;22
 Pear;15;33'''
         self.create_bucket_and_upload_file_body(fruits, "fruits_semicolon.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -923,8 +855,8 @@ Pear;15;33'''
             );
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        query = client.execute(sql)
+        query.check()
+        data = query.result_set()
+        result_set = data
         self.validate_result(result_set)

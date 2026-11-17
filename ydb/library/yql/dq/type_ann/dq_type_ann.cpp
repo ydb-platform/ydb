@@ -821,6 +821,7 @@ public:
         AddHandler({
             TDqPhyGraceJoin::CallableName(),
             TDqPhyBlockHashJoin::CallableName(),
+            TDqPhyHashJoin::CallableName(),
             TDqPhyScalarHashJoin::CallableName(),
             TDqPhyMapJoin::CallableName(),
             TDqPhyJoinDict::CallableName(),

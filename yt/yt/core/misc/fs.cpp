@@ -630,7 +630,7 @@ std::string NormalizePathSeparators(const std::string& path)
 
 void SetPermissions(const std::string& path, int permissions)
 {
-#ifdef _linux_
+#ifdef _unix_
     auto res = HandleEintr(::chmod, path.c_str(), permissions);
     if (res == -1) {
         THROW_ERROR_EXCEPTION("Failed to set permissions for descriptor")
@@ -645,8 +645,19 @@ void SetPermissions(const std::string& path, int permissions)
 
 void SetPermissions(int fd, int permissions)
 {
+#ifdef _linux_
     const auto& procPath = Format("/proc/self/fd/%v", fd);
     SetPermissions(procPath, permissions);
+#elif defined(_unix_)
+    if (HandleEintr(::fchmod, fd, permissions) == -1) {
+        THROW_ERROR_EXCEPTION("Failed to set permissions for descriptor")
+            .With("fd", fd)
+            .With("permissions", permissions)
+            .With(TError::FromSystem());
+    }
+#else
+    Y_UNUSED(fd, permissions);
+#endif
 }
 
 void MakeSymbolicLink(const std::string& filePath, const std::string& linkPath)
@@ -700,7 +711,11 @@ std::string GetHomePath()
     SHGetSpecialFolderPath(0, buffer.data(), CSIDL_PROFILE, 0);
     return buffer.data();
 #else
-    return std::getenv("HOME");
+    const auto* home = std::getenv("HOME");
+    if (!home) {
+        THROW_ERROR_EXCEPTION("HOME environment variable is not set");
+    }
+    return home;
 #endif
 }
 
@@ -1174,7 +1189,7 @@ TError AttachFindOutput(TError error, const std::string& path)
 
 TDeviceId GetDeviceId(const std::string& path)
 {
-#ifdef _linux_
+#if defined(_linux_) || defined(_darwin_)
     auto deviceId = Stat(path).st_dev;
     return {major(deviceId), minor(deviceId)};
 #else

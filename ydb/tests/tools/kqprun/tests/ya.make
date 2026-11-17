@@ -7,6 +7,7 @@ DATA(
 )
 
 TEST_SRCS(
+    test_query_files.py
     test_kqprun_recipe.py
 )
 

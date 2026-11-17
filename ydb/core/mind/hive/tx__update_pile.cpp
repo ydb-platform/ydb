@@ -46,17 +46,27 @@ public:
             }
             if (pileInfo.State != wardenPileInfo.State) {
                 if (!NBridge::PileStateTraits(wardenPileInfo.State).AllowsConnection) {
-                    for (auto nodeId : pileInfo.Nodes) {
-                        auto* nodeInfo = Self->FindNode(nodeId);
-                        if (!nodeInfo) {
+                    for (const auto& [_, nodeInfo] : Self->Nodes) {
+                        if (nodeInfo.BridgePileId != pileId) {
                             continue;
                         }
-                        for (const auto& [_, tablets] : nodeInfo->Tablets) {
+                        for (const auto& [state, tablets] : nodeInfo.Tablets) {
+                            // not stopped: a stopped tablet whose instance still runs would be revived in place by the node's resync
+                            if (state == TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN) {
+                                continue;
+                            }
                             TabletsToRestart.reserve(TabletsToRestart.size() + tablets.size());
                             TabletsToRestart.insert(TabletsToRestart.end(), tablets.begin(), tablets.end());
                         }
                     }
                 }
+            }
+            if (pileInfo.State != wardenPileInfo.State &&
+                    wardenPileInfo.State == NKikimrBridge::TClusterState::HOT_STANDBY) {
+                // the pile stays connected, so the tablets running there are not restarted; they read through other
+                // piles and no new one is started there, so they are moved out gracefully
+                pileInfo.Drain = true;
+                db.Table<Schema::BridgePile>().Key(pileInfo.GetId()).Update<Schema::BridgePile::Drain>(true);
             }
             if (!pileInfo.IsPromoted && wardenPileInfo.IsBeingPromoted) {
                 promotion = true;
@@ -76,9 +86,6 @@ public:
                 pileInfo.Drain = true;
                 db.Table<Schema::BridgePile>().Key(pileInfo.GetId()).Update<Schema::BridgePile::Drain>(true);
             }
-            if (pileInfo.Drain) {
-                Self->StartHiveDrain(pileId, TDrainSettings{.DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN, .Forward = false});
-            }
         }
 
         for (auto* tablet : TabletsToRestart) {
@@ -93,6 +100,7 @@ public:
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("THive::TTxUpdatePiles::Complete",
             {"logPrefix", GetLogPrefix()});
+        Self->ProcessPileDrains();
     }
 
 };

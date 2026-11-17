@@ -202,7 +202,7 @@ struct TAstNode {
     inline ~TAstNode() = default;
 
     void Destroy() {
-        TString().swap(Position_.File);
+        TCowString().swap(Position_.File);
     }
 
 private:

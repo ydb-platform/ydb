@@ -44,36 +44,34 @@ private:
             return TStatus::Error;
         }
 
-        if (!State_->IsRtmrMode()) {
-            const auto writeInput = write.Input().Ptr();
-            const auto inputPos = writeInput->Pos();
-            if (const auto maybeTuple = TMaybeNode<TExprList>(writeInput)) {
-                const auto tuple = maybeTuple.Cast();
+        const auto writeInput = write.Input().Ptr();
+        const auto inputPos = writeInput->Pos();
+        if (const auto maybeTuple = TMaybeNode<TExprList>(writeInput)) {
+            const auto tuple = maybeTuple.Cast();
 
-                TVector<TExprBase> values;
-                values.reserve(tuple.Size());
-                for (const auto& value : tuple) {
-                    if (!EnsureStructType(value.Ref(), ctx)) {
-                        return TStatus::Error;
-                    }
-
-                    values.emplace_back(value);
+            TVector<TExprBase> values;
+            values.reserve(tuple.Size());
+            for (const auto& value : tuple) {
+                if (!EnsureStructType(value.Ref(), ctx)) {
+                    return TStatus::Error;
                 }
 
-                const auto list = Build<TCoAsList>(ctx, writeInput->Pos()).Add(std::move(values)).Done();
-
-                input.Ptr()->ChildRef(TSoWriteToShard::idx_Input) = list.Ptr();
-                return TStatus::Repeat;
+                values.emplace_back(value);
             }
 
-            const TTypeAnnotationNode* inputItemType = nullptr;
-            if (!EnsureNewSeqType<true, true, true>(inputPos, *writeInput->GetTypeAnn(), ctx, &inputItemType)) {
-                return TStatus::Error;
-            }
+            const auto list = Build<TCoAsList>(ctx, writeInput->Pos()).Add(std::move(values)).Done();
 
-            if (!ValidateWriteTypeAnnotation(inputPos, inputItemType, ctx)) {
-                return TStatus::Error;
-            }
+            input.Ptr()->ChildRef(TSoWriteToShard::idx_Input) = list.Ptr();
+            return TStatus::Repeat;
+        }
+
+        const TTypeAnnotationNode* inputItemType = nullptr;
+        if (!EnsureNewSeqType<true, true, true>(inputPos, *writeInput->GetTypeAnn(), ctx, &inputItemType)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateWriteTypeAnnotation(inputPos, inputItemType, ctx)) {
+            return TStatus::Error;
         }
 
         input.Ptr()->SetTypeAnn(write.World().Ref().GetTypeAnn());
@@ -81,8 +79,6 @@ private:
     }
 
     TStatus HandleSoShard(TExprBase input, TExprContext& ctx) {
-        YQL_ENSURE(!State_->IsRtmrMode(), "SoShard can't be used in rtmr mode");
-
         if (!EnsureMinMaxArgsCount(input.Ref(), 5, 6, ctx)) {
             return TStatus::Error;
         }

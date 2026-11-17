@@ -21,8 +21,11 @@ void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, T
     Manager->OnGCFinishedOnExecute(CollectGenStepInFlight, dbBlobs);
 }
 
-bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
+bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
     Manager->OnGCFinishedOnComplete(CollectGenStepInFlight);
+    if (FirstGC && CollectGenStepInFlight) {
+        self.OnFirstGC(CollectGenStepInFlight->Generation(), TActivationContext::AsActorContext());
+    }
     return true;
 }
 
@@ -37,10 +40,11 @@ bool TGCTask::DoOnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& /*self*/,
 
 TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const std::optional<TGenStep>& collectGenStepInFlight,
     std::deque<TUnifiedBlobId>&& keepsToErase, const std::shared_ptr<TBlobManager>& manager, TBlobsCategories&& blobsToRemove,
-    const std::shared_ptr<TRemoveGCCounters>& counters, const ui64 tabletId, const ui64 currentGen)
+    const std::shared_ptr<TRemoveGCCounters>& counters, const ui64 tabletId, const ui64 currentGen, const bool firstGC)
     : TBase(storageId, std::move(blobsToRemove), counters)
     , ListsByGroupId(std::move(listsByGroupId))
     , CollectGenStepInFlight(collectGenStepInFlight)
+    , FirstGC(firstGC)
     , TabletId(tabletId)
     , CurrentGen(currentGen)
     , KeepsToErase(std::move(keepsToErase))

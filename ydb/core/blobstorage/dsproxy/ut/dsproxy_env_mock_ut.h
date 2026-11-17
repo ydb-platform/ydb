@@ -7,6 +7,7 @@
 
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -53,7 +54,8 @@ struct TDSProxyEnv {
             TBlobStorageGroupInfo::EEncryptionMode encryptionMode = TBlobStorageGroupInfo::EEM_ENC_V1,
             const TControlWrapper& dormantTimeoutMinutes = DormantTimeoutDefaultControl,
             bool enableProxySchedule = false,
-            const TVector<TBlobStorageGroupInfo::TDynamicInfo::EFailRealmState>& failRealmStates = {})
+            const TVector<TBlobStorageGroupInfo::TDynamicInfo::EFailRealmState>& failRealmStates = {},
+            std::optional<EMirror3dcGroupState> groupState = {})
     {
         GroupId = groupId;
         NodeIdx = nodeIndex;
@@ -79,7 +81,11 @@ struct TDSProxyEnv {
 
         if (!failRealmStates.empty()) {
             auto dynamic = Info->GetDynamicInfo();
-            dynamic.FailRealmStates = failRealmStates;
+            Y_ABORT_UNLESS(failRealmStates.size() == dynamic.Mirror3dcState.FailRealmStates.size());
+            for (ui32 realm = 0; realm < failRealmStates.size(); ++realm) {
+                dynamic.Mirror3dcState.FailRealmStates[realm] = failRealmStates[realm];
+            }
+            dynamic.Mirror3dcState.State = groupState.value_or(NKikimrBlobStorage::TGroupState::NORMAL);
             Info = MakeIntrusive<TBlobStorageGroupInfo>(Info->PickTopology(), std::move(dynamic), "",
                 TMaybe<TKikimrScopeId>{}, NPDisk::DEVICE_TYPE_UNKNOWN);
         }

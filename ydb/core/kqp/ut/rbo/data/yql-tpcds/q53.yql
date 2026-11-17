@@ -15,13 +15,13 @@ FROM (
                 i_manufact_id
         ) AS avg_quarterly_sales
     FROM
-        `/Root/test/ds/item`
+        `item`
     ,
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     ,
-        `/Root/test/ds/store`
+        `store`
     WHERE
         ss_item_sk == i_item_sk
         AND ss_sold_date_sk == d_date_sk

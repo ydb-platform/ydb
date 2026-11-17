@@ -84,7 +84,8 @@ public:
 
     TDqSolomonWriteActor(ui64 outputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, ui64 taskId, TDqSolomonWriteParams&& writeParams,
         NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters,
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, i64 freeSpace, bool enableStreamingQueriesCounters)
+        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, i64 freeSpace, bool enableStreamingQueriesCounters,
+        bool enableCountersPerTask)
         : TActor<TDqSolomonWriteActor>(&TDqSolomonWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
@@ -92,7 +93,7 @@ public:
         , WriteParams(std::move(writeParams))
         , Url(GetUrl())
         , Callbacks(callbacks)
-        , Metrics(counters, TxId, taskId, enableStreamingQueriesCounters)
+        , Metrics(counters, TxId, taskId, enableStreamingQueriesCounters, enableCountersPerTask)
         , FreeSpace(freeSpace)
         ,
         UserMetricsEncoder(WriteParams.Shard.GetScheme(), WriteParams.Shard.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING)
@@ -181,6 +182,7 @@ private:
             ;
 
             if (enableStreamingQueriesCounters) {
+                CountersRoot = subgroup;
                 subgroup = subgroup->GetSubgroup("tx_id", TxId);
                 if (enableCountersPerTask) {
                     subgroup = subgroup->GetSubgroup("task_id", ToString(taskId));
@@ -196,6 +198,16 @@ private:
             Errors = subgroup->GetCounter("Errors", true);
         }
 
+        ~TDqSolomonWriteActorMetrics() {
+            if (CountersRoot) {
+                // XXX Group will be removed by each task of query (repeatedly);
+                // Should be mostly harmless (as all of them removed at once at query termination);
+                // Though, there are some racing potential on query restart;
+                // This is common problem with solomon sink, pq source, pq sink and dq slj actor
+                CountersRoot->RemoveSubgroup("tx_id", TxId);
+            }
+        }
+
         TString TxId;
         ::NMonitoring::TDynamicCounters::TCounterPtr SendingBufferSize;
         ::NMonitoring::TDynamicCounters::TCounterPtr WindowMinSendingBufferSize;
@@ -204,6 +216,7 @@ private:
         ::NMonitoring::TDynamicCounters::TCounterPtr SentMetrics;
         ::NMonitoring::TDynamicCounters::TCounterPtr ConfirmedMetrics;
         ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
+        ::NMonitoring::TDynamicCounterPtr CountersRoot;
 
     public:
         void ReportSendingBufferSize(size_t size) {
@@ -549,7 +562,7 @@ private:
 std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(NYql::NSo::NProto::TDqSolomonShard&& settings,
     ui64 outputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, ui64 taskId, const THashMap<TString, TString>& secureParams,
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, i64 freeSpace, bool enableStreamingQueriesCounters)
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, i64 freeSpace, bool enableStreamingQueriesCounters, bool enableCountersPerTask)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -562,7 +575,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     auto credentialsProvider = credentialsProviderFactory->CreateProvider();
 
     TDqSolomonWriteActor* actor = new TDqSolomonWriteActor(outputIndex, statsLevel, txId, taskId, std::move(params), callbacks, counters,
-        credentialsProvider, freeSpace, enableStreamingQueriesCounters);
+        credentialsProvider, freeSpace, enableStreamingQueriesCounters, enableCountersPerTask);
     return { actor, actor };
 }
 
@@ -577,9 +590,10 @@ void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredT
             if (taskParamsIt != args.TaskParams.end()) {
                 txId = taskParamsIt->second;
             }
+            bool enableCountersPerTask = args.StatsLevel == TCollectStatsLevel::Profile;
 
             return CreateDqSolomonWriteActor(std::move(settings), args.OutputIndex, args.StatsLevel, txId, args.TaskId, args.SecureParams,
-                args.Callback, counters, credentialsFactory, DqSolomonDefaultFreeSpace, enableStreamingQueriesCounters);
+                args.Callback, counters, credentialsFactory, DqSolomonDefaultFreeSpace, enableStreamingQueriesCounters, enableCountersPerTask);
         });
 }
 

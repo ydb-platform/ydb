@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/blobstorage/vdisk/skeleton)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -17,6 +15,7 @@ PEERDIR(
 SRCS(
     skeleton_oos_logic_ut.cpp
     skeleton_front_latency_ut.cpp
+    skeleton_log_counters_ut.cpp
     skeleton_vpatch_actor_ut.cpp
 )
 

@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/blobstorage/backpressure)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(

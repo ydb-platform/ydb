@@ -433,6 +433,7 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
     , TableClient(driver)
     , TopicClient(driver)
     , CoordinationNodeClient(driver)
+    , Remover(NInternal::CreateDefaultRemover(driver, {}))
     , RateLimiterClient(driver)
     , QueryClient(driver)
     , CmsClient(driver)
@@ -527,13 +528,9 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
     // RecursiveList outputs elements in pre-order: root, root's children, ...
     // We reverse it to delete scheme objects before directories.
     auto cleanupResult = RemovePathsRecursive(
-        SchemeClient,
-        TableClient,
-        TopicClient,
-        QueryClient,
-        CoordinationNodeClient,
         newListing.Entries.rbegin(),
-        newListing.Entries.rend()
+        newListing.Entries.rend(),
+        Remover
     );
     if (!cleanupResult.IsSuccess()) {
         LOG_E("Error on cleanup, issues: " << cleanupResult.GetIssues().ToOneLineString());
@@ -1118,11 +1115,10 @@ TRestoreResult TRestoreClient::Drop(ESchemeEntryType type, const TString& path, 
         return Result<TRestoreResult>();
     }
 
-    auto remover = NInternal::CreateDefaultRemover(SchemeClient, TableClient, TopicClient, QueryClient, CoordinationNodeClient, {});
     TSchemeEntry entry;
     entry.Type = type;
     entry.Name = path;
-    TStatus result = remover(entry);
+    TStatus result = Remover(entry);
 
     if (result.IsSuccess()) {
         LOG_D("Dropped " << path.Quote());

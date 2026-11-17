@@ -610,7 +610,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             //lock partition
             UNIT_ASSERT(readStream->Read(&resp));
             UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
-            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "topic1");
+            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "acc/topic1");
             UNIT_ASSERT(resp.start_partition_session_request().partition_session().partition_id() == 0);
 
             assignId = resp.start_partition_session_request().partition_session().partition_session_id();
@@ -2057,7 +2057,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             //lock partition
             UNIT_ASSERT(readStream->Read(&resp));
             UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
-            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "topic1");
+            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "acc/topic1");
             UNIT_ASSERT(resp.start_partition_session_request().partition_session().partition_id() == 0);
 
             assignId = resp.start_partition_session_request().partition_session().partition_session_id();

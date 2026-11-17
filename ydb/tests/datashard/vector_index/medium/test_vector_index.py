@@ -176,8 +176,7 @@ class TestVectorIndex(VectorBase):
                                     order by {knn_func}({col_name}, $Target) {"DESC" if knn_func in targets["similarity"].values() else "ASC"}
                                     limit 100;
                                     """
-        wait_for(self.wait_create_vector_index(sql_select_request, dml), timeout_seconds=150)
-        rows = dml.query(sql_select_request)
+        rows = self.query_when_index_ready(sql_select_request, dml, timeout_seconds=150)
         if knn_func == "Knn::InnerProductSimilarity":
             rows.reverse()
         count = 0
@@ -365,8 +364,7 @@ class TestVectorIndex(VectorBase):
                                     order by {knn_func}({col_name}, $Target) {"DESC" if knn_func in targets["similarity"].values() else "ASC"}
                                     limit 5;
                                     """
-            wait_for(self.wait_create_vector_index(sql_select_request, dml), timeout_seconds=100)
-            rows = dml.query(sql_select_request)
+            rows = self.query_when_index_ready(sql_select_request, dml, timeout_seconds=100)
             if knn_func == "Knn::InnerProductSimilarity":
                 rows.reverse()
             count = 0
@@ -395,14 +393,18 @@ class TestVectorIndex(VectorBase):
                     assert rows[j][count] == 0, f"faild in {knn_func} != 0, rows{j} = {rows[j][count]}"
             count += 1
 
-    def wait_create_vector_index(self, sql_request: str, dml: DMLOperations):
+    def query_when_index_ready(self, sql_request: str, dml: DMLOperations, timeout_seconds: int):
+        rows = None
+
         def predicate():
+            nonlocal rows
             try:
-                dml.query(sql_request)
+                rows = dml.query(sql_request)
             except Exception as ex:
                 if "No global indexes for table" in str(ex):
                     return False
                 raise ex
             return True
 
-        return predicate
+        assert wait_for(predicate, timeout_seconds=timeout_seconds), "Vector index did not become ready"
+        return rows

@@ -150,9 +150,16 @@ bool TStrategyBase::IsUnrecoverableAltruistic(TBlobStorageGroupInfo::EBlobState 
 }
 
 std::optional<EStrategyOutcome> TStrategyBase::SetAbsentForUnrecoverableAltruistic(
-        TBlobStorageGroupInfo::EBlobState recoveryState, TBlobState &state) {
+        TBlobStorageGroupInfo::EBlobState recoveryState, TBlobState &state, const TBlobStorageGroupInfo &info) {
     if (IsUnrecoverableAltruistic(recoveryState)) {
-        state.WholeSituation = TBlobState::ESituation::Absent;
+        // with more disks not replicated yet than the group may have, the state is disintegrated, as the error domains
+        // are counted, even when the parts read are enough to restore the blob, so it is not absent then; otherwise it
+        // is taken for the absent one, as disks being replicated rely on such answers to get rid of phantom blobs
+        if (recoveryState == TBlobStorageGroupInfo::EBS_DISINTEGRATED && state.Restore(info)) {
+            state.WholeSituation = TBlobState::ESituation::Present;
+        } else {
+            state.WholeSituation = TBlobState::ESituation::Absent;
+        }
         return EStrategyOutcome::DONE;
     }
     return std::nullopt;

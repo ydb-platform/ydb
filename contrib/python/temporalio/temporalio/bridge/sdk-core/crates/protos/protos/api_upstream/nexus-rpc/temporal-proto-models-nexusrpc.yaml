@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nexus-rpc/nexus-rpc-gen/main/schemas/nexus-rpc-gen.json
+#
+# Nexus service definition for server-to-worker communication.
+# See request_response.proto for message definitions.
+#
+# Task queue format: /temporal-sys/worker-commands/{namespace}/{worker_grouping_key}
+
+nexusrpc: 1.0.0
+
+services:
+  temporal.api.nexusservices.workerservice.v1.WorkerService:
+    description: >
+      Internal Nexus service for server-to-worker communication.
+      Used by the Temporal server to send commands to workers.
+    operations:
+      ExecuteCommands:
+        description: Executes worker commands sent by the server.
+        input:
+          $goRef: "go.temporal.io/api/nexusservices/workerservice/v1.ExecuteCommandsRequest"
+          $javaRef: "io.temporal.api.nexusservices.workerservice.v1.ExecuteCommandsRequest"
+          $pythonRef: "temporalio.api.nexusservices.workerservice.v1.ExecuteCommandsRequest"
+          $typescriptRef: "@temporalio/api/nexusservices/workerservice/v1.ExecuteCommandsRequest"
+          $dotnetRef: "Temporalio.Api.Nexusservices.Workerservice.V1.ExecuteCommandsRequest"
+          $rubyRef: "Temporalio::Api::Nexusservices::Workerservice::V1::ExecuteCommandsRequest"
+        output:
+          $goRef: "go.temporal.io/api/nexusservices/workerservice/v1.ExecuteCommandsResponse"
+          $javaRef: "io.temporal.api.nexusservices.workerservice.v1.ExecuteCommandsResponse"
+          $pythonRef: "temporalio.api.nexusservices.workerservice.v1.ExecuteCommandsResponse"
+          $typescriptRef: "@temporalio/api/nexusservices/workerservice/v1.ExecuteCommandsResponse"
+          $dotnetRef: "Temporalio.Api.Nexusservices.Workerservice.V1.ExecuteCommandsResponse"
+          $rubyRef: "Temporalio::Api::Nexusservices::Workerservice::V1::ExecuteCommandsResponse"
+

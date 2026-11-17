@@ -32,6 +32,7 @@ RECURSE(
     backpressure
     base
     bridge
+    contracts
     crypto
     ddisk
     dsproxy
@@ -43,6 +44,7 @@ RECURSE(
     pdisk
     storagepoolmon
     subsystem
+    syncer
     testing
     vdisk
 )

@@ -2,7 +2,8 @@
 
 #include "events.h"
 #include <ydb/core/ymq/base/events_writer_iface.h>
-#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>

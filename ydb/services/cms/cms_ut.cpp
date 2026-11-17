@@ -12,6 +12,7 @@
 #include <ydb/core/protos/console_tenant.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
@@ -70,7 +71,7 @@ static Ydb::StatusIds::StatusCode WaitForOperationStatus(std::shared_ptr<grpc::C
     return response.operation().status();
 }
 
-static Ydb::Cms::GetDatabaseStatusResult WaitForTenantState(std::shared_ptr<grpc::Channel> channel, const TString& path, Ydb::Cms::GetDatabaseStatusResult::State state = Ydb::Cms::GetDatabaseStatusResult::RUNNING, const TString &token = "") {
+static Ydb::Cms::GetDatabaseStatusResult WaitForTenantState(std::shared_ptr<grpc::Channel> channel, const TString& path, Ydb::Cms::GetDatabaseStatusResult::State state = Ydb::Cms::GetDatabaseStatusResult::RUNNING, const TString &token = "", const TString& expectedPath = "") {
     std::unique_ptr<Ydb::Cms::V1::CmsService::Stub> stub;
     stub = Ydb::Cms::V1::CmsService::NewStub(channel);
     Ydb::Cms::GetDatabaseStatusRequest request;
@@ -90,7 +91,7 @@ static Ydb::Cms::GetDatabaseStatusResult WaitForTenantState(std::shared_ptr<grpc
         Ydb::Cms::GetDatabaseStatusResult result;
         auto res = response.operation().result().UnpackTo(&result);
         UNIT_ASSERT(res);
-        UNIT_ASSERT_VALUES_EQUAL(result.path(), path);
+        UNIT_ASSERT_VALUES_EQUAL(result.path(), expectedPath ? expectedPath : path);
         if (result.state() == state) {
             return result;
         }
@@ -135,8 +136,10 @@ static void SetSyncOperation(TRequest& req) {
     req.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
 }
 
-static void doSimpleTenantsTest(bool sync) {
-    TKikimrWithGrpcAndRootSchema server;
+static void doSimpleTenantsTest(bool sync, bool relativePathsEnabled) {
+    NKikimrConfig::TAppConfig config;
+    config.MutableFeatureFlags()->SetEnableRelativePaths(relativePathsEnabled);
+    TKikimrWithGrpcAndRootSchema server(config);
 
     server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::CMS_TENANTS, NLog::PRI_TRACE);
 
@@ -148,13 +151,14 @@ static void doSimpleTenantsTest(bool sync) {
     channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
 
     const TString tenant = "/Root/users/user-1";
+    const TString requestPath = relativePathsEnabled ? "users/user-1" : tenant;
     // create tenant
     {
         stub = Ydb::Cms::V1::CmsService::NewStub(channel);
         grpc::ClientContext context;
 
         Ydb::Cms::CreateDatabaseRequest request;
-        request.set_path(tenant);
+        request.set_path(requestPath);
         if (sync)
             SetSyncOperation(request);
         auto unit = request.mutable_resources()->add_storage_units();
@@ -189,7 +193,7 @@ static void doSimpleTenantsTest(bool sync) {
         grpc::ClientContext context;
 
         Ydb::Cms::AlterDatabaseRequest request;
-        request.set_path(tenant);
+        request.set_path(requestPath);
 
         auto unit = request.add_storage_units_to_add();
         unit->set_unit_kind("hdd");
@@ -204,7 +208,7 @@ static void doSimpleTenantsTest(bool sync) {
 
     // get tenant status
     {
-        Ydb::Cms::GetDatabaseStatusResult result = WaitForTenantState(channel, tenant, Ydb::Cms::GetDatabaseStatusResult::RUNNING);
+        Ydb::Cms::GetDatabaseStatusResult result = WaitForTenantState(channel, requestPath, Ydb::Cms::GetDatabaseStatusResult::RUNNING, "", tenant);
         UNIT_ASSERT_VALUES_EQUAL(result.path(), tenant);
         UNIT_ASSERT_VALUES_EQUAL(result.state(), Ydb::Cms::GetDatabaseStatusResult::RUNNING);
         UNIT_ASSERT_VALUES_EQUAL(result.required_resources().storage_units_size(), 1);
@@ -238,7 +242,7 @@ static void doSimpleTenantsTest(bool sync) {
         grpc::ClientContext context;
 
         Ydb::Cms::RemoveDatabaseRequest request;
-        request.set_path("/Root/users/user-1");
+        request.set_path(requestPath);
         if (sync)
             SetSyncOperation(request);
 
@@ -263,7 +267,7 @@ static void doSimpleTenantsTest(bool sync) {
         grpc::ClientContext context;
 
         Ydb::Cms::GetDatabaseStatusRequest request;
-        request.set_path("/Root/users/user-1");
+        request.set_path(requestPath);
 
         Ydb::Cms::GetDatabaseStatusResponse response;
         auto status = stub->GetDatabaseStatus(&context, request, &response);
@@ -365,12 +369,12 @@ void CheckRemoveDatabase(std::shared_ptr<grpc::Channel> channel,
 }
 
 Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
-    Y_UNIT_TEST(SimpleTenantsTest) {
-        doSimpleTenantsTest(false);
+    Y_UNIT_TEST_TWIN(SimpleTenantsTest, relativePathsEnabled) {
+        doSimpleTenantsTest(false, relativePathsEnabled);
     }
 
-    Y_UNIT_TEST(SimpleTenantsTestSyncOperation) {
-        doSimpleTenantsTest(true);
+    Y_UNIT_TEST_TWIN(SimpleTenantsTestSyncOperation, relativePathsEnabled) {
+        doSimpleTenantsTest(true, relativePathsEnabled);
     }
 
     Y_UNIT_TEST(AuthTokenTest) {

@@ -962,8 +962,7 @@ public:
 
         if (Info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
             // Both VPatch and VMovedPatch require NORMAL; otherwise use ordinary Get/Put.
-            UseVPatch &= GetMirror3dcGroupState(Info->GetFailRealmState(0), Info->GetFailRealmState(1),
-                Info->GetFailRealmState(2)) == EMirror3dcGroupState::NORMAL;
+            UseVPatch &= Info->GetMirror3dcState().State == NKikimrBlobStorage::TGroupState::NORMAL;
         }
 
         IsGoodPatchedBlobId = result;

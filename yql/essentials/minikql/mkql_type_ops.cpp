@@ -794,9 +794,9 @@ public:
         ui32 prevYear = NUdf::MIN_YEAR - 1;
         YearsOffsets_[0] = 0;
 
-        ui32 dayOfYear = 365;
+        ui32 dayOfYear = 364;
         ui32 dayOfWeek = 2;
-        ui32 weekOfYear = 52;
+        ui32 weekOfYear = 53;
         ui32 weekOfYearIso8601 = 1;
 
         Months_[0] = 0;
@@ -1271,9 +1271,11 @@ bool SplitInterval(i64 value, bool& sign, ui32& day, ui32& hour, ui32& min, ui32
 
 bool MakeTzDate(ui32 year, ui32 month, ui32 day, ui16& value, ui16 tzId) {
     ui32 datetime;
-    auto result = MakeTzDatetime(year, month, day, 0U, 0U, 0U, datetime, tzId);
+    if (!MakeTzDatetime(year, month, day, 0U, 0U, 0U, datetime, tzId)) {
+        return false;
+    }
     value = datetime / 86400U;
-    return result;
+    return true;
 }
 
 bool MakeTzDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, ui32& value, ui16 tzId) {

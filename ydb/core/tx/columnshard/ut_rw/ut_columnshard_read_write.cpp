@@ -2442,7 +2442,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         const ui64 txId = 111;
 
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
-        AFL_VERIFY(writer.Write(MakeTestBatch<arrow::UInt64Type>({ "key" }, std::vector<ui64>{ 1, 2, 3 }), { 1 }, txId) ==
+        YDB_LOG_VERIFY(writer.Write(MakeTestBatch<arrow::UInt64Type>({ "key" }, std::vector<ui64>{ 1, 2, 3 }), { 1 }, txId) ==
                    NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         // a transaction that is not proposed is aborted on start
         Y_UNUSED(writer.StartCommit(txId));

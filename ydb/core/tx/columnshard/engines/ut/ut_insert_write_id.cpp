@@ -15,15 +15,15 @@ namespace {
 class TNoDataAccessorsManager: public NDataAccessorControl::IDataAccessorsManager {
 private:
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& /*request*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     virtual void DoAddPortion(const std::shared_ptr<TPortionDataAccessor>& /*accessor*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& /*portion*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
 public:
@@ -50,64 +50,64 @@ public:
     }
 
     const IBlobGroupSelector* GetDsGroupSelector() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return nullptr;
     }
 
     void WriteColumns(
         const TPortionInfo&, const NKikimrTxColumnShard::TIndexPortionAccessor&, const NKikimrTxColumnShard::TIndexPortionBlobsInfo&) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     void WriteColumn(const TPortionDataAccessor&, const TPortionInfo&, const TColumnRecord&, const ui32) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     bool LoadColumns(const std::function<void(TColumnChunkLoadContextV2&&)>&, const std::optional<TInternalPathId>, const std::optional<ui64>,
         const std::optional<TInternalPathId>, const std::optional<ui64>) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     }
 
     void WritePortion(const std::vector<TUnifiedBlobId>&, const TPortionInfo&) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     void CommitPortion(const TPortionInfo&, const TSnapshot&) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     void ErasePortion(const TPortionInfo&) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     bool LoadPortions(const std::function<bool(std::unique_ptr<TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>&,
         const std::optional<TInternalPathId>, const std::optional<ui64>) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     }
 
     void WriteIndex(const TPortionDataAccessor&, const TPortionInfo&, const TIndexChunk&) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     void EraseIndex(const TPortionInfo&, const TIndexChunk&) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     bool LoadIndexes(const std::function<void(const TInternalPathId, const ui64, TIndexChunkLoadContext&&)>&,
         const std::optional<TInternalPathId>, const std::optional<ui64>, const std::optional<TInternalPathId>,
         const std::optional<ui64>) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     }
 
     TConclusion<THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TConclusionStatus::Fail("not supported");
     }
 };

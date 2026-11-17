@@ -25,7 +25,7 @@ bool TEngineUncommittedPortionsReader::DoExecute(NTabletFlatExecutor::TTransacti
         if (!db.LoadPortionVerified(portionAddress,
                 [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
                     const TIndexInfo& indexInfo = portion->GetSchema(Self->GetVersionedIndex())->GetIndexInfo();
-                    AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
+                    YDB_LOG_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
                     portions.emplace_back(granule, portion->Build());
                 })) {
             return false;

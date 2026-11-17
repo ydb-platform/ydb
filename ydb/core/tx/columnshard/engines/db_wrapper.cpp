@@ -175,7 +175,8 @@ bool TDbWrapper::LoadPortionVerified(const TPortionAddress& address,
     if (!rowset.IsReady()) {
         return false;
     }
-    AFL_VERIFY(!rowset.EndOfSet())("address", address.DebugString());
+    YDB_LOG_VERIFY(!rowset.EndOfSet(),
+        {"address", address.DebugString()});
     auto [portion, metaProto] = MakePortionInfoConstructor(rowset);
     callback(std::move(portion), metaProto);
     return true;

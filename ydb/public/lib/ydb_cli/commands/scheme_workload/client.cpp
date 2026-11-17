@@ -107,6 +107,7 @@ public:
             Check(result, "DescribeTable", path);
             const auto& description = result.GetTableDescription();
             Y_ENSURE(description.GetPrimaryKeyColumns() == std::vector<std::string>{"id"}, "Unexpected primary key at " << path);
+            Y_ENSURE(description.GetIndexDescriptions().empty(), "Table indexes are not supported at " << path);
             const auto& partitions = description.GetPartitioningSettings();
             Y_ENSURE(partitions.GetMinPartitionsCount() == object.Partitions
                 && partitions.GetMaxPartitionsCount() == object.Partitions

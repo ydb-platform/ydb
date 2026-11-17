@@ -47,6 +47,7 @@ Objects are named `<path>/table_<i>` and `<path>/topic_<i>`. `init` rejects exis
 Both commands prepare the directory if needed. Before `run`, its contents are listed and existing object schemas are inspected.
 A complete existing ALTER batch is dropped first;
 an absent batch is added first. Partial batches or incompatible schemas fail validation before mutations start.
+Tables with indexes are rejected during validation because their indexed columns cannot be dropped by the workload.
 The duration covers CREATE and ALTER after validation; outstanding requests are allowed to finish after it expires.
 Reaching `count` stops CREATE for that type; ALTER continues until the duration expires.
 The deadline can leave some objects uncreated. A later `run` inspects the actual set and creates the remaining objects.

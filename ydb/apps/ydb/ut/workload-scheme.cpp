@@ -85,6 +85,45 @@ public:
         }
     }
 
+    void CreateIndexedTable(NYdb::NTable::TSession session, ui32 index,
+            const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns = {}) {
+        auto builder = NYdb::NTable::TTableBuilder()
+            .AddNonNullableColumn("id", NYdb::EPrimitiveType::Uint64)
+            .SetPrimaryKeyColumn("id")
+            .SetUniformPartitions(2)
+            .SetPartitioningSettings(NYdb::NTable::TPartitioningSettingsBuilder()
+                .SetPartitioningBySize(false).SetPartitioningByLoad(false)
+                .SetMinPartitionsCount(2).SetMaxPartitionsCount(2).Build())
+            .AddSecondaryIndex("by_extra", indexColumns, dataColumns);
+        for (ui32 i = 0; i < 3; ++i) {
+            builder.AddNullableColumn("extra_" + std::to_string(i), NYdb::EPrimitiveType::Utf8);
+        }
+        const auto result = session.CreateTable(std::string(FullPath(TStringBuilder() << "table_" << index)),
+            builder.Build()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    void CheckIndexedColumnRejected(const std::vector<std::string>& indexColumns,
+            const std::vector<std::string>& dataColumns = {}) {
+        WriteConfig("tables: {count: 3, initial_count: 1, partitions: 2, alter_batch_size: 3}");
+        Init();
+        auto driver = Driver();
+        NYdb::NTable::TTableClient tables(driver);
+        auto session = tables.GetSession().GetValueSync().GetSession();
+        CreateIndexedTable(session, 1, indexColumns, dataColumns);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Run(), yexception, "Table indexes are not supported at " + FullPath("table_1"));
+        CheckTable(session, 0, false);
+        const auto existing = session.DescribeTable(std::string(FullPath("table_1"))).GetValueSync();
+        UNIT_ASSERT_C(existing.IsSuccess(), existing.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(existing.GetTableDescription().GetColumns().size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(existing.GetTableDescription().GetIndexDescriptions().size(), 1);
+        NYdb::NScheme::TSchemeClient scheme(driver);
+        const auto listing = scheme.ListDirectory(std::string(Database() + "/" + Path)).GetValueSync();
+        UNIT_ASSERT_C(listing.IsSuccess(), listing.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(listing.GetChildren().size(), 2);
+    }
+
     TTempDir Temporary;
     TString Path;
     TString ConfigPath;
@@ -244,6 +283,14 @@ Y_UNIT_TEST_SUITE_F(YdbWorkloadScheme, TSchemeWorkloadFixture) {
         const auto listing = scheme.ListDirectory(std::string(Database() + "/" + Path)).GetValueSync();
         UNIT_ASSERT(listing.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(listing.GetChildren().size(), 1);
+    }
+
+    Y_UNIT_TEST(IndexKeyColumnFailsBeforeMutation) {
+        CheckIndexedColumnRejected({"extra_0"});
+    }
+
+    Y_UNIT_TEST(IndexDataColumnFailsBeforeMutation) {
+        CheckIndexedColumnRejected({"extra_1"}, {"extra_0"});
     }
 
     Y_UNIT_TEST(InvalidConfigurationFails) {

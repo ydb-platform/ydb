@@ -60,7 +60,7 @@ public:
 
             tableInfo = DataShard.AlterTableDropIndex(ctx, txc, pathId, version, indexPathId);
         } else {
-            tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);
+            tableInfo = DataShard.AlterTableFinishColumnBuild(ctx, txc, pathId, version);
         }
 
         Y_ENSURE(tableInfo);

@@ -2,6 +2,12 @@
 #include "datashard_active_transaction.h"
 #include "datashard_ut_read_table.h"
 
+#include "datashard_ut_common_kqp.h"
+#include <ydb/core/formats/factory.h>
+#include <ydb/core/tx/schemeshard/index/build_index.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <util/generic/scope.h>
+
 #include <ydb/core/testlib/actors/block_events.h>
 
 namespace NKikimr {
@@ -732,5 +738,332 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots)
+
+} // namespace NKikimr
+
+namespace NKikimr {
+namespace {
+
+using namespace NDataShard;
+using namespace NDataShard::NKqpHelpers;
+using namespace NDataShardReadTableTest;
+
+enum class ERead {
+    Iterator,
+    Columns,
+    KqpScan,
+    ReadTable,
+    MiniKQL,
+    AllColumns,
+};
+
+class TBuildingColumnFixture {
+public:
+    TBuildingColumnFixture() {
+        Tests::TServerSettings settings(PortManager.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false);
+        settings.FeatureFlags.SetEnableAddColumsWithDefaults(true);
+        settings.Formats = new TFormatFactory;
+        Server = new Tests::TServer(settings);
+        auto& runtime = *Server->GetRuntime();
+        Sender = runtime.AllocateEdgeActor();
+        InitRoot(Server, Sender);
+        auto [shards, tableId] = CreateShardedTable(Server, Sender, "/Root", "Table", 1);
+        Shard = shards.at(0);
+        TableId = tableId;
+        ExecSQL(Server, Sender, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10), (2, 20);");
+    }
+
+    NKikimrSchemeOp::TTableDescription Schema() {
+        return GetTables(Server, Shard).first.begin()->second.GetDescription();
+    }
+
+    ui32 ColumnId(const NKikimrSchemeOp::TTableDescription& schema, const TString& name) {
+        for (const auto& column : schema.GetColumns()) {
+            if (column.GetName() == name) {
+                return column.GetId();
+            }
+        }
+        UNIT_FAIL("Missing column " << name);
+        return 0;
+    }
+
+    void CheckRead(ERead read, const TString& name, bool building, const TRowVersion& snapshot) {
+        auto& runtime = *Server->GetRuntime();
+        const auto schema = Schema();
+        const auto columnId = ColumnId(schema, name);
+        const auto sender = runtime.AllocateEdgeActor();
+
+        switch (read) {
+        case ERead::Iterator: {
+            auto request = GetBaseReadRequest(TableId, schema, ++ReadId,
+                NKikimrDataEvents::FORMAT_CELLVEC, snapshot);
+            request->Record.ClearColumns();
+            request->Record.AddColumns(columnId);
+            AddFullRangeQuery(*request);
+            runtime.SendToPipe(Shard, sender, request.release());
+            auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(sender);
+            const auto& result = *response->Get();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Record.GetStatus().GetCode(),
+                building ? Ydb::StatusIds::SCHEME_ERROR : Ydb::StatusIds::SUCCESS,
+                result.Record.DebugString());
+            if (!building) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetRowsCount(), 3);
+                for (size_t i = 0; i < result.GetRowsCount(); ++i) {
+                    const auto cells = result.GetCells(i);
+                    UNIT_ASSERT(!cells[0].IsNull());
+                    UNIT_ASSERT_VALUES_EQUAL(cells[0].AsValue<ui32>(), name == "extra" ? 42 : (i + 1) * 10);
+                }
+            }
+            break;
+        }
+        case ERead::Columns: {
+            auto request = MakeHolder<TEvDataShard::TEvReadColumnsRequest>();
+            request->Record.SetTableId(TableId.PathId.LocalPathId);
+            request->Record.SetSnapshotStep(snapshot.Step);
+            request->Record.SetSnapshotTxId(snapshot.TxId);
+            request->Record.AddColumns(name);
+            request->Record.SetFromKeyInclusive(true);
+            runtime.SendToPipe(Shard, sender, request.Release());
+            auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadColumnsResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(),
+                building ? NKikimrTxDataShard::TError::SCHEME_ERROR : 0,
+                response->Get()->Record.DebugString());
+            if (!building) {
+                UNIT_ASSERT(!response->Get()->Record.GetBlocks().empty());
+            }
+            break;
+        }
+        case ERead::KqpScan: {
+            auto request = MakeHolder<TEvDataShard::TEvKqpScan>();
+            auto& record = request->Record;
+            record.SetTxId(++ReadId);
+            record.SetScanId(ReadId);
+            record.SetLocalPathId(TableId.PathId.LocalPathId);
+            record.SetTablePath("/Root/Table");
+            record.SetSchemaVersion(schema.GetTableSchemaVersion());
+            record.AddColumnTags(columnId);
+            record.AddColumnTypes(NScheme::NTypeIds::Uint32);
+            record.AddColumnTypeInfos();
+            auto* range = record.AddRanges();
+            range->SetFromInclusive(true);
+            range->SetToInclusive(true);
+            record.MutableSnapshot()->SetStep(snapshot.Step);
+            record.MutableSnapshot()->SetTxId(snapshot.TxId);
+            record.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            runtime.SendToPipe(Shard, sender, request.Release());
+            TAutoPtr<IEventHandle> handle;
+            const auto [error, init] = runtime.GrabEdgeEventsRethrow<
+                NKqp::TEvKqpCompute::TEvScanError, NKqp::TEvKqpCompute::TEvScanInitActor>(handle);
+            if (building) {
+                UNIT_ASSERT_C(error != nullptr, "KQP scan accepted a building column");
+                UNIT_ASSERT_STRING_CONTAINS(error->Record.DebugString(), "column");
+            } else {
+                UNIT_ASSERT_C(init != nullptr, (error ? error->Record.DebugString() : "Missing scan init"));
+                runtime.Send(new IEventHandle(ActorIdFromProto(init->Record.GetScanActorId()), sender,
+                    new NKqp::TEvKqpCompute::TEvScanDataAck(1_MB)), 0, true);
+                auto response = runtime.GrabEdgeEventRethrow<NKqp::TEvKqpCompute::TEvScanData>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(response->Get()->Rows.size(), 3);
+                for (size_t i = 0; i < response->Get()->Rows.size(); ++i) {
+                    const auto& row = response->Get()->Rows[i];
+                    UNIT_ASSERT(!row[0].IsNull());
+                    UNIT_ASSERT_VALUES_EQUAL(row[0].AsValue<ui32>(), name == "extra" ? 42 : (i + 1) * 10);
+                }
+            }
+            break;
+        }
+        case ERead::ReadTable: {
+            if (building) {
+                NKikimrTxDataShard::TDataTransaction tx;
+                tx.SetImmediate(true);
+                tx.SetReadOnly(true);
+                tx.SetStreamResponse(true);
+                ActorIdToProto(sender, tx.MutableSink());
+                auto& scan = *tx.MutableReadTableTransaction();
+                scan.MutableTableId()->SetOwnerId(TableId.PathId.OwnerId);
+                scan.MutableTableId()->SetTableId(TableId.PathId.LocalPathId);
+                scan.SetSnapshotStep(snapshot.Step);
+                scan.SetSnapshotTxId(snapshot.TxId);
+                auto& column = *scan.AddColumns();
+                column.SetId(columnId);
+                column.SetName(name);
+                column.SetTypeId(NScheme::NTypeIds::Uint32);
+                runtime.SendToPipe(Shard, sender, new TEvDataShard::TEvProposeTransaction(
+                    NKikimrTxDataShard::TX_KIND_SCAN, sender, ++ReadId, tx.SerializeAsString(), TTxFlags::Immediate));
+                TAutoPtr<IEventHandle> handle;
+                const auto [result, clearance] = runtime.GrabEdgeEventsRethrow<
+                    TEvDataShard::TEvProposeTransactionResult, TEvTxProcessing::TEvStreamClearanceRequest>(handle);
+                Y_UNUSED(clearance);
+                UNIT_ASSERT_C(result != nullptr, "ReadTable accepted a building column");
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetStatus(),
+                    NKikimrTxDataShard::TEvProposeTransactionResult::ERROR, result->Record.DebugString());
+                UNIT_ASSERT_STRING_CONTAINS(result->Record.DebugString(), "SCHEME_CHANGED");
+            }
+            auto settings = MakeReadTableSettings("/Root/Table", true);
+            settings.Columns = {name};
+            TReadTableState state(Server, settings);
+            const auto result = state.All();
+            UNIT_ASSERT_VALUES_EQUAL_C(state.IsError, building, result);
+            if (!building) {
+                UNIT_ASSERT_VALUES_EQUAL(result, name == "extra"
+                    ? "extra = 42\nextra = 42\nextra = 42\n"
+                    : "value = 10\nvalue = 20\nvalue = 30\n");
+            }
+            break;
+        }
+        case ERead::MiniKQL: {
+            const auto body = CompileSelectRow(schema, name);
+            runtime.SendToPipe(Shard, sender, new TEvDataShard::TEvProposeTransaction(
+                NKikimrTxDataShard::TX_KIND_DATA, sender, ++ReadId, body, snapshot, TTxFlags::Immediate));
+            auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvProposeTransactionResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), building
+                ? NKikimrTxDataShard::TEvProposeTransactionResult::ERROR
+                : NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE,
+                response->Get()->Record.DebugString());
+            break;
+        }
+        case ERead::AllColumns: {
+            auto settings = MakeReadTableSettings("/Root/Table", true);
+            TReadTableState state(Server, settings);
+            const auto result = state.All();
+            UNIT_ASSERT_C(!state.IsError, result);
+            UNIT_ASSERT_STRING_CONTAINS(result, "key = 1");
+            UNIT_ASSERT_STRING_CONTAINS(result, "value = 30");
+            if (building) {
+                UNIT_ASSERT_C(!result.Contains("extra"), result);
+            } else {
+                UNIT_ASSERT_STRING_CONTAINS(result, "extra = 42");
+            }
+            break;
+        }
+        }
+    }
+
+    TString CompileSelectRow(const NKikimrSchemeOp::TTableDescription& schema, const TString& name) {
+        using namespace NMiniKQL;
+        using TResolver = NYql::IDbSchemeResolver;
+        TMockDbSchemeResolver resolver;
+        TResolver::TTableResult table(TResolver::TTableResult::Ok);
+        table.Table.TableName = "Table";
+        table.TableId.Reset(new TTableId(TableId.PathId, schema.GetTableSchemaVersion()));
+        table.KeyColumnCount = 1;
+        for (const auto& column : schema.GetColumns()) {
+            table.Columns.emplace(column.GetName(), TResolver::TTableResult::TColumn{
+                column.GetId(), column.GetName() == "key" ? 0 : -1,
+                NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), 0, EColumnTypeConstraint::Nullable});
+        }
+        resolver.AddTable(table);
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+        alloc.Release();
+        Y_DEFER { alloc.Acquire(); };
+        auto* registry = Server->GetRuntime()->GetAppData().FunctionRegistry;
+        auto compiled = NYql::ConvertToMiniKQL(NYql::ParseText(TStringBuilder()
+            << "((let row '('('key (Uint32 '1)))) (let columns '('" << name << ")) "
+            << "(return (AsList (SetResult 'result (SelectRow 'Table row columns)))))"),
+            registry, &env, &resolver).GetValueSync();
+        UNIT_ASSERT_C(compiled.Node.GetNode(), compiled.Errors.ToString());
+        auto engine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1,
+            registry, *TAppData::RandomProvider, *TAppData::TimeProvider));
+        UNIT_ASSERT(engine->SetProgram(SerializeRuntimeNode(compiled.Node, env)) == IEngineFlat::EResult::Ok);
+        for (auto& key : engine->GetDbKeys()) {
+            key->Status = TKeyDesc::EStatus::Ok;
+            key->Partitioning = std::make_shared<TPartitioning>(TVector<TKeyDesc::TPartitionInfo>{Shard});
+        }
+        UNIT_ASSERT(engine->PrepareShardPrograms() == IEngineFlat::EResult::Ok);
+        IEngineFlat::TShardData shard;
+        UNIT_ASSERT(engine->GetAffectedShard(0, shard) == IEngineFlat::EResult::Ok);
+        NKikimrTxDataShard::TDataTransaction tx;
+        tx.SetMiniKQL(shard.Program);
+        tx.SetImmediate(true);
+        tx.SetReadOnly(true);
+        return tx.SerializeAsString();
+    }
+
+    TPortManager PortManager;
+    Tests::TServer::TPtr Server;
+    TActorId Sender;
+    TTableId TableId;
+    ui64 Shard = 0;
+    ui64 ReadId = 100000;
+};
+
+void TestBuildingColumn(ERead read, bool reboot = false) {
+    TBuildingColumnFixture fixture;
+    auto& runtime = *fixture.Server->GetRuntime();
+    auto batches = runtime.AddObserver<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>([](auto& event) {
+        event->Get()->Record.MutableSettings()->MutableScanSettings()->SetMaxBatchRows(1);
+        event->Get()->Record.MutableSettings()->MutableScanSettings()->SetMaxBatchBytes(1);
+    });
+    TBlockEvents<TEvDataShard::TEvUploadRowsRequest> uploads(runtime);
+    auto build = KqpSchemeExecSend(runtime,
+        "ALTER TABLE `/Root/Table` ADD COLUMN extra Uint32 DEFAULT 42;", "/Root");
+    runtime.WaitFor("first backfill batch", [&] { return !uploads.empty() || build.HasValue(); });
+    UNIT_ASSERT_C(!uploads.empty(), build.GetValueSync().DebugString());
+    uploads.Unblock(1);
+    runtime.WaitFor("second backfill batch", [&] { return !uploads.empty(); });
+    ExecSQL(fixture.Server, fixture.Sender, "UPSERT INTO `/Root/Table` (key, value) VALUES (3, 30);");
+    if (reboot) {
+        RebootTablet(runtime, fixture.Shard, fixture.Sender);
+    }
+    auto snapshot = CreateVolatileSnapshot(fixture.Server, {"/Root/Table"});
+    fixture.CheckRead(read == ERead::AllColumns ? ERead::Iterator : read, "value", false, snapshot);
+    fixture.CheckRead(read, "extra", true, snapshot);
+    uploads.Stop().Unblock();
+    UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExecWait(runtime, build), "SUCCESS");
+    snapshot = CreateVolatileSnapshot(fixture.Server, {"/Root/Table"});
+    fixture.CheckRead(read, "extra", false, snapshot);
+    fixture.CheckRead(ERead::Iterator, "extra", false, snapshot);
+    RebootTablet(runtime, fixture.Shard, fixture.Sender);
+    fixture.CheckRead(read, "extra", false, snapshot);
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(DataShardBuildingColumns) {
+    Y_UNIT_TEST(PreserveBuildFlagInSchemaDelta) {
+        NKikimrSchemeOp::TTableDescription schema;
+        schema.SetName("Table");
+        schema.SetPath("/Root/Table");
+        auto* key = schema.AddColumns();
+        key->SetId(1);
+        key->SetName("key");
+        key->SetTypeId(NScheme::NTypeIds::Uint32);
+        schema.AddKeyColumnIds(1);
+        auto* extra = schema.AddColumns();
+        extra->SetId(2);
+        extra->SetName("extra");
+        extra->SetTypeId(NScheme::NTypeIds::Uint32);
+        extra->SetIsBuildInProgress(true);
+        TUserTable table(1000, schema, 0);
+
+        NKikimrSchemeOp::TTableDescription delta;
+        delta.SetName("Table");
+        auto* column = delta.AddColumns();
+        column->SetId(2);
+        column->SetName("extra");
+        TUserTable altered(table, delta);
+        altered.GetSchema(schema);
+        UNIT_ASSERT(schema.GetColumns(1).GetIsBuildInProgress());
+
+        TUserTable restored(1000, schema, 0);
+        restored.SetPath("/Root/Table");
+        restored.GetSchema(schema);
+        UNIT_ASSERT(schema.GetColumns(1).GetIsBuildInProgress());
+
+        column->SetIsBuildInProgress(false);
+        TUserTable ready(restored, delta);
+        ready.GetSchema(schema);
+        UNIT_ASSERT(!schema.GetColumns(1).GetIsBuildInProgress());
+    }
+
+    Y_UNIT_TEST(ReadIterator) { TestBuildingColumn(ERead::Iterator); }
+    Y_UNIT_TEST(ReadIteratorAfterReboot) { TestBuildingColumn(ERead::Iterator, true); }
+    Y_UNIT_TEST(ReadColumns) { TestBuildingColumn(ERead::Columns); }
+    Y_UNIT_TEST(KqpScan) { TestBuildingColumn(ERead::KqpScan); }
+    Y_UNIT_TEST(ReadTable) { TestBuildingColumn(ERead::ReadTable); }
+    Y_UNIT_TEST(SelectRow) { TestBuildingColumn(ERead::MiniKQL); }
+    Y_UNIT_TEST(ReadTableAllColumns) { TestBuildingColumn(ERead::AllColumns); }
+}
 
 } // namespace NKikimr

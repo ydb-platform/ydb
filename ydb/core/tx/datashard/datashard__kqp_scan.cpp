@@ -648,7 +648,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
 
     for (int i = 0; i < request.GetColumnTags().size(); ++i) {
         auto* column = tableColumns.FindPtr(request.GetColumnTags(i));
-        if (!column) {
+        if (!column || column->IsBuildInProgress) {
             reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
                 << " Cant find table '" << request.GetTablePath() << "'"
                 << " column " << request.GetColumnTags(i)  << " at " << TabletID());

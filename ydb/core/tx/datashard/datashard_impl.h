@@ -2359,6 +2359,10 @@ public:
         const TPathId& pathId, const ui64 tableSchemaVersion,
         bool persist = true);
 
+    TUserTable::TPtr AlterTableFinishColumnBuild(
+        const TActorContext& ctx, TTransactionContext& txc,
+        const TPathId& pathId, ui64 tableSchemaVersion);
+
     TUserTable::TPtr AlterTableAddIndex(
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, ui64 tableSchemaVersion,

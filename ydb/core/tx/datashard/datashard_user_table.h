@@ -309,6 +309,7 @@ struct TUserTable : public TThrRefBase {
         bool IsKey;
         ui32 Family = 0;
         bool NotNull = false;
+        bool IsBuildInProgress = false;
         bool SetNotNullInProgress = false;
         // Set when the column default is a sequence: the path as written in the DDL
         // (possibly relative to the table). The data shard resolves it against its own

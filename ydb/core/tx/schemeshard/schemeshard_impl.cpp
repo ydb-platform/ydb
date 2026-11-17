@@ -8446,6 +8446,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             }
             descr->SetFamily(colInfo.Family);
             descr->SetNotNull(colInfo.NotNull);
+            descr->SetIsBuildInProgress(colInfo.IsBuildInProgress);
             descr->SetSetNotNullInProgress(colInfo.SetNotNullInProgress);
             if (colInfo.DefaultKind == ETableColumnDefaultKind::FromSequence) {
                 descr->SetDefaultFromSequence(colInfo.DefaultValue);

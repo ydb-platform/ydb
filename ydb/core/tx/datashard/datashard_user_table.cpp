@@ -304,6 +304,9 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         }
         column.Family = col.GetFamily();
         column.NotNull = col.GetNotNull();
+        if (col.HasIsBuildInProgress()) {
+            column.IsBuildInProgress = col.GetIsBuildInProgress();
+        }
         column.SetNotNullInProgress = col.GetSetNotNullInProgress();
         switch (col.GetDefaultValueCase()) {
             case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence:
@@ -465,6 +468,7 @@ void TUserTable::AlterSchema() {
         }
         descr->SetFamily(column.Family);
         descr->SetNotNull(column.NotNull);
+        descr->SetIsBuildInProgress(column.IsBuildInProgress);
         if (column.DefaultFromSequence) {
             descr->SetDefaultFromSequence(column.DefaultFromSequence);
         }

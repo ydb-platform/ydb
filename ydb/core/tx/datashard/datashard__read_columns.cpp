@@ -274,6 +274,9 @@ public:
         const ui32 localTableId = tableInfo.LocalTid;
         THashMap<TString, ui32> columnsByName;
         for (const auto& col : tableInfo.Columns) {
+            if (col.second.IsBuildInProgress) {
+                continue;
+            }
             columnsByName[col.second.Name] = col.first;
         }
 

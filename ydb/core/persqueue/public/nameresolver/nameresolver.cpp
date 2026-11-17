@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public/topic_parser.h>
 
 #include <util/string/builder.h>
@@ -378,6 +379,7 @@ std::expected<TResolvedName, TString> ResolveName(
     }
 
     auto wrap = [&](TString path) {
+        NPersQueue::CountTopicPathWithDatabasePrefix(database, name, path);
         return MakeResolved(std::move(path), database, databaseNorm, lbRoot, isFederation);
     };
 

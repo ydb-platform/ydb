@@ -310,6 +310,7 @@ struct TUserTable : public TThrRefBase {
         ui32 Family = 0;
         bool NotNull = false;
         bool SetNotNullInProgress = false;
+        bool IsBuildInProgress = false;
         // Set when the column default is a sequence: the path as written in the DDL
         // (possibly relative to the table). The data shard resolves it against its own
         // table path when it needs to address the sequence.
@@ -606,6 +607,7 @@ struct TUserTable : public TThrRefBase {
     ui64 GetTableSchemaVersion() const { return TableSchemaVersion; }
     void SetTableSchemaVersion(ui64 schemaVersion);
     bool ResetTableSchemaVersion();
+    bool FinishColumnBuilding();
 
     NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetDetailedMetricsLevel() const {
         return DetailedMetricsLevel;

@@ -67,7 +67,7 @@ bool FamilySchemaChanged(const TUserTable& oldTable, const TUserTable& newTable)
 
     for (const auto& [id, column] : newTable.Columns) {
         auto it = oldTable.Columns.find(id);
-        if (it == oldTable.Columns.end()) {
+        if (column.IsBuildInProgress || it == oldTable.Columns.end() || it->second.IsBuildInProgress) {
             continue;
         }
 
@@ -290,14 +290,18 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     }
 
     bool schemaChanged = FamilySchemaChanged(*oldInfo, *newInfo);
-    if (alterTableTx.DropColumnsSize()) {
-        schemaChanged = true;
-    } else {
-        for (const auto& [tag, column] : newInfo->Columns) {
-            if (!oldInfo->Columns.contains(tag)) {
-                schemaChanged = true;
-                break;
-            }
+    for (const auto& [tag, column] : oldInfo->Columns) {
+        const auto it = newInfo->Columns.find(tag);
+        if (!column.IsBuildInProgress && (it == newInfo->Columns.end() || it->second.IsBuildInProgress)) {
+            schemaChanged = true;
+            break;
+        }
+    }
+    for (const auto& [tag, column] : newInfo->Columns) {
+        const auto it = oldInfo->Columns.find(tag);
+        if (!column.IsBuildInProgress && (it == oldInfo->Columns.end() || it->second.IsBuildInProgress)) {
+            schemaChanged = true;
+            break;
         }
     }
 

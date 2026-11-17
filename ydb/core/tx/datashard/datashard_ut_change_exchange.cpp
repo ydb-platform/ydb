@@ -7063,6 +7063,157 @@ Y_UNIT_TEST_SUITE(Cdc) {
         AssertColumn(droppedTable, "value", "Uint32", "default");
     }
 
+    Y_UNIT_TEST_QUAD(BuildingDefaultColumn, Cancel, Reboot) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(true);
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        const auto [shards, tableId] = CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10), (2, 20);");
+
+        const TVector<TCdcStream> streams{
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson, "Updates"),
+            NewImage(NKikimrSchemeOp::ECdcStreamFormatJson, "NewImage"),
+            OldImage(NKikimrSchemeOp::ECdcStreamFormatJson, "OldImage"),
+            NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson, "Images", false, false),
+        };
+        for (const auto& stream : streams) {
+            WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table", WithSchemaChanges(stream)));
+        }
+
+        // Hold the acknowledgement of a committed batch so that a row already
+        // contains the default while the column build is still in progress.
+        TBlockEvents<TEvDataShard::TEvUploadRowsResponse> backfill(runtime);
+        runtime.Send(new IEventHandle(MakeTxProxyID(), edgeActor, new TEvTxUserProxy::TEvAllocateTxId()));
+        const auto buildId = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvAllocateTxIdResult>(edgeActor)->Get()->TxId;
+        Ydb::TypedValue literal;
+        literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
+        literal.mutable_value()->set_uint32_value(42);
+        auto request = CreateBuildColumnRequest(buildId, "/Root", "/Root/Table", "extra", literal);
+        runtime.SendToPipe(tableId.PathId.OwnerId, edgeActor, request.release(), 0, GetPipeConfigWithRetries());
+        const auto created = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(edgeActor);
+        UNIT_ASSERT_VALUES_EQUAL_C(created->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
+            created->Get()->Record.DebugString());
+        runtime.WaitFor("committed column backfill batch", [&] { return !backfill.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(backfill.front()->Get()->Record.GetStatus(), ui32(NKikimrTxDataShard::TError::OK));
+        if (Reboot) {
+            RebootTablet(runtime, shards.at(0), edgeActor);
+        }
+
+        const auto building = DescribePath(runtime, tableId.PathId.OwnerId, "/Root/Table");
+        bool foundBuildingColumn = false;
+        for (const auto& column : building.GetPathDescription().GetTable().GetColumns()) {
+            if (column.GetName() == "extra") {
+                UNIT_ASSERT(column.GetIsBuildInProgress());
+                foundBuildingColumn = true;
+            }
+        }
+        UNIT_ASSERT(foundBuildingColumn);
+
+        ExecSQL(server, edgeActor, "UPDATE `/Root/Table` SET value = 11 WHERE key = 1;");
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (3, 30);");
+        ExecSQL(server, edgeActor, "INSERT INTO `/Root/Table` (key, value) VALUES (4, 40);");
+        ExecSQL(server, edgeActor, "REPLACE INTO `/Root/Table` (key, value) VALUES (1, 12);");
+        ExecSQL(server, edgeActor, "DELETE FROM `/Root/Table` WHERE key = 2;");
+
+        TVector<TVector<TString>> expected{
+            {
+                R"({"update":{"value":11},"key":[1]})",
+                R"({"update":{"value":30},"key":[3]})",
+                R"({"update":{"value":40},"key":[4]})",
+                R"({"reset":{"value":12},"key":[1]})",
+                R"({"erase":{},"key":[2]})",
+            },
+            {
+                R"({"update":{},"key":[1],"newImage":{"value":11}})",
+                R"({"update":{},"key":[3],"newImage":{"value":30}})",
+                R"({"update":{},"key":[4],"newImage":{"value":40}})",
+                R"({"reset":{},"key":[1],"newImage":{"value":12}})",
+                R"({"erase":{},"key":[2]})",
+            },
+            {
+                R"({"update":{},"key":[1],"oldImage":{"value":10}})",
+                R"({"update":{},"key":[3]})",
+                R"({"update":{},"key":[4]})",
+                R"({"reset":{},"key":[1],"oldImage":{"value":11}})",
+                R"({"erase":{},"key":[2],"oldImage":{"value":20}})",
+            },
+            {
+                R"({"update":{},"key":[1],"oldImage":{"value":10},"newImage":{"value":11}})",
+                R"({"update":{},"key":[3],"newImage":{"value":30}})",
+                R"({"update":{},"key":[4],"newImage":{"value":40}})",
+                R"({"reset":{},"key":[1],"oldImage":{"value":11},"newImage":{"value":12}})",
+                R"({"erase":{},"key":[2],"oldImage":{"value":20}})",
+            },
+        };
+        for (size_t i = 0; i < streams.size(); ++i) {
+            WaitForContent(server, edgeActor, "/Root/Table/" + streams[i].Name, expected[i]);
+        }
+
+        if (Cancel) {
+            CancelAddIndex(server, "/Root", buildId);
+        } else {
+            backfill.Stop().Unblock();
+        }
+        WaitTxNotification(server, edgeActor, buildId);
+        backfill.Stop();
+        if (Reboot) {
+            RebootTablet(runtime, shards.at(0), edgeActor);
+        }
+        const auto finished = DescribePath(runtime, tableId.PathId.OwnerId, "/Root/Table");
+        TestDescribeResult(finished, {
+            NLs::CheckColumns("Table", Cancel ? TSet<TString>{"key", "value"} : TSet<TString>{"key", "value", "extra"},
+                {}, {"key"}, true),
+        });
+        for (const auto& column : finished.GetPathDescription().GetTable().GetColumns()) {
+            UNIT_ASSERT(!column.GetIsBuildInProgress());
+        }
+
+        ExecSQL(server, edgeActor, "UPDATE `/Root/Table` SET value = 13 WHERE key = 1;");
+        ExecSQL(server, edgeActor, "INSERT INTO `/Root/Table` (key, value) VALUES (5, 50);");
+        for (size_t i = 0; i < streams.size(); ++i) {
+            const auto mode = streams[i].Mode;
+            if (!Cancel) {
+                expected[i].push_back(R"({"tableChanges":"***","ts":"***"})");
+            }
+            NJson::TJsonValue update, insert;
+            NJson::ReadJsonTree(R"({"update":{},"key":[1]})", &update, true);
+            NJson::ReadJsonTree(R"({"update":{},"key":[5]})", &insert, true);
+            auto setValues = [&](NJson::TJsonValue& values, ui32 value) {
+                values["value"] = value;
+                if (!Cancel) {
+                    values["extra"] = 42;
+                }
+            };
+            if (mode == NKikimrSchemeOp::ECdcStreamModeUpdate) {
+                update["update"]["value"] = 13;
+                setValues(insert["update"], 50);
+            }
+            if (mode == NKikimrSchemeOp::ECdcStreamModeOldImage || mode == NKikimrSchemeOp::ECdcStreamModeNewAndOldImages) {
+                setValues(update["oldImage"], 12);
+            }
+            if (mode == NKikimrSchemeOp::ECdcStreamModeNewImage || mode == NKikimrSchemeOp::ECdcStreamModeNewAndOldImages) {
+                setValues(update["newImage"], 13);
+                setValues(insert["newImage"], 50);
+            }
+            expected[i].push_back(NJson::WriteJson(update, false));
+            expected[i].push_back(NJson::WriteJson(insert, false));
+            const auto records = WaitForContent(server, edgeActor, "/Root/Table/" + streams[i].Name, expected[i]);
+            if (!Cancel) {
+                const auto& table = records[5]["tableChanges"][0]["table"];
+                UNIT_ASSERT_VALUES_EQUAL(table["columns"].GetMap().size(), 3);
+                AssertColumn(table, "extra", "Uint32", "default");
+            }
+        }
+    }
+
     Y_UNIT_TEST(SchemaChangesIndexes) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

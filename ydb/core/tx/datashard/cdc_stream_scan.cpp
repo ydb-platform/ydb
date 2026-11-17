@@ -669,7 +669,7 @@ public:
         if (it->second.Mode != NKikimrSchemeOp::ECdcStreamModeKeysOnly) {
             valueTags.reserve(table->Columns.size() - 1);
             for (const auto& [tag, column] : table->Columns) {
-                if (!column.IsKey) {
+                if (!column.IsKey && !column.IsBuildInProgress) {
                     valueTags.push_back(tag);
                 }
             }

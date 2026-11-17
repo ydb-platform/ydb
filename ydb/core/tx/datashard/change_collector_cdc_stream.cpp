@@ -107,7 +107,8 @@ const TCdcStreamChangeCollector::TValueSchema& TCdcStreamChangeCollector::GetVal
         schema.Tags.reserve(valueCount);
         schema.Types.reserve(valueCount);
         for (const auto& [tag, column] : table->Columns) {
-            if (!column.IsKey) {
+            schema.HasBuildInProgressColumns |= column.IsBuildInProgress;
+            if (!column.IsKey && !column.IsBuildInProgress) {
                 schema.Tags.push_back(tag);
                 schema.Types.push_back(column.Type);
             }
@@ -192,6 +193,16 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
 
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
+    TVector<TUpdateOp> visibleUpdates;
+    if (GetValueSchema(userTable).HasBuildInProgressColumns) {
+        visibleUpdates.reserve(updates.size());
+        for (const auto& update : updates) {
+            if (!userTable->Columns.at(update.Tag).IsBuildInProgress) {
+                visibleUpdates.push_back(update);
+            }
+        }
+        updates = visibleUpdates;
+    }
     const auto& keyTags = userTable->KeyColumnIds;
     const auto& keyTypes = userTable->KeyColumnTypes;
     TMaybe<TVector<TCell>> keyCells;

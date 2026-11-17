@@ -1,3 +1,4 @@
+#include "event_util.h"
 #include "replication.h"
 #include "target_table.h"
 #include "util.h"
@@ -114,6 +115,45 @@ Y_UNIT_TEST_SUITE(Replication) {
         config.ClearInitialScan();
         replication->SetConfig(std::move(config));
         UNIT_ASSERT(!replication->GetConfig().GetInitialScan());
+    }
+
+    Y_UNIT_TEST(SourceIdPrefixFollowsPersistedTargetFlag) {
+        // The prefix is decided once, when the target is created, and persisted with it. It is
+        // deliberately not recomputed from the replication config: a target created before the
+        // column existed loads with the flag unset and has to keep the bare partition index its
+        // destination offsets were already written under.
+        NKikimrReplication::TReplicationConfig config;
+        config.SetInitialScan(false);
+        auto replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2), config, "/Root/db");
+        const auto id = replication->AddTarget(TReplication::ETargetKind::Table,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/table", "/Root/replica"));
+        auto* target = replication->FindTarget(id);
+        target->SetStreamName("stream-1");
+
+        UNIT_ASSERT(!target->IsSourceIdQualified());
+        UNIT_ASSERT_VALUES_EQUAL(MakeSourceIdPrefix(*target), "");
+
+        target->SetSourceIdQualified(true);
+        UNIT_ASSERT_VALUES_EQUAL(MakeSourceIdPrefix(*target), "stream-1");
+    }
+
+    Y_UNIT_TEST(InitialStateFollowsInitialScanAndSwitchover) {
+        // A replication that takes over its destination tables must start working, not wait paused
+        // for an import that will never come: the tables already hold the data. Getting this wrong
+        // creates the targets and then never starts a worker.
+        NKikimrReplication::TReplicationConfig config;
+        config.SetInitialScan(false);
+        UNIT_ASSERT_VALUES_EQUAL(InitialReplicationState(config), TReplication::EState::Paused);
+
+        config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER);
+        UNIT_ASSERT_VALUES_EQUAL(InitialReplicationState(config), TReplication::EState::Ready);
+
+        config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_IMPORT);
+        UNIT_ASSERT_VALUES_EQUAL(InitialReplicationState(config), TReplication::EState::Paused);
+
+        config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SCAN);
+        config.SetInitialScan(true);
+        UNIT_ASSERT_VALUES_EQUAL(InitialReplicationState(config), TReplication::EState::Ready);
     }
 
     struct TLagSetup {

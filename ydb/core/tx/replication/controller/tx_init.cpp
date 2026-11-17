@@ -74,6 +74,9 @@ class TController::TTxInit: public TTxBase {
             if (rowset.GetValueOrDefault<Schema::Replications::DeferredAlter>(false)) {
                 Self->DeferredAlters.insert(rid);
             }
+            if (rowset.GetValueOrDefault<Schema::Replications::ConsistentDone>(false)) {
+                Self->ConsistentDoneReplications.insert(rid);
+            }
 
             if (!database) {
                 Self->UnresolvedDatabaseReplications.emplace(replication->GetId(), ResolveDatabaseAttemptsLimit);
@@ -133,6 +136,8 @@ class TController::TTxInit: public TTxBase {
                 : dstState);
             target->SetDstPathId(dstPathId);
             target->SetIssue(issue);
+            target->SetSourceIdQualified(
+                rowset.GetValueOrDefault<Schema::Targets::QualifiedSourceId>(false));
             const auto indexBuild = rowset.GetValueOrDefault<Schema::Targets::IndexBuild>(TString());
             if (indexBuild) {
                 target->SetIndexBuild(true);

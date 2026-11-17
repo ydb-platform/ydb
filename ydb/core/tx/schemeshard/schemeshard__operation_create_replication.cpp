@@ -3,6 +3,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/util/proto_duration.h>
@@ -510,12 +511,42 @@ public:
 
         Strategy->Proccess(*desc.MutableConfig(), owner);
 
+        if (desc.GetConfig().HasBootstrap()) {
+            const auto bootstrap = desc.GetConfig().GetBootstrap();
+            const bool scans = bootstrap == NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SCAN;
+
+            // BOOTSTRAP names what INITIAL_SCAN only implied. Both may be given, but not with
+            // contradictory meanings.
+            if (desc.GetConfig().HasInitialScan() && desc.GetConfig().GetInitialScan() != scans) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "BOOTSTRAP and INITIAL_SCAN contradict each other");
+                return result;
+            }
+            if (desc.GetConfig().HasTransferSpecific()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "BOOTSTRAP is not supported for a transfer");
+                return result;
+            }
+            if (bootstrap == NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER
+                    && (!IsAdministrator(AppData(), context.UserToken.Get())
+                        || AppData()->AdministrationAllowedSIDs.empty())) {
+                // Adopting demotes tables the replication did not create, bypassing every protection
+                // a replica table has, so it needs a real cluster administrator. "All users are
+                // admins by default" does not count, as for an index implementation table alter.
+                result->SetError(NKikimrScheme::StatusAccessDenied,
+                    "BOOTSTRAP = 'SWITCHOVER' requires a cluster administrator");
+                return result;
+            }
+            desc.MutableConfig()->SetInitialScan(scans);
+        }
+
         if (desc.GetConfig().HasTransferSpecific()) {
             desc.MutableConfig()->ClearInitialScan();
         } else if (!desc.GetConfig().HasInitialScan()) {
             desc.MutableConfig()->SetInitialScan(AppData()->ReplicationConfig.GetInitialScan());
         }
-        if (desc.GetConfig().GetInitialScan()) {
+        if (desc.GetConfig().GetInitialScan()
+                || desc.GetConfig().GetBootstrap() == NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER) {
             desc.MutableState()->MutableStandBy();
         } else {
             desc.MutableState()->MutablePaused();

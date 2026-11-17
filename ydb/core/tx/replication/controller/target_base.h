@@ -53,6 +53,8 @@ public:
     ETargetKind GetKind() const override;
     bool IsIndexBuild() const override { return IndexBuild; }
     void SetIndexBuild(bool value) override { IndexBuild = value; }
+    bool IsSourceIdQualified() const override { return SourceIdQualified; }
+    void SetSourceIdQualified(bool value) override { SourceIdQualified = value; }
 
     const IConfig::TPtr& GetConfig() const override;
     const TString& GetSrcPath() const override;
@@ -107,6 +109,7 @@ private:
     std::optional<bool> StreamSchemaChanges;
     TString Issue;
     bool IndexBuild = false;
+    bool SourceIdQualified = false;
 
     TActorId DstCreator;
     TActorId DstAlterer;

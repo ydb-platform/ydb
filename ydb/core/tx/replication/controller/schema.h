@@ -35,6 +35,8 @@ struct TControllerSchema: NIceDb::Schema {
         struct CommittedTxId: Column<12, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
 
         struct SourceOffsetMismatch: Column<15, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
+        // A consistent DONE that waits for the global commit loop to drain before detaching.
+        struct ConsistentDone: Column<40, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -50,7 +52,8 @@ struct TControllerSchema: NIceDb::Schema {
             DeferredAlter,
             CommittedStep,
             CommittedTxId,
-            SourceOffsetMismatch
+            SourceOffsetMismatch,
+            ConsistentDone
         >;
     };
 
@@ -100,6 +103,12 @@ struct TControllerSchema: NIceDb::Schema {
             static constexpr Type Default = InvalidLocalPathId;
         };
         struct IndexBuild: Column<20, NScheme::NTypeIds::String> {};
+        // Set when the target is created: its workers qualify the destination deduplication
+        // source id with the stream name. Absent on targets created before this column existed,
+        // which keep the bare partition index so their persisted offsets stay valid.
+        struct QualifiedSourceId: Column<21, NScheme::NTypeIds::Bool> {
+            static constexpr bool Default = false;
+        };
 
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
@@ -122,7 +131,8 @@ struct TControllerSchema: NIceDb::Schema {
             SchemaBarrierFlushTxIds,
             PendingDstPathOwnerId,
             PendingDstPathLocalId,
-            IndexBuild
+            IndexBuild,
+            QualifiedSourceId
         >;
     };
 

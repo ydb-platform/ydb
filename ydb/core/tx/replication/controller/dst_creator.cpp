@@ -411,6 +411,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         PipeCache = ev->Get()->Services.LeaderPipeCache;
         if (DropIndexTx.HasDropIndex()) {
             ExecuteSchemeTx(DropIndexTx);
+        } else if (AdoptTx.HasAlterTable()) {
+            ExecuteSchemeTx(AdoptTx);
         } else if (InitialScan || CreatePlaceholder) {
             CreateDst();
         } else {
@@ -445,6 +447,29 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         tableCondition->SetPathId(DstPathId.LocalPathId);
         tableCondition->SetPathVersion(desc.GetPathDescription().GetSelf().GetPathVersion());
         DropIndexTx.AddApplyIf()->SetPathId(index.GetLocalPathId());
+        NeedToCheck = true;
+        AllocateTxId();
+    }
+
+    void PrepareAdopt(const NKikimrScheme::TEvDescribeSchemeResult& desc) {
+        // Demote the table the replication did not create: the same internal alter the controller
+        // already uses to release a destination on DONE, in the opposite direction.
+        AdoptTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        AdoptTx.SetInternal(true);
+        DstPathId.ToProto(AdoptTx.MutableAlterTable()->MutablePathId());
+        auto& config = *AdoptTx.MutableAlterTable()->MutableReplicationConfig();
+        FillReplicationConfig(config);
+        // The data is already in place, which is what the attach path means by a complete import.
+        config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+
+        // Bind the demote to the table that was just validated, so a concurrent schema change
+        // cannot redirect it.
+        auto* condition = AdoptTx.AddApplyIf();
+        condition->SetPathId(DstPathId.LocalPathId);
+        condition->SetPathVersion(desc.GetPathDescription().GetSelf().GetPathVersion());
+
+        // Describe again afterwards: the ordinary replica checks then apply to the demoted table,
+        // so a restart in between simply re-runs the validation and finds nothing left to do.
         NeedToCheck = true;
         AllocateTxId();
     }
@@ -496,6 +521,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 DropIndexTx.Clear();
                 Become(&TThis::StateDescribeDstPath);
                 return Retry();
+            } else if (AdoptTx.HasAlterTable()) {
+                AdoptTx.Clear();
+                Become(&TThis::StateDescribeDstPath);
+                return Retry();
             } else {
                 return Error(record.GetStatus(), record.GetReason());
             }
@@ -505,6 +534,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case NKikimrScheme::StatusPreconditionFailed:
         case NKikimrScheme::StatusPathDoesNotExist:
             if (DropIndexTx.HasDropIndex()) {
+                return DescribeDstPath();
+            }
+            if (AdoptTx.HasAlterTable()) {
+                // An ApplyIf that no longer holds means the destination moved under us; describing
+                // it again decides whether the demote is still needed or already done.
+                AdoptTx.Clear();
                 return DescribeDstPath();
             }
             return Error(record.GetStatus(), record.GetReason());
@@ -577,6 +612,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                     return PrepareDropIndex(index, record);
                 }
             }
+            if (NeedsAdoption(desc.GetTable())) {
+                return PrepareAdopt(record);
+            }
             return Success();
         }
         case NKikimrScheme::StatusPathDoesNotExist:
@@ -612,21 +650,31 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         return !config.HasOwnerPathId() || TPathId::FromProto(config.GetOwnerPathId()) == PathId;
     }
 
+    // A destination bootstrapped by SWITCHOVER is an ordinary writable table until the controller
+    // demotes it, so the replica configuration checks cannot be applied to it yet. Everything else
+    // -- keys, columns, families -- is still verified before anything is altered.
+    bool NeedsAdoption(const NKikimrSchemeOp::TTableDescription& got) const {
+        return AdoptExisting
+            && got.GetReplicationConfig().GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE;
+    }
+
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
-        if (!got.HasReplicationConfig()) {
-            error = TStringBuilder() << "Cannot attach destination table '" << DstPath
-                << "': replication configuration is missing. Recreate the replication and import data"
-                << " into its destination tables before switching to STANDBY";
-            return false;
-        }
+        if (!NeedsAdoption(got)) {
+            if (!got.HasReplicationConfig()) {
+                error = TStringBuilder() << "Cannot attach destination table '" << DstPath
+                    << "': replication configuration is missing. Recreate the replication and import data"
+                    << " into its destination tables before switching to STANDBY";
+                return false;
+            }
 
-        if (!CheckReplicationConfig(got.GetReplicationConfig(), Mode, Consistency, error)) {
-            return false;
-        }
+            if (!CheckReplicationConfig(got.GetReplicationConfig(), Mode, Consistency, error)) {
+                return false;
+            }
 
-        if (!InitialScan && IsStandby() && !IsImported(got)) {
-            error = "Destination table import is not complete (expected IMPORTED)";
-            return false;
+            if (!InitialScan && IsStandby() && !IsImported(got)) {
+                error = "Destination table import is not complete (expected IMPORTED)";
+                return false;
+            }
         }
 
         const NKikimrSchemeOp::TIndexedTableCreationConfig* indexedDesc = nullptr;
@@ -931,6 +979,15 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         } else if (state == &TThis::StateDescribeDstPath) {
             DescribeDstPath();
         } else if (state == &TThis::StateExecuteSchemeTx) {
+            if (AdoptTx.HasAlterTable()) {
+                // The demote may already have committed: its reply or completion notification can
+                // be lost when the pipe breaks. Replaying it would be refused, because its ApplyIf
+                // names the path version from before the demote bumped it, and the destination
+                // would be left a read-only replica with no workers. Reconcile instead -- a fresh
+                // describe either finds it already demoted, or prepares the demote anew.
+                AdoptTx.Clear();
+                return DescribeDstPath();
+            }
             AllocateTxId();
         }
     }
@@ -977,7 +1034,8 @@ public:
             EConsistencyLevel consistency,
             const TString& database,
             bool initialScan,
-            TReplication::EState desiredState)
+            TReplication::EState desiredState,
+            bool adoptExisting = false)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -990,7 +1048,10 @@ public:
         , Mode(mode)
         , Consistency(consistency)
         , InitialScan(initialScan)
-        , CreatePlaceholder(!initialScan && desiredState == TReplication::EState::Paused)
+        , AdoptExisting(adoptExisting)
+        // An adopted destination already exists and holds its data: there is no placeholder to
+        // create for it, paused or not.
+        , CreatePlaceholder(!initialScan && !adoptExisting && desiredState == TReplication::EState::Paused)
         , DesiredState(desiredState)
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
@@ -1039,6 +1100,7 @@ private:
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
     const bool InitialScan;
+    const bool AdoptExisting;
     const bool CreatePlaceholder;
     const TReplication::EState DesiredState;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
@@ -1051,6 +1113,7 @@ private:
     ui64 WaitingTxId = 0;
     NKikimrSchemeOp::TModifyScheme TxBody;
     NKikimrSchemeOp::TModifyScheme DropIndexTx;
+    NKikimrSchemeOp::TModifyScheme AdoptTx;
     TActorId PipeCache;
     bool NeedToCheck = false;
     bool AssignOwner = false;
@@ -1127,16 +1190,17 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
         EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
-        replication->GetConfig().GetInitialScan(), replication->GetDesiredState());
+        replication->GetConfig().GetInitialScan(), replication->GetDesiredState(),
+        IsSwitchover(replication->GetConfig()));
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
-        TReplication::EState desiredState)
+        TReplication::EState desiredState, bool adoptExisting)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState, adoptExisting);
 }
 
 }

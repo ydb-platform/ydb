@@ -491,4 +491,7 @@ message TFeatureFlags {
     optional bool EnableTopicWriteSessionsInitQuoting = 391 [default = false];
     optional bool EnableAsyncReplicationChecksumCheck = 392 [default = false];
     optional bool EnableIndexShadowDataRepair = 393 [default = false];
+    // A DONE with FAILOVER_MODE_CONSISTENT on a GLOBAL replication keeps the workers until every
+    // assigned write transaction is committed, instead of stopping them at once.
+    optional bool EnableConsistentReplicationDone = 394 [default = false];
 }

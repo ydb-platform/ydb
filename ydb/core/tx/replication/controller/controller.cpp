@@ -204,7 +204,7 @@ void TController::SwitchToWork(const TActorContext& ctx) {
     }
     RunTxIndexBuild(ctx);
     for (const auto replicationId : DeferredAlters) {
-        if (!HasPendingAlter(replicationId)) {
+        if (!HasPendingAlter(replicationId) && !ConsistentDoneBlocked(replicationId)) {
             ctx.Send(SelfId(), new TEvPrivate::TEvResumeDeferredAlter(replicationId));
         }
     }
@@ -250,6 +250,13 @@ bool TController::HasActiveSchemaBarrier(ui64 replicationId) const {
     return AnyOf(SchemaBarriers, [replicationId](const auto& item) {
         return item.first.first == replicationId && item.second.IsActive();
     });
+}
+
+bool TController::ConsistentDoneBlocked(ui64 replicationId) const {
+    // A consistent DONE keeps the workers until every assigned global write transaction is
+    // committed; the source keeps sending heartbeats while it is fenced, so the loop drains.
+    return ConsistentDoneReplications.contains(replicationId)
+        && (!AssignedTxIds.empty() || !PendingTxId.empty() || CommittingTxId);
 }
 
 bool TController::HasPendingAlter(ui64 replicationId) const {

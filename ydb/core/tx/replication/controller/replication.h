@@ -85,6 +85,9 @@ public:
         virtual ETargetKind GetKind() const = 0;
         virtual bool IsIndexBuild() const = 0;
         virtual void SetIndexBuild(bool value) = 0;
+        // Whether this target's workers qualify the deduplication source id with the stream name.
+        virtual bool IsSourceIdQualified() const = 0;
+        virtual void SetSourceIdQualified(bool value) = 0;
 
         virtual const IConfig::TPtr& GetConfig() const = 0;
         virtual const TString& GetSrcPath() const = 0;
@@ -209,5 +212,15 @@ private:
     std::optional<TDropOp> DropOp;
 
 }; // TReplication
+
+// Whether the replication takes over its destination tables as they are: they already exist and
+// already hold the data, so the controller demotes them in place instead of creating anything.
+// This is the SWITCHOVER bootstrap mode; the code below calls the act of doing it adoption.
+bool IsSwitchover(const NKikimrReplication::TReplicationConfig& config);
+
+// The state a replication is created in. One without an initial scan waits paused until its
+// destination tables have been filled and handed over; an adopted one has nothing to wait for,
+// because its tables already hold the data, so it starts working once they are demoted.
+TReplication::EState InitialReplicationState(const NKikimrReplication::TReplicationConfig& config);
 
 }

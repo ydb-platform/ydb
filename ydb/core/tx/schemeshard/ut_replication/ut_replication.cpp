@@ -1,10 +1,7 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
->>>>>>> e0bfdd00e12 (additional validation for uniq replication (#56545))
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/ydb_convert/replication_description.h>

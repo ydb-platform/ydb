@@ -238,9 +238,6 @@ IRetryPolicy<>::TPtr ConvertEnumToRetryPolicy(ERetryPolicy policy) {
     }
     Y_UNREACHABLE();
 }
-
-
-
 }  // anonymous namespace
 
 void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr& ev) {

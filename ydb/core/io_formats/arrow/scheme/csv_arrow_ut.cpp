@@ -364,8 +364,8 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
         };
 
         TString csv;
-        csv += "1.000000000,aaaaaaaaaaaaaaaa\n";
-        csv += "-2.500000000,bbbbbbbbbbbbbbbb\n";
+        csv += "1.000000000,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n";
+        csv += "-2.500000000,bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\n";
 
         auto batch = TestReadSingleBatch(columns, csv, ',', false, 2);
         auto decColumn = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(batch->column(0));

@@ -12,6 +12,7 @@ IF (OS_LINUX)
 
     PEERDIR(
         ydb/library/actors/interconnect/address
+        ydb/library/actors/util
         contrib/libs/ibdrv
         contrib/libs/protobuf
         library/cpp/monlib/dynamic_counters
@@ -28,7 +29,9 @@ ELSE()
 
     PEERDIR(
         ydb/library/actors/interconnect/address
+        ydb/library/actors/util
         contrib/libs/protobuf
+        library/cpp/monlib/dynamic_counters
     )
 
 ENDIF()

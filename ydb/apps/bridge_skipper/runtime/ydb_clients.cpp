@@ -10,6 +10,8 @@
 #include <util/string/cast.h>
 
 #include <algorithm>
+#include <iterator>
+#include <set>
 #include <utility>
 
 namespace NBridgeSkipper {
@@ -88,9 +90,10 @@ NYdb::TDriverConfig MakeDriverConfig(
 
 class TYdbClients final : public IYdbClients {
 public:
-    TYdbClients(const TConfig& config, const TLoadedCredentials& credentials, TYdbClock clock, TTokenLoader tokenLoader)
+    TYdbClients(const TConfig& config, const TLoadedCredentials& credentials, TYdbClock clock,
+        TTokenLoader tokenLoader, std::shared_ptr<TTokenSource> tokens)
         : Timing(config.Timing)
-        , Tokens(std::make_shared<TTokenSource>(config.Auth.TokenFile, credentials.Token, std::move(tokenLoader)))
+        , Tokens(tokens ? std::move(tokens) : std::make_shared<TTokenSource>(config.Auth.TokenFile, credentials.Token, std::move(tokenLoader)))
         , Redactor(std::make_shared<const TRedactor>(Tokens))
         , Clock(std::move(clock))
         , Driver(std::make_shared<NYdb::TDriver>(MakeDriverConfig(config, credentials, Tokens))) {
@@ -196,13 +199,14 @@ public:
         };
         const auto settings = NYdb::NConfig::TFetchAllConfigsSettings()
             .OperationTimeout(Timing.ReadTimeout).ClientTimeout(timeout);
+        const auto redactor = Redactor->ForRequest();
         try {
             auto future = client->Config.FetchAllConfigs(settings);
-            future.Subscribe([base = std::move(base), finish, driver = Driver, redactor = Redactor,
+            future.Subscribe([base = std::move(base), finish, driver = Driver, redactor,
                     timeout](const auto& settled) mutable {
                 try {
                     const auto& config = settled.GetValueSync();
-                    FillStatus(base.Rpc, config, *redactor);
+                    FillStatus(base.Rpc, config, redactor);
                     if (!base.Rpc.Success) {
                         finish(std::move(base));
                         return;
@@ -233,7 +237,7 @@ public:
                     listed.Subscribe([base = std::move(base), discovery, finish, redactor,
                             scheme = endpoint.Scheme](const auto& settled) mutable {
                         try {
-                            finish(DecodeInventoryResult(settled.GetValueSync(), std::move(base.Rpc), *redactor, scheme));
+                            finish(DecodeInventoryResult(settled.GetValueSync(), std::move(base.Rpc), redactor, scheme));
                         } catch (...) {
                             Fail(base, "SDK_RESULT_ERROR");
                             finish(std::move(base));
@@ -286,6 +290,7 @@ private:
         TMonotonic validUntil = TMonotonic::Max())
     {
         decltype(launch()) future;
+        const auto redactor = Redactor->ForRequest();
         try {
             base.Rpc.SentAt = Clock();
             if (base.Rpc.SentAt >= validUntil) {
@@ -302,9 +307,9 @@ private:
         // No actor pointer, activation context, driver or client reference is
         // captured. The coordinator keeps ActorSystem alive through Stop(true).
         future.Subscribe([base = std::move(base), completed = std::move(completed),
-                decode = std::move(decode), redactor = Redactor, tokens = Tokens, clock = Clock](const auto& settled) mutable {
+                decode = std::move(decode), redactor, tokens = Tokens, clock = Clock](const auto& settled) mutable {
             try {
-                base = decode(settled.GetValueSync(), base.Rpc, *redactor);
+                base = decode(settled.GetValueSync(), base.Rpc, redactor);
             } catch (...) {
                 Fail(base, "SDK_RESULT_ERROR");
             }
@@ -327,15 +332,23 @@ private:
 
 } // namespace
 
+struct TTokenSource::TTokenVersion {
+    explicit TTokenVersion(TString value)
+        : Value(std::move(value)) {
+    }
+    TString Value;
+    std::shared_ptr<TTokenVersion> Next;
+};
+
 TTokenSource::TTokenSource(const TMaybe<TString>& file, const TMaybe<TString>& token, TTokenLoader loader)
     : File(file)
-    , Current(token.GetOrElse(TString()))
+    , Current(std::make_shared<TTokenVersion>(token.GetOrElse(TString())))
     , Loader(std::move(loader)) {
 }
 
 TString TTokenSource::Token() const {
     std::lock_guard lock(Mutex);
-    return Current;
+    return Current->Value;
 }
 
 void TTokenSource::Reload() {
@@ -350,10 +363,14 @@ void TTokenSource::Reload() {
     }
     {
         std::lock_guard lock(Mutex);
-        if (Current == *token) {
+        if (Current->Value == *token) {
             return;
         }
-        Current = *token;
+        // A request retains its first version, including versions installed
+        // before the SDK actually asks for its credential. With no such owner,
+        // the previous version is destroyed instead of becoming global history.
+        Current->Next = std::make_shared<TTokenVersion>(*token);
+        Current = Current->Next;
     }
     Cerr << "{\"event\":\"token_reloaded\",\"level\":\"info\",\"category\":\"credentials\"}\n";
 }
@@ -366,6 +383,53 @@ bool TTokenSource::IsValid() const {
     return !Token().empty();
 }
 
+std::shared_ptr<TTokenSource::TTokenVersion> TTokenSource::Capture() const {
+    std::lock_guard lock(Mutex);
+    for (auto it = Active.begin(); it != Active.end();) {
+        it = it->second.expired() ? Active.erase(it) : std::next(it);
+    }
+    Active[Current.get()] = Current;
+    return Current;
+}
+
+std::vector<TString> TTokenSource::RedactionTokens(const std::shared_ptr<TTokenVersion>& first) const {
+    std::lock_guard lock(Mutex);
+    // Most records have one credential version, regardless of RPC concurrency.
+    // Avoid building and sorting sets until an older request retains a version.
+    if (first == Current || (!first && (Active.empty()
+            || (Active.size() == 1 && Active.begin()->first == Current.get()))))
+    {
+        return Current->Value.empty() ? std::vector<TString>{} : std::vector<TString>{Current->Value};
+    }
+    std::set<TString> unique;
+    std::set<const TTokenVersion*> visited;
+    const auto collect = [&](auto version) {
+        for (; version && visited.insert(version.get()).second; version = version->Next) {
+            if (!version->Value.empty()) {
+                unique.insert(version->Value);
+            }
+        }
+    };
+    if (first) {
+        collect(first);
+    } else {
+        collect(Current);
+        for (auto it = Active.begin(); it != Active.end();) {
+            if (auto version = it->second.lock()) {
+                collect(std::move(version));
+                ++it;
+            } else {
+                it = Active.erase(it);
+            }
+        }
+    }
+    std::vector<TString> tokens(unique.begin(), unique.end());
+    // A rotated token can contain the previous one. Hide the entire longer
+    // credential before replacing a shorter matching prefix.
+    std::sort(tokens.begin(), tokens.end(), [](const auto& a, const auto& b) { return a.size() > b.size(); });
+    return tokens;
+}
+
 TRedactor::TRedactor(std::shared_ptr<const TTokenSource> tokens)
     : Tokens(std::move(tokens)) {
 }
@@ -374,13 +438,20 @@ TRedactor::TRedactor(const TLoadedCredentials& credentials)
     : TRedactor(std::make_shared<const TTokenSource>(Nothing(), credentials.Token)) {
 }
 
+TRedactor TRedactor::ForRequest() const {
+    TRedactor result(Tokens);
+    result.First = Tokens->Capture();
+    return result;
+}
+
 TString TRedactor::Redact(TStringBuf text, size_t limit) const {
-    const TString token = Tokens->Token();
     TString result(text);
-    size_t offset = 0;
-    while (!token.empty() && (offset = result.find(token, offset)) != TString::npos) {
-        result.replace(offset, token.size(), "[REDACTED]");
-        offset += 10;
+    for (const auto& token : Tokens->RedactionTokens(First)) {
+        size_t offset = 0;
+        while ((offset = result.find(token, offset)) != TString::npos) {
+            result.replace(offset, token.size(), "[REDACTED]");
+            offset += 10;
+        }
     }
     // Redact the complete input before truncating it across a secret boundary.
     result.resize(std::min(result.size(), limit));
@@ -688,9 +759,10 @@ std::shared_ptr<IYdbClients> CreateYdbClients(
     const TConfig& config,
     const TLoadedCredentials& credentials,
     TYdbClock clock,
-    TTokenLoader tokenLoader)
+    TTokenLoader tokenLoader,
+    std::shared_ptr<TTokenSource> tokens)
 {
-    return std::make_shared<TYdbClients>(config, credentials, std::move(clock), std::move(tokenLoader));
+    return std::make_shared<TYdbClients>(config, credentials, std::move(clock), std::move(tokenLoader), std::move(tokens));
 }
 
 } // namespace NBridgeSkipper

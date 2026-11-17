@@ -1,15 +1,23 @@
 LIBRARY()
 
 SRCS(
+    cdc_aggregator_stream.cpp
+    cdc_aggregator_stream_proto.cpp
+    cdc_aggregator_stream_repository.cpp
     tablet.cpp
+    tx_configure_tracking.cpp
     tx_init.cpp
     tx_init_schema.cpp
+    tx_partitioning_changed.cpp
+    tx_write_heartbeats.cpp
 )
 
 PEERDIR(
     ydb/core/base
     ydb/core/engine/minikql
+    ydb/core/persqueue/common
     ydb/core/protos
+    ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/cdc_aggregator/public

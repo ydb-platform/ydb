@@ -15,11 +15,11 @@ std::unique_ptr<NArrow::NMerger::TMergePartialStream> TSpecialReadContext::Build
 ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_ptr<const IDataSource>>& sources) {
     ui64 result = 0;
     for (auto&& i : sources) {
-        AFL_VERIFY(i.second->GetIntervalsCount());
+        YDB_LOG_VERIFY(i.second->GetIntervalsCount());
         const ui64 sourceMemory = std::max<ui64>(1, i.second->GetResourceGuardsMemory() / i.second->GetIntervalsCount());
         result += sourceMemory;
     }
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     result += ReadSequentiallyBufferSize;
     return result;
 }
@@ -69,7 +69,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
                 gInit->InitializationFinished(BuildColumnsFetchingPlan(
                     needSnapshots, isWholeExclusiveSource, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions));
             }
-            AFL_VERIFY(!result.NeedInitialization());
+            YDB_LOG_VERIFY(!result.NeedInitialization());
         }
         if (result.HasScript()) {
             return result.GetScriptVerified();
@@ -148,7 +148,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddFetchingStep(*GetPredicateColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
 
-        AFL_VERIFY(acc.GetAddedFetchingColumns().GetColumnsCount());
+        YDB_LOG_VERIFY(acc.GetAddedFetchingColumns().GetColumnsCount());
 
         if (needFilterDeletion) {
             acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
@@ -173,7 +173,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (needFilterDeletion) {
             acc.AddFetchingStep(*GetDeletionColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
-        AFL_VERIFY(acc.GetAddedFetchingColumns().GetColumnsCount());
+        YDB_LOG_VERIFY(acc.GetAddedFetchingColumns().GetColumnsCount());
 
         acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
         acc.AddAssembleStep(*GetPKColumns(), "PK", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);

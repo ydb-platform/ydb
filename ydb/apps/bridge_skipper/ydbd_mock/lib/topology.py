@@ -8,6 +8,7 @@ gRPC port `grpc_base_port + port_stride * p + n`, unless explicit port lists are
 import dataclasses
 import ipaddress
 import math
+import os
 import socket
 import typing
 
@@ -39,6 +40,7 @@ class Timings:
 
     def update(self, values: dict) -> None:
         fields = {f.name for f in dataclasses.fields(self)}
+        pending = {}
         for key, value in values.items():
             if key not in fields:
                 raise TopologyError("unknown timing %r, known: %s" % (key, ", ".join(sorted(fields))))
@@ -52,6 +54,8 @@ class Timings:
                 raise TopologyError("timing %s must not be negative" % key)
             if number == 0 and key in POSITIVE_TIMINGS:
                 raise TopologyError("timing %s must be greater than zero" % key)
+            pending[key] = number
+        for key, number in pending.items():
             setattr(self, key, number)
 
     def to_dict(self) -> dict:
@@ -71,6 +75,7 @@ class Policies:
 
     def update(self, values: dict) -> None:
         fields = {f.name: f for f in dataclasses.fields(self)}
+        pending = {}
         for key, value in values.items():
             if key not in fields:
                 raise TopologyError("unknown policy %r, known: %s" % (key, ", ".join(sorted(fields))))
@@ -85,6 +90,8 @@ class Policies:
                     raise TopologyError("issue_style must be minimal or realistic")
             else:
                 value = _to_bool(key, value)
+            pending[key] = value
+        for key, value in pending.items():
             setattr(self, key, value)
 
     def to_dict(self) -> dict:
@@ -211,6 +218,25 @@ class Topology:
         self.warnings: typing.List[str] = []
         self.validate()
         self._piles = self._build()
+        self._pile_files = self._build_pile_files()
+
+    def _build_pile_files(self) -> typing.Dict[str, str]:
+        separators = [s for s in (os.sep, os.altsep, "\0") if s]
+        safe = {name for name in self.pile_names if name not in ("", ".", "..")
+                and not any(separator in name for separator in separators)}
+        used = set(safe)
+        result = {}
+        for index, name in enumerate(self.pile_names):
+            file_name = name if name in safe else "__pile_%d" % index
+            while file_name in used and name not in safe:
+                file_name = "_" + file_name
+            result[name] = file_name
+            used.add(file_name)
+        return result
+
+    def pile_file_name(self, name: str) -> str:
+        """Map logical identity to a local component, preserving existing safe names."""
+        return self._pile_files[name]
 
     # ----- construction -----
 

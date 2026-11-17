@@ -97,7 +97,7 @@ Y_UNIT_TEST(AutoFallbackPreservesMode) {
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'auto';
-        SELECT AggList(key)
+        SELECT MaxBy(key, key)
         FROM (SELECT Interval64('P1D') AS key);
         SELECT 1;
     )sql", settings);
@@ -106,6 +106,23 @@ Y_UNIT_TEST(AutoFallbackPreservesMode) {
     TWordCountHive stat = {{TString("YqlSelect"), 0}};
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+}
+
+Y_UNIT_TEST(AutoFallbackForDistinctWindowAggregation) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.Flags.insert("DistinctOverWindow");
+
+    auto result = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        SELECT Aggregate_List(DISTINCT value) OVER () AS values
+        FROM (VALUES (1), (1), (2)) AS t(value);
+    )sql", settings);
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+
+    TWordCountHive stat = {{TString("YqlAggWin"), 0}};
+    VerifyProgram(result, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAggWin"], 0);
 }
 
 Y_UNIT_TEST(AutoFallbackPreservesHints) {
@@ -988,17 +1005,6 @@ Y_UNIT_TEST(ExistsSubqueryWhere) {
     };
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 4);
-}
-
-Y_UNIT_TEST(GroupByUnsupportsTwoArg) {
-    NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
-
-    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
-        PRAGMA YqlSelect = 'force';
-        SELECT AggList(a) FROM (VALUES (1)) AS x(a);
-    )sql", settings);
-    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "YqlSelect unsupported: Aggregation 'AggList'");
 }
 
 Y_UNIT_TEST(GroupByCountImplicit) {

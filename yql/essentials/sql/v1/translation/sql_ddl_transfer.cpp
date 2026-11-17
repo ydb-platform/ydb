@@ -41,11 +41,13 @@ TString GetLambdaText(TTranslation& ctx, TContext& context, const TRule_lambda_o
 bool TTransferTranslation::TransferSettingsEntry(std::map<TString, TNodePtr>& out,
                                                  const TRule_transfer_settings_entry& in, TSqlExpression& ctx, bool create)
 {
+    const auto keyPos = ctx.Context().Position(in.GetRule_an_id1());
+    const auto valuePos = ctx.Context().Position(in.GetRule_expr3());
     auto key = IdEx(in.GetRule_an_id1(), ctx);
     TNodePtr value = Unwrap(ctx.Build(in.GetRule_expr3()));
 
     if (!value) {
-        ctx.Context().Error() << "Invalid transfer setting: " << key.Name;
+        ctx.Context().Error(valuePos) << "Invalid transfer setting: " << key.Name;
         return false;
     }
 
@@ -93,49 +95,49 @@ bool TTransferTranslation::TransferSettingsEntry(std::map<TString, TNodePtr>& ou
 
     const auto keyName = to_lower(key.Name);
     if (!ConfigSettings.count(keyName) && !StateSettings.contains(keyName) && !CreateOnlySettings.contains(keyName)) {
-        ctx.Context().Error() << "Unknown transfer setting: " << key.Name;
+        ctx.Context().Error(keyPos) << "Unknown transfer setting: " << key.Name;
         return false;
     }
 
     if (create && StateSettings.count(keyName)) {
-        ctx.Context().Error() << key.Name << " is not supported in CREATE";
+        ctx.Context().Error(keyPos) << key.Name << " is not supported in CREATE";
         return false;
     }
 
     if (!create && CreateOnlySettings.contains(keyName)) {
-        ctx.Context().Error() << key.Name << " is not supported in ALTER";
+        ctx.Context().Error(keyPos) << key.Name << " is not supported in ALTER";
         return false;
     }
 
     if (keyName == "metrics_level") {
         auto literalValue = value->GetLiteralValue();
         if (!literalValue) {
-            ctx.Error() << " metrics_level value must be a string literal";
+            ctx.Context().Error(valuePos) << " metrics_level value must be a string literal";
             return false;
         }
 
         if (!literalValue.empty() && literalValue[0] == '-') {
-            ctx.Error() << "Invalid numeric value for metrics_value: negative numbers are not allowed";
+            ctx.Context().Error(valuePos) << "Invalid numeric value for metrics_value: negative numbers are not allowed";
             return false;
         }
 
         if (ui64 numericVal; TryFromString<ui64>(literalValue, numericVal)) {
             if (numericVal >= MetricsLevelValues.size()) {
-                ctx.Error() << "Invalid numeric value for metrics_value " << numericVal << ", valid values: from 0 to "
-                            << (MetricsLevelValues.size() - 1);
+                ctx.Context().Error(valuePos) << "Invalid numeric value for metrics_value " << numericVal << ", valid values: from 0 to "
+                                              << (MetricsLevelValues.size() - 1);
                 return false;
             }
         } else {
             auto valueStr = to_lower(literalValue);
             if (!MetricsLevelValues.contains(valueStr)) {
-                ctx.Error() << "Invalid metrics_level value: " << valueStr
-                            << ". Allowed values: " << JoinSeq(", ", MetricsLevelValues);
+                ctx.Context().Error(valuePos) << "Invalid metrics_level value: " << valueStr
+                                              << ". Allowed values: " << JoinSeq(", ", MetricsLevelValues);
                 return false;
             }
         }
     }
     if (!out.emplace(keyName, value).second) {
-        ctx.Context().Error() << "Duplicate transfer setting: " << key.Name;
+        ctx.Context().Error(keyPos) << "Duplicate transfer setting: " << key.Name;
     }
 
     return true;
@@ -170,13 +172,14 @@ bool TTransferTranslation::ParseTransferLambda(
 
     lambdaText = GetLambdaText(*this, Ctx_, lambdaOrParameter);
     if (lambdaText.empty()) {
-        Ctx_.Error() << "Cannot parse lambda correctly";
+        Ctx_.Error(lambdaOrParameter) << "Cannot parse lambda correctly";
     }
 
     return !lambdaText.empty();
 }
 
 TNodePtr TTransferTranslation::Build(const TRule_create_transfer_stmt& node) {
+    const auto pos = Ctx_.Position(node);
     // create_transfer_stmt: CREATE TRANSFER
     TObjectOperatorContext context(Ctx_.Scoped);
     if (node.GetRule_object_ref3().HasBlock1()) {
@@ -204,12 +207,12 @@ TNodePtr TTransferTranslation::Build(const TRule_create_transfer_stmt& node) {
     }
 
     if (Ctx_.Scoped->ActivePragmas.contains(std::make_pair(TString(), TString("relativepathprefix")))) {
-        return BuildCreateTransfer(Ctx_.Pos(), BuildTablePath(prefixPath, id),
+        return BuildCreateTransfer(pos, BuildTablePath(prefixPath, id),
                                    BuildTablePath(prefixPath, source), BuildTablePath(prefixPath, target),
                                    transformLambda, std::move(settings), context);
     }
 
-    return BuildCreateTransfer(Ctx_.Pos(), BuildTablePath(prefixPath, id),
+    return BuildCreateTransfer(pos, BuildTablePath(prefixPath, id),
                                source, target, transformLambda, std::move(settings), context);
 }
 
@@ -255,7 +258,7 @@ TNodePtr TTransferTranslation::Build(const TRule_alter_transfer_stmt& node) {
     }
 
     const TString id = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
-    return BuildAlterTransfer(Ctx_.Pos(),
+    return BuildAlterTransfer(Ctx_.Position(node),
                               BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id),
                               std::move(transformLambda), std::move(settings), context);
 }
@@ -271,7 +274,7 @@ TNodePtr TTransferTranslation::Build(const TRule_drop_transfer_stmt& node) {
     }
 
     const TString id = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
-    return BuildDropTransfer(Ctx_.Pos(),
+    return BuildDropTransfer(Ctx_.Position(node),
                              BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id),
                              node.HasBlock4(), context);
 }

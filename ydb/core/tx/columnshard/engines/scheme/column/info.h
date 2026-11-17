@@ -24,7 +24,7 @@ private:
     YDB_READONLY_DEF(std::optional<ui32>, PKColumnIndex);
     YDB_READONLY_DEF(TString, ColumnName);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Field>, ArrowField);
-    YDB_READONLY_DEF(NScheme::TTypeInfo, TypeInfo);
+    YDB_READONLY_DEF(NArrow::TComparisonType, ComparisonType);
     YDB_READONLY(NArrow::NSerialization::TSerializerContainer, Serializer, NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
     YDB_READONLY(
         NArrow::NAccessor::TConstructorContainer, DataAccessorConstructor, NArrow::NAccessor::TConstructorContainer::GetDefaultConstructor());
@@ -38,7 +38,12 @@ private:
 public:
     TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField,
         const NArrow::NSerialization::TSerializerContainer& serializer, const bool needMinMax, const bool isSorted, const bool isNullable,
-        const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex, const NScheme::TTypeInfo& typeInfo = {});
+        const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex,
+        const NArrow::TComparisonType& comparisonType);
+
+    const NScheme::TTypeInfo& GetTypeInfo() const {
+        return ComparisonType.GetTypeInfo();
+    }
 
     TColumnSaver GetColumnSaver() const {
         AFL_VERIFY(Serializer);

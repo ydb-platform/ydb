@@ -49,7 +49,6 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
     : TActor(&TDuplicateManager::StateMain)
     , LastSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetLastSchema())
     , PKColumns(context.GetPKColumns())
-    , PKSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetPrimaryKey())
     , Counters(context.GetCommonContext()->GetCounters().GetSimpleDuplicateFilteringCounters())
     , Intervals(MakeIntervalTree(portions))
     , Portions(MakePortionsIndex(Intervals))
@@ -177,7 +176,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
 
         AFL_VERIFY(!constructor->IsDone());
         TBuildFilterContext columnFetchingRequest(SelfId(), AbortionFlag, constructor->GetRequest()->Get()->GetMaxVersion(),
-            std::move(portionsToFetch), GetFetchingColumns(), PKSchema, LastSchema, ColumnDataManager, DataAccessorsManager, Counters,
+            std::move(portionsToFetch), GetFetchingColumns(), LastSchema, ColumnDataManager, DataAccessorsManager, Counters,
             std::move(requestGuard), memoryGuard);
         memoryGuard->Update(columnFetchingRequest.GetDataSize());
 

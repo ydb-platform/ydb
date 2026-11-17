@@ -13,7 +13,7 @@ TIntervalPoint TIntervalPoint::From(const TPredicateContainer& container, const 
             return 0;
         }
     }();
-    return TIntervalPoint(container, pkSchema, shift);
+    return TIntervalPoint(container, shift);
 }
 
 TIntervalPoint TIntervalPoint::To(const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema) {
@@ -26,7 +26,7 @@ TIntervalPoint TIntervalPoint::To(const TPredicateContainer& container, const st
             return 0;
         }
     }();
-    return TIntervalPoint(container, pkSchema, shift);
+    return TIntervalPoint(container, shift);
 }
 
 }   // namespace NKikimr::NOlap::NTxInteractions

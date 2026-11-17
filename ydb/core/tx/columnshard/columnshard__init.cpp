@@ -19,6 +19,7 @@
 #include <ydb/core/tx/tiering/manager.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/formats/arrow/switch/compare.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
@@ -295,6 +296,19 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 
     const bool isFirstRun = txc.DB.GetScheme().IsEmpty();
     NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
+
+    {
+        NIceDb::TNiceDb db(txc.DB);
+        ui64 decimalNumericComparison = 0;
+        if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::DecimalNumericComparison, decimalNumericComparison)) {
+            return false;
+        }
+
+        // Commit the irreversible mode before loading schemas or starting comparisons.
+        if (!decimalNumericComparison && NArrow::TComparator::IsDecimalNumericComparisonEnabled()) {
+            Schema::SaveSpecialValue(db, Schema::EValueIds::DecimalNumericComparison, 1);
+        }
+    }
 
     if (!NYDBTest::TControllers::GetColumnShardController()->BuildLocalBaseModifier()) {
         NIceDb::TNiceDb db(txc.DB);

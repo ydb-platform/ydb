@@ -82,7 +82,8 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     auto batch = preparedConclusion.DetachResult();
     if (Context.GetPassWriteGate()) {
         NArrow::TSimpleRow minKey(
-            NArrow::TColumnOperator().VerifyIfAbsent().Extract(batch.GetContainer(), Context.GetActualSchema()->GetPKColumnNames()), 0);
+            NArrow::TColumnOperator().VerifyIfAbsent().Extract(batch.GetContainer(), Context.GetActualSchema()->GetPKColumnNames()), 0,
+            Context.GetActualSchema()->GetIndexInfo().GetPrimaryKeyTypes());
         const bool readsExistingRows = ReadsExistingRows(WriteData.GetWriteMeta().GetModificationType(), batch, Context);
         TActorContext::AsActorContext().Send(Context.GetTabletActorId(),
             new TEvPassWriteGate(std::move(WriteData), std::move(batch), Context, std::move(minKey), readsExistingRows));
@@ -120,8 +121,16 @@ void StartWritingPreparedBatch(
                 auto conclusion = context.GetActualSchema()->BuildDefaultBatch(context.GetActualSchema()->GetIndexInfo().ArrowSchema(), 1, true);
                 AFL_VERIFY(!conclusion.IsFail())("error", conclusion.GetErrorMessage());
                 auto batchDefault = conclusion.DetachResult();
+                std::vector<NArrow::TComparisonType> defaultTypes;
+                defaultTypes.reserve(batchDefault->num_columns());
+                const auto& indexInfo = context.GetActualSchema()->GetIndexInfo();
+                for (const auto& field : batchDefault->schema()->fields()) {
+                    defaultTypes.emplace_back(
+                        indexInfo.GetColumnFeaturesVerified(indexInfo.GetColumnIdVerified(field->name())).GetComparisonType());
+                }
+
                 NArrow::NMerger::TSortableBatchPosition pos(
-                    batchDefault, 0, batchDefault->schema()->field_names(), batchDefault->schema()->field_names(), false);
+                    batchDefault, 0, batchDefault->schema()->field_names(), batchDefault->schema()->field_names(), false, defaultTypes);
                 merger = std::make_shared<TUpdateMerger>(
                     batch, context.GetActualSchema(), insertionConclusion.IsSuccess() ? "" : insertionConclusion.GetErrorMessage(), pos);
             }

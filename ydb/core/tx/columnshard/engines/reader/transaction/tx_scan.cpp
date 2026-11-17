@@ -45,8 +45,8 @@ TConclusion<std::shared_ptr<TPKRangesFilter>> MakeRanges(
         return std::make_shared<TPKRangesFilter>(TPKRangesFilter::BuildEmpty());
     }
     const TVersionedPresetSchemas& schemas = GetPresetSchemas(shard);
-    auto filterConclusion = TPKRangesFilter::BuildFromProto(
-        request, tableMetadataAccessor.GetPrimaryKeyInfo(schemas), tableMetadataAccessor.GetPrimaryKeyScheme(schemas));
+    const auto& indexInfo = tableMetadataAccessor.GetSnapshotSchemaVerified(schemas, TSnapshot::Max())->GetIndexInfo();
+    auto filterConclusion = TPKRangesFilter::BuildFromProto(request, indexInfo.GetPrimaryKeyComparisonColumns(), indexInfo.GetPrimaryKey());
     if (filterConclusion.IsFail()) {
         return TConclusionStatus::Fail(filterConclusion.GetErrorMessage());
     }

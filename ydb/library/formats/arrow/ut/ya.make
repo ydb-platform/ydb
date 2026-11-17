@@ -3,7 +3,11 @@ UNITTEST_FOR(ydb/library/formats/arrow)
 SIZE(SMALL)
 
 PEERDIR(
+    ydb/core/protos
+    ydb/core/testlib
+    library/cpp/monlib/dynamic_counters
     contrib/libs/apache/arrow
+    ydb/core/scheme_types
     ydb/library/arrow_kernels
 
     # for NYql::NUdf alloc stuff used in binary_json
@@ -22,6 +26,7 @@ CFLAGS(
 )
 
 SRCS(
+    replace_key_ut.cpp
     ut_arrow.cpp
     ut_size_calcer.cpp
     ut_splitter.cpp

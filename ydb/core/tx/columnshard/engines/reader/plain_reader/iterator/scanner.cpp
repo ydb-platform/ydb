@@ -34,7 +34,7 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
         }
         std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> guards = { std::move(allocationGuard) };
         AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_unique<TPartialReadResult>(std::move(guards), std::move(gGuard), std::move(*newBatch),
-            std::make_shared<TPlainScanCursor>(std::make_shared<NArrow::TSimpleRow>(lastPK, 0)), Context->GetCommonContext(), callbackIdxSubscriver)).second);
+            std::make_shared<TPlainScanCursor>(std::make_shared<NArrow::TSimpleRow>(lastPK, 0, Context->GetReadMetadata()->GetResultSchema()->GetIndexInfo().GetPrimaryKeyTypes())), Context->GetCommonContext(), callbackIdxSubscriver)).second);
     } else {
         AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, nullptr).second);
     }

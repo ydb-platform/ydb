@@ -490,7 +490,7 @@ NArrow::TSimpleRow MakeTestKey(const ui64 value, const std::vector<NArrow::NTest
     std::vector<TTypeInfo> types = TTestSchema::ExtractTypes(pk);
     std::vector<TCell> cells = MakeTestCells(types, value, mem);
     batchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(types.data(), cells.data(), types.size()));
-    return NArrow::TSimpleRow(batchBuilder.FlushBatch(false), 0);
+    return NArrow::TSimpleRow(batchBuilder.FlushBatch(false), 0, NArrow::ColumnTypes(NArrow::NTest::TTestColumn::ConvertToPairs(pk)));
 }
 
 THashMap<TString, NColumnShard::NTiers::TTierConfig> TTestSchema::BuildSnapshot(const TTableSpecials& specials) {

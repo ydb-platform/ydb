@@ -391,6 +391,7 @@ private:
     std::shared_ptr<TPortionIndexStats> PortionsStats;
     ui64 TabletId = 0;
     bool GenerateInternalPathId;
+    bool EnableDecimalNumericComparison = false;
     std::optional<TUnifiedPathId> TabletPathId;
     TInternalPathId MaxInternalPathId;
 

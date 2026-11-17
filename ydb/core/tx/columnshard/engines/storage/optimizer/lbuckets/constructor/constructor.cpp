@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets {
 
 NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(
     const TBuildContext& context) const {
-    return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), GetNodePortionsCountLimit());
+    return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), GetNodePortionsCountLimit());
 }
 
 bool TOptimizerPlannerConstructor::DoApplyToCurrentObject(IOptimizerPlanner& current) const {

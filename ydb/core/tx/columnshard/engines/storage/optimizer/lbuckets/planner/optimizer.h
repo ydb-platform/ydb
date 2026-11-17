@@ -740,16 +740,13 @@ public:
         return TModificationGuard(*this);
     }
 
-    TPortionsBucket(
-        const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<arrow::Schema>& pkSchema, const std::shared_ptr<TCounters>& counters)
+    TPortionsBucket(const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TCounters>& counters)
         : MainPortion(portion)
         , Counters(counters)
         , Others(Counters, GetCommonFreshnessCheckDuration())
     {
         if (MainPortion) {
-            NArrow::NMerger::TSortableBatchPosition sBatchPosition(
-                MainPortion->IndexKeyStart().ToBatch(), 0, pkSchema->field_names(), {}, false);
-            StartPos = std::move(sBatchPosition);
+            StartPos = MainPortion->IndexKeyStart().BuildSortablePosition();
             Counters->PortionsAlone->AddPortion(MainPortion);
         }
     }
@@ -818,7 +815,7 @@ public:
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> BuildOptimizationTasks(std::shared_ptr<TGranuleMeta> granule,
         const std::shared_ptr<NDataLocks::TManager>& locksManager, const NArrow::TSimpleRow* nextBorder,
-        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::shared_ptr<IStoragesManager>& storagesManager) const {
+        const std::shared_ptr<IStoragesManager>& storagesManager) const {
         auto youngestPortion = GetYoungestPortion(nextBorder);
         auto oldestPortion = GetOldestPortion(nextBorder);
         AFL_VERIFY(youngestPortion && oldestPortion);
@@ -885,15 +882,15 @@ public:
         TSaverContext saverContext(storagesManager);
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
-            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(), 0, primaryKeysSchema->field_names(), {}, false);
+            const auto pos = MainPortion->IndexKeyStart().BuildSortablePosition();
             result->AddCheckPoint(pos, false);
         }
         if (!nextBorder && MainPortion && !forceMergeForTests) {
-            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyEnd().ToBatch(), 0, primaryKeysSchema->field_names(), {}, false);
+            const auto pos = MainPortion->IndexKeyEnd().BuildSortablePosition();
             result->AddCheckPoint(pos, true);
         }
         if (stopPoint) {
-            NArrow::NMerger::TSortableBatchPosition pos(stopPoint->ToBatch(), 0, primaryKeysSchema->field_names(), {}, false);
+            const auto pos = stopPoint->BuildSortablePosition();
             result->AddCheckPoint(pos, false);
         }
         return { result };
@@ -964,7 +961,6 @@ private:
         }
     };
 
-    const std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
     const std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<TPortionsBucket> LeftBucket;
     std::map<NArrow::TSimpleRow, std::shared_ptr<TPortionsBucket>> Buckets;
@@ -1048,7 +1044,7 @@ private:
     }
 
     void AddBucket(const std::shared_ptr<TPortionInfo>& portion) {
-        auto insertInfo = Buckets.emplace(portion->IndexKeyStart(), std::make_shared<TPortionsBucket>(portion, PrimaryKeysSchema, Counters));
+        auto insertInfo = Buckets.emplace(portion->IndexKeyStart(), std::make_shared<TPortionsBucket>(portion, Counters));
         AFL_VERIFY(insertInfo.second);
         if (insertInfo.first == Buckets.begin()) {
             RemoveBucketFromRating(LeftBucket);
@@ -1065,11 +1061,9 @@ private:
     }
 
 public:
-    TPortionBuckets(const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<TCounters>& counters)
-        : PrimaryKeysSchema(primaryKeysSchema)
-        , StoragesManager(storagesManager)
-        , LeftBucket(std::make_shared<TPortionsBucket>(nullptr, primaryKeysSchema, counters))
+    TPortionBuckets(const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<TCounters>& counters)
+        : StoragesManager(storagesManager)
+        , LeftBucket(std::make_shared<TPortionsBucket>(nullptr, counters))
         , Counters(counters)
     {
         AddBucketToRating(LeftBucket);
@@ -1124,19 +1118,18 @@ public:
         const TPortionsBucket* bucketForOptimization = *BucketsByWeight.begin()->second.begin();
         if (bucketForOptimization == LeftBucket.get()) {
             if (Buckets.size()) {
-                return bucketForOptimization->BuildOptimizationTasks(
-                    granule, locksManager, &Buckets.begin()->first, PrimaryKeysSchema, StoragesManager);
+                return bucketForOptimization->BuildOptimizationTasks(granule, locksManager, &Buckets.begin()->first, StoragesManager);
             } else {
-                return bucketForOptimization->BuildOptimizationTasks(granule, locksManager, nullptr, PrimaryKeysSchema, StoragesManager);
+                return bucketForOptimization->BuildOptimizationTasks(granule, locksManager, nullptr, StoragesManager);
             }
         } else {
             auto it = Buckets.find(bucketForOptimization->GetPortion()->IndexKeyStart());
             AFL_VERIFY(it != Buckets.end());
             ++it;
             if (it != Buckets.end()) {
-                return bucketForOptimization->BuildOptimizationTasks(granule, locksManager, &it->first, PrimaryKeysSchema, StoragesManager);
+                return bucketForOptimization->BuildOptimizationTasks(granule, locksManager, &it->first, StoragesManager);
             } else {
-                return bucketForOptimization->BuildOptimizationTasks(granule, locksManager, nullptr, PrimaryKeysSchema, StoragesManager);
+                return bucketForOptimization->BuildOptimizationTasks(granule, locksManager, nullptr, StoragesManager);
             }
         }
     }
@@ -1260,10 +1253,10 @@ public:
     }
 
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::optional<ui64>& nodePortionsCountLimit)
+        const std::optional<ui64>& nodePortionsCountLimit)
         : TBase(pathId, nodePortionsCountLimit)
         , Counters(std::make_shared<TCounters>())
-        , Buckets(primaryKeysSchema, storagesManager, Counters)
+        , Buckets(storagesManager, Counters)
         , StoragesManager(storagesManager)
     {
     }

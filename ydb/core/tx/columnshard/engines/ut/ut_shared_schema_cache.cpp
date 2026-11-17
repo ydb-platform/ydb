@@ -85,6 +85,36 @@ const TIndexInfo* GetIndexInfo(TShard& shard, const ui64 version) {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TColumnEngineSharedSchemaCache) {
+    Y_UNIT_TEST(DecimalComparisonModesDoNotShareSchemaVersions) {
+        const auto owner = NColumnShard::TSchemeShardLocalPathId::FromRawValue(42);
+        const TPathId tenant(1, 1);
+        const auto legacyCache = TSchemaCachesManager::GetCache(owner, tenant, false);
+        const auto numericCache = TSchemaCachesManager::GetCache(owner, tenant, true);
+        UNIT_ASSERT(legacyCache != numericCache);
+        UNIT_ASSERT(TSchemaCachesManager::GetCache(owner, tenant, false) == legacyCache);
+        UNIT_ASSERT(TSchemaCachesManager::GetCache(owner, tenant, true) == numericCache);
+        auto proto = MakeSchemaV1();
+        const NScheme::TTypeInfo decimal(NScheme::TDecimalType(22, 0));
+        *proto.MutableColumns(0) = NArrow::NTest::TTestColumn("timestamp", decimal).SetNullable(false).CreateColumn(1);
+        auto legacy = TIndexInfo::BuildFromProto(PresetId, proto, TTestStoragesManager::GetInstance(), legacyCache);
+        auto numeric = TIndexInfo::BuildFromProto(PresetId, proto, TTestStoragesManager::GetInstance(), numericCache);
+        UNIT_ASSERT(legacy);
+        UNIT_ASSERT(numeric);
+        const auto cachedLegacy = legacyCache->GetOrInsertIndexInfo(std::move(*legacy));
+        const auto cachedNumeric = numericCache->GetOrInsertIndexInfo(std::move(*numeric));
+        UNIT_ASSERT(&*cachedLegacy != &*cachedNumeric);
+        UNIT_ASSERT(cachedLegacy->GetPrimaryKeyTypes().front() == NArrow::TComparisonType(decimal, false));
+        UNIT_ASSERT(cachedNumeric->GetPrimaryKeyTypes().front() == NArrow::TComparisonType(decimal, true));
+        const auto foundLegacy = legacyCache->FindIndexInfo(PresetId, proto.GetVersion());
+        const auto foundNumeric = numericCache->FindIndexInfo(PresetId, proto.GetVersion());
+        UNIT_ASSERT(foundLegacy);
+        UNIT_ASSERT(foundNumeric);
+        UNIT_ASSERT(&**foundLegacy == &*cachedLegacy);
+        UNIT_ASSERT(&**foundNumeric == &*cachedNumeric);
+        UNIT_ASSERT((*foundLegacy)->GetPrimaryKeyTypes().front() == NArrow::TComparisonType(decimal, false));
+        UNIT_ASSERT((*foundNumeric)->GetPrimaryKeyTypes().front() == NArrow::TComparisonType(decimal, true));
+    }
+
     Y_UNIT_TEST(SecondEngineReusesCachedVersions) {
         auto cache = std::make_shared<TSchemaObjectsCache>();
         TShard first(cache, TSnapshot(10, 1), TSnapshot(20, 1));

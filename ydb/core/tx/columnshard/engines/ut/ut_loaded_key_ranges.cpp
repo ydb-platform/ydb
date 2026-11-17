@@ -29,7 +29,7 @@ NArrow::TSimpleRow MakeKey(const ui64 timestamp, const TString& resourceType) {
     auto builders = NArrow::MakeBuilders(schema);
     UNIT_ASSERT(static_cast<arrow::TimestampBuilder&>(*builders[0]).Append(timestamp).ok());
     UNIT_ASSERT(static_cast<arrow::StringBuilder&>(*builders[1]).Append(resourceType.data(), resourceType.size()).ok());
-    return NArrow::TSimpleRow(arrow::RecordBatch::Make(schema, 1, NArrow::Finish(std::move(builders))), 0);
+    return NArrow::TSimpleRow(arrow::RecordBatch::Make(schema, 1, NArrow::Finish(std::move(builders))), 0, NArrow::ColumnTypes(MakePk()));
 }
 
 struct TBorder {
@@ -46,7 +46,7 @@ TCell MakeResourceType(const TString& resourceType) {
 }
 
 NOlap::TPKRangesFilter MakeRanges(const std::vector<std::pair<TBorder, TBorder>>& ranges) {
-    NOlap::TRangesBuilder builder(MakePk(), MakePkSchema());
+    NOlap::TRangesBuilder builder(NArrow::ComparisonSchema(MakePk()), MakePkSchema());
     for (const auto& [from, to] : ranges) {
         const TString fromBuf = TSerializedCellVec::Serialize(from.Cells);
         const TString toBuf = TSerializedCellVec::Serialize(to.Cells);

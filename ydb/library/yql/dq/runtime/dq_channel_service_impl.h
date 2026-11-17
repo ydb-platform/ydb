@@ -214,7 +214,7 @@ public:
     void StorageWakeupHandler();
 
     void PushDataChunk(TDataChunk&& data);
-    void NotifyInput(bool force);
+    void NotifyInput(bool force, bool freshLocalData = false);
     void NotifyOutput(bool force);
 
     void ExportPushStats(TDqAsyncStats& stats) override;

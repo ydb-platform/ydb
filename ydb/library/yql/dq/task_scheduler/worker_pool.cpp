@@ -11,9 +11,12 @@
 #include <cmath>
 #include <limits>
 #include <tuple>
+#include <utility>
 
 namespace NYql::NDq {
 namespace {
+thread_local TLocalConsumerHint* ActiveLocalConsumerHint = nullptr;
+
 bool IsTerminal(ETaskSchedulingState state) {
     return state == ETaskSchedulingState::Cancelled || state == ETaskSchedulingState::Finished;
 }
@@ -34,6 +37,25 @@ ui32 WorkRank(ETaskWorkKind work) {
 }
 } // namespace
 
+TLocalConsumerScope::TLocalConsumerScope(TLocalConsumerHint& hint, NActors::TActorId query, ui64 producerTask)
+    : Previous(std::exchange(ActiveLocalConsumerHint, &hint)) {
+    hint = {.Query = query, .ProducerTask = producerTask};
+}
+
+TLocalConsumerScope::~TLocalConsumerScope() {
+    ActiveLocalConsumerHint = Previous;
+}
+
+bool TLocalConsumerScope::Captures(NActors::TActorId query) {
+    return ActiveLocalConsumerHint && ActiveLocalConsumerHint->Query == query;
+}
+
+void TLocalConsumerScope::Record(NActors::TActorId actor, ui64 readyRevision, ui64 channel) {
+    ActiveLocalConsumerHint->Consumer = actor;
+    ActiveLocalConsumerHint->ReadyRevision = readyRevision;
+    ActiveLocalConsumerHint->Channel = channel;
+}
+
 TTaskWorkPool::TTaskWorkPool(ui32 maxQueryConcurrency, TWakeup wakeup, NMonitoring::TDynamicCounterPtr counters)
     : MaxQueryConcurrency(maxQueryConcurrency), Wakeup(std::move(wakeup))
 {
@@ -48,6 +70,11 @@ TTaskWorkPool::TTaskWorkPool(ui32 maxQueryConcurrency, TWakeup wakeup, NMonitori
         InlineCompletions = group->GetCounter("InlineCompletions", true);
         Wakeups = group->GetCounter("Wakeups", true);
         EmptyTakes = group->GetCounter("EmptyTakes", true);
+        WorkerActivations = group->GetCounter("WorkerActivations", true);
+        EmptyActivations = group->GetCounter("EmptyActivations", true);
+        LocalConsumerHints = group->GetCounter("LocalConsumerHints", true);
+        LocalConsumerSelections = group->GetCounter("LocalConsumerSelections", true);
+        LocalConsumerPrioritySwitches = group->GetCounter("LocalConsumerPrioritySwitches", true);
         SelectionsCount = group->GetCounter("Selections", true);
         SelectionCpuUs = group->GetCounter("SelectionCpuUs", true);
         SelectionLockWaitUs = group->GetCounter("SelectionLockWaitUs", true);
@@ -90,22 +117,46 @@ ui32 TTaskWorkPool::CountWorkLocked(ui32 limit) const {
     return count;
 }
 
-TVector<NActors::TActorId> TTaskWorkPool::WakeLocked() {
-    // Wake one idle worker per claimable task instead of all of them: the rest
-    // would only contend for the lock, find nothing and park again.
+TVector<NActors::TActorId> TTaskWorkPool::WakeLocked(NActors::TActorId preferred) {
     TVector<NActors::TActorId> workers;
     if (IdleWorkers.empty()) {
         return workers;
     }
-    const ui32 count = CountWorkLocked(IdleWorkers.size());
-    for (auto it = IdleWorkers.begin(); workers.size() < count;) {
+    // Each notification already on the way covers one claimable task until the
+    // recipient enters Take. Availability changes can arrive before delivery.
+    const ui32 pending = PendingWorkers.size();
+    const ui32 claimable = CountWorkLocked(IdleWorkers.size() + pending);
+    if (claimable <= pending) {
+        return workers;
+    }
+    const ui32 count = claimable - pending;
+    const auto wake = [&](auto it) {
         workers.push_back(*it);
-        IdleWorkers.erase(it++);
+        PendingWorkers.insert(*it);
+        IdleWorkers.erase(it);
+    };
+    if (auto it = IdleWorkers.find(preferred); it != IdleWorkers.end()) {
+        wake(it);
+    }
+    while (workers.size() < count) {
+        wake(IdleWorkers.begin());
     }
     if (Wakeups) {
         *Wakeups += workers.size();
     }
     return workers;
+}
+
+void TTaskWorkPool::Reschedule(NActors::TActorId worker) {
+    TVector<NActors::TActorId> wake;
+    {
+        std::lock_guard lock(Mutex);
+        // Publish that this worker is idle under the same lock as Enqueue, so
+        // arriving work either participates in this selection or wakes it later.
+        IdleWorkers.insert(worker);
+        wake = WakeLocked(worker);
+    }
+    Wake(std::move(wake));
 }
 
 void TTaskWorkPool::RegisterGraph(NActors::TActorId id, ui64 registration,
@@ -233,7 +284,9 @@ void TTaskWorkPool::NotifyAvailable() {
     Wake(std::move(wake));
 }
 
-std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worker, ui64 reserveCpuUs) {
+std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worker, ui64 reserveCpuUs,
+    const TLocalConsumerHint& hint)
+{
     const auto cpuStart = SelectionCpuUs ? ThreadCPUTime() : 0;
     const auto lockStart = SelectionLockWaitUs ? TMonotonic::Now() : TMonotonic();
     Y_DEFER { if (SelectionCpuUs) { *SelectionCpuUs += ThreadCPUTime() - cpuStart; } };
@@ -241,12 +294,23 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
     if (SelectionLockWaitUs) {
         *SelectionLockWaitUs += (TMonotonic::Now() - lockStart).MicroSeconds();
     }
+    if (worker && !PendingWorkers.empty()) {
+        PendingWorkers.erase(worker);
+    }
     TQuery* selectedQuery = nullptr;
     TTask* selectedTask = nullptr;
     double service = std::numeric_limits<double>::infinity();
     std::tuple<bool, bool, ui32, ui32, ui64> taskKey;
     NActors::TActorId selectedQueryId, selectedActor;
     const auto now = TMonotonic::Now();
+    const auto eligible = [](const TTask& task) {
+        return task.Ready && task.Available && task.Available->load(std::memory_order_acquire) && !task.Execution.expired();
+    };
+    const auto keyFor = [this](const TQuery& query, const TTask& task) {
+        const auto distance = query.Graph ? query.Graph->GetResultDistance(task.State.TaskId) : std::nullopt;
+        return std::tuple{Selections - task.SelectionAt < 64, !KnownReady(task.State),
+            distance.value_or(std::numeric_limits<ui32>::max()), WorkRank(task.State.Classification.Work), task.Sequence};
+    };
     for (auto id : ReadyQueries) {
         auto& query = Queries.at(id);
         if (query.Running >= MaxQueryConcurrency || query.NotBefore > now) {
@@ -255,15 +319,10 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
         const double candidateService = query.Service + query.ReservedCpuUs / query.Weight;
         for (auto actor : query.ReadyTasks) {
             auto& task = query.Tasks.at(actor);
-            if (!task.Ready) {
+            if (!eligible(task)) {
                 continue;
             }
-            if (!task.Available || !task.Available->load(std::memory_order_acquire) || task.Execution.expired()) {
-                continue;
-            }
-            const auto distance = query.Graph ? query.Graph->GetResultDistance(task.State.TaskId) : std::nullopt;
-            const auto key = std::tuple{Selections - task.SelectionAt < 64, !KnownReady(task.State),
-                distance.value_or(std::numeric_limits<ui32>::max()), WorkRank(task.State.Classification.Work), task.Sequence};
+            const auto key = keyFor(query, task);
             if (!selectedTask || candidateService < service
                 || (candidateService == service && (selectedQuery == &query ? key < taskKey
                     : task.Sequence < selectedTask->Sequence))) {
@@ -273,6 +332,32 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
                 selectedTask = &task;
                 service = candidateService;
                 taskKey = key;
+            }
+        }
+    }
+    bool localConsumer = false;
+    bool localityChangedSelection = false;
+    if (hint.Consumer && LocalConsumerHints) {
+        ++*LocalConsumerHints;
+    }
+    // Let the normal policy select the query first, including its cross-query
+    // tie breaker. Within it, locality never beats aging or known readiness.
+    if (selectedTask && hint.Consumer && hint.Query == selectedQueryId) {
+        auto it = selectedQuery->Tasks.find(hint.Consumer);
+        if (it != selectedQuery->Tasks.end() && eligible(it->second) && it->second.State.Revision == hint.ReadyRevision) {
+            const auto consumerKey = keyFor(*selectedQuery, it->second);
+            if (std::tie(std::get<0>(consumerKey), std::get<1>(consumerKey))
+                <= std::tie(std::get<0>(taskKey), std::get<1>(taskKey)))
+            {
+                localConsumer = true;
+                localityChangedSelection = selectedActor != hint.Consumer;
+                selectedActor = hint.Consumer;
+                selectedTask = &it->second;
+                taskKey = consumerKey;
+                if (LocalConsumerSelections) {
+                    ++*LocalConsumerSelections;
+                    *LocalConsumerPrioritySwitches += localityChangedSelection;
+                }
             }
         }
     }
@@ -317,6 +402,12 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
         selection["result_distance"] = std::get<2>(taskKey) == std::numeric_limits<ui32>::max()
             ? NJson::TJsonValue() : NJson::TJsonValue(std::get<2>(taskKey));
         selection["fifo_sequence"] = std::get<4>(taskKey);
+        if (localConsumer) {
+            selection["local_consumer"] = true;
+            selection["locality_changed_selection"] = localityChangedSelection;
+            selection["local_producer_task"] = hint.ProducerTask;
+            selection["local_channel"] = hint.Channel;
+        }
         selection["selection"] = Selections;
     }
     const auto selectedAt = task->Trace ? TMonotonic::Now() : TMonotonic();
@@ -358,6 +449,15 @@ void TTaskWorkPool::RecordExecution(const TTaskRunProgress& progress, ui64 cpuUs
         *WorkerRuns += progress.RunnerInvoked;
         *WorkerCpuUs += cpuUs;
         *QuotaRejected += progress.QuotaRejected;
+    }
+}
+
+void TTaskWorkPool::RecordActivation(bool ranSlice) {
+    if (WorkerActivations) {
+        ++*WorkerActivations;
+        if (!ranSlice) {
+            ++*EmptyActivations;
+        }
     }
 }
 
@@ -439,8 +539,14 @@ private:
     }
     void Execute() {
         const auto deadline = TMonotonic::Now() + TDuration::MicroSeconds(Settings.WorkerActivationUs);
+        TLocalConsumerHint hint;
+        bool ranSlice = false;
+        Y_DEFER { Pool->RecordActivation(ranSlice); };
         do {
-            auto claim = Pool->Take(SelfId(), Settings.WorkerSliceCpuUs);
+            // A hint expires at the next selection or at the end of this
+            // activation, whichever comes first.
+            auto claim = Pool->Take(SelfId(), Settings.WorkerSliceCpuUs, hint);
+            hint = {};
             if (!claim) {
                 return;
             }
@@ -463,10 +569,18 @@ private:
                     Pool->Finish(*claim, 0);
                     continue;
                 }
+                ranSlice = true;
                 try {
+                    std::optional<TLocalConsumerScope> locality;
+                    if (Settings.PreferLocalConsumer) {
+                        locality.emplace(hint, claim->Task->Query, claim->Task->TaskId);
+                    }
                     result = claim->Execution->RunSlice({Settings.WorkerSliceCpuUs, deadline});
                 } catch (...) {
                     result.Error = std::current_exception();
+                }
+                if (result.Error || result.RetryAfter || result.Progress.QuotaRejected) {
+                    hint = {};
                 }
             }
             const auto cpuUs = Max<ui64>(1, ThreadCPUTime() - cpuStart);
@@ -496,7 +610,7 @@ private:
             }
             claim->Execution->OnSliceFinished(std::move(result));
         } while (TMonotonic::Now() < deadline);
-        Send(SelfId(), new TEvWorkerWakeup());
+        Pool->Reschedule(SelfId());
     }
     const std::shared_ptr<TTaskWorkPool> Pool;
     const TTaskSchedulerSettings Settings;

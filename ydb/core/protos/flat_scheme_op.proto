@@ -440,8 +440,6 @@ message TTableDescription {
     // Actual number of table partitions (shards), always filled in describe
     // results, so clients don't need to request the TablePartitions list.
     optional uint64 PartitionCount = 55;
-
-    reserved 56; // Local HNSW metadata is stored in DataShard's NIceDb tables.
 }
 
 message TCompressionOptions {

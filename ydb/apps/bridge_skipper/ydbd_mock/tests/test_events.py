@@ -57,8 +57,9 @@ class EventLogTest(unittest.TestCase):
         self.assertEqual([e["i"] for e in log.query()], [2, 3, 4])
         self.assertEqual(log.last_seq, 5)
 
-    def test_partial_sink_tail_is_removed_before_two_restarts(self):
-        for tail in (b'{"seq":2,"kind":"interrupted', b'x' * 70000):
+    def test_unterminated_sink_tail_is_removed_before_two_restarts(self):
+        for tail in (b'{"seq":2,"kind":"interrupted', b'x' * 70000,
+                     b'{"seq":2,"kind":"complete_without_newline"}'):
             with self.subTest(tail_size=len(tail)), tempfile.TemporaryDirectory() as d:
                 path = os.path.join(d, "events.jsonl")
                 first = self.make(sink_path=path)

@@ -31,7 +31,8 @@ TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context
             if (!newDataSources.contains(tier)) {
                 auto tierPath = TPath::Resolve(tier, ssContext->SS);
                 YDB_LOG_VERIFY(tierPath.IsResolved(),
-                    {"path", tier});
+                    {"path", tier}
+                );
                 ssContext->MemChanges.GrabExternalDataSource(ssContext->SS, tierPath->PathId);
                 ssContext->SS->RemoveExternalDataSourceReference(tierPath->PathId, pathId);
                 ssContext->DbChanges.PersistExternalDataSource(tierPath->PathId);
@@ -41,7 +42,8 @@ TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context
             if (!oldDataSources.contains(tier)) {
                 auto tierPath = TPath::Resolve(tier, ssContext->SS);
                 YDB_LOG_VERIFY(tierPath.IsResolved(),
-                    {"path", tier});
+                    {"path", tier}
+                );
                 ssContext->MemChanges.GrabExternalDataSource(ssContext->SS, tierPath->PathId);
                 ssContext->SS->AddExternalDataSourceReference(
                     tierPath->PathId, TPath::Init(pathId, ssContext->SS));

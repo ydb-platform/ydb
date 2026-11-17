@@ -68,7 +68,8 @@ bool TOlapIndexUpsert::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexReq
         InheritPortionStorage = indexSchema.GetInheritPortionStorage();
     }
     YDB_LOG_VERIFY(IndexConstructor.DeserializeFromProto(indexSchema),
-        {"incorrectProto", indexSchema.DebugString()});
+        {"incorrectProto", indexSchema.DebugString()}
+    );
     return true;
 }
 

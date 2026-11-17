@@ -805,7 +805,8 @@ public:
         for (const auto& tier : tableInfo->GetUsedTiers()) {
             auto tierPath = TPath::Resolve(tier, context.SS);
             YDB_LOG_VERIFY(tierPath.IsResolved(),
-                {"path", tier});
+                {"path", tier}
+            );
             context.SS->PersistExternalDataSourceReference(db, tierPath->PathId, dstPath);
         }
 

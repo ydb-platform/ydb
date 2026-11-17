@@ -15,7 +15,8 @@ void TOlapIndexSchema::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDes
     Id = indexSchema.GetId();
     Name = indexSchema.GetName();
     YDB_LOG_VERIFY(IndexMeta.DeserializeFromProto(indexSchema),
-        {"incorrectProto", indexSchema.DebugString()});
+        {"incorrectProto", indexSchema.DebugString()}
+    );
 }
 
 bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexUpsert& upsert, IErrorCollector& errors) {
@@ -91,7 +92,7 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
                 for (const auto& indexPair : Indexes) {
                     const auto& existingIndex = indexPair.second;
                     const auto& existingMeta = existingIndex.GetIndexMeta();
-                    if ((meta->GetClassName() == NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName || meta->GetClassName() == "BLOOM_FILTER") && 
+                    if ((meta->GetClassName() == NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName || meta->GetClassName() == "BLOOM_FILTER") &&
                         existingMeta->GetClassName() == meta->GetClassName() && existingMeta->GetSingleColumnId() == newColumnId) {
                         TString columnName = ToString(*newColumnId);
                         if (const auto* column = currentSchema.GetColumns().GetById(*newColumnId)) {
@@ -143,7 +144,7 @@ bool TOlapIndexesDescription::ValidateNoDuplicateMinMaxAndBloomFilterIndexes(con
         if (!columnId) {
             continue;
         }
-        if (meta.GetClassName() != NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName 
+        if (meta.GetClassName() != NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName
             && meta.GetClassName() != "BLOOM_FILTER") {
             continue;
         }
@@ -154,7 +155,7 @@ bool TOlapIndexesDescription::ValidateNoDuplicateMinMaxAndBloomFilterIndexes(con
                 columnName = column->GetName();
             }
             errors.AddError(NKikimrScheme::StatusSchemeError,
-                TStringBuilder() << "creating 2 " << it->first.second << " indexes on one column is forbidden, tried to create both '" << index.GetName() << "' and '" << it->second << 
+                TStringBuilder() << "creating 2 " << it->first.second << " indexes on one column is forbidden, tried to create both '" << index.GetName() << "' and '" << it->second <<
                 "' on column " << columnName << ".");
             return false;
         }

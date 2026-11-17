@@ -29,7 +29,8 @@ const google::protobuf::RepeatedField<arc_ui64>& TColumnTableInfo::GetPartitions
 
 void TColumnTableInfo::SetColumnShards(const std::vector<ui64>& columnShards) {
     YDB_LOG_VERIFY(GetColumnShards().empty(),
-        {"original", Description.DebugString()});
+        {"original", Description.DebugString()}
+    );
     YDB_LOG_VERIFY(columnShards.size());
 
     Description.MutableSharding()->MutableColumnShards()->Clear();

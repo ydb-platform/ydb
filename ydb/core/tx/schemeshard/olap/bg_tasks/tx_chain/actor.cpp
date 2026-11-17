@@ -37,7 +37,8 @@ void TTxChainActor::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev
 void TTxChainActor::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
     YDB_LOG_VERIFY(SessionLogic->GetCurrentTxIdVerified() == ev->Get()->Record.GetTxId());
     YDB_LOG_VERIFY(ev->Get()->IsAccepted() || ev->Get()->IsDone(),
-        {"problem", ev->ToString()});
+        {"problem", ev->ToString()}
+    );
 }
 
 void TTxChainActor::OnSessionProgressSaved() {

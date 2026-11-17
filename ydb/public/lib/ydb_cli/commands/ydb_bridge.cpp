@@ -71,27 +71,27 @@ void TCommandBridgeSetDatabaseMode::Config(TConfig& config) {
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<mode>", "bridged: enable bridge replication across all provisioned piles; "
         "data synchronization continues in the background.\n"
-        "ordinary: disable bridge replication; redundant copies are deleted in the background.");
+        "non-bridged: disable bridge replication; redundant copies are deleted in the background.");
     config.Opts->GetOpts().GetFreeArgSpec(0)
         .Completer(NLastGetopt::NComp::Choice({{"bridged", "Enable bridge replication"},
-                                             {"ordinary", "Disable bridge replication"}}));
+                                             {"non-bridged", "Disable bridge replication"}}));
     config.Opts->AddLongOption("database-path", "Absolute path of the database to change. "
             "The global --database option selects the connection database.")
         .Required().RequiredArgument("PATH").StoreResult(&DatabasePath);
-    config.Opts->AddLongOption("retain-pile", "With mode ordinary, keep data in this pile, which must already have synchronized copies. "
-            "By default, select copies automatically; they may be in different piles. Does not relocate existing ordinary data.")
+    config.Opts->AddLongOption("retain-pile", "With mode non-bridged, keep data in this pile, which must already have synchronized copies. "
+            "By default, select copies automatically; they may be in different piles. Does not relocate existing non-bridged data.")
         .RequiredArgument("PILE_NAME").StoreResult(&RetainPile);
 }
 
 void TCommandBridgeSetDatabaseMode::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
     const auto mode = config.ParseResult->GetFreeArgs()[0];
-    if (mode != "bridged" && mode != "ordinary") {
-        throw TMisuseException() << "Invalid mode \"" << mode << "\". Use bridged or ordinary.";
+    if (mode != "bridged" && mode != "non-bridged") {
+        throw TMisuseException() << "Invalid mode \"" << mode << "\". Use bridged or non-bridged.";
     }
     Bridged = mode == "bridged";
     if (config.ParseResult->Has("retain-pile") && Bridged) {
-        throw TMisuseException() << "--retain-pile requires mode ordinary.";
+        throw TMisuseException() << "--retain-pile requires mode non-bridged.";
     }
 }
 
@@ -199,7 +199,7 @@ TCommandBridgeRollback::TCommandBridgeRollback(bool allowEmptyDatabase)
         "The report covers static and connected dynamic nodes.")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
-    CompletionDescription = "Roll a converted cluster back to ordinary mode";
+    CompletionDescription = "Roll a converted cluster back to non-bridged mode";
 }
 
 void TCommandBridgeRollback::Config(TConfig& config) {
@@ -207,7 +207,7 @@ void TCommandBridgeRollback::Config(TConfig& config) {
     config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
     config.Opts->AddLongOption("skip-bsc-validation",
-            "Don't ask the storage controller whether it can make its groups ordinary ones first. Use it only when the "
+            "Don't ask the storage controller whether it can make its groups non-bridged ones first. Use it only when the "
             "storage controller can't start; it reports what blocks it then.")
         .StoreTrue(&SkipBscValidation);
 }
@@ -381,7 +381,7 @@ int TCommandBridgeJoinPile::Run(TConfig& config) {
     auto result = client.UpdateClusterState(updates, {}).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
-    Cout << "Cluster state updated successfully." << Endl;
+    Cout << "Pile synchronization started. Monitor progress with \"ydb admin cluster bridge list piles\"." << Endl;
 
     return EXIT_SUCCESS;
 }
@@ -418,13 +418,13 @@ int TCommandBridgeConvert::Run(TConfig& config) {
         .SkipStoragePoolConversion(SkipStoragePoolConversion)).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
-    Cout << "Cluster converted to bridge mode successfully." << Endl;
+    Cout << "Cluster conversion started. Monitor progress with \"ydb admin cluster bridge list piles\"." << Endl;
 
     return EXIT_SUCCESS;
 }
 
 TCommandBridgeProvisionPile::TCommandBridgeProvisionPile(bool allowEmptyDatabase)
-    : TYdbCommand("provision-pile", {}, "Prepare storage in an INACTIVE pile listed in the bridge config with its hosts, "
+    : TYdbCommand("provision-pile", {}, "Prepare storage in a NOT_PROVISIONED pile listed in the bridge config with its hosts, "
         "then set it to DISCONNECTED. Run join-pile to start synchronization.")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
@@ -455,7 +455,7 @@ int TCommandBridgeProvisionPile::Run(TConfig& config) {
 }
 
 TCommandBridgeDestroyPile::TCommandBridgeDestroyPile(bool allowEmptyDatabase)
-    : TYdbCommand("destroy-pile", {}, "Delete storage-group parts and data in a DISCONNECTED pile, then set it to INACTIVE. "
+    : TYdbCommand("destroy-pile", {}, "Delete storage-group parts and data in a DISCONNECTED pile, then set it to NOT_PROVISIONED. "
         "This cannot be undone. Waits for removal to complete; afterwards, the pile and its hosts can be removed from the bridge config.")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
@@ -492,7 +492,7 @@ int TCommandBridgeDestroyPile::Run(TConfig& config) {
     auto result = client.RemovePile(Pile).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
-    Cout << "Pile destroyed successfully, it is INACTIVE now." << Endl;
+    Cout << "Pile destroyed successfully, it is NOT_PROVISIONED now." << Endl;
 
     return EXIT_SUCCESS;
 }

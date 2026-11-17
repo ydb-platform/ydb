@@ -59,7 +59,9 @@ private:
 
     const bool AllowEmptyDatabase;
     EView View = EView::Piles;
-    bool Detailed = false;
+    bool AllColumns = false;
+    TString ColumnsOption;
+    TVector<TString> Columns;
     bool NotSynced = false;
     TString DatabasePath;
     TString StoragePool;

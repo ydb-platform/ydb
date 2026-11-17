@@ -9,6 +9,7 @@
 
 #include <util/string/cast.h>
 #include <util/string/join.h>
+#include <util/string/split.h>
 
 #include <algorithm>
 
@@ -32,7 +33,7 @@ namespace NYdb::NConsoleClient {
                 case NBridge::EPileState::SUSPENDED:
                     return "SUSPENDED";
                 case NBridge::EPileState::INACTIVE:
-                    return "INACTIVE";
+                    return "NOT_PROVISIONED";
             }
             return "UNKNOWN";
         }
@@ -60,9 +61,9 @@ namespace NYdb::NConsoleClient {
                 case NBridge::ESynchronizationStatus::Pending:
                     return "PENDING";
                 case NBridge::ESynchronizationStatus::NotRequired:
-                    return "NOT_REQUIRED";
+                    return "NON_BRIDGED";
                 default:
-                    return "UNKNOWN";
+                    return "STATUS_UNAVAILABLE";
             }
         }
 
@@ -82,7 +83,7 @@ namespace NYdb::NConsoleClient {
 
         TString DatabaseSyncLabel(const NBridge::TGroupSyncCounts& groups) {
             if (!groups.Required) {
-                return "NOT_REQUIRED";
+                return "NON_BRIDGED";
             }
             if (groups.Synced == groups.Required) {
                 return "SYNCED";
@@ -90,7 +91,7 @@ namespace NYdb::NConsoleClient {
             if (groups.Syncing) {
                 return "SYNCING";
             }
-            return groups.Unknown ? "UNKNOWN" : "PENDING";
+            return groups.Unknown ? "STATUS_UNAVAILABLE" : "PENDING";
         }
 
         TString StorageModeToString(NBridge::EStorageMode mode) {
@@ -98,7 +99,7 @@ namespace NYdb::NConsoleClient {
                 case NBridge::EStorageMode::Bridged:
                     return "bridged";
                 case NBridge::EStorageMode::Ordinary:
-                    return "ordinary";
+                    return "non-bridged";
                 case NBridge::EStorageMode::Mixed:
                     return "mixed";
                 default:
@@ -168,23 +169,54 @@ namespace NYdb::NConsoleClient {
             Cout << Endl;
         }
 
-        void PrintRows(const TVector<TString>& headers, const TVector<TVector<TString>>& rows, bool csv, const TString& note = {}) {
+        const TVector<TString>& PileColumns(bool all = true) {
+            static const TVector<TString> base = {"Pile", "PileState", "DatabasesSync", "Operation", "LastError"};
+            static const TVector<TString> full = {"Pile", "PileState", "DatabasesSync", "DatabasesSyncing", "DatabasesPending",
+                                                 "DatabasesStatusUnavailable", "DatabasesNonBridged", "Operation", "LastError"};
+            return all ? full : base;
+        }
+
+        const TVector<TString>& DatabaseColumns(bool all = true) {
+            static const TVector<TString> base = {"Database", "Mode", "Pile", "DataSync", "GroupsSync", "LastError"};
+            static const TVector<TString> full = {"Database", "Mode", "Pile", "DataSync", "GroupsSync", "Pools", "GroupsSyncing",
+                                                 "GroupsPending", "GroupsStatusUnavailable", "LastError", "LastErrorAt"};
+            return all ? full : base;
+        }
+
+        const TVector<TString>& GroupColumns(bool all = true) {
+            static const TVector<TString> base = {"GroupId", "Pool", "Pile", "DataSync", "Phase", "LastError"};
+            static const TVector<TString> full = {"GroupId", "Pool", "Pile", "DataSync", "Phase", "PhysicalGroupId", "PoolId",
+                                                 "LastError", "LastErrorAt"};
+            return all ? full : base;
+        }
+
+        TString OptionalText(const TString& text, bool csv) {
+            return !csv && text.empty() ? TString("—") : text;
+        }
+
+        void PrintRows(const TVector<TString>& allColumns, const TVector<TVector<TString>>& rows,
+                       const TVector<TString>& columns, bool csv) {
+            TVector<size_t> indices;
+            for (const auto& column : columns) {
+                indices.push_back(std::find(allColumns.begin(), allColumns.end(), column) - allColumns.begin());
+            }
             if (csv) {
-                WriteCsvRow(headers);
+                WriteCsvRow(columns);
                 for (const auto& row : rows) {
-                    WriteCsvRow(row);
+                    TVector<TString> selected;
+                    for (const auto index : indices) {
+                        selected.push_back(row[index]);
+                    }
+                    WriteCsvRow(selected);
                 }
                 return;
             }
-            TPrettyTable table(headers, TPrettyTableConfig().WithoutRowDelimiters());
+            TPrettyTable table(columns, TPrettyTableConfig().WithoutRowDelimiters());
             for (const auto& row : rows) {
                 auto& out = table.AddRow();
-                for (size_t i = 0; i < row.size(); ++i) {
-                    out.Column(i, row[i]);
+                for (size_t i = 0; i < indices.size(); ++i) {
+                    out.Column(i, row[indices[i]]);
                 }
-            }
-            if (!note.empty()) {
-                table.AddRow().FreeText(note);
             }
             Cout << table;
         }
@@ -207,13 +239,6 @@ namespace NYdb::NConsoleClient {
             return json;
         }
 
-        TString GroupPoolToString(const std::optional<NBridge::TStoragePool>& pool, bool csv) {
-            if (!pool) {
-                return csv ? TString{} : TString("—");
-            }
-            return csv ? NJson::WriteJson(StoragePoolToJson(*pool), false, true) : TString(pool->Name);
-        }
-
         TString PoolNames(const std::vector<NBridge::TStoragePool>& pools) {
             TString result;
             for (const auto& pool : pools) {
@@ -231,7 +256,7 @@ namespace NYdb::NConsoleClient {
             json.InsertValue("synced", groups.Synced);
             json.InsertValue("syncing", groups.Syncing);
             json.InsertValue("pending", groups.Pending);
-            json.InsertValue("unknown", groups.Unknown);
+            json.InsertValue("status_unavailable", groups.Unknown);
             return json;
         }
 
@@ -241,8 +266,8 @@ namespace NYdb::NConsoleClient {
             json.InsertValue("synced", databases.Synced);
             json.InsertValue("syncing", databases.Syncing);
             json.InsertValue("pending", databases.Pending);
-            json.InsertValue("not_required", databases.NotRequired);
-            json.InsertValue("unknown", databases.Unknown);
+            json.InsertValue("non_bridged", databases.NotRequired);
+            json.InsertValue("status_unavailable", databases.Unknown);
             return json;
         }
 
@@ -358,15 +383,8 @@ namespace NYdb::NConsoleClient {
             Cout << Endl;
         }
 
-        TVector<TString> PileCsvHeaders(bool detailed) {
-            if (!detailed) {
-                return {"pile_name", "state", "generation"};
-            }
-            return {"pile_name", "pile_name_present", "state", "databases_synced", "databases_total", "databases_syncing",
-                    "databases_pending", "databases_not_required", "databases_unknown", "cluster_unattributed_storage_pools", "generation"};
-        }
-
-        void PrintUnbridgedStatus(const NBridge::TUnbridgedStatus& status, EDataFormat format, bool detailed) {
+        void PrintUnbridgedStatus(const NBridge::TUnbridgedStatus& status, EDataFormat format, bool allColumns,
+                                  const TVector<TString>& columns) {
             const auto& bridgeNodes = status.BridgeConfigNodeIds;
             const auto& unreportedNodes = status.UnreportedStaticNodeIds;
             if (format == EDataFormat::Json) {
@@ -387,92 +405,53 @@ namespace NYdb::NConsoleClient {
                 return;
             }
             if (format == EDataFormat::Csv) {
-                WriteCsvRow(PileCsvHeaders(detailed));
+                WriteCsvRow(columns);
                 Cerr << "Node configuration status is available with --format json." << Endl;
                 return;
             }
 
-            if (bridgeNodes.empty() && unreportedNodes.empty()) {
-                Cout << "Cluster mode: ordinary" << Endl;
-                return;
-            }
-            Cout << (bridgeNodes.empty() ? "Bridge configuration status incomplete" : "Bridge configuration still in use") << Endl;
-            const auto printNodes = [detailed](TStringBuf countLabel, TStringBuf idsLabel, const std::vector<uint32_t>& nodes) {
-                if (nodes.empty()) {
-                    return;
-                }
-                Cout << (detailed ? idsLabel : countLabel) << ": ";
-                if (detailed) {
-                    Cout << MakeRangeJoiner(", ", nodes);
-                } else {
-                    Cout << nodes.size();
-                }
-                Cout << Endl;
-            };
-            printNodes("Nodes with bridge config", "Node IDs with bridge config", bridgeNodes);
-            printNodes("Unreported static nodes", "Unreported static node IDs", unreportedNodes);
+            Cout << "Cluster mode: non-bridged" << Endl;
             if (!bridgeNodes.empty()) {
-                Cout << "To return to ordinary mode, remove bridge configuration and restart the nodes." << Endl;
+                Cout << "Bridge configuration: present on " << bridgeNodes.size() << " nodes" << Endl;
+                if (allColumns) {
+                    Cout << "Node IDs with bridge configuration: " << MakeRangeJoiner(", ", bridgeNodes) << Endl;
+                }
+            }
+            if (!unreportedNodes.empty()) {
+                Cout << "Bridge configuration: status unavailable on " << unreportedNodes.size() << " static nodes" << Endl;
+                if (allColumns) {
+                    Cout << "Unreported static node IDs: " << MakeRangeJoiner(", ", unreportedNodes) << Endl;
+                }
             }
         }
 
-        void PrintDatabaseRows(const std::vector<NBridge::TDatabaseSynchronization>& databases, bool detailed, bool csv) {
-            TVector<TString> headers = csv
-                                           ? TVector<TString>{"database_path", "storage_pools", "storage_mode", "pile_name", "pile_name_present", "groups_synced", "groups_required"}
-                                           : TVector<TString>{"Database", "Pools", "Mode", "Pile", "Sync", "Synced groups"};
-            if (detailed) {
-                const TVector<TString> extras = csv
-                                                    ? TVector<TString>{"groups_syncing", "groups_pending", "groups_unknown", "last_sync_error", "last_sync_error_occurred_at"}
-                                                    : TVector<TString>{"Syncing groups", "Pending groups", "Unknown groups", "Last sync error", "Last error time"};
-                headers.insert(headers.end(), extras.begin(), extras.end());
-            }
+        void PrintDatabaseRows(const std::vector<NBridge::TDatabaseSynchronization>& databases,
+                               const TVector<TString>& columns, bool csv) {
             TVector<TVector<TString>> rows;
             for (const auto& item : databases) {
-                TVector<TString> row{OptionalName(item.DatabasePath, csv),
-                                     csv ? NJson::WriteJson(StoragePoolsToJson(item.StoragePools), false, true) : PoolNames(item.StoragePools),
-                                     StorageModeToString(item.StorageMode), OptionalName(item.PileName, csv)};
-                if (csv) {
-                    row.insert(row.end(), {item.PileName ? "true" : "false", ToString(item.Groups.Synced), ToString(item.Groups.Required)});
-                } else {
-                    row.insert(row.end(), {DatabaseSyncLabel(item.Groups), item.Groups.Required ? SyncRatioToString(item.Groups) : TString("—")});
-                }
-                if (detailed) {
-                    row.insert(row.end(), {ToString(item.Groups.Syncing), ToString(item.Groups.Pending), ToString(item.Groups.Unknown),
-                                           SyncErrorMessage(item.LastSyncError), SyncErrorTime(item.LastSyncError, csv)});
-                }
-                rows.push_back(std::move(row));
+                rows.push_back({OptionalName(item.DatabasePath, csv), StorageModeToString(item.StorageMode),
+                                OptionalName(item.PileName, csv), DatabaseSyncLabel(item.Groups),
+                                item.Groups.Required ? SyncRatioToString(item.Groups) : OptionalText({}, csv),
+                                OptionalText(PoolNames(item.StoragePools), csv), ToString(item.Groups.Syncing),
+                                ToString(item.Groups.Pending), ToString(item.Groups.Unknown),
+                                OptionalText(SyncErrorMessage(item.LastSyncError), csv), SyncErrorTime(item.LastSyncError, csv)});
             }
-            PrintRows(headers, rows, csv);
+            PrintRows(DatabaseColumns(), rows, columns, csv);
         }
 
-        void PrintGroupRows(const std::vector<NBridge::TGroupSynchronization>& groups, bool detailed, bool csv) {
-            TVector<TString> headers = csv
-                                           ? TVector<TString>{"group_id", "storage_pool", "pile_name", "pile_name_present", "sync_status"}
-                                           : TVector<TString>{"Group", "Pool", "Pile", "Sync"};
-            if (detailed) {
-                const TVector<TString> extras = csv
-                                                    ? TVector<TString>{"physical_group_id", "sync_phase", "last_sync_error", "last_sync_error_occurred_at"}
-                                                    : TVector<TString>{"Physical group", "Phase", "Last sync error", "Last error time"};
-                headers.insert(headers.end(), extras.begin(), extras.end());
-            }
+        void PrintGroupRows(const std::vector<NBridge::TGroupSynchronization>& groups, const TVector<TString>& columns, bool csv) {
             TVector<TVector<TString>> rows;
             for (const auto& item : groups) {
-                TVector<TString> row{ToString(item.GroupId),
-                                     GroupPoolToString(item.StoragePool, csv),
-                                     OptionalName(item.PileName, csv)};
-                if (csv) {
-                    row.push_back(item.PileName ? "true" : "false");
-                }
-                row.push_back(SyncStatusToString(item.SyncStatus));
-                if (detailed) {
-                    row.insert(row.end(), {item.PhysicalGroupId ? ToString(*item.PhysicalGroupId) : csv ? TString{}
-                                                                                                        : TString("—"),
-                                           csv ? TString(item.SyncPhase) : PrettySyncPhase(item.SyncPhase), SyncErrorMessage(item.LastSyncError),
-                                           SyncErrorTime(item.LastSyncError, csv)});
-                }
-                rows.push_back(std::move(row));
+                const TString poolId = item.StoragePool
+                                       ? ToString(item.StoragePool->Id.BoxId) + ":" + ToString(item.StoragePool->Id.PoolId)
+                                       : TString{};
+                rows.push_back({ToString(item.GroupId), item.StoragePool ? TString(item.StoragePool->Name) : OptionalText({}, csv),
+                                OptionalName(item.PileName, csv), SyncStatusToString(item.SyncStatus),
+                                OptionalText(PrettySyncPhase(item.SyncPhase), csv),
+                                item.PhysicalGroupId ? ToString(*item.PhysicalGroupId) : OptionalText({}, csv), OptionalText(poolId, csv),
+                                OptionalText(SyncErrorMessage(item.LastSyncError), csv), SyncErrorTime(item.LastSyncError, csv)});
             }
-            PrintRows(headers, rows, csv);
+            PrintRows(GroupColumns(), rows, columns, csv);
         }
 
         const NBridge::TPileSynchronization* FindPile(const NBridge::TListPileSynchronizationResult* summary, const std::string& name) {
@@ -486,92 +465,64 @@ namespace NYdb::NConsoleClient {
             return nullptr;
         }
 
+        TString PileOperationToString(NBridge::TPendingPileOperation::EKind kind) {
+            switch (kind) {
+                case NBridge::TPendingPileOperation::EKind::ADD:
+                    return "provision-pile (in_progress)";
+                case NBridge::TPendingPileOperation::EKind::REMOVE:
+                    return "destroy-pile (in_progress)";
+                default:
+                    return PendingPileOperationKindToString(kind) + " (in_progress)";
+            }
+        }
+
         void PrintPiles(const NBridge::TGetClusterStateResult& result, const std::vector<NBridge::TPileStateUpdate>& state,
-                        const NBridge::TListPileSynchronizationResult* summary, const std::optional<TString>& pileFilter, bool detailed, bool csv) {
-            if (csv && !detailed) {
-                WriteCsvRow(PileCsvHeaders(detailed));
-                for (const auto& pile : state) {
-                    WriteCsvRow({TString(pile.PileName), PileStateToString(pile.State), ToString(result.GetGeneration())});
-                }
-                return;
+                        const NBridge::TListPileSynchronizationResult* summary, const TVector<TString>& columns, bool csv) {
+            const auto& operation = result.GetPendingPileOperation();
+            const bool rollback = operation && operation->Kind == NBridge::TPendingPileOperation::EKind::ROLLBACK;
+            TVector<TVector<TString>> rows;
+            for (const auto& pile : state) {
+                const auto* counts = pile.State == NBridge::EPileState::INACTIVE ? nullptr : FindPile(summary, pile.PileName);
+                const bool hasOperation = operation && !rollback && operation->PileName == pile.PileName;
+                rows.push_back({OptionalName(pile.PileName, csv), PileStateToString(pile.State),
+                                counts ? DatabaseSyncRatioToString(counts->Databases) : OptionalText({}, csv),
+                                counts ? ToString(counts->Databases.Syncing) : OptionalText({}, csv),
+                                counts ? ToString(counts->Databases.Pending) : OptionalText({}, csv),
+                                counts ? ToString(counts->Databases.Unknown) : OptionalText({}, csv),
+                                counts ? ToString(counts->Databases.NotRequired) : OptionalText({}, csv),
+                                hasOperation ? PileOperationToString(operation->Kind) : OptionalText({}, csv),
+                                hasOperation ? OptionalText(TString(operation->ErrorReason), csv) : OptionalText({}, csv)});
             }
-            if (summary || csv) {
-                const TVector<TString> headers = csv
-                    ? PileCsvHeaders(detailed)
-                    : TVector<TString>{"Pile", "State", "Synced/total databases", "Syncing databases", "Pending databases",
-                                       "Not required databases", "Unknown databases"};
-                TVector<TVector<TString>> rows;
-                auto addRow = [&](const std::optional<std::string>& name, const TString& pileState,
-                                  const NBridge::TPileSynchronization* counts) {
-                    TVector<TString> row{OptionalName(name, csv)};
-                    if (csv) {
-                        row.push_back(name ? "true" : "false");
-                        row.push_back(pileState);
-                        if (counts) {
-                            row.insert(row.end(), {ToString(counts->Databases.Synced), ToString(counts->Databases.Total),
-                                                   ToString(counts->Databases.Syncing), ToString(counts->Databases.Pending),
-                                                   ToString(counts->Databases.NotRequired), ToString(counts->Databases.Unknown)});
-                        } else {
-                            row.insert(row.end(), 6, TString{});
-                        }
-                        row.insert(row.end(), {summary ? ToString(summary->GetUnattributedStoragePools()) : TString{},
-                                               ToString(result.GetGeneration())});
-                    } else {
-                        row.insert(row.end(), {name ? pileState : TString("—"),
-                                               counts ? DatabaseSyncRatioToString(counts->Databases) : TString("—"),
-                                               counts ? ToString(counts->Databases.Syncing) : TString("—"),
-                                               counts ? ToString(counts->Databases.Pending) : TString("—"),
-                                               counts ? ToString(counts->Databases.NotRequired) : TString("—"),
-                                               counts ? ToString(counts->Databases.Unknown) : TString("—")});
-                    }
-                    rows.push_back(std::move(row));
-                };
-                for (const auto& pile : state) {
-                    addRow(pile.PileName, PileStateToString(pile.State), FindPile(summary, pile.PileName));
-                }
-                if (summary && !pileFilter) {
-                    for (const auto& pile : summary->GetPiles()) {
-                        if (!pile.PileName) {
-                            addRow(std::nullopt, {}, &pile);
-                        }
-                    }
-                }
-                TString note;
-                if (summary && summary->GetUnattributedStoragePools()) {
-                    note = TStringBuilder() << "Database counts exclude storage pools without database attribution: "
-                                            << summary->GetUnattributedStoragePools();
-                }
-                PrintRows(headers, rows, csv, note);
-            } else {
-                for (const auto& pile : state) {
-                    Cout << "Pile " << pile.PileName << ": " << PileStateToString(pile.State) << Endl;
-                }
-            }
+            PrintRows(PileColumns(), rows, columns, csv);
             if (csv) {
                 return;
             }
-            Cout << "Generation: " << result.GetGeneration() << Endl;
-            if (result.IsConversionInProgress()) {
-                Cout << "Conversion from non-bridged cluster is in progress, piles can't be added yet" << Endl;
+            Cout << Endl << "Generation: " << result.GetGeneration() << Endl;
+            if (summary && summary->GetUnattributedStoragePools()) {
+                Cout << "Database counts exclude storage pools without database attribution: "
+                     << summary->GetUnattributedStoragePools() << Endl;
             }
-            if (const auto& op = result.GetPendingPileOperation()) {
-                if (op->Kind == NBridge::TPendingPileOperation::EKind::ROLLBACK) {
-                    Cout << "Rollback: storage in progress" << Endl;
-                } else {
-                    Cout << "Pending operation on pile " << op->PileName << ": " << PendingPileOperationKindToString(op->Kind) << Endl;
+            if (summary) {
+                for (const auto& pile : summary->GetPiles()) {
+                    if (!pile.PileName && pile.Databases.Total) {
+                        Cout << "Databases with unavailable pile placement: " << pile.Databases.Total << Endl;
+                    }
                 }
-                if (!op->ErrorReason.empty()) {
-                    Cout << "Last attempt has failed (being retried): " << op->ErrorReason << Endl;
+            }
+            if (result.IsConversionInProgress()) {
+                Cout << "Conversion: storage in progress; piles cannot be provisioned yet" << Endl;
+            }
+            if (rollback) {
+                Cout << "Rollback: storage in progress" << Endl;
+                if (!operation->ErrorReason.empty()) {
+                    Cout << "Rollback last error (being retried): " << operation->ErrorReason << Endl;
                 }
             }
         }
 
-        void PrintSelectedDatabase(const TString& requestedPath, const std::optional<std::string>& owner) {
-            if (!requestedPath.empty()) {
-                Cout << "Database: " << requestedPath << Endl;
-                if (owner && *owner != NormalizePath(requestedPath)) {
-                    Cout << "Shared storage: " << *owner << Endl;
-                }
+        void PrintSharedStorage(const TString& requestedPath, const std::optional<std::string>& owner) {
+            if (!requestedPath.empty() && owner && *owner != NormalizePath(requestedPath)) {
+                Cout << "Shared storage: " << *owner << Endl;
             }
         }
 
@@ -595,11 +546,23 @@ namespace NYdb::NConsoleClient {
         }));
 
         AddOutputFormats(config, {EDataFormat::Pretty, EDataFormat::Json, EDataFormat::Csv});
-        config.Opts->AddLongOption("detailed", "Show database counts for piles or node IDs when bridge state is absent. "
-            "Show group counts and the last error for databases, "
-            "or physical group IDs, synchronization phases and the last error for groups. "
-            "Database and group JSON includes available details by default.")
-            .StoreTrue(&Detailed);
+        config.Opts->AddLongOption('A', "all", "Show all table columns, or node IDs when the cluster is non-bridged.")
+            .StoreTrue(&AllColumns);
+        TVector<NLastGetopt::NComp::TChoice> columnChoices;
+        for (const auto* columns : {&PileColumns(), &DatabaseColumns(), &GroupColumns()}) {
+            for (const auto& column : *columns) {
+                const auto found = std::find_if(columnChoices.begin(), columnChoices.end(), [&](const auto& choice) {
+                    return choice.Choice == column;
+                });
+                if (found == columnChoices.end()) {
+                    columnChoices.emplace_back(column);
+                }
+            }
+        }
+        config.Opts->AddLongOption("columns", "Comma-separated columns in output order (pretty/csv). Incompatible with -A.")
+            .RequiredArgument("COLUMN,...").StoreResult(&ColumnsOption)
+            .Completer(NLastGetopt::NComp::Choice(std::move(columnChoices)));
+        config.Opts->MutuallyExclusive("all", "columns");
         config.Opts->AddLongOption("pile", "Show only this pile. An empty name is valid.")
             .RequiredArgument("NAME")
             .Handler([this](const TString& name) { PileName = name; });
@@ -607,7 +570,8 @@ namespace NYdb::NConsoleClient {
             "Serverless paths select shared storage.")
             .RequiredArgument("PATH")
             .StoreResult(&DatabasePath);
-        config.Opts->AddLongOption("not-synced", "For databases and groups, show incomplete required synchronization, including unknown states.")
+        config.Opts->AddLongOption("not-synced", "For databases and groups, show incomplete required synchronization, "
+            "including unavailable statuses.")
             .StoreTrue(&NotSynced);
         config.Opts->AddLongOption("pool", "For groups, select a uniquely named storage pool.")
             .RequiredArgument("NAME")
@@ -615,20 +579,20 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("pool-id", "For groups, select a storage pool by BOX:POOL ID. BOX may be zero and POOL must be nonzero.")
             .RequiredArgument("BOX:POOL")
             .Handler([this](const TString& value) { StoragePoolId = ParseStoragePoolId(value); });
-        config.Opts->AddLongOption("mode", "For databases, filter by the mode of all database pools (bridged, ordinary or mixed).")
+        config.Opts->AddLongOption("mode", "For databases, filter by the mode of all database pools (bridged, non-bridged or mixed).")
             .RequiredArgument("MODE")
             .ChoicesWithCompletion({{"bridged", "Bridge synchronization enabled"},
-                                    {"ordinary", "Bridge synchronization disabled"},
-                                    {"mixed", "Database has both bridged and ordinary pools"}})
+                                    {"non-bridged", "Bridge synchronization disabled"},
+                                    {"mixed", "Database has both bridged and non-bridged pools"}})
             .Handler([this](const TString& value) {
                 if (value == "bridged") {
                     StorageModeFilter = NBridge::EStorageMode::Bridged;
-                } else if (value == "ordinary") {
+                } else if (value == "non-bridged") {
                     StorageModeFilter = NBridge::EStorageMode::Ordinary;
                 } else if (value == "mixed") {
                     StorageModeFilter = NBridge::EStorageMode::Mixed;
                 } else {
-                    throw TMisuseException() << "--mode must be bridged, ordinary or mixed.";
+                    throw TMisuseException() << "--mode must be bridged, non-bridged or mixed.";
                 }
             });
         config.Opts->MutuallyExclusive("database-path", "pool");
@@ -649,6 +613,28 @@ namespace NYdb::NConsoleClient {
             View = EView::Groups;
         } else {
             throw TMisuseException() << "Unknown view \"" << args.front() << "\". Use piles, databases or groups.";
+        }
+
+        const auto& allColumns = View == EView::Piles
+                                 ? PileColumns()
+                                 : View == EView::Databases ? DatabaseColumns() : GroupColumns();
+        if (config.ParseResult->Has("columns")) {
+            if (OutputFormat == EDataFormat::Json) {
+                throw TMisuseException() << "--columns requires --format pretty or csv.";
+            }
+            Columns = StringSplitter(ColumnsOption).Split(',').ToList<TString>();
+            for (const auto& column : Columns) {
+                if (std::find(allColumns.begin(), allColumns.end(), column) == allColumns.end()) {
+                    throw TMisuseException() << "Unknown column \"" << column << "\". Available columns: " << JoinSeq(", ", allColumns) << ".";
+                }
+            }
+            if (Columns.empty()) {
+                throw TMisuseException() << "--columns requires at least one column. Available columns: " << JoinSeq(", ", allColumns) << ".";
+            }
+        } else {
+            Columns = View == EView::Piles
+                      ? PileColumns(AllColumns)
+                      : View == EView::Databases ? DatabaseColumns(AllColumns) : GroupColumns(AllColumns);
         }
 
         if (config.ParseResult->Has("database-path")) {
@@ -681,30 +667,9 @@ namespace NYdb::NConsoleClient {
         if (View == EView::Piles) {
             const auto cluster = client.GetClusterState(NBridge::TGetClusterStateSettings()
                 .IncludeUnbridgedStatus(!PileName)).GetValueSync();
-            if (!PileName && cluster.GetStatus() == EStatus::NOT_FOUND) {
-                // Servers predating IncludeUnbridgedStatus expose the node report through GetRollbackStatus.
-                const auto rollback = client.GetRollbackStatus().GetValueSync();
-                if (rollback.GetStatus() != EStatus::CLIENT_CALL_UNIMPLEMENTED) {
-                    NStatusHelpers::ThrowOnErrorOrPrintIssues(rollback);
-                    if (rollback.IsBridged() || rollback.IsRollbackInProgress()) {
-                        Cerr << "Bridge cluster state changed. Retry the request." << Endl;
-                        return EXIT_FAILURE;
-                    }
-                    const NBridge::TUnbridgedStatus unbridged{
-                        .BridgeConfigNodeIds = rollback.GetBridgeConfigNodeIds(),
-                        .UnreportedStaticNodeIds = rollback.GetUnreportedStaticNodeIds(),
-                    };
-                    if (!rollback.IsComplete() && unbridged.BridgeConfigNodeIds.empty() && unbridged.UnreportedStaticNodeIds.empty()) {
-                        Cerr << "Unbridged status report is incomplete." << Endl;
-                        return EXIT_FAILURE;
-                    }
-                    PrintUnbridgedStatus(unbridged, OutputFormat, Detailed);
-                    return EXIT_SUCCESS;
-                }
-            }
             NStatusHelpers::ThrowOnErrorOrPrintIssues(cluster);
             if (const auto& unbridged = cluster.GetUnbridgedStatus()) {
-                PrintUnbridgedStatus(*unbridged, OutputFormat, Detailed);
+                PrintUnbridgedStatus(*unbridged, OutputFormat, AllColumns, Columns);
                 return EXIT_SUCCESS;
             }
             auto state = cluster.GetState();
@@ -716,7 +681,10 @@ namespace NYdb::NConsoleClient {
             }
             std::optional<NBridge::TListPileSynchronizationResult> summary;
             TString incompleteReason;
-            if (Detailed) {
+            const bool needsSummary = std::any_of(Columns.begin(), Columns.end(), [](const TString& column) {
+                return column.StartsWith("Databases");
+            });
+            if (needsSummary) {
                 auto response = client.ListPileSynchronization().GetValueSync();
                 if (!response.IsSuccess()) {
                     incompleteReason = TStringBuilder() << "Synchronization summary unavailable: " << response.GetIssues().ToString();
@@ -738,7 +706,7 @@ namespace NYdb::NConsoleClient {
                 }
                 PrintJson(json);
             } else {
-                PrintPiles(cluster, state, summary ? &*summary : nullptr, PileName, Detailed, csv);
+                PrintPiles(cluster, state, summary ? &*summary : nullptr, Columns, csv);
             }
             if (!incompleteReason.empty()) {
                 Cerr << "Bridge diagnostics incomplete: " << incompleteReason << Endl;
@@ -764,10 +732,11 @@ namespace NYdb::NConsoleClient {
                 json.InsertValue("databases", DatabasesToJson(result.GetDatabases()));
                 PrintJson(json);
             } else {
+                PrintDatabaseRows(result.GetDatabases(), Columns, csv);
                 if (!csv) {
-                    PrintSelectedDatabase(DatabasePath, result.GetStorageOwnerDatabasePath());
+                    Cout << Endl << "Generation: " << result.GetClusterStateGeneration() << Endl;
+                    PrintSharedStorage(DatabasePath, result.GetStorageOwnerDatabasePath());
                 }
-                PrintDatabaseRows(result.GetDatabases(), Detailed, csv);
             }
             return EXIT_SUCCESS;
         }
@@ -789,10 +758,11 @@ namespace NYdb::NConsoleClient {
             json.InsertValue("groups", GroupsToJson(result.GetGroups()));
             PrintJson(json);
         } else {
+            PrintGroupRows(result.GetGroups(), Columns, csv);
             if (!csv) {
-                PrintSelectedDatabase(DatabasePath, result.GetStorageOwnerDatabasePath());
+                Cout << Endl << "Generation: " << result.GetClusterStateGeneration() << Endl;
+                PrintSharedStorage(DatabasePath, result.GetStorageOwnerDatabasePath());
             }
-            PrintGroupRows(result.GetGroups(), Detailed, csv);
         }
         return EXIT_SUCCESS;
     }

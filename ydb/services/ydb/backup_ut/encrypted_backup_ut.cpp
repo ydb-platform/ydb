@@ -1201,14 +1201,15 @@ protected:
     void TestCommonEncryptionRequirements(bool useSchemaSecrets, bool isFsBackup = false) {
         using namespace ::fmt::literals;
 
+        auto& runtime = *Server().GetRuntime();
+        NKikimr::TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
+        NKikimr::TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusImport);
         THolder<TTempDir> tempDirHolder;
         TString basePath;
         if (isFsBackup) {
             tempDirHolder = MakeHolder<TTempDir>();
             basePath = tempDirHolder->Path();
-            auto& runtime = *Server().GetRuntime();
             runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
-            NKikimr::TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
         }
         // Create different objects with names that are expected to be hidden (anonymized) in encrypted exports
         // Create two object of each type in order to verify that we don't duplicate IVs
@@ -1362,11 +1363,7 @@ protected:
             WaitOpSuccess(res);
         } else {
             NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
-            // TODO: Include Kesus in the round-trip tests once its import is supported.
-            // FS tests above still cover encrypted Kesus export without importing it.
             settings
-                .AppendExcludeRegexp("^Anonymized_Dir/Anonymized_Kesus$")
-                .AppendExcludeRegexp("^Anonymized_Dir/Anonymized_Kesus2$")
                 .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
 
             auto res = YdbExportClient().ExportToS3(settings).GetValueSync();

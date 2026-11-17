@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TVDiskMonitoring) {
                 UNIT_ASSERT_VALUES_EQUAL(counters->FindCounter("MinHugeBlobInBytes")->Val(), size);
             }
             UNIT_ASSERT(!counters->FindCounter("MinHugeBlobInBytes")->ForDerivative());
-            UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), extended ? 24 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), extended ? 23 : 1);
             auto old = counters->FindSubgroup("MinHugeBlobInBytes", "131072");
             UNIT_ASSERT_VALUES_EQUAL(old->FindCounter("count")->Val(), 0);
         }
@@ -176,13 +176,16 @@ Y_UNIT_TEST_SUITE(TVDiskMonitoring) {
         for (bool extended : {false, true}) {
             TMonitoringContext context(extended);
             auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-            TVDiskStateGroup mon(counters);
-            mon.VDiskState(NKikimrWhiteboard::OK);
-            mon.VDiskState(NKikimrWhiteboard::PDiskError);
-            UNIT_ASSERT(mon.VDiskState() == NKikimrWhiteboard::PDiskError);
+            // SkeletonFront and Skeleton keep separate groups on the same counters.
+            TVDiskStateGroup front(counters);
+            TVDiskStateGroup skeleton(counters);
+            front.VDiskState(NKikimrWhiteboard::OK);
+            skeleton.VDiskState(NKikimrWhiteboard::PDiskError);
+            UNIT_ASSERT(front.VDiskState() == NKikimrWhiteboard::PDiskError);
             UNIT_ASSERT_VALUES_EQUAL(counters->FindCounter("VDiskState_OK")->Val(), 0);
             UNIT_ASSERT_VALUES_EQUAL(counters->FindCounter("VDiskState_PDiskError")->Val(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), extended ? 10 : 8);
+            UNIT_ASSERT(!counters->FindCounter("VDiskState_Initial"));
+            UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), extended ? 6 : 4);
         }
     }
 
@@ -225,7 +228,32 @@ Y_UNIT_TEST_SUITE(TVDiskMonitoring) {
                 "ScrubDiskCost", "DefragDiskCost", "InternalDiskCost"}) {
             UNIT_ASSERT_C(exported.Contains(TString(name) + "{"), name);
         }
-        UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), 46);
+        UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), 36);
+    }
+
+    Y_UNIT_TEST(CapacityAlertRegistersEnteredColorsOnly) {
+        TMonitoringContext context(false);
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        // A donor and its acceptor on one PDisk may share these counters.
+        TDskOutOfSpaceGroup donor(counters);
+        TDskOutOfSpaceGroup acceptor(counters);
+        UNIT_ASSERT(!counters->FindCounter("CapacityAlertGreen"));
+        donor.CapacityAlert(NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
+        acceptor.CapacityAlert(NKikimrBlobStorage::TPDiskSpaceColor::YELLOW);
+        UNIT_ASSERT_VALUES_EQUAL(counters->FindCounter("CapacityAlertGreen")->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->FindCounter("CapacityAlertYellow")->Val(), 1);
+        UNIT_ASSERT(!counters->FindCounter("CapacityAlertCyan"));
+    }
+
+    Y_UNIT_TEST(ThrottlingDetailsRegisterOnFirstWrite) {
+        TMonitoringContext context(true);
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TSkeletonOverloadGroup mon(counters);
+        UNIT_ASSERT(counters->FindCounter("ThrottlingIsActive"));
+        UNIT_ASSERT(counters->FindCounter("ThrottlingCurrentSpeedLimit"));
+        UNIT_ASSERT(!counters->FindCounter("ThrottlingDryRun"));
+        mon.ThrottlingDryRun() = 1;
+        UNIT_ASSERT_VALUES_EQUAL(counters->FindCounter("ThrottlingDryRun")->Val(), 1);
     }
 }
 

@@ -111,7 +111,7 @@ public:
     }
 
     TSnapshot GetPreviousSnapshot() const {
-        AFL_VERIFY(Valid());
+        YDB_LOG_VERIFY(Valid());
         if (TxId == 0) {
             return TSnapshot(PlanStep - 1, ::Max<ui64>());
         } else {

@@ -717,6 +717,7 @@ public:
         out << "<th>Write</th>";
         out << "<th>Usage impact</th>";
         out << "<th>Isolation</th>";
+        out << "<th>Named</th>";
         out << "</tr>";
         out << "</thead>";
 
@@ -731,6 +732,7 @@ public:
             out << GetResourceValuesHtml(tablet.GetResourceValues());
             out << "<td>" << tablet.GetUsageImpact() << "</td>";
             out << "<td>" << (tablet.IsPinnedToNode() ? "pinned" : (tablet.IsHighImpact() ? "high-impact" : "")) << "</td>";
+            out << "<td>" << EncodeHtmlPcdata(tablet.GetResourceValues().NamedResources.ToString()) << "</td>";
             out << "</tr>";
         }
         out <<"</tbody>";
@@ -1009,6 +1011,7 @@ public:
         UpdateConfig(db, "DataCenterChangeReactionPeriod", configUpdates);
         UpdateConfig(db, "TabletEventHistorySize", configUpdates);
         UpdateConfig(db, "NodeEventHistorySize", configUpdates);
+        UpdateConfig(db, "CountersExportMode", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1304,7 +1307,7 @@ public:
                     out << "<div class='col-sm-2' style='padding-top:5px'><select id='" << param << "' style='max-width:170px;margin-top:7px' onchange='edit(this);'>";
                     TString base = GetEnumValueCommonPrefix(enumfield);
                     for (int n = 0; n < enumfield->value_count(); ++n) {
-                        const google::protobuf::EnumValueDescriptor* enumdescr = enumfield->FindValueByNumber(n);
+                        const google::protobuf::EnumValueDescriptor* enumdescr = enumfield->value(n);
                         out << "<option value=" << enumdescr->number() << (enumvalue == enumdescr->number() ? " selected" : "") << ">"
                             << enumdescr->name().substr(base.size())
                             << "</option>";
@@ -1461,6 +1464,7 @@ public:
         ShowConfig(out, "DataCenterChangeReactionPeriod");
         ShowConfig(out, "TabletEventHistorySize");
         ShowConfig(out, "NodeEventHistorySize");
+        ShowConfig(out, "CountersExportMode");
 
         out << "<div class='row' style='margin-top:40px'>";
         bool allowedMetricsLocalOverridden = !Self->TabletTypeAllowedMetrics.empty();
@@ -1848,11 +1852,46 @@ public:
             EBalancerType::Scatter,
             EBalancerType::Manual,
             EBalancerType::Storage,
+            EBalancerType::ScatterNamed,
         }) {
             int balancer = static_cast<int>(type);
             out << "<tr id='balancer" << balancer << "'><td>" << EBalancerTypeName(type) << "</td><td></td><td></td><td></td><td></td><td></td></tr>";
         }
         out << "</table></div></div>";
+
+        if (!Self->NamedResourceRegistry.GetKnownNames().empty()) {
+            out << "<div style='margin-bottom:10px'><table class='simple-table1'>";
+            out << "<tr><th>Named resource</th><th>Balance mode</th><th>Total</th><th>Transferable</th>"
+                   "<th>Max node usage</th><th>Nodes over capacity</th><th>Nodes with spare capacity</th></tr>";
+            for (const TString& name : Self->NamedResourceRegistry.GetKnownNames()) {
+                const auto& settings = Self->GetNamedResourceSettings(name);
+                ui64 total = 0;
+                ui64 transferable = 0;
+                double maxUsage = 0;
+                ui64 overCapacity = 0;
+                ui64 spareCapacity = 0;
+                for (const auto& [nodeId, node] : Self->Nodes) {
+                    if (!node.IsAlive()) {
+                        continue;
+                    }
+                    total += node.NamedResourceValues.GetValue(name);
+                    transferable += node.NamedResourceValues.GetTransferableValue(name);
+                    if (auto usage = node.GetNamedResourceUsage(name)) {
+                        maxUsage = std::max(maxUsage, *usage);
+                        overCapacity += *usage > 1;
+                        spareCapacity += *usage < 1;
+                    }
+                }
+                out << "<tr><td>" << EncodeHtmlPcdata(name) << "</td>"
+                    << "<td>" << NKikimrConfig::THiveConfig::TNamedResourceSettings::EBalanceMode_Name(settings.BalanceMode) << "</td>"
+                    << "<td>" << total << "</td>"
+                    << "<td>" << transferable << "</td>"
+                    << "<td>" << Sprintf("%.3f", maxUsage) << "</td>"
+                    << "<td>" << overCapacity << "</td>"
+                    << "<td>" << spareCapacity << "</td></tr>";
+            }
+            out << "</table></div>";
+        }
 
         out << "<table id='node_table' class='table simple-table2 table-hover table-condensed'>";
         out << "<thead><tr>"
@@ -5728,6 +5767,14 @@ public:
         add("ResourceValues", GetResourceValuesText(node.ResourceValues));
         add("ResourceTotalValues", GetResourceValuesText(node.ResourceTotalValues));
         add("ResourceMaximumValues", GetResourceValuesText(node.ResourceMaximumValues));
+        add("NamedResourceValues", node.NamedResourceValues.ToString());
+        {
+            TStringBuilder maximum;
+            for (const auto& [name, value] : TMap<TString, ui64>(node.NamedResourceMaximum.begin(), node.NamedResourceMaximum.end())) {
+                maximum << (maximum.empty() ? "" : ", ") << name << "=" << value;
+            }
+            add("NamedResourceMaximum", maximum);
+        }
         add("MaxTabletsScheduled", node.GetMaxTabletsScheduled());
         {
             TStringBuilder availability;

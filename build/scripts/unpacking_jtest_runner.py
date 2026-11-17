@@ -102,6 +102,40 @@ def make_command_file_from_cp(class_path, out):
         cp_file.write(os.pathsep.join(class_path))
 
 
+def jacoco_includes(jars):
+    """
+    Build the jacoco agent `includes` option from the .covcls class lists lying next to the classpath jars.
+    A class list is produced only for modules selected by JAVA_COVERAGE_SOURCE_FILTER at configure time
+    (see _FILTER_JAVA_COVERAGE in build/plugins/coverage.py), so instrumenting just their packages makes
+    the agent as selective as clang coverage: other modules, contrib and the JDK are left untouched.
+    Packages rather than classes keep the option short; a class of another module sharing the package is
+    instrumented in vain and dropped by the report, which filters by the same lists exactly.
+    Return an empty option when no jar carries a class list: the filter matched no module on the
+    classpath, so there is nothing to instrument.
+    """
+    patterns = set()
+    for jar in jars:
+        class_list = os.path.splitext(jar)[0] + '.covcls'
+        if not os.path.exists(class_list):
+            continue
+        with io.open(class_list, encoding='utf8') as afile:
+            for line in afile:
+                name = line.strip()[: -len('.class')]
+                if '/' in name:
+                    patterns.add(os.path.dirname(name).replace('/', '.') + '.*')
+                elif name:
+                    # default package: there is no prefix to match
+                    patterns.add(name)
+    return ':'.join(sorted(patterns))
+
+
+def add_jacoco_includes(args, jars):
+    for i, arg in enumerate(args):
+        # ya leaves the option empty when JAVA_COVERAGE_SOURCE_FILTER is set
+        if arg.startswith('-javaagent:') and arg.endswith(',includes='):
+            args[i] = arg + jacoco_includes(jars)
+
+
 def main():
     s = time.time()
     opts, args = parse_args()
@@ -128,6 +162,7 @@ def main():
         mf = os.path.join(os.path.dirname(real_name), 'fixed.bfg.jar')
         with open(real_name) as origin:
             class_path = [os.path.join(build_root, i.strip()) for i in origin]
+        add_jacoco_includes(args, class_path + [opts.tests_jar_path])
         if opts.tests_jar_path in class_path:
             class_path.remove(opts.tests_jar_path)
         if opts.classpath_option_type == 'manifest':
@@ -143,6 +178,7 @@ def main():
             raise Exception("Unexpected classpath option type: " + opts.classpath_option_type)
         args = fix_cmd(args[: cp_idx + 1]) + [mf] + args[cp_idx + 2 :]
     else:
+        add_jacoco_includes(args, args[cp_idx + 1].split(os.pathsep))
         args[cp_idx + 1] = args[cp_idx + 1].replace(opts.tests_jar_path, dest)
         args = fix_cmd(args[:cp_idx]) + args[cp_idx:]
 

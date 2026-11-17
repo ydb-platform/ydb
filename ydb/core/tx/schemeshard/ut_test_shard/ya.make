@@ -1,11 +1,6 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 PEERDIR(
     ydb/core/protos/schemeshard

@@ -13,14 +13,6 @@ namespace {
             : Keys(std::move(keys))
         {
             Y_ENSURE(Keys, "Compaction key space requires a key schema");
-            // Equal PG values may have different binary encodings. Only raw
-            // bloom prefixes before the first PG column can prove absence.
-            for (const auto& type : Keys->Types) {
-                if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    break;
-                }
-                ++BloomPrefixLimit;
-            }
             Parts.reserve(parts.size());
             for (const auto& part : parts) {
                 Y_ENSURE(bool(part.Part) != bool(part.ColdPart),
@@ -36,14 +28,11 @@ namespace {
         }
 
         bool HasKey(TCellsRef key) override {
-            // A prefix query cannot prove the absence of a complete key using
+            // TKeyCellDefaults is nonempty, so this also rejects empty keys.
+            // Prefix queries cannot prove the absence of a complete key using
             // full-key bloom filters or the search-key bounds convention.
             Y_ENSURE(key.size() == Keys->Size(),
                 "Compaction key space requires a complete key");
-            if (key.empty()) {
-                // Bounds helpers interpret an empty search key as +inf.
-                return !Parts.empty();
-            }
             std::optional<NBloom::TPrefix> prefix;
             for (auto& cursor : Parts) {
                 if (cursor.Info.ColdPart) {
@@ -65,13 +54,13 @@ namespace {
                     }
                 }
 
-                if (part->ByKeyPrefixes.empty() || BloomPrefixLimit == 0) {
+                if (part->ByKeyPrefixes.empty()) {
                     return true;
                 }
                 if (!prefix) {
                     prefix.emplace(key);
                 }
-                if (part->MightHaveKeyPrefix(*prefix, BloomPrefixLimit)) {
+                if (part->MightHaveKeyPrefix(*prefix)) {
                     return true;
                 }
             }
@@ -85,11 +74,12 @@ namespace {
             { }
 
             TCompactionPartInfo Info;
+            // Only advances: IKeySpace requires HasKey queries in increasing
+            // key order. Reset() rewinds the cursors owned by this mask only.
             size_t SliceIndex = 0;
         };
 
         const TIntrusiveConstPtr<TKeyCellDefaults> Keys;
-        ui32 BloomPrefixLimit = 0;
         TVector<TPartCursor> Parts;
     };
 

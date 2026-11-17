@@ -39,11 +39,11 @@ public:
         : Request(std::move(request))
         , AllocationGuard(allocationGuard)
     {
-        AFL_VERIFY(allocationGuard);
+        YDB_LOG_VERIFY(allocationGuard);
     }
 
     void OnError(const TString& errorMessage) {
-        AFL_VERIFY(Request.GetGlobalContext().GetOwner());
+        YDB_LOG_VERIFY(Request.GetGlobalContext().GetOwner());
         TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
             std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(errorMessage)));
     }
@@ -64,7 +64,7 @@ private:
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         THashSet<TPortionAddress> portionAddresses;
         for (const ui64 portionId : Request.GetBatch().GetPortionIds()) {
-            AFL_VERIFY(portionAddresses.emplace(Request.GetGlobalContext().GetPortion(portionId)->GetAddress()).second);
+            YDB_LOG_VERIFY(portionAddresses.emplace(Request.GetGlobalContext().GetPortion(portionId)->GetAddress()).second);
         }
         YDB_LOG_TRACE("",
             {"component", "duplicates_manager"},
@@ -197,7 +197,7 @@ bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
     TActorId owner = context.GetOwner();
     TBuildFilterTaskContext request(std::move(context), shared_from_this(), std::move(bordersBatch));
     if (portionsCount == 0) {
-        AFL_VERIFY(BordersIterator.IsDone());
+        YDB_LOG_VERIFY(BordersIterator.IsDone());
         TActorContext::AsActorContext().Send(
             owner, std::make_unique<TEvBordersConstructionResult>(std::move(request),
                        THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>{}, nullptr));

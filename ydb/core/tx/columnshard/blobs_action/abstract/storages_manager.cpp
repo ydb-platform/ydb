@@ -6,8 +6,8 @@
 namespace NKikimr::NOlap {
 
 std::shared_ptr<IBlobsStorageOperator> IStoragesManager::GetOperatorOptional(const TString& storageId) const {
-    AFL_VERIFY(Initialized);
-    AFL_VERIFY(storageId);
+    YDB_LOG_VERIFY(Initialized);
+    YDB_LOG_VERIFY(storageId);
     TReadGuard rg(RWMutex);
     auto it = Constructed.find(storageId);
     if (it != Constructed.end()) {
@@ -19,7 +19,8 @@ std::shared_ptr<IBlobsStorageOperator> IStoragesManager::GetOperatorOptional(con
 
 std::shared_ptr<IBlobsStorageOperator> IStoragesManager::GetOperatorVerified(const TString& storageId) const {
     auto result = GetOperatorOptional(storageId);
-    AFL_VERIFY(result)("storage_id", storageId);
+    YDB_LOG_VERIFY(result,
+        {"storageId", storageId});
     return result;
 }
 
@@ -43,7 +44,7 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOper
 }
 
 void IStoragesManager::OnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) {
-    AFL_VERIFY(tiers);
+    YDB_LOG_VERIFY(tiers);
     for (auto&& i : tiers->GetManagers()) {
         GetOperatorGuarantee(i.first.ToString())->OnTieringModified(tiers);
     }
@@ -56,7 +57,7 @@ void IStoragesManager::DoInitialize() {
 }
 
 bool IStoragesManager::LoadIdempotency(NTable::TDatabase& database) {
-    AFL_VERIFY(Initialized);
+    YDB_LOG_VERIFY(Initialized);
     if (!DoLoadIdempotency(database)) {
         return false;
     }
@@ -82,12 +83,13 @@ bool IStoragesManager::HasBlobsToDelete() const {
 
 std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::BuildOperator(const TString& storageId) {
     auto result = DoBuildOperator(storageId);
-    AFL_VERIFY(result)("storage_id", storageId);
+    YDB_LOG_VERIFY(result,
+        {"storageId", storageId});
     return result;
 }
 
 void IStoragesManager::Stop() {
-    AFL_VERIFY(!Finished);
+    YDB_LOG_VERIFY(!Finished);
     if (Initialized && !Finished) {
         for (auto&& i : Constructed) {
             i.second->Stop();

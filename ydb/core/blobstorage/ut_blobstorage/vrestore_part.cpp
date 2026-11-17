@@ -183,6 +183,73 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
         UNIT_ASSERT(!fixture.Read(8, 3));
     }
 
+    Y_UNIT_TEST(Mirror3dcRepairSyncerPropagatesKeep) {
+        TFixture fixture;
+        fixture.PutLocalPart(0, 1);
+        fixture.PutLocalPart(3, 1);
+        fixture.PutLocalPart(1, 2);
+        fixture.PutLocalPart(4, 2);
+        fixture.VDiskResponses[0] = {.Status = NKikimrProto::OK, .PartId = 1, .Data = fixture.Data};
+
+        auto previousFilter = fixture.Env.Runtime->FilterFunction;
+        fixture.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvBlobStorage::TEvAssimilateResult::EventType) {
+                for (auto& blob : event->Get<TEvBlobStorage::TEvAssimilateResult>()->Blobs) {
+                    if (blob.Id == fixture.FullId) {
+                        blob.Keep = true;
+                    }
+                }
+            }
+            return previousFilter(node, event);
+        };
+        TActorId edge = fixture.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        TInstant deadline = fixture.Env.Runtime->GetClock() + TDuration::Minutes(1);
+        fixture.Env.Runtime->Register(NGroupSyncer::CreateMirror3dcRepairSyncer(fixture.Info, edge), 1);
+        NGroupSyncer::TEvMirror3dcRepairScanResult::TPtr result =
+            fixture.Env.WaitForEdgeActorEvent<NGroupSyncer::TEvMirror3dcRepairScanResult>(edge, true, deadline + TDuration::Seconds(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        fixture.CheckWritten(2, 3, true);
+        UNIT_ASSERT(!fixture.Read(5, 3));
+        UNIT_ASSERT(!fixture.Read(8, 3));
+    }
+
+    Y_UNIT_TEST(NodeWardenStartsRepairSyncer) {
+        TFixture fixture;
+        fixture.PutLocalPart(0, 1);
+        fixture.PutLocalPart(3, 1);
+        fixture.PutLocalPart(1, 2);
+        fixture.PutLocalPart(4, 2);
+        fixture.VDiskResponses[0] = {.Status = NKikimrProto::OK, .PartId = 1, .Data = fixture.Data};
+        ui32 node = fixture.Info->GetActorId(TVDiskIdShort(fixture.VDisk(0))).NodeId();
+        TActorId edge = fixture.Env.Runtime->AllocateEdgeActor(node, __FILE__, __LINE__);
+        std::unique_ptr<NGroupSyncer::TEvRunMirror3dcRepair> request = std::make_unique<NGroupSyncer::TEvRunMirror3dcRepair>();
+        request->Record.SetGroupId(fixture.Info->GroupID.GetRawId());
+        request->Record.SetGeneration(fixture.Info->GroupGeneration);
+        fixture.Env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(node), edge, request.release(), 0, 17), node);
+        NGroupSyncer::TEvRunMirror3dcRepairResult::TPtr result =
+            fixture.Env.WaitForEdgeActorEvent<NGroupSyncer::TEvRunMirror3dcRepairResult>(
+                edge, true, fixture.Env.Runtime->GetClock() + TDuration::Minutes(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 17);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetGeneration(), fixture.Info->GroupGeneration);
+        fixture.CheckWritten(2, 3);
+    }
+
+    Y_UNIT_TEST(NodeWardenRejectsObsoleteRepairGeneration) {
+        TFixture fixture;
+        TActorId edge = fixture.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        std::unique_ptr<NGroupSyncer::TEvRunMirror3dcRepair> request = std::make_unique<NGroupSyncer::TEvRunMirror3dcRepair>();
+        request->Record.SetGroupId(fixture.Info->GroupID.GetRawId());
+        request->Record.SetGeneration(fixture.Info->GroupGeneration - 1);
+        fixture.Env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), edge, request.release(), 0, 18), 1);
+        NGroupSyncer::TEvRunMirror3dcRepairResult::TPtr result =
+            fixture.Env.WaitForEdgeActorEvent<NGroupSyncer::TEvRunMirror3dcRepairResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 18);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::RACE);
+    }
+
     Y_UNIT_TEST(MissingPart) {
         TFixture f;
         f.VDiskResponses[1] = {.Status = NKikimrProto::OK, .PartId = 2, .Data = f.Data};

@@ -6,9 +6,12 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/interconnect/address/interconnect_address.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <ydb/core/audit/audit_log.h>
+
+#include <util/generic/algorithm.h>
 
 namespace NKikimr::NAudit {
 
@@ -16,9 +19,10 @@ namespace {
 
 class THeartbeatActor : public NActors::TActorBootstrapped<THeartbeatActor> {
 public:
-    explicit THeartbeatActor(const TAuditConfig& auditConfig)
+    explicit THeartbeatActor(const TAuditConfig& auditConfig, TNetworkInterfacesProvider networkInterfacesProvider)
         : HeartbeatInterval(GetInterval(auditConfig))
         , EnableLogging(auditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::AuditHeartbeat, NKikimrConfig::TAuditConfig::TLogClassConfig::Completed, NACLibProto::SUBJECT_TYPE_ANONYMOUS))
+        , NetworkInterfacesProvider(std::move(networkInterfacesProvider))
     {
     }
 
@@ -27,18 +31,48 @@ public:
     }
 
     void Bootstrap() {
-        Become(&THeartbeatActor::StateFunc);
         Y_VERIFY(HeartbeatInterval);
         if (EnableLogging) {
+            Become(&THeartbeatActor::StateFunc);
             PerformHeartbeat();
         } else {
             PassAway();
         }
     }
 
+    TString GetNodeAddress() const {
+        // Pick a stable local IP to identify the node in heartbeat audit records.
+        TVector<std::pair<int, TString>> addresses;
+        const auto interfaces = NetworkInterfacesProvider();
+        for (const auto& interface : interfaces) {
+            if (!interface.Address || NAddr::IsLoopback(*interface.Address)) {
+                continue;
+            }
+            const NInterconnect::TAddress address(*interface.Address);
+            if (address.IsLinkLocal()) {
+                continue;
+            }
+            const TString ip = address.GetAddress();
+            if (ip.empty() || ip == "0.0.0.0" || ip == "::") {
+                continue;
+            }
+            int familyOrder = 2;
+            if (address.GetFamily() == AF_INET) {
+                familyOrder = 0;
+            } else if (address.GetFamily() == AF_INET6) {
+                familyOrder = 1;
+            }
+            addresses.emplace_back(familyOrder, ip);
+        }
+        Sort(addresses);
+        return addresses.empty() ? TString() : addresses.front().second;
+    }
+
     void HeartbeatLog() {
+        const TString nodeAddress = GetNodeAddress();
         AUDIT_LOG(
             AUDIT_PART("component", "audit-service")
+            AUDIT_PART("remote_address", nodeAddress.empty() ? "{none}" : nodeAddress)
             AUDIT_PART("subject", "metadata@system")
             AUDIT_PART("sanitized_token", "{none}")
             AUDIT_PART("operation", "HEARTBEAT")
@@ -63,12 +97,14 @@ public:
 private:
     const TDuration HeartbeatInterval;
     const bool EnableLogging;
+    const TNetworkInterfacesProvider NetworkInterfacesProvider;
 };
 
 }
 
-std::unique_ptr<NActors::IActor> CreateHeartbeatActor(const TAuditConfig& auditConfig) {
-    return std::make_unique<THeartbeatActor>(auditConfig);
+std::unique_ptr<NActors::IActor> CreateHeartbeatActor(const TAuditConfig& auditConfig,
+        TNetworkInterfacesProvider networkInterfacesProvider) {
+    return std::make_unique<THeartbeatActor>(auditConfig, std::move(networkInterfacesProvider));
 }
 
 } // namespace NKikimr::NAudit

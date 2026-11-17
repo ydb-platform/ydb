@@ -27,7 +27,7 @@ TRemapColumns::TOthersData::TFinishContext TRemapColumns::BuildRemapInfo(
 }
 
 void TRemapColumns::StartSourceChunk(const ui32 sourceIdx, const TDictStats& sourceColumnStats, const TDictStats& sourceOtherStats) {
-    AFL_VERIFY(ColumnStatsRegistered);
+    YDB_LOG_VERIFY(ColumnStatsRegistered);
     if (RemapInfo.size() <= sourceIdx) {
         RemapInfo.resize((sourceIdx + 1) * 2);
     }
@@ -39,7 +39,7 @@ void TRemapColumns::StartSourceChunk(const ui32 sourceIdx, const TDictStats& sou
         if (remapSourceInfoColumns.size() <= i) {
             remapSourceInfoColumns.resize((i + 1) * 2);
         }
-        AFL_VERIFY(!remapSourceInfoColumns[i]);
+        YDB_LOG_VERIFY(!remapSourceInfoColumns[i]);
         if (const auto it = ResultColumnKeyIndex.find(sourceColumnStats.GetColumnName(i)); it != ResultColumnKeyIndex.end()) {
             remapSourceInfoColumns[i] = TRemapInfo(it->second, true);
         } else {
@@ -51,7 +51,7 @@ void TRemapColumns::StartSourceChunk(const ui32 sourceIdx, const TDictStats& sou
         if (remapSourceInfoOthers.size() <= i) {
             remapSourceInfoOthers.resize((i + 1) * 2);
         }
-        AFL_VERIFY(!remapSourceInfoOthers[i]);
+        YDB_LOG_VERIFY(!remapSourceInfoOthers[i]);
         if (const auto it = ResultColumnKeyIndex.find(sourceOtherStats.GetColumnName(i)); it != ResultColumnKeyIndex.end()) {
             remapSourceInfoOthers[i] = TRemapInfo(it->second, true);
         } else {

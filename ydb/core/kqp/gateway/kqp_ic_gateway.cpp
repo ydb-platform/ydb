@@ -9,7 +9,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>

@@ -284,7 +284,6 @@ protected:
     bool ParseViewQuery(std::map<TString, TDeferredAtom>& features,
                         const TRule_define_action_or_subquery_body& body,
                         const NSQLv1Generated::TToken& beforeToken,
-                        const NSQLv1Generated::TToken& afterToken,
                         const TString& service,
                         const TDeferredAtom& cluster);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
@@ -387,7 +386,5 @@ TVector<TPatternComponent<TChar>> SplitPattern(const TBasicString<TChar>& patter
 }
 
 bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& suffix);
-
-std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token);
 
 } // namespace NSQLTranslationV1

@@ -51,16 +51,16 @@ private:
                 ordered.emplace_back(i);
             }
             std::sort(ordered.begin(), ordered.end());
-            AFL_VERIFY(std::unique(ordered.begin(), ordered.end()) == ordered.end());
+            YDB_LOG_VERIFY(std::unique(ordered.begin(), ordered.end()) == ordered.end());
             Portions = std::set<TOrderedPortion>(ordered.begin(), ordered.end());
         }
         for (auto&& i : add) {
             if (!constructionFlag) {
-                AFL_VERIFY(Portions.emplace(i).second);
+                YDB_LOG_VERIFY(Portions.emplace(i).second);
             }
         }
         for (auto&& i : remove) {
-            AFL_VERIFY(Portions.erase(i));
+            YDB_LOG_VERIFY(Portions.erase(i));
         }
         return problems;
     }

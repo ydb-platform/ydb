@@ -25,9 +25,9 @@ public:
         , RecordBatch(recordBatch)
         , Context(context)
     {
-        AFL_VERIFY(!!WriteData);
-        AFL_VERIFY(!!RecordBatch);
-        AFL_VERIFY(!!Context);
+        YDB_LOG_VERIFY(!!WriteData);
+        YDB_LOG_VERIFY(!!RecordBatch);
+        YDB_LOG_VERIFY(!!Context);
     }
 };
 

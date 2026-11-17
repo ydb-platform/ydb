@@ -71,7 +71,8 @@ private:
             hFunc(TEvents::TEvWakeup, HandleScan);
             hFunc(NColumnShard::TEvPrivate::TEvTaskProcessedResult, HandleScan);
             default:
-                AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
+                YDB_LOG_VERIFY(false,
+                    {"unexpectedEvent", ev->GetTypeName()});
         }
     }
 

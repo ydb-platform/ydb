@@ -63,7 +63,7 @@ This feature is under development and is disabled by default by the [`enable_onl
 {% endnote %}
 {% endif %}
 
-A [unique secondary index](#unique) can also be created online on an existing table without blocking writes during the build. Unlike a regular secondary index, it not only speeds up lookups but also enforces uniqueness of the indexed column values. Adding it therefore involves both building the index table and checking the uniqueness constraint.
+A [unique secondary index](#unique) can also be created online without blocking writes. Building it is more complex because it requires checking the uniqueness of the indexed column values in addition to populating the index.
 
 The online index creation operation consists of the following steps:
 

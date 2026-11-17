@@ -1993,11 +1993,20 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         AssertOperationInFlight(runtime, txId);
         blockedAcks.Stop();
 
+        TVector<NKikimrCdcAggregator::TEvPartitioningChangedAck> repeatedAcks;
+        auto observeRepeatedAcks = runtime.AddObserver<NCdcAggregator::TEvCdcAggregator::TEvPartitioningChangedAck>([&](auto& ev) {
+            repeatedAcks.push_back(ev->Get()->Record);
+        });
+
         // when
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
         // then
         env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT(!repeatedAcks.empty());
+        for (const auto& ack : repeatedAcks) {
+            UNIT_ASSERT_C(ack.GetStatus() == NKikimrCdcAggregator::TEvPartitioningChangedAck::SUCCESS, ack.ShortDebugString());
+        }
         const auto childShards = GetSortedTableShards(runtime, "/MyRoot/Table");
         UNIT_ASSERT_VALUES_EQUAL(childShards.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(DescribeCdcAggregatorSources(runtime, aggregatorTabletId), childShards);

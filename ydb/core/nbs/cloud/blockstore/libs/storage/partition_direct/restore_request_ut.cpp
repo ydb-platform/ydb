@@ -115,20 +115,6 @@ Y_UNIT_TEST_SUITE(TRestoreRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         UNIT_ASSERT_VALUES_EQUAL(E_FAIL, future.GetValue().Error.GetCode());
     }
-
-    Y_UNIT_TEST_F(ShouldCompleteEmptyHostSet, TBaseFixture)
-    {
-        Init();
-        const auto request = std::make_shared<TRestoreRequestExecutor>(
-            Runtime->GetActorSystem(0),
-            DirectBlockGroup,
-            THostMask{});
-        const auto future = request->GetFuture();
-        request->Run();
-        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(S_OK, future.GetValue().Error.GetCode());
-        UNIT_ASSERT(future.GetValue().Meta.empty());
-    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

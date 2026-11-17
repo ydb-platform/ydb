@@ -37,10 +37,7 @@ TRestoreRequestExecutor::~TRestoreRequestExecutor()
 
 void TRestoreRequestExecutor::Run()
 {
-    if (Hosts.Empty()) {
-        Reply(MakeError(S_OK));
-        return;
-    }
+    Y_ABORT_UNLESS(!Hosts.Empty());
 
     for (const auto host: Hosts) {
         DoRun(host);

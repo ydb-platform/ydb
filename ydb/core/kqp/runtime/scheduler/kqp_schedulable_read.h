@@ -18,7 +18,8 @@ struct TSchedulableRead : TSchedulableTask {
         void Refill();
     };
 
-    TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query, std::shared_ptr<TQuotaState> quota);
+    explicit TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query,
+        std::shared_ptr<TQuotaState> quota = std::make_shared<TQuotaState>());
 
     bool TryConsumeQuota(TDuration expectedQuota);
     // An admitted first read must finish without quota waits while it holds
@@ -36,11 +37,10 @@ struct TSchedulableRead : TSchedulableTask {
 
     // Returns false if the MaxQuotaMs is zero. It's possible if the resource pool
     // also has TOTAL_CPU_LIMIT_PERCENT = 0.
-    bool IsValid() const {
-        return Quota->MaxQuotaMs != 0;
-    }
+    bool IsValid() const;
 
 private:
+    void RefreshQuota();
     void ReserveQuota(ui64 expectedQuotaMs);
 
     // Milliseconds precision - because THPTimer::STime to TDuration has the same precision

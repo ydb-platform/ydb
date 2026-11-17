@@ -18,17 +18,7 @@ TSchedulableRead::TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query, std:
     //       Should actualize demand depending on real requests - in best case scenario: append to real query.
 {
     Y_ENSURE(Quota);
-    // Refill the retained balance at the previous rate before picking up new limits.
-    Quota->Refill();
-    if (query->GetParent()->ReadLimit) {
-        Quota->MaxQuotaMs = query->GetParent()->ReadLimit->MilliSeconds();
-        Quota->QuotaPerSecond = Quota->MaxQuotaMs / 1000.0;
-    } else {
-        Quota->MaxQuotaMs = 1000;
-        Quota->QuotaPerSecond = 1.0;
-    }
-
-    Quota->AvailableQuotaMs = std::min<i64>(Quota->MaxQuotaMs, Quota->AvailableQuotaMs);
+    RefreshQuota();
 
     YDB_LOG_TRACE("Created schedulable read with quota limit",
         {"schedulableReadPtr", uintptr_t(this)},
@@ -37,8 +27,29 @@ TSchedulableRead::TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query, std:
     YQL_ENSURE(Quota->MaxQuotaMs <= 1000);
 }
 
+bool TSchedulableRead::IsValid() const {
+    return Query->GetParent()->GetConfiguredAttributes().GetReadLimit().MilliSeconds() != 0;
+}
+
+void TSchedulableRead::RefreshQuota() {
+    const auto limit = Query->GetParent()->GetConfiguredAttributes().GetReadLimit().MilliSeconds();
+    if (limit != Quota->MaxQuotaMs) {
+        Quota->Refill();
+        Quota->MaxQuotaMs = limit;
+        Quota->QuotaPerSecond = limit / 1000.0;
+        Quota->AvailableQuotaMs = std::min<i64>(limit, Quota->AvailableQuotaMs);
+        if (Quota->AvailableQuotaMs == static_cast<i64>(limit)) {
+            Quota->RefillRemainder = 0;
+        }
+        FairShareRetryCount = 0;
+    }
+}
+
 bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
-    // TODO: support update of the pool's read quota on AddOrUpdatePool().
+    RefreshQuota();
+    if (!Quota->MaxQuotaMs) {
+        return false;
+    }
     auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), Quota->MaxQuotaMs);
 
     YDB_LOG_TRACE("Trying to consume read quota",
@@ -62,7 +73,9 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
 void TSchedulableRead::ConsumeQuotaForAdmittedRead(TDuration expectedQuota) {
     Quota->Refill();
     IncreaseUsage();
-    ReserveQuota(std::min(expectedQuota.MilliSeconds(), Quota->MaxQuotaMs));
+    // Even if another reader observed a zero limit after admission, this
+    // attempt must account actual time and release the acquired CPU slot.
+    ReserveQuota(Quota->MaxQuotaMs ? std::min(expectedQuota.MilliSeconds(), Quota->MaxQuotaMs) : expectedQuota.MilliSeconds());
 }
 
 void TSchedulableRead::ReserveQuota(ui64 expectedQuotaMs) {
@@ -96,6 +109,7 @@ void TSchedulableRead::ReturnQuota(NHPTimer::STime elapsedCycles) {
 }
 
 bool TSchedulableRead::HasAvailableQuota() {
+    RefreshQuota();
     Quota->Refill();
     return Quota->AvailableQuotaMs > 0;
 }
@@ -115,6 +129,9 @@ void TSchedulableRead::TQuotaState::Refill() {
 }
 
 TDuration TSchedulableRead::EstimateQuotaDelay(TDuration expectedQuota) const {
+    if (!Quota->MaxQuotaMs) {
+        return TDuration::Minutes(1);
+    }
     const auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), Quota->MaxQuotaMs);
 
     if (Quota->AvailableQuotaMs >= static_cast<i64>(expectedQuotaMs)) {

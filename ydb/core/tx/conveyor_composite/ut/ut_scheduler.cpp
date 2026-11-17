@@ -1230,9 +1230,10 @@ namespace NKikimr::NConveyorComposite {
                 },
             };
             auto scheduler = std::make_shared<NKqp::NScheduler::TComputeScheduler>(counters, options);
-            scheduler->AddOrUpdateDatabase("database", {});
-            scheduler->AddOrUpdatePool("database", "pool", {});
-            auto query = scheduler->AddOrUpdateQuery("database", "pool", identity.QueryId, {});
+            auto configuration = std::make_unique<NKqp::NScheduler::NHdrf::NStatic::TRoot>();
+            configuration->GetOrCreateDatabase("database").GetOrCreatePool("pool");
+            scheduler->UpdateConfiguration(std::move(configuration));
+            auto query = scheduler->AddOrUpdateQuery("database", "pool", identity.QueryId);
             scheduler->ToggleEnabled(true);
             fixture.Runtime.GetAppData().KqpComputeScheduler = scheduler;
             auto service = fixture.Runtime.Register(NKqp::CreateKqpComputeSchedulerService(TDuration::MilliSeconds(1)));

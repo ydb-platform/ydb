@@ -45,7 +45,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
         // TODO: implement Read resource - for now it's only per datashard.
 
-        explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
+        explicit TTreeElement(const TId& id) : TTreeElementBase(id) {}
 
         TPool* GetParent() const;
 
@@ -55,9 +55,11 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
     class TQuery : public TTreeElement, public NHdrf::TQuery<ETreeType::DYNAMIC>, public TSnapshotSwitch<NSnapshot::TQueryPtr>, public std::enable_shared_from_this<TQuery> {
     public:
         // TODO: pass delay params directly to actors from table_service_config
-        TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMinFairShare, const TStaticAttributes& attrs = {});
+        TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMinFairShare);
 
         NSnapshot::TQuery* TakeSnapshot() override;
+
+        bool GetAllowMinFairShare() const;
 
         // Gives the new query the fair-share of its pool right away - not to wait for its first snapshot.
         // The initial snapshot is not attached to the snapshot tree, so it has no parent.
@@ -87,9 +89,14 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
     class TPool : public TTreeElement, public NHdrf::TPool<ETreeType::DYNAMIC> {
     public:
-        TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs = {});
+        TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters);
 
         NSnapshot::TPool* TakeSnapshot() override;
+
+        // Resolves the stable runtime path in one version of the static tree.
+        // The returned reference owns that version, including the node's ancestors.
+        NStatic::TPoolPtr GetStaticPool() const;
+        TStaticAttributes GetConfiguredAttributes() const;
 
         void CollectDelay(ui64 microseconds) const {
             if (Counters) {
@@ -98,21 +105,21 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         }
 
     protected:
-        virtual NSnapshot::TPool* CreateSnapshot() const;
+        virtual NSnapshot::TPool* CreateSnapshot(const NStatic::TPoolPtr& pool) const;
     };
 
     // The memory of the default pool is accounted, but not limited by the pool itself
     class TDefaultPool : public TPool {
     public:
-        TDefaultPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs = {});
+        TDefaultPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters);
 
     protected:
-        NSnapshot::TPool* CreateSnapshot() const override;
+        NSnapshot::TPool* CreateSnapshot(const NStatic::TPoolPtr& pool) const override;
     };
 
     class TDatabase : public TPool {
     public:
-        explicit TDatabase(const TDatabaseId& id, const TStaticAttributes& attrs = {});
+        explicit TDatabase(const TDatabaseId& id);
 
         NSnapshot::TDatabase* TakeSnapshot() override;
     };
@@ -127,11 +134,16 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
         NSnapshot::TRoot* TakeSnapshot() override;
 
-    public:
-        std::atomic<ui64> TotalCpuLimit = Infinity();
-        std::atomic<ui64> TotalMemoryLimit = Infinity();
+        NStatic::TRootPtr GetStaticTree() const {
+            return std::atomic_load(&StaticTree);
+        }
+
+        void SetStaticTree(NStatic::TRootPtr tree) {
+            std::atomic_store(&StaticTree, std::move(tree));
+        }
 
     private:
+        NStatic::TRootPtr StaticTree = std::make_shared<const NStatic::TRoot>();
         struct {
             NMonitoring::TDynamicCounters::TCounterPtr TotalCpuLimit;
             NMonitoring::TDynamicCounters::TCounterPtr TotalMemoryLimit;

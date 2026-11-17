@@ -16,10 +16,10 @@ TPool* TTreeElement::GetParent() const {
 // TQuery
 ///////////////////////////////////////////////////////////////////////////////
 
-TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMinFairShare, const TStaticAttributes& attrs)
-    : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id, attrs)
-    , TTreeElement(id, attrs)
-    , NHdrf::TQuery<ETreeType::DYNAMIC>(id, attrs)
+TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMinFairShare)
+    : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id)
+    , TTreeElement(id)
+    , NHdrf::TQuery<ETreeType::DYNAMIC>(id)
     , DelayParams(delayParams)
     , AllowMinFairShare(allowMinFairShare)
 {
@@ -54,7 +54,7 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() {
 void TQuery::InitSnapshot(const NSnapshot::TPool& pool) {
     auto snapshot = std::make_shared<NSnapshot::TQuery>(std::get<TQueryId>(GetId()), shared_from_this());
 
-    snapshot->CpuFairShare = pool.CpuFairShare > 0 ? pool.CpuFairShare : AllowMinFairShare;
+    snapshot->CpuFairShare = pool.CpuFairShare > 0 ? pool.CpuFairShare : GetAllowMinFairShare();
     snapshot->MemoryFairShare = pool.MemoryFairShare;
 
     SetSnapshot(snapshot);
@@ -81,6 +81,11 @@ TFullPoolId TQuery::GetFullPoolId() const {
         .DatabaseId = std::get<TDatabaseId>(database->GetId()),
         .PoolId = std::get<TPoolId>(pool->GetId()),
     };
+}
+
+bool TQuery::GetAllowMinFairShare() const {
+    const auto* parent = GetParent();
+    return AllowMinFairShare && (!parent || parent->GetConfiguredAttributes().GetCpuLimit() > 0);
 }
 
 TSchedulableTaskList::iterator TQuery::AddTask(const TSchedulableTaskPtr& task) {
@@ -121,10 +126,10 @@ ui32 TQuery::ResumeTasks(ui32 count) {
 // TPool
 ///////////////////////////////////////////////////////////////////////////////
 
-TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs)
-    : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id, attrs)
-    , TTreeElement(id, attrs)
-    , NHdrf::TPool<ETreeType::DYNAMIC>(id, attrs)
+TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters)
+    : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id)
+    , TTreeElement(id)
+    , NHdrf::TPool<ETreeType::DYNAMIC>(id)
 {
     if (!counters) {
         return;
@@ -160,21 +165,57 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
     Counters->MemoryFairShare = group->GetCounter("MemoryFairShare", false); // snapshot
 }
 
+NStatic::TPoolPtr TPool::GetStaticPool() const {
+    TVector<TPoolId> path;
+    const TPool* pool = this;
+    while (pool->GetParent()) {
+        path.push_back(std::get<TPoolId>(pool->GetId()));
+        pool = pool->GetParent();
+    }
+    const auto* root = dynamic_cast<const TRoot*>(pool);
+    Y_ENSURE(root, "Pool is not attached to the scheduler root");
+    const auto tree = root->GetStaticTree();
+    if (path.empty()) {
+        return tree;
+    }
+    NStatic::TPoolPtr node = NStatic::GetDatabase(tree, path.back());
+    for (size_t i = path.size() - 1; i > 0; --i) {
+        node = NStatic::GetPool(node, path[i - 1]);
+    }
+    return node;
+}
+
+TStaticAttributes TPool::GetConfiguredAttributes() const {
+    const auto pool = GetStaticPool();
+    return pool ? static_cast<const TStaticAttributes&>(*pool) : TStaticAttributes{};
+}
+
 NSnapshot::TPool* TPool::TakeSnapshot() {
-    auto* newPool = CreateSnapshot();
+    const auto staticPool = GetStaticPool();
+    auto* newPool = CreateSnapshot(staticPool);
+    if (staticPool) {
+        const auto* root = staticPool.get();
+        while (const auto* parent = root->GetParent()) {
+            root = parent;
+        }
+        if (!static_cast<const NStatic::TRoot*>(root)->SupportsGuarantees()) {
+            newPool->CpuGuarantee = 0;
+        }
+    }
 
     newPool->MemoryUsage = MemoryUsage.load();
 
     if (Counters) {
-        Counters->Limit->Set(GetCpuLimit() * 1'000'000);
-        Counters->Guarantee->Set(GetCpuGuarantee() * 1'000'000);
+        const auto& attrs = newPool->GetConfiguredAttributes();
+        Counters->Limit->Set(attrs.GetCpuLimit() * 1'000'000);
+        Counters->Guarantee->Set(attrs.GetCpuGuarantee() * 1'000'000);
         Counters->InFlight->Set(CpuUsage * 1'000'000);
         Counters->Waiting->Set(CpuThrottle * 1'000'000);
         Counters->Usage->Set(CpuBurstUsage);
         Counters->UsageResume->Set(CpuBurstUsageResume);
         Counters->Read->Set(ReadBurstUsage);
         Counters->Throttle->Set(CpuBurstThrottle);
-        Counters->MemoryLimit->Set(GetMemoryLimit());
+        Counters->MemoryLimit->Set(attrs.GetMemoryLimit());
         Counters->MemoryUsage->Set(MemoryUsage.load());
     }
 
@@ -194,36 +235,37 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
     return newPool;
 }
 
-NSnapshot::TPool* TPool::CreateSnapshot() const {
-    return new NSnapshot::TPool(std::get<TPoolId>(GetId()), Counters, *this);
+NSnapshot::TPool* TPool::CreateSnapshot(const NStatic::TPoolPtr& pool) const {
+    return new NSnapshot::TPool(std::get<TPoolId>(GetId()), Counters, pool);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // TDefaultPool
 ///////////////////////////////////////////////////////////////////////////////
 
-TDefaultPool::TDefaultPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs)
-    : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id, attrs)
-    , TPool(id, counters, attrs)
+TDefaultPool::TDefaultPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters)
+    : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id)
+    , TPool(id, counters)
 {
 }
 
-NSnapshot::TPool* TDefaultPool::CreateSnapshot() const {
-    return new NSnapshot::TDefaultPool(std::get<TPoolId>(GetId()), Counters, *this);
+NSnapshot::TPool* TDefaultPool::CreateSnapshot(const NStatic::TPoolPtr& pool) const {
+    return new NSnapshot::TDefaultPool(std::get<TPoolId>(GetId()), Counters, pool);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // TDatabase
 ///////////////////////////////////////////////////////////////////////////////
 
-TDatabase::TDatabase(const TDatabaseId& id, const TStaticAttributes& attrs)
-    : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id, attrs)
-    , TPool(id, {}, attrs)
+TDatabase::TDatabase(const TDatabaseId& id)
+    : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id)
+    , TPool(id, {})
 {
 }
 
 NSnapshot::TDatabase* TDatabase::TakeSnapshot() {
-    auto* newDatabase = new NSnapshot::TDatabase(std::get<TDatabaseId>(GetId()), *this);
+    const auto staticPool = GetStaticPool();
+    auto* newDatabase = new NSnapshot::TDatabase(std::get<TDatabaseId>(GetId()), staticPool);
     ForEachChild<TPool>([&](TPool* pool, size_t) {
         newDatabase->AddPool(NSnapshot::TPoolPtr(pool->TakeSnapshot()));
     });
@@ -257,20 +299,18 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
 }
 
 NSnapshot::TRoot* TRoot::TakeSnapshot() {
-    auto* newRoot = new NSnapshot::TRoot();
-
-    const ui64 totalCpuLimit = TotalCpuLimit.load();
-    const ui64 totalMemoryLimit = TotalMemoryLimit.load();
+    // The scheduler holds its tree lock until all children have captured the same static version.
+    const auto tree = GetStaticTree();
+    auto* newRoot = new NSnapshot::TRoot(tree);
+    const ui64 totalCpuLimit = tree->TotalCpuLimit;
+    const ui64 totalMemoryLimit = tree->TotalMemoryLimit;
 
     Counters.TotalCpuLimit->Set(totalCpuLimit * 1'000'000);
     Counters.TotalMemoryLimit->Set(totalMemoryLimit);
 
-    newRoot->TotalCpuLimit = totalCpuLimit;
-    newRoot->TotalMemoryLimit = totalMemoryLimit;
     ForEachChild<TDatabase>([&](TDatabase* database, size_t) {
         newRoot->AddDatabase(NSnapshot::TDatabasePtr(database->TakeSnapshot()));
     });
-
     return newRoot;
 }
 

@@ -970,9 +970,9 @@
     ],
     "test.test[pg-sublink_projection_expr_corr-default.txt-Debug]": [
         {
-            "checksum": "b39941ebcd46b91fad27810b3158fd74",
-            "size": 3447,
-            "uri": "https://{canondata_backend}/1781765/c183164d563045322f307b5d25c99a57d20e2bf8/resource.tar.gz#test.test_pg-sublink_projection_expr_corr-default.txt-Debug_/opt.yql"
+            "checksum": "93e0ca6d9af8dd528f45a98cbc2c3d08",
+            "size": 3466,
+            "uri": "https://{canondata_backend}/1937424/e15a6e1643759b89e17bbe76c4ea98b8ca68c9d4/resource.tar.gz#test.test_pg-sublink_projection_expr_corr-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-sublink_projection_expr_corr-default.txt-Results]": [

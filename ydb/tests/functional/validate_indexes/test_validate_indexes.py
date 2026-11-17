@@ -1,6 +1,8 @@
 import contextlib
 import io
 import json
+import math
+import struct
 import subprocess
 import threading
 import time
@@ -64,10 +66,13 @@ class TestValidateIndexes(unittest.TestCase):
             f"SELECT COUNT(*) AS n FROM `{self.index}`;", commit_tx=True
         ))[0].rows[0]["n"]
 
-    def _run(self, table=None):
+    def _run(self, table=None, ddl_excluded=True):
+        command = [yatest.common.binary_path("ydb/tools/validate_indexes/bin/validate-indexes"),
+                   "--endpoint", self.endpoint, "--database", "/Root", "--table", table or self.table]
+        if ddl_excluded:
+            command.append("--ddl-excluded")
         result = subprocess.run(
-            [yatest.common.binary_path("ydb/tools/validate_indexes/bin/validate-indexes"),
-             "--endpoint", self.endpoint, "--database", "/Root", "--table", table or self.table],
+            command,
             capture_output=True, text=True, timeout=90,
         )
         return result.returncode, result.stdout, result.stderr
@@ -95,6 +100,199 @@ class TestValidateIndexes(unittest.TestCase):
         name = self.table.rsplit("/", 1)[1]
         self._corrupt(self.table, f"""(EraseRow '__user__{name}
             '('('tenant (Utf8 'a)) '('id (Uint64 '1))))""")
+
+    def test_ddl_exclusion_is_required(self):
+        self._create()
+        code, output, error = self._run(ddl_excluded=False)
+        self.assertEqual(code, 2, output + error)
+        self.assertIn("DDL", error)
+        self.assertNotIn("consistent", output)
+        with self.pool.checkout() as session, self.assertRaisesRegex(ValueError, "DDL exclusion"):
+            validator.validate(self.driver, session, self.table)
+
+    def test_changefeed_progress_is_not_schema(self):
+        self._create()
+        with self.pool.checkout() as session:
+            description = validator._describe(self.driver, session, self.table)
+        feed_type = validator._apis.ydb_table.ChangefeedDescription
+        feed = description.changefeeds.add(name="events", state=feed_type.STATE_INITIAL_SCAN)
+        feed.initial_scan_progress.parts_total = 2
+        feed.initial_scan_progress.parts_completed = 0
+        expected = validator.Table._schema(description)
+        # Initial scanning progresses and becomes enabled without user DDL.
+        feed.initial_scan_progress.parts_completed = 1
+        self.assertEqual(validator.Table._schema(description), expected)
+        feed.state = feed_type.STATE_ENABLED
+        feed.ClearField("initial_scan_progress")
+        self.assertEqual(validator.Table._schema(description), expected)
+
+    def test_schema_add_index_race(self):
+        self._create()
+        self._erase_index()
+        original_describe = validator._describe
+        changed = []
+
+        def create_corrupt_index_then_repair_original(driver, session, path):
+            description = original_describe(driver, session, path)
+            if path == self.table and not changed:
+                changed.append(True)
+                self.pool.retry_operation_sync(lambda ddl_session: ddl_session.execute_scheme(
+                    f"ALTER TABLE `{self.table}` ADD INDEX by_payload GLOBAL ON (payload);"
+                ))
+                self._corrupt(self.table + "/by_payload/indexImplTable", """(EraseRow '__user__indexImplTable
+                    '('('payload (Utf8 'one)) '('tenant (Utf8 'a)) '('id (Uint64 '1))))""")
+                self._corrupt(self.index, """(UpdateRow '__user__indexImplTable
+                    '('('value (Utf8 'first)) '('tenant (Utf8 'a)) '('id (Uint64 '1)))
+                    '('('payload (Utf8 'one))))""")
+            return description
+
+        output = io.StringIO()
+        error = io.StringIO()
+        with mock.patch.object(validator, "_describe", create_corrupt_index_then_repair_original):
+            with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
+                code = validator.main(["--endpoint", self.endpoint, "--database", "/Root",
+                                       "--table", self.table, "--ddl-excluded"])
+        self.assertEqual(code, 2, output.getvalue() + error.getvalue())
+        self.assertIn("Schema changed", error.getvalue())
+        self.assertTrue(changed)
+        self.assertEqual(self._index_count(), 3)
+        remaining = self._execute(f"SELECT COUNT(*) AS n FROM `{self.table}/by_payload/indexImplTable`;")
+        self.assertEqual(remaining[0].rows[0]["n"], 2)
+        self.assertNotIn("consistent", output.getvalue())
+
+    def test_schema_add_first_index_race(self):
+        self.table = f"/Root/first_index_{uuid.uuid4().hex}"
+        self.pool.retry_operation_sync(lambda session: session.execute_scheme(
+            f"CREATE TABLE `{self.table}` (id Uint64, value Utf8, PRIMARY KEY (id));"
+        ))
+        original_describe = validator._describe
+        changed = []
+
+        def add_first_index(driver, session, path):
+            description = original_describe(driver, session, path)
+            if path == self.table and not changed:
+                changed.append(True)
+                self.pool.retry_operation_sync(lambda ddl_session: ddl_session.execute_scheme(
+                    f"ALTER TABLE `{self.table}` ADD INDEX by_value GLOBAL ON (value);"
+                ))
+            return description
+
+        output = io.StringIO()
+        with self.pool.checkout() as session, mock.patch.object(validator, "_describe", add_first_index):
+            with contextlib.redirect_stdout(output), self.assertRaisesRegex(ValueError, "[Ss]chema changed"):
+                validator.validate(self.driver, session, self.table, ddl_excluded=True)
+        self.assertTrue(changed)
+        self.assertNotIn("No supported indexes", output.getvalue())
+
+    def test_schema_recreate_index_same_name(self):
+        self._create()
+        original_scan = self.driver.table_client.scan_query
+        incarnations = []
+
+        def recreate_index(query, *args, **kwargs):
+            with self.pool.checkout() as session:
+                incarnations.append(validator._describe(self.driver, session, self.index).self.created_at)
+            self.pool.retry_operation_sync(lambda session: session.execute_scheme(f"""
+                ALTER TABLE `{self.table}` DROP INDEX by_value;
+                ALTER TABLE `{self.table}` ADD INDEX by_value GLOBAL ON (value, tenant) COVER (payload);
+            """))
+            with self.pool.checkout() as session:
+                incarnations.append(validator._describe(self.driver, session, self.index).self.created_at)
+            self.assertNotEqual(incarnations[0], incarnations[1], "Fixture must recreate the implementation table")
+            return original_scan(query, *args, **kwargs)
+
+        output = io.StringIO()
+        with self.pool.checkout() as session:
+            with mock.patch.object(self.driver.table_client, "scan_query", recreate_index):
+                with contextlib.redirect_stdout(output), self.assertRaisesRegex(ValueError, "[Ss]chema changed"):
+                    validator.validate(self.driver, session, self.table, ddl_excluded=True)
+        self.assertEqual(len(incarnations), 2)
+        self.assertNotEqual(incarnations[0], incarnations[1], "Fixture must recreate the implementation table")
+        self.assertNotIn("consistent", output.getvalue())
+
+    def test_schema_recreate_table_same_name(self):
+        self._create()
+        original_scan = self.driver.table_client.scan_query
+        recreated = []
+
+        def recreate_table(query, *args, **kwargs):
+            self.pool.retry_operation_sync(lambda session: session.execute_scheme(f"""
+                DROP TABLE `{self.table}`;
+                CREATE TABLE `{self.table}` (
+                    tenant Utf8, id Uint64, value Utf8, payload Utf8, PRIMARY KEY (tenant, id),
+                    INDEX by_value GLOBAL SYNC ON (value, tenant) COVER (payload)
+                );
+            """))
+            recreated.append(True)
+            return original_scan(query, *args, **kwargs)
+
+        output = io.StringIO()
+        with self.pool.checkout() as session:
+            with mock.patch.object(self.driver.table_client, "scan_query", recreate_table):
+                with contextlib.redirect_stdout(output), self.assertRaisesRegex(ValueError, "[Ss]chema changed"):
+                    validator.validate(self.driver, session, self.table, ddl_excluded=True)
+        self.assertTrue(recreated)
+        self.assertNotIn("consistent", output.getvalue())
+
+    def _floating_table(self, kind, value):
+        self.table = f"/Root/floating_{uuid.uuid4().hex}"
+        self.index = self.table + "/by_value/indexImplTable"
+        self.pool.retry_operation_sync(lambda session: session.execute_scheme(f"""
+            CREATE TABLE `{self.table}` (
+                id Uint64, value Uint64, score {kind}, PRIMARY KEY (id),
+                INDEX by_value GLOBAL ON (value) COVER (score)
+            );
+        """))
+        self._execute(f"UPSERT INTO `{self.table}` (id, value, score) VALUES (1u, 2u, {value});")
+
+    def test_floating_signed_zero_mismatch(self):
+        for kind, negative_bits in (("Float", "00000080"), ("Double", "0000000000000080")):
+            with self.subTest(kind=kind):
+                self._floating_table(kind, f"{kind}('0')")
+                code, output, error = self._run()
+                self.assertEqual(code, 0, output + error)
+                self._corrupt(self.index, f"""(UpdateRow '__user__indexImplTable
+                    '('('value (Uint64 '2)) '('id (Uint64 '1)))
+                    '('('score ({kind} '-0))))""")
+                stored = self._execute(f"SELECT ToBytes(score) AS bits FROM `{self.index}`;")
+                self.assertEqual(stored[0].rows[0]["bits"].hex(), negative_bits)
+                code, output, error = self._run()
+                self.assertEqual(code, 1, output + error)
+                differences = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+                self.assertEqual(len(differences), 2, output)
+                self.assertEqual({row["pk"]["id"] for row in differences}, {1})
+                self.assertEqual({math.copysign(1, row["row"]["score"]) for row in differences}, {-1, 1})
+                self.assertEqual({row["comparison_bytes"]["score"] for row in differences},
+                                 {"0" * len(negative_bits), negative_bits})
+
+    def test_floating_nan_payload_mismatch(self):
+        for kind, original_bits in (("Float", "0100c07f"), ("Double", "010000000000f87f")):
+            with self.subTest(kind=kind):
+                self._floating_table(kind, f"{kind}('0')")
+                score = struct.unpack("<f" if kind == "Float" else "<d", bytes.fromhex(original_bits))[0]
+                query = ydb.DataQuery(
+                    f"DECLARE $score AS {kind}; UPSERT INTO `{self.table}` (id, value, score) VALUES (1u, 2u, $score);",
+                    {"$score": getattr(ydb.PrimitiveType, kind)},
+                )
+                self.pool.retry_operation_sync(lambda session: session.transaction().execute(
+                    query, {"$score": score}, commit_tx=True
+                ))
+                stored = self._execute(f"SELECT ToBytes(score) AS bits FROM `{self.table}`;")
+                self.assertEqual(stored[0].rows[0]["bits"].hex(), original_bits)
+                code, output, error = self._run()
+                self.assertEqual(code, 0, output + error)
+                self._corrupt(self.index, f"""(UpdateRow '__user__indexImplTable
+                    '('('value (Uint64 '2)) '('id (Uint64 '1)))
+                    '('('score ({kind} 'nan))))""")
+                stored = self._execute(f"SELECT ToBytes(score) AS bits FROM `{self.index}`;")
+                actual_bits = stored[0].rows[0]["bits"].hex()
+                self.assertNotEqual(actual_bits, original_bits)
+                code, output, error = self._run()
+                self.assertEqual(code, 1, output + error)
+                differences = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+                self.assertEqual(len(differences), 2, output)
+                self.assertTrue(all(row["row"]["score"] == "nan" for row in differences), output)
+                self.assertEqual({row["comparison_bytes"]["score"] for row in differences}, {original_bits, actual_bits})
 
     def test_consistent_sync_and_async(self):
         for kind in ("SYNC", "ASYNC"):
@@ -225,6 +423,9 @@ class TestValidateIndexes(unittest.TestCase):
         self.assertEqual(code, 0, output + error)
         self.assertIn("by_value: consistent", output)
         self.assertIn("by_id: consistent", output)
+        self.assertIn("Checked index set:", output)
+        self.assertIn("by_value (global_index)", output)
+        self.assertIn("by_id (global_unique_index)", output)
         self._erase_index()
         code, output, error = self._run()
         self.assertEqual(code, 1, output + error)
@@ -474,7 +675,7 @@ class TestValidateIndexes(unittest.TestCase):
 
             with self.pool.checkout() as session, mock.patch.object(ydb.Driver, "__call__", record_query_start):
                 with contextlib.redirect_stdout(io.StringIO()):
-                    self.assertTrue(validator.validate(self.driver, session, self.table))
+                    self.assertTrue(validator.validate(self.driver, session, self.table, ddl_excluded=True))
             self.assertEqual(len(query_writes), 1)
             self.assertGreater(len(writes), query_writes[0] + 1, "Writes must commit during the query itself")
 
@@ -530,7 +731,7 @@ class TestValidateIndexes(unittest.TestCase):
         output = io.StringIO()
         with self.pool.checkout() as session, mock.patch.object(ydb.Driver, "__call__", record_reads):
             with contextlib.redirect_stdout(output):
-                self.assertIsNone(validator.validate(self.driver, session, self.table))
+                self.assertIsNone(validator.validate(self.driver, session, self.table, ddl_excluded=True))
         self.assertIn("by_value: consistent", output.getvalue())
         self.assertIn("by_payload: consistent", output.getvalue())
         self.assertIn("by_async: inconclusive", output.getvalue())
@@ -552,7 +753,7 @@ class TestValidateIndexes(unittest.TestCase):
         with self.pool.checkout() as session:
             with mock.patch.object(ydb._utilities.SyncResponseIterator, "__next__", fail_after_response):
                 with contextlib.redirect_stdout(output), self.assertRaises(ydb.Unavailable):
-                    validator.validate(self.driver, session, self.table)
+                    validator.validate(self.driver, session, self.table, ddl_excluded=True)
         self.assertTrue(responses, "A real server response must precede the injected interruption")
         self.assertNotIn("consistent", output.getvalue())
 
@@ -569,7 +770,7 @@ class TestValidateIndexes(unittest.TestCase):
         with self.pool.checkout() as session:
             with mock.patch.object(ydb._utilities.SyncResponseIterator, "__next__", truncate_response):
                 with contextlib.redirect_stdout(output), self.assertRaises(ydb.TruncatedResponseError):
-                    validator.validate(self.driver, session, self.table)
+                    validator.validate(self.driver, session, self.table, ddl_excluded=True)
         self.assertNotIn("consistent", output.getvalue())
 
     def test_hot_partitioned_table(self):

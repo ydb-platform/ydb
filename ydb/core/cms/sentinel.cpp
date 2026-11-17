@@ -1111,7 +1111,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
         // we ignore all previous unhandled requests
         // usually it will never happen with correct config
-        SentinelState->ChangeRequests.clear();
+        if (SentinelState->StatusChangeAttempt == 0) {
+            SentinelState->ChangeRequests.clear();
+        }
 
         auto queueStatusChange = [&](const TPDiskID& id, TPDiskInfo::TPtr info,
                 EPDiskStatus status, EPDiskStatus requiredStatus,
@@ -1129,8 +1131,10 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             LogStatusChange(id, status, requiredStatus, maintenanceStatus, requiredMaintenanceStatus, reason);
 
             if (!Config.DryRun) {
-                SentinelState->ChangeRequests.emplace(id, info);
-                (*Counters->PDisksPendingChange)++;
+                auto [_, inserted] = SentinelState->ChangeRequests.insert_or_assign(id, info);
+                if (inserted) {
+                    (*Counters->PDisksPendingChange)++;
+                }
             }
         };
 

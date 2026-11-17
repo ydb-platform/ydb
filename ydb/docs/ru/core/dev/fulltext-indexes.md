@@ -124,7 +124,7 @@ WHERE body LIKE "%обуч%ние%"
 LIMIT 20;
 ```
 
-`LIKE` учитывает регистр, а `ILIKE` — нет. Для поиска по `ILIKE` через полнотекстовый индекс требуется `use_filter_lowercase=true`.
+`LIKE` учитывает регистр, а `ILIKE` — нет. Для поиска по `ILIKE` через полнотекстовый индекс укажите `use_filter_lowercase=true` в секции `WITH` при создании индекса.
 
 Шаблон можно передать параметром или составить выражением; поддерживается `ESCAPE`. Индекс также поддерживает равенство и функции `StartsWith` / `EndsWith`. См. [примеры запросов](../yql/reference/syntax/select/fulltext_index.md#like-ilike).
 

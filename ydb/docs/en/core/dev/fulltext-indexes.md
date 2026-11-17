@@ -123,7 +123,7 @@ WHERE body LIKE "%learn%ing%"
 LIMIT 20;
 ```
 
-`LIKE` is case-sensitive; `ILIKE` is not. Using `ILIKE` to search through a fulltext index requires `use_filter_lowercase=true`.
+`LIKE` is case-sensitive; `ILIKE` is not. To use `ILIKE` with a fulltext index, set `use_filter_lowercase=true` in the `WITH` clause when creating the index.
 
 A pattern can be a parameter or an expression; `ESCAPE` is supported. The index also supports equality and the `StartsWith` / `EndsWith` functions. See the [query examples](../yql/reference/syntax/select/fulltext_index.md#like-ilike).
 

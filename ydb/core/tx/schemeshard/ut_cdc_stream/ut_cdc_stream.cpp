@@ -1892,7 +1892,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         env.TestWaitTabletDeletion(runtime, aggregatorTabletId);
     }
 
-    Y_UNIT_TEST(AggregatorConfiguredBeforeStreamCreated) {
+    Y_UNIT_TEST(ShouldCompleteStreamCreationWhenCdcAggregatorConfirmsTracking) {
+        // given
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
             .EnableProtoSourceIdInfo(true)
@@ -1922,15 +1923,18 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         runtime.WaitFor("TEvConfigureTrackingResult", [&] { return blockedResults.size(); });
         AssertOperationInFlight(runtime, txId);
 
+        // when
         blockedResults.Stop().Unblock();
-        env.TestWaitNotification(runtime, txId);
 
+        // then
+        env.TestWaitNotification(runtime, txId);
         const auto sources = DescribeCdcAggregatorSources(runtime, GetCdcAggregatorTabletId(runtime, "/MyRoot/Table/Stream"));
         UNIT_ASSERT_VALUES_EQUAL(sources.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(sources, GetSortedTableShards(runtime, "/MyRoot/Table"));
     }
 
-    Y_UNIT_TEST(AggregatorConfiguredAfterRebootInConfigureParts) {
+    Y_UNIT_TEST(ShouldConfigureCdcAggregatorWhenSchemeShardRebootsInConfigureParts) {
+        // given
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
             .EnableProtoSourceIdInfo(true)
@@ -1960,9 +1964,11 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         runtime.WaitFor("TEvConfigureTrackingResult", [&] { return blockedResults.size(); });
         blockedResults.Stop();
 
+        // when
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-        env.TestWaitNotification(runtime, txId);
 
+        // then
+        env.TestWaitNotification(runtime, txId);
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
             NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
             NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated),
@@ -1971,7 +1977,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(sources, GetSortedTableShards(runtime, "/MyRoot/Table"));
     }
 
-    Y_UNIT_TEST(AggregatorTracksSplit) {
+    Y_UNIT_TEST(ShouldReportSplitToCdcAggregatorWhenSchemeShardRebootsBeforeAck) {
+        // given
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
             .EnableProtoSourceIdInfo(true)
@@ -2010,11 +2017,13 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )", parentShards.front()));
         runtime.WaitFor("TEvPartitioningChangedAck", [&] { return blockedAcks.size(); });
         AssertOperationInFlight(runtime, txId);
-
         blockedAcks.Stop();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-        env.TestWaitNotification(runtime, txId);
 
+        // when
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // then
+        env.TestWaitNotification(runtime, txId);
         const auto childShards = GetSortedTableShards(runtime, "/MyRoot/Table");
         UNIT_ASSERT_VALUES_EQUAL(childShards.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(DescribeCdcAggregatorSources(runtime, aggregatorTabletId), childShards);

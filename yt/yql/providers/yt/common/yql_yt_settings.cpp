@@ -365,6 +365,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, JoinMergeUnsortedFactor).Lower(0.0);
     REGISTER_SETTING(*this, JoinMergeForce);
     REGISTER_SETTING(*this, MapJoinLimit);
+    REGISTER_SETTING(*this, BlockMapJoinLimit);
     REGISTER_SETTING(*this, MapJoinShardMinRows);
     REGISTER_SETTING(*this, MapJoinShardCount).Lower(1).Upper(10);
     REGISTER_SETTING(*this, MapJoinUseFlow);

@@ -1,0 +1,45 @@
+Audit date: 2026-11-17
+
+Local P model commands (from the model directory):
+p compile --pproj Recovery.pproj --mode pchecker --outdir <outside-checkout>/PChecker
+p check <outside-checkout>/PChecker/PChecker/net8.0/SyncGuidRecovery.dll --testcase <testcase> --schedules 50 --seed <seed> --max-steps 10000 --fail-on-maxsteps --outdir <results>
+
+Baseline ef13485ee20: all 14 cases, seed 1; six negative cases fail their intended monitor, eight controls pass.
+First repaired model 0596d5c242e: all 14 cases, seed 1.
+Reconstructed model 55d6bd8a667: all 18 cases, seed 1; FreshGroup/DegradedRestart/DegradedFreshGroup also seeds 2 and 3 for both topologies.
+
+p compile --pproj Proofs.pproj --mode pchecker --outdir <outside-checkout>/Proofs
+p check <outside-checkout>/Proofs/PChecker/net8.0/SyncGuidRecoveryProofs.dll --testcase <component-testcase> --schedules 50 --seed <seed> --max-steps 10000 --fail-on-maxsteps --outdir <results>
+All four component harnesses: seeds 1, 2, 3.
+
+p compile --pproj Proofs.pproj --mode pex --outdir <outside-checkout>/ProofsPEx
+p check <outside-checkout>/ProofsPEx/PEx/target/SyncGuidRecoveryProofs-jar-with-dependencies.jar --mode pex --testcase <component-testcase> --sch-pex dfs --schedules 0 --seed 1 --memout 1 --max-steps 10000 --fail-on-maxsteps --checker-args :--state-caching:exact --outdir <results>
+
+p compile --pproj Recovery.pproj --mode pex --outdir <outside-checkout>/PEx
+p check <outside-checkout>/PEx/PEx/target/SyncGuidRecovery-jar-with-dependencies.jar --mode pex --testcase <tcFreshGroup or tcMirror3dcFreshGroup> --sch-pex dfs --schedules 0 --seed 1 --memout 8 --max-steps 10000 --fail-on-maxsteps --checker-args :--state-caching:exact --outdir <results>
+Both full searches exhausted the memory limit. Component checks completed.
+
+Mutation sensitivity (isolated copies; never edits the checked source):
+python3 Evidence/run_mutations.py /tmp/sync-guid-recovery-new-mutation-run
+The recorded original runs used one schedule except minority-final (50 configured, failure on schedule 5). The exported runner uses 50 for all variants.
+
+C++ commands run only on mr-nvme-testing-006.ydb.yandex.net, from each exact checkout root:
+
+Baseline reproduction b29e4c989c0:
+./ya make --build relwithdebinfo -j48 --link-threads=1 -DUSER_LDFLAGS=-Wl,--threads=2 -R -tA ydb/core/blobstorage/ut_blobstorage/ut_replication -F 'RecoverLostDataRestart::RollingWipe*' -F 'RecoverLostDataRestart::RestartWithTwoUnavailablePeers'
+
+Pre-correction snapshot 2a56734e4bfdd1a566f1c4b5fba4d0804e125372 (7155fbaa8de production source plus nonblocking startup controls):
+./ya make --build relwithdebinfo -j48 --link-threads=1 -DUSER_LDFLAGS=-Wl,--threads=2 -R -tA ydb/core/blobstorage/ut_blobstorage/ut_replication -F 'RecoverLostDataRestart::RestartWith*TwoUnavailablePeers'
+
+Reconstructed C++ checkpoint ec26ddef811 (final nonblocking probe):
+./ya make --build relwithdebinfo -j48 --link-threads=1 -DUSER_LDFLAGS=-Wl,--threads=2 -R -tA ydb/core/blobstorage/ut_blobstorage/ut_replication ydb/core/blobstorage/vdisk/syncer/ut -F 'RecoverLostDataRestart::*' -F 'TSyncNeighborsTests::*'
+
+All use normal checkout dependencies, no prebuilt driver and no canonical output regeneration. Initial six-job attempts warmed the normal build cache. The obsolete fff9f0b0ed3 run was canceled, not classified as a test failure.
+
+Snapshot delivery: regular pushes through mr006 failed on missing historical Git objects. Exact object closures were transferred with git pack-objects/index-pack into the task-only /tmp/sync-guid-audit-20261117.git repository, rooted at the known shared 6e3629b18daf4a2441d2b129fa3b1ae84564610f shallow boundary. No shared remote refs or system settings were changed.
+
+Additional test scope was explicitly approved by the user during execution:
+On both ea17cba86ce3b4c69ff1b4e2e83403c49b65f5cc and 8f509cd04e8, run:
+./ya make --build relwithdebinfo -j16 --link-threads=1 -DUSER_LDFLAGS=-Wl,--threads=2 -R -tA ydb/core/blobstorage/dsproxy/ut_fat ydb/core/blobstorage/ut_blobstorage/ut_balancing ydb/core/blobstorage/ut_blobstorage/ut_startup_brokers -F 'TBlobStorageProxyTest::TestDoubleFailure' -F 'TBlobStorageProxyTest::TestEmptyDiscover' -F 'VDiskBalancing::TwoPartsOnOneNodeTest_Block42' -F 'VDiskBalancing::TwoPartsOnOneNodeTest_Block42_HugeBlob' -F 'VDiskStartupBrokers::StartupDataSyncBrokerKeepsTokenUntilInitialDueSyncAttemptCompletes' -F 'VDiskStartupBrokers::StartupDataSyncBrokerReleasesTokenWhenPeerIsOfflinePerNode'
+
+The historical startup-control command was rerun in /tmp/sync-guid-audit-fast-20261117 after checking out 2a56734e4bf, then the checkout was switched to ec26ddef811 and the final 18-test command rebuilt normal dependencies. This reuses normal build cache, not copied binaries. Initial ea17 startup controls with the blocking probe are diagnostic aborts, not assertion evidence.

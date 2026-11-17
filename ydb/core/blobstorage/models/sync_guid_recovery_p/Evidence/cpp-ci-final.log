@@ -1,0 +1,74 @@
+------- [TM] {default-linux-x86_64, relwithdebinfo} ydb/core/blobstorage/dsproxy/ut_fat/unittest >> TBlobStorageProxyT
+Test command err:
+2026-11-17T13:28:43.825471Z :BS_PDISK CRIT: blobstorage_pdisk_actor.cpp:422: PDiskId# 1 Can not be initialized! Format is incomplete. Magic sector is not present on disk. Maybe wrong PDiskKey Config: {TPDiskConfig Path# "/home/ydynnikov/.ya/build/build_root/d3ke/00002c/r3tmp/tmpanuRsF//vdisk_bad_0/pdisk.dat" ExpectedPath# "" ExpectedSerial# "" PDiskGuid# 123 PDiskId# 1 PDiskCategory# {Type# DEVICE_TYPE_ROT Kind# 0} MetadataOnly# 0 StartOwnerRound# 1 SectorMap# true EnableSectorEncryption # 0 ChunkSize# 134217728 PhysicalChunkSize# 0 SectorSize# 4096 StatisticsUpdateIntervalMs# 1000 SchedulerCfg# {TPDiskSchedulerConfig BytesSchedulerWeight# 1 LogWeight# 1 FreshWeight# 2 CompWeight# 7 SyncLogWeight# 15 HugeWeight# 2 FastReadWeight# 1 OtherReadWeight# 1 LoadWeight# 2 LowReadWeight# 1 MaxChunkReadsPerCycle# 16 MaxChunkReadsDurationPerCycleMs# 0.25 MaxChunkWritesPerCycle# 8 MaxChunkWritesDurationPerCycleMs# 1} MinLogChunksTotal# 4 MaxLogChunksPerOwnerMultiplier# 5 MaxLogChunksPerOwnerDivisor# 4 SortFreeChunksPerItems# 100 GetDriveDataSwitch# DoNotTouch WriteCacheSwitch# DoNotTouch DriveModelSeekTimeNs# 8000000 DriveModelSpeedBps# 127000000 DriveModelSpeedBpsMin# 135000000 DriveModelSpeedBpsMax# 200000000 DriveModelBulkWrieBlockSize# 2097152 DriveModelTrimSpeedBps# 0 ReorderingMs# 50 DeviceInFlight# 4 CostLimitNs# 50000000 BufferPoolBufferSizeBytes# 524288 BufferPoolBufferCount# 256 MaxQueuedCompletionActions# 128 IoPieceSizeBytes# 524288 ExpectedSlotCount# 0 ExpectedSlotSize# 0 MaxSlots# 0 SlotSizeInUnits# 0 ReserveLogChunksMultiplier# 56 InsaneLogChunksMultiplier# 40 RedLogChunksMultiplier# 30 OrangeLogChunksMultiplier# 20 WarningLogChunksMultiplier# 4 YellowLogChunksMultiplier# 4 MaxMetadataMegabytes# 32 SpaceColorBorder# GREEN CompletionThreadsCount# 1 UseNoopScheduler# false UseBytesFlightControl# false PlainDataChunks# 0 SeparateHugePriorities# 0} PDiskId=1 marker=BPD01
+2026-11-17T13:28:43.825743Z :BS_PDISK CRIT: blobstorage_pdisk_actor.cpp:422: PDiskId# 2 Can not be initialized! Format is incomplete. Magic sector is not present on disk. Maybe wrong PDiskKey Config: {TPDiskConfig Path# "/home/ydynnikov/.ya/build/build_root/d3ke/00002c/r3tmp/tmpanuRsF//vdisk_bad_1/pdisk.dat" ExpectedPath# "" ExpectedSerial# "" PDiskGuid# 123 PDiskId# 2 PDiskCategory# {Type# DEVICE_TYPE_ROT Kind# 0} MetadataOnly# 0 StartOwnerRound# 1 SectorMap# true EnableSectorEncryption # 0 ChunkSize# 134217728 PhysicalChunkSize# 0 SectorSize# 4096 StatisticsUpdateIntervalMs# 1000 SchedulerCfg# {TPDiskSchedulerConfig BytesSchedulerWeight# 1 LogWeight# 1 FreshWeight# 2 CompWeight# 7 SyncLogWeight# 15 HugeWeight# 2 FastReadWeight# 1 OtherReadWeight# 1 LoadWeight# 2 LowReadWeight# 1 MaxChunkReadsPerCycle# 16 MaxChunkReadsDurationPerCycleMs# 0.25 MaxChunkWritesPerCycle# 8 MaxChunkWritesDurationPerCycleMs# 1} MinLogChunksTotal# 4 MaxLogChunksPerOwnerMultiplier# 5 MaxLogChunksPerOwnerDivisor# 4 SortFreeChunksPerItems# 100 GetDriveDataSwitch# DoNotTouch WriteCacheSwitch# DoNotTouch DriveModelSeekTimeNs# 8000000 DriveModelSpeedBps# 127000000 DriveModelSpeedBpsMin# 135000000 DriveModelSpeedBpsMax# 200000000 DriveModelBulkWrieBlockSize# 2097152 DriveModelTrimSpeedBps# 0 ReorderingMs# 50 DeviceInFlight# 4 CostLimitNs# 50000000 BufferPoolBufferSizeBytes# 524288 BufferPoolBufferCount# 256 MaxQueuedCompletionActions# 128 IoPieceSizeBytes# 524288 ExpectedSlotCount# 0 ExpectedSlotSize# 0 MaxSlots# 0 SlotSizeInUnits# 0 ReserveLogChunksMultiplier# 56 InsaneLogChunksMultiplier# 40 RedLogChunksMultiplier# 30 OrangeLogChunksMultiplier# 20 WarningLogChunksMultiplier# 4 YellowLogChunksMultiplier# 4 MaxMetadataMegabytes# 32 SpaceColorBorder# GREEN CompletionThreadsCount# 1 UseNoopScheduler# false UseBytesFlightControl# false PlainDataChunks# 0 SeparateHugePriorities# 0} PDiskId=2 marker=BPD01
+2026-11-17T13:28:43.826908Z :BS_LOCALRECOVERY CRIT: localrecovery_public.cpp:129: PDiskId# 1 VDISK[0:_:0:0:0]: (0) LocalRecovery FINISHED: {RecoveryDuration# INPROGRESS RecoveredLogStartLsn# 0 SuccessfulRecovery# false EmptyLogoBlobsDb# true EmptyBlocksDb# true EmptyBarriersDb# true EmptySyncLog# true EmptySyncer# true EmptyHuge# true LogRecLogoBlob# 0 LogRecBlock# 0 LogRecGC# 0 LogRecSyncLogIdx# 0 LogRecLogoBlobsDB# 0 LogRecBlocksDB# 0 LogRecBarriersDB# 0 LogRecCutLog# 0 LogRecLocalSyncData# 0 LogRecSyncerState# 0 LogRecHandoffDel# 0 LogRecHugeBlobAllocChunk# 0 LogRecHugeBlobFreeChunk# 0 LogRecHugeBlobEntryPoint# 0 LogRecHugeLogoBlob# 0 LogRecLogoBlobOpt# 0 LogRecPhantomBlob# 0 LogRecAnubisOsirisPut# 0 LogRecAddBulkSst# 0 LogoBlobFreshApply# 0 LogoBlobFreshSkip# 0 LogoBlobsBatchFreshApply# 0 LogoBlobsBatchFreshSkip#0 LogoBlobSyncLogApply# 0 LogoBlobSyncLogSkip# 0 HugeLogoBlobFreshApply# 0 HugeLogoBlobFreshSkip# 0 HugeLogoBlobSyncLogApply# 0 HugeLogoBlobSyncLogSkip# 0 BlockFreshApply# 0 BlockFreshSkip# 0 BlocksBatchFreshApply# 0 BlocksBatchFreshSkip# 0 BlockSyncLogApply# 0 BlockSyncLogSkip# 0 BarrierFreshApply# 0 BarrierFreshSkip# 0 BarriersBatchFreshApply# 0 BarriersBatchFreshSkip# 0 BarrierSyncLogApply# 0 BarrierSyncLogSkip# 0 GCBarrierFreshApply# 0 GCBarrierFreshSkip# 0 GCLogoBlobFreshApply# 0 GCLogoBlobFreshSkip# 0 GCSyncLogApply# 0 GCSyncLogSkip# 0 TryPutLogoBlobSyncData# 0 TryPutBlockSyncData# 0 TryPutBarrierSyncData# 0 HandoffDelFreshApply# 0 HandoffDelFreshSkip# 0 HugeBlobAllocChunkApply# 0 HugeBlobAllocChunkSkip# 0 HugeBlobFreeChunkApply# 0 HugeBlobFreeChunkSkip# 0 HugeLogoBlobToHeapApply# 0 HugeLogoBlobToHeapSkip# 0 HugeSlotsDelGenericApply# 0 HugeSlotsDelGenericSkip# 0 TryPutLogoBlobPhantom# 0 RecoveryLogDiapason# [18446744073709551615 0] StartingPoints# {} ReadLogReplies# {}} reason# Yard::Init failed, errorReason# "PDisk is in StateError, reason# PDiskId# 1 Can not be initialized! Format is incomplete. Magic sector is not present on disk. Maybe wrong PDiskKey" status# CORRUPTED;VDISK LOCAL RECOVERY FAILURE DUE TO LOGICAL ERROR 
+2026-11-17T13:28:43.826952Z :BS_LOCALRECOVERY CRIT: localrecovery_public.cpp:129: PDiskId# 2 VDISK[0:_:0:1:0]: (0) LocalRecovery FINISHED: {RecoveryDuration# INPROGRESS RecoveredLogStartLsn# 0 SuccessfulRecovery# false EmptyLogoBlobsDb# true EmptyBlocksDb# true EmptyBarriersDb# true EmptySyncLog# true EmptySyncer# true EmptyHuge# true LogRecLogoBlob# 0 LogRecBlock# 0 LogRecGC# 0 LogRecSyncLogIdx# 0 LogRecLogoBlobsDB# 0 LogRecBlocksDB# 0 LogRecBarriersDB# 0 LogRecCutLog# 0 LogRecLocalSyncData# 0 LogRecSyncerState# 0 LogRecHandoffDel# 0 LogRecHugeBlobAllocChunk# 0 LogRecHugeBlobFreeChunk# 0 LogRecHugeBlobEntryPoint# 0 LogRecHugeLogoBlob# 0 LogRecLogoBlobOpt# 0 LogRecPhantomBlob# 0 LogRecAnubisOsirisPut# 0 LogRecAddBulkSst# 0 LogoBlobFreshApply# 0 LogoBlobFreshSkip# 0 LogoBlobsBatchFreshApply# 0 LogoBlobsBatchFreshSkip#0 LogoBlobSyncLogApply# 0 LogoBlobSyncLogSkip# 0 HugeLogoBlobFreshApply# 0 HugeLogoBlobFreshSkip# 0 HugeLogoBlobSyncLogApply# 0 HugeLogoBlobSyncLogSkip# 0 BlockFreshApply# 0 BlockFreshSkip# 0 BlocksBatchFreshApply# 0 BlocksBatchFreshSkip# 0 BlockSyncLogApply# 0 BlockSyncLogSkip# 0 BarrierFreshApply# 0 BarrierFreshSkip# 0 BarriersBatchFreshApply# 0 BarriersBatchFreshSkip# 0 BarrierSyncLogApply# 0 BarrierSyncLogSkip# 0 GCBarrierFreshApply# 0 GCBarrierFreshSkip# 0 GCLogoBlobFreshApply# 0 GCLogoBlobFreshSkip# 0 GCSyncLogApply# 0 GCSyncLogSkip# 0 TryPutLogoBlobSyncData# 0 TryPutBlockSyncData# 0 TryPutBarrierSyncData# 0 HandoffDelFreshApply# 0 HandoffDelFreshSkip# 0 HugeBlobAllocChunkApply# 0 HugeBlobAllocChunkSkip# 0 HugeBlobFreeChunkApply# 0 HugeBlobFreeChunkSkip# 0 HugeLogoBlobToHeapApply# 0 HugeLogoBlobToHeapSkip# 0 HugeSlotsDelGenericApply# 0 HugeSlotsDelGenericSkip# 0 TryPutLogoBlobPhantom# 0 RecoveryLogDiapason# [18446744073709551615 0] StartingPoints# {} ReadLogReplies# {}} reason# Yard::Init failed, errorReason# "PDisk is in StateError, reason# PDiskId# 2 Can not be initialized! Format is incomplete. Magic sector is not present on disk. Maybe wrong PDiskKey" status# CORRUPTED;VDISK LOCAL RECOVERY FAILURE DUE TO LOGICAL ERROR
+------- [TM] {default-linux-x86_64, relwithdebinfo} ydb/core/blobstorage/ut_blobstorage/ut_balancing/unittest >> VDisk
+Test command err:
+RandomSeed# 2328198271441393132
+SEND TEvPut with key [1:1:1:0:0:3201024:0]
+2026-11-17T13:30:00.526813Z 1 00h01m00.010512s :PIPE_SERVER ERROR: Node disconnected
+2026-11-17T13:30:00.526989Z 1 00h01m00.010512s :PIPE_SERVER ERROR: Node disconnected
+TEvPutResult: TEvPutResult {Id# [1:1:1:0:0:3201024:0] Status# OK StatusFlags# { } ApproximateFreeSpaceShare# 0.999988}
+Node 0: 4 
+Node 1: 5 
+Node 2: 6 
+Node 3: 1 
+Node 4: 
+Node 5: 
+Node 6: 2 
+Node 7: 3 
+2026-11-17T13:30:00.556043Z 1 00h01m00.011024s :PIPE_SERVER ERROR: Node disconnected
+Node 0: 4 
+Node 1: 5 
+Node 2: 6 
+Node 3: 1 2 
+Node 4: 
+Node 5: 1 
+Node 6: 
+Node 7: 3 
+Start compaction 1
+Finish compaction 1
+------- [TM] {default-linux-x86_64, relwithdebinfo} ydb/core/blobstorage/ut_blobstorage/ut_balancing/unittest >> VDisk
+Test command err:
+RandomSeed# 15879563066552766436
+SEND TEvPut with key [1:1:1:0:0:100:0]
+2026-11-17T13:30:00.651653Z 1 00h01m00.010512s :PIPE_SERVER ERROR: Node disconnected
+2026-11-17T13:30:00.651733Z 1 00h01m00.010512s :PIPE_SERVER ERROR: Node disconnected
+TEvPutResult: TEvPutResult {Id# [1:1:1:0:0:100:0] Status# OK StatusFlags# { } ApproximateFreeSpaceShare# 0.999988}
+Node 0: 4 
+Node 1: 5 
+Node 2: 6 
+Node 3: 1 
+Node 4: 
+Node 5: 
+Node 6: 2 
+Node 7: 3 
+2026-11-17T13:30:00.668705Z 1 00h01m00.011024s :PIPE_SERVER ERROR: Node disconnected
+Node 0: 4 
+Node 1: 5 
+Node 2: 6 
+Node 3: 1 2 
+Node 4: 
+Node 5: 1 
+Node 6: 
+Node 7: 3 
+Start compaction 1
+Finish compaction 1
+------- [TM] {default-linux-x86_64, relwithdebinfo} ydb/core/blobstorage/ut_blobstorage/ut_startup_brokers/unittest >>
+Test command err:
+RandomSeed# 2602571092153404916
+2026-11-17T13:30:28.210758Z 1 00h00m30.002024s :PIPE_SERVER ERROR: Node disconnected
+2026-11-17T13:30:28.277450Z 1 00h00m35.010512s :PIPE_SERVER ERROR: Node disconnected
+------- [TM] {default-linux-x86_64, relwithdebinfo} ydb/core/blobstorage/ut_blobstorage/ut_startup_brokers/unittest >>
+Test command err:
+RandomSeed# 7105097868480513843
+2026-11-17T13:30:28.524806Z 1 00h00m30.002024s :PIPE_SERVER ERROR: Node disconnected
+Number of suites by filters TBlobStorageProxyTest::TestDoubleFailure, TBlobStorageProxyTest::TestEmptyDiscover, VDiskBalancing::TwoPartsOnOneNodeTest_Block42, VDiskBalancing::TwoPartsOnOneNodeTest_Block42_HugeBlob, VDiskStartupBrokers::StartupDataSyncBrokerKeepsTokenUntilInitialDueSyncAttemptCompletes, VDiskStartupBrokers::StartupDataSyncBrokerReleasesTokenWhenPeerIsOfflinePerNode
+
+Total 3 suites:
+	3 - GOOD
+Total 6 tests:
+	6 - GOOD
+Ok

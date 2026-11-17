@@ -1,3 +1,6 @@
+> Historical investigation and evidence. For the reconstructed series, current
+> scope and verification results, see [AUDIT.md](../AUDIT.md).
+
 # [EPIC] Make VDisk recovery safe across rolling wipes and temporary unavailability
 
 **Ticket type:** umbrella ticket draft. **Investigation and GitHub research date:** 2026-11-12
@@ -22,13 +25,13 @@ Make recovery across rolling wipes preserve VDisk identity and recover the metad
 
 Tickets 02 and 03 share the witness-erasure root cause and may be implemented together; ticket 01 requires a separate metadata-history guarantee.
 
-The [P model](../sync_guid_recovery_p/README.md) uses the actual mirror-3-dc
+The [P model](../README.md) uses the actual mirror-3-dc
 group predicate: `(3,2,0)` replies form a quorum, `(2,2,2)` do not. On 2026-11-12,
 all six negative cases failed their intended monitors and all eight controls
 completed 50 schedules without bugs. Tested working-tree base Git SHA:
 `a68bd12f36af20329023baf319990155fa1ebf10`, committed
 2026-11-12T20:12:20+03:00; uncommitted model changes are identified by
-[source hashes](../sync_guid_recovery_p/Evidence/results.json).
+source hashes (historical artifact, not tracked in this series).
 
 ## Work to complete
 
@@ -64,7 +67,7 @@ The strongest existing proposal is open draft [PR #57055](https://github.com/ydb
 - Reproduced: **2026-11-12**, on `mr006`. Captured test events are around **00:29:21 UTC+3**; the log timestamps are `2026-11-11T21:29:21–22Z`, not a different reproduction date.
 - Tested Git SHA: **`c28196d089ffdd61c365f15abc76cee36af8cbde`**, committed **2026-11-12T00:27:29+03:00**, available in the `mr006` repository on branch `codex/sync-guid-recovery-investigation`.
 - Production baseline: [`6e3629b18daf4a2441d2b129fa3b1ae84564610f`](https://github.com/ydb-platform/ydb/commit/6e3629b18daf4a2441d2b129fa3b1ae84564610f), committed **2026-11-11T17:52:44+03:00**.
-- Test changes: two cases and one shared scenario in [recover_lost_data_restart.cpp](../core/blobstorage/ut_blobstorage/recover_lost_data_restart.cpp), 111 added lines. No production changes are included in that revision.
+- Test changes: two cases and one shared scenario in [recover_lost_data_restart.cpp](../../../ut_blobstorage/recover_lost_data_restart.cpp), 111 added lines. No production changes are included in that revision.
 - Target: `ydb/core/blobstorage/ut_blobstorage/ut_replication`.
 - Final result: **exactly two tests executed, both failed at the intended assertions; build succeeded; `ya make` exited with code 10**.
 - [Captured final console log](evidence/historical-rolling-wipe-baseline.log).

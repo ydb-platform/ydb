@@ -1,0 +1,18 @@
+{
+  "ydb/core/blobstorage/ut_blobstorage/recover_lost_data_restart.cpp": "19232e5460601c1e8f077bf427c6181bced768331b0da55b951fb77f0abaf9e9",
+  "ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer.cpp": "12906886bec3df0a0ef05a6602806dffe30b2bdb1c48bbb88337c8bc5d679436",
+  "ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_committer.cpp": "cda159f26bc9cc553f1c0f19751884b5ee46518f76301ee5c7696605c97f8457",
+  "ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_committer.h": "93117568d162f222173d55b205ed42629841fbcabd86f0630642dddab6812c61",
+  "ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.cpp": "10396840361697a3882bd23503d39f58a878f5d184150cabf8d65931eb54f2ce",
+  "ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.h": "017f57b0881eeb593f9f78aa1e97f01a2ce8d3c74dd4d2b0aabb4bc109b49104",
+  "ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data_ut.cpp": "40e4d2ca08ce2f8720c72c06d4716480b715e5d76211c196c0a0c533c4950c61",
+  "ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_scheduler.cpp": "f161e8ad99a04b6a46883f1d082f63822829c38b6f12f7acc306fe5102d63c1d",
+  "ydb/core/blobstorage/vdisk/syncer/guid_history.h": "b52966fbd8f8f23955f48eb340a4e3165cd72a4aef972ca3f5180904def82bec",
+  "ydb/core/blobstorage/vdisk/syncer/guid_proxyobtain.cpp": "200f029b870d97b1fbf4f964e34e796dbf5179d302ccf3c65f89f775a36672b7",
+  "ydb/core/blobstorage/vdisk/syncer/guid_proxyobtain.h": "9159567aa9535301c4d39f91763f7a23c23ffe0f1e7eff4dae62fbee294e620a",
+  "ydb/core/blobstorage/vdisk/syncer/guid_recovery.cpp": "8382e510a49ad4b0ccd64c2dd81f87e632101273c52b5fc9b6a98c045afd0edc",
+  "ydb/core/blobstorage/vdisk/syncer/guid_recovery.h": "1b26303bb04b29df3b207b63a6a1e17487365d9afe015b12658cf97af0c35ffa",
+  "ydb/core/blobstorage/vdisk/syncer/syncer_job_task.cpp": "8128c37e0112fbe198ac503a28c2192e7865ee387e5b970448cf780fd0055054",
+  "ydb/core/protos/blobstorage.proto": "1f8d9160655d8c2fb5d413d76b83a19881f364a469a371daabc01dd44552da7e",
+  "ydb/core/protos/blobstorage_vdisk_internal.proto": "72a51a74e66eec1fe58602f6d2cc76cce99be2472f08c2811c1fd08e886525ac"
+}

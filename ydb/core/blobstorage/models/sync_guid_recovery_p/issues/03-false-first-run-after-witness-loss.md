@@ -1,12 +1,15 @@
+> Historical investigation and evidence. For the reconstructed series, current
+> scope and verification results, see [AUDIT.md](../AUDIT.md).
+
 # Existing VDisk can be classified as FirstRun after local loss and erosion of peer GUID witnesses
 
 **Status:** reproduced in the reduced P model for `Erasure4Plus2Block` and normal `ErasureMirror3dc`; no dedicated end-to-end C++ regression has been run. It requires local `Empty` state in addition to temporary unavailability.
 
-**Umbrella:** [[EPIC] Make VDisk recovery safe across rolling wipes](%5BEPIC%5D.md).
+**Umbrella:** [[EPIC] Make VDisk recovery safe across rolling wipes](EPIC.md).
 
 ## Validation provenance
 
-- **P reproduction:** 2026-11-12, `tcFalseFirstRun` and `tcMirror3dcFalseFirstRun`. Tested working-tree base Git SHA: `a68bd12f36af20329023baf319990155fa1ebf10`; commit date: 2026-11-12T20:12:20+03:00. The model changes were uncommitted; [results.json](../sync_guid_recovery_p/Evidence/results.json) records exact source hashes. Both saved schedules were replayed successfully.
+- **P reproduction:** 2026-11-12, `tcFalseFirstRun` and `tcMirror3dcFalseFirstRun`. Tested working-tree base Git SHA: `a68bd12f36af20329023baf319990155fa1ebf10`; commit date: 2026-11-12T20:12:20+03:00. The model changes were uncommitted; results.json (historical artifact, not tracked in this series) records exact source hashes. Both saved schedules were replayed successfully.
 - **C++ reproduction:** not executed; there is no dedicated C++ reproduction SHA or date for this scenario.
 - **Code inspection date:** 2026-11-12.
 - **Inspected production Git SHA:** [`6e3629b18daf4a2441d2b129fa3b1ae84564610f`](https://github.com/ydb-platform/ydb/commit/6e3629b18daf4a2441d2b129fa3b1ae84564610f); commit date: 2026-11-11T17:52:44+03:00.
@@ -19,8 +22,8 @@ other VDisk sequentially. On return, the real empty first quorum triggers
 `FirstRun`, new-GUID publication, and local `Final`; the monitor rejects the
 reinitialization of an existing slot. Mirror-3-dc uses nine VDisks, three physical
 realms, `NORMAL`, all realms `INCLUDED`, and first quorum `{0,1,2,3,4}`.
-See the [mirror-3-dc trace](../sync_guid_recovery_p/Evidence/tcMirror3dcFalseFirstRun.excerpt.txt)
-and [checker commands](../sync_guid_recovery_p/README.md).
+See the mirror-3-dc trace (historical artifact, not tracked in this series)
+and [checker commands](../README.md).
 
 An existing **open draft [PR #57055 — Preserve VDisk GUID history across realm recovery](https://github.com/ydb-platform/ydb/pull/57055)** explicitly describes peer-witness loss causing a later wiped realm to appear `FirstRun`. This is direct conceptual overlap, rather than a previously unknown proposal. The PR's inspected history collection targets mirror-3-dc realm state `R`; the candidate sequence below uses 4+2 and has not been run with that PR applied.
 

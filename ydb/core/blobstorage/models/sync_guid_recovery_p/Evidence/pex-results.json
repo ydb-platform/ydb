@@ -1,0 +1,44 @@
+[
+  {
+    "log": "pex-tcFreshGroup-incomplete.log",
+    "complete": false,
+    "states": 1097966,
+    "schedules": 2187842,
+    "remaining_choices": 132
+  },
+  {
+    "log": "pex-tcMirror3dcFreshGroup-incomplete.log",
+    "complete": false,
+    "states": 942936,
+    "schedules": 1827940,
+    "remaining_choices": 134
+  },
+  {
+    "log": "pex-tcProofClosedSurvey.log",
+    "complete": true,
+    "states": 57,
+    "schedules": 3,
+    "remaining_choices": 0
+  },
+  {
+    "log": "pex-tcProofFullSyncRetry.log",
+    "complete": true,
+    "states": 13,
+    "schedules": 2,
+    "remaining_choices": 0
+  },
+  {
+    "log": "pex-tcProofGuidConflict.log",
+    "complete": true,
+    "states": 0,
+    "schedules": 2,
+    "remaining_choices": 0
+  },
+  {
+    "log": "pex-tcProofGuidPublication.log",
+    "complete": true,
+    "states": 7268,
+    "schedules": 10503,
+    "remaining_choices": 0
+  }
+]

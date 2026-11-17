@@ -1,3 +1,5 @@
+* Fixed node-startup config fetches omitting their seed-node marker when no requestor hosts are supplied.
+
 * Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
 
 * Added support for tablet reassignment operation IDs.

@@ -712,14 +712,21 @@ Y_UNIT_TEST_SUITE(ConfigGRPCServiceAuth) {
         return path;
     }
 
+    Ydb::Config::FetchConfigRequest MakeFetchConfigRequest(bool seedNode = false) {
+        Ydb::Config::FetchConfigRequest request;
+        request.mutable_all();
+        if (seedNode) {
+            request.mutable_seed_node_fetch_requestor();
+        }
+        return request;
+    }
+
     Ydb::Config::FetchConfigResponse DoFetchConfig(
             auto& channel,
             std::optional<TString> token,
-            std::optional<TString> database) {
+            std::optional<TString> database,
+            const Ydb::Config::FetchConfigRequest& request = MakeFetchConfigRequest()) {
         auto stub = Ydb::Config::V1::ConfigService::NewStub(channel);
-
-        Ydb::Config::FetchConfigRequest request;
-        request.mutable_all();
 
         Ydb::Config::FetchConfigResponse response;
         grpc::ClientContext ctx;
@@ -729,7 +736,8 @@ Y_UNIT_TEST_SUITE(ConfigGRPCServiceAuth) {
         if (database) {
             ctx.AddMetadata(NYdb::YDB_DATABASE_HEADER, *database);
         }
-        stub->FetchConfig(&ctx, request, &response);
+        const auto status = stub->FetchConfig(&ctx, request, &response);
+        UNIT_ASSERT_C(status.ok(), status.error_message());
         return response;
     }
 
@@ -858,6 +866,91 @@ config:
         TServerWithAuth server;
         ConfigureAuth(server, /*adminSids*/ {"user@builtin"}, /*enableDatabaseAdmin*/ false);
         CheckClusterConfigAccess(server.GetChannel(), "user@builtin", /*allowed*/ true);
+    }
+
+    Y_UNIT_TEST(SeedNodeFetchAllowedForRegistrationSid) {
+        TServerWithAuth server;
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
+        server.GetRuntime()->GetAppData(0).RegisterDynamicNodeAllowedSIDs = {"node@builtin"};
+
+        // Dynamic nodes identify seed requests with an empty message, without hostname or IC port.
+        auto request = MakeFetchConfigRequest(/*seedNode*/ true);
+        auto fetch = DoFetchConfig(server.GetChannel(), "node@builtin", std::nullopt, request);
+        AssertAllowed(fetch.operation(), "Seed node FetchConfig");
+        request.mutable_all()->mutable_none();
+        auto explicitNoneFetch = DoFetchConfig(server.GetChannel(), "node@builtin", std::nullopt, request);
+        AssertAllowed(explicitNoneFetch.operation(), "Seed node FetchConfig without transform");
+        CheckClusterConfigAccess(server.GetChannel(), "node@builtin", /*allowed*/ false);
+    }
+
+    Y_UNIT_TEST(SeedNodeFetchAllowedForClusterAdmin) {
+        TServerWithAuth server;
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
+        server.GetRuntime()->GetAppData(0).RegisterDynamicNodeAllowedSIDs = {"node@builtin"};
+
+        auto fetch = DoFetchConfig(server.GetChannel(), "root@builtin", std::nullopt, MakeFetchConfigRequest(/*seedNode*/ true));
+        AssertAllowed(fetch.operation(), "Seed node FetchConfig");
+    }
+
+    Y_UNIT_TEST(SeedNodeFetchDeniedWhenRegistrationRestricted) {
+        TServerWithAuth server;
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
+        server.GetRuntime()->GetAppData(0).RegisterDynamicNodeAllowedSIDs = {"node@builtin"};
+
+        const auto request = MakeFetchConfigRequest(/*seedNode*/ true);
+        auto userFetch = DoFetchConfig(server.GetChannel(), "user@builtin", std::nullopt, request);
+        AssertDenied(userFetch.operation(), "Seed node FetchConfig", NOT_CLUSTER_ADMIN_MSG);
+        auto anonymousFetch = DoFetchConfig(server.GetChannel(), std::nullopt, std::nullopt, request);
+        AssertDenied(anonymousFetch.operation(), "Anonymous seed node FetchConfig", NOT_CLUSTER_ADMIN_MSG);
+    }
+
+    Y_UNIT_TEST(SeedNodeFetchAllowedWhenRegistrationSidsEmpty) {
+        TServerWithAuth server;
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
+        server.GetRuntime()->GetAppData(0).RegisterDynamicNodeAllowedSIDs.clear();
+
+        const auto request = MakeFetchConfigRequest(/*seedNode*/ true);
+        auto userFetch = DoFetchConfig(server.GetChannel(), "user@builtin", std::nullopt, request);
+        AssertAllowed(userFetch.operation(), "Seed node FetchConfig");
+        auto anonymousFetch = DoFetchConfig(server.GetChannel(), std::nullopt, std::nullopt, request);
+        AssertAllowed(anonymousFetch.operation(), "Anonymous seed node FetchConfig");
+        CheckClusterConfigAccess(server.GetChannel(), "user@builtin", /*allowed*/ false);
+        CheckClusterConfigAccess(server.GetChannel(), std::nullopt, /*allowed*/ false);
+    }
+
+    Y_UNIT_TEST(SeedNodeFetchTransformRequiresClusterAdmin) {
+        TServerWithAuth server;
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
+        server.GetRuntime()->GetAppData(0).RegisterDynamicNodeAllowedSIDs = {"node@builtin"};
+
+        TVector<Ydb::Config::FetchConfigRequest> requests(2, MakeFetchConfigRequest(/*seedNode*/ true));
+        requests[0].mutable_all()->mutable_add_blob_storage_and_domains_config();
+        requests[1].mutable_all()->mutable_add_explicit_sections();
+        for (const auto& request : requests) {
+            auto fetch = DoFetchConfig(server.GetChannel(), "node@builtin", std::nullopt, request);
+            AssertDenied(fetch.operation(), "Transformed seed node FetchConfig", NOT_CLUSTER_ADMIN_MSG);
+            auto adminFetch = DoFetchConfig(server.GetChannel(), "root@builtin", std::nullopt, request);
+            AssertAllowed(adminFetch.operation(), "Transformed seed node FetchConfig");
+        }
+    }
+
+    Y_UNIT_TEST(SeedNodeFetchDomainContextRequiresClusterAdmin) {
+        TServerWithAuth server;
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
+        server.GetRuntime()->GetAppData(0).RegisterDynamicNodeAllowedSIDs = {"node@builtin"};
+
+        auto fetch = DoFetchConfig(server.GetChannel(), "node@builtin", "/Root", MakeFetchConfigRequest(/*seedNode*/ true));
+        AssertDenied(fetch.operation(), "Seed node FetchConfig for domain", NOT_CLUSTER_ADMIN_MSG);
+    }
+
+    Y_UNIT_TEST(SeedNodeFetchDatabaseContextRequiresDatabaseAdmin) {
+        TServerWithAuthDynamicPools server;
+        const TString database = CreateDatabaseWithOwner(server, "db_owner_root", "root@builtin");
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ true);
+        server.GetRuntime()->GetAppData(0).RegisterDynamicNodeAllowedSIDs = {"node@builtin"};
+
+        auto fetch = DoFetchConfig(server.GetChannel(), "node@builtin", database, MakeFetchConfigRequest(/*seedNode*/ true));
+        AssertDenied(fetch.operation(), "Seed node FetchConfig for database", NOT_DATABASE_ADMIN_MSG);
     }
 
     Y_UNIT_TEST(DatabaseConfigDeniedForOwnerWhenDatabaseAdminDisabled) {

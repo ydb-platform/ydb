@@ -1,5 +1,6 @@
 RECURSE(
     build_info
+    config
     connection_string
     coordination
     discovery_mutator

@@ -526,7 +526,16 @@ public:
             return;
         }
 
-        if (!NKikimr::IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
+        const auto* userToken = Request_->GetInternalToken().Get();
+        const auto& request = *GetProtoRequest();
+        const auto transform = request.all().config_transform_case();
+        const bool isNodeBootstrap = request.has_seed_node_fetch_requestor() &&
+            request.mode_case() == Ydb::Config::FetchConfigRequest::ModeCase::kAll &&
+            (transform == Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::CONFIG_TRANSFORM_NOT_SET ||
+             transform == Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kNone);
+
+        if (!NKikimr::IsAdministrator(AppData(), userToken) &&
+            !(isNodeBootstrap && NKikimr::IsTokenAllowed(userToken, AppData()->RegisterDynamicNodeAllowedSIDs))) {
             self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
                   NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
             return;

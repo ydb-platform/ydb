@@ -2030,7 +2030,7 @@ Y_UNIT_TEST(CreateTableDefaultAndNotNullInOrderWithComma) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write!") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                       line.find(R"__(('columnConstrains '('('not_null) '('default (Bool '"false")))) '()))))__"));
+                                       line.find(R"__(('columnConstrains '('('not_null) '('default (Bool '"false")) '('defaultSource '('"USE ydb;\n" '"false")))) '()))))__"));
         }
     };
 
@@ -2054,7 +2054,7 @@ Y_UNIT_TEST(CreateTableDefaultAndNotNullReversed) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write!") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                       line.find(R"__('('columnConstrains '('('not_null) '('default (Int32 '"0")))) '()))))__"));
+                                       line.find(R"__('('columnConstrains '('('not_null) '('default (Int32 '"0")) '('defaultSource '('"USE ydb;\n" '"0")))) '()))))__"));
         }
     };
 

@@ -11,6 +11,7 @@ using namespace NYdb::NTopic::NTests;
 
 void CheckConcurrentWriteSessions(ui32 writeSessionsInitRps, bool directWrite, size_t sessionCount, bool restartTablet = false) {
     auto serverSettings = TTopicSdkTestSetup::MakeServerSettings();
+    serverSettings.FeatureFlags.SetEnableTopicWriteSessionsInitQuoting(true);
     serverSettings.PQConfig.SetWriteSessionsInitRps(writeSessionsInitRps);
     TTopicSdkTestSetup setup("WriteSessionsQuoter", serverSettings, false);
 

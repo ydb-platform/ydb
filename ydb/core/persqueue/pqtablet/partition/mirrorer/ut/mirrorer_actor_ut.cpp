@@ -326,6 +326,7 @@ NPersQueue::TTopicConverterPtr MakeTopicConverter(const TString& database, const
 
 NKikimrPQ::TMirrorPartitionConfig MakeMirrorConfig() {
     NKikimrPQ::TMirrorPartitionConfig config;
+    config.SetSyncWriteTime(true);
     config.SetEndpoint("localhost");
     config.SetEndpointPort(2135);
     config.SetTopic("src-topic");
@@ -480,7 +481,7 @@ struct TMirrorerEnv {
     }
 
     void Dispatch(TDuration timeout = TDuration::MilliSeconds(20)) {
-        Runtime.DispatchEvents(TDispatchOptions(), timeout);
+        Runtime.SimulateSleep(timeout);
     }
 
     void Advance(TDuration delay) {

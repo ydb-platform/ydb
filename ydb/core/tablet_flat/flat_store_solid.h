@@ -2,7 +2,7 @@
 
 #include "flat_sausage_solid.h"
 #include "util_fmt_abort.h"
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 #include <functional>
 
 namespace NKikimr {

@@ -9,10 +9,10 @@
 namespace NKikimr::NBsController {
 
     // Keeps track of space color of groups in every storage pool bound to a database (via pool's ScopeId) and decides
-    // whether the database is running out of space. The pool is exhausted when every physical group in it has reached
-    // the block color; it stops being exhausted when some group gets better than the unblock color. A group's color is
-    // the worst color of its VDisks, so while not every VDisk has reported its metrics (e.g. after reassignment or
-    // restart), only a lower bound is known: it is enough to tell the group has reached the block color, but not that
+    // whether the database is running out of space. The pool is exhausted when every ordinary or bridged group in it has
+    // reached the block color; it stops being exhausted when some group gets better than the unblock color. A group's
+    // color is the worst color of its VDisks, so while not every VDisk has reported its metrics (e.g. after reassignment
+    // or restart), only a lower bound is known: it is enough to tell the group has reached the block color, but not that
     // it is better than the unblock one. The database is exhausted when any of its pools is. Interested nodes
     // subscribe to databases and get notified whenever this changes.
     class TDatabaseSpaceTracker {
@@ -85,8 +85,8 @@ namespace NKikimr::NBsController {
         // returns existing pools whose Exhausted state has changed since the last call
         std::map<TBoxStoragePoolId, bool> TakeChangedLatches() { return std::exchange(ChangedLatches, {}); }
 
-        // set physical group's color: the worst color of its VDisks that have reported (nullopt when none has) and
-        // whether all of them have; groups that are not physical ones are not to be added (or are to be removed)
+        // set counted group's color: the worst color of its VDisks that have reported (nullopt when none has) and
+        // whether all of them have; a bridged group aggregates the VDisks of its parts taking writes
         void SetGroup(TGroupId groupId, TBoxStoragePoolId poolId, std::optional<ESpaceColor> color, bool complete = true);
         void RemoveGroup(TGroupId groupId);
 
@@ -96,7 +96,7 @@ namespace NKikimr::NBsController {
         bool IsExhausted(TScope scope) const;
 
         struct TPoolState {
-            std::optional<ESpaceColor> BestColor; // unset when the pool has no physical groups
+            std::optional<ESpaceColor> BestColor; // unset when the pool has no counted groups
             std::optional<ESpaceColor> WorstColor;
             ui32 NumGroups = 0;
             ui32 NumUnknownGroups = 0; // groups with no VDisk reported

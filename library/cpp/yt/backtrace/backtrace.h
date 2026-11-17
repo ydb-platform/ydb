@@ -12,7 +12,7 @@ using TBacktraceBuffer = TMutableRange<const void*>;
 //! Obtains a backtrace via a given cursor.
 /*!
  *  \param buffer is the buffer where the backtrace is written to
- *  \param framesToSkip is the number of top frames to skip
+ *  \param framesToSkip is the number of initial cursor frames to skip.
  *  \returns the portion of #buffer that has actually been filled
  */
 template <class TCursor>

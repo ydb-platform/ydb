@@ -2,7 +2,7 @@
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
-#include <ydb/public/lib/ydb_cli/common/parameters.h>
+#include <ydb/public/lib/ydb_cli/commands/parameters.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>

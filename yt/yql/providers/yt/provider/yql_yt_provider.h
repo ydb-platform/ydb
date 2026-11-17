@@ -57,17 +57,17 @@ struct TYtTableDescription: public TYtTableDescriptionBase {
     bool RowSpecSortReady = false;
 
     bool Fill(
-        const TString& cluster, const TString& table, const TQContext& qContext, TExprContext& ctx,
-        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool allowViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags);
+        const TString& cluster, const TString& table, TExprContext& ctx,
+        TTypeAnnotationContext& types,
+        bool allowViewIsolation, const NSQLTranslation::TSqlFlags& sqlFlags);
     void ToYson(NYson::TYsonWriter& writer, const TString& cluster, const TString& table, const TString& view) const;
     bool Validate(TPosition pos, TStringBuf cluster, TStringBuf tableName, bool withQB,
         const THashMap<std::pair<TString, TString>, TString>& anonymousLabels, TExprContext& ctx) const;
     void SetConstraintsReady();
     bool FillViews(
-        const TString& cluster, const TString& table, const TQContext& qContext, TExprContext& ctx,
-        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool allowViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags);
+        const TString& cluster, const TString& table, TExprContext& ctx,
+        TTypeAnnotationContext& types,
+        bool allowViewIsolation, const NSQLTranslation::TSqlFlags& sqlFlags);
 };
 
 // Anonymous tables are kept by labels

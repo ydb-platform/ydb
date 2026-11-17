@@ -32,5 +32,10 @@ Y_UNIT_TEST(LockMethodsTable) {
     UNIT_ASSERT_VALUES_EQUAL(22, GetMethodIndex(&IValueBuilder::GetArrowBlockChunks));
     UNIT_ASSERT_VALUES_EQUAL(23, GetMethodIndex(&IValueBuilder::GetPgBuilder));
     UNIT_ASSERT_VALUES_EQUAL(24, GetMethodIndex(&IValueBuilder::NewArray64));
+    UNIT_ASSERT_VALUES_EQUAL(25, GetMethodIndex(&IValueBuilder::NewListBuilder));
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 48)
+    UNIT_ASSERT_VALUES_EQUAL(26, GetMethodIndex(&IValueBuilder::ValueToString));
+    UNIT_ASSERT_VALUES_EQUAL(27, GetMethodIndex(&IValueBuilder::ValueFromString));
+#endif
 }
 } // Y_UNIT_TEST_SUITE(TUdfValueBuilder)

@@ -1,4 +1,4 @@
-#include "simple_server.h"
+#include <yt/cpp/mapreduce/tests/native/test_helpers/simple_server.h>
 
 #include <yt/cpp/mapreduce/http/http.h>
 
@@ -130,7 +130,7 @@ private:
     TFunc Func_;
 };
 
-TEST(TConnectionPoolTest, TestReleaseUnread)
+TEST(TConnectionPoolTest, ReleaseUnread)
 {
     auto simpleServer = CreateSimpleHttpServer();
 
@@ -144,7 +144,7 @@ TEST(TConnectionPoolTest, TestReleaseUnread)
     }
 }
 
-TEST(TConnectionPoolTest, TestProxy)
+TEST(TConnectionPoolTest, Proxy)
 {
     auto simpleServer = CreateSimpleHttpServer();
     auto simpleServer2 = CreateProxyHttpServer();
@@ -164,7 +164,7 @@ TEST(TConnectionPoolTest, TestProxy)
     }
 }
 
-TEST(TConnectionPoolTest, TestConcurrency)
+TEST(TConnectionPoolTest, Concurrency)
 {
     TConnectionPoolConfigGuard g(1);
 

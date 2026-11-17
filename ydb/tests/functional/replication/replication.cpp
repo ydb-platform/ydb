@@ -4,6 +4,74 @@ using namespace NReplicationTest;
 
 Y_UNIT_TEST_SUITE(Replication)
 {
+    void LiteralDefaults(const TString& consistency)
+    {
+        MainTestCase testCase;
+        testCase.CreateSourceTable(R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                count Uint64 NOT NULL DEFAULT 0,
+                message Utf8 DEFAULT "default message",
+                PRIMARY KEY (Key)
+            );
+        )");
+        testCase.ExecuteSourceTableQuery(R"(
+            INSERT INTO `%s` (Key, count, message) VALUES (1ul, 7ul, "explicit");
+        )");
+        testCase.ExecuteSourceTableQuery("INSERT INTO `%s` (Key) VALUES (2ul);");
+        testCase.ExecuteDDL(Sprintf(R"(
+            CREATE ASYNC REPLICATION `%s` FOR `%s` AS `%s`
+            WITH (CONNECTION_STRING = "grpc://%s", CONSISTENCY_LEVEL = "%s");
+        )", testCase.ReplicationName.data(), testCase.SourceTableName.data(), testCase.TableName.data(),
+                testCase.ConnectionString.data(), consistency.data()));
+
+        TExpectations expected = {
+            {_C("Key", ui64(1)), _C("count", ui64(7)), _C("message", TString("explicit"))},
+            {_C("Key", ui64(2)), _C("count", ui64(0)), _C("message", TString("default message"))},
+        };
+        testCase.CheckResult(expected);
+
+        // Check defaults on the live source as well as rows from the initial scan.
+        testCase.ExecuteSourceTableQuery("INSERT INTO `%s` (Key) VALUES (3ul);");
+        expected.push_back({_C("Key", ui64(3)), _C("count", ui64(0)), _C("message", TString("default message"))});
+        testCase.CheckResult(expected);
+
+        testCase.ExecuteDDL(Sprintf(R"(
+            ALTER ASYNC REPLICATION `%s` SET (STATE = "DONE");
+        )", testCase.ReplicationName.data()));
+        testCase.CheckReplicationState(TReplicationDescription::EState::Done);
+
+        for (const auto& [operation, key] : {std::pair{"INSERT", ui64(4)}, std::pair{"UPSERT", ui64(5)}}) {
+            const TString query = TStringBuilder() << operation << " INTO `" << testCase.TableName
+                                                   << "` (Key) VALUES (" << key << "ul);";
+            const auto result = testCase.ExecuteQuery(query, false);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            expected.push_back({_C("Key", ui64(key)), _C("count", ui64(0)), _C("message", TString("default message"))});
+        }
+        testCase.CheckResult(expected);
+
+        const TString nullQuery = TStringBuilder() << "INSERT INTO `" << testCase.TableName
+                                                   << "` (Key, count, message) VALUES (6ul, 99ul, NULL);";
+        const auto nullResult = testCase.ExecuteQuery(nullQuery, false);
+        UNIT_ASSERT_C(nullResult.IsSuccess(), nullResult.GetIssues().ToString());
+        expected.push_back({_C("Key", ui64(6)), _C("count", ui64(99)), _T<NullChecker>("message")});
+        testCase.CheckResult(expected);
+
+        testCase.DropReplication();
+        testCase.DropSourceTable();
+        testCase.ExecuteDDL(Sprintf("DROP TABLE `%s`;", testCase.TableName.data()));
+    }
+
+    Y_UNIT_TEST(LiteralDefaultsRow)
+    {
+        LiteralDefaults("ROW");
+    }
+
+    Y_UNIT_TEST(LiteralDefaultsGlobal)
+    {
+        LiteralDefaults("GLOBAL");
+    }
+
     Y_UNIT_TEST(Types)
     {
         MainTestCase testCase;

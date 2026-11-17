@@ -60,16 +60,16 @@ class TestVectorIndexNegative(VectorBase):
             sync="",
         )
         self.query(create_table_sql)
+        self._upsert_values(
+            all_types=all_types,
+            prefix=prefix_data,
+            pk_types=pk_types,
+            vector_type=vector_type,
+            vector_dimension=vector_dimension,
+            to_binary_string_converters=self.to_binary_string_converters,
+        )
         for prefix in prefixes:
             for cover in covers:
-                self._upsert_values(
-                    all_types=all_types,
-                    prefix=prefix_data,
-                    pk_types=pk_types,
-                    vector_type=vector_type,
-                    vector_dimension=vector_dimension,
-                    to_binary_string_converters=self.to_binary_string_converters,
-                )
                 try:
                     self._select(
                         vector_type=vector_type,

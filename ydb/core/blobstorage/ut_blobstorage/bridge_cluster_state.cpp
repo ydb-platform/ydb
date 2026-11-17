@@ -2,10 +2,132 @@
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
+#include <ydb/library/testlib/helpers.h>
+
+#include <algorithm>
 
 using NBridgeTest::GetBridgedLocation;
 
 Y_UNIT_TEST_SUITE(BridgeClusterState) {
+    Y_UNIT_TEST_TWIN(HistorySurvivesUncommittedState, rejoining) {
+        using TState = NKikimrBridge::TClusterState;
+        NKikimrBlobStorage::TStorageConfig config;
+        config.SetGeneration(1);
+        config.MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(2));
+        auto update = [&] {
+            if (const auto error = NStorage::TDistributedConfigKeeper::UpdateClusterStateGeneration(&config)) {
+                UNIT_FAIL(*error);
+            }
+            if (const auto error = NStorage::TDistributedConfigKeeper::TrimHistoryEntries(&config)) {
+                UNIT_FAIL(*error);
+            }
+        };
+        update();
+        auto advance = [&](TState::EPileState state) {
+            auto prev = config;
+            prev.ClearPrevConfig();
+            config.MutablePrevConfig()->CopyFrom(prev);
+            config.SetGeneration(prev.GetGeneration() + 1);
+            config.MutableClusterState()->SetPerPileState(1, state);
+            update();
+        };
+
+        advance(TState::DISCONNECTED);
+        advance(TState::NOT_SYNCHRONIZED_1);
+        if constexpr (!rejoining) {
+            advance(TState::NOT_SYNCHRONIZED_2);
+            advance(TState::NOT_SYNCHRONIZED_2);
+        }
+        const auto lastCommittedState = config.GetClusterState();
+        advance(rejoining ? TState::NOT_SYNCHRONIZED_2 : TState::SYNCHRONIZED);
+
+        const auto& history = config.GetClusterStateDetails().GetUnsyncedHistory();
+        UNIT_ASSERT_C(std::ranges::any_of(history, [&](const auto& entry) {
+            return NBridge::IsSameClusterState(entry.GetClusterState(), lastCommittedState);
+        }), "previous committed state was trimmed before its successor was committed on the pile");
+
+        const auto currentState = config.GetClusterState();
+        advance(currentState.GetPerPileState(1));
+        const auto& trimmed = config.GetClusterStateDetails().GetUnsyncedHistory();
+        UNIT_ASSERT_VALUES_EQUAL(trimmed.size(), 1);
+        UNIT_ASSERT(NBridge::IsSameClusterState(trimmed.Get(0).GetClusterState(), currentState));
+    }
+
+    Y_UNIT_TEST(RecoveredStateRejectsInvalidPileRolesAndStates) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        const auto current = QueryStorageConfig(env);
+        UNIT_ASSERT(!NStorage::ValidateConfig(current));
+        auto check = [&](const auto& mutate, TStringBuf expected) {
+            auto recovered = current;
+            mutate(*recovered.MutableClusterState());
+            const auto error = NStorage::ValidateConfig(recovered);
+            UNIT_ASSERT_C(error, "malformed recovered cluster state was accepted");
+            UNIT_ASSERT_STRING_CONTAINS(*error, expected);
+        };
+        for (ui32 role : {0u, 4u, Max<ui32>()}) {
+            check([&](auto& state) { state.SetPrimaryPile(role); }, "Incorrect primary pile");
+            check([&](auto& state) { state.SetPromotedPile(role); }, "Incorrect promoted pile");
+        }
+        check([](auto& state) { state.SetPerPileState(0, NKikimrBridge::TClusterState::SUSPENDED); },
+            "Incorrect primary pile state");
+        check([](auto& state) {
+            state.SetPromotedPile(2);
+            state.SetPerPileState(1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+        }, "Incorrect promoted pile state");
+        check([](auto& state) {
+            state.SetPerPileState(2, static_cast<NKikimrBridge::TClusterState::EPileState>(Max<int>()));
+        }, "Incorrect pile state");
+        auto valid = current;
+        valid.MutableClusterState()->SetPromotedPile(2);
+        valid.MutableClusterState()->SetPerPileState(2, NKikimrBridge::TClusterState::SUSPENDED);
+        UNIT_ASSERT(!NStorage::ValidateConfig(valid));
+    }
+
+    Y_UNIT_TEST(RejectsInvalidPileRolesAndStates) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto current = QueryStorageConfig(env).GetClusterState();
+        auto check = [&](const auto& mutate, TStringBuf expected) {
+            auto next = current;
+            next.SetGeneration(next.GetGeneration() + 1);
+            mutate(next);
+            const auto response = InvokeDistconf(env, [&](auto& record) {
+                record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(next);
+            });
+            UNIT_ASSERT_EQUAL_C(response.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
+                response.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(response.GetErrorReason(), expected);
+            UNIT_ASSERT_VALUES_EQUAL(QueryStorageConfig(env).GetClusterState().SerializeAsString(),
+                current.SerializeAsString());
+        };
+        for (ui32 role : {0u, 3u, Max<ui32>()}) {
+            check([&](auto& state) { state.SetPrimaryPile(role); }, "Incorrect primary pile");
+            check([&](auto& state) { state.SetPromotedPile(role); }, "Incorrect promoted pile");
+        }
+        check([](auto& state) {
+            state.SetPerPileState(1, static_cast<NKikimrBridge::TClusterState::EPileState>(Max<int>()));
+        }, "Incorrect pile state");
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        checker.CheckAll();
+    }
+
     Y_UNIT_TEST(DisconnectReplacesSyncStateAfterAnotherPile) {
         TEnvironmentSetup env{{
             .NodeCount = 24,

@@ -36,3 +36,7 @@ SIZE(MEDIUM)
 REQUIREMENTS(ram:16)
 
 END()
+
+RECURSE_FOR_TESTS(
+    sqs_federation_tests
+)

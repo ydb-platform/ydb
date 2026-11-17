@@ -91,6 +91,7 @@ sql_stmt_core:
   | create_symlink_stmt
   | drop_symlink_stmt
   | kill_session_stmt
+  | checksum_table_stmt
 ;
 
 expr:
@@ -1086,7 +1087,7 @@ alter_replication_action:
 
 alter_replication_set_setting: SET LPAREN replication_settings RPAREN;
 
-drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
+drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE? FORCE?;
 
 lambda_or_parameter:
     lambda
@@ -1261,6 +1262,8 @@ rollback_stmt: ROLLBACK;
 analyze_table: simple_table_ref (LPAREN column_list RPAREN)? sample_clause?;
 analyze_table_list: analyze_table (COMMA analyze_table)* COMMA?;
 analyze_stmt: ANALYZE analyze_table_list;
+
+checksum_table_stmt: CHECKSUM TABLE simple_table_ref_core with_table_settings?;
 
 alter_sequence_stmt: ALTER SEQUENCE (IF EXISTS)? object_ref alter_sequence_action+;
 alter_sequence_action:
@@ -1508,6 +1511,7 @@ keyword_as_compat:
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CHECKSUM
   | CLASSIFIER
   // | COLLATE
   | COLLECTION
@@ -1563,6 +1567,7 @@ keyword_as_compat:
   | FOLLOWING
   | FOR
   | FOREIGN
+  | FORCE
   | FUNCTION
   | GENERATED
   | GLOB
@@ -1756,6 +1761,7 @@ keyword_compat: (
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CHECKSUM
   | CLASSIFIER
   | COLLATE
   | COLLECTION
@@ -1811,6 +1817,7 @@ keyword_compat: (
   | FOLLOWING
   | FOR
   | FOREIGN
+  | FORCE
   | FUNCTION
   | GENERATED
   | GLOB
@@ -2112,6 +2119,7 @@ CASE: C A S E;
 CAST: C A S T;
 CHANGEFEED: C H A N G E F E E D;
 CHECK: C H E C K;
+CHECKSUM: C H E C K S U M;
 CLASSIFIER: C L A S S I F I E R;
 COLLATE: C O L L A T E;
 COLUMN: C O L U M N;
@@ -2183,6 +2191,7 @@ FLOW: F L O W;
 FOLLOWING: F O L L O W I N G;
 FOR: F O R;
 FOREIGN: F O R E I G N;
+FORCE: F O R C E;
 FROM: F R O M;
 FULL: F U L L;
 FUNCTION: F U N C T I O N;

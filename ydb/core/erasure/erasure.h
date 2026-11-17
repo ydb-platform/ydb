@@ -248,6 +248,8 @@ struct TErasureParameters;
 
 struct TErasureType {
 
+    static constexpr ui32 MaxTotalParts = 10;
+
     enum EErasureSpecies {
         ErasureNone = 0,
 

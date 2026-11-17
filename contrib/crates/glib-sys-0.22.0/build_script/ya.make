@@ -1,0 +1,44 @@
+# Native Rust build POC; host build script.
+
+RUST_BUILD_SCRIPT(build_script_build)
+
+CRATE_VERSION(0.22.0)
+CRATE_EDITION(2024)
+CRATE_ROOT(../build.rs)
+CRATE_MANIFEST(../Cargo.toml)
+VERSION(0.22.0)
+LICENSE("MIT")
+CRATE_MANIFEST_DIR(..)
+
+CRATE_SOURCES(
+    ../src/lib.rs
+    ../src/manual.rs
+)
+
+CRATE_INPUTS(
+    ../.cargo-checksum.json
+    ../.cargo_vcs_info.json
+    ../Cargo.lock
+    ../Gir.toml
+    ../LICENSE
+    ../versions.txt
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_ENV(
+    SYSTEM_DEPS_GLIB_2_0_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_GLIB_2_0_LIB=glib_2_0
+    SYSTEM_DEPS_GOBJECT_2_0_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_GOBJECT_2_0_LIB=gobject_2_0
+)
+
+PEERDIR(
+    contrib/crates/system-deps-7.0.7
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
+)
+
+END()

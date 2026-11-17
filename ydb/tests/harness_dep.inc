@@ -15,6 +15,7 @@ ELSE()  # default ydbd from current source tree
 ENDIF()
 
 ENV(YDB_DRIVER_BINARY=${YDB_DRIVER_BINARY})
+ENV(YDB_TEST_DISABLE_MLOCK=1)
 
 DEPENDS(
     ydb/apps/ydb

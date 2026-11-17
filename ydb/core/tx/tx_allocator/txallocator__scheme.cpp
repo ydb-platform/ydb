@@ -13,7 +13,7 @@ struct TTxAllocator::TTxSchema: public TTransactionBase<TTxAllocator> {
         : TBase(allocator)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_RESERVE; }
+    TTxType GetTxType() const override { return TXTYPE_INIT; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();

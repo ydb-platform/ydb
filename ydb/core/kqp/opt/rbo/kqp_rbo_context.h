@@ -28,6 +28,8 @@ class IFunctionRegistry;
 
 namespace NKikimr::NKqp {
 
+class TCompileTrace;
+
 class TRBOContext {
 public:
     TRBOContext(NOpt::TKqpOptimizeContext& kqpCtx, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx,
@@ -36,6 +38,8 @@ public:
     bool NeedToLog() const {
         return TraceLog.NeedToLog();
     }
+
+    TCompileTrace* GetCompileTrace() const;
 
     template <typename TEnricher>
     void EnrichRuleLog(TEnricher&& enricher) {

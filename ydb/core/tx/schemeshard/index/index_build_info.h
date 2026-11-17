@@ -1,5 +1,7 @@
 #pragma once
 
+#include "index_utils.h"
+
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
@@ -235,6 +237,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::THnswIndexDescription,
         NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
 
     struct TKMeans {
@@ -751,6 +754,13 @@ public:
                     indexInfo->SpecializedIndexDescription = std::move(desc);
                     break;
                 }
+                case NKikimrSchemeOp::TIndexCreationConfig::kHnswIndexDescription: {
+                    auto& desc = *creationConfig.MutableHnswIndexDescription();
+                    TString createError;
+                    Y_ENSURE(NKikimr::NKMeans::ValidateHnswSettingsPartial(desc.GetSettings(), createError), createError);
+                    indexInfo->SpecializedIndexDescription = std::move(desc);
+                    break;
+                }
                 case NKikimrSchemeOp::TIndexCreationConfig::kFulltextIndexDescription: {
                     auto& desc = *creationConfig.MutableFulltextIndexDescription();
                     indexInfo->SpecializedIndexDescription = std::move(desc);
@@ -874,10 +884,7 @@ public:
     }
 
     bool IsBuildFulltextCompact() const {
-        return BuildKind == EBuildKind::BuildFulltext && (
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
+        return BuildKind == EBuildKind::BuildFulltext && NTableIndex::IsCompactFulltextIndex(IndexType);
     }
 
     // A compact fulltext build that uses __ydb_row_id as the doc id: it runs a prepass building the

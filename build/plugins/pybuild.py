@@ -3,6 +3,7 @@ import json
 import os
 from hashlib import md5
 
+import coverage
 import ymake
 from _common import (
     stripext,
@@ -18,6 +19,86 @@ PY_NAMESPACE_PREFIX = 'py/namespace'
 BUILTIN_PROTO = 'builtin_proto'
 DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
 DEFAULT_BLACK_FILE_PROCESSING_TIME = "1.5"  # in seconds
+
+
+PY3_RESFS_PACK_GROUP = 32
+
+
+def _root_relative(path, unit):
+    """
+    The source path relative to the source or the build root, also for generated sources like ${BINDIR}/x.py,
+    compiled into the bytecode (resfs/src gets ${rootrel} rendered by ymake, see _PY3_RESFS_PACK).
+    """
+    rel = rootrel_arc_src(path, unit)
+    if rel.startswith('${BINDIR}/'):
+        return unit.path()[3:] + '/' + rel[len('${BINDIR}/') :]
+    resolved = unit.resolve_arc_path(rel)
+    if resolved.startswith(('$S/', '$B/')):
+        return resolved[3:]
+    return rel
+
+
+def _py3_resfs_pack_group_size(unit):
+    return max(1, int(unit.get('PY3_RESFS_PACK_GROUP') or PY3_RESFS_PACK_GROUP))
+
+
+def _py3_resfs_pack_groups(items, group_size):
+    """
+    Content-defined grouping: items are ordered by resource name and a group ends after an item
+    whose name hash hits 1/group_size (or once the group grows to 4 * group_size items). Adding or
+    removing a file reshapes only its own group instead of shifting all the groups after it.
+    """
+    group = []
+    for item in sorted(items, key=lambda item: item[1]):
+        group.append(item)
+        boundary = int(md5(item[1].encode('utf-8')).hexdigest()[:8], 16) % group_size == 0
+        if boundary or len(group) >= 4 * group_size:
+            yield group
+            group = []
+    if group:
+        yield group
+
+
+def _add_py3_resfs_packs(unit, items, with_py, with_pyc, kv):
+    """
+    items: [(srcx, dest, path)], kv: ['key=value']. Groups the items and calls _PY3_RESFS_PACK for each
+    group (see tools/pyres_pack); the kv records go to the first group. Returns False if nothing is packed.
+    """
+    if not with_py and not with_pyc:
+        return False
+    flags = []
+    if not with_py:
+        flags.append('--no-py')
+    if not with_pyc:
+        flags.append('--no-pyc')
+
+    for idx, group in enumerate(_py3_resfs_pack_groups(items, _py3_resfs_pack_group_size(unit))):
+        extra = kv if idx == 0 else []
+        # named after the content, so that untouched groups keep their outputs (and cache hits)
+        name = md5(json.dumps([flags, group, extra]).encode('utf-8')).hexdigest()[:16]
+        args = ['pyres_{}.pyres'.format(name)]
+        if flags:
+            args += ['FLAGS'] + flags
+        args += ['SRCX'] + [srcx for srcx, _, _ in group]
+        args += ['DEST'] + [dest for _, dest, _ in group]
+        args += ['SRC'] + [path for _, _, path in group]
+        if extra:
+            args += ['KV'] + extra
+        unit.on_py3_resfs_pack(args)
+    return True
+
+
+def _add_py3_assert_rewrite(unit, pys):
+    res = []
+    items = [(_root_relative(path, unit) + '-', 'py/' + mod.replace('.', '/') + '.py', path) for path, mod in pys]
+    for group in _py3_resfs_pack_groups(items, _py3_resfs_pack_group_size(unit)):
+        outs = [path + uniq_suffix(path, unit) + '.yapyc3ar' for _, _, path in group]
+        unit.on_py3_assert_rewrite(
+            ['SRCX'] + [srcx for srcx, _, _ in group] + ['SRC'] + [path for _, _, path in group] + ['OUT'] + outs
+        )
+        for (_, dest, _), out in zip(group, outs):
+            res += ['DEST', dest + '.yapyc3ar', out]
+    _split_macro_call(unit.onresource_files, res, 3)
 
 
 def _split_macro_call(macro_call, data, item_size, chunk_size=1024, compress=False):
@@ -89,7 +170,12 @@ def mangle(name):
     return ''.join('{}{}'.format(len(s), s) for s in name.split('.'))
 
 
-def parse_pyx_includes(filename, path, source_root, seen=None, py3=True):
+def parse_pyx_includes(filename, path, source_root, seen=None, py3=True, root_relative=False):
+    """
+    Yields (root relative name, path) of the files textually included into the cython source.
+    Arcadia root relative includes belong to another module and are yielded only on root_relative demand.
+    """
+
     def normpath(*args):
         return os.path.normpath(os.path.join(*args))
 
@@ -118,18 +204,23 @@ def parse_pyx_includes(filename, path, source_root, seen=None, py3=True):
             incname, incpath = normpath(file_dirname, incfile), normpath(path_dirname, incfile)
             yield (incname, incpath)
             # search for includes in the included files
-            for e in parse_pyx_includes(incname, incpath, source_root, seen, py3):
+            for e in parse_pyx_includes(incname, incpath, source_root, seen, py3, root_relative):
                 yield e
         else:
             # There might be arcadia root or cython relative include.
             # Don't treat such file as missing, because there must be PEERDIR on py_library
             # which contains it.
             cython_dir = "/contrib/tools/cython/" if py3 else "/contrib/tools/cython_py2/"
-            for path in [
+            for base_dir in [
                 source_root,
                 source_root + cython_dir + "Cython/Includes",
             ]:
-                if os.path.exists(normpath(path, incfile)):
+                if os.path.exists(normpath(base_dir, incfile)):
+                    if root_relative and base_dir == source_root:
+                        incname, incpath = os.path.normpath(incfile), '${ARCADIA_ROOT}/' + incfile
+                        yield (incname, incpath)
+                        for e in parse_pyx_includes(incname, incpath, source_root, seen, py3, root_relative):
+                            yield e
                     break
             else:
                 ymake.report_configure_error("'{}' includes missing file: {} ({})".format(path, incfile, abs_path))
@@ -137,6 +228,26 @@ def parse_pyx_includes(filename, path, source_root, seen=None, py3=True):
 
 def has_pyx(args):
     return any(arg.endswith('.pyx') for arg in args)
+
+
+def is_cython_coverage_enabled(unit, pyxs, py3):
+    """
+    Tracing slows a module down and changes its uids, so only modules with sources to report get it.
+    The report is filtered per file at runtime, that is why sources, textually included ones as well,
+    are checked here instead of the module path.
+    """
+    if unit.get('CYTHON_COVERAGE') != 'yes':
+        return False
+    filters = coverage.get_coverage_filters(unit)
+    source_root = unit.resolve('$S')
+    for path, _ in pyxs:
+        filename = rootrel_arc_src(path, unit)
+        if coverage.should_be_covered(unit, filters, filename):
+            return True
+        for include, _ in parse_pyx_includes(filename, path, source_root, None, py3, root_relative=True):
+            if coverage.should_be_covered(unit, filters, include):
+                return True
+    return False
 
 
 def get_srcdir(path, unit):
@@ -222,9 +333,6 @@ def py_program(unit, py3):
     if unit.get('OS_WINDOWS') == 'yes':
         unit.onwindows_long_path_manifest()
 
-    if unit.get('MODULE_TYPE') == 'PROGRAM':  # can not check DLL
-        unit.onadd_check_py_imports()
-
 
 @ymake.macro
 def PY_SRCS(unit: ymake.Unit, *args: str):
@@ -290,13 +398,10 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
     else:
         ns = (unit.get('PY_NAMESPACE_VALUE') or upath.replace('/', '.')) + '.'
 
-    cython_coverage = unit.get('CYTHON_COVERAGE') == 'yes'
     cythonize_py = False
     optimize_proto = unit.get('OPTIMIZE_PY_PROTOS_FLAG') == 'yes'
 
     cython_directives = []
-    if cython_coverage:
-        cython_directives += ['-X', 'linetrace=True']
 
     pyxs_c = []
     pyxs_c_h = []
@@ -448,7 +553,14 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
         # for currently processing pyx file.
         include_map = collections.defaultdict(set)
 
+        cython_coverage = is_cython_coverage_enabled(
+            unit, pyxs_c + pyxs_c_h + pyxs_c_api_h + pyxs_cpp + pyxs_cpp_h + pyxs_cpp_api_h, py3
+        )
         if cython_coverage:
+            # The last directive wins, so CYTHON_DIRECTIVE linetrace=False still turns tracing off
+            cython_directives = ['-X', 'linetrace=True'] + cython_directives
+            # linetrace=True only emits the trace calls, these defines compile them in
+            unit.oncflags(['-DCYTHON_TRACE=1', '-DCYTHON_TRACE_NOGIL=1', '-DCYTHON_USE_SYS_MONITORING=0'])
 
             def process_pyx(filename, path, out_suffix, with_ext):
                 # skip generated files
@@ -529,7 +641,9 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
         if py_files2res:
             # Compile original and generated sources into target for proper cython coverage calculation
             for files2res in (py_files2res, cpp_files2res):
-                unit.onresource_files(['DONT_COMPRESS'] + [x for name, path in files2res for x in ('DEST', name, path)])
+                unit.onresource_files(
+                    ['DONT_COMPRESS'] + [x for name, path in sorted(files2res) for x in ('DEST', name, path)]
+                )
 
         if include_map:
             for cython in ['cython' if py3 else 'cython_py2']:
@@ -565,6 +679,8 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
         if py3:
             mod_list_md5 = md5()
             resfs_mocks = []
+            static_pack = unit.get('_PY3_RESFS_STATIC') == 'yes'
+            pack_items = []
 
             for path, mod in pys:
                 mod_list_md5.update(mod.encode('utf-8'))
@@ -578,6 +694,8 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
                 # - https://docs.yandex-team.ru/ya-make/manual/python/vars
                 if external_py_files_mode and is_extended_source_search_enabled(path, unit):
                     resfs_mocks += ['-', 'resfs/src/resfs/file/' + dest + '=' + rootrel_arc_src(path, unit)]
+                elif static_pack:
+                    pack_items.append((_root_relative(path, unit) + '-', dest, path))
                 else:
                     if with_py:
                         res += ['DEST', dest, path]
@@ -590,7 +708,22 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
             if resfs_mocks:
                 unit.onresource(['DONT_COMPRESS'] + resfs_mocks)
 
-            if py_namespaces:
+            if with_pyc and not external_py_files_mode and unit.get('PY3_ASSERT_REWRITE') != 'no':
+                _add_py3_assert_rewrite(unit, [(path, mod) for path, mod in pys if mod.startswith('__tests__.')])
+
+            ns_packed = False
+            if pack_items:
+                # The namespace records travel in the pack as well. Their keys only need a unique prefix:
+                # derived from the record itself, it does not change when modules are added or removed.
+                ns_kv = []
+                for path, ns in sorted(py_namespaces.items()):
+                    record = '{}={}'.format(path, ':'.join(sorted(ns)))
+                    ns_kv.append(
+                        '{}/{}/{}'.format(PY_NAMESPACE_PREFIX, md5(record.encode('utf-8')).hexdigest(), record)
+                    )
+                ns_packed = _add_py3_resfs_packs(unit, pack_items, with_py, with_pyc, ns_kv)
+
+            if py_namespaces and not ns_packed:
                 # Note: Add md5 to key to prevent key collision if two or more PY_SRCS() used in the same ya.make
                 ns_res = ['DONT_COMPRESS']
                 for path, ns in sorted(py_namespaces.items()):

@@ -1,0 +1,8 @@
+sys/auxv.h is unavailable in Arcadia build.
+
+--- a/meson.build
++++ b/meson.build
+@@ -249 +248,0 @@
+-  'sys/auxv.h',
+@@ -431 +429,0 @@
+-  'getauxval',

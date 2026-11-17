@@ -86,9 +86,12 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
-                .NotAsyncReplicaTable()
                 .IsCommonSensePath()
                 .IsTheSameDomain(domainPath);
+
+            if (checks && (!request.GetInternal() || !tablePath.IsImportingReplica())) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (!checks) {
                 return Reply(checks.GetStatus(), checks.GetError());
@@ -306,9 +309,21 @@ public:
                             notNull,
                             familyName));
                 } else {
+                    const auto& literal = colInfo.default_from_literal();
+                    if (literal.value().has_null_flag_value()) {
+                        if (notNull) {
+                            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                                << "Cannot add not null column '" << colInfo.GetColumnName() << "' with NULL default value");
+                        }
+                        if (!literal.type().has_optional_type() && !literal.type().has_pg_type()) {
+                            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                                << "NULL default value for column '" << colInfo.GetColumnName()
+                                << "' requires an optional or PostgreSQL type");
+                        }
+                    }
                     buildInfo->BuildColumns.push_back(
                         TIndexBuildInfo::TColumnBuildInfo(
-                            colInfo.GetColumnName(), colInfo.default_from_literal(), notNull, familyName));
+                            colInfo.GetColumnName(), literal, notNull, familyName));
                 }
             }
         } else {
@@ -394,6 +409,9 @@ private:
         const auto& index = settings.index();
 
         switch (index.type_case()) {
+        case Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex:
+            explain = "HNSW index implementation is not available yet";
+            return false;
         case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
             explain = "Invalid or unset index type";
             return false;

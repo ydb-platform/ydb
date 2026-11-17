@@ -109,7 +109,6 @@ public:
         if (mode == ITableKeys::EBuildKeysMode::INPUT &&
             IsQueryMode(ctx.Settings.Mode) &&
             Service_ != KikimrProviderName &&
-            Service_ != RtmrProviderName &&
             Service_ != YdbProviderName) {
             key = Y("MrTableConcat", key);
         }
@@ -1404,14 +1403,14 @@ public:
             opts = L(opts, Q(Y(Q("columnsDefaultValues"), Q(columnsDefaultValueSettings))));
         }
 
-        if (Table_.Service == YtProviderName || Table_.Service == RtmrProviderName) {
+        if (Table_.Service == YtProviderName) {
             if (!Params_.PkColumns.empty() && !Params_.PartitionByColumns.empty()) {
                 ctx.Error() << "Only one of PRIMARY KEY or PARTITION BY constraints may be specified";
                 return false;
             }
         } else {
             if (!Params_.OrderByColumns.empty()) {
-                ctx.Error() << "ORDER BY is supported only for " << YtProviderName << " or " << RtmrProviderName << " provider.";
+                ctx.Error() << "ORDER BY is supported only for " << YtProviderName << " provider.";
                 return false;
             }
         }
@@ -2321,8 +2320,8 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
 
 class TDropAsyncReplication final: public TAsyncReplication {
 public:
-    explicit TDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context)
-        : TAsyncReplication(pos, id, cascade ? "dropCascade" : "drop", context)
+    explicit TDropAsyncReplication(TPosition pos, const TString& id, const TString& mode, const TObjectOperatorContext& context)
+        : TAsyncReplication(pos, id, mode, context)
     {
     }
 
@@ -2333,8 +2332,8 @@ protected:
 
 }; // TDropAsyncReplication
 
-TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context) {
-    return new TDropAsyncReplication(pos, id, cascade, context);
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, const TString& mode, const TObjectOperatorContext& context) {
+    return new TDropAsyncReplication(pos, id, mode, context);
 }
 
 class TAlterAsyncReplication final: public TAsyncReplication {
@@ -2739,12 +2738,7 @@ public:
                 }
 
                 if (ctx.DqEngineEnable) {
-                    TString mode = "auto";
-                    if (ctx.PqReadByRtmrCluster && ctx.PqReadByRtmrCluster != "dq") {
-                        mode = "disable";
-                    } else if (ctx.DqEngineForce) {
-                        mode = "force";
-                    }
+                    const TString mode = ctx.DqEngineForce ? "force" : "auto";
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                                                            BuildQuotedAtom(Pos_, "DqEngine"), BuildQuotedAtom(Pos_, mode))));
                 }
@@ -2783,21 +2777,11 @@ public:
                                                            BuildQuotedAtom(Pos_, "DeriveColumnOrder"))));
                 }
 
-                if (ctx.PqReadByRtmrCluster) {
+                if (ctx.PqReadByDq) {
                     auto pqSourceAll = Y("DataSource", BuildQuotedAtom(Pos_, TString(PqProviderName)), BuildQuotedAtom(Pos_, "$all"));
+                    // Preserve the legacy PQ attribute used to select the DQ reader.
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", pqSourceAll,
-                                                           BuildQuotedAtom(Pos_, "Attr"), BuildQuotedAtom(Pos_, "PqReadByRtmrCluster_"), BuildQuotedAtom(Pos_, ctx.PqReadByRtmrCluster))));
-
-                    auto rtmrSourceAll = Y("DataSource", BuildQuotedAtom(Pos_, TString(RtmrProviderName)), BuildQuotedAtom(Pos_, "$all"));
-                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", rtmrSourceAll,
-                                                           BuildQuotedAtom(Pos_, "Attr"), BuildQuotedAtom(Pos_, "PqReadByRtmrCluster_"), BuildQuotedAtom(Pos_, ctx.PqReadByRtmrCluster))));
-
-                    if (ctx.PqReadByRtmrCluster != "dq") {
-                        // set any dynamic settings for particular RTMR cluster for CommitAll!
-                        auto rtmrSource = Y("DataSource", BuildQuotedAtom(Pos_, TString(RtmrProviderName)), BuildQuotedAtom(Pos_, ctx.PqReadByRtmrCluster));
-                        currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", rtmrSource,
-                                                               BuildQuotedAtom(Pos_, "Attr"), BuildQuotedAtom(Pos_, "Dummy_"), BuildQuotedAtom(Pos_, "1"))));
-                    }
+                                                           BuildQuotedAtom(Pos_, "Attr"), BuildQuotedAtom(Pos_, "PqReadByRtmrCluster_"), BuildQuotedAtom(Pos_, "dq"))));
                 }
 
                 if (ctx.YsonCastToString.Defined()) {

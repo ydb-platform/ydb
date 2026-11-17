@@ -1241,11 +1241,11 @@ private:
 
 TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, const TExprNode::TPtr& predicate,
     const TJoinLabels& labels, const TExprNode& row, const THashMap<TString, TString>& backRenameMap,
-    TExprContext& ctx, bool rotateJoinTree)
+    TExprContext& ctx, bool rotateJoinTree, bool allowAggrEquals)
 {
     TExprNode::TPtr left;
     TExprNode::TPtr right;
-    if (!IsMemberEquality(predicate, row, left, right)) {
+    if (!IsMemberEquality(predicate, row, left, right, allowAggrEquals)) {
         return equiJoin;
     }
 
@@ -1297,12 +1297,6 @@ bool IsExtractOrPredicatesOverEquiJoinEnabled(const TTypeAnnotationContext* type
     YQL_ENSURE(types);
     static const char Flag[] = "ExtractOrPredicatesOverEquiJoin";
     return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
-}
-
-bool IsNormalizeEqualityFilterOverJoinEnabled(const TTypeAnnotationContext* types) {
-    YQL_ENSURE(types);
-    static const char Flag[] = "NormalizeEqualityFilterOverJoin";
-    return !IsOptimizerDisabled<Flag>(*types);
 }
 
 struct TExtraInputPredicates {
@@ -2052,12 +2046,9 @@ TExprBase FlatMapOverEquiJoin(
             }
         }
 
-        if (IsNormalizeEqualityFilterOverJoinEnabled(types)) {
-            auto newNode = NormalizeEqualityFilterOverJoin(node, labels, backRenameMap, parentsMap, ctx);
-            if (newNode.Raw() != node.Raw()) {
-                YQL_CLOG(DEBUG, Core) << "NormalizeEqualityFilterOverJoin";
-                return newNode;
-            }
+        if (auto newNode = NormalizeEqualityFilterOverJoin(node, labels, backRenameMap, parentsMap, ctx); newNode.Raw() != node.Raw()) {
+            YQL_CLOG(DEBUG, Core) << "NormalizeEqualityFilterOverJoin";
+            return newNode;
         }
 
         if (IsEqualityFilterOverJoinEnabled(types)) {
@@ -2132,9 +2123,10 @@ TExprBase FlatMapOverEquiJoin(
                 }
             }
 
-            if (!IsEqualityFilterOverJoinEnabled(types) && inputs.size() == 2) {
+            const bool allowAggrEquals = IsAggrEqualsJoinKeysEnabled(*types);
+            if (inputs.size() == 2 && (!IsEqualityFilterOverJoinEnabled(types) || (allowAggrEquals && andTerm->IsCallable("AggrEquals")))) {
                 auto newJoin = DecayCrossJoinIntoInner(equiJoin.Ptr(), andTerm,
-                    labels, row, backRenameMap, ctx, types->RotateJoinTree);
+                    labels, row, backRenameMap, ctx, types->RotateJoinTree, allowAggrEquals);
                 if (newJoin != equiJoin.Ptr()) {
                     YQL_CLOG(DEBUG, Core) << "DecayCrossJoinIntoInner";
                     ret = newJoin;

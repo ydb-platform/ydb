@@ -92,6 +92,7 @@ namespace NSequenceShard {
             HFunc(TEvSequenceShard::TEvRestoreSequence, Handle);
             HFunc(TEvSequenceShard::TEvRedirectSequence, Handle);
             HFunc(TEvSequenceShard::TEvGetSequence, Handle);
+            HFunc(TEvSequenceShard::TEvAdvanceSequence, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {

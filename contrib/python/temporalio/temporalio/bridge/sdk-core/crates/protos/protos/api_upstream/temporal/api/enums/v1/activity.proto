@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package temporal.api.enums.v1;
+
+option go_package = "go.temporal.io/api/enums/v1;enums";
+option java_package = "io.temporal.api.enums.v1";
+option java_multiple_files = true;
+option java_outer_classname = "ActivityProto";
+option ruby_package = "Temporalio::Api::Enums::V1";
+option csharp_namespace = "Temporalio.Api.Enums.V1";
+
+// Status of a standalone activity.
+// The status is updated when the activity is originally scheduled, paused, unpaused, and when the
+// activity reaches a terminal state.
+// (-- api-linter: core::0216::synonyms=disabled
+//     aip.dev/not-precedent: Named consistently with WorkflowExecutionStatus. --)
+enum ActivityExecutionStatus {
+    ACTIVITY_EXECUTION_STATUS_UNSPECIFIED = 0;
+
+    // The activity has not reached a terminal status. See PendingActivityState for the run state
+    // (SCHEDULED, STARTED, or CANCEL_REQUESTED).
+    ACTIVITY_EXECUTION_STATUS_RUNNING = 1;
+
+    // The activity completed successfully. An activity can complete even after cancellation is
+    // requested if the worker calls RespondActivityTaskCompleted before acknowledging cancellation.
+    ACTIVITY_EXECUTION_STATUS_COMPLETED = 2;
+
+    // The activity failed. Causes:
+    // - Worker returned a non-retryable failure
+    // - RetryPolicy.maximum_attempts exhausted
+    // - Attempt failed after cancellation was requested (retries blocked)
+    ACTIVITY_EXECUTION_STATUS_FAILED = 3;
+
+    // The activity was canceled. Reached when:
+    // - Cancellation requested while SCHEDULED (immediate), or
+    // - Cancellation requested while STARTED and worker called RespondActivityTaskCanceled.
+    //
+    // Workers discover cancellation requests via heartbeat responses (cancel_requested=true).
+    // Activities that do not heartbeat will not learn of cancellation and may complete, fail, or
+    // time out normally. CANCELED requires explicit worker acknowledgment or immediate cancellation
+    // of a SCHEDULED activity.
+    ACTIVITY_EXECUTION_STATUS_CANCELED = 4;
+
+    // The activity was terminated. Immediate; does not wait for worker acknowledgment.
+    ACTIVITY_EXECUTION_STATUS_TERMINATED = 5;
+
+    // The activity timed out. See TimeoutType for the specific timeout.
+    // - SCHEDULE_TO_START and SCHEDULE_TO_CLOSE timeouts always result in TIMED_OUT.
+    // - START_TO_CLOSE and HEARTBEAT may retry if RetryPolicy permits; TIMED_OUT is
+    //   reached when retry is blocked (RetryPolicy.maximum_attempts exhausted,
+    //   SCHEDULE_TO_CLOSE would be exceeded, or cancellation has been requested).
+    ACTIVITY_EXECUTION_STATUS_TIMED_OUT = 6;
+
+    // The activity is paused. Paused state is only reachable after calling
+    // PauseActivityExecution on a standalone activity.
+    ACTIVITY_EXECUTION_STATUS_PAUSED = 7;
+}
+
+// Defines whether to allow re-using an activity ID from a previously *closed* activity.
+// If the request is denied, the server returns an `ActivityExecutionAlreadyStarted` error.
+//
+// See `ActivityIdConflictPolicy` for handling ID duplication with a *running* activity.
+enum ActivityIdReusePolicy {
+    ACTIVITY_ID_REUSE_POLICY_UNSPECIFIED = 0;
+    // Always allow starting an activity using the same activity ID.
+    ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE = 1;
+    // Allow starting an activity using the same ID only when the last activity's final state is one
+    // of {failed, canceled, terminated, timed out}.
+    ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY = 2;
+    // Do not permit re-use of the ID for this activity. Future start requests could potentially change the policy,
+    // allowing re-use of the ID.
+    ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE = 3;
+}
+
+// Defines what to do when trying to start an activity with the same ID as a *running* activity.
+// Note that it is *never* valid to have two running instances of the same activity ID.
+//
+// See `ActivityIdReusePolicy` for handling activity ID duplication with a *closed* activity.
+enum ActivityIdConflictPolicy {
+    ACTIVITY_ID_CONFLICT_POLICY_UNSPECIFIED = 0;
+    // Don't start a new activity; instead return `ActivityExecutionAlreadyStarted` error.
+    ACTIVITY_ID_CONFLICT_POLICY_FAIL = 1;
+    // Don't start a new activity; instead return a handle for the running activity.
+    ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING = 2;
+}

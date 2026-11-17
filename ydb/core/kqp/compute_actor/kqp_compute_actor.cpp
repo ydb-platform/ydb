@@ -93,10 +93,6 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
                 return WrapDqHashAggregate(callable, ctx);
             }
 
-            if (name == "FulltextAnalyze"sv) {
-                return WrapFulltextAnalyze(callable, ctx);
-            }
-
             if (name == "KqpStreamEnumerate"sv) {
                 return WrapKqpStreamEnumerate(callable, ctx);
             }

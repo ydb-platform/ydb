@@ -18,6 +18,8 @@ namespace NYql::NDqs {
         TVector<NDqProto::TDqTask> Tasks;
         NActors::TActorId SourceID;
         TString ResultType;
+        TString UploadPrefix;
+        TString UploadClusterAddress;
     };
 
     class IDqsExecutionPlanner {
@@ -29,10 +31,10 @@ namespace NYql::NDqs {
         virtual TString GetResultType() const = 0;
 
         TPlan GetPlan() {
-            return TPlan {
-                GetTasks(),
-                GetSourceID(),
-                GetResultType()
+            return TPlan{
+                .Tasks = GetTasks(),
+                .SourceID = GetSourceID(),
+                .ResultType = GetResultType(),
             };
         }
     };

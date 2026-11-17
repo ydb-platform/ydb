@@ -1,136 +1,63 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import pytest
-import logging
-import os
-import time
-
+from ydb.tests.fq.streaming_common.common import StreamingTestBase, get_checkpoint_coordinator_metric
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
-from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
-from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
-from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
-import library.python.retry as retry
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-import ydb.public.api.protos.draft.fq_pb2 as fq
+from ydb.tests.library.common.wait_for import wait_for
 
 
-@pytest.fixture
-def kikimr(request):
-    kikimr_conf = StreamingOverKikimrConfig(
-        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(1)}
-    )
-    kikimr = StreamingOverKikimr(kikimr_conf)
-    kikimr.start_mvp_mock_server()
-    kikimr.start()
-    yield kikimr
-    kikimr.stop_mvp_mock_server()
-    kikimr.stop()
-
-
-class TestRecoveryMatchRecognize(TestYdsBase):
-    @classmethod
-    def setup_class(cls):
-        # for retry
-        cls.retry_conf = retry.RetryConf().upto(seconds=30).waiting(0.1)
-
-    def dump_workers(self, kikimr, worker_count, ca_count, wait_time=plain_or_under_sanitizer(30, 150)):
-        deadline = time.time() + wait_time
-        while True:
-            wcs = 0
-            ccs = 0
-            list = []
-            for node_index in kikimr.control_plane.kikimr_cluster.nodes:
-                wc = kikimr.control_plane.get_worker_count(node_index)
-                cc = kikimr.control_plane.get_ca_count(node_index)
-                wcs += wc
-                ccs += cc
-                list.append([node_index, wc, cc])
-            if wcs == worker_count and ccs == ca_count:
-                for [s, w, c] in list:
-                    if w * 2 != c:
-                        continue
-                for [s, w, c] in list:
-                    logging.debug("Node {}, workers {}, ca {}".format(s, w, c))
-                return
-            if time.time() > deadline:
-                for [s, w, c] in list:
-                    logging.debug("Node {}, workers {}, ca {}".format(s, w, c))
-                assert False, "Workers={} and CAs={}, but {} and {} expected".format(wcs, ccs, worker_count, ca_count)
-
-    def restart_node(self, kikimr, query_id):
-        # restart node with CA
-
-        node_to_restart = None
-
-        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
-            wc = kikimr.compute_plane.get_worker_count(node_index)
-            if wc is not None:
-                if wc > 0 and node_to_restart is None:
-                    node_to_restart = node_index
-        assert node_to_restart is not None, "Can't find any task on node"
-
-        logging.debug("Restart compute node {}".format(node_to_restart))
-
-        kikimr.compute_plane.kikimr_cluster.nodes[node_to_restart].stop()
-        kikimr.compute_plane.kikimr_cluster.nodes[node_to_restart].start()
-        kikimr.compute_plane.wait_bootstrap(node_to_restart)
-
+class TestRecoveryMatchRecognize(StreamingTestBase):
     def recovery_impl(
         self,
-        kikimr,
-        client,
-        yq_version,
+        ydb_topics,
         sql_template,
         test_name,
         messages_before_restart,
         messages_after_restart,
         expected,
     ):
-        self.init_topics(f"{test_name}_{yq_version}")
+        io = ydb_topics(test_name)
+        query = io.start(sql_template.format(io.input, io.output))
+        io.write(messages_before_restart)
+        # Cross barriers after all the prefix has entered the stateful operators.
+        io.checkpoint(query, count=3)
 
-        sql = sql_template.format(self.input_topic, self.output_topic)
+        # Restart all compute nodes so TimeOrderRecoverer and MATCH_RECOGNIZE
+        # must reload their saved state regardless of the execution placement.
+        nodes = list(io.kikimr.cluster.slots.values())
+        try:
+            for node in nodes:
+                node.stop()
+        finally:
+            for node in nodes:
+                node.set_log_file_prefix('logfile_restarted_')
+                node.start()
+        io.kikimr.wait_kqp_node_count(len(nodes))
+        assert wait_for(
+            lambda: get_checkpoint_coordinator_metric(io.kikimr.cluster, query, 'RestoredFromSavedCheckpoint') > 0,
+            timeout_seconds=plain_or_under_sanitizer(120, 500),
+            step_seconds=0.5,
+        ), io.state(query)
+        io.checkpoint(query)
+        assert io.state(query)['Status'] == 'RUNNING', io.state(query)
 
-        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+        io.write(messages_after_restart)
+        assert io.read(len(expected)) == expected
+        io.stop(query)
+        io.wait_actor_count('KQP_COMPUTE_ACTOR', 0)
+        io.wait_actor_count('YQ_CHECKPOINT_COORDINATOR', 0)
 
-        self.write_stream(messages_before_restart)
-
-        logging.debug("get_completed_checkpoints {}".format(kikimr.compute_plane.get_completed_checkpoints(query_id)))
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
-        )
-
-        self.restart_node(kikimr, query_id)
-        self.write_stream(messages_after_restart)
-
-        assert client.get_query_status(query_id) == fq.QueryMeta.RUNNING
-
-        read_data = self.read_stream(len(expected))
-        logging.info("Data was read: {}".format(read_data))
-
-        assert read_data == expected
-
-        client.abort_query(query_id)
-        client.wait_query(query_id)
-        self.dump_workers(kikimr, 0, 0)
-
-    @yq_v1
-    @pytest.mark.parametrize("kikimr", [(None, None, None)], indirect=["kikimr"])
-    def test_time_order_recoverer(self, kikimr, client, yq_version, request):
+    def test_time_order_recoverer(self, ydb_topics, request):
         sql = R'''
-            PRAGMA dq.MaxTasksPerStage="2";
+            PRAGMA ydb.MaxTasksPerStage="2";
 
             pragma FeatureR010="prototype";
             pragma config.flags("TimeOrderRecoverDelay", "-1000000");
             pragma config.flags("TimeOrderRecoverAhead", "1000000");
 
-            INSERT INTO myyds.`{1}`
+            INSERT INTO {1}
             SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow()))))
-            FROM (SELECT * FROM myyds.`{0}`
+            FROM (SELECT * FROM {0}
                 WITH (
                     format=json_each_row,
                     SCHEMA
@@ -157,9 +84,7 @@ class TestRecoveryMatchRecognize(TestYdsBase):
         expected = ['{"dt":1696849942000001}', '{"dt":1696849942400002}', '{"dt":1696849942800000}']
 
         self.recovery_impl(
-            kikimr,
-            client,
-            yq_version,
+            ydb_topics,
             sql,
             request.node.name,
             messages_before_restart,
@@ -167,20 +92,18 @@ class TestRecoveryMatchRecognize(TestYdsBase):
             expected,
         )
 
-    @yq_v1
-    @pytest.mark.parametrize("kikimr", [(None, None, None)], indirect=["kikimr"])
-    def test_match_recognize(self, kikimr, client, yq_version, request):
+    def test_match_recognize(self, ydb_topics, request):
         sql = R'''
-            PRAGMA dq.MaxTasksPerStage="2";
+            PRAGMA ydb.MaxTasksPerStage="2";
 
             pragma FeatureR010="prototype";
             pragma config.flags("TimeOrderRecoverDelay", "-1000000");
             pragma config.flags("TimeOrderRecoverAhead", "1000000");
             pragma config.flags("MatchRecognizeStream", "auto");
 
-            INSERT INTO myyds.`{1}`
+            INSERT INTO {1}
             SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow()))))
-            FROM (SELECT * FROM myyds.`{0}`
+            FROM (SELECT * FROM {0}
                 WITH (
                     format=json_each_row,
                     SCHEMA
@@ -217,9 +140,7 @@ class TestRecoveryMatchRecognize(TestYdsBase):
         messages_after_restart = ['{"dt": 1696849944100001, "str": "E" }']
         expected = ['{"a_str":"A","b_str":"B","c_str":"C","dt_begin":1696849942000001,"dt_end":1696849943000001}']
         self.recovery_impl(
-            kikimr,
-            client,
-            yq_version,
+            ydb_topics,
             sql,
             request.node.name,
             messages_before_restart,

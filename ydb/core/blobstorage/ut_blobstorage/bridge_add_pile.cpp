@@ -30,6 +30,105 @@ namespace {
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeAddPile) {
+    Y_UNIT_TEST(GroupCreatedWhileBscCommitIsPending) {
+        TEnvironmentSetup env(MakeExpandableSettings());
+        CreatePoolAndGetGroup(env);
+        auto pool = ReadStoragePool(env, 1);
+        pool.SetStoragePoolId(2);
+        pool.SetName("pool_2");
+        pool.SetKind("pool_2");
+        pool.ClearItemConfigGeneration();
+
+        auto res = AddThirdPileToConfig(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        StartPileNodes(env, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId);
+
+        const TActorId sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        std::optional<NKikimrBlobStorage::TConfigResponse> response;
+        bool holdCommits = false;
+        ui32 numNotifications = 0;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldCommits;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == sender) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigResponse) {
+                    response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.GetResponse();
+                }
+                return false;
+            }
+            if (ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                const auto& details = ev->Get<TEvNodeWardenStorageConfig>()->Config->GetClusterStateDetails();
+                if (details.HasPendingPileOperation() && details.GetPendingPileOperation().GetKind() ==
+                        NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ADD) {
+                    if (IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
+                            TypeName(*actor).Contains("TBlobStorageController")) {
+                        holdCommits = true;
+                    }
+                }
+            }
+            if (holdCommits && ev->GetTypeRewrite() == TEvBlobStorage::EvPut &&
+                    ev->Get<TEvBlobStorage::TEvPut>()->Id.TabletID() == env.TabletId) {
+                heldCommits.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            if (GetBridgePileOperationNotification(*ev)) {
+                ++numNotifications;
+            }
+            return true;
+        };
+
+        res = AddPile(env, "pile_3");
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        WaitUntil(env, [&] { return !heldCommits.empty(); }, "BSC commit held", TDuration::MilliSeconds(100));
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(numNotifications, 0);
+
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+        env.Runtime->SendToPipe(env.TabletId, sender, request.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(!response);
+        UNIT_ASSERT_VALUES_EQUAL(numNotifications, 0);
+
+        holdCommits = false;
+        for (auto& [nodeId, ev] : heldCommits) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        WaitUntil(env, [&] { return response.has_value(); }, "pool creation committed", TDuration::Seconds(1));
+        UNIT_ASSERT_C(response->GetSuccess(), response->GetErrorDescription());
+        env.Runtime->FilterFunction = {};
+        WaitPileOperationFinished(env);
+        UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId), 2);
+
+        RejoinPile(env, 2);
+        UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId), 2);
+    }
+
+    Y_UNIT_TEST(AddedPileSyncersAreLimited) {
+        TEnvironmentSetup env(MakeExpandableSettings());
+        CreatePoolAndGetGroup(env, 4);
+        SetBridgeSyncMaxSyncers(env, 2);
+        auto res = AddThirdPileToConfig(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        StartPileNodes(env, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId);
+        AddPileAndWait(env, "pile_3");
+
+        TSyncerTracker tracker;
+        tracker.Hold = true;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            return tracker.OnEvent(nodeId, ev);
+        };
+        SwitchPileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitUntil(env, [&] { return tracker.GetNumRunning() >= 2; }, "syncers running");
+        env.Sim(TDuration::Seconds(5)); // the static group gets synced by now, so it takes no slots
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumRunning(), 2);
+        tracker.RunUntil(env, 2, "pile synchronized", [&] {
+            return GetPileState(env, 2) == NKikimrBridge::TClusterState::SYNCHRONIZED;
+        });
+        env.Runtime->FilterFunction = {};
+    }
+
     Y_UNIT_TEST(NativeTwoToThree) {
         TEnvironmentSetup env(MakeExpandableSettings());
         const ui32 groupId = CreatePoolAndGetGroup(env);
@@ -114,7 +213,19 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
         checker.Write(groupId);
         checker.CheckAll();
 
+        // the group relies on its original part until the part in the new pile is synced, and the original pile can't
+        // go out meanwhile
+        auto getAuthorityPileId = [&] {
+            const auto info = GetGroupInfo(env, groupId);
+            return TBridgePileId::FromProto(&info.GetBridgeGroupState(),
+                &NKikimrBridge::TGroupState::GetAuthorityPileId);
+        };
+        UNIT_ASSERT(getAuthorityPileId() == TBridgePileId::FromPileIndex(0));
+        ExpectError(TrySwitchPileState(env, 0, NKikimrBridge::TClusterState::DISCONNECTED),
+            "Incorrect primary pile state");
+
         RejoinPile(env, 1);
+        WaitUntil(env, [&] { return !getAuthorityPileId(); }, "group not relying on its original part");
         checker.Write(groupId);
         checker.CheckAll();
         CheckPileData(env, checker, 1, 10);
@@ -126,6 +237,36 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
             env.Sim(TDuration::Seconds(30));
             checker.Write(groupId);
             checker.CheckAll();
+        }
+    }
+
+    // groups of the pools not converted along with the cluster get no parts in the added pile, while static groups do
+    Y_UNIT_TEST(ConvertedOneToTwoSkippingStoragePools) {
+        const auto named = std::make_shared<bool>(false);
+        TEnvironmentSetup env(MakeConvertedClusterSettings(named));
+        TDataChecker checker(env);
+        const ui32 groupId = ConvertCluster(env, checker, 1, true);
+        const ui32 staticGroupId = 0;
+        checker.Write(staticGroupId);
+
+        NameConvertedClusterNodes(env, *named, [&] {
+            checker.Write(groupId);
+            checker.CheckAll();
+        });
+        auto res = AddPileToConfig(env, "pile_2", 10, 17);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        StartPileNodes(env, "pile_2", 10, 17);
+        AddPileAndWait(env, "pile_2");
+        UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 1, 10, 17), 0); // no dynamic bridged groups
+        RejoinPile(env, 1);
+
+        const auto info = GetGroupInfo(env, groupId);
+        UNIT_ASSERT_C(!info.HasBridgeGroupState(), info.ShortDebugString());
+        for (ui32 nodeId : {1u, 10u}) {
+            checker.Write(groupId, nodeId);
+            checker.Write(staticGroupId, nodeId);
+            checker.CheckAll(nodeId);
         }
     }
 

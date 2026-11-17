@@ -80,6 +80,12 @@ dstool
 │  │                                       Redistributes VDisks based on 
 │  │                                    available free space ratios.
 │  │                                    
+│  │                                    4. Group slot-based balancing (--sort-
+│  │                                    by=group_slots):
+│  │                                       Equalizes the number of VDisks from 
+│  │                                    selected groups or a storage pool across
+│  │                                     PDisks.
+│  │                                    
 │  │                                    Use --storage-pool to limit balancing to
 │  │                                     a specific storage pool, or --group-ids
 │  │                                     to target

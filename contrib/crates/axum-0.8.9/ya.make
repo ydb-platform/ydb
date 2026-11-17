@@ -1,0 +1,249 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(axum)
+
+CRATE_VERSION(0.8.9)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/body/mod.rs
+    src/boxed.rs
+    src/error_handling/mod.rs
+    src/extension.rs
+    src/extract/connect_info.rs
+    src/extract/matched_path.rs
+    src/extract/mod.rs
+    src/extract/multipart.rs
+    src/extract/nested_path.rs
+    src/extract/original_uri.rs
+    src/extract/path/de.rs
+    src/extract/path/mod.rs
+    src/extract/query.rs
+    src/extract/raw_form.rs
+    src/extract/raw_query.rs
+    src/extract/rejection.rs
+    src/extract/state.rs
+    src/extract/ws.rs
+    src/form.rs
+    src/handler/future.rs
+    src/handler/mod.rs
+    src/handler/service.rs
+    src/json.rs
+    src/macros.rs
+    src/middleware/from_extractor.rs
+    src/middleware/from_fn.rs
+    src/middleware/map_request.rs
+    src/middleware/map_response.rs
+    src/middleware/mod.rs
+    src/middleware/response_axum_body.rs
+    src/response/mod.rs
+    src/response/redirect.rs
+    src/response/sse.rs
+    src/routing/future.rs
+    src/routing/into_make_service.rs
+    src/routing/method_filter.rs
+    src/routing/method_routing.rs
+    src/routing/mod.rs
+    src/routing/not_found.rs
+    src/routing/path_router.rs
+    src/routing/route.rs
+    src/routing/strip_prefix.rs
+    src/routing/tests/fallback.rs
+    src/routing/tests/get_to_head.rs
+    src/routing/tests/handle_error.rs
+    src/routing/tests/merge.rs
+    src/routing/tests/mod.rs
+    src/routing/tests/nest.rs
+    src/routing/url_params.rs
+    src/serve/listener.rs
+    src/serve/mod.rs
+    src/service_ext.rs
+    src/test_helpers/counting_cloneable_state.rs
+    src/test_helpers/mod.rs
+    src/test_helpers/test_client.rs
+    src/test_helpers/tracing_helpers.rs
+    src/util.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    CHANGELOG.md
+    Cargo.lock
+    LICENSE
+    README.md
+    src/docs/debugging_handler_type_errors.md
+    src/docs/error_handling.md
+    src/docs/extract.md
+    src/docs/handlers_intro.md
+    src/docs/method_routing/fallback.md
+    src/docs/method_routing/layer.md
+    src/docs/method_routing/merge.md
+    src/docs/method_routing/route_layer.md
+    src/docs/middleware.md
+    src/docs/response.md
+    src/docs/routing/fallback.md
+    src/docs/routing/into_make_service_with_connect_info.md
+    src/docs/routing/layer.md
+    src/docs/routing/merge.md
+    src/docs/routing/method_not_allowed_fallback.md
+    src/docs/routing/nest.md
+    src/docs/routing/route.md
+    src/docs/routing/route_layer.md
+    src/docs/routing/route_service.md
+    src/docs/routing/with_state.md
+    src/docs/routing/without_v07_checks.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+PEERDIR(
+    contrib/crates/axum-core-0.5.6
+    contrib/crates/bytes-1.12.1
+    contrib/crates/futures-util-0.3.34
+    contrib/crates/http-1.5.0
+    contrib/crates/http-body-1.1.0
+    contrib/crates/http-body-util-0.1.5
+    contrib/crates/itoa-1.0.18
+    contrib/crates/matchit-0.8.4
+    contrib/crates/memchr-2.8.3
+    contrib/crates/mime-0.3.17
+    contrib/crates/percent-encoding-2.3.2
+    contrib/crates/pin-project-lite-0.2.17
+    contrib/crates/serde_core-1.0.229
+    contrib/crates/sync_wrapper-1.0.2
+    contrib/crates/tower-0.5.3
+    contrib/crates/tower-layer-0.3.3
+    contrib/crates/tower-service-0.3.3
+)
+
+LICENSE("MIT")
+VERSION(0.8.9)
+ORIGINAL_SOURCE(https://static.crates.io/crates/axum/axum-0.8.9.crate)
+
+CRATE_FEATURES(
+    default
+    form
+    http1
+    json
+    matched-path
+    original-uri
+    query
+    tokio
+    tower-log
+    tracing
+    ws
+)
+
+PEERDIR(
+    contrib/crates/base64-0.22.1
+    contrib/crates/form_urlencoded-1.2.2
+    contrib/crates/hyper-1.12.0
+    contrib/crates/hyper-util-0.1.21
+    contrib/crates/serde_json-1.0.154
+    contrib/crates/serde_path_to_error-0.1.20
+    contrib/crates/serde_urlencoded-0.7.1
+    contrib/crates/sha1-0.10.7
+    contrib/crates/tokio-1.54.1
+    contrib/crates/tokio-tungstenite-0.29.0
+    contrib/crates/tracing-0.1.44
+)
+
+CRATE_INPUTS(
+    src/docs/debugging_handler_type_errors.md
+    src/docs/error_handling.md
+    src/docs/extract.md
+    src/docs/handlers_intro.md
+    src/docs/method_routing/fallback.md
+    src/docs/method_routing/layer.md
+    src/docs/method_routing/merge.md
+    src/docs/method_routing/route_layer.md
+    src/docs/middleware.md
+    src/docs/response.md
+    src/docs/routing/fallback.md
+    src/docs/routing/into_make_service_with_connect_info.md
+    src/docs/routing/layer.md
+    src/docs/routing/merge.md
+    src/docs/routing/method_not_allowed_fallback.md
+    src/docs/routing/nest.md
+    src/docs/routing/route.md
+    src/docs/routing/route_layer.md
+    src/docs/routing/route_service.md
+    src/docs/routing/with_state.md
+    src/docs/routing/without_v07_checks.md
+)
+
+CRATE_SOURCES(
+    src/body/mod.rs
+    src/boxed.rs
+    src/error_handling/mod.rs
+    src/extension.rs
+    src/extract/connect_info.rs
+    src/extract/matched_path.rs
+    src/extract/mod.rs
+    src/extract/multipart.rs
+    src/extract/nested_path.rs
+    src/extract/original_uri.rs
+    src/extract/path/de.rs
+    src/extract/path/mod.rs
+    src/extract/query.rs
+    src/extract/raw_form.rs
+    src/extract/raw_query.rs
+    src/extract/rejection.rs
+    src/extract/state.rs
+    src/extract/ws.rs
+    src/form.rs
+    src/handler/future.rs
+    src/handler/mod.rs
+    src/handler/service.rs
+    src/json.rs
+    src/lib.rs
+    src/macros.rs
+    src/middleware/from_extractor.rs
+    src/middleware/from_fn.rs
+    src/middleware/map_request.rs
+    src/middleware/map_response.rs
+    src/middleware/mod.rs
+    src/middleware/response_axum_body.rs
+    src/response/mod.rs
+    src/response/redirect.rs
+    src/response/sse.rs
+    src/routing/future.rs
+    src/routing/into_make_service.rs
+    src/routing/method_filter.rs
+    src/routing/method_routing.rs
+    src/routing/mod.rs
+    src/routing/not_found.rs
+    src/routing/path_router.rs
+    src/routing/route.rs
+    src/routing/strip_prefix.rs
+    src/routing/tests/fallback.rs
+    src/routing/tests/get_to_head.rs
+    src/routing/tests/handle_error.rs
+    src/routing/tests/merge.rs
+    src/routing/tests/mod.rs
+    src/routing/tests/nest.rs
+    src/routing/url_params.rs
+    src/serve/listener.rs
+    src/serve/mod.rs
+    src/service_ext.rs
+    src/test_helpers/counting_cloneable_state.rs
+    src/test_helpers/mod.rs
+    src/test_helpers/test_client.rs
+    src/test_helpers/tracing_helpers.rs
+    src/util.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/thiserror-impl-2.0.21
+    contrib/crates/tokio-macros-2.7.2
+    contrib/crates/tracing-attributes-0.1.31
+    contrib/crates/zerocopy-derive-0.8.63
+)
+
+END()

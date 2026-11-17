@@ -449,6 +449,31 @@ private:
     const TOptionsSchema OptionsSchema_;
 };
 
+SIMPLE_UDF_OPTIONS(TPatternFromLikeSpark, char*(char*, char*), builder.SetMinLangVer(NYql::NFeature::SparkTranslator.MinLangVer);) {
+    TStringBuf pattern(args[0].AsStringRef());
+    const TStringBuf escape(args[1].AsStringRef());
+    Y_ENSURE(GetNumberOfUTF8Chars(escape) == 1, "LIKE escape must be a single character");
+    TStringBuilder result;
+    result << "(?s)";
+    while (!pattern.empty()) {
+        if (pattern.StartsWith(escape)) {
+            pattern.Skip(escape.size());
+            Y_ENSURE(!pattern.empty(), "LIKE pattern must not end with the escape character");
+            const size_t length = pattern.StartsWith(escape) ? escape.size() : 1;
+            Y_ENSURE(pattern.StartsWith(escape) || pattern.front() == '%' || pattern.front() == '_',
+                     "LIKE escape must precede %, _ or the escape character");
+            result << RE2::QuoteMeta(StringPiece(pattern.data(), length));
+            pattern.Skip(length);
+        } else {
+            const char character = pattern.front();
+            result << (character == '%' ? TString(".*") : character == '_' ? TString(".")
+                                                                           : TString(RE2::QuoteMeta(StringPiece(&character, 1))));
+            pattern.Skip(1);
+        }
+    }
+    return valueBuilder->NewString(result);
+}
+
 SIMPLE_UDF_WITH_OPTIONAL_ARGS(TPatternFromLike, char*(char*, TOptional<char*>), 1) {
     const std::string_view input(args[0].AsStringRef());
     const bool hasEscape = bool(args[1]);
@@ -566,6 +591,7 @@ public:
         sink.Add(TRe2Udf::Name(TRe2Udf::EMode::FIND_AND_CONSUME));
         sink.Add(TEscape::Name());
         sink.Add(TPatternFromLike::Name());
+        sink.Add(TPatternFromLikeSpark::Name());
         sink.Add(TOptions::Name());
         sink.Add(TIsValidRegexp<posix>::Name());
     }
@@ -665,6 +691,7 @@ public:
         } else if (!(
                        TEscape::DeclareSignature(name, userType, builder, typesOnly) ||
                        TPatternFromLike::DeclareSignature(name, userType, builder, typesOnly) ||
+                       TPatternFromLikeSpark::DeclareSignature(name, userType, builder, typesOnly) ||
                        TOptions::DeclareSignature(name, userType, builder, typesOnly) ||
                        TIsValidRegexp<posix>::DeclareSignature(name, userType, builder, typesOnly))) {
             builder.SetError(

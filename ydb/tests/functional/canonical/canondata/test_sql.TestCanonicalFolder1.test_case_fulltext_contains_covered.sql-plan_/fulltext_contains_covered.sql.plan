@@ -80,5 +80,22 @@
         "type": "query",
         "version": "0.2"
     },
-    "tables": []
+    "tables": [
+        {
+            "name": "/local/base_fulltext_contains_covered_sql_plan/FullTextTable",
+            "reads": [
+                {
+                    "columns": [
+                        "Data",
+                        "Key",
+                        "Text"
+                    ],
+                    "lookup_by": [
+                        "Key"
+                    ],
+                    "type": "Lookup"
+                }
+            ]
+        }
+    ]
 }

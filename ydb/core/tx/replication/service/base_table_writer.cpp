@@ -84,6 +84,7 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
         tableId.SetOwnerId(TableId.PathId.OwnerId);
         tableId.SetTableId(TableId.PathId.LocalPathId);
         tableId.SetSchemaVersion(TableId.SchemaVersion);
+        event->Record.SetDatabaseName(Database);
 
         TString source;
 
@@ -185,10 +186,12 @@ public:
 
     explicit TTablePartitionWriter(
             const TActorId& parent,
+            const TString& database,
             ui64 tabletId,
             const TTableId& tableId,
             THolder<IChangeRecordSerializer>&& serializer)
         : Parent(parent)
+        , Database(database)
         , TabletId(tabletId)
         , TableId(tableId)
         , Serializer(std::move(serializer))
@@ -211,6 +214,7 @@ public:
 
 private:
     const TActorId Parent;
+    const TString Database;
     const ui64 TabletId;
     const TTableId TableId;
 
@@ -489,7 +493,7 @@ class TLocalTableWriter
     IActor* CreateSender(ui64 partitionId) const override {
         YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         const auto tableId = TTableId(TablePathId, Schema->Version);
-        return new TTablePartitionWriter(SelfId(), partitionId, tableId, Serializer->Clone());
+        return new TTablePartitionWriter(SelfId(), Database, partitionId, tableId, Serializer->Clone());
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {

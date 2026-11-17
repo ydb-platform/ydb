@@ -13,6 +13,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <google/protobuf/text_format.h>
+#include <google/protobuf/util/message_differencer.h>
 #include <library/cpp/malloc/api/malloc.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -871,9 +872,47 @@ void TCmsTestEnv::SendCmsConfig(const NKikimrCms::TCmsConfig &config)
 
 void TCmsTestEnv::SetCmsConfig(const NKikimrCms::TCmsConfig &config)
 {
-    SendCmsConfig(config);
+    // Keep Console authoritative so the dispatcher replays this config after a CMS restart.
+    bool requestSeen = false;
+    bool applied = false;
+    TActorId dispatcher;
+    TActorId subscriber;
+    ui64 notificationCookie = 0;
+    auto notificationObserver = AddObserver<TEvConsole::TEvConfigNotificationRequest>([&](auto& ev) {
+        const auto& rec = ev->Get()->Record;
+        if (rec.GetLocal() && rec.GetConfig().HasCmsConfig()
+            && google::protobuf::util::MessageDifferencer::Equals(rec.GetConfig().GetCmsConfig(), config)) {
+            requestSeen = true;
+            dispatcher = ev->Sender;
+            subscriber = ev->Recipient;
+            notificationCookie = ev->Cookie;
+        }
+    });
+    auto ackObserver = AddObserver<TEvConsole::TEvConfigNotificationResponse>([&](auto& ev) {
+        if (requestSeen && ev->Sender == subscriber && ev->Recipient == dispatcher
+            && ev->Cookie == notificationCookie) {
+            applied = true;
+        }
+    });
+
+    const TString cookie = "cms-test-config";
+    auto request = MakeHolder<TEvConsole::TEvConfigureRequest>();
+    request->Record.AddActions()->MutableRemoveConfigItems()->MutableCookieFilter()->AddCookies(cookie);
+    auto* item = request->Record.AddActions()->MutableAddConfigItem()->MutableConfigItem();
+    item->SetKind(NKikimrConsole::TConfigItem::CmsConfigItem);
+    item->SetMergeStrategy(NKikimrConsole::TConfigItem::OVERWRITE);
+    item->SetCookie(cookie);
+    item->MutableConfig()->MutableCmsConfig()->CopyFrom(config);
+    SendToPipe(MakeConsoleID(), Sender, request.Release(), 0, GetPipeConfigWithRetries());
 
     TAutoPtr<IEventHandle> handle;
+    auto configureReply = GrabEdgeEventRethrow<TEvConsole::TEvConfigureResponse>(handle);
+    UNIT_ASSERT(configureReply);
+    UNIT_ASSERT_VALUES_EQUAL(configureReply->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+    WaitFor("CMS has applied the Console config", [&] { return applied; }, TDuration::Seconds(30));
+
+    SendCmsConfig(config);
+
     auto reply = GrabEdgeEventRethrow<TEvCms::TEvSetConfigResponse>(handle);
     UNIT_ASSERT(reply);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), TStatus::OK);

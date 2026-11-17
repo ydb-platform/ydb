@@ -140,7 +140,7 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer(const TIntrus
                                             << " has no outputs");
                                         const auto outputs = stage.Outputs().Cast();
                                         const size_t sinkIndex = FromString<size_t>(sinkEffect.Cast().SinkIndex().Value());
-                                        AFL_ENSURE(sinkIndex < outputs.Size());
+                                        YDB_LOG_ENSURE(sinkIndex < outputs.Size());
                                         const auto dqSink = outputs.Item(sinkIndex).Maybe<TDqSink>();
                                         if (dqSink && dqSink.Cast().Settings().Maybe<TKqpTableSinkSettings>()) {
                                             YQL_ENSURE(!hasTableEffect, "Stage #" << PrintKqpStageOnly(stage, ctx)

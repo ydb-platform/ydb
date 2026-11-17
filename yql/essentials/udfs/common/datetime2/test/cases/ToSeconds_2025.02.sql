@@ -1,10 +1,9 @@
-/* syntax version 1 */
+$rows = [
+    <|fdate: Just(Date("2018-11-22")), finterval: Just(Interval("P2DT10H"))|>,
+    <|fdate: Just(Date("2018-11-22")), finterval: Just(Interval("P25000D"))|>,
+];
+
 select
-    DateTime::ToSeconds(`date`) as date_to_seconds,
-    DateTime::ToSeconds(`interval`) as interval_to_seconds
-from (
-    select
-        cast(fdate as Date) as `date`,
-        cast(finterval as Interval) as `interval`
-    from Input
-);
+    DateTime::ToSeconds(fdate) as date_to_seconds,
+    DateTime::ToSeconds(finterval) as interval_to_seconds
+FROM AS_TABLE($rows);

@@ -313,6 +313,53 @@ struct TConsumerEnv {
 
 Y_UNIT_TEST_SUITE(TMLPConsumerWakeupTests) {
 
+Y_UNIT_TEST(ReplicatedPurgePreservesStateForStaleAndRepeatedOffsets) {
+    TConsumerEnv env;
+    env.FetchMessages(3);
+
+    env.SendRead(TDuration::Seconds(60), TDuration::Minutes(5));
+    env.ReplyKvWrite();
+    env.SendCommit(0);
+    env.ReplyKvWrite();
+
+    // Keep offset 1 locked and acknowledge offset 2 beyond the committed prefix.
+    for (ui64 offset : {1, 2}) {
+        env.SendRead(TDuration::Seconds(60), TDuration::Minutes(5));
+        env.ReplyKvWrite();
+        env.AssertStatus(offset, TStorage::EMessageStatus::Locked);
+    }
+    env.SendCommit(2);
+    env.ReplyKvWrite();
+    const auto before = env.GetState();
+
+    auto sendPurge = [&](ui64 offset) {
+        auto request = MakeHolder<TEvPQ::TEvMLPPurgeRequest>(kTopic, kConsumer, 0);
+        request->Record.SetToOffset(offset);
+        env.Runtime.Send(new IEventHandle(env.Consumer, env.Reader, request.Release()));
+    };
+    for (ui64 offset : {0, 1, 0, 1}) {
+        sendPurge(offset);
+        auto response = env.Runtime.GrabEdgeEvent<TEvPQ::TEvMLPPurgeResponse>(TDuration::Seconds(5));
+        UNIT_ASSERT_C(response, "Stale replication must complete without a new KV write");
+
+        const auto after = env.GetState();
+        UNIT_ASSERT_VALUES_EQUAL(after->Messages.size(), before->Messages.size());
+        for (size_t i = 0; i < before->Messages.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(after->Messages[i].Offset, before->Messages[i].Offset);
+            UNIT_ASSERT_VALUES_EQUAL(after->Messages[i].Status, before->Messages[i].Status);
+            UNIT_ASSERT_VALUES_EQUAL(after->Messages[i].ProcessingCount, before->Messages[i].ProcessingCount);
+            UNIT_ASSERT_VALUES_EQUAL(after->Messages[i].ProcessingDeadline, before->Messages[i].ProcessingDeadline);
+        }
+    }
+
+    // A strictly greater offset still advances the consumer.
+    sendPurge(3);
+    env.ReplyKvWrite();
+    auto response = env.Runtime.GrabEdgeEvent<TEvPQ::TEvMLPPurgeResponse>(TDuration::Seconds(5));
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(env.GetState()->Messages.empty());
+}
+
 Y_UNIT_TEST(RegularPersistDoesNotStickProcessingScheduled) {
     TConsumerEnv env;
     env.FetchOneMessage();

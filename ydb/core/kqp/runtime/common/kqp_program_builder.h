@@ -60,7 +60,8 @@ public:
 
     TRuntimeNode KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType, const TString& leftLabel, const TString& rightLabel, ui32 cookieFormatVersion = 0);
 
-    TRuntimeNode FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings, TRuntimeNode mode);
+    TRuntimeNode FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings, TRuntimeNode mode,
+        TRuntimeNode patternMode = {}, TRuntimeNode escape = {});
 
     // input: List/Flow/Stream<T> -> same container of Tuple<Uint64, T> with a 1-based rank.
     TRuntimeNode KqpStreamEnumerate(TRuntimeNode input);

@@ -8,17 +8,38 @@ import json
 import logging
 import multiprocessing
 import os
+import re
 import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from .parse import TuTiming, parse_trace
+from .parse import TuTiming, duration_events, parse_trace
 
 
 log = logging.getLogger("timing.aggregate")
 
-_AGG_CACHE_VERSION = 3
+_AGG_CACHE_VERSION = 5
+
+_BUILD_ROOT_RE = re.compile(r"^.*?/build_root/[^/]+/[^/]+/")
+
+
+def _header_key(path: str, repo_root: Optional[Path]) -> str:
+    if repo_root is None:
+        return path
+    # Generated headers have a separate build root for each compile. Do
+    # not resolve symlinks: that may turn a source path into a cache path.
+    try:
+        return str(Path(path).relative_to(repo_root))
+    except ValueError:
+        return _BUILD_ROOT_RE.sub("", path)
+
+
+def _normalize_headers(costs: Dict[str, int], repo_root: Optional[Path]) -> Dict[str, int]:
+    normalized: Dict[str, int] = defaultdict(int)
+    for path, duration in costs.items():
+        normalized[_header_key(path, repo_root)] += duration
+    return normalized
 
 
 def _us(v: int) -> float:
@@ -147,9 +168,7 @@ def event_histogram(trace_dir: Path, sample: int = 300) -> Dict[str, Tuple[int, 
                 data = _json.load(fh)
         except (OSError, ValueError):
             continue
-        for e in data.get("traceEvents") or []:
-            if e.get("ph") != "X":
-                continue
+        for e in duration_events(data.get("traceEvents") or []):
             name = e.get("name") or "?"
             slot = hist.setdefault(name, [0, 0])
             slot[0] += 1
@@ -199,13 +218,13 @@ def _reduce_chunk(args) -> dict:
         te += t.execute_us
         tf += t.frontend_us
         tb += t.backend_us
-        for d, u in t.source_us.items():
+        for d, u in _normalize_headers(t.source_us, repo_root).items():
             header_us[d] = header_us.get(d, 0) + u
             header_tus[d] = header_tus.get(d, 0) + 1
         for d, u in t.template_us.items():
             template_us[d] = template_us.get(d, 0) + u
             template_count[d] = template_count.get(d, 0) + 1
-        for d, u in t.file_us.items():
+        for d, u in _normalize_headers(t.file_us, repo_root).items():
             file_us[d] = file_us.get(d, 0) + u
             file_tus[d] = file_tus.get(d, 0) + 1
 
@@ -260,12 +279,15 @@ def collect_traces(
         return Aggregate()
 
     sig = _dir_signature(files)
+    repo_root_str = str(repo_root) if repo_root else None
     if cache_path is None:
         cache_path = trace_dir.parent / "timing_aggregate.json"
     if use_cache and cache_path.exists():
         try:
             cached = json.loads(cache_path.read_text(encoding="utf-8"))
-            if cached.get("signature") == sig and cached.get("version") == _AGG_CACHE_VERSION:
+            if (cached.get("signature") == sig
+                    and cached.get("version") == _AGG_CACHE_VERSION
+                    and cached.get("repo_root") == repo_root_str):
                 log.info("loaded cached aggregate (%d TUs) from %s",
                          len(cached.get("agg", {}).get("tus", [])), cache_path)
                 return Aggregate.from_dict(cached["agg"])
@@ -276,7 +298,6 @@ def collect_traces(
         jobs = max(1, multiprocessing.cpu_count() - 1)
     n_chunks = max(jobs, min(len(files), jobs * 4))
     chunks = _chunks([str(p) for p in files], n_chunks)
-    repo_root_str = str(repo_root) if repo_root else None
 
     log.info("parsing %d trace files in %d chunks across %d workers",
              len(files), len(chunks), jobs)
@@ -299,6 +320,7 @@ def collect_traces(
         try:
             tmp = cache_path.with_suffix(".json.tmp")
             tmp.write_text(json.dumps({"version": _AGG_CACHE_VERSION,
+                                       "repo_root": repo_root_str,
                                        "signature": sig, "agg": agg.to_dict()}),
                            encoding="utf-8")
             os.replace(tmp, cache_path)

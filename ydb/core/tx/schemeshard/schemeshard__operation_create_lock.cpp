@@ -139,8 +139,11 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .NotUnderOperation()
-                .IsTable()
-                .NotAsyncReplicaTable();
+                .IsTable();
+
+            if (checks && (!Transaction.GetInternal() || !tablePath.IsImportingReplica())) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (checks && !parentPath.IsTableIndex()) {
                 checks.IsCommonSensePath();

@@ -139,7 +139,7 @@ ITransaction* THive::CreateShrinkPool(TEvHive::TEvShrinkStoragePool::TPtr ev) {
 class TTxShrinkPoolReply : public TTransactionBase<THive> {
     TEvHive::TEvShrinkStoragePoolReply::TPtr Event;
 
-    TTxType GetTxType() const override { return NHive::TXTYPE_SHRINK_POOL; }
+    TTxType GetTxType() const override { return NHive::TXTYPE_SHRINK_POOL_REPLY; }
 
 public:
     TTxShrinkPoolReply(TEvHive::TEvShrinkStoragePoolReply::TPtr ev, THive* hive)

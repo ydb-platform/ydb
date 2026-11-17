@@ -3,11 +3,6 @@
 
 import boto3
 import json
-import pytest
-
-import ydb.public.api.protos.draft.fq_pb2 as fq
-
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 BUCKET_NAME = 'fbucket'
 
@@ -30,9 +25,7 @@ class TestS3PushDown:
             aws_secret_access_key='secret_key',
         )
 
-    @yq_all
-    @pytest.mark.parametrize('client', [{'folder_id': 'my_folder'}], indirect=True)
-    def test_simple_case(self, kikimr, s3, client, yq_version, unique_prefix):
+    def test_simple_case(self, kikimr, s3, client, unique_prefix):
         file_head = 'Fruit,Price,Weight\n'
         file_rows = [file_head]
         for i in range(0, 10_000):
@@ -43,9 +36,8 @@ class TestS3PushDown:
         s3_client = TestS3PushDown.create_s3_client(s3)
         s3_client.put_object(Body=file_content, Bucket=BUCKET_NAME, Key='fruits.csv')
 
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, 'fbucket')
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, 'fbucket')
 
         sql = f'''
             select *
@@ -58,15 +50,11 @@ class TestS3PushDown:
             limit 1;
         '''
 
-        query_id = client.create_query('test', sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
+        stat = query.statistics
         ingress_bytes = None
-        if yq_version == 'v1':
-            ingress_bytes = stat['Graph=0']['IngressBytes']
-        else:
-            assert yq_version == 'v2'
-            ingress_bytes = stat['ResultSet']['IngressBytes']
+        ingress_bytes = query.metric("IngressBytes")
 
-        assert ingress_bytes['sum'] < file_size, f'loaded too much for a pushed down query: {json.dumps(stat)}'
+        assert ingress_bytes < file_size, f'loaded too much for a pushed down query: {json.dumps(stat)}'

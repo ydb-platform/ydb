@@ -7,10 +7,16 @@
 
 namespace NActors {
 
+    using TIcProxyCreator = std::function<IActor*(const ui32, TInterconnectProxyCommon::TPtr common, IActor**)>;
+
     TProxyWrapperFactory CreateProxyWrapperFactory(TIntrusivePtr<TInterconnectProxyCommon> common,
-        TInterconnectSessionPoolMapping poolMapping, class TInterconnectMock *mock = nullptr);
+        TInterconnectSessionPoolMapping poolMapping);
+
+    TProxyWrapperFactory CreateProxyWrapperFactory(TIntrusivePtr<TInterconnectProxyCommon> common, ui32 poolId);
+
+    TProxyWrapperFactory CreateProxyWrapperFactory(TIntrusivePtr<TInterconnectProxyCommon> common,
+        TInterconnectSessionPoolMapping poolMapping, TIcProxyCreator proxyCreator); // for tests
 
     TProxyWrapperFactory CreateProxyWrapperFactory(TIntrusivePtr<TInterconnectProxyCommon> common, ui32 poolId,
-        class TInterconnectMock *mock = nullptr);
-
+        TIcProxyCreator proxyCreator); // for tests
 }

@@ -1,9 +1,5 @@
 UNITTEST_FOR(ydb/core/kesus/proxy)
 
-FORK_SUBTESTS()
-
-SPLIT_FACTOR(20)
-
 SIZE(MEDIUM)
 
 PEERDIR(

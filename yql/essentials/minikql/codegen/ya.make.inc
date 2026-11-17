@@ -26,6 +26,7 @@ COPY_FILE(
         llvm/Passes/PassBuilder.h
         llvm-c/Disassembler.h
         llvm/TargetParser/Host.h
+        llvm/Target/TargetMachine.h
         llvm/Support/ManagedStatic.h
         llvm/Support/SourceMgr.h
         llvm/Support/TargetSelect.h

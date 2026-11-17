@@ -5,7 +5,6 @@
 
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/core/yql_module_helpers.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_sqlselect.h>
 
@@ -544,6 +543,26 @@ TExprNode::TPtr GetYqlWithoutForStarResult(const TExprNode& setItem) {
     return hasStarResult ? GetSetting(settings, "without") : nullptr;
 }
 
+bool IsSqlInEquality(const TExprNode& comparison) {
+    if (comparison.IsCallable("==")) {
+        return true;
+    }
+    if (!comparison.IsCallable({"JoinEquals", "OptAggrEquals"})) {
+        return false;
+    }
+    const TTypeAnnotationNode* type = comparison.Head().GetTypeAnn();
+    if (type->HasYqlNaN()) {
+        return false;
+    }
+    if (comparison.IsCallable("OptAggrEquals")) {
+        if (type->GetKind() == ETypeAnnotationKind::Optional) {
+            type = type->Cast<TOptionalExprType>()->GetItemType();
+        }
+        return !type->HasOptionalOrNull();
+    }
+    return true;
+}
+
 } // namespace
 
 bool ValidateYqlWithoutSetting(TExprNode& setting, TExprContext& ctx) {
@@ -675,14 +694,59 @@ TMaybe<TYqlFromSettings> TYqlFromSettings::Parse(const TExprNode::TPtr& settings
             return true;
         }
 
+        if (name == "flatten_columns" || name == "flatten_by") {
+            if (!EnsureTupleSize(setting, 2, ctx)) {
+                return false;
+            }
+            const TStringBuf callable = name == "flatten_columns" ? "YqlFlattenColumns" : "YqlFlattenBy";
+            if (!setting.Tail().IsCallable(callable)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Tail().Pos()), TStringBuilder() << "Expected " << callable));
+                return false;
+            }
+            return true;
+        }
+
         YQL_ENSURE(false, "unknown setting " << name);
     };
 
-    if (!EnsureValidSettings(*settings, {"cte", "into_values"}, validator, ctx.Expr)) {
+    if (!EnsureValidSettings(*settings, {"cte", "into_values", "flatten_columns", "flatten_by"}, validator, ctx.Expr)) {
         return Nothing();
     }
 
+    if (HasSetting(*settings, "flatten_columns") && HasSetting(*settings, "flatten_by")) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(settings->Pos()), "FLATTEN COLUMNS and FLATTEN BY are mutually exclusive"));
+        return Nothing();
+    }
     return parsed;
+}
+
+IGraphTransformer::TStatus YqlFlattenWrapper(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx)
+{
+    Y_UNUSED(output);
+    const bool isFlattenBy = input->IsCallable("YqlFlattenBy");
+    const ui32 count = isFlattenBy ? 2 : 1;
+    if (!EnsureArgsCount(*input, count, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    for (const auto& child : input->Children()) {
+        if (child->GetTypeAnn() && child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+    }
+    for (ui32 index = 0; index < count; ++index) {
+        const auto& lambda = *input->Child(index);
+        if (isFlattenBy && index == 0 && lambda.IsCallable("Void")) {
+            continue;
+        }
+        if (!lambda.IsLambda() || !EnsureArgsCount(lambda.Head(), 1, ctx.Expr)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda.Pos()), "Expected one-argument flatten lambda"));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+    input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+    return IGraphTransformer::TStatus::Ok;
 }
 
 IGraphTransformer::TStatus PromoteYqlAggOptions(
@@ -1015,6 +1079,18 @@ IGraphTransformer::TStatus FinalizeYqlColumnRefs(
         settings);
 }
 
+bool IsYqlInSubLink(const TExprNode& input) {
+    if (!input.IsCallable("YqlSubLink") || input.Head().Content() != "any") {
+        return false;
+    }
+    const auto& lambda = *input.Child(3);
+    const auto& comparison = lambda.Tail();
+    if (!IsSqlInEquality(comparison)) {
+        return false;
+    }
+    return !IsDepended(comparison.Head(), *lambda.Head().Child(1));
+}
+
 IGraphTransformer::TStatus ValidateYqlSubLinkSettings(
     const TExprNode::TPtr& input,
     TContext& ctx,
@@ -1040,26 +1116,36 @@ IGraphTransformer::TStatus ValidateYqlSubLinkSettings(
 
     if (input->Head().Content() != "any") {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(settings->Pos()),
-            "Settings are allowed only for link type 'any'"));
+                                 "Settings are allowed only for link type 'any'"));
         return IGraphTransformer::TStatus::Error;
     }
 
     const auto validator = [](TStringBuf name, TExprNode& setting, TExprContext& ctx) -> bool {
+        if (name == "unknownResultIfCorrelated") {
+            if (!EnsureArgsCount(setting, 2, ctx) || !EnsureAtom(setting.Tail(), ctx)) {
+                return false;
+            }
+            if (setting.Tail().Content() != "true" && setting.Tail().Content() != "false") {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Tail().Pos()), "Expected true or false"));
+                return false;
+            }
+            return true;
+        }
         if (setting.ChildrenSize() != 1) {
             ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
-                TStringBuilder() << "No extra parameters are expected by setting '" << name << "'"));
+                                TStringBuilder() << "No extra parameters are expected by setting '" << name << "'"));
             return false;
         }
         return true;
     };
 
-    if (!EnsureValidSettings(*settings, {"ansiIn", "warnNoAnsiIn"}, validator, ctx.Expr)) {
+    if (!EnsureValidSettings(*settings, {"ansiIn", "warnNoAnsiIn", "unknownResultIfCorrelated"}, validator, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     if (HasSetting(*settings, "ansiIn") && HasSetting(*settings, "warnNoAnsiIn")) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(settings->Pos()),
-            "Settings 'ansiIn' and 'warnNoAnsiIn' are mutually exclusive"));
+                                 "Settings 'ansiIn' and 'warnNoAnsiIn' are mutually exclusive"));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -1099,68 +1185,6 @@ IGraphTransformer::TStatus ValidateYqlSublinkInCollectionItemsNullable(
 
     output = ctx.Expr.ChangeChild(*input, 5, RemoveSetting(*settings, "warnNoAnsiIn", ctx.Expr));
     return IGraphTransformer::TStatus::Repeat;
-}
-
-IGraphTransformer::TStatus YqlAggFactoryWrapper(
-    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx)
-{
-    Y_UNUSED(output);
-
-    if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!EnsureMaxArgsCount(*input, 1, ctx.Expr)) {
-        ctx.Expr.AddError(TIssue(
-            input->Child(0)->Pos(ctx.Expr),
-            TStringBuilder() << "Parameters are not implemented yet"));
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    bool isUniversal;
-    if (!EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, isUniversal)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (isUniversal) {
-        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    if (!ctx.Types.Modules) {
-        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    const TExprNode::TPtr* factory = ImportFreezed(
-        input->Child(0)->Pos(ctx.Expr),
-        "/lib/yql/aggregate.yqls",
-        TString(input->Child(0)->Content()) + "_traits_factory",
-        ctx.Expr,
-        ctx.Types);
-
-    if (!factory) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    YQL_ENSURE((*factory)->IsLambda());
-
-    const size_t expectedArgsCount = (*factory)->Head().ChildrenSize();
-    YQL_ENSURE(2 <= expectedArgsCount);
-
-    // `-1` for name, `+2` for `list_type` and `extractor`
-    const size_t actualArgsCount = input->ChildrenSize() - 1 + 2;
-
-    if (expectedArgsCount != actualArgsCount) {
-        ctx.Expr.AddError(TIssue(
-            input->Child(0)->Pos(ctx.Expr),
-            TStringBuilder() << "Expected " << expectedArgsCount << " arguments, "
-                             << "but got " << actualArgsCount));
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
-    return IGraphTransformer::TStatus::Ok;
 }
 
 // See also the logic at the AggregateWrapper
@@ -1299,68 +1323,6 @@ IGraphTransformer::TStatus YqlAggWrapper(
 
     output = ctx.Expr.ChangeChild(*input, 2, std::move(result));
     return IGraphTransformer::TStatus::Repeat;
-}
-
-IGraphTransformer::TStatus YqlWinFactoryWrapper(
-    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx)
-{
-    Y_UNUSED(output);
-
-    if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!EnsureMaxArgsCount(*input, 1, ctx.Expr)) {
-        ctx.Expr.AddError(TIssue(
-            input->Child(0)->Pos(ctx.Expr),
-            TStringBuilder() << "Parameters are not implemented yet"));
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    bool isUniversal;
-    if (!EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, isUniversal)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (isUniversal) {
-        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    if (!ctx.Types.Modules) {
-        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    const TExprNode::TPtr* factory = ImportFreezed(
-        input->Child(0)->Pos(ctx.Expr),
-        "/lib/yql/window.yqls",
-        TString(input->Child(0)->Content()) + "_traits_factory",
-        ctx.Expr,
-        ctx.Types);
-
-    if (!factory) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    YQL_ENSURE((*factory)->IsLambda());
-
-    const size_t expectedArgsCount = (*factory)->Head().ChildrenSize();
-    YQL_ENSURE(2 <= expectedArgsCount);
-
-    // `-1` for name, `+2` for `list_type` and `extractor`
-    const size_t actualArgsCount = input->ChildrenSize() - 1 + 2;
-
-    if (expectedArgsCount != actualArgsCount) {
-        ctx.Expr.AddError(TIssue(
-            input->Child(0)->Pos(ctx.Expr),
-            TStringBuilder() << "Expected " << expectedArgsCount << " arguments, "
-                             << "but got " << actualArgsCount));
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
-    return IGraphTransformer::TStatus::Ok;
 }
 
 IGraphTransformer::TStatus YqlAggWinWrapper(

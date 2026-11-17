@@ -33,6 +33,7 @@ PEERDIR(
     contrib/libs/grpc
     contrib/libs/fmt
     contrib/libs/jwt-cpp
+    library/cpp/json
     library/cpp/json/writer
     ydb/core/security/certificate_check/test_utils
     ydb/core/wrappers/ut_helpers

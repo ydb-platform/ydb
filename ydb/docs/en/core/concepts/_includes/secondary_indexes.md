@@ -55,6 +55,16 @@ JSON indexes allow you to speed up predicates with the [JSON_EXISTS](../../yql/r
 
 In {{ ydb-short-name }}, you can create a secondary index and delete an existing secondary index without stopping service. You can create only one index at a time for a single table.
 
+{% if feature_flags.enable_online_add_unique_index == false %}
+{% note warning "Experimental feature" %}
+
+This feature is under development and is disabled by default by the [`enable_online_add_unique_index`](../../reference/configuration/feature_flags.md) flag. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the flag may cause errors, cluster instability, or make it impossible to change the YDB version. Do not enable this flag in production clusters. [Learn more](../../reference/configuration/feature_flags.md#experimental).
+
+{% endnote %}
+{% endif %}
+
+A [unique secondary index](#unique) can also be created online without blocking writes. Building it is more complex because it requires checking the uniqueness of the indexed column values in addition to populating the index.
+
 The online index creation operation consists of the following steps:
 
 1. Taking a snapshot of the table with data, creating the index table marked as available for writing.
@@ -74,7 +84,7 @@ Possible impact on user transactions:
 
 {% note info %}
 
-The data write speed is chosen to minimize the impact of the write process on user transactions. To control the speed, configure limits for the corresponding queue of the [resource broker](../../reference/configuration/resource_broker_config.md#resource-broker-config).
+The data write speed is chosen to minimize the impact of the write process on user transactions. To control the speed, configure limits for the corresponding queue of the [resource broker](../../reference/configuration/resource_broker_config.md).
 
 {% endnote %}
 

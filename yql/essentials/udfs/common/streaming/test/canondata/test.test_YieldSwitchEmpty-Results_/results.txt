@@ -1,0 +1,60 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "ListType";
+                                    [
+                                        "VariantType";
+                                        [
+                                            "TupleType";
+                                            [
+                                                [
+                                                    "StructType";
+                                                    [
+                                                        [
+                                                            "Data";
+                                                            [
+                                                                "DataType";
+                                                                "String"
+                                                            ]
+                                                        ]
+                                                    ]
+                                                ];
+                                                [
+                                                    "StructType";
+                                                    [
+                                                        [
+                                                            "Data";
+                                                            [
+                                                                "DataType";
+                                                                "String"
+                                                            ]
+                                                        ]
+                                                    ]
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        []
+                    ]
+                ]
+            }
+        ];
+        "Unordered" = %true
+    }
+]

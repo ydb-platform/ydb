@@ -19,19 +19,7 @@ logger = logging.getLogger(__name__)
 # local configuration for the ydb cluster (fetched by ydb_cluster_configuration fixture)
 CLUSTER_CONFIG = dict(
     additional_log_configs={
-        'TX_PROXY': LogLevels.DEBUG,
-        'KQP_PROXY': LogLevels.DEBUG,
-        'KQP_WORKER': LogLevels.DEBUG,
-        'KQP_GATEWAY': LogLevels.DEBUG,
-        'GRPC_PROXY': LogLevels.TRACE,
-        'TX_DATASHARD': LogLevels.DEBUG,
-        'TX_PROXY_SCHEME_CACHE': LogLevels.DEBUG,
-        'GRPC_SERVER': LogLevels.DEBUG,
-        # more logs
-        'FLAT_TX_SCHEMESHARD': LogLevels.TRACE,
-        'HIVE': LogLevels.TRACE,
-        'CMS_TENANTS': LogLevels.TRACE,
-        # less logs
+        'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
         'KQP_YQL': LogLevels.ERROR,
         'KQP_SESSION': LogLevels.CRIT,
         'KQP_COMPILE_ACTOR': LogLevels.CRIT,
@@ -68,7 +56,7 @@ class TestTenants():
         ydb_database
         time.sleep(5)
 
-    def test_when_deactivate_fat_tenant_creation_another_tenant_is_ok(self, ydb_cluster, ydb_root, ydb_client_session, config_hive, robust_retries):
+    def test_when_deactivate_fat_tenant_creation_another_tenant_is_ok(self, ydb_cluster, ydb_root, ydb_endpoint, config_hive, robust_retries):
         logger.info("create fat tenant")
 
         boot_batch_size = 5
@@ -98,10 +86,10 @@ class TestTenants():
                     logger.debug("> describe table: series, %s", str(result))
                     return result
 
-                pool = ydb_client_session(database_path)
-
-                pool.retry_operation_sync(create_table, robust_retries)
-                pool.retry_operation_sync(describe_table)
+                with ydb.Driver(endpoint=ydb_endpoint, database=database_path) as driver:
+                    with ydb.SessionPool(driver) as pool:
+                        pool.retry_operation_sync(create_table, robust_retries)
+                        pool.retry_operation_sync(describe_table)
 
     def test_register_tenant_and_force_drop_with_table(self, ydb_database, ydb_client_session, robust_retries):
         database_path = ydb_database
@@ -291,7 +279,7 @@ class TestTenants():
             greater_than(0)
         )
 
-    def test_stop_start(self, ydb_cluster, ydb_client_session, ydb_root, ydb_safe_test_name, robust_retries):
+    def test_stop_start(self, ydb_cluster, ydb_endpoint, ydb_root, ydb_safe_test_name, robust_retries):
         def create_table(session, table):
             session.execute_scheme(fr'''
                 CREATE TABLE `{table}` (id utf8, PRIMARY KEY (id));
@@ -301,8 +289,9 @@ class TestTenants():
 
         for i in range(5):
             with ydb_database_ctx(ydb_cluster, database_path):
-                pool = ydb_client_session(database_path)
-                pool.retry_operation_sync(create_table, robust_retries, 'table_{}'.format(i))
+                with ydb.Driver(endpoint=ydb_endpoint, database=database_path) as driver:
+                    with ydb.SessionPool(driver) as pool:
+                        pool.retry_operation_sync(create_table, robust_retries, 'table_{}'.format(i))
 
     def test_create_drop_create_table(self, ydb_database, ydb_client_session, robust_retries):
         database_path = ydb_database

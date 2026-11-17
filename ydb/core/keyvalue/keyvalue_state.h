@@ -271,6 +271,12 @@ protected:
     TIndex Index;
     THashMap<TLogoBlobID, ui32> RefCounts;
 
+    // Transient read ownership, independent of persistent index references.
+    THashMap<ui64, TVector<TLogoBlobID>> ReadBlobsByRequest;
+    THashMap<TLogoBlobID, ui64> ReadBlobRefCounts;
+    void AcquireReadBlobs(const TIntermediate& intermediate);
+    void ReleaseReadBlobs(ui64 requestUid);
+
     TMap<ui64, TSet<TLogoBlobID>> TrashForVacuum; // vacuum generation -> set of blobs
     TSet<TLogoBlobID> Trash;
     ui64 CompletedVacuumGeneration = 0;
@@ -305,6 +311,9 @@ protected:
     THashMap<TLogoBlobID, TLogoBlobID> MoveDataBlobIdToNewBlobId; // for blobs with refcount > 1
     ui64 MoveDataBlobsMoved = 0;
     // trash checking stage
+    // VacuumResetGeneration snapshot taken when the trash-checking stage starts;
+    // a mismatch in CheckTrash() means bins were reorganized and the scan must restart
+    ui64 MoveDataTrashCheckingVacuumResetGeneration = 0;
     std::optional<ui64> MoveDataTrashCheckingVacuumGeneration = {}; // not set for Trash, set for TrashForVacuum
     TLogoBlobID MoveDataTrashCheckingBlobId;
     bool MoveDataTrashCheckingWaitingForGC = false;
@@ -864,6 +873,11 @@ public:
     ui32 GetRefCount(const TLogoBlobID& id) const {
         const auto it = RefCounts.find(id);
         return it != RefCounts.end() ? it->second : 0;
+    }
+
+    ui64 GetReadBlobRefCount(const TLogoBlobID& id) const {
+        const auto it = ReadBlobRefCounts.find(id);
+        return it != ReadBlobRefCounts.end() ? it->second : 0;
     }
 
     std::weak_ptr<TKeyValueStateLifetimeToken> GetLifetimeToken() const {

@@ -1,6 +1,4 @@
 #include "library/cpp/threading/local_executor/local_executor.h"
-#include "yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h"
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
@@ -13,6 +11,10 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_test_registrar.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_test_setup.h>
+#include <yql/essentials/minikql/computation/test_support/mkql_pattern_test_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -66,69 +68,11 @@ TPatternCacheEntryPtr MakeMockEntry(size_t codeSize = 1) {
 
 NYql::TRuntimeSettingsStableHash MakeStableHash(ui8 fill) {
     NYql::TRuntimeSettingsStableHash hash;
-    constexpr size_t arbitraryLength = 12;
-    hash->resize(arbitraryLength, fill);
+    hash->fill(fill);
     return hash;
 }
 
 } // namespace
-
-TComputationNodeFactory GetListTestFactory() {
-    return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
-        if (callable.GetType()->GetName() == "TestList") {
-            return new TExternalComputationNode(ctx.Mutables);
-        }
-        return GetBuiltinFactory()(callable, ctx);
-    };
-}
-
-TRuntimeNode CreateFlow(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
-    if (list) {
-        return pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {});
-    } else {
-        std::vector<const TRuntimeNode> arr;
-        arr.reserve(vecSize);
-        for (ui64 i = 0; i < vecSize; ++i) {
-            arr.push_back(NTest::ConvertValueToLiteralNode(pb, ui64((i + 124515) % 6740234)));
-        }
-        TArrayRef<const TRuntimeNode> arrRef(std::move(arr));
-        return pb.ToFlow(pb.AsList(arrRef), {});
-    }
-}
-
-template <bool Wide>
-TRuntimeNode CreateFilter(TProgramBuilder& pb, size_t vecSize, TCallable* list);
-
-template <>
-TRuntimeNode CreateFilter<false>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
-    TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
-
-    auto handler = [&](TRuntimeNode node) -> TRuntimeNode {
-        return pb.AggrEquals(
-            pb.Mod(node, NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
-            NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0)));
-    };
-    return pb.Filter(flow, handler);
-}
-
-template <>
-TRuntimeNode CreateFilter<true>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
-    TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
-
-    auto handler = [&](TRuntimeNode::TList node) -> TRuntimeNode {
-        return pb.AggrEquals(
-            pb.Mod(node.front(), NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(128))),
-            NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>(0)));
-    };
-    return pb.NarrowMap(
-        pb.WideFilter(
-            pb.ExpandMap(flow,
-                         [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
-            handler),
-        [&](TRuntimeNode::TList items) -> TRuntimeNode { return items.front(); });
-}
 
 template <bool Wide>
 TRuntimeNode CreateMap(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr);
@@ -136,7 +80,7 @@ TRuntimeNode CreateMap(TProgramBuilder& pb, size_t vecSize, TCallable* list = nu
 template <>
 TRuntimeNode CreateMap<false>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     auto handler = [&](TRuntimeNode node) -> TRuntimeNode {
         return pb.AggrEquals(
@@ -149,7 +93,7 @@ TRuntimeNode CreateMap<false>(TProgramBuilder& pb, size_t vecSize, TCallable* li
 template <>
 TRuntimeNode CreateMap<true>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     auto handler = [&](TRuntimeNode::TList node) -> TRuntimeNode::TList {
         return {pb.AggrEquals(
@@ -170,7 +114,7 @@ TRuntimeNode CreateCondense(TProgramBuilder& pb, size_t vecSize, TCallable* list
 template <>
 TRuntimeNode CreateCondense<false>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     auto switcherHandler = [&](TRuntimeNode, TRuntimeNode) -> TRuntimeNode {
         return NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false);
@@ -185,7 +129,7 @@ TRuntimeNode CreateCondense<false>(TProgramBuilder& pb, size_t vecSize, TCallabl
 template <>
 TRuntimeNode CreateCondense<true>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     return pb.NarrowMap(
         pb.WideCondense1(
@@ -207,7 +151,7 @@ TRuntimeNode CreateChopper(TProgramBuilder& pb, size_t vecSize, TCallable* list 
 template <>
 TRuntimeNode CreateChopper<false>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     return pb.Chopper(
         flow,
@@ -224,7 +168,7 @@ TRuntimeNode CreateChopper<false>(TProgramBuilder& pb, size_t vecSize, TCallable
 template <>
 TRuntimeNode CreateChopper<true>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     return pb.NarrowMap(
         pb.WideChopper(
@@ -250,7 +194,7 @@ TRuntimeNode CreateCombine(TProgramBuilder& pb, size_t vecSize, TCallable* list 
 template <>
 TRuntimeNode CreateCombine<false>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     return pb.CombineCore(
         /* stream */
@@ -270,7 +214,7 @@ TRuntimeNode CreateCombine<false>(TProgramBuilder& pb, size_t vecSize, TCallable
 template <>
 TRuntimeNode CreateCombine<true>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     return pb.NarrowMap(
         pb.WideCombiner(
@@ -298,7 +242,7 @@ TRuntimeNode CreateChain1Map(TProgramBuilder& pb, size_t vecSize, TCallable* lis
 template <>
 TRuntimeNode CreateChain1Map<false>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     return pb.Chain1Map(
         flow,
@@ -311,7 +255,7 @@ TRuntimeNode CreateChain1Map<false>(TProgramBuilder& pb, size_t vecSize, TCallab
 template <>
 TRuntimeNode CreateChain1Map<true>(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     return pb.NarrowMap(
         pb.WideChain1Map(
@@ -328,7 +272,7 @@ TRuntimeNode CreateChain1Map<true>(TProgramBuilder& pb, size_t vecSize, TCallabl
 template <bool Wide>
 TRuntimeNode CreateDiscard(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     if (Wide) {
         return pb.Discard(
@@ -342,7 +286,7 @@ TRuntimeNode CreateDiscard(TProgramBuilder& pb, size_t vecSize, TCallable* list 
 template <bool Wide>
 TRuntimeNode CreateSkip(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     auto count = NTest::ConvertValueToLiteralNode(pb, ui64(500));
     if (Wide) {
@@ -360,7 +304,7 @@ TRuntimeNode CreateSkip(TProgramBuilder& pb, size_t vecSize, TCallable* list = n
 template <bool Flow>
 TRuntimeNode CreateNarrowFlatMap(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     return pb.NarrowFlatMap(
         pb.ExpandMap(flow,
@@ -373,7 +317,7 @@ TRuntimeNode CreateNarrowFlatMap(TProgramBuilder& pb, size_t vecSize, TCallable*
 
 TRuntimeNode CreateNarrowMultiMap(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     return pb.NarrowMultiMap(
         pb.ExpandMap(flow,
@@ -386,7 +330,7 @@ TRuntimeNode CreateNarrowMultiMap(TProgramBuilder& pb, size_t vecSize, TCallable
 template <bool WithPayload>
 TRuntimeNode CreateSqueezeToSortedDict(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     return pb.FlatMap(
         pb.NarrowSqueezeToSortedDict(
@@ -400,7 +344,7 @@ TRuntimeNode CreateSqueezeToSortedDict(TProgramBuilder& pb, size_t vecSize, TCal
 
 TRuntimeNode CreateMapJoin(TProgramBuilder& pb, size_t vecSize, TCallable* list = nullptr) {
     TTimer t(TString(__func__) + ": ");
-    auto flow = CreateFlow(pb, vecSize, list);
+    auto flow = NTest::CreateFlow(pb, vecSize, list);
 
     const auto list1 = pb.Map(flow, [&](TRuntimeNode item) {
         return pb.NewTuple({pb.Mod(item, NTest::ConvertValueToLiteralNode(pb, ui64(1000))), NTest::ConvertValueToLiteralNode(pb, ui32(1))});
@@ -464,7 +408,7 @@ void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'00
     TExploringNodeVisitor explorer;
     explorer.Walk(progReturn.GetNode(), typeEnv);
 
-    TComputationPatternOpts opts(alloc.Ref(), typeEnv, GetListTestFactory(), functionRegistry.Get(),
+    TComputationPatternOpts opts(alloc.Ref(), typeEnv, NTest::GetListTestFactory(), functionRegistry.Get(),
                                  NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception, useLLVM ? "" : "OFF", EGraphPerProcess::Multi);
 
     {
@@ -496,7 +440,7 @@ void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'00
 
             auto entry = cache.Find(key);
 
-            TComputationPatternOpts opts(entry->Alloc.Ref(), entry->Env, GetListTestFactory(),
+            TComputationPatternOpts opts(entry->Alloc.Ref(), entry->Env, NTest::GetListTestFactory(),
                                          functionRegistry.Get(), NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception,
                                          useLLVM ? "" : "OFF", EGraphPerProcess::Multi);
 
@@ -527,7 +471,7 @@ void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'00
 }
 
 Y_UNIT_TEST_QUAD(Filter, Wide, UseLLVM) {
-    ParallelProgTest(CreateFilter<Wide>, UseLLVM, 10098816);
+    ParallelProgTest(NTest::CreateFilter<Wide>, UseLLVM, 10098816);
 }
 
 Y_UNIT_TEST_QUAD(Map, Wide, UseLLVM) {
@@ -592,13 +536,13 @@ Y_UNIT_TEST(ClonesSurviveCompilationStateChanges) {
 
     TRuntimeNode progReturn;
     with_lock (alloc) {
-        progReturn = CreateFilter<false>(pb, vecSize, /*list=*/nullptr);
+        progReturn = NTest::CreateFilter<false>(pb, vecSize, /*list=*/nullptr);
     }
 
     TExploringNodeVisitor explorer;
     explorer.Walk(progReturn.GetNode(), typeEnv);
 
-    TComputationPatternOpts opts(alloc.Ref(), typeEnv, GetListTestFactory(), functionRegistry.Get(),
+    TComputationPatternOpts opts(alloc.Ref(), typeEnv, NTest::GetListTestFactory(), functionRegistry.Get(),
                                  NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception,
                                  /*optLLVM=*/"", EGraphPerProcess::Multi);
 
@@ -614,7 +558,7 @@ Y_UNIT_TEST(ClonesSurviveCompilationStateChanges) {
         auto timeProvider = CreateDeterministicTimeProvider(10000000);
         TScopedAlloc graphAlloc(__LOCATION__);
 
-        TComputationPatternOpts cloneOpts(entry->Alloc.Ref(), entry->Env, GetListTestFactory(),
+        TComputationPatternOpts cloneOpts(entry->Alloc.Ref(), entry->Env, NTest::GetListTestFactory(),
                                           functionRegistry.Get(), NUdf::EValidateMode::Lazy,
                                           NUdf::EValidatePolicy::Exception, /*optLLVM=*/"", EGraphPerProcess::Multi);
 
@@ -811,13 +755,13 @@ Y_UNIT_TEST_TWIN(FilterPerf, Wide) {
     Cerr << "vecSize: " << vecSize << Endl;
     const auto listType = NTest::ConvertToMinikqlType<TVector<ui64>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
-    auto progReturn = CreateFilter<Wide>(pb, vecSize, list);
+    auto progReturn = NTest::CreateFilter<Wide>(pb, vecSize, list);
 
     TExploringNodeVisitor explorer;
     explorer.Walk(progReturn.GetNode(), typeEnv);
 
     NUdf::EValidateMode validateMode = NUdf::EValidateMode::Max;
-    TComputationPatternOpts opts(alloc.Ref(), typeEnv, GetListTestFactory(),
+    TComputationPatternOpts opts(alloc.Ref(), typeEnv, NTest::GetListTestFactory(),
                                  functionRegistry.Get(), validateMode, NUdf::EValidatePolicy::Exception,
                                  "OFF", EGraphPerProcess::Multi);
 

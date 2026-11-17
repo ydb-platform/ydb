@@ -1,6 +1,7 @@
 #include "blobstorage_monactors.h"
 #include "blobstorage_db.h"
 #include "skeleton_mon_dbmainpage.h"
+#include "skeleton_mon_restore_part.h"
 #include "skeleton_mon_util.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
@@ -1610,6 +1611,8 @@ namespace NKikimr {
                 auto s = Sprintf("Unsupported value '%s' for CGI parameter 'dbname'", dbname.data());
                 return new TMonErrorActor(notifyId, ev, s);
             }
+        } else if (type == "restorepart") {
+            return CreateMonRestorePartRequestActor(selfVDiskId, notifyId, skeletonFrontID, ev);
         } else if (type == "stat") {
             return new TSkeletonFrontMonDbStatActor(selfVDiskId, notifyId, cfg, skeletonFrontID,
                     ev, NKikimrBlobStorage::StatDb, dbname);

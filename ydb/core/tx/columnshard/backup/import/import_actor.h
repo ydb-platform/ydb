@@ -19,7 +19,7 @@
 namespace NKikimr::NOlap::NImport {
 
 class TImportActor: public NBackground::TSessionActor {
-private:
+public:
     enum class EStage {
         Initialization,
         WaitData,
@@ -28,6 +28,7 @@ private:
         Finished
     };
 
+private:
     using TBase = NBackground::TSessionActor;
 
     EStage Stage = EStage::Initialization;
@@ -45,13 +46,11 @@ private:
     TInstant SaveProgressStartTime;
     TInstant StageStartTime;
 
-    static constexpr TDuration OperationTimeout = TDuration::Minutes(240);
     static constexpr TDuration WarningInterval = TDuration::Seconds(60);
     static constexpr TDuration TimeoutCheckInterval = TDuration::Seconds(15);
     static constexpr ui64 WriteRetryTag = 1;
 
     void SwitchStage(const EStage from, const EStage to);
-    static TString StageToString(EStage stage);
 
     void ScheduleTimeoutCheck();
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);

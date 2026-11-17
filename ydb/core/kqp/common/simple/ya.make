@@ -3,6 +3,7 @@ YQL_LIBRARY()
 SRCS(
     helpers.cpp
     kqp_event_ids.cpp
+    mvcc_version.h
     query_id.cpp
     reattach.cpp
     services.cpp

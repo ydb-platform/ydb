@@ -51,6 +51,7 @@ int TRdmaCtx::GetMaxSge() const noexcept { return 0; }
 
 namespace NLinkMgr {
     TRdmaCtx* GetCtx(NInterconnect::TAddress const&) { return nullptr; }
+    TRdmaCtx* GetCtxByInterface(const TString&) { return nullptr; }
     bool Init() { return false; }
 }
 

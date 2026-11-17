@@ -5,6 +5,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
@@ -200,7 +201,7 @@ TAccountReadQuoter::TAccountReadQuoter(
         {"kesus", KesusPath},
         {"resourcePath", ResourcePath}
     );
-    ConsumerPath = NPersQueue::ConvertOldConsumerName(user);
+    ConsumerPath = MetricsConsumerName(user);
 }
 
 

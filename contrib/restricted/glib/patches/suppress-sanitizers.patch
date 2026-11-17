@@ -1,0 +1,36 @@
+--- a/glib/ghash.c	(43dd6d224cd13b0187e7b921ce8d7d61d499e398)
++++ b/glib/ghash.c	(working tree)
+@@ -40,6 +40,8 @@
+ #include "grefcount.h"
+ #include "gvalgrind.h"
+
++#include <util/system/compiler.h>
++
+ /* The following #pragma is here so we can do this...
+  *
+  *   #ifndef USE_SMALL_ARRAYS
+@@ -383,6 +385,7 @@ g_hash_table_realloc_key_or_value_array (gpointer a, guint size, G_GNUC_UNUSED g
+ #endif
+ }
+
++Y_NO_SANITIZE("memory")
+ static inline gpointer
+ g_hash_table_fetch_key_or_value (gpointer a, guint index, gboolean is_big)
+ {
+--- a/glib/gslice.c	(43dd6d224cd13b0187e7b921ce8d7d61d499e398)
++++ b/glib/gslice.c	(working tree)
+@@ -859,9 +859,12 @@ static inline void
+ thread_memory_swap_magazines (ThreadMemory *tmem,
+                               guint         ix)
+ {
+-  Magazine xmag = tmem->magazine1[ix];
++  _Static_assert(sizeof(Magazine) == sizeof(ChunkLink*) + sizeof(gsize), "This should be rewritten if changed size");
++  ChunkLink *chunks = tmem->magazine1[ix].chunks;
++  gsize      count = tmem->magazine1[ix].count;
+   tmem->magazine1[ix] = tmem->magazine2[ix];
+-  tmem->magazine2[ix] = xmag;
++  tmem->magazine2[ix].chunks = chunks;
++  tmem->magazine2[ix].count = count;
+ }
+
+ static inline gboolean

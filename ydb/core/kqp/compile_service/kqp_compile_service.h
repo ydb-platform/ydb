@@ -9,6 +9,10 @@
 #include <util/system/spinlock.h>
 
 namespace NKikimr {
+namespace NPathAliasing {
+class TPathNormalizer;
+}
+
 namespace NKqp {
 
 class TKqpDbCounters;
@@ -262,6 +266,7 @@ IActor* CreateKqpCompileComputationPatternService(const NKikimrConfig::TTableSer
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    const std::shared_ptr<const NPathAliasing::TPathNormalizer>& pathNormalizer,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TString& uid, const TKqpQueryId& query,

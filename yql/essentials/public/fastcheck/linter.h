@@ -47,7 +47,7 @@ struct TChecksRequest {
     TLangVersion LangVer = MinLangVersion;
     bool IsAnsiLexer = false;
     EMode Mode = EMode::Default;
-    const IUdfMeta* UdfMeta = nullptr;
+    const TUdfMeta* UdfMeta = nullptr;
     TMaybe<TVector<TCheckFilter>> Filters;
     TString IssueReportTarget;
     bool SuppressPrerequisiteIssues = false;
@@ -63,6 +63,9 @@ struct TCheckResponse {
 struct TChecksResponse {
     TVector<TCheckResponse> Checks;
 };
+
+void PreloadIssues();
+TUdfMeta LoadUdfMeta(TStringBuf json);
 
 TVector<TCheckFilter> ParseChecks(const TString& checks);
 TSet<TString> ListChecks(const TMaybe<TVector<TCheckFilter>>& filters = Nothing());

@@ -21,8 +21,14 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         TAstListNodeImpl dummy(GetPos()); // For a legacy interopability
-        if (!NSQLTranslationV1::Init(ctx, src, Args) ||
-            !Aggregation_->InitAggr(ctx, /*isFactory=*/false, src, dummy, Args)) {
+
+        for (const ui32 index : Aggregation_->GetFactoryColumnIndices()) {
+            if (index < Args.size() && !Args[index]->Init(ctx, src)) {
+                return false;
+            }
+        }
+
+        if (!Aggregation_->InitAggr(ctx, /*isFactory=*/false, src, dummy, Args)) {
             return false;
         }
 
@@ -66,9 +72,8 @@ private:
         }
 
         factory = L(std::move(factory), Name());
-        for (TNodePtr arg : Args | std::views::drop(1)) {
-            factory = L(std::move(factory), std::move(arg));
-        }
+        Aggregation_->AddFactoryArguments(factory);
+
         return factory;
     }
 
@@ -110,20 +115,12 @@ private:
 
 bool IsSupported(EAggregationType type) {
     return type == NORMAL ||
-           type == COUNT;
-}
-
-bool IsSupported(const TVector<TNodePtr>& args) {
-    return args.size() == 1;
-}
-
-bool IsSupported(TYqlAggregationArgs& args) {
-    return IsSupported(args.Type) &&
-           IsSupported(args.Args);
+           type == COUNT ||
+           type == PERCENTILE;
 }
 
 TNodeResult BuildYqlAggregation(TPosition position, TYqlAggregationArgs&& args) {
-    if (!IsSupported(args)) {
+    if (!IsSupported(args.Type)) {
         return std::unexpected(ESQLError::UnsupportedYqlSelect);
     }
 

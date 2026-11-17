@@ -77,6 +77,7 @@ using TProtobufCustomFieldConverter = std::variant<
 static constexpr int AttributeDictionaryAttributeFieldNumber = 1;
 static constexpr int ProtobufMapKeyFieldNumber = 1;
 static constexpr int ProtobufMapValueFieldNumber = 2;
+static constexpr int YsonListFieldNumber = 1;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -216,6 +217,9 @@ NYson::TProtobufElementType GetProtobufElementType(const TProtobufElement& proto
             return TProtobufElementType{FieldDescriptor::TYPE_MESSAGE};
         },
         [] (const TProtobufRepeatedElement& element) {
+            if (element.YsonListMessage) {
+                return TProtobufElementType{FieldDescriptor::TYPE_MESSAGE};
+            }
             return GetProtobufElementType(element.Element);
         },
         [] (const TProtobufMapElement& /*element*/) {
@@ -811,10 +815,27 @@ public:
         : Registry_(registry)
         , Underlying_(descriptor)
         , AttributeDictionary_(descriptor->options().GetExtension(NYson::NProto::attribute_dictionary))
+        , YsonList_(descriptor->options().GetExtension(NYson::NProto::yson_list))
         , UnknownFieldNumber_(descriptor->options().GetExtension(NYson::NProto::unknown_yson_field_number))
         , FullName_(FromProto<std::string>(Underlying_->full_name()))
         , Converter_(registry->FindMessageTypeConverter(descriptor))
-    { }
+    {
+        if (IsYsonList()) {
+            auto* field = Underlying_->FindFieldByNumber(YsonListFieldNumber);
+            THROW_ERROR_EXCEPTION_UNLESS(field &&
+                    field->is_repeated() &&
+                    Underlying_->field_count() == 1 &&
+                    Underlying_->extension_range_count() == 0,
+                "Message %Qv with \"yson_list\" option must have exactly one repeated field "
+                "with number %v and must not declare extension ranges",
+                GetFullName(),
+                YsonListFieldNumber);
+            THROW_ERROR_EXCEPTION_IF(field->options().HasExtension(NYson::NProto::yson_map) ||
+                field->options().HasExtension(NYson::NProto::required),
+                "Repeated field of message %Qv with \"yson_list\" must not have \"required\" or \"yson_map\" options",
+                GetFullName());
+        }
+    }
 
     void Build()
     {
@@ -848,6 +869,18 @@ public:
     int GetUnknownFieldNumber() const
     {
         return UnknownFieldNumber_;
+    }
+
+    bool IsYsonList() const
+    {
+        return YsonList_;
+    }
+
+    const TProtobufField* GetYsonListField() const
+    {
+        return IsYsonList()
+            ? GetFieldByNumber(YsonListFieldNumber)
+            : nullptr;
     }
 
     const std::string& GetFullName() const
@@ -904,6 +937,12 @@ public:
 
     TProtobufElement GetElement() const
     {
+        if (const auto* field = GetYsonListField()) {
+            return std::make_unique<TProtobufRepeatedElement>(TProtobufRepeatedElement{
+                .Element = field->GetElement(/*insideRepeated*/ true),
+                .YsonListMessage = this,
+            });
+        }
         if (IsAttributeDictionary()) {
             return std::make_unique<TProtobufAttributeDictionaryElement>(TProtobufAttributeDictionaryElement{
                 this,
@@ -917,6 +956,10 @@ public:
 
     void WriteSchema(IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
     {
+        if (const auto* field = GetYsonListField()) {
+            field->WriteTypeSchema(consumer, options);
+            return;
+        }
         BuildYsonFluently(consumer).BeginMap()
             .Item("type_name").Value("struct")
             .DoIf(options.AddCppTypeNames, [&] (auto fluent) {
@@ -941,6 +984,7 @@ private:
     TProtobufTypeRegistry* const Registry_;
     const Descriptor* const Underlying_;
     const bool AttributeDictionary_;
+    const bool YsonList_;
     const int UnknownFieldNumber_;
 
     const std::string FullName_;
@@ -1367,6 +1411,7 @@ private:
         TFieldNumberList RequiredFieldNumbers;
         TFieldNumberList NonRequiredFieldNumbers;
         int CurrentMapIndex = 0;
+        bool ParsingYsonList = false;
     };
     std::vector<TTypeEntry> TypeStack_;
 
@@ -1531,6 +1576,13 @@ private:
 
     void OnMyBeginList() override
     {
+        if (const auto* type = GetCurrentMessageType(); type && type->IsYsonList()) {
+            BeginMessage();
+            TypeStack_.back().ParsingYsonList = true;
+            FieldStack_.emplace_back(type->GetYsonListField());
+            return;
+        }
+
         ValidateNotRoot();
 
         const auto* field = FieldStack_.back().Field;
@@ -1556,10 +1608,36 @@ private:
     {
         YT_ASSERT(!TypeStack_.empty());
         FieldStack_.pop_back();
-        YPathStack_.Pop();
+        if (TypeStack_.back().ParsingYsonList) {
+            EndMessage();
+        } else {
+            YPathStack_.Pop();
+        }
     }
 
     void OnMyBeginMap() override
+    {
+        const auto* type = GetCurrentMessageType();
+        THROW_ERROR_EXCEPTION_IF(type && type->IsYsonList() && !GetProtobufInteropConfig()->AllowYsonListFromMap,
+            "Message %Qv with \"yson_list\" option cannot be parsed from \"map\" values",
+            type->GetFullName())
+            .With("ypath", YPathStack_.GetPath());
+
+        BeginMessage();
+    }
+
+    const TProtobufMessageType* GetCurrentMessageType() const
+    {
+        if (FieldStack_.empty()) {
+            return RootType_;
+        }
+        const auto& entry = FieldStack_.back();
+        return entry.Field && (!entry.Field->IsRepeated() || entry.ParsingList)
+            ? entry.Field->GetMessageType()
+            : nullptr;
+    }
+
+    void BeginMessage()
     {
         if (TypeStack_.empty()) {
             TypeStack_.emplace_back(RootType_);
@@ -1758,6 +1836,17 @@ private:
     }
 
     void OnMyEndMap() override
+    {
+        const auto* type = TypeStack_.back().Type;
+        THROW_ERROR_EXCEPTION_IF(TypeStack_.back().ParsingYsonList,
+            "Unexpected end of map while parsing YSON list message %Qv",
+            type->GetFullName())
+            .With("ypath", YPathStack_.GetPath());
+
+        EndMessage();
+    }
+
+    void EndMessage()
     {
         auto& typeEntry = TypeStack_.back();
         const auto* type = typeEntry.Type;
@@ -2246,7 +2335,7 @@ public:
     void Parse()
     {
         TypeStack_.emplace_back(RootType_);
-        Consumer_->OnBeginMap();
+        OnBeginMessage();
 
         while (true) {
             auto& typeEntry = TypeStack_.back();
@@ -2262,7 +2351,7 @@ public:
             }
 
             if (!flag) {
-                if (typeEntry.RepeatedField) {
+                if (typeEntry.RepeatedField && !type->IsYsonList()) {
                     if (typeEntry.RepeatedField->IsYsonMap()) {
                         OnEndMap();
                     } else {
@@ -2290,7 +2379,8 @@ public:
                             .With("ypath", YPathStack_.GetPath());
                     }
                 } else {
-                    OnEndMap();
+                    OnEndMessage();
+                    YPathStack_.Pop();
                 }
                 TypeStack_.pop_back();
 
@@ -2300,7 +2390,7 @@ public:
             }
         }
 
-        Consumer_->OnEndMap();
+        OnEndMessage();
         TypeStack_.pop_back();
 
         YT_VERIFY(TypeStack_.empty());
@@ -2320,6 +2410,7 @@ private:
     {
         explicit TTypeEntry(const TProtobufMessageType* type)
             : Type(type)
+            , RepeatedField(type->GetYsonListField())
         { }
 
         const TProtobufMessageType* Type;
@@ -2355,6 +2446,24 @@ private:
     std::vector<char> PooledString_;
     std::vector<char> PooledKey_;
     std::vector<char> PooledValue_;
+
+    void OnBeginMessage()
+    {
+        if (TypeStack_.back().Type->IsYsonList()) {
+            Consumer_->OnBeginList();
+        } else {
+            Consumer_->OnBeginMap();
+        }
+    }
+
+    void OnEndMessage()
+    {
+        if (TypeStack_.back().Type->IsYsonList()) {
+            Consumer_->OnEndList();
+        } else {
+            Consumer_->OnEndMap();
+        }
+    }
 
     void OnBeginMap()
     {
@@ -2597,7 +2706,7 @@ private:
         // NB: If field with number equal to `UnknownFieldNumber` exists, treat it just like every other field.
         // Serialization layer already disallows such mismatches.
         if (!field) {
-            if (fieldNumber == type->GetUnknownFieldNumber()) {
+            if (fieldNumber == type->GetUnknownFieldNumber() && !type->IsYsonList()) {
                 if (wireType != WireFormatLite::WIRETYPE_LENGTH_DELIMITED) {
                     THROW_ERROR_EXCEPTION("Invalid wire type %v while parsing unknown field at %v",
                         static_cast<int>(wireType),
@@ -3061,7 +3170,7 @@ private:
                             LimitStack_.push_back(CodedStream_.PushLimit(static_cast<int>(length)));
                             TypeStack_.emplace_back(field->GetMessageType());
                             if (!IsYsonMapEntry()) {
-                                OnBeginMap();
+                                OnBeginMessage();
                             }
                         }
                         break;
@@ -3456,6 +3565,18 @@ TProtobufElementResolveResult ResolveProtobufElementByYPath(
             tokenizer.Advance();
             tokenizer.Expect(NYPath::ETokenType::Literal);
             return makeResult(std::make_unique<TProtobufAnyElement>());
+        }
+
+        if (const auto* field = currentType->GetYsonListField()) {
+            tokenizer.Advance();
+            if (!options.AllowAsterisks || tokenizer.GetType() != NYPath::ETokenType::Asterisk) {
+                tokenizer.ExpectListIndex();
+            }
+            if (!field->IsMessage()) {
+                return GetProtobufElementFromField(field, /*insideRepeated*/ true, tokenizer);
+            }
+            currentType = field->GetMessageType();
+            continue;
         }
 
         tokenizer.Advance();

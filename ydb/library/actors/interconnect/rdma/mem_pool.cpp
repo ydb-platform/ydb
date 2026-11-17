@@ -642,13 +642,9 @@ namespace NInterconnect::NRdma {
         void Tick(NMonotonic::TMonotonic time) noexcept override {
             constexpr TDuration holdTime = TDuration::Seconds(15);
 
+            const std::lock_guard<std::mutex> lock(Mutex);
             ui64 prevMax = MaxAllocated.Counter->Val();
-            ui64 maxAllocated = 0;
-
-            {
-                const std::lock_guard<std::mutex> lock(Mutex);
-                maxAllocated = ExtractMaxAllocatedForAllChunks();
-            }
+            ui64 maxAllocated = ExtractMaxAllocatedForAllChunks();
 
             if (time - MaxAllocated.Time > holdTime) {
                 MaxAllocated.Counter->Set(maxAllocated);

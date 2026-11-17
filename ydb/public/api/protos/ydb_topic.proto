@@ -335,7 +335,7 @@ message StreamReadMessage {
         // Indicates that the SDK supports auto partitioning.
         bool auto_partitioning_support = 5;
         // Max in flight bytes per partition
-        uint64 partition_max_in_flight_bytes = 6; 
+        uint64 partition_max_in_flight_bytes = 6;
 
         message TopicReadSettings {
             // Topic path.
@@ -478,7 +478,9 @@ message StreamReadMessage {
         // Identifier of partition session whose status was requested.
         int64 partition_session_id = 1;
 
-        // Partition contains messages with offsets in range [start, end).
+
+        // start is the committed offset; end is the partition end offset.
+        // start may precede the earliest retained offset.
         OffsetsRange partition_offsets = 2;
 
         // Each offset up to and including (committed_offset - 1) was fully processed.
@@ -500,11 +502,15 @@ message StreamReadMessage {
         // Each offset up to and including (committed_offset - 1) was fully processed.
         int64 committed_offset = 2;
 
-        // Partition contains messages with offsets in range [start, end).
+        // start is the initial read offset; end is the partition end offset.
+        // start may precede retained_start_offset.
         OffsetsRange partition_offsets = 3;
 
         // Partition location, filled only when InitRequest.direct_read is true.
         PartitionLocation partition_location = 4;
+
+        // Earliest offset retained by the partition
+        optional int64 retained_start_offset = 5;
     }
 
     // Signal for server that client is ready to recive data for partition.

@@ -59,7 +59,7 @@ Currently, we do not support deploying the connector in {{ k8s }}, but we plan t
                   value: "true"
     ```
 
-4. Add the following `feature_flags` section to the {{ ydb-short-name }} configuration file:
+4. Add the following [`feature_flags`](../../../../reference/configuration/feature_flags.md) section to the {{ ydb-short-name }} configuration file:
 
     ```yaml
     feature_flags:

@@ -34,7 +34,7 @@ public:
         : TPhysicalOpBuilder(ctx, pos, names) {
     }
 
-    virtual TExprNode::TPtr BuildPhysicalOp() = 0;
+    virtual NPhysicalConvertionUtils::TStageBody BuildPhysicalOp() = 0;
 };
 
 class TPhysicalUnaryOpBuilder: public TPhysicalOpBuilder {
@@ -44,6 +44,20 @@ public:
     }
 
     virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) = 0;
+};
+
+/**
+ * Operators that are wide internally (WideMap, WideFilter, WideSort) and can therefore
+ * take and hand back a wide stage body directly, with no NarrowMap/ExpandMap round trip
+ * against their neighbours. See NPhysicalConvertionUtils::TStageBody.
+ */
+class TPhysicalWideUnaryOpBuilder: public TPhysicalOpBuilder {
+public:
+    TPhysicalWideUnaryOpBuilder(TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalOpBuilder(ctx, pos, names) {
+    }
+
+    virtual NPhysicalConvertionUtils::TStageBody BuildPhysicalOp(const NPhysicalConvertionUtils::TStageBody& input) = 0;
 };
 
 class TPhysicalBinaryOpBuilder: public TPhysicalOpBuilder {
@@ -70,7 +84,7 @@ public:
         : TPhysicalOpBuilder(ctx, pos, names) {
     }
 
-    virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) = 0;
+    virtual NPhysicalConvertionUtils::TStageBody BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) = 0;
 };
 
 class TPhysicalUnaryOpBuilderWithMemLimit: public TPhysicalOpBuilder {
@@ -79,10 +93,10 @@ public:
         : TPhysicalOpBuilder(ctx, pos, names) {
     }
 
-    virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input, std::optional<i64> memLimit) = 0;
+    virtual NPhysicalConvertionUtils::TStageBody BuildPhysicalOp(const NPhysicalConvertionUtils::TStageBody& input, std::optional<i64> memLimit) = 0;
 };
 
 template <typename TPhysicalBuilder, typename TOperator, typename... Args>
-TExprNode::TPtr Build(TOperator& op, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names, Args... args) {
-    return TPhysicalBuilder(op, ctx, pos, names).BuildPhysicalOp(args...);
+auto Build(TOperator& op, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names, Args&&... args) {
+    return TPhysicalBuilder(op, ctx, pos, names).BuildPhysicalOp(std::forward<Args>(args)...);
 }

@@ -48,9 +48,7 @@ static int TryReadPossibleCpuCount()
     return ParsePossibleCpuCount(std::string_view(buffer, size));
 }
 
-// Published by GetCpuCount(); see the declaration in per_cpu-inl.h. Defaults to 0 so the
-// fast path's bounds check sends every update to the safe atomic fallback until the size is
-// known.
+// Initialized by GetCpuCount() before any per-CPU updates; see per_cpu-inl.h.
 constinit int CpuCount = 0;
 
 } // namespace NDetail
@@ -70,9 +68,8 @@ int GetCpuCount()
         } else {
             // Bitmap unavailable (e.g. /sys masked in a container): _SC_NPROCESSORS_CONF is a
             // count, not a cpu_id bound, so on a sparse topology it may be smaller than some
-            // cpu_id. The fast path's bounds check then routes those CPUs to the clamped
-            // atomic fallback -- still memory-safe, though a clamped slot may mix atomic and
-            // non-atomic writes (at worst a lost counter update on such exotic setups).
+            // cpu_id. Such CPU ids use the atomic fallback with an index reduced modulo
+            // the slot count; this does not prevent collisions with rseq updates.
             int configured = static_cast<int>(::sysconf(_SC_NPROCESSORS_CONF));
             cpuCount = configured > 0 ? configured : 1;
         }

@@ -17,6 +17,20 @@
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+namespace {
+    class TTableSplitTestServer : public TKikimrWithGrpcAndRootSchema {
+    public:
+        explicit TTableSplitTestServer(NKikimrConfig::TAppConfig appConfig = {})
+            : TKikimrWithGrpcAndRootSchema(std::move(appConfig), {}, {}, false, nullptr,
+                [](NKikimr::Tests::TServerSettings& settings) {
+                    settings.SetLoggerInitializer([](NKikimr::TTestActorRuntime& runtime) {
+                        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+                    });
+                })
+        {}
+    };
+}
+
 void CreateTestTable(NYdb::NTable::TTableClient& client, const TString& name) {
     auto sessionResult = client.CreateSession().ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
@@ -145,7 +159,6 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         UNIT_ASSERT_VALUES_EQUAL(shardsBefore, 1);
 
         server.Server_->GetRuntime()->GetAppData().DataShardConfig.SetStatsReportIntervalSeconds(0);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_INFO);
 
         // Set low CPU usage threshold for robustness
@@ -177,7 +190,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 AtomicSet(enough, 1);
                 break;
             }
-            Sleep(TDuration::Seconds(5));
+            Sleep(TDuration::Seconds(1));
         }
 
         for (size_t i = 0; i < threads.size(); i++) {
@@ -186,8 +199,12 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         int retries = 5;
         size_t shardsAfter = 0;
-        for (;retries > 0 && !(shardsAfter >= shardsBefore + minSplits); --retries, Sleep(TDuration::Seconds(1))) {
+        for (;retries > 0; --retries) {
             shardsAfter = oldClient.GetTablePartitions("/Root/Foo").size();
+            if (shardsAfter >= shardsBefore + minSplits) {
+                break;
+            }
+            Sleep(TDuration::Seconds(1));
         }
         Cerr << "Table has " << shardsAfter << " shards" << Endl;
         UNIT_ASSERT_C(shardsAfter >= shardsBefore + minSplits, "Table didn't split!!11 O_O");
@@ -202,7 +219,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 "SELECT * FROM `/Root/Foo` \n"
                 "WHERE NameHash = $name_hash AND Name = $name";
 
-        TKikimrWithGrpcAndRootSchema server;
+        TTableSplitTestServer server;
         DoTestSplitByLoad(server, query);
     }
 
@@ -216,7 +233,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 "WHERE NameHash = $name_hash AND Name = $name";
 
         NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TTableSplitTestServer server(appConfig);
         DoTestSplitByLoad(server, query, /* fill with data */ true, /* at least two splits */ 2);
     }
 
@@ -229,7 +246,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 "UPSERT INTO `/Root/Foo` (NameHash, Name, Version, Timestamp) "
                 "  VALUES ($name_hash, $name, $version, $timestamp);";
 
-        TKikimrWithGrpcAndRootSchema server;
+        TTableSplitTestServer server;
         DoTestSplitByLoad(server, query);
     }
 
@@ -242,12 +259,12 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 "DELETE FROM `/Root/Foo` \n"
                 "WHERE NameHash = $name_hash AND Name = $name";
 
-        TKikimrWithGrpcAndRootSchema server;
+        TTableSplitTestServer server;
         DoTestSplitByLoad(server, query);
     }
 
     Y_UNIT_TEST(SplitByLoadWithNonEmptyRangeReads) {
-        TKikimrWithGrpcAndRootSchema server;
+        TTableSplitTestServer server;
 
         NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
         NYdb::NTable::TTableClient client(driver);
@@ -282,7 +299,6 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         UNIT_ASSERT_VALUES_EQUAL(shardsBefore, 1);
 
         server.Server_->GetRuntime()->GetAppData().DataShardConfig.SetStatsReportIntervalSeconds(0);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_INFO);
 
         TString rangeQuery =
@@ -316,7 +332,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 AtomicSet(enough, 1);
                 break;
             }
-            Sleep(TDuration::Seconds(5));
+            Sleep(TDuration::Seconds(1));
         }
 
         for (size_t i = 0; i < threads.size(); i++) {
@@ -325,8 +341,12 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         int retries = 5;
         size_t shardsAfter = 0;
-        for (;retries > 0 && shardsAfter <= shardsBefore; --retries, Sleep(TDuration::Seconds(1))) {
+        for (;retries > 0; --retries) {
             shardsAfter = oldClient.GetTablePartitions("/Root/Foo").size();
+            if (shardsAfter > shardsBefore) {
+                break;
+            }
+            Sleep(TDuration::Seconds(1));
         }
         Cerr << "Table has " << shardsAfter << " shards" << Endl;
         UNIT_ASSERT_C(shardsAfter > shardsBefore, "Table didn't split!!11 O_O");
@@ -367,7 +387,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         NKikimr::TAppData::TimeProvider = testTimeProvider;
 
         NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TTableSplitTestServer server(appConfig);
 
         auto& icb = *server.Server_->GetRuntime()->GetAppData().Icb;
         // Set min uptime before merge by load to 10h
@@ -438,8 +458,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         appConfig.MutableFeatureFlags()->SetEnableResourcePools(true);
         appConfig.MutableDataShardConfig()->SetStatsReportIntervalSeconds(2);
 
-        TKikimrWithGrpcAndRootSchema server(appConfig);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
+        TTableSplitTestServer server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_NOTICE);
 
@@ -540,7 +559,6 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         }
 
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 
         partitions = 1;
         do { // wait until split

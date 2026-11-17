@@ -6,7 +6,7 @@ Before diving into `BATCH DELETE FROM`, it is recommended to familiarize yoursel
 
 {% endnote %}
 
-`BATCH DELETE FROM` allows to delete records in large tables while minimizing the risk of lock invalidation and transaction rollback by weakening guarantees. Specifically, data deletion is performed as a series of transactions for each [partition](../../../concepts/datamodel/table.md#partitioning) of the specified table separately, processing 10 000 rows per iteration. Each query processes up to 10 partitions concurrently.
+`BATCH DELETE FROM` allows to delete records in large tables while minimizing the risk of lock invalidation and transaction rollback by weakening guarantees. Specifically, data deletion is performed as a series of transactions for each [partition](../../../concepts/datamodel/table.md#partitioning_row_table) of the specified table separately, processing 10 000 rows per iteration. Each query processes up to 10 partitions concurrently.
 
 This query, like the standard `DELETE FROM`, executes synchronously and returns a status. If an error occurs or the client disconnects, data deletion stops, and applied changes are not rolled back.
 

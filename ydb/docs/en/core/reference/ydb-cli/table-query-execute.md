@@ -3,7 +3,7 @@
 
 {% include notitle [warning](./_includes/deprecated_command_warning.md) %}
 
-The `table query execute` subcommand is designed for reliable execution of YQL queries. With this sub-command, you can successfully execute your query when certain table partitions are unavailable for a short time (for example, due to being [split or merged](../../concepts/datamodel/table.md#partitioning)) by using built-in retry policies.
+The `table query execute` subcommand is designed for reliable execution of YQL queries. With this sub-command, you can successfully execute your query when certain table partitions are unavailable for a short time (for example, due to being [split or merged](../../concepts/datamodel/table.md#partitioning_row_table)) by using built-in retry policies.
 
 General format of the command:
 

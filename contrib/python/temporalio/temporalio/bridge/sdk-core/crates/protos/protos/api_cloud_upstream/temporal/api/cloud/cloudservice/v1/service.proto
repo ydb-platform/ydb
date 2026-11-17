@@ -1,0 +1,1291 @@
+syntax = "proto3";
+
+package temporal.api.cloud.cloudservice.v1;
+
+option go_package = "go.temporal.io/api/cloud/cloudservice/v1;cloudservice";
+option java_package = "io.temporal.api.cloud.cloudservice.v1";
+option java_multiple_files = true;
+option java_outer_classname = "ServiceProto";
+option ruby_package = "Temporalio::Api::Cloud::CloudService::V1";
+option csharp_namespace = "Temporalio.Api.Cloud.CloudService.V1";
+
+import "temporal/api/cloud/cloudservice/v1/request_response.proto";
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+    info: {
+        title: "Temporal Cloud Ops API";
+        description: "Programmatic access to manage Temporal Cloud control plane resources including namespaces, users, service accounts, and more.\n\n## Authentication\n\nAll API requests require authentication using an API Key. Include your API key in the `Authorization` header using the Bearer scheme:\n\n```\nAuthorization: Bearer YOUR_API_KEY\n```\n\nAPI keys can be created and managed through the [API Keys endpoints](#tag/API-Keys) or via the Temporal Cloud UI. For more information, see [API Keys Documentation](https://docs.temporal.io/cloud/api-keys).\n\n## Authorization\n\nThe API uses Role-Based Access Control (RBAC) to manage permissions. Each operation requires specific role-based permissions in addition to a valid API key.\n\n### Account-Level Roles\n\n- **Account Owner** - Full account administration access\n- **Account Admin** - Manage namespaces, users, and service accounts  \n- **Account Developer** - Create namespaces and manage Nexus endpoints\n- **Finance Admin** - View usage and billing information\n- **Account Read** - Read-only access to account resources\n\n### Namespace-Level Roles\n\n- **Namespace Admin** - Full access to namespace configuration and data\n- **Namespace Write** - Execute workflows and modify workflow data\n- **Namespace Read** - Read-only access to namespace data\n\nNamespace-level permissions are scoped to specific namespaces. A user or service account may have different permission levels across different namespaces.\n\nFor detailed information about roles and permissions, see [Access Control Documentation](https://docs.temporal.io/cloud/users).";
+        version: "1.0";
+        extensions: {
+            key: "x-logo";
+            value: {
+                struct_value: {
+                    fields: {
+                        key: "url";
+                        value: {
+                            string_value: "https://images.ctfassets.net/0uuz8ydxyd9p/4YGUnEoCaH9SyoUDhlJkau/e1600205d17eeee3033d926ef06664a9/Temporal_LogoLockup_Horizontal_dark_1.svg";
+                        }
+                    }
+                }
+            }
+        }
+    };
+    external_docs: {
+        url: "https://docs.temporal.io/cloud";
+        description: "Temporal Cloud Documentation";
+    };
+    tags: [
+        {name: "Namespaces"; description: "Manage Temporal Cloud namespaces"},
+        {name: "Users"; description: "Manage users and their namespace access"},
+        {name: "Service Accounts"; description: "Manage service accounts and their namespace access"},
+        {name: "API Keys"; description: "Manage API keys for authentication"},
+        {name: "Groups"; description: "Manage user groups and group membership"},
+        {name: "Nexus"; description: "Manage Nexus endpoints"},
+        {name: "High Availability"; description: "Manage high availability (multi-region, multi-cloud, and same-region replication) namespace configurations"},
+        {name: "Export"; description: "Manage workflow history export configurations"},
+        {name: "Connectivity Rules"; description: "Manage network connectivity rules"},
+        {name: "Regions"; description: "Query available regions"},
+        {name: "Account"; description: "Manage account settings and usage"},
+        {name: "Custom Roles"; description: "Manage custom roles and their permissions"},
+        {name: "Operations"; description: "Query async operation status"}
+    ];
+};
+
+// WARNING: This service is currently experimental and may change in
+// incompatible ways.
+service CloudService {
+
+    // Get information about the current authenticated user or service account principal
+    rpc GetCurrentIdentity(GetCurrentIdentityRequest) returns (GetCurrentIdentityResponse) {
+        option (google.api.http) = {
+            get: "/cloud/current-identity",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Account"];
+            summary: "Get current identity";
+            description: "Returns information about the currently authenticated user or service account principal";
+        };
+    }
+
+    // Gets all known users
+    rpc GetUsers(GetUsersRequest) returns (GetUsersResponse) {
+        option (google.api.http) = {
+            get: "/cloud/users",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Users"];
+            summary: "List all users";
+            description: "Returns a list of all users in the account";
+            operation_id: "listUsers";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/users";
+                description: "User management documentation";
+            };
+        };
+    }
+
+    // Get a user
+    rpc GetUser(GetUserRequest) returns (GetUserResponse) {
+        option (google.api.http) = {
+            get: "/cloud/users/{user_id}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Users"];
+            summary: "Get user by ID";
+            description: "Takes a user ID, returns user details";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/users";
+                description: "User management documentation";
+            };
+        };
+    }
+
+    // Create a user
+    rpc CreateUser(CreateUserRequest) returns (CreateUserResponse) {
+        option (google.api.http) = {
+            post: "/cloud/users",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Users"];
+            summary: "Create a user";
+            description: "Creates a new user in the account";
+        };
+    }
+
+    // Update a user
+    rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse) {
+        option (google.api.http) = {
+            post: "/cloud/users/{user_id}",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Users"];
+            summary: "Update a user";
+            description: "Updates an existing user's details";
+        };
+    }
+
+    // Delete a user
+    rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/users/{user_id}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Users"];
+            summary: "Delete a user";
+            description: "Removes a user from the account";
+        };
+    }
+
+    // Set a user's access to a namespace
+    rpc SetUserNamespaceAccess(SetUserNamespaceAccessRequest) returns (SetUserNamespaceAccessResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/users/{user_id}/access",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Users"];
+            summary: "Set user namespace access";
+            description: "Configures a user's permissions for a specific namespace";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/users-namespace-level-permissions";
+                description: "Namespace permissions documentation";
+            };
+        };
+    }
+
+    // Get the latest information on an async operation
+    rpc GetAsyncOperation(GetAsyncOperationRequest) returns (GetAsyncOperationResponse) {
+        option (google.api.http) = {
+            get: "/cloud/operations/{async_operation_id}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Operations"];
+            summary: "Get async operation status";
+            description: "Returns the current status and details of an asynchronous operation";
+        };
+    }
+
+    // Create a new namespace
+    rpc CreateNamespace (CreateNamespaceRequest) returns (CreateNamespaceResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Namespaces"];
+            summary: "Create a namespace";
+            description: "Creates a new namespace in the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/namespaces";
+                description: "Namespace management documentation";
+            };
+        };
+    }
+
+    // Get all namespaces
+    rpc GetNamespaces (GetNamespacesRequest)  returns (GetNamespacesResponse) {
+        option (google.api.http) = {
+            get: "/cloud/namespaces",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Namespaces"];
+            summary: "List all namespaces";
+            description: "Returns a list of all namespaces in the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/namespaces";
+                description: "Namespace management documentation";
+            };
+        };
+    }
+
+    // Get a namespace
+    rpc GetNamespace (GetNamespaceRequest) returns (GetNamespaceResponse) {
+        option (google.api.http) = {
+            get: "/cloud/namespaces/{namespace}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Namespaces"];
+            summary: "Get namespace details";
+            description: "Returns detailed information about a specific namespace";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/namespaces";
+                description: "Namespace management documentation";
+            };
+        };
+    }
+
+    // Update a namespace
+    rpc UpdateNamespace (UpdateNamespaceRequest) returns (UpdateNamespaceResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Namespaces"];
+            summary: "Update a namespace";
+            description: "Updates configuration for an existing namespace";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/namespaces";
+                description: "Namespace management documentation";
+            };
+        };
+    }
+
+    // Rename an existing customer search attribute
+    rpc RenameCustomSearchAttribute (RenameCustomSearchAttributeRequest) returns (RenameCustomSearchAttributeResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/rename-custom-search-attribute",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Namespaces"];
+            summary: "Rename custom search attribute";
+            description: "Renames a custom search attribute in a namespace";
+            external_docs: {
+                url: "https://docs.temporal.io/search-attribute#custom-search-attribute";
+                description: "Custom Search Attributes documentation";
+            };
+        };
+    }
+
+    // Delete a namespace
+    rpc DeleteNamespace (DeleteNamespaceRequest) returns (DeleteNamespaceResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/namespaces/{namespace}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Namespaces"];
+            summary: "Delete a namespace";
+            description: "Permanently deletes a namespace and all its data";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/namespaces";
+                description: "Namespace management documentation";
+            };
+        };
+    }
+
+    // Failover a multi-region namespace
+    rpc FailoverNamespaceRegion (FailoverNamespaceRegionRequest) returns (FailoverNamespaceRegionResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/failover-region",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["High Availability"];
+            summary: "Failover namespace region";
+            description: "Initiates a regional failover for a high availability namespace";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/high-availability";
+                description: "High availability namespace documentation";
+            };
+        };
+    }
+
+    // Add a new region to a namespace
+    // Deprecated: Use the UpdateNamespace() to add new replica in the namespace spec instead.
+    rpc AddNamespaceRegion (AddNamespaceRegionRequest) returns (AddNamespaceRegionResponse) {
+        option deprecated = true;
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/add-region",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["High Availability"];
+            summary: "Add namespace replica";
+            description: "Adds a new replica to an existing namespace";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/high-availability";
+                description: "High availability namespace documentation";
+            };
+        };
+    }
+
+    // Delete a region from a namespace
+    // Deprecated: Use the UpdateNamespace() to delete a replica in the namespace spec instead.
+    rpc DeleteNamespaceRegion (DeleteNamespaceRegionRequest) returns (DeleteNamespaceRegionResponse) {
+        option deprecated = true;
+        option (google.api.http) = {
+            delete: "/cloud/namespaces/{namespace}/regions/{region}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["High Availability"];
+            summary: "Remove namespace replica";
+            description: "Removes a replica from a high availability namespace";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/high-availability";
+                description: "High availability namespace documentation";
+            };
+        };
+    }
+
+    // Get all regions
+    rpc GetRegions (GetRegionsRequest) returns (GetRegionsResponse) {
+        option (google.api.http) = {
+            get: "/cloud/regions",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Regions"];
+            summary: "List all regions";
+            description: "Returns a list of all available cloud regions";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/regions";
+                description: "Regions documentation";
+            };
+        };
+    }
+
+    // Get a region
+    rpc GetRegion (GetRegionRequest) returns (GetRegionResponse) {
+        option (google.api.http) = {
+            get: "/cloud/regions/{region}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Regions"];
+            summary: "Get region details";
+            description: "Returns detailed information about a specific region";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/regions";
+                description: "Regions documentation";
+            };
+        };
+    }
+
+    // Get all known API keys
+    rpc GetApiKeys (GetApiKeysRequest) returns (GetApiKeysResponse) {
+        option (google.api.http) = {
+            get: "/cloud/api-keys",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["API Keys"];
+            summary: "List all API keys";
+            description: "Returns a list of all API keys in the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/api-keys";
+                description: "API Keys documentation";
+            };
+        };
+    }
+
+    // Get an API key
+    rpc GetApiKey (GetApiKeyRequest) returns (GetApiKeyResponse) {
+        option (google.api.http) = {
+            get: "/cloud/api-keys/{key_id}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["API Keys"];
+            summary: "Get API key details";
+            description: "Returns detailed information about a specific API key";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/api-keys";
+                description: "API Keys documentation";
+            };
+        };
+    }
+
+    // Create an API key
+    rpc CreateApiKey (CreateApiKeyRequest) returns (CreateApiKeyResponse) {
+        option (google.api.http) = {
+            post: "/cloud/api-keys",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["API Keys"];
+            summary: "Create an API key";
+            description: "Creates a new API key for programmatic access";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/api-keys";
+                description: "API Keys documentation";
+            };
+        };
+    }
+
+    // Update an API key
+    rpc UpdateApiKey (UpdateApiKeyRequest) returns (UpdateApiKeyResponse) {
+        option (google.api.http) = {
+            post: "/cloud/api-keys/{key_id}",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["API Keys"];
+            summary: "Update an API key";
+            description: "Updates an existing API key's properties";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/api-keys";
+                description: "API Keys documentation";
+            };
+        };
+    }
+
+    // Delete an API key
+    rpc DeleteApiKey (DeleteApiKeyRequest) returns (DeleteApiKeyResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/api-keys/{key_id}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["API Keys"];
+            summary: "Delete an API key";
+            description: "Revokes and deletes an API key";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/api-keys";
+                description: "API Keys documentation";
+            };
+        };
+    }
+
+    // Gets nexus endpoints
+    rpc GetNexusEndpoints(GetNexusEndpointsRequest) returns (GetNexusEndpointsResponse) {
+        option (google.api.http) = {
+            get: "/cloud/nexus/endpoints",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Nexus"];
+            summary: "List all Nexus endpoints";
+            description: "Returns a list of all Nexus endpoints in the account";
+            external_docs: {
+                url: "https://docs.temporal.io/nexus";
+                description: "Nexus documentation";
+            };
+        };
+    }
+
+    // Get a nexus endpoint
+    rpc GetNexusEndpoint(GetNexusEndpointRequest) returns (GetNexusEndpointResponse) {
+        option (google.api.http) = {
+            get: "/cloud/nexus/endpoints/{endpoint_id}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Nexus"];
+            summary: "Get Nexus endpoint details";
+            description: "Returns detailed information about a specific Nexus endpoint";
+            external_docs: {
+                url: "https://docs.temporal.io/nexus";
+                description: "Nexus documentation";
+            };
+        };
+    }
+
+    // Create a nexus endpoint
+    rpc CreateNexusEndpoint(CreateNexusEndpointRequest) returns (CreateNexusEndpointResponse) {
+        option (google.api.http) = {
+            post: "/cloud/nexus/endpoints",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Nexus"];
+            summary: "Create a Nexus endpoint";
+            description: "Creates a new Nexus endpoint for cross-namespace communication";
+            external_docs: {
+                url: "https://docs.temporal.io/nexus";
+                description: "Nexus documentation";
+            };
+        };
+    }
+
+    // Update a nexus endpoint
+    rpc UpdateNexusEndpoint(UpdateNexusEndpointRequest) returns (UpdateNexusEndpointResponse) {
+        option (google.api.http) = {
+            post: "/cloud/nexus/endpoints/{endpoint_id}",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Nexus"];
+            summary: "Update a Nexus endpoint";
+            description: "Updates an existing Nexus endpoint's configuration";
+            external_docs: {
+                url: "https://docs.temporal.io/nexus";
+                description: "Nexus documentation";
+            };
+        };
+    }
+
+    // Delete a nexus endpoint
+    rpc DeleteNexusEndpoint(DeleteNexusEndpointRequest) returns (DeleteNexusEndpointResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/nexus/endpoints/{endpoint_id}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Nexus"];
+            summary: "Delete a Nexus endpoint";
+            description: "Removes a Nexus endpoint from the account";
+            external_docs: {
+                url: "https://docs.temporal.io/nexus";
+                description: "Nexus documentation";
+            };
+        };
+    }
+
+    // Get all user groups
+    rpc GetUserGroups (GetUserGroupsRequest) returns (GetUserGroupsResponse) {
+        option (google.api.http) = {
+            get: "/cloud/user-groups",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Groups"];
+            summary: "List all user groups";
+            description: "Returns a list of all user groups in the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/users-account-level-roles";
+                description: "User groups documentation";
+            };
+        };
+    }
+
+    // Get a user group
+    rpc GetUserGroup (GetUserGroupRequest) returns (GetUserGroupResponse) {
+        option (google.api.http) = {
+            get: "/cloud/user-groups/{group_id}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Groups"];
+            summary: "Get user group details";
+            description: "Returns detailed information about a specific user group";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/user-groups";
+                description: "User groups documentation";
+            };
+        };
+    }
+
+    // Create new a user group
+    rpc CreateUserGroup (CreateUserGroupRequest) returns (CreateUserGroupResponse) {
+        option (google.api.http) = {
+            post: "/cloud/user-groups",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Groups"];
+            summary: "Create a user group";
+            description: "Creates a new user group for managing permissions";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/user-groups";
+                description: "User groups documentation";
+            };
+        };
+    }
+
+    // Update a user group
+    rpc UpdateUserGroup (UpdateUserGroupRequest) returns (UpdateUserGroupResponse) {
+        option (google.api.http) = {
+            post: "/cloud/user-groups/{group_id}",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Groups"];
+            summary: "Update a user group";
+            description: "Updates an existing user group's properties";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/user-groups";
+                description: "User groups documentation";
+            };
+        };
+    }
+
+    // Delete a user group
+    rpc DeleteUserGroup (DeleteUserGroupRequest) returns (DeleteUserGroupResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/user-groups/{group_id}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Groups"];
+            summary: "Delete a user group";
+            description: "Removes a user group from the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/user-groups";
+                description: "User groups documentation";
+            };
+        };
+    }
+
+    // Set a user group's access to a namespace
+    rpc SetUserGroupNamespaceAccess (SetUserGroupNamespaceAccessRequest) returns (SetUserGroupNamespaceAccessResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/user-groups/{group_id}/access",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Groups"];
+            summary: "Set user group namespace access";
+            description: "Configures a user group's permissions for a specific namespace";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/user-groups";
+                description: "User groups documentation";
+            };
+        };
+    }
+
+    // Add a member to the group, can only be used with Cloud group types.
+    rpc AddUserGroupMember(AddUserGroupMemberRequest) returns (AddUserGroupMemberResponse) {
+        option (google.api.http) = {
+            post: "/cloud/user-groups/{group_id}/members",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Groups"];
+            summary: "Add user to group";
+            description: "Adds a user to a user group (Cloud groups only)";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/user-groups";
+                description: "User groups documentation";
+            };
+        };
+    }
+
+    // Remove a member from the group, can only be used with Cloud group types.
+    rpc RemoveUserGroupMember(RemoveUserGroupMemberRequest) returns (RemoveUserGroupMemberResponse) {
+        option (google.api.http) = {
+            post: "/cloud/user-groups/{group_id}/remove-member",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Groups"];
+            summary: "Remove user from group";
+            description: "Removes a user from a user group (Cloud groups only)";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/user-groups";
+                description: "User groups documentation";
+            };
+        };
+    }
+
+    rpc GetUserGroupMembers(GetUserGroupMembersRequest) returns (GetUserGroupMembersResponse) {
+        option (google.api.http) = {
+            get: "/cloud/user-groups/{group_id}/members",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Groups"];
+            summary: "List users in a group";
+            description: "Returns a list of all users in a user group";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/user-groups";
+                description: "User groups documentation";
+            };
+        };
+    }
+
+    // Create a service account.
+    rpc CreateServiceAccount(CreateServiceAccountRequest) returns (CreateServiceAccountResponse) {
+        option (google.api.http) = {
+            post: "/cloud/service-accounts",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Service Accounts"];
+            summary: "Create a service account";
+            description: "Creates a new service account for automated access";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/service-accounts";
+                description: "Service Accounts documentation";
+            };
+        };
+    }
+
+    // Get a service account.
+    rpc GetServiceAccount(GetServiceAccountRequest) returns (GetServiceAccountResponse) {
+        option (google.api.http) = {
+            get: "/cloud/service-accounts/{service_account_id}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Service Accounts"];
+            summary: "Get service account details";
+            description: "Returns detailed information about a specific service account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/service-accounts";
+                description: "Service Accounts documentation";
+            };
+        };
+    }
+
+    // Get service accounts.
+    rpc GetServiceAccounts(GetServiceAccountsRequest) returns (GetServiceAccountsResponse) {
+        option (google.api.http) = {
+            get: "/cloud/service-accounts",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Service Accounts"];
+            summary: "List all service accounts";
+            description: "Returns a list of all service accounts in the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/service-accounts";
+                description: "Service Accounts documentation";
+            };
+        };
+    }
+
+    // Update a service account.
+    rpc UpdateServiceAccount(UpdateServiceAccountRequest) returns (UpdateServiceAccountResponse) {
+        option (google.api.http) = {
+            post: "/cloud/service-accounts/{service_account_id}",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Service Accounts"];
+            summary: "Update a service account";
+            description: "Updates an existing service account's properties";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/service-accounts";
+                description: "Service Accounts documentation";
+            };
+        };
+    }
+
+    // Set a service account's access to a namespace.
+    rpc SetServiceAccountNamespaceAccess(SetServiceAccountNamespaceAccessRequest) returns (SetServiceAccountNamespaceAccessResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/service-accounts/{service_account_id}/access",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Service Accounts"];
+            summary: "Set service account namespace access";
+            description: "Configures a service account's permissions for a specific namespace";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/service-accounts";
+                description: "Service Accounts documentation";
+            };
+        };
+    }
+
+    // Delete a service account.
+    rpc DeleteServiceAccount(DeleteServiceAccountRequest) returns (DeleteServiceAccountResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/service-accounts/{service_account_id}",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Service Accounts"];
+            summary: "Delete a service account";
+            description: "Removes a service account from the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/service-accounts";
+                description: "Service Accounts documentation";
+            };
+        };
+    }
+
+    // WARNING: Pre-Release Feature
+    // Get usage data across namespaces
+    rpc GetUsage(GetUsageRequest) returns (GetUsageResponse) {
+        option (google.api.http) = {
+            get: "/cloud/usage",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Account"];
+            summary: "Get usage data";
+            description: "Get usage data across namespaces";
+            deprecated: true;
+        };
+    }
+
+    // Get account information.
+    rpc GetAccount (GetAccountRequest) returns (GetAccountResponse) {
+        option (google.api.http) = {
+            get: "/cloud/account",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Account"];
+            summary: "Get account details";
+            description: "Returns detailed information about the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/billing-and-cost";
+                description: "Billing documentation";
+            };
+        };
+    }
+
+    // Update account information.
+    rpc UpdateAccount (UpdateAccountRequest) returns (UpdateAccountResponse) {
+        option (google.api.http) = {
+            post: "/cloud/account",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Account"];
+            summary: "Update account details";
+            description: "Updates account configuration and settings";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/billing-and-cost";
+                description: "Billing documentation";
+            };
+        };
+    }
+
+    // Create an export sink
+    rpc CreateNamespaceExportSink(CreateNamespaceExportSinkRequest) returns (CreateNamespaceExportSinkResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/export-sinks",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Export"];
+            summary: "Create history export sink";
+            description: "Creates a new workflow history export sink";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/export";
+                description: "Export documentation";
+            };
+        };
+    }
+
+    // Get an export sink
+    rpc GetNamespaceExportSink(GetNamespaceExportSinkRequest) returns (GetNamespaceExportSinkResponse) {
+        option (google.api.http) = {
+            get: "/cloud/namespaces/{namespace}/export-sinks/{name}"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Export"];
+            summary: "Get history sink details";
+            description: "Returns detailed information about a specific workflow history export sink";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/export";
+                description: "Export documentation";
+            };
+        };
+    }
+
+    // Get export sinks
+    rpc GetNamespaceExportSinks(GetNamespaceExportSinksRequest) returns (GetNamespaceExportSinksResponse) {
+        option (google.api.http) = {
+            get: "/cloud/namespaces/{namespace}/export-sinks"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Export"];
+            summary: "List history export sinks";
+            description: "Returns a list of all workflow history export sinks for a namespace";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/export";
+                description: "Export documentation";
+            };
+        };
+    }
+
+    // Update an export sink
+    rpc UpdateNamespaceExportSink(UpdateNamespaceExportSinkRequest) returns (UpdateNamespaceExportSinkResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/export-sinks/{spec.name}",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Export"];
+            summary: "Update history export sink";
+            description: "Updates an existing workflow history export sink's configuration";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/export";
+                description: "Export documentation";
+            };
+        };
+    }
+
+    // Delete an export sink
+    rpc DeleteNamespaceExportSink(DeleteNamespaceExportSinkRequest) returns (DeleteNamespaceExportSinkResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/namespaces/{namespace}/export-sinks/{name}"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Export"];
+            summary: "Delete history export sink";
+            description: "Removes a workflow history export sink from a namespace";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/export";
+                description: "Export documentation";
+            };
+        };
+    }
+
+    // Validates an export sink configuration by delivering an empty test file to the specified sink.
+    // This operation verifies that the sink is correctly configured, accessible, and ready for data export.
+    rpc ValidateNamespaceExportSink(ValidateNamespaceExportSinkRequest) returns (ValidateNamespaceExportSinkResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/export-sink-validate",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Export"];
+            summary: "Validate history export sink configuration";
+            description: "Tests workflow history export sink configuration by delivering a test file to verify accessibility";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/export";
+                description: "Export documentation";
+            };
+        };
+    }
+
+    // Update the tags for a namespace
+     rpc UpdateNamespaceTags(UpdateNamespaceTagsRequest) returns (UpdateNamespaceTagsResponse) {
+        option (google.api.http) = {
+            post: "/cloud/namespaces/{namespace}/update-tags"
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Namespaces"];
+            summary: "Update namespace tags";
+            description: "Updates the tags associated with a namespace";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/namespaces#tag-a-namespace";
+                description: "Namespace tag documentation";
+            };
+        };
+    }
+
+    // Creates a connectivity rule
+    rpc CreateConnectivityRule(CreateConnectivityRuleRequest) returns (CreateConnectivityRuleResponse) {
+        option (google.api.http) = {
+            post: "/cloud/connectivity-rules"
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Connectivity Rules"];
+            summary: "Create connectivity rule";
+            description: "Creates a new connectivity rule for network access control";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/connectivity";
+                description: "Connectivity documentation";
+            };
+        };
+    }
+
+    // Gets a connectivity rule by id
+    rpc GetConnectivityRule(GetConnectivityRuleRequest) returns (GetConnectivityRuleResponse) {
+        option (google.api.http) = {
+            get: "/cloud/connectivity-rules/{connectivity_rule_id}"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Connectivity Rules"];
+            summary: "Get connectivity rule details";
+            description: "Returns detailed information about a specific connectivity rule";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/connectivity";
+                description: "Connectivity documentation";
+            };
+        };
+    }
+
+    // Lists connectivity rules by account
+    rpc GetConnectivityRules(GetConnectivityRulesRequest) returns (GetConnectivityRulesResponse) {
+        option (google.api.http) = {
+            get: "/cloud/connectivity-rules"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Connectivity Rules"];
+            summary: "List all connectivity rules";
+            description: "Returns a list of all connectivity rules in the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/connectivity";
+                description: "Connectivity documentation";
+            };
+        };
+    }
+
+    // Deletes a connectivity rule by id
+    rpc DeleteConnectivityRule(DeleteConnectivityRuleRequest) returns (DeleteConnectivityRuleResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/connectivity-rules/{connectivity_rule_id}"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Connectivity Rules"];
+            summary: "Delete connectivity rule";
+            description: "Removes a connectivity rule from the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/connectivity";
+                description: "Connectivity documentation";
+            };
+        };
+    }
+
+    // Get audit logs
+    rpc GetAuditLogs(GetAuditLogsRequest) returns (GetAuditLogsResponse) {
+        option (google.api.http) = {
+            get: "/cloud/audit-logs",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Account"];
+            summary: "Get audit logs"
+            description: "Returns a paginated list of audit logs for the account, optionally filtered by time range"
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/audit-logging";
+                description: "Audit logging documentation";
+            };
+        };
+    }
+
+    // Validate customer audit log sink is accessible from Temporal's workflow by delivering an empty file to the specified sink.
+    // The operation verifies that the sink is correctly configured, accessible and ready to receive audit logs.
+    rpc ValidateAccountAuditLogSink(ValidateAccountAuditLogSinkRequest) returns (ValidateAccountAuditLogSinkResponse) {
+        option (google.api.http) = {
+            post: "/cloud/audit-log-sink-validate",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Account"];
+            summary: "Validate audit log sink"
+            description: "Validate customer audit log sink is accessible from Temporal's workflow by delivering an empty file to the specified sink. The operation verifies that the sink is correctly configured, accessible and ready to receive audit logs."
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/audit-logging";
+                description: "Audit logging documentation";
+            };
+        };
+    }
+
+    // Create an audit log sink
+    rpc CreateAccountAuditLogSink(CreateAccountAuditLogSinkRequest) returns (CreateAccountAuditLogSinkResponse) {
+        option (google.api.http) = {
+            post: "/cloud/audit-log-sinks",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Account"];
+            summary: "Create audit log sink";
+            description: "Creates a new audit log sink for exporting audit logs";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/audit-logging";
+                description: "Audit logging documentation";
+            };
+        };
+    }
+
+    // Get an audit log sink
+    rpc GetAccountAuditLogSink(GetAccountAuditLogSinkRequest) returns (GetAccountAuditLogSinkResponse) {
+        option (google.api.http) = {
+            get: "/cloud/audit-log-sinks/{name}"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Account"];
+            summary: "Get audit log sink details";
+            description: "Returns detailed information about a specific audit log sink";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/audit-logging";
+                description: "Audit logging documentation";
+            };
+        };
+    }
+
+    // Get audit log sinks
+    rpc GetAccountAuditLogSinks(GetAccountAuditLogSinksRequest) returns (GetAccountAuditLogSinksResponse) {
+        option (google.api.http) = {
+            get: "/cloud/audit-log-sinks"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Account"];
+            summary: "List audit log sinks";
+            description: "Returns a list of all audit log sinks for the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/audit-logging";
+                description: "Audit logging documentation";
+            };
+        };
+    }
+
+    // Update an audit log sink
+    rpc UpdateAccountAuditLogSink(UpdateAccountAuditLogSinkRequest) returns (UpdateAccountAuditLogSinkResponse) {
+        option (google.api.http) = {
+            post: "/cloud/audit-log-sinks/{spec.name}",
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Account"];
+            summary: "Update audit log sink";
+            description: "Updates an existing audit log sink's configuration";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/audit-logging";
+                description: "Audit logging documentation";
+            };
+        };
+    }
+
+    // Delete an audit log sink
+    rpc DeleteAccountAuditLogSink(DeleteAccountAuditLogSinkRequest) returns (DeleteAccountAuditLogSinkResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/audit-log-sinks/{name}"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Account"];
+            summary: "Delete audit log sink";
+            description: "Removes an audit log sink from the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/audit-logging";
+                description: "Audit logging documentation";
+            };
+        };
+    }
+
+    // Get namespace capacity information
+    rpc GetNamespaceCapacityInfo(GetNamespaceCapacityInfoRequest) returns (GetNamespaceCapacityInfoResponse) {
+        option (google.api.http) = {
+            get: "/cloud/namespaces/{namespace}/capacity-info"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Namespaces"];
+            summary: "Get namespace capacity information";
+            description: "Returns capacity information for a namespace. This includes provisioned capacity options, on-demand limits, and 7 day historical APS statistics useful for capacity planning.";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/capacity-modes";
+                description: "Capacity modes information documentation";
+            };
+        };
+    }
+
+    // Create a billing report
+    rpc CreateBillingReport(CreateBillingReportRequest) returns (CreateBillingReportResponse) {
+        option (google.api.http) = {
+            post: "/cloud/billing-reports"
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Billing"];
+            summary: "Create a billing report";
+            description: "Creates a billing report for the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/billing-reports";
+                description: "Billing report documentation";
+            };
+        };
+    }
+
+    // Get a billing report
+    rpc GetBillingReport(GetBillingReportRequest) returns (GetBillingReportResponse) {
+        option (google.api.http) = {
+            get: "/cloud/billing-reports/{billing_report_id}"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Billing"];
+            summary: "Get a billing report";
+            description: "Gets an existing billing report for the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/billing-reports";
+                description: "Billing report documentation";
+            };
+        };
+    }
+
+    // Get custom roles
+    rpc GetCustomRoles(GetCustomRolesRequest) returns (GetCustomRolesResponse) {
+        option (google.api.http) = {
+            get: "/cloud/custom-roles"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Custom Roles"];
+            summary: "List custom roles";
+            description: "Returns a list of custom roles in the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/custom-roles";
+                description: "Custom roles documentation";
+            };
+        };
+    }
+
+    // Get a custom role
+    rpc GetCustomRole(GetCustomRoleRequest) returns (GetCustomRoleResponse) {
+        option (google.api.http) = {
+            get: "/cloud/custom-roles/{role_id}"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Custom Roles"];
+            summary: "Get custom role by ID";
+            description: "Returns details for a specific custom role";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/custom-roles";
+                description: "Custom roles documentation";
+            };
+        };
+    }
+
+    // Create a custom role
+    rpc CreateCustomRole(CreateCustomRoleRequest) returns (CreateCustomRoleResponse) {
+        option (google.api.http) = {
+            post: "/cloud/custom-roles"
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Custom Roles"];
+            summary: "Create a custom role";
+            description: "Creates a new custom role in the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/custom-roles";
+                description: "Custom roles documentation";
+            };
+        };
+    }
+
+    // Update a custom role
+    rpc UpdateCustomRole(UpdateCustomRoleRequest) returns (UpdateCustomRoleResponse) {
+        option (google.api.http) = {
+            post: "/cloud/custom-roles/{role_id}"
+            body: "*"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Custom Roles"];
+            summary: "Update a custom role";
+            description: "Updates an existing custom role";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/custom-roles";
+                description: "Custom roles documentation";
+            };
+        };
+    }
+
+    // Delete a custom role
+    rpc DeleteCustomRole(DeleteCustomRoleRequest) returns (DeleteCustomRoleResponse) {
+        option (google.api.http) = {
+            delete: "/cloud/custom-roles/{role_id}"
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Custom Roles"];
+            summary: "Delete a custom role";
+            description: "Deletes a custom role from the account";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/custom-roles";
+                description: "Custom roles documentation";
+            };
+        };
+    }
+
+    // Get users with access to a namespace
+    rpc GetUserNamespaceAssignments(GetUserNamespaceAssignmentsRequest) returns (GetUserNamespaceAssignmentsResponse) {
+        option (google.api.http) = {
+            get: "/cloud/namespaces/{namespace}/user-assignments",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Users"];
+            summary: "Get users with access to a namespace";
+            description: "Returns the users that have access to the namespace, including each user's namespace-level access.";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/users";
+                description: "Users documentation";
+            };
+        };
+    }
+
+    // Get service accounts with access to a namespace
+    rpc GetServiceAccountNamespaceAssignments(GetServiceAccountNamespaceAssignmentsRequest) returns (GetServiceAccountNamespaceAssignmentsResponse) {
+        option (google.api.http) = {
+            get: "/cloud/namespaces/{namespace}/service-account-assignments",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Service Accounts"];
+            summary: "List service accounts with access to a namespace";
+            description: "Returns the service accounts that have access to the namespace, including each service account's namespace-level access.";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/service-accounts";
+                description: "Service Accounts documentation";
+            };
+        };
+    }
+
+    // Get user groups with access to a namespace
+    rpc GetUserGroupNamespaceAssignments(GetUserGroupNamespaceAssignmentsRequest) returns (GetUserGroupNamespaceAssignmentsResponse) {
+        option (google.api.http) = {
+            get: "/cloud/namespaces/{namespace}/user-group-assignments",
+        };
+        option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+            tags: ["Groups"];
+            summary: "List user groups with access to a namespace";
+            description: "Returns the user groups that have access to the namespace, including each group's namespace-level access.";
+            external_docs: {
+                url: "https://docs.temporal.io/cloud/user-groups";
+                description: "User groups documentation";
+            };
+        };
+    }
+}

@@ -52,6 +52,23 @@ For profiling memory allocations build kqprun with ya make flag `-D PROFILE_MEMO
     ./kqprun --sql "SELECT 42" -C async --loop-count 0 --loop-delay 100 --inflight-limit 10
     ```
 
+### Query directories
+
+* Run all `.sql`/`.yql` files from directories (non-recursive, lexicographic filename order, other files are ignored; an empty or missing directory is an error):
+    ```(bash)
+    ./kqprun --scheme-query-dir schema/ --script-query-dir queries/ -A explain --continue-after-fail
+    ```
+
+    All scheme queries run before script queries. `--scheme-query`, `--scheme-query-dir`, `--script-query`, `--script-query-dir` and `--sql` can be repeated and mixed; inputs of each kind keep command line order. Use zero-padded prefixes (`001-create.sql`, `002-alter.sql`) when order matters. Progress and errors include the source file name.
+
+    With `--continue-after-fail` the remaining queries are still executed, but the exit status is nonzero if any synchronous query failed. A failed scheme query always stops the run.
+
+* Raise scheme limits for root database and created tenants (protobuf text `NKikimrSubDomains::TSchemeLimits`, omitted fields keep their defaults), e. g. for large schemas:
+    ```(bash)
+    echo 'MaxPaths: 100000 MaxTableColumns: 1000 MaxTableIndices: 100' > limits.pb.txt
+    ./kqprun --scheme-limits limits.pb.txt --scheme-query-dir schema/ --script-query-dir queries/ -A explain
+    ```
+
 ### Logs
 
 * Setup log settings (`-C query` for clear logs):
@@ -68,6 +85,23 @@ For profiling memory allocations build kqprun with ya make flag `-D PROFILE_MEMO
     ```(bash)
     ./kqprun --sql "SELECT 42" --script-statistics stats.log --script-timeline-file timeline.svg
     ```
+
+### Trace files
+
+* Collect query spans locally without a tracing backend:
+    ```(bash)
+    ./kqprun --app-config configuration/app_config.conf \
+        -p query.sql -C query -A explain \
+        --trace-file spans.jsonl --trace-dataset experiment --trace-level 15
+    ```
+
+    `--trace-file` overwrites its destination and streams one complete OTLP JSON export request per line, each containing one span. The encoding follows the [OTLP JSON specification](https://opentelemetry.io/docs/specs/otlp/#json-protobuf-encoding): trace and span IDs (including link IDs) are hexadecimal and enums are numeric. Other bytes attributes retain protobuf's base64 encoding. The JSONL file can be read by Violinoscope or an OpenTelemetry Collector OTLP JSON file receiver; an OTLP/HTTP receiver accepts each line as a separate `application/json` request to `/v1/traces`.
+
+    `--trace-dataset` sets the `dataset.name` resource attribute (default: `kqprun`); `--trace-level` accepts 1 through 15 (default: 15).
+
+    Generic query requests have a `kqprun.query` parent span with `query.name` set to the input basename, or the zero-based request number for inline SQL, and `query.index` set to that request number. Labels do not depend on SQL text or its redaction. Query and script requests are traced; schema creation is not. `--trace-id` remains a separate text correlation ID and does not enable span collection.
+
+    Normal finalization waits 300 ms for spans that end after the query response and checks for writer errors. This is a grace period, not a guarantee that arbitrarily delayed spans have arrived. Span detail depends on the instrumentation in the binary; detailed compilation phases require the separate KQP compilation tracing changes.
 
 ### Cluster
 

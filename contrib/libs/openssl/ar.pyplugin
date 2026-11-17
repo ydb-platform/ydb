@@ -35,12 +35,6 @@ def gen_renames_2(p, d):
         if 'asan_globals' in s:
             continue
 
-        if s in ['HMAC', 'SHA1', 'SHA256', 'SHA256', 'SHA512', 'RC4', 'MD5', 'SHA384']:
-            continue
-
-        if a and s[1:] in ['HMAC', 'SHA1', 'SHA256', 'SHA256', 'SHA512', 'RC4', 'MD5', 'SHA384']:
-            continue
-
         if a:
             yield s + ' _' + p + s[1:]
         else:

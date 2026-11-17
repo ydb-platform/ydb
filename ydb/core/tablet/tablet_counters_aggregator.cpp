@@ -27,6 +27,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/util/wildcard.h>
 #include <ydb/library/actors/interconnect/subscription_manager.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -1683,8 +1684,7 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
                     continue;
                 }
                 if (groupNames[j] == "Client") {
-                    group = group->GetSubgroup("ConsumerPath",
-                                         NPersQueue::ConvertOldConsumerName(groups[j], AppData(ctx)->PQConfig));
+                    group = group->GetSubgroup("ConsumerPath", NPQ::MetricsConsumerName(groups[j]));
                     continue;
                 }
             }
@@ -2421,7 +2421,7 @@ public:
             if (groups.size() == 1) { //topic case
                 ff = groups[0];
             } else if (groups.size() == 3) { //client important topic
-                res = NPersQueue::ConvertOldConsumerName(groups[0], AppData(ctx)->PQConfig) + "|" + groups[1] + "|";
+                res = NPQ::MetricsConsumerName(groups[0]) + "|" + groups[1] + "|";
                 ff = groups[2];
             } else {
                 continue;

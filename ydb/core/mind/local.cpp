@@ -11,6 +11,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
@@ -22,6 +23,7 @@
 
 #include <util/system/info.h>
 #include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
 #include <util/string/vector.h>
 
 #include <unordered_map>
@@ -51,7 +53,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvSendTabletMetrics : TEventLocal<TEvSendTabletMetrics, EvSendTabletMetrics> {};
+        struct TEvSendTabletMetrics : TEventLocal<TEvSendTabletMetrics, EvSendTabletMetrics> {
+            const ui64 Generation;
+            explicit TEvSendTabletMetrics(ui64 generation)
+                : Generation(generation)
+            {}
+        };
         struct TEvUpdateSystemUsage : TEventLocal<TEvUpdateSystemUsage, EvUpdateSystemUsage> {};
         struct TEvUpdateTabletMemoryShares : TEventLocal<TEvUpdateTabletMemoryShares, EvUpdateTabletMemoryShares> {};
         struct TEvLocalDrainTimeout : TEventLocal<TEvLocalDrainTimeout, EvLocalDrainTimeout> {};
@@ -88,7 +95,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     };
 
     struct TOnlineTabletEntry : TTabletEntry {
-        NKikimrTabletBase::TMetrics ResourceValues;
+        NKikimrTabletBase::TMetrics ResourceValues; // changes not yet acknowledged by Hive, cleared on ack
+        // the tablet's last reported values as counted in TabletsCpuSum / TabletsMemSum / TabletsNetSum;
+        // kept apart from ResourceValues because that one is cleared once Hive acknowledges the batch
+        ui64 AccountedCpu = 0;
+        ui64 AccountedMem = 0;
+        ui64 AccountedNet = 0;
 
         TOnlineTabletEntry() = default;
         TOnlineTabletEntry(TTabletEntry& tablet)
@@ -108,6 +120,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     TActorId BootQueue;
     ui32 HiveGeneration;
+    NKikimrLocal::THiveCapabilities HiveCapabilities;
+    NKikimrLocal::THiveSettings HiveSettings;
 
     TActorId KnownHiveLeader;
 
@@ -115,18 +129,56 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     TInstant StartTime;
     std::unordered_map<TTabletId, TTabletEntry> InbootTablets;
     std::unordered_map<TTabletId, TOnlineTabletEntry> OnlineTablets;
-    std::unordered_map<TTabletId, ui32> UpdatedTabletMetrics;
+    struct TUpdatedTabletMetrics {
+        bool InFlight = false;
+        bool UpdatedAfterSend = false;
+    };
+    std::unordered_map<TTabletId, TUpdatedTabletMetrics> UpdatedTabletMetrics;
+    // Legacy ACKs identify tablets, but not batches or tablet incarnations.
+    // Keep their conservative counters across tablet death and replacement.
+    std::unordered_map<TTabletId, ui32> LegacyPendingTabletMetrics;
+    ui64 NextTabletMetricsCookie = 0;
+    ui64 TabletMetricsInFlightCookie = 0;
+    ui64 TabletMetricsScheduleGeneration = 0;
+    bool TabletMetricsAckCookiesSupported = false;
+    // Promotion keeps the same actor online as a follower and in boot as a
+    // leader, so each state needs its own reverse index.
+    THashMap<TActorId, TTabletId> InbootTabletsByActor;
+    THashMap<TActorId, TTabletId> OnlineTabletsByActor;
+
     bool SendTabletMetricsInProgress;
     TInstant SendTabletMetricsTime;
     TDuration LastSendTabletMetricsDuration = {};
     constexpr static TDuration TABLET_METRICS_BATCH_INTERVAL = TDuration::MilliSeconds(5000);
     constexpr static TDuration UPDATE_SYSTEM_USAGE_INTERVAL = TDuration::MilliSeconds(1000);
+    // running sums of the last reported CPU, Memory and Network over the tablets in OnlineTablets, updated
+    // when a tablet reports or leaves so that exporting them costs nothing per send; see SubtractFromTabletMetricsSums
+    ui64 TabletsCpuSum = 0;
+    ui64 TabletsMemSum = 0;
+    ui64 TabletsNetSum = 0;
     ui64 UserPoolUsage = 0; // (usage uS x threads) / sec
     ui64 UserPoolLimit = 0; // PotentialMaxThreadCount of UserPool
     ui64 MemUsage = 0;
     ui64 MemLimit = 0;
     double NodeUsage = 0;
     double CpuUsage = 0; // Sum of CPU usage in all pools / Number of CPUs
+
+    // Resource broker queue usage, reported to Hive as named resources
+    struct TQueueUsageValue {
+        ui64 Value = 0;
+        bool Transferable = true; // nothing is running yet
+
+        bool operator==(const TQueueUsageValue&) const = default;
+    };
+    // Usage reported for online tablets: tablet -> resource name -> value. Names stay (with zero value) after
+    // the usage is gone, and everything is resent periodically and on reconnect: Hive keeps a reported value
+    // until it is changed, so a lost update (e.g. acked by Hive but not persisted before its restart) has to be
+    // repaired by a resend.
+    std::unordered_map<TTabletId, THashMap<TString, TQueueUsageValue>> ReportedQueueUsage;
+    TInstant LastQueueUsageResend;
+    constexpr static TDuration QUEUE_USAGE_RESEND_INTERVAL = TDuration::Seconds(60);
+    // Queue limits (only for queues limited by CPU): resource name -> limit
+    TMap<TString, ui64> QueueLimits;
 
     bool SentDrainNode = false;
     bool DrainResultReceived = false;
@@ -166,6 +218,41 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     TSharedQuotaPtr TxCacheQuota;
     ::NMonitoring::TDynamicCounterPtr Counters;
 
+    // Node usage counters, exported while Hive's CountersExportMode is at least LOCAL_PER_NODE_COUNTERS (see UpdateSettings).
+    // Labels: node_id, hive_id (one group per registrar: a node registers in several Hives).
+    struct TNodeUsageCounters {
+        using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+
+        // The node-wide values this node reports to Hive.
+        // These metrics are updated just before reporting to Hive.
+        //
+        // Naming conventions:
+        // - Node* - means that this metric is about the whole node, not only about tablets.
+        // - Tablets* - means that this metric includes only the resource usage reported by tablets.
+        TCounterPtr NodeUsagePercent; // TotalNodeUsage reported to Hive: max{pool usage among monitored pools (System,User,IC by default), node memory usage over memory limit (if the limit is known)}.
+        TCounterPtr NodeCpuUsagePercent; // TotalNodeCpuUsage reported to Hive: overall CPU usage by all pools of the actor system divided by the number of CPUs on the machine.
+        TCounterPtr NodeUserPoolUsageUs; // TotalResourceUsage.CPU in μs per second reported to Hive.
+        TCounterPtr NodeUserPoolLimitUs; // User pool limit in μs per second.
+        TCounterPtr NodeUsageUserPoolPercent; // Usage of user pool over ResourceMaximum.CPU, consistent with Hive's NodeUsageAvgCpuPercent.
+        TCounterPtr NodeMemUsageBytes; // TotalResourceUsage.Memory reported to Hive: overall memory usage taken from the allocator.
+        TCounterPtr NodeMemLimitBytes; // Memory limit.
+        TCounterPtr NodeUsageMemPercent; // MemUsage over ResourceMaximum.Memory, consistent with Hive's NodeUsageAvgMemPercent.
+        TCounterPtr NodeResourceMaximumCpuUs; // ResourceMaximum reported to Hive.
+        TCounterPtr NodeResourceMaximumMemBytes; // ResourceMaximum reported to Hive.
+        TCounterPtr NodeResourceMaximumNetBytesPerSec; // ResourceMaximum reported to Hive.
+        // Sums of the last reported per-tablet metrics over the tablets online on this node, the raw material Hive sums up.
+        TCounterPtr TabletsUsageCpuUs;
+        TCounterPtr TabletsUsageMemBytes;
+        TCounterPtr TabletsUsageNetBytesPerSec;
+        // Percents over ResourceMaximum (0 if there is no maximum), consistent with Hive's metrics.
+        TCounterPtr TabletsUsageCpuPercent;
+        TCounterPtr TabletsUsageMemPercent;
+        TCounterPtr TabletsUsageNetPercent;
+    };
+    std::unique_ptr<TNodeUsageCounters> NodeUsageCounters;
+    ::NMonitoring::TDynamicCounterPtr LocalNodeCounters;
+
+    // Cumulative event counters for the node.
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterStartAttempts;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterFollowerAttempts;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterRestored;
@@ -183,6 +270,23 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelIsolated;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelDemotedByBS;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelUnknownReason;
+
+    template <class TTablets>
+    static auto FindTabletByActor(TTablets& tablets, const THashMap<TActorId, TTabletId>& index, TActorId actor) {
+        auto it = index.find(actor);
+        if (it == index.end()) {
+            return tablets.end();
+        }
+        auto tablet = tablets.find(it->second);
+        Y_ABORT_UNLESS(tablet != tablets.end() && tablet->second.Tablet == actor);
+        return tablet;
+    }
+
+    template <class TTablets>
+    static void EraseTablet(TTablets& tablets, THashMap<TActorId, TTabletId>& index, typename TTablets::iterator it) {
+        index.erase(it->second.Tablet);
+        tablets.erase(it);
+    }
 
     static TTabletId LeaderId(TTabletId tabletId) {
         return {tabletId.first, 0};
@@ -325,11 +429,14 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             ctx.Send(xpair.second.Tablet, new TEvents::TEvPoisonPill());
         }
         OnlineTablets.clear();
+        OnlineTabletsByActor.clear();
+        TabletsCpuSum = TabletsMemSum = TabletsNetSum = 0;
 
         for (const auto &xpair : InbootTablets) {
             ctx.Send(xpair.second.Tablet, new TEvents::TEvPoisonPill());
         }
         InbootTablets.clear();
+        InbootTabletsByActor.clear();
 
         TActor::Die(ctx);
     }
@@ -344,10 +451,49 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
+    void UpdateSettings(const NKikimrLocal::THiveSettings& settings) {
+        // Replace the full snapshot. Apply individual settings here when added.
+        HiveSettings.CopyFrom(settings);
+        if (HiveSettings.GetCountersExportMode() >= NKikimrConfig::THiveConfig::COUNTERS_EXPORT_MODE_LOCAL_PER_NODE_COUNTERS) {
+            CreateNodeUsageCounters(); // the values appear with the next metrics sent to Hive
+        } else {
+            NodeUsageCounters.reset();
+        }
+    }
+
+    void CreateNodeUsageCounters() {
+        if (NodeUsageCounters) {
+            return;
+        }
+        NodeUsageCounters = std::make_unique<TNodeUsageCounters>();
+        TNodeUsageCounters& c = *NodeUsageCounters;
+        auto group = LocalNodeCounters->GetSubgroup("hive_id", ToString(HiveId));
+        c.NodeUsagePercent = group->GetExpiringCounter("Local_NodeUsagePercent");
+        c.NodeCpuUsagePercent = group->GetExpiringCounter("Local_NodeCpuUsagePercent");
+        c.NodeUserPoolUsageUs = group->GetExpiringCounter("Local_NodeUserPoolUsageUs");
+        c.NodeUserPoolLimitUs = group->GetExpiringCounter("Local_NodeUserPoolLimitUs");
+        c.NodeUsageUserPoolPercent = group->GetExpiringCounter("Local_NodeUsageUserPoolPercent");
+        c.NodeMemUsageBytes = group->GetExpiringCounter("Local_NodeMemUsageBytes");
+        c.NodeMemLimitBytes = group->GetExpiringCounter("Local_NodeMemLimitBytes");
+        c.NodeUsageMemPercent = group->GetExpiringCounter("Local_NodeUsageMemPercent");
+        c.NodeResourceMaximumCpuUs = group->GetExpiringCounter("Local_NodeResourceMaximumCpuUs");
+        c.NodeResourceMaximumMemBytes = group->GetExpiringCounter("Local_NodeResourceMaximumMemBytes");
+        c.NodeResourceMaximumNetBytesPerSec = group->GetExpiringCounter("Local_NodeResourceMaximumNetBytesPerSec");
+        c.TabletsUsageCpuUs = group->GetExpiringCounter("Local_TabletsUsageCpuUs");
+        c.TabletsUsageMemBytes = group->GetExpiringCounter("Local_TabletsUsageMemBytes");
+        c.TabletsUsageNetBytesPerSec = group->GetExpiringCounter("Local_TabletsUsageNetBytesPerSec");
+        c.TabletsUsageCpuPercent = group->GetExpiringCounter("Local_TabletsUsageCpuPercent");
+        c.TabletsUsageMemPercent = group->GetExpiringCounter("Local_TabletsUsageMemPercent");
+        c.TabletsUsageNetPercent = group->GetExpiringCounter("Local_TabletsUsageNetPercent");
+    }
+
     void TryToRegister(const TActorContext &ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::TryToRegister");
 
         Y_DEBUG_ABORT_UNLESS(!HivePipeClient);
+
+        // A reconnect may reach an old Hive with no capability advertisement.
+        HiveCapabilities.Clear();
 
         // pipe client is in use for convenience, real info update come from EvPing
         NTabletPipe::TClientConfig pipeConfig;
@@ -360,6 +506,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         HivePipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, HiveId, pipeConfig));
 
         THolder<TEvLocal::TEvRegisterNode> request = MakeHolder<TEvLocal::TEvRegisterNode>(HiveId);
+        request->Record.MutableCapabilities();
         for (auto &domain: ServicedDomains) {
             *request->Record.AddServicedDomains() = NKikimrSubDomains::TDomainKey(domain);
         }
@@ -386,6 +533,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::HandlePipeDestroyed: disconnected from hive");
         HivePipeClient = TActorId();
         Connected = false;
+        TabletMetricsInFlightCookie = 0;
+        TabletMetricsAckCookiesSupported = false;
+        ++TabletMetricsScheduleGeneration; // Ignore timers from the old pipe.
+        SendTabletMetricsInProgress = false;
+        for (auto& [_, state] : UpdatedTabletMetrics) {
+            state.InFlight = false;
+        }
         TryToRegister(ctx);
         if (SentDrainNode && !DrainResultReceived) {
             YDB_LOG_NOTICE_CTX(ctx, "TLocalNodeRegistrar: drain complete, hive pipe destroyed",
@@ -431,7 +585,6 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (msg->ClientId != HivePipeClient)
             return;
         if (msg->Status == NKikimrProto::OK) {
-            SendTabletMetricsInProgress = false;
             return;
         }
         HandlePipeDestroyed(ctx);
@@ -447,8 +600,37 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         HandlePipeDestroyed(ctx);
     }
 
+    static void SetNamedResource(NKikimrTabletBase::TMetrics& metrics, const TString& name, ui64 value, bool transferable = true) {
+        NKikimrTabletBase::TNamedResource* resource = nullptr;
+        for (auto& r : *metrics.MutableNamedResources()) {
+            if (r.GetName() == name) {
+                resource = &r;
+                break;
+            }
+        }
+        if (resource == nullptr) {
+            resource = metrics.AddNamedResources();
+            resource->SetName(name);
+        }
+        resource->SetValue(value);
+        if (transferable) {
+            resource->ClearTransferable(); // the default
+        } else {
+            resource->SetTransferable(false);
+        }
+    }
+
     void FillResourceMaximum(NKikimrTabletBase::TMetrics* record) {
         record->CopyFrom(ResourceLimit);
+        for (const auto& [name, limit] : QueueLimits) {
+            bool overridden = false;
+            for (const auto& r : record->GetNamedResources()) {
+                overridden |= (r.GetName() == name);
+            }
+            if (!overridden) {
+                SetNamedResource(*record, name, limit);
+            }
+        }
         if (!record->HasCPU()) {
             if (UserPoolLimit != 0) {
                 record->SetCPU(UserPoolLimit);
@@ -461,6 +643,15 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 record->SetMemory(NSystemInfo::TotalMemorySize());
             }
         }
+        if (NodeUsageCounters) {
+            NodeUsageCounters->NodeResourceMaximumCpuUs->Set(record->GetCPU());
+            NodeUsageCounters->NodeResourceMaximumMemBytes->Set(record->GetMemory());
+            NodeUsageCounters->NodeResourceMaximumNetBytesPerSec->Set(record->GetNetwork());
+        }
+    }
+
+    static ui64 Percent(ui64 value, ui64 maximum) {
+        return maximum ? value * 100 / maximum : 0;
     }
 
     void SendStatusOk(const TActorContext &ctx) {
@@ -503,9 +694,32 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             return;
         }
 
+        if (HiveGeneration && hiveGen > HiveGeneration) {
+            // The pipe may already be connecting to this Hive. Let it discard
+            // an obsolete retry delay without interrupting that connection.
+            HiveGeneration = hiveGen;
+            // Resync while BootQueue still identifies the previous Hive, so
+            // its in-flight boots are discarded before adopting the new one.
+            Connected = false;
+            if (HivePipeClient) {
+                ctx.Send(HivePipeClient, new TEvTabletPipe::TEvClientUpdateGeneration(hiveGen, sender));
+            }
+        }
+
         if (!HivePipeClient) {
             TryToRegister(ctx);
             return;
+        }
+
+        if (hiveGen != HiveGeneration || sender != BootQueue) {
+            HiveCapabilities.Clear();
+        }
+        if (record.HasCapabilities()) {
+            HiveCapabilities.CopyFrom(record.GetCapabilities());
+        }
+        // Updates also apply while connected; an ordinary ping changes nothing.
+        if (record.HasHiveSettings()) {
+            UpdateSettings(record.GetHiveSettings());
         }
 
         if (!Connected) {
@@ -513,6 +727,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 for (const auto &x : InbootTablets)
                     ctx.Send(x.second.Tablet, new TEvents::TEvPoisonPill());
                 InbootTablets.clear();
+                InbootTabletsByActor.clear();
             }
 
             if (record.GetPurge()) {
@@ -524,6 +739,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                     ForgetTabletMemory(x.first, ctx);
                 }
                 OnlineTablets.clear();
+                OnlineTabletsByActor.clear();
+                UpdatedTabletMetrics.clear();
+                TabletsCpuSum = TabletsMemSum = TabletsNetSum = 0;
             }
 
             ResourceProfiles = new TResourceProfiles;
@@ -552,6 +770,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             NTabletPipe::SendData(ctx, HivePipeClient, eventSyncTablets.Release());
 
             Connected = true;
+            LastQueueUsageResend = TInstant::Zero(); // resend all queue usage with the next update
             YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing: connected to hive");
             for (const auto& tabletEntries : RetainedCutHistory) {
                 for (const auto& e : tabletEntries.second) {
@@ -561,6 +780,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
 
         HiveGeneration = hiveGen;
+        if (sender != BootQueue) {
+            LegacyPendingTabletMetrics.clear();
+        }
         BootQueue = sender;
 
         // we send status of the 'local' to become online and available for new tablets
@@ -573,7 +795,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         TTabletId leaderId = LeaderId(tabletId);
         TTabletEntry& leaderEntry = InbootTablets[leaderId];
         followerEntry.IsPromoting = true;
+        InbootTabletsByActor.erase(leaderEntry.Tablet);
         leaderEntry = followerEntry;
+        InbootTabletsByActor[leaderEntry.Tablet] = leaderId;
         leaderEntry.From = now;
         leaderEntry.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER;
         leaderEntry.Generation = suggestedGen;
@@ -583,7 +807,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     void FinishPromotion(TTabletId tabletId, TTabletEntry& entry, const TActorContext& ctx) {
         TTabletId promotedTablet{tabletId.first, entry.PromotingFromFollower};
         ForgetTabletMemory(promotedTablet, ctx);
-        OnlineTablets.erase(promotedTablet);
+        UpdatedTabletMetrics.erase(promotedTablet);
+        auto it = OnlineTablets.find(promotedTablet);
+        if (it != OnlineTablets.end()) {
+            SubtractFromTabletMetricsSums(it->second);
+            EraseTablet(OnlineTablets, OnlineTabletsByActor, it);
+        }
         entry.IsPromoting = false;
         entry.PromotingFromFollower = 0;
     }
@@ -639,7 +868,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 }
                 ctx.Send(it->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
                 ForgetTabletMemory(it->first, ctx);
-                OnlineTablets.erase(it);
+                UpdatedTabletMetrics.erase(tabletId);
+                SubtractFromTabletMetricsSums(it->second);
+                EraseTablet(OnlineTablets, OnlineTabletsByActor, it);
             }
         }
 
@@ -658,6 +889,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
 
         entry.PendingMemoryReport.reset();
+        InbootTabletsByActor.erase(entry.Tablet);
         TTabletSetupInfo *setupInfo = it->second.SetupInfo.Get();
         switch (record.GetBootMode()) {
         case NKikimrLocal::BOOT_MODE_LEADER:
@@ -670,6 +902,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             break;
         }
 
+        InbootTabletsByActor[entry.Tablet] = tabletId;
         entry.Generation = suggestedGen;
         entry.From = ctx.Now();
         entry.TabletType = tabletType;
@@ -728,14 +961,20 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             const auto& metrics(msg->ResourceValues);
             const bool hiveMetrics = metrics.HasCPU() || metrics.HasMemory() || metrics.HasNetwork() ||
                 metrics.HasStorage() || metrics.GroupReadThroughputSize() || metrics.GroupWriteThroughputSize() ||
-                metrics.GroupReadIopsSize() || metrics.GroupWriteIopsSize();
+                metrics.GroupReadIopsSize() || metrics.GroupWriteIopsSize() || metrics.NamedResourcesSize();
             if (metrics.HasCPU()) {
+                TabletsCpuSum += metrics.GetCPU() - it->second.AccountedCpu;
+                it->second.AccountedCpu = metrics.GetCPU();
                 it->second.ResourceValues.SetCPU(metrics.GetCPU());
             }
             if (metrics.HasMemory()) {
+                TabletsMemSum += metrics.GetMemory() - it->second.AccountedMem;
+                it->second.AccountedMem = metrics.GetMemory();
                 it->second.ResourceValues.SetMemory(metrics.GetMemory());
             }
             if (metrics.HasNetwork()) {
+                TabletsNetSum += metrics.GetNetwork() - it->second.AccountedNet;
+                it->second.AccountedNet = metrics.GetNetwork();
                 it->second.ResourceValues.SetNetwork(metrics.GetNetwork());
             }
             if (metrics.HasStorage()) {
@@ -765,16 +1004,25 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                     it->second.ResourceValues.AddGroupWriteIops()->CopyFrom(v);
                 }
             }
+            for (const auto& v : metrics.GetNamedResources()) {
+                SetNamedResource(it->second.ResourceValues, v.GetName(), v.GetValue(), v.GetTransferable());
+            }
             UpdateTabletMemory(tabletId, msg->Executor, it->second.TabletType, msg->TabletMemoryReport, ctx);
             // Owner-only updates must not dirty cached placement metrics awaiting a Hive ack.
             if (!hiveMetrics) {
                 return;
             }
+            if (!TabletMetricsAckCookiesSupported) {
+                auto [legacy, inserted] = LegacyPendingTabletMetrics.emplace(tabletId, 1);
+                if (!inserted) {
+                    legacy->second = 2;
+                }
+            }
             auto uit = UpdatedTabletMetrics.find(tabletId);
             if (uit == UpdatedTabletMetrics.end()) {
-                UpdatedTabletMetrics.emplace(tabletId, 1);
-            } else {
-                uit->second = 2;
+                UpdatedTabletMetrics.emplace(tabletId, TUpdatedTabletMetrics{});
+            } else if (uit->second.InFlight) {
+                uit->second.UpdatedAfterSend = true;
             }
             if (Connected) {
                 ScheduleSendTabletMetrics(ctx);
@@ -789,12 +1037,25 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
-    void Handle(TEvPrivate::TEvSendTabletMetrics::TPtr&, const TActorContext& ctx) {
+    void Handle(TEvPrivate::TEvSendTabletMetrics::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Generation != TabletMetricsScheduleGeneration || TabletMetricsInFlightCookie != 0) {
+            return;
+        }
         if (Connected) {
             TAutoPtr<TEvHive::TEvTabletMetrics> event = new TEvHive::TEvTabletMetrics;
             NKikimrHive::TEvTabletMetrics& record = event->Record;
-            for (const auto& prTabletId : UpdatedTabletMetrics) {
-                AddTabletMetrics(prTabletId.first, record);
+            for (auto it = UpdatedTabletMetrics.begin(); it != UpdatedTabletMetrics.end();) {
+                if (!OnlineTablets.contains(it->first)) {
+                    it = UpdatedTabletMetrics.erase(it);
+                    continue;
+                }
+                AddTabletMetrics(it->first, record);
+                if (!TabletMetricsAckCookiesSupported) {
+                    LegacyPendingTabletMetrics.emplace(it->first, 1);
+                }
+                it->second.InFlight = true;
+                it->second.UpdatedAfterSend = false;
+                ++it;
             }
             if (UserPoolUsage != 0) {
                 record.MutableTotalResourceUsage()->SetCPU(UserPoolUsage);
@@ -805,7 +1066,27 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             record.SetTotalNodeUsage(NodeUsage);
             record.SetTotalNodeCpuUsage(CpuUsage);
             FillResourceMaximum(record.MutableResourceMaximum());
-            NTabletPipe::SendData(ctx, HivePipeClient, event.Release());
+            if (NodeUsageCounters) {
+                TNodeUsageCounters& c = *NodeUsageCounters;
+                const NKikimrTabletBase::TMetrics& maximum = record.GetResourceMaximum();
+                c.NodeUsagePercent->Set(NodeUsage * 100);
+                c.NodeCpuUsagePercent->Set(CpuUsage * 100);
+                c.NodeUserPoolUsageUs->Set(UserPoolUsage);
+                c.NodeUserPoolLimitUs->Set(UserPoolLimit);
+                c.NodeUsageUserPoolPercent->Set(Percent(UserPoolUsage, maximum.GetCPU()));
+                c.NodeMemUsageBytes->Set(MemUsage);
+                c.NodeMemLimitBytes->Set(MemLimit);
+                c.NodeUsageMemPercent->Set(Percent(MemUsage, maximum.GetMemory()));
+                c.TabletsUsageCpuUs->Set(TabletsCpuSum);
+                c.TabletsUsageMemBytes->Set(TabletsMemSum);
+                c.TabletsUsageNetBytesPerSec->Set(TabletsNetSum);
+                c.TabletsUsageCpuPercent->Set(Percent(TabletsCpuSum, maximum.GetCPU()));
+                c.TabletsUsageMemPercent->Set(Percent(TabletsMemSum, maximum.GetMemory()));
+                c.TabletsUsageNetPercent->Set(Percent(TabletsNetSum, maximum.GetNetwork()));
+            }
+            TabletMetricsInFlightCookie = ++NextTabletMetricsCookie;
+            Y_ABORT_UNLESS(TabletMetricsInFlightCookie != 0);
+            NTabletPipe::SendData(ctx, HivePipeClient, event.Release(), TabletMetricsInFlightCookie);
             SendTabletMetricsTime = ctx.Now();
         } else {
             SendTabletMetricsInProgress = false;
@@ -817,7 +1098,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             TDuration schedulePeriod = LastSendTabletMetricsDuration * 2 + TABLET_METRICS_BATCH_INTERVAL;
             schedulePeriod = Max(schedulePeriod, TABLET_METRICS_BATCH_INTERVAL);
             schedulePeriod = Min(schedulePeriod, TDuration::Seconds(60));
-            ctx.Schedule(schedulePeriod, new TEvPrivate::TEvSendTabletMetrics());
+            ctx.Schedule(schedulePeriod, new TEvPrivate::TEvSendTabletMetrics(++TabletMetricsScheduleGeneration));
             SendTabletMetricsInProgress = true;
         }
     }
@@ -833,22 +1114,63 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
+    // a tablet leaves OnlineTablets: its last reported metrics leave the sums
+    void SubtractFromTabletMetricsSums(const TOnlineTabletEntry& tablet) {
+        TabletsCpuSum -= tablet.AccountedCpu;
+        TabletsMemSum -= tablet.AccountedMem;
+        TabletsNetSum -= tablet.AccountedNet;
+    }
+
     void Handle(TEvLocal::TEvTabletMetricsAck::TPtr& ev, const TActorContext& ctx) {
         TEvLocal::TEvTabletMetricsAck* msg = ev->Get();
+        if (TabletMetricsInFlightCookie == 0 || ev->Sender != BootQueue) {
+            return;
+        }
+        const bool versioned = ev->Cookie != 0;
+        if (versioned ? ev->Cookie != TabletMetricsInFlightCookie : TabletMetricsAckCookiesSupported) {
+            return;
+        }
+        if (versioned && !TabletMetricsAckCookiesSupported) {
+            TabletMetricsAckCookiesSupported = true;
+            LegacyPendingTabletMetrics.clear();
+        }
         auto size = msg->Record.TabletIdSize();
         Y_ABORT_UNLESS(msg->Record.FollowerIdSize() == size);
         for (decltype(size) i = 0; i < size; ++i) {
             TTabletId tabletId(msg->Record.GetTabletId(i), msg->Record.GetFollowerId(i));
+            bool clear = false;
+            if (!versioned) {
+                auto legacy = LegacyPendingTabletMetrics.find(tabletId);
+                if (legacy == LegacyPendingTabletMetrics.end()) {
+                    continue;
+                }
+                clear = --legacy->second == 0;
+                if (clear) {
+                    LegacyPendingTabletMetrics.erase(legacy);
+                }
+            }
             auto uit = UpdatedTabletMetrics.find(tabletId);
-            if (uit != UpdatedTabletMetrics.end() && --uit->second == 0) {
+            if (uit == UpdatedTabletMetrics.end() || !uit->second.InFlight) {
+                continue;
+            }
+            auto& state = uit->second;
+            state.InFlight = false;
+            if (versioned) {
+                clear = !state.UpdatedAfterSend;
+            }
+            if (clear) {
                 UpdatedTabletMetrics.erase(uit);
                 auto it = OnlineTablets.find(tabletId);
                 if (it != OnlineTablets.end()) {
-                    TOnlineTabletEntry& tablet = it->second;
-                    tablet.ResourceValues.Clear();
+                    it->second.ResourceValues.Clear();
                 }
             }
         }
+        // A partial/empty ACK leaves unacknowledged snapshots pending for retry.
+        for (auto& [_, state] : UpdatedTabletMetrics) {
+            state.InFlight = false;
+        }
+        TabletMetricsInFlightCookie = 0;
         LastSendTabletMetricsDuration = ctx.Now() - SendTabletMetricsTime;
         SendTabletMetricsInProgress = false;
         if (!UpdatedTabletMetrics.empty()) {
@@ -866,7 +1188,104 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         auto req = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
         req->Record.MutableFieldsRequired()->Assign(REQUIRED_FIELDS.begin(), REQUIRED_FIELDS.end());
         Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), req.release());
+        Send(NResourceBroker::MakeResourceBrokerID(), new NResourceBroker::TEvResourceBroker::TEvQueueUsageRequest());
         Schedule(UPDATE_SYSTEM_USAGE_INTERVAL, new TEvPrivate::TEvUpdateSystemUsage());
+    }
+
+    void Handle(NResourceBroker::TEvResourceBroker::TEvQueueUsageResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& queues = ev->Get()->Queues;
+
+        TMap<TString, ui64> queueLimits;
+        std::unordered_map<TTabletId, THashMap<TString, TQueueUsageValue>> currentUsage;
+        for (const auto& queue : queues) {
+            TString name = NResourceBroker::MakeQueueResourceName(queue.Name);
+            if (queue.Limit != Max<ui64>()) {
+                queueLimits[name] = queue.Limit;
+            }
+            for (const auto& tablet : queue.Tablets) {
+                TTabletId tabletId(tablet.TabletId, tablet.FollowerId);
+                if (!OnlineTablets.contains(tabletId)) {
+                    continue; // will be reported once the tablet is online
+                }
+                currentUsage[tabletId][name] = TQueueUsageValue{
+                    .Value = tablet.Waiting + tablet.Running,
+                    .Transferable = tablet.Running == 0, // a move would restart running tasks
+                };
+            }
+        }
+
+        if (queueLimits != QueueLimits) {
+            QueueLimits = std::move(queueLimits);
+            YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar: resource broker queue limits changed");
+            if (Connected) {
+                SendStatusOk(ctx);
+            }
+        }
+
+        bool changed = false;
+        auto reportChange = [&](const TTabletId& tabletId, const TString& name, const TQueueUsageValue& value) {
+            auto it = OnlineTablets.find(tabletId);
+            if (it == OnlineTablets.end()) {
+                return;
+            }
+            SetNamedResource(it->second.ResourceValues, name, value.Value, value.Transferable);
+            // same bookkeeping as for TEvTabletMetrics
+            if (!TabletMetricsAckCookiesSupported) {
+                auto [legacy, inserted] = LegacyPendingTabletMetrics.emplace(tabletId, 1);
+                if (!inserted) {
+                    legacy->second = 2;
+                }
+            }
+            auto uit = UpdatedTabletMetrics.find(tabletId);
+            if (uit == UpdatedTabletMetrics.end()) {
+                UpdatedTabletMetrics.emplace(tabletId, TUpdatedTabletMetrics{});
+            } else if (uit->second.InFlight) {
+                uit->second.UpdatedAfterSend = true;
+            }
+            changed = true;
+        };
+
+        // Tablets which went offline are forgotten, see also the (re)start of a tablet
+        std::erase_if(ReportedQueueUsage, [&](const auto& item) { return !OnlineTablets.contains(item.first); });
+
+        // Usage which disappeared becomes zero, but the name stays for the resend
+        for (auto& [tabletId, reported] : ReportedQueueUsage) {
+            auto current = currentUsage.find(tabletId);
+            for (auto& [name, value] : reported) {
+                if (current == currentUsage.end() || !current->second.contains(name)) {
+                    if (value != TQueueUsageValue{}) {
+                        value = TQueueUsageValue{};
+                        reportChange(tabletId, name, value);
+                    }
+                }
+            }
+        }
+
+        // New and changed usage
+        for (auto& [tabletId, usage] : currentUsage) {
+            auto& reported = ReportedQueueUsage[tabletId];
+            for (auto& [name, value] : usage) {
+                auto& prev = reported[name];
+                if (prev != value) {
+                    prev = value;
+                    reportChange(tabletId, name, value);
+                }
+            }
+        }
+
+        // Periodic resend of everything, including zeros
+        if (Connected && ctx.Now() - LastQueueUsageResend >= QUEUE_USAGE_RESEND_INTERVAL) {
+            LastQueueUsageResend = ctx.Now();
+            for (const auto& [tabletId, reported] : ReportedQueueUsage) {
+                for (const auto& [name, value] : reported) {
+                    reportChange(tabletId, name, value);
+                }
+            }
+        }
+
+        if (changed && Connected) {
+            ScheduleSendTabletMetrics(ctx);
+        }
     }
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev, const TActorContext& ctx) {
@@ -949,8 +1368,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 entry.PendingMemoryReport->Report, ctx);
             entry.PendingMemoryReport.reset();
         }
-        OnlineTablets.emplace(tabletId, entry);
-        InbootTablets.erase(inbootIt);
+        auto [onlineIt, inserted] = OnlineTablets.emplace(tabletId, inbootIt->second);
+        if (inserted) {
+            OnlineTabletsByActor[onlineIt->second.Tablet] = tabletId;
+        }
+        EraseTablet(InbootTablets, InbootTabletsByActor, inbootIt);
+        // Hive only has estimates for a (re)started tablet until it is reported, so everything has to be reported again
+        ReportedQueueUsage.erase(tabletId);
     }
 
     void Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorContext&) {
@@ -969,9 +1393,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvTablet::TEvReady: tablet ready",
             {"tabletId", tabletId},
             {"generation", msg->Generation});
-        auto inbootIt = std::find_if(InbootTablets.begin(), InbootTablets.end(), [&](const auto& pr) -> bool {
-            return pr.second.Tablet == ev->Sender;
-        });
+        auto inbootIt = FindTabletByActor(InbootTablets, InbootTabletsByActor, ev->Sender);
         if (inbootIt == InbootTablets.end())
             return;
         TTabletEntry &entry = inbootIt->second;
@@ -1035,10 +1457,16 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         TEvTablet::TEvTabletDead *msg = ev->Get();
         const auto tabletId = msg->TabletID;
         const ui32 generation = msg->Generation;
-        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvTablet::TEvTabletDead",
+        // a poison pill is a requested stop and a demotion happens when a new instance takes over (e.g. on a tablet move),
+        // any other reason is a failure worth seeing in the node's log
+        const bool regularDeath = msg->Reason == TEvTablet::TEvTabletDead::ReasonPill
+            || msg->Reason == TEvTablet::TEvTabletDead::ReasonDemotedByStateStorage
+            || msg->Reason == TEvTablet::TEvTabletDead::ReasonDemotedByBlobStorage;
+        YDB_LOG_CTX(ctx, regularDeath ? PRI_DEBUG : PRI_NOTICE, "Tablet is dead",
+            {"nodeId", ctx.SelfID.NodeId()},
             {"tabletId", tabletId},
             {"generation", generation},
-            {"reason", (ui32)msg->Reason});
+            {"reason", msg->Reason});
 
         switch (msg->Reason) {
         case TEvTablet::TEvTabletDead::ReasonBootLocked:
@@ -1083,9 +1511,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
 
         // known tablets should be in online-tablets or in inboot-tablets (with correct generation).
-        auto onlineIt = std::find_if(OnlineTablets.begin(), OnlineTablets.end(), [&](const auto& pr) -> bool {
-            return pr.second.Tablet == ev->Sender;
-        });
+        auto onlineIt = FindTabletByActor(OnlineTablets, OnlineTabletsByActor, ev->Sender);
         if (onlineIt != OnlineTablets.end()) { // from online list
             MarkDeadTablet(onlineIt->first, generation, TEvLocal::TEvTabletStatus::StatusFailed, msg->Reason, ctx);
             if (onlineIt->second.IsPromoting) {
@@ -1093,27 +1519,27 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 auto inbootIt = InbootTablets.find(leader);
                 if (inbootIt != InbootTablets.end()) {
                     MarkDeadTablet(leader, inbootIt->second.Generation, TEvLocal::TEvTabletStatus::StatusFailed, msg->Reason, ctx);
-                    InbootTablets.erase(inbootIt);
+                    EraseTablet(InbootTablets, InbootTabletsByActor, inbootIt);
                 }
             }
             if (onlineIt->first.second == 0) { // leader
                 RetainedCutHistory.erase(onlineIt->first.first);
             }
             ForgetTabletMemory(onlineIt->first, ctx);
-            OnlineTablets.erase(onlineIt);
+            UpdatedTabletMetrics.erase(onlineIt->first);
+            SubtractFromTabletMetricsSums(onlineIt->second);
+            EraseTablet(OnlineTablets, OnlineTabletsByActor, onlineIt);
             UpdateEstimate();
             return;
         }
 
-        auto inbootIt = std::find_if(InbootTablets.begin(), InbootTablets.end(), [&](const auto& pr) -> bool {
-            return pr.second.Tablet == ev->Sender;
-        });
+        auto inbootIt = FindTabletByActor(InbootTablets, InbootTabletsByActor, ev->Sender);
         if (inbootIt != InbootTablets.end() && inbootIt->second.Generation <= generation) {
             MarkDeadTablet(inbootIt->first, generation, TEvLocal::TEvTabletStatus::StatusBootFailed, msg->Reason, ctx);
             if (inbootIt->first.second == 0) { // leader
                 RetainedCutHistory.erase(inbootIt->first.first);
             }
-            InbootTablets.erase(inbootIt);
+            EraseTablet(InbootTablets, InbootTabletsByActor, inbootIt);
             return;
         }
 
@@ -1236,22 +1662,23 @@ public:
         TxCacheQuota = new TSharedQuota(Counters->GetCounter("UsedTxDataCache"),
                                         Counters->GetCounter("TxDataCacheSize"));
 
-        CounterStartAttempts = Counters->GetCounter("Local_StartAttempts", true);
-        CounterFollowerAttempts = Counters->GetCounter("Local_FollowerAttempts", true);
-        CounterRestored = Counters->GetCounter("Local_Restored", true);
-        CounterCancelLocked = Counters->GetCounter("Local_CancelLocked", true);
-        CounterCancelSSTimeout = Counters->GetCounter("Local_CancelSSTimeout", true);
-        CounterCancelRace = Counters->GetCounter("Local_CancelRace", true);
-        CounterCancelBootBSError = Counters->GetCounter("Local_CancelBootBSError", true);
-        CounterCancelOutdated = Counters->GetCounter("Local_CancelOutdated", true);
-        CounterCancelBootSSError = Counters->GetCounter("Local_CancelBootSSError", true);
-        CounterCancelPoisonPill = Counters->GetCounter("Local_CancelPoisonPill", true);
-        CounterCancelDemotedBySS = Counters->GetCounter("Local_CancelDemotedBySS", true);
-        CounterCancelBSError = Counters->GetCounter("Local_CancelBSError", true);
-        CounterCancelInconsistentCommit = Counters->GetCounter("Local_CancelInconsistentCommit", true);
-        CounterCancelIsolated = Counters->GetCounter("Local_CancelIsolated", true);
-        CounterCancelDemotedByBS = Counters->GetCounter("Local_CancelDemotedByBS", true);
-        CounterCancelUnknownReason = Counters->GetCounter("Local_CancelUnknownReason", true);
+        LocalNodeCounters = Counters->GetSubgroup("node_id", ToString(Owner.NodeId()));
+        CounterStartAttempts = LocalNodeCounters->GetCounter("Local_StartAttempts", true);
+        CounterFollowerAttempts = LocalNodeCounters->GetCounter("Local_FollowerAttempts", true);
+        CounterRestored = LocalNodeCounters->GetCounter("Local_Restored", true);
+        CounterCancelLocked = LocalNodeCounters->GetCounter("Local_CancelLocked", true);
+        CounterCancelSSTimeout = LocalNodeCounters->GetCounter("Local_CancelSSTimeout", true);
+        CounterCancelRace = LocalNodeCounters->GetCounter("Local_CancelRace", true);
+        CounterCancelBootBSError = LocalNodeCounters->GetCounter("Local_CancelBootBSError", true);
+        CounterCancelOutdated = LocalNodeCounters->GetCounter("Local_CancelOutdated", true);
+        CounterCancelBootSSError = LocalNodeCounters->GetCounter("Local_CancelBootSSError", true);
+        CounterCancelPoisonPill = LocalNodeCounters->GetCounter("Local_CancelPoisonPill", true);
+        CounterCancelDemotedBySS = LocalNodeCounters->GetCounter("Local_CancelDemotedBySS", true);
+        CounterCancelBSError = LocalNodeCounters->GetCounter("Local_CancelBSError", true);
+        CounterCancelInconsistentCommit = LocalNodeCounters->GetCounter("Local_CancelInconsistentCommit", true);
+        CounterCancelIsolated = LocalNodeCounters->GetCounter("Local_CancelIsolated", true);
+        CounterCancelDemotedByBS = LocalNodeCounters->GetCounter("Local_CancelDemotedByBS", true);
+        CounterCancelUnknownReason = LocalNodeCounters->GetCounter("Local_CancelUnknownReason", true);
 
         UpdateCacheQuota();
     }
@@ -1298,6 +1725,7 @@ public:
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             HFunc(NMemory::TEvConsumerRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
+            HFunc(NResourceBroker::TEvResourceBroker::TEvQueueUsageResponse, Handle);
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             default:
                 YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TLocalNodeRegistrar: Unhandled in StateWork",

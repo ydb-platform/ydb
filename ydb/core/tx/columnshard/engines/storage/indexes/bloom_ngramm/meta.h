@@ -147,6 +147,22 @@ public:
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
+
+    ui32 GetNGrammSize() const {
+        return Request.ResolvedNGrammSize();
+    }
+
+    // A case-sensitive index rejects a case-insensitive probe. A case-insensitive index accepts both.
+    bool AcceptsCaseMode(const bool caseSensitive) const {
+        return !Request.ResolvedCaseSensitive() || caseSensitive;
+    }
+
+    std::optional<ui32> GetCompatibleBloomNgramSize(const bool caseSensitive) const override {
+        if (!AcceptsCaseMode(caseSensitive)) {
+            return std::nullopt;
+        }
+        return GetNGrammSize();
+    }
 };
 
 }   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

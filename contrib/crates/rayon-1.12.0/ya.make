@@ -1,0 +1,137 @@
+# Native Rust build with dependencies shared through contrib/crates.
+
+CRATE(rayon)
+
+CRATE_VERSION(1.12.0)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/array.rs
+    src/collections/binary_heap.rs
+    src/collections/btree_map.rs
+    src/collections/btree_set.rs
+    src/collections/hash_map.rs
+    src/collections/hash_set.rs
+    src/collections/linked_list.rs
+    src/collections/mod.rs
+    src/collections/vec_deque.rs
+    src/compile_fail/cannot_collect_filtermap_data.rs
+    src/compile_fail/cannot_zip_filtered_data.rs
+    src/compile_fail/cell_par_iter.rs
+    src/compile_fail/mod.rs
+    src/compile_fail/must_use.rs
+    src/compile_fail/no_send_par_iter.rs
+    src/compile_fail/rc_par_iter.rs
+    src/delegate.rs
+    src/iter/blocks.rs
+    src/iter/chain.rs
+    src/iter/chunks.rs
+    src/iter/cloned.rs
+    src/iter/collect/consumer.rs
+    src/iter/collect/mod.rs
+    src/iter/collect/test.rs
+    src/iter/copied.rs
+    src/iter/empty.rs
+    src/iter/enumerate.rs
+    src/iter/extend.rs
+    src/iter/filter.rs
+    src/iter/filter_map.rs
+    src/iter/find.rs
+    src/iter/find_first_last/mod.rs
+    src/iter/find_first_last/test.rs
+    src/iter/flat_map.rs
+    src/iter/flat_map_iter.rs
+    src/iter/flatten.rs
+    src/iter/flatten_iter.rs
+    src/iter/fold.rs
+    src/iter/fold_chunks.rs
+    src/iter/fold_chunks_with.rs
+    src/iter/for_each.rs
+    src/iter/from_par_iter.rs
+    src/iter/inspect.rs
+    src/iter/interleave.rs
+    src/iter/interleave_shortest.rs
+    src/iter/intersperse.rs
+    src/iter/len.rs
+    src/iter/map.rs
+    src/iter/map_with.rs
+    src/iter/mod.rs
+    src/iter/multizip.rs
+    src/iter/noop.rs
+    src/iter/once.rs
+    src/iter/panic_fuse.rs
+    src/iter/par_bridge.rs
+    src/iter/plumbing/mod.rs
+    src/iter/positions.rs
+    src/iter/product.rs
+    src/iter/reduce.rs
+    src/iter/repeat.rs
+    src/iter/rev.rs
+    src/iter/skip.rs
+    src/iter/skip_any.rs
+    src/iter/skip_any_while.rs
+    src/iter/splitter.rs
+    src/iter/step_by.rs
+    src/iter/sum.rs
+    src/iter/take.rs
+    src/iter/take_any.rs
+    src/iter/take_any_while.rs
+    src/iter/test.rs
+    src/iter/try_fold.rs
+    src/iter/try_reduce.rs
+    src/iter/try_reduce_with.rs
+    src/iter/unzip.rs
+    src/iter/update.rs
+    src/iter/walk_tree.rs
+    src/iter/while_some.rs
+    src/iter/zip.rs
+    src/iter/zip_eq.rs
+    src/math.rs
+    src/option.rs
+    src/par_either.rs
+    src/prelude.rs
+    src/private.rs
+    src/range.rs
+    src/range_inclusive.rs
+    src/result.rs
+    src/slice/chunk_by.rs
+    src/slice/chunks.rs
+    src/slice/mod.rs
+    src/slice/rchunks.rs
+    src/slice/sort.rs
+    src/slice/test.rs
+    src/slice/windows.rs
+    src/split_producer.rs
+    src/str.rs
+    src/string.rs
+    src/vec.rs
+)
+
+CRATE_INPUTS(
+    Cargo.lock
+    FAQ.md
+    LICENSE-APACHE
+    LICENSE-MIT
+    README.md
+    RELEASES.md
+    src/iter/plumbing/README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+PEERDIR(
+    contrib/crates/either-1.19.0
+    contrib/crates/rayon-core-1.13.0
+)
+
+LICENSE("MIT OR Apache-2.0")
+VERSION(1.12.0)
+ORIGINAL_SOURCE(https://static.crates.io/crates/rayon/rayon-1.12.0.crate)
+
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
+)
+
+END()

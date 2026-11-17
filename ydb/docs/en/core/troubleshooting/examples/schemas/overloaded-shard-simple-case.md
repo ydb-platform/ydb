@@ -54,7 +54,7 @@ The CPU load has increased, as shown in the **CPU by execution pool** diagram.
 
 {% cut "See the details on the CPU Grafana dashboard" %}
 
-Examining the **CPU** Grafana dashboard reveals that CPU usage increased [in the user pool and the interconnect pool](../../../concepts/glossary.md#actor-system-pool):
+Examining the **CPU** Grafana dashboard reveals that CPU usage increased [in the user pool and the interconnect pool](../../../reference/configuration/actor_system_config.md#tuneconfig):
 
 ![CPU](./_assets/overloaded-shard-simple-case/incident-grafana-cpu-dashboard-user-pool-by-actors.png)
 

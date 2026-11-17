@@ -1,11 +1,13 @@
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/scalar_layout_converter.h>
 #include <library/cpp/testing/unittest/registar.h>
+
 #include "scalar_layout_converter_utils.h"
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/print_unboxed_value.h>
+
 using NYql::NUdf::TUnboxedValuePod;
 using NYql::NUdf::TUnboxedValue;
 using namespace NKikimr::NMiniKQL;

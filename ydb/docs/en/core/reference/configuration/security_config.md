@@ -73,7 +73,7 @@ You can use this group to grant [access rights](../../concepts/glossary.md#acces
 
 {% note tip %}
 
-You can get information about access rights on scheme objects in the system views. For more information see, [{#T}](../../dev/system-views#informaciya-o-pravah-dostupa).
+You can get information about access rights on scheme objects in the system views. For more information see, [{#T}](../../dev/system-views.md#information-about-access-rights).
 
 {% endnote %}
 

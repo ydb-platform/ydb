@@ -199,8 +199,8 @@ message TEvWriteResult {
     // Commit version when available
     optional NKikimrProto.TRowVersion CommitVersion = 14;
 
-    // Duplicate of a previously applied write; Status carries the original status.
-    optional bool IsDuplicate = 15;
+    // Field 15 was IsDuplicate: duplicates answer with a plain completed result.
+    reserved 15;
 }
 
 message TEvLockRows {

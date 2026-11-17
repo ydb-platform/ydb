@@ -1,0 +1,40 @@
+Behdad Esfahbod <behdad@gnu.org>
+#
+# Behdad Esfahbod maintained the entire 0.19 series. He designed, and
+# implemented most of what is in FriBidi today.
+#
+
+Dov Grobgeld <dov.grobgeld@gmail.com>
+#
+# Dov Grobgeld originally wrote FriBidi.  The 0.1.* releases were all done
+# by him.  After the a long time of not being involved, Dov received
+# back the maintenance of the package in time for the 1.0 release.
+# He did the entire algorithmic work to support the changes made
+# to the Unicode algorithm in the Unicode 6.3 standard.
+#
+
+Roozbeh Pournader <roozbeh@gnu.org>
+#
+# Roozbeh Pournader hasn't contributed much code to FriBidi personally; but
+# has maintained, promoted, and supported the project for a while.  He has
+# helped with making GNU FriBidi standards compliant, and has sometimes
+# lobbied with the Unicode Consortium when needed.  Roozbeh was supposed to
+# be a co-maintainer of GNU FriBidi, but he's not doing that yet.
+#
+
+Khaled Hosny <khaledhosny@eglug.org>
+#
+# Khaled Hosny has done lots of cleanup and autoconfig work.
+
+# Note: Other people have contributed significant amounts of code, but
+# usually the code has faded out because of restructuring and redesigning
+# things around GNU FriBidi.  As an example, the FriBidiEnv patch by Omer
+# Zak, made itself into FriBidi CVS for a couple of years, but was finally
+# implemented in a better way by Behdad.
+#
+# Note: GNU getopt is distributed with and used in GNU FriBidi under bin/, but
+# is not part of GNU FriBidi.
+#
+# Note: Parts of the Unicode Character Database are distributed with and used
+# in GNU FriBidi under gen.tab/unidata/, but are not part of GNU FriBidi.
+#

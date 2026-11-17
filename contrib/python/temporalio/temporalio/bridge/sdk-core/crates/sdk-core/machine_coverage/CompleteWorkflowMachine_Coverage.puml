@@ -1,0 +1,6 @@
+@startuml
+Created -[#blue]-> CompleteWorkflowCommandCreated: Schedule
+CompleteWorkflowCommandCreated -[#blue]-> CompleteWorkflowCommandCreated: CommandCompleteWorkflowExecution
+CompleteWorkflowCommandCreated -[#blue]-> CompleteWorkflowCommandRecorded: WorkflowExecutionCompleted
+CompleteWorkflowCommandRecorded --> [*]
+@enduml

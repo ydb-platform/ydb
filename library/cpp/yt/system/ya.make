@@ -33,14 +33,6 @@ PEERDIR(
     library/cpp/yt/misc
 )
 
-IF (OS_LINUX)
-    IF (ARCH_X86_64 OR ARCH_AARCH64)
-        PEERDIR(
-            library/cpp/yt/rseq
-        )
-    ENDIF()
-ENDIF()
-
 END()
 
 RECURSE(

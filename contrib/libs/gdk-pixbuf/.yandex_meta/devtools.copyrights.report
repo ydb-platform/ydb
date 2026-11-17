@@ -1,0 +1,243 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 178c88d7cc405e67a1f35755dcae1d12
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2007 Red Hat, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-scaled-anim.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 20cdf94abd4e2184f707de0e6a9894ec
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2000 Red Hat, Inc
+         * mediaLib integration Copyright (c) 2001-2007 Sun Microsystems, Inc.
+         * All rights reserved.  (Brian Cameron, Dmitriy Demin, James Cheng,
+         * Padraig O'Briain)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/pixops/pixops.c [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 50647af32f927f9c2bc52a1fde8cf161
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2004 Dom Lachowicz
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-simple-anim.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 50c966eb1d53f6d1184e5452b262d47c
+BELONGS ya.make
+    License text:
+         * Progressive loading code Copyright (C) 1999 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/io-jpeg.c [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 50fb206ae3042292d98073d03877a692
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2016 Chun-wei Fan
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-macros.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5e486a5f36e2f6bb47b1bfd42b1d6077
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1999 Mark Crichton
+         * Copyright (C) 1999 The Free Software Foundation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/io-png.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5f20a44f4fd7f19fe950a3bd4926f5ff
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2000 Red Hat, Inc
+         * mediaLib integration Copyright (c) 2001-2007 Sun Microsystems, Inc.
+         * All rights reserved.  (Brian Cameron, Dmitriy Demin, James Cheng,
+         * Padraig O'Briain)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/pixops/pixops.c [2:5]
+        gdk-pixbuf/pixops/pixops.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77c3912f1678eec9ca81e5946af3b2cf
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1999, 2001 Tim Janik
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/gdk-pixdata.c [2:2]
+        gdk-pixbuf/gdk-pixdata.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 91ee60cf3ea2171b50a781bb5799be24
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1999 Michael Zucchi
+         * Copyright (C) 1999 The Free Software Foundation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/io-jpeg.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 97b98b0afb71e748e4853fac35b18b21
+BELONGS ya.make
+    License text:
+        This code is copyright Red Hat, Inc, 2000 and licensed under the terms
+        of the GNU Lesser General Public License (LGPL).
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/pixops/README [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9a56f099d1306faa74a9d7bb54e4b403
+BELONGS ya.make
+    License text:
+         * Copyright (C) Dom Lachowicz
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-simple-anim.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL abd922702427e9cdc6d146a3f97694e8
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1999 The Free Software Foundation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-animation.c [4:4]
+        gdk-pixbuf/gdk-pixbuf-animation.h [4:4]
+        gdk-pixbuf/gdk-pixbuf-data.c [3:3]
+        gdk-pixbuf/gdk-pixbuf-io.c [3:3]
+        gdk-pixbuf/gdk-pixbuf-io.h [5:5]
+        gdk-pixbuf/gdk-pixbuf-loader.c [4:4]
+        gdk-pixbuf/gdk-pixbuf-loader.h [3:3]
+        gdk-pixbuf/gdk-pixbuf-private.h [4:4]
+        gdk-pixbuf/gdk-pixbuf-scale.c [3:3]
+        gdk-pixbuf/gdk-pixbuf-util.c [3:3]
+        gdk-pixbuf/gdk-pixbuf.c [4:4]
+        gdk-pixbuf/gdk-pixbuf.h [3:3]
+        gdk-pixbuf/io-jpeg.c [4:5]
+        gdk-pixbuf/io-png.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b51a1129a23d8f4177d70f086c3e91c6
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2003 The Free Software Foundation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-core.h [3:3]
+        gdk-pixbuf/gdk-pixbuf-transform.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b58be1e169e026e17e2928cead9ed0cb
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2011 Chun-wei Fan <fanc999@yahoo.com.tw>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/fallback-c89.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [428:433]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cea1b82351539a871d540971f218116e
+BELONGS ya.make
+    License text:
+         Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+         51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d6fe1dac1cded24308a15f57c25677a7
+BELONGS ya.make
+    License text:
+         * Copyright (C) Red Hat, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-scaled-anim.c [4:4]

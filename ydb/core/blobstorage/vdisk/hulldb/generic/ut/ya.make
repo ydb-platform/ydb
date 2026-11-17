@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/blobstorage/vdisk/hulldb/generic)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -14,6 +12,7 @@ PEERDIR(
 )
 
 SRCS(
+    hullds_idx_counters_ut.cpp
     hullds_sst_it_all_ut.cpp
     blobstorage_hullwritesst_ut.cpp
     blobstorage_hullwritesst_estimate_ut.cpp

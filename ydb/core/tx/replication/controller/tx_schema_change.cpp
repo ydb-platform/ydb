@@ -8,11 +8,15 @@
 #include <ydb/core/tx/replication/common/schema_change.h>
 #include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
 namespace {
+
+using TFamily = NKikimrReplication::TSchemaChange::TFamily;
 
 bool IsValidSchemaChange(const NKikimrReplication::TSchemaChange& schema) {
     if (!schema.HasVersion() || !schema.GetSourceSchemaVersion()) {
@@ -32,6 +36,15 @@ bool IsValidSchemaChange(const NKikimrReplication::TSchemaChange& schema) {
 
             if (!IsValidCompression(family.GetCompression()) || !IsValidCacheMode(family.GetCacheMode())) {
                 return false;
+            }
+
+            if (family.HasCompressionLevel()) {
+                if (family.GetCompression() != TFamily::COMPRESSION_ZSTD) {
+                    return false;
+                }
+                if (family.GetCompressionLevel() > static_cast<ui32>(ZSTD_maxCLevel())) {
+                    return false;
+                }
             }
 
             if (family.HasMedia() && family.GetMedia().empty()) {
@@ -791,7 +804,7 @@ public:
 };
 
 void TController::StartSchemaChangeDstAlter(const std::pair<ui64, ui64>& key, const TActorContext& ctx) {
-    if (SchemaChangeDstAlterers.contains(key)) {
+    if (ReplicationsWithSourceOffsetMismatch.contains(key.first) || SchemaChangeDstAlterers.contains(key)) {
         return;
     }
 
@@ -880,6 +893,9 @@ void TController::RunTxSchemaChangeDstAlterTxId(TEvPrivate::TEvSchemaChangeDstAl
 }
 
 void TController::StartSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key, const TActorContext& ctx) {
+    if (ReplicationsWithSourceOffsetMismatch.contains(key.first)) {
+        return;
+    }
     const auto barrierIt = SchemaBarriers.find(key);
     if (CommittingTxId || barrierIt == SchemaBarriers.end()) {
         return;

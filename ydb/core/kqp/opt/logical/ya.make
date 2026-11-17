@@ -22,6 +22,7 @@ PEERDIR(
     ydb/library/json_index
     ydb/core/kqp/opt/cbo
     ydb/core/kqp/opt/cbo/solver
+    ydb/core/kqp/tracing
     yql/essentials/core/extract_predicate
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt

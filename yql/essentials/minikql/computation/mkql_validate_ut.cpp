@@ -1,6 +1,6 @@
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_node_printer.h>
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 #include "mkql_computation_list_adapter.h"
 #include "mkql_computation_node_impl.h"
 #include "mkql_computation_node.h"

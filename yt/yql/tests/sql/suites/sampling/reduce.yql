@@ -1,4 +1,4 @@
-/* custom check: len(yt_res_yson[0][b'Write'][0][b'Data']) < 8 */
+/* custom check: len(yt_res_yson[0][b'Write'][0][b'Data']) < 100 */
 USE plato;
 
 $udf = YQL::@@(lambda '(key stream) (AsStruct

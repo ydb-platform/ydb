@@ -97,6 +97,9 @@ struct TFileLogWriterConfig
     bool UseLogrotateCompatibleTimestampSuffix;
     bool EnableCompression;
     bool EnableNoReuse;
+    //! If true, write back dirty pages and issue a best-effort page-cache eviction hint before closing.
+    //! Has no effect on platforms other than Linux.
+    bool TryEvictPageCacheOnFileClose;
     ECompressionMethod CompressionMethod;
     int CompressionLevel;
 

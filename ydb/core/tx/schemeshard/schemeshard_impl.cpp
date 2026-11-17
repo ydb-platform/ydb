@@ -6161,7 +6161,6 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult, Handle);
         HFuncTraced(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult, Handle);
 
-        // cdc aggregator
         HFuncTraced(NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult, Handle);
         HFuncTraced(NCdcAggregator::TEvCdcAggregator::TEvPartitioningChangedAck, Handle);
 
@@ -7744,6 +7743,8 @@ void TSchemeShard::Handle(NCdcAggregator::TEvCdcAggregator::TEvPartitioningChang
 
     Execute(CreateTxOperationReply(operationId, ev), ctx);
 }
+
+void TSchemeShard::Handle(NReplication::TEvController::TEvCreateReplicationResult::TPtr &ev, const TActorContext &ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Handle TEvCreateReplicationResult",
         {"schemeshard", TabletID()},
         {"message", ev->Get()->Record.ShortDebugString()},

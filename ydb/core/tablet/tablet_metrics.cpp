@@ -23,6 +23,11 @@ void TResourceMetricsValues::Fill(NKikimrTabletBase::TMetrics& metrics) const {
     if (Memory.IsValueReady()) {
         metrics.SetMemory(Memory.GetValue());
     }
+    if (TabletMemoryReport) {
+        metrics.SetTabletMemoryUsed(TabletMemoryReport->Used);
+        metrics.SetMemoryDemand(TabletMemoryReport->Demand);
+        metrics.SetMemoryReclaimable(TabletMemoryReport->Reclaimable);
+    }
     if (Network.IsValueReady()) {
         metrics.SetNetwork(Network.GetValue());
     }
@@ -85,10 +90,12 @@ void TResourceMetricsValues::Fill(NKikimrTabletBase::TMetrics& metrics) const {
     }
 }
 
-TResourceMetricsSendState::TResourceMetricsSendState(ui64 tabletId, ui32 followerId, const TActorId& launcher)
+TResourceMetricsSendState::TResourceMetricsSendState(ui64 tabletId, ui32 followerId, const TActorId& launcher, const TActorId& executor, const TActorId& systemTablet)
     : TabletId(tabletId)
     , FollowerId(followerId)
     , Launcher(launcher)
+    , Executor(executor)
+    , SystemTablet(systemTablet)
 {}
 
 namespace {
@@ -165,6 +172,35 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         src.Memory.Set(0);
         metrics.SetMemory(0);
         have = true;
+    }
+
+    if (src.TabletMemoryReport) {
+        const ui64 memory = src.TabletMemoryReport->Used;
+        const ui64 demand = src.TabletMemoryReport->Demand;
+        const ui64 reclaimable = src.TabletMemoryReport->Reclaimable;
+        const ui32 levelMemory = memory / SignificantChangeMemory;
+        const ui32 levelDemand = demand / SignificantChangeMemory;
+        const ui32 levelReclaimable = reclaimable / SignificantChangeMemory;
+        const bool zeroTransition = !LastTabletMemoryReport ||
+            ((memory == 0) != (LastTabletMemoryReport->Used == 0)) ||
+            ((demand == 0) != (LastTabletMemoryReport->Demand == 0)) ||
+            ((reclaimable == 0) != (LastTabletMemoryReport->Reclaimable == 0));
+        const bool elasticTransition = LastTabletMemoryReport &&
+            ((reclaimable != 0 || demand > memory) !=
+             (LastTabletMemoryReport->Reclaimable != 0 || LastTabletMemoryReport->Demand > LastTabletMemoryReport->Used));
+        if (zeroTransition || elasticTransition || levelMemory != LevelTabletMemoryUsed || levelDemand != LevelMemoryDemand ||
+            levelReclaimable != LevelMemoryReclaimable || force)
+        {
+            // Partial updates can violate Reclaimable <= Used <= Demand at the receiver.
+            metrics.SetTabletMemoryUsed(memory);
+            metrics.SetMemoryDemand(demand);
+            metrics.SetMemoryReclaimable(reclaimable);
+            LevelTabletMemoryUsed = levelMemory;
+            LevelMemoryDemand = levelDemand;
+            LevelMemoryReclaimable = levelReclaimable;
+            LastTabletMemoryReport = src.TabletMemoryReport;
+            have = true;
+        }
     }
 
     if (src.Network.IsValueReady()) {
@@ -269,9 +305,19 @@ bool TResourceMetricsSendState::TryUpdate(TResourceMetricsValues& src, const TAc
         return false; // too soon
     }
     NKikimrTabletBase::TMetrics values;
-    bool updated = FillChanged(src, values, now, past > TDuration::Seconds(60));
+    // Owner-only sends must not postpone Hive's periodic placement refresh.
+    bool updated = FillChanged(src, values, now, now - LastHiveUpdate > TDuration::Seconds(60));
     if (updated) {
-        ctx.Send(Launcher, new TEvLocal::TEvTabletMetrics(TabletId, FollowerId, values));
+        const bool hiveMetrics = values.HasCPU() || values.HasMemory() || values.HasNetwork() ||
+            values.HasStorage() || values.GroupReadThroughputSize() || values.GroupWriteThroughputSize() ||
+            values.GroupReadIopsSize() || values.GroupWriteIopsSize();
+        if (hiveMetrics) {
+            LastHiveUpdate = now;
+        }
+        ctx.Send(Launcher, new TEvLocal::TEvTabletMetrics(TabletId, FollowerId, values, Executor,
+            src.TabletMemoryReport, SystemTablet));
+        // Other metrics may also carry a fresh owner snapshot. Remember what was sent.
+        LastTabletMemoryReport = src.TabletMemoryReport;
         LastUpdate = now;
     }
     return updated;

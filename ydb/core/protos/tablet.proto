@@ -255,6 +255,10 @@ message TMetrics {
     optional uint64 ReadIops = 12;
     optional uint64 WriteIops = 13;
     repeated TNamedResource NamedResources = 14;
+    // Owner-only report; Memory remains the legacy Hive placement estimate.
+    optional uint64 MemoryDemand = 15;
+    optional uint64 MemoryReclaimable = 16;
+    optional uint64 TabletMemoryUsed = 17;
 }
 
 message TEvTabletStop {

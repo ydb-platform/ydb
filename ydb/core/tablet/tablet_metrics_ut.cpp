@@ -1,11 +1,260 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tablet_flat/flat_database.h>
+#include <ydb/core/protos/tablet.pb.h>
+#include <ydb/core/mind/local.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
+#include <util/generic/size_literals.h>
 #include "tablet_metrics.h"
 
 namespace NKikimr {
 namespace NMetrics {
 
+namespace {
+
+void AssertMemoryReport(const NKikimrTabletBase::TMetrics& metrics, ui64 used, ui64 demand, ui64 reclaimable) {
+    UNIT_ASSERT(metrics.HasTabletMemoryUsed());
+    UNIT_ASSERT(metrics.HasMemoryDemand());
+    UNIT_ASSERT(metrics.HasMemoryReclaimable());
+    UNIT_ASSERT_VALUES_EQUAL(metrics.GetTabletMemoryUsed(), used);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.GetMemoryDemand(), demand);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.GetMemoryReclaimable(), reclaimable);
+    UNIT_ASSERT_LE(metrics.GetMemoryReclaimable(), metrics.GetTabletMemoryUsed());
+    UNIT_ASSERT_LE(metrics.GetTabletMemoryUsed(), metrics.GetMemoryDemand());
+}
+
+}
+
 Y_UNIT_TEST_SUITE(TFlatMetrics) {
+    Y_UNIT_TEST(MemoryReportIncludesZeroValues) {
+        TResourceMetricsValues values;
+        NKikimrTabletBase::TMetrics message;
+        values.Fill(message);
+        UNIT_ASSERT(!message.HasMemoryDemand());
+        UNIT_ASSERT(!message.HasMemoryReclaimable());
+
+        values.SetMemoryReport(10_MB, 12_MB, 0);
+        values.Fill(message);
+        AssertMemoryReport(message, 10_MB, 12_MB, 0);
+
+        message.Clear();
+        values.SetMemoryReport(0, 0, 0);
+        values.Fill(message);
+        AssertMemoryReport(message, 0, 0, 0);
+    }
+
+    Y_UNIT_TEST(MemoryReportClearsReclaimable) {
+        TResourceMetrics metrics(1, 0, TActorId());
+        NKikimrTabletBase::TMetrics message;
+        metrics.SetMemoryReport(12_MB, 15_MB, 10_MB);
+        UNIT_ASSERT(metrics.FillChanged(message));
+
+        message.Clear();
+        metrics.SetMemoryReport(12_MB, 15_MB, 0);
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 12_MB, 15_MB, 0);
+
+        message.Clear();
+        UNIT_ASSERT(!metrics.FillChanged(message));
+        UNIT_ASSERT(metrics.FillChanged(message, TInstant::Now(), true));
+        AssertMemoryReport(message, 12_MB, 15_MB, 0);
+
+        message.Clear();
+        metrics.SetMemoryReport(0, 0, 0);
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 0, 0, 0);
+
+        TResourceMetrics emptyReport(2, 0, TActorId());
+        emptyReport.SetMemoryReport(0, 0, 0);
+        message.Clear();
+        UNIT_ASSERT(emptyReport.FillChanged(message));
+        AssertMemoryReport(message, 0, 0, 0);
+    }
+
+    Y_UNIT_TEST(MemoryReportPreservesInvariantsAcrossThresholds) {
+        TResourceMetrics metrics(1, 0, TActorId());
+        NKikimrTabletBase::TMetrics receiver;
+        metrics.SetMemoryReport(11_MB + 100_KB, 12_MB, 10_MB + 900_KB);
+        UNIT_ASSERT(metrics.FillChanged(receiver));
+
+        // Used crosses a bucket boundary, while reclaimable stays in the same bucket.
+        NKikimrTabletBase::TMetrics update;
+        metrics.SetMemoryReport(10_MB + 500_KB, 12_MB, 10_MB + 400_KB);
+        UNIT_ASSERT(metrics.FillChanged(update));
+        receiver.MergeFrom(update);
+        AssertMemoryReport(receiver, 10_MB + 500_KB, 12_MB, 10_MB + 400_KB);
+
+        metrics.SetMemoryReport(10_MB + 900_KB, 11_MB + 100_KB, 0);
+        update.Clear();
+        UNIT_ASSERT(metrics.FillChanged(update));
+        receiver.MergeFrom(update);
+
+        // Used grows past the previously sent demand; demand's bucket does not change.
+        metrics.SetMemoryReport(11_MB + 500_KB, 11_MB + 700_KB, 0);
+        update.Clear();
+        UNIT_ASSERT(metrics.FillChanged(update));
+        receiver.MergeFrom(update);
+        AssertMemoryReport(receiver, 11_MB + 500_KB, 11_MB + 700_KB, 0);
+    }
+
+    Y_UNIT_TEST(MemoryReportRetainsChangeThrottling) {
+        TResourceMetrics metrics(1, 0, TActorId());
+        NKikimrTabletBase::TMetrics message;
+        metrics.SetMemoryReport(10_MB + 100_KB, 12_MB + 100_KB, 1_MB + 100_KB);
+        UNIT_ASSERT(metrics.FillChanged(message));
+
+        metrics.SetMemoryReport(10_MB + 200_KB, 12_MB + 200_KB, 1_MB + 200_KB);
+        message.Clear();
+        UNIT_ASSERT(!metrics.FillChanged(message));
+        UNIT_ASSERT(metrics.FillChanged(message, TInstant::Now(), true));
+        AssertMemoryReport(message, 10_MB + 200_KB, 12_MB + 200_KB, 1_MB + 200_KB);
+
+        // A change in demand alone must also send the other two current values.
+        metrics.SetMemoryReport(10_MB + 300_KB, 13_MB, 1_MB + 300_KB);
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 10_MB + 300_KB, 13_MB, 1_MB + 300_KB);
+    }
+
+    Y_UNIT_TEST(SubMegabyteZeroTransitionsAreReported) {
+        TResourceMetrics metrics(1, 0, TActorId());
+        NKikimrTabletBase::TMetrics message;
+        metrics.SetMemoryReport(100_KB, 200_KB, 1);
+        UNIT_ASSERT(metrics.FillChanged(message));
+        metrics.SetMemoryReport(100_KB, 200_KB, 2);
+        message.Clear();
+        UNIT_ASSERT(!metrics.FillChanged(message));
+        metrics.SetMemoryReport(100_KB, 200_KB, 0);
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 100_KB, 200_KB, 0);
+        metrics.SetMemoryReport(100_KB, 200_KB, 1);
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 100_KB, 200_KB, 1);
+        metrics.SetMemoryReport(0, 0, 0);
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 0, 0, 0);
+    }
+
+    Y_UNIT_TEST(LegacyMemoryDoesNotOverwriteMemoryReport) {
+        TResourceMetrics metrics(1, 0, TActorId());
+        metrics.SetMemoryReport(10_MB, 12_MB, 0);
+        metrics.Memory.Set(20_MB);
+        NKikimrTabletBase::TMetrics message;
+        metrics.Fill(message);
+        AssertMemoryReport(message, 10_MB, 12_MB, 0);
+
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 10_MB, 12_MB, 0);
+
+        metrics.Memory.Set(30_MB);
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message));
+        UNIT_ASSERT_VALUES_EQUAL(message.GetMemory(), 30_MB);
+        UNIT_ASSERT(!message.HasTabletMemoryUsed());
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message, TInstant::Now(), true));
+        AssertMemoryReport(message, 10_MB, 12_MB, 0);
+
+        metrics.SetMemoryReport(30_MB, 35_MB, 5_MB);
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 30_MB, 35_MB, 5_MB);
+    }
+
+    Y_UNIT_TEST(LegacyMemoryDoesNotEnableMemoryReport) {
+        TResourceMetrics metrics(1, 0, TActorId());
+        metrics.Memory.Set(10_MB);
+        NKikimrTabletBase::TMetrics message;
+        metrics.Fill(message);
+        UNIT_ASSERT_VALUES_EQUAL(message.GetMemory(), 10_MB);
+        UNIT_ASSERT(!message.HasMemoryDemand());
+        UNIT_ASSERT(!message.HasMemoryReclaimable());
+
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message));
+        UNIT_ASSERT_VALUES_EQUAL(message.GetMemory(), 10_MB);
+        UNIT_ASSERT(!message.HasMemoryDemand());
+        UNIT_ASSERT(!message.HasMemoryReclaimable());
+
+        metrics.Memory.Set(11_MB);
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message, TInstant::Now(), true));
+        UNIT_ASSERT_VALUES_EQUAL(message.GetMemory(), 11_MB);
+        UNIT_ASSERT(!message.HasMemoryDemand());
+        UNIT_ASSERT(!message.HasMemoryReclaimable());
+    }
+
+    Y_UNIT_TEST(OwnerOnlyUpdatesDoNotSuppressHiveRefresh) {
+        for (bool ownerUpdates : {false, true}) {
+            TTestBasicRuntime runtime;
+            runtime.Initialize(TAppPrepare().Unwrap());
+            const auto launcher = runtime.AllocateEdgeActor();
+            TResourceMetrics metrics(1, 0, launcher);
+            metrics.Memory.Set(20_MB);
+            const auto start = runtime.GetCurrentTime() + TDuration::Seconds(1);
+            ui32 hiveRefreshes = 0;
+
+            for (ui32 step = 0; step <= 60; ++step) {
+                runtime.UpdateCurrentTime(start + TDuration::Seconds(15 * step));
+                const ui64 ownerUsed = (10 + step) * 1_MB;
+                if (ownerUpdates) {
+                    metrics.SetMemoryReport(ownerUsed, ownerUsed, 0);
+                }
+                const bool updated = runtime.RunCall([&] {
+                    return metrics.TryUpdate(TActivationContext::AsActorContext());
+                });
+                // The legacy forced refresh is due after more than 60 seconds.
+                const bool hiveRefresh = step % 5 == 0;
+                UNIT_ASSERT_VALUES_EQUAL(updated, ownerUpdates || hiveRefresh);
+                if (!updated) {
+                    continue;
+                }
+                auto event = runtime.GrabEdgeEvent<TEvLocal::TEvTabletMetrics>(launcher);
+                const auto& message = event->Get()->ResourceValues;
+                UNIT_ASSERT_VALUES_EQUAL(message.HasMemory(), hiveRefresh);
+                if (message.HasMemory()) {
+                    UNIT_ASSERT_VALUES_EQUAL(message.GetMemory(), 20_MB);
+                    ++hiveRefreshes;
+                }
+                if (ownerUpdates) {
+                    AssertMemoryReport(message, ownerUsed, ownerUsed, 0);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(hiveRefreshes, 13);
+        }
+    }
+
+    Y_UNIT_TEST(OwnerOnlyUpdatesRetainSendThrottling) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        const auto launcher = runtime.AllocateEdgeActor();
+        TResourceMetrics metrics(1, 0, launcher);
+        metrics.Memory.Set(20_MB);
+        metrics.SetMemoryReport(10_MB, 10_MB, 0);
+        const auto start = runtime.GetCurrentTime() + TDuration::Seconds(1);
+        runtime.UpdateCurrentTime(start);
+        const auto update = [&] {
+            return runtime.RunCall([&] {
+                return metrics.TryUpdate(TActivationContext::AsActorContext());
+            });
+        };
+        UNIT_ASSERT(update());
+        runtime.GrabEdgeEvent<TEvLocal::TEvTabletMetrics>(launcher);
+
+        metrics.SetMemoryReport(11_MB, 11_MB, 0);
+        runtime.UpdateCurrentTime(start + TDuration::MilliSeconds(500));
+        UNIT_ASSERT(!update());
+        runtime.UpdateCurrentTime(start + TDuration::Seconds(1));
+        UNIT_ASSERT(update());
+        auto event = runtime.GrabEdgeEvent<TEvLocal::TEvTabletMetrics>(launcher);
+        const auto& message = event->Get()->ResourceValues;
+        UNIT_ASSERT(!message.HasMemory());
+        AssertMemoryReport(message, 11_MB, 11_MB, 0);
+    }
+
     Y_UNIT_TEST(TimeSeriesAvg4) {
         TTimeSeriesValue<ui64, TDuration::Minutes(1).GetValue(), 4> value;
         TInstant time = TInstant::Now();

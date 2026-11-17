@@ -34,6 +34,7 @@ SRCS(
     statestorage_guardian_ut.cpp
     statestorage_ut.cpp
     table_index_ut.cpp
+    tablet_memory_admission_ut.cpp
 )
 
 END()

@@ -4,6 +4,7 @@ SRCS(
     sql_aggregation_ut.cpp
     sql_ansi_ut.cpp
     sql_core_ut.cpp
+    sql_ddl_table_default_expr_ut.cpp
     sql_ddl_table_ut.cpp
     sql_ddl_ut.cpp
     sql_ddl_view_ut.cpp

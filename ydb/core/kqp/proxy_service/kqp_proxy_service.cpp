@@ -11,8 +11,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/request_types.h>
 #include <ydb/core/base/statestorage.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
@@ -28,6 +28,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration/pq_checkpoint_provider_integration.h>
+#include <ydb/core/kqp/federated_query/streaming/streaming_query_controller.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
@@ -337,6 +338,10 @@ public:
             FederatedQuerySetup->CheckpointProviderIntegrations.try_emplace(
                 TString(NYql::PqProviderName),
                 CreatePqCheckpointProviderIntegration(TActivationContext::ActorSystem(), FederatedQuerySetup->PqGatewayFactory->CreatePqGateway(), *FederatedQuerySetup->Driver, FederatedQuerySetup->CredentialsFactory)
+            );
+            FederatedQuerySetup->StreamingQueryControllerFactory = CreateStreamingQueryControllerFactory(
+                FederatedQuerySetup->PqGatewayFactory,
+                FederatedQuerySetup->CheckpointProviderIntegrations
             );
         }
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, VectorIndexLevelsCache);
@@ -854,7 +859,7 @@ public:
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
         auto* proxyRequest = PendingRequests.FindPtr(requestId);
-        AFL_ENSURE(proxyRequest);
+        YDB_LOG_ENSURE(proxyRequest);
         auto& span = proxyRequest->Span;
         span = NWilson::TSpan(TComponentTracingLevels::TQueryProcessor::TopLevel,
             std::move(ev->TraceId), "Query Proxy", NWilson::EFlags::AUTO_END);
@@ -2318,8 +2323,8 @@ private:
         if (!FeatureFlags.GetEnableSharedReadingInStreamingQueries() || RowDispatcherService) {
             return;
         }
-        AFL_VERIFY(FederatedQuerySetup);
-        AFL_VERIFY(FeatureFlags.GetEnableStreamingQueries());
+        YDB_LOG_VERIFY(FederatedQuerySetup);
+        YDB_LOG_VERIFY(FeatureFlags.GetEnableStreamingQueries());
 
         const auto& pqGatewayFactory = FederatedQuerySetup->PqGatewayFactory;
         Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");

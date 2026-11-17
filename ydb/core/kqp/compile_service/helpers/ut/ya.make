@@ -1,8 +1,5 @@
 UNITTEST_FOR(ydb/core/kqp/compile_service/helpers)
 
-FORK_SUBTESTS()
-SPLIT_FACTOR(50)
-
 SIZE(MEDIUM)
 
 SRCS(

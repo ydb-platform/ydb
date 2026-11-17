@@ -121,7 +121,7 @@ enum ESimpleCounters {
     COUNTER_TRASH_BYTES = 3                                          [(CounterOpts) = {Name: "TrashBytes"}];
 
     COUNTER_REQ_WO_IN_FLY = 4                                        [(CounterOpts) = {Name: "ReqWoInFly"}];
-    COUNTER_REQ_WO_QUEUED = 5                                        [(CounterOpts) = {Name: "ReqWoQueued"}];
+    COUNTER_REQ_WO_QUEUED_DEPRECATED = 5                             [deprecated = true];
 
     COUNTER_REQ_RO_RW_IN_FLY = 6                                     [(CounterOpts) = {Name: "ReqRoRwInFly"}];
     COUNTER_REQ_RO_RW_QUEUED = 7                                     [(CounterOpts) = {Name: "ReqRoRwQueued"}];

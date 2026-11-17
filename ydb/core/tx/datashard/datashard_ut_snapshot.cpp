@@ -725,10 +725,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(MvccSnapshotTailCleanup) {
         TPortManager pm;
         TServerSettings::TControls controls;
+        NKikimrConfig::TAppConfig app;
+        // Exercise expiration with DataShard retention disabled, while KQP can
+        // still register snapshots through the common snapshots-locking flag.
+        app.MutableFeatureFlags()->SetEnableDataShardSnapshotLocking(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetKeepSnapshotTimeout(TDuration::Seconds(2))
+            .SetAppConfig(app)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);

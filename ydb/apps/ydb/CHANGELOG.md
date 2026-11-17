@@ -1,3 +1,8 @@
+* Cluster administration commands that allow omitting `--database` now reject tenant paths. Specify a root domain such as `/Root`, or omit the connection database.
+* `ydb scheme rmdir --recursive` now removes objects in parallel. Added `--in-flight` option to set the maximum number of objects removed at the same time (default: 16).
+* Workload imports with `--file-output-path` now skip database post-import actions such as index building and statistics collection.
+* Fixed a crash when searching documentation in interactive AI mode.
+* `export s3`, `export nfs` and `export yt` now honor `__omit_backup = "true"`; `tools dump` honors it for tables and changefeeds. S3 export/import now skip async replication changefeeds.
 * Added `ydb admin cluster bridge rollback` to roll a converted cluster back to ordinary mode. `ydb admin cluster bridge list piles` shows its progress.
 * Added `--expected-generation` option to `ydb admin cluster bridge update` to apply a cluster state update only if the cluster state still has the given generation.
 * Added `piles`, `databases`, and `groups` views to `ydb admin cluster bridge list` for synchronization diagnostics.

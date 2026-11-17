@@ -63,6 +63,7 @@ PEERDIR(
     ydb/core/path_aliasing
     ydb/core/persqueue
     ydb/core/persqueue/deferred_publish
+    ydb/core/persqueue/public/write_sessions_quoter
     ydb/core/protos
     ydb/core/security
     ydb/core/security/ldap_auth_provider
@@ -74,6 +75,7 @@ PEERDIR(
     ydb/core/testlib/actors
     ydb/core/testlib/basics
     ydb/core/testlib/tablet_helpers
+    ydb/core/tx/cdc_aggregator/tablet
     ydb/core/tx/columnshard
     ydb/core/tx/conveyor/service
     ydb/core/tx/conveyor/usage

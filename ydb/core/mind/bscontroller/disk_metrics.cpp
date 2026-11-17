@@ -53,10 +53,9 @@ public:
             }
         }
 
-        // hysteresis latches are persisted along with the metrics they follow from; a pool might have been deleted
-        // meanwhile, and its latch row along with it, which must not be recreated
-        EraseNodesIf(DatabaseSpaceLatches, [&](const auto& item) { return !Self->StoragePools.contains(item.first); });
-        Self->PersistDatabaseSpaceLatches(db, DatabaseSpaceLatches);
+        // hysteresis latches are persisted along with the metrics they follow from; the transactions queued before
+        // this one might have changed them further or deleted the pools meanwhile
+        Self->PersistChangedDatabaseSpaceLatches(db, DatabaseSpaceLatches);
 
         return true;
     }

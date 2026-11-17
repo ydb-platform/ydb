@@ -20,7 +20,7 @@ $ssr = (
             CAST(0 AS Decimal (7, 2)) AS return_amt,
             CAST(0 AS Decimal (7, 2)) AS net_loss
         FROM
-            `/Root/test/ds/store_sales` as store_sales
+            `store_sales` as store_sales
         UNION ALL
         SELECT
             sr_store_sk AS store_sk,
@@ -30,12 +30,12 @@ $ssr = (
             sr_return_amt AS return_amt,
             sr_net_loss AS net_loss
         FROM
-            `/Root/test/ds/store_returns` as store_returns
+            `store_returns` as store_returns
     ) AS salesreturns
     ,
-        `/Root/test/ds/date_dim` as date_dim
+        `date_dim` as date_dim
     ,
-        `/Root/test/ds/store` as store
+        `store` as store
     WHERE
         date_sk == d_date_sk
         AND CAST(d_date AS Date) BETWEEN CAST('1998-08-04' AS Date) AND (
@@ -62,7 +62,7 @@ $csr = (
             CAST(0 AS Decimal (7, 2)) AS return_amt,
             CAST(0 AS Decimal (7, 2)) AS net_loss
         FROM
-            `/Root/test/ds/catalog_sales` as catalog_sales
+            `catalog_sales` as catalog_sales
         UNION ALL
         SELECT
             cr_catalog_page_sk AS page_sk,
@@ -72,12 +72,12 @@ $csr = (
             cr_return_amount AS return_amt,
             cr_net_loss AS net_loss
         FROM
-            `/Root/test/ds/catalog_returns` as catalog_returns
+            `catalog_returns` as catalog_returns
     ) AS salesreturns
     ,
-        `/Root/test/ds/date_dim` as date_dim
+        `date_dim` as date_dim
     ,
-        `/Root/test/ds/catalog_page` as catalog_page
+        `catalog_page` as catalog_page
     WHERE
         date_sk == d_date_sk
         AND CAST(d_date AS Date) BETWEEN CAST('1998-08-04' AS Date) AND (
@@ -104,7 +104,7 @@ $wsr = (
             CAST(0 AS Decimal (7, 2)) AS return_amt,
             CAST(0 AS Decimal (7, 2)) AS net_loss
         FROM
-            `/Root/test/ds/web_sales` as web_sales
+            `web_sales` as web_sales
         UNION ALL
         SELECT
             ws_web_site_sk AS wsr_web_site_sk,
@@ -114,9 +114,9 @@ $wsr = (
             wr_return_amt AS return_amt,
             wr_net_loss AS net_loss
         FROM
-            `/Root/test/ds/web_returns` as web_returns
+            `web_returns` as web_returns
         LEFT OUTER JOIN
-            `/Root/test/ds/web_sales` as web_sales
+            `web_sales` as web_sales
         ON
             (
                 wr_item_sk == ws_item_sk
@@ -124,9 +124,9 @@ $wsr = (
             )
     ) AS salesreturns
     ,
-        `/Root/test/ds/date_dim` as date_dim
+        `date_dim` as date_dim
     ,
-        `/Root/test/ds/web_site` as web_site
+        `web_site` as web_site
     WHERE
         date_sk == d_date_sk
         AND CAST(d_date AS Date) BETWEEN CAST('1998-08-04' AS Date) AND (

@@ -1,0 +1,4 @@
+SELECT
+    CAST(index AS Int64) AS left_value,
+    CAST(index / 2 AS Int64) AS right_value
+FROM Input;

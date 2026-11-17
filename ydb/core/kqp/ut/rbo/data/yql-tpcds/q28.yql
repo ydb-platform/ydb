@@ -12,7 +12,7 @@ FROM (
         Count(ss_list_price) AS B1_CNT,
         Count(DISTINCT ss_list_price) AS B1_CNTD
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     WHERE
         ss_quantity BETWEEN 0 AND 5
         AND (
@@ -27,7 +27,7 @@ FROM (
         Count(ss_list_price) AS B2_CNT,
         Count(DISTINCT ss_list_price) AS B2_CNTD
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     WHERE
         ss_quantity BETWEEN 6 AND 10
         AND (
@@ -42,7 +42,7 @@ FROM (
         Count(ss_list_price) AS B3_CNT,
         Count(DISTINCT ss_list_price) AS B3_CNTD
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     WHERE
         ss_quantity BETWEEN 11 AND 15
         AND (
@@ -57,7 +57,7 @@ FROM (
         Count(ss_list_price) AS B4_CNT,
         Count(DISTINCT ss_list_price) AS B4_CNTD
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     WHERE
         ss_quantity BETWEEN 16 AND 20
         AND (
@@ -72,7 +72,7 @@ FROM (
         Count(ss_list_price) AS B5_CNT,
         Count(DISTINCT ss_list_price) AS B5_CNTD
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     WHERE
         ss_quantity BETWEEN 21 AND 25
         AND (
@@ -87,7 +87,7 @@ FROM (
         Count(ss_list_price) AS B6_CNT,
         Count(DISTINCT ss_list_price) AS B6_CNTD
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     WHERE
         ss_quantity BETWEEN 26 AND 30
         AND (

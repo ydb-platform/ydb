@@ -10,21 +10,21 @@ SELECT
     Avg(wr_refunded_cash) AS avg_wr_r,
     Avg(wr_fee) AS avg_wr_f
 FROM
-    `/Root/test/ds/web_sales`
+    `web_sales`
 ,
-    `/Root/test/ds/web_returns`
+    `web_returns`
 ,
-    `/Root/test/ds/web_page`
+    `web_page`
 ,
-    `/Root/test/ds/customer_demographics` AS cd1
+    `customer_demographics` AS cd1
 ,
-    `/Root/test/ds/customer_demographics` AS cd2
+    `customer_demographics` AS cd2
 ,
-    `/Root/test/ds/customer_address`
+    `customer_address`
 ,
-    `/Root/test/ds/date_dim`
+    `date_dim`
 ,
-    `/Root/test/ds/reason`
+    `reason`
 WHERE
     ws_web_page_sk == wp_web_page_sk
     AND ws_item_sk == wr_item_sk

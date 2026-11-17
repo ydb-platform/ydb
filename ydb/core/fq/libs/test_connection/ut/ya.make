@@ -1,7 +1,10 @@
-UNITTEST_FOR(ydb/core/fq/libs/control_plane_proxy)
+UNITTEST_FOR(ydb/core/fq/libs/test_connection)
 
 PEERDIR(
+    library/cpp/logger
     library/cpp/testing/unittest
+    ydb/core/testlib
+    ydb/core/testlib/actors
     yql/essentials/sql/pg_dummy
     yql/essentials/public/udf/service/exception_policy
 )

@@ -34,20 +34,20 @@ protected:
             NIceDb::NHelpers::TStaticSchemaFiller<TSysViewSchema>::Fill(schema);
             for (ui32 i = 1; i <= schema.Columns.size(); ++i) {
                 auto it = schema.Columns.find(i);
-                AFL_VERIFY(it != schema.Columns.end());
+                YDB_LOG_VERIFY(it != schema.Columns.end());
                 pred(it->second.Name, it->second.PType.GetTypeId());
             }
 
             for (auto&& i : schema.KeyColumns) {
                 auto it = schema.Columns.find(i);
-                AFL_VERIFY(it != schema.Columns.end());
+                YDB_LOG_VERIFY(it != schema.Columns.end());
                 proto.AddKeyColumnNames(it->second.Name);
             }
             return proto;
         }();
 
         auto indexInfo = TIndexInfo::BuildFromProto(GetPresetId(), proto, storagesManager, schemaObjectsCache);
-        AFL_VERIFY(indexInfo);
+        YDB_LOG_VERIFY(indexInfo);
         return std::move(*indexInfo);
     }
 

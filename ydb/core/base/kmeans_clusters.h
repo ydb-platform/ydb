@@ -13,6 +13,7 @@ namespace NKikimr::NTableIndex::NKMeans {
 
 namespace NKikimr::NKMeans {
 
+inline constexpr ui32 MinHnswM = 2;
 inline constexpr ui32 MaxHnswM = 100;
 inline constexpr ui32 MaxHnswEfConstruction = 1000;
 
@@ -43,6 +44,10 @@ public:
     virtual void RemoveEmptyClusters() = 0;
 
     virtual void FindClusters(const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) = 0;
+
+    virtual void FindClusters(TConstArrayRef<TStringBuf> centroids, const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) = 0;
+
+    virtual void FindClusters(TConstArrayRef<TCell> centroids, const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) = 0;
 
     virtual std::optional<ui32> FindCluster(const TStringBuf embedding) = 0;
 

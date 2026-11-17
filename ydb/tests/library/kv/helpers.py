@@ -77,7 +77,7 @@ def create_kv_tablets_and_wait_for_start(
         kikimr_client, kv_client, swagger_client, number_of_tablets, path, timeout_seconds=120, skip_generations=None
 ):
     response = kv_client.create_tablets(number_of_tablets, path)
-    assert_that(response.operation.status == StatusIds.SUCCESS, f"Failed to create KV tablets: {response}")
+    assert_that(response.operation.status == StatusIds.SUCCESS, "Failed to create KV tablets: {}".format(response))
     all_tablet_ids = get_kv_volume_tablet_ids(kikimr_client, path, number_of_tablets)
     wait_tablets_state_by_id(
         kikimr_client,

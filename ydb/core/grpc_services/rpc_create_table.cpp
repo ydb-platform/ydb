@@ -482,12 +482,6 @@ private:
             }
         }
 
-        if (families.Modified && !families.ValidateColumnFamilies(&code, &error)) {
-            NYql::TIssues issues;
-            issues.AddIssue(NYql::TIssue(error));
-            return Reply(code, issues, ctx);
-        }
-
         // Attributes
         for (auto [key, value] : req->attributes()) {
             auto& attr = *modifyScheme->MutableAlterUserAttributes()->AddUserAttributes();

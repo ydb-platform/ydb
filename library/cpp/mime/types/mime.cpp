@@ -81,7 +81,7 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_GZIP, "application/x-gzip\0application/gzip\0", "gz\0gzip\0"},
     {MIME_XLSX, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\0", "xlsx\0"},
     {MIME_PPTX, "application/vnd.openxmlformats-officedocument.presentationml.presentation\0", "pptx\0"},
-    {MIME_JAVASCRIPT, "application/javascript\0text/javascript\0", "js\0"},
+    {MIME_JAVASCRIPT, "application/javascript\0text/javascript\0application/x-javascript\0", "js\0"},
     {MIME_EPUB, "application/epub+zip\0", "epub\0"},
     {MIME_TEX, "application/x-tex\0application/x-latex\0text/x-tex\0", "tex\0"},
     {MIME_JSON, "application/json\0application/x-amz-json-1.0\0application/x-amz-json-1.1\0", "json\0"},

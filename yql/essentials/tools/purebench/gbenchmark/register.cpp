@@ -2,7 +2,7 @@
 
 #include <yql/essentials/tools/purebench/gbenchmark/suites/suite.h>
 
-#include <benchmark/benchmark.h>
+#include <library/cpp/testing/gbenchmark/benchmark.h>
 
 #include <util/generic/yexception.h>
 #include <util/system/yassert.h>

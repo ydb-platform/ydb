@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/scheme_board)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(

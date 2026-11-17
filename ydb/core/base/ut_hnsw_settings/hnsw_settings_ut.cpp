@@ -57,7 +57,17 @@ namespace NKikimr::NKMeans {
                 CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexCreationConfig>(description);
                 CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexDescription>(description);
                 CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexAlteringConfig>(description);
+                NKikimrSchemeOp::TTableDescription table;
+                auto* index = table.AddTableIndexes();
+                index->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+                *index->MutableHnswIndexDescription() = description;
+                NKikimrSchemeOp::TTableDescription restored;
+                UNIT_ASSERT(restored.ParseFromString(table.SerializeAsString()));
+                UNIT_ASSERT_VALUES_EQUAL(restored.TableIndexesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(restored.GetTableIndexes(0).SerializeAsString(), index->SerializeAsString());
             }
+            // Empty but present index metadata is the persisted HNSW disable marker.
+            CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexDescription>({});
         }
 
         Y_UNIT_TEST(IndexTypeConversion) {
@@ -91,9 +101,11 @@ namespace NKikimr::NKMeans {
             auto settings = MakeSettings();
             auto* vector = settings.mutable_settings();
             TString error;
-            for (const auto m : {0u, MaxHnswM + 1}) {
+            for (const auto m : {0u, 1u, MaxHnswM + 1}) {
                 vector->set_m(m);
                 UNIT_ASSERT(!ValidateHnswSettings(settings, error));
+                UNIT_ASSERT_STRING_CONTAINS(error, "M");
+                UNIT_ASSERT(!ValidateHnswSettingsPartial(settings, error));
                 UNIT_ASSERT_STRING_CONTAINS(error, "M");
             }
             vector->set_m(MaxHnswM);
@@ -106,6 +118,9 @@ namespace NKikimr::NKMeans {
             vector->set_min_rows(0);
             vector->set_delta_rows(Max<ui64>());
             UNIT_ASSERT_C(ValidateHnswSettings(settings, error), error);
+            vector->set_m(MinHnswM);
+            UNIT_ASSERT_C(ValidateHnswSettings(settings, error), error);
+            UNIT_ASSERT_C(ValidateHnswSettingsPartial(settings, error), error);
         }
 
         Y_UNIT_TEST(KMeansRejectsHnswOnlySettings) {

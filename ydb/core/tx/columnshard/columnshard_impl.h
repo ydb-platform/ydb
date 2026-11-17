@@ -22,6 +22,7 @@
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/source/events/transfer.h"
 #include "engines/reader/transaction/scan_gate.h"
+#include "local_db_backup/events.h"
 #include "maintenance/cut_history/find_empty_history_intervals.h"
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
@@ -322,6 +323,15 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
+    // Manual backup of the local DB (tablet_flat) to S3, triggered from the App page. The logic lives in
+    // NLocalDbBackup::TLocalDbBackupActor; the tablet only forwards the page and serves the executor-bound requests.
+    bool HandleLocalDbBackupPage(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLocalDbBackup::TEvStartBackup::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLocalDbBackup::TEvCancelBackup::TPtr& ev, const TActorContext& ctx);
+    void ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext& ctx) override;
+    void CancelLocalDbBackupScans();
+    void StopLocalDbBackup(const TActorContext& ctx);
+
     void Handle(TAutoPtr<NActors::TEventHandle<NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>>& ev);
     void Handle(TAutoPtr<NActors::TEventHandle<NConsole::TEvConsole::TEvConfigNotificationRequest>>& ev);
     void Handle(TEvPrivate::TEvRetryConfigSubscription::TPtr& ev);
@@ -524,6 +534,8 @@ private:
     // Local CMS snapshot of ColumnShardConfig. Heap-allocated so this header
     // does not need a complete NKikimrConfig::TColumnShardConfig / config.pb.h.
     std::unique_ptr<NKikimrConfig::TColumnShardConfig> ColumnShardConfig;
+    TActorId LocalDbBackupActorId;   // created lazily on the first visit of the page
+    THashMap<NLocalDbBackup::TTableId, ui64> LocalDbBackupScans;   // tableId -> QueueScan taskId
     std::shared_ptr<NSubscriber::TManager> Subscribers;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
@@ -690,7 +702,7 @@ public:
     }
 
     const NOlap::IColumnEngine& GetIndexVerified() const {
-        AFL_VERIFY(TablesManager.GetPrimaryIndex());
+        YDB_LOG_VERIFY(TablesManager.GetPrimaryIndex());
         return *TablesManager.GetPrimaryIndex();
     }
 
@@ -700,17 +712,17 @@ public:
     }
 
     TTxController& GetProgressTxController() const {
-        AFL_VERIFY(ProgressTxController);
+        YDB_LOG_VERIFY(ProgressTxController);
         return *ProgressTxController;
     }
 
     TOperationsManager& GetOperationsManager() const {
-        AFL_VERIFY(OperationsManager);
+        YDB_LOG_VERIFY(OperationsManager);
         return *OperationsManager;
     }
 
     TWriteGate& GetWriteGate() {
-        AFL_VERIFY(WriteGate);
+        YDB_LOG_VERIFY(WriteGate);
         return *WriteGate;
     }
 
@@ -731,12 +743,12 @@ public:
     }
 
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(StoragesManager);
         return StoragesManager;
     }
 
     const std::shared_ptr<NOlap::NDataLocks::TManager>& GetDataLocksManager() const {
-        AFL_VERIFY(DataLocksManager);
+        YDB_LOG_VERIFY(DataLocksManager);
         return DataLocksManager;
     }
 

@@ -823,7 +823,7 @@ private:
 
 class TBuildingColumnFixture {
 public:
-    TBuildingColumnFixture() {
+    explicit TBuildingColumnFixture(bool keyOnly = false) {
         Tests::TServerSettings settings(PortManager.GetPort(2134));
         settings.SetDomainName("Root").SetUseRealThreads(false);
         settings.FeatureFlags.SetEnableAddColumsWithDefaults(true);
@@ -831,9 +831,16 @@ public:
         Server = new Tests::TServer(settings);
         Sender = Runtime().AllocateEdgeActor();
         InitRoot(Server, Sender);
-        auto [shards, tableId] = CreateShardedTable(Server, Sender, "/Root", "Table", 1);
+        TShardedTableOptions options;
+        if (keyOnly) {
+            options.Columns({{"key", "Uint32", true, false}});
+            ExistingColumns = {"key"};
+        }
+        auto [shards, tableId] = CreateShardedTable(Server, Sender, "/Root", "Table", options);
         TableId = tableId;
-        ExecSQL(Server, Sender, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10), (2, 20);");
+        ExecSQL(Server, Sender, keyOnly
+            ? "UPSERT INTO `/Root/Table` (key) VALUES (1), (2);"
+            : "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10), (2, 20);");
         RememberColumns(Schema(shards.at(0)));
     }
 
@@ -1042,8 +1049,15 @@ public:
                 UNIT_ASSERT_VALUES_EQUAL(error->Record.IssuesSize(), 1);
                 const auto& issue = error->Record.GetIssues(0);
                 UNIT_ASSERT_VALUES_EQUAL(issue.issue_code(), ui32(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH));
-                UNIT_ASSERT_VALUES_EQUAL(issue.message(), TStringBuilder() << "TxId: " << ReadId << "."
-                    << " Cant find table '/Root/Table' column " << ColumnIds.at(badColumn) << " at " << shard);
+                TStringBuilder expected;
+                expected << "TxId: " << ReadId << ".";
+                if (state == EColumnState::Building) {
+                    expected << " Cannot read table '/Root/Table' column '" << badColumn << "' ("
+                        << ColumnIds.at(badColumn) << ") at " << shard << ": column build is in progress";
+                } else {
+                    expected << " Cant find table '/Root/Table' column " << ColumnIds.at(badColumn) << " at " << shard;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(issue.message(), expected);
             } else {
                 UNIT_ASSERT_C(init != nullptr, (error ? error->Record.DebugString() : "Missing scan init"));
                 const auto actor = ActorIdFromProto(init->Record.GetScanActorId());
@@ -1150,6 +1164,13 @@ public:
                 if (badColumn) {
                     UNIT_ASSERT_VALUES_EQUAL(result.ErrorSize(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(result.GetError(0).GetKind(), NKikimrTxDataShard::TError::SCHEME_ERROR);
+                    if (state == EColumnState::Building) {
+                        // MiniKQL structs order columns by name.
+                        const TString column = Find(projection, "extra") != projection.end() ? "extra" : "other";
+                        UNIT_ASSERT_VALUES_EQUAL(result.GetError(0).GetReason(), TStringBuilder()
+                            << "Cannot read column '" << column << "' (" << ColumnIds.at(column)
+                            << ") of table " << TableId.PathId << ": column build is in progress");
+                    }
                     UNIT_ASSERT(result.GetTxResult().empty());
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL(result.ErrorSize(), 0);
@@ -1202,7 +1223,7 @@ public:
         const auto badColumn = RejectedColumn(projection, state);
         TProjection expectedProjection = projection;
         if (projection.empty()) {
-            expectedProjection = {"key", "value"};
+            expectedProjection = ExistingColumns;
             if (state == EColumnState::Ready) { expectedProjection.insert(expectedProjection.end(), {"extra", "other"}); }
         }
         TRows rows;
@@ -1413,6 +1434,7 @@ public:
     TTableId TableId;
     ui64 ReadId = 100000;
     TVector<ui32> Keys = {1, 2};
+    TProjection ExistingColumns = {"key", "value"};
     THashMap<TString, ui32> ColumnIds;
 };
 
@@ -1626,6 +1648,29 @@ Y_UNIT_TEST_SUITE(DataShardBuildingColumns) {
     Y_UNIT_TEST(KqpScan) { TestBuildingColumn(ERead::KqpScan); }
     Y_UNIT_TEST(ReadTable) { TestBuildingColumn(ERead::ReadTable); }
     Y_UNIT_TEST(SelectRow) { TestBuildingColumn(ERead::MiniKQL); }
+
+    Y_UNIT_TEST(ReadTableImplicitKeyOnlyDuringBackfill) {
+        TBuildingColumnFixture fixture(true);
+        fixture.CheckReadTable({}, EColumnState::Absent);
+        TColumnBuild build(fixture);
+        const auto checkBuilding = [&] {
+            fixture.CheckReadTable({}, EColumnState::Building);
+            fixture.CheckReadTable({"key", "extra", "other"}, EColumnState::Building);
+        };
+        checkBuilding();
+        build.CommitBatch(1);
+        checkBuilding();
+        build.CommitBatch(2);
+        checkBuilding();
+        build.WaitForFinalization();
+        checkBuilding();
+        build.Finish();
+        fixture.CheckReadTable({}, EColumnState::Ready);
+        fixture.RestartSchemeShard();
+        fixture.RestartDataShards();
+        fixture.CheckReadTable({}, EColumnState::Ready);
+    }
+
     Y_UNIT_TEST(SchemeShardRestartDuringBackfill) {
         TBuildingColumnFixture fixture;
         TColumnBuild build(fixture);

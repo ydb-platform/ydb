@@ -648,10 +648,16 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
 
     for (int i = 0; i < request.GetColumnTags().size(); ++i) {
         auto* column = tableColumns.FindPtr(request.GetColumnTags(i));
-        if (!column || column->IsBuildInProgress) {
+        if (!column) {
             reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
                 << " Cant find table '" << request.GetTablePath() << "'"
                 << " column " << request.GetColumnTags(i)  << " at " << TabletID());
+            return;
+        }
+        if (column->IsBuildInProgress) {
+            reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
+                << " Cannot read table '" << request.GetTablePath() << "' column '" << column->Name
+                << "' (" << request.GetColumnTags(i) << ") at " << TabletID() << ": column build is in progress");
             return;
         }
 

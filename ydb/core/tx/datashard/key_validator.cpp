@@ -161,14 +161,44 @@ std::tuple<NMiniKQL::IEngineFlat::EResult, TString> TKeyValidator::ValidateKeys(
                     key->Status = TKeyDesc::EStatus::Ok;
                     return {EResult::SnapshotNotReady, ""};
                 default:
-                    auto error = TStringBuilder()
-                                 << "Validate (" << __LINE__ << "): Key validation status: " << (ui32)key->Status;
+                    auto error = GetBuildingColumnError();
+                    if (error.empty()) {
+                        error = TStringBuilder()
+                            << "Validate (" << __LINE__ << "): Key validation status: " << (ui32)key->Status;
+                    }
                     return {EResult::KeyError, std::move(error)};
             }
         }
     }
 
     return {EResult::Ok, ""};
+}
+
+TString TKeyValidator::GetBuildingColumnError() const {
+    for (const auto& validKey : Info.Keys) {
+        const auto& key = *validKey.Key;
+        if (key.Status == TKeyDesc::EStatus::Ok || TSysTables::IsSystemTable(key.TableId)) {
+            continue;
+        }
+        if (key.Status != TKeyDesc::EStatus::OperationNotSupported || key.RowOperation != TKeyDesc::ERowOperation::Read) {
+            return {};
+        }
+        for (const auto& op : key.Columns) {
+            if (op.Operation != TKeyDesc::EColumnOperation::Read) {
+                return {};
+            }
+        }
+        const auto& tableInfo = *Self.GetUserTables().at(key.TableId.PathId.LocalPathId);
+        for (const auto& op : key.Columns) {
+            const auto* column = tableInfo.Columns.FindPtr(op.Column);
+            if (column && column->IsBuildInProgress) {
+                return TStringBuilder() << "Cannot read column '" << column->Name << "' (" << op.Column
+                    << ") of table " << key.TableId.PathId << ": column build is in progress";
+            }
+        }
+        return {};
+    }
+    return {};
 }
 
 NMiniKQL::IEngineFlat::TValidationInfo& TKeyValidator::GetInfo() {

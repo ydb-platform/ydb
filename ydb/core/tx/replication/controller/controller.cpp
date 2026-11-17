@@ -78,6 +78,12 @@ STFUNC(TController::StateWork) {
         HFunc(TEvController::TEvAlterReplication, Handle);
         HFunc(TEvController::TEvDropReplication, Handle);
         HFunc(TEvController::TEvDescribeReplication, Handle);
+        HFunc(TEvController::TEvCheckTable, Handle);
+        HFunc(TEvController::TEvCancelCheckTable, Handle);
+        HFunc(NSchemeShard::TEvSchemeShard::TEvChecksumAdmissionResult, Handle);
+        HFunc(NChecksum::TEvResult, Handle);
+        HFunc(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, Handle);
+        HFunc(TEvents::TEvWakeup, HandleChecksumWakeup);
         HFunc(TEvPrivate::TEvDropReplication, Handle);
         HFunc(TEvPrivate::TEvDiscoveryTargetsResult, Handle);
         HFunc(TEvPrivate::TEvAssignStreamName, Handle);
@@ -124,6 +130,12 @@ STFUNC(TController::StateWork) {
 }
 
 void TController::Cleanup(const TActorContext& ctx) {
+    for (auto& [key, runtime] : ChecksumRuntime) {
+        StopChecksum(key, ctx);
+        if (runtime.Admission) {
+            ctx.Send(runtime.Admission, new TEvents::TEvPoison());
+        }
+    }
     for (auto& [_, replication] : Replications) {
         replication->SetLagChangedCallback({});
         replication->Shutdown(ctx);
@@ -162,6 +174,7 @@ void TController::SwitchToDatabaseResolve(const TActorContext& ctx) {
 void TController::SwitchToWork(const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "SwitchToWork");
 
+    RebuildChecksumTargets();
     SignalTabletActive(ctx);
     Become(&TThis::StateWork);
 
@@ -210,10 +223,21 @@ void TController::SwitchToWork(const TActorContext& ctx) {
     }
 
     TabletCounters->Simple()[COUNTER_UNRESOLVED_DATABASE_REPLICATIONS] = unresolvedDatabaseReplications;
+    ProgressChecksums(ctx);
 }
 
 void TController::Reset() {
     SysParams.Reset();
+    ChecksumExecutions.clear();
+    ChecksumResults.clear();
+    ChecksumBoundaries.clear();
+    ChecksumTargets.clear();
+    ChecksumRuntime.clear();
+    ChecksumRetainCookies.clear();
+    RawPendingTxId.clear();
+    PendingTxId.clear();
+    ChecksumWakeupScheduled = false;
+    AssignedTxIdBegins.clear();
     ProcessedSourceOffsets.clear();
     ReplicationsWithSourceOffsetMismatch.clear();
     for (auto& [_, replication] : Replications) {
@@ -1164,11 +1188,12 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
         return;
     }
 
-    const auto intervalMs = config.GetGlobal().GetCommitIntervalMilliSeconds();
+    // Retain raw versions until assignment, including during snapshot acquisition.
+    // Rounding first would lose which side of the checksum cut they belong to.
     for (const auto& version : ev->Get()->Record.GetVersions()) {
-        const ui64 intervalNo = version.GetStep() / intervalMs;
-        const auto adjustedVersion = TRowVersion(intervalMs * (intervalNo + 1), 0);
-        PendingTxId[adjustedVersion].insert(nodeId);
+        const auto raw = TRowVersion::FromProto(version);
+        RawPendingTxId[raw].insert(nodeId);
+        PendingTxId[AdjustTxIdVersion(raw)].insert(nodeId);
     }
 
     TabletCounters->Simple()[COUNTER_PENDING_VERSIONS] = PendingTxId.size();
@@ -1293,10 +1318,12 @@ void TController::Remove(ui64 id) {
         return;
     }
 
+    RemoveReplicationChecksums(id, ActorContext());
     ReplicationsWithSourceOffsetMismatch.erase(id);
     it->second->SetLagChangedCallback({});
     ReplicationsByPathId.erase(it->second->GetPathId());
     Replications.erase(it);
+    RebuildChecksumTargets();
     UpdateLagCounters();
 }
 

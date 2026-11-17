@@ -1,3 +1,5 @@
+* Added per-item `ChecksumStatus` with the latest attempt outcome and retained comparison result to draft replication Describe.
+
 * Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
 
 * Added support for tablet reassignment operation IDs.

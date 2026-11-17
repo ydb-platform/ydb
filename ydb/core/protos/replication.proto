@@ -5,6 +5,7 @@ import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/draft/ydb_replication.proto";
+import "ydb/public/api/protos/ydb_common.proto";
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
@@ -117,6 +118,7 @@ message TReplicationConfig {
             optional uint64 Id = 4;
             optional uint32 LagMilliSeconds = 5;
             optional float InitialScanProgress = 6; // pencentage
+            optional Ydb.Replication.DescribeReplicationResult.Item.ChecksumStatus ChecksumStatus = 7;
         }
 
         repeated TTarget Targets = 1;
@@ -298,6 +300,45 @@ message TEvDropReplicationResult {
 message TEvDescribeReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional bool IncludeStats = 2;
+}
+
+// Internal execution interface; the destination identity is resolved by the controller.
+message TEvCheckTable {
+    optional NKikimrProto.TPathID DestinationPathId = 1;
+    optional string RequestId = 2;
+}
+
+message TEvCheckTableResult {
+    optional NKikimrProto.TPathID DestinationPathId = 1;
+    optional string RequestId = 2;
+    optional Ydb.StatusIds.StatusCode Status = 3;
+    optional string Issue = 4;
+    optional bool Deferred = 5;
+    optional Ydb.Replication.DescribeReplicationResult.Item.ChecksumStatus ChecksumStatus = 6;
+}
+
+message TTableChecksumExecution {
+    enum EPhase {
+        FINISHED = 0;
+        PREFLIGHT = 1;
+        QUEUED = 2;
+        ADMITTED = 3;
+        PREPARING = 4;
+        SYNCHRONIZING = 5;
+        CHECKSUMMING = 6;
+    }
+    optional string RequestId = 1;
+    optional NKikimrProto.TPathID DestinationPathId = 2;
+    optional EPhase Phase = 3 [default = FINISHED];
+    optional uint64 DeadlineUs = 4;
+    optional uint32 GrantedShards = 5;
+    optional Ydb.VirtualTimestamp SourceSnapshot = 6;
+    optional Ydb.VirtualTimestamp DestinationSnapshot = 7;
+    optional uint64 BoundaryWriteTxId = 8;
+    optional Ydb.Replication.TableChecksum Source = 9;
+    optional Ydb.Replication.TableChecksum Destination = 10;
+    optional TEvCheckTableResult Response = 11;
+    optional bool ReleasePending = 12;
 }
 
 // SchemeShard admission protocol. Release also cancels a queued request.

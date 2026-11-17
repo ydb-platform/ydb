@@ -11,8 +11,10 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tx/replication/checksum
     ydb/core/tx/replication/common
     ydb/core/tx/replication/controller/protos
+    ydb/core/tx/replication/private_client
     ydb/core/tx/replication/ydb_proxy
     ydb/core/tx/replication/ydb_proxy/local_proxy
     ydb/core/tx/scheme_board
@@ -30,6 +32,9 @@ PEERDIR(
 
 SRCS(
     controller.cpp
+    checksum_source.cpp
+    checksum_admission.cpp
+    tx_checksum.cpp
     dst_alterer.cpp
     dst_creator.cpp
     dst_remover.cpp

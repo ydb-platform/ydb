@@ -285,6 +285,10 @@ public:
 
             auto& item = *Result->Record.AddTargets();
             item.SetId(target->GetId());
+            const auto checksum = Self->ChecksumResults.find({replication->GetId(), target->GetId()});
+            if (checksum != Self->ChecksumResults.end()) {
+                *item.MutableChecksumStatus() = checksum->second;
+            }
             item.SetSrcPath(target->GetSrcPath());
             item.SetDstPath(target->GetDstPath());
 

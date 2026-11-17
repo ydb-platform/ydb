@@ -87,6 +87,7 @@ public:
                 }
             }
 
+            Self->RebuildChecksumTargets();
             YDB_LOG_NOTICE_CTX(ctx, "Target dst created",
                 {"rid", rid},
                 {"tid", tid},

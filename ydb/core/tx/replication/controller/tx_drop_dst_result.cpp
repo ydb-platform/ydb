@@ -101,6 +101,7 @@ void TController::RemoveTarget(NIceDb::TNiceDb& db, TReplication& replication, u
         }
     }
     replication.RemoveTarget(targetId);
+    RebuildChecksumTargets();
 }
 
 }

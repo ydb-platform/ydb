@@ -131,8 +131,12 @@ class TController::TTxIndexBuild: public TTxBase {
     ui64 Allocate(const TRowVersion& end, NIceDb::TNiceDb& db) {
         const ui64 txId = Self->AllocatedTxIds.front();
         Self->AllocatedTxIds.pop_front();
+        const auto begin = Self->GetTxIdBegin(end);
+        Self->AssignedTxIdBegins[end] = begin;
         db.Table<Schema::TxIds>().Key(end.Step, end.TxId).Update(
-            NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
+            NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId),
+            NIceDb::TUpdate<Schema::TxIds::BeginStep>(begin.Step),
+            NIceDb::TUpdate<Schema::TxIds::BeginTxId>(begin.TxId)
         );
         Self->AssignedTxIds.emplace(end, txId);
         return txId;
@@ -178,10 +182,14 @@ class TController::TTxIndexBuild: public TTxBase {
 
         const auto& last = *Self->AssignedTxIds.rbegin();
         return last.first > join
+            && last.first > Self->GetChecksumBoundary()
             && last.second != Self->CommittingTxId;
     }
 
     void Assign(NIceDb::TNiceDb& db) {
+        if (Self->ChecksumAssignmentPaused()) {
+            return;
+        }
         for (auto it = Self->PendingIndexTxIds.begin(); it != Self->PendingIndexTxIds.end();) {
             const auto id = TWorkerId::Parse((*it)->Get()->Record.GetWorker());
             const auto key = std::make_pair(id.ReplicationId(), id.TargetId());
@@ -209,6 +217,7 @@ class TController::TTxIndexBuild: public TTxBase {
                 const bool global = build.GetPhase() != TBuild::FILLING && version >= join;
                 ui64 txId = 0;
                 if (global) {
+                    end = Self->AdjustTxIdVersion(version);
                     auto assigned = Self->AssignedTxIds.lower_bound(end);
                     if (assigned != Self->AssignedTxIds.end()) {
                         end = assigned->first;
@@ -216,13 +225,22 @@ class TController::TTxIndexBuild: public TTxBase {
                     } else if (CanReuseLastGlobalAssignment(join)) {
                         auto node = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
                         db.Table<Schema::TxIds>().Key(node.key().Step, node.key().TxId).Delete();
+                        const auto begin = Self->GetTxIdBegin(node.key());
+                        Self->AssignedTxIdBegins.erase(node.key());
                         node.key() = end;
+                        Self->AssignedTxIdBegins[end] = begin;
                         txId = node.mapped();
                         db.Table<Schema::TxIds>().Key(end.Step, end.TxId).Update(
-                            NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
+                            NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId),
+                            NIceDb::TUpdate<Schema::TxIds::BeginStep>(begin.Step),
+                            NIceDb::TUpdate<Schema::TxIds::BeginTxId>(begin.TxId)
                         );
                         Self->AssignedTxIds.insert(std::move(node));
-                    } else if (!Self->AllocatedTxIds.empty() && Self->AssignedTxIds.size() < MaxOpenTxIds + 1) {
+                    } else if (!Self->AllocatedTxIds.empty()
+                        && (Self->AssignedTxIds.size() < MaxOpenTxIds + 1
+                            || (Self->GetChecksumBoundary() && Self->AssignedTxIds.rbegin()->first <= Self->GetChecksumBoundary()
+                                && end > Self->GetChecksumBoundary())))
+                    {
                         txId = Allocate(end, db);
                     }
                 } else {
@@ -273,7 +291,7 @@ class TController::TTxIndexBuild: public TTxBase {
                 auto& assigned = *reply->Record.AddVersionTxIds();
                 end.ToProto(assigned.MutableVersion());
                 assigned.SetTxId(txId);
-                (global ? join : TRowVersion::Min()).ToProto(assigned.MutableBegin());
+                (global ? Max(join, Self->GetTxIdBegin(end)) : TRowVersion::Min()).ToProto(assigned.MutableBegin());
             }
 
             if (reply->Record.VersionTxIdsSize()) {
@@ -359,7 +377,7 @@ class TController::TTxIndexBuild: public TTxBase {
                 continue;
             }
 
-            if (build.GetPhase() == TBuild::FILLING && heartbeat > maxVersion && !Self->AllocatedTxIds.empty()) {
+            if (!Self->ChecksumAssignmentPaused() && build.GetPhase() == TBuild::FILLING && heartbeat > maxVersion && !Self->AllocatedTxIds.empty()) {
                 const auto interval = GetCommitInterval(*replication);
                 // Every already issued interval ends before or at C. Taking
                 // the next boundary after the last global interval also

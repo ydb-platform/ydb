@@ -5,6 +5,8 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 
+#include <yql/essentials/public/udf/udf_data_type.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
@@ -315,6 +317,21 @@ private:
     }
 
     bool ValidateAlterConfig(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const NKikimrReplication::TReplicationConfig& newConf) {
+        if (newConf.HasChecksumIntervalMilliSeconds()) {
+            if (desc.GetConfig().HasTransferSpecific()) {
+                result.SetError(NKikimrScheme::StatusInvalidParameter, "Checksum interval is only supported for replication");
+                return false;
+            }
+            const auto interval = newConf.GetChecksumIntervalMilliSeconds();
+            if (interval > (NYql::NUdf::MAX_TIMESTAMP - 1) / 1000) {
+                result.SetError(NKikimrScheme::StatusInvalidParameter, "Checksum interval cannot be represented as SQL Interval");
+                return false;
+            }
+            if (interval && !desc.GetConfig().GetConsistencySettings().HasGlobal()) {
+                result.SetError(NKikimrScheme::StatusInvalidParameter, "Periodic checksum checks require GLOBAL consistency");
+                return false;
+            }
+        }
         if (newConf.HasAvailabilityPeriod()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Availability period can only be set when creating replication");
             return false;
@@ -454,6 +471,10 @@ public:
         if (op.HasConfig()) {
             const auto newConf = op.GetConfig();
             auto& oldConf = *(alterData->Description.MutableConfig());
+
+            if (newConf.HasChecksumIntervalMilliSeconds()) {
+                oldConf.SetChecksumIntervalMilliSeconds(newConf.GetChecksumIntervalMilliSeconds());
+            }
 
             if (newConf.HasSrcConnectionParams()) {
                 const auto newParam = newConf.GetSrcConnectionParams();

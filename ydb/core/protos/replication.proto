@@ -154,6 +154,8 @@ message TReplicationConfig {
     optional TReplicationLocationConfig Location = 10;
     optional bool InitialScan = 11 [default = true];
     optional TAvailabilityPeriod AvailabilityPeriod = 12;
+    // Zero disables periodic checksum checks.
+    optional uint64 ChecksumIntervalMilliSeconds = 13 [default = 0];
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.
@@ -384,6 +386,7 @@ message TEvDescribeReplicationResult {
     optional TReplicationStats Stats = 7;
     optional TAvailabilityPeriod AvailabilityPeriod = 8;
     optional Ydb.Replication.DescribeReplicationResult.Transactions Transactions = 9;
+    optional uint64 ChecksumIntervalMilliSeconds = 13 [default = 0];
 }
 
 message TControllerIdentity {

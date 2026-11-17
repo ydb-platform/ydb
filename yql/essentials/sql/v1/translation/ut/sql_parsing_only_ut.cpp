@@ -5897,6 +5897,28 @@ Y_UNIT_TEST(CreateAsyncReplicationParseSecretPathsCorrect) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(AsyncReplicationChecksumInterval) {
+    for (const auto& prefix : {"CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 WITH",
+            "ALTER ASYNC REPLICATION MyReplication SET"})
+    {
+        for (const auto& value : {"Interval('PT0S')", "Interval('PT1H')", "Interval('PT0.001S')"}) {
+            const auto res = SqlToYql(TStringBuilder() << "USE plato; " << prefix
+                << " (CHECKSUM_INTERVAL = " << value << ");");
+            UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+        }
+        for (const auto& value : {"'PT1H'", "1", "TRUE", "NULL"}) {
+            const auto res = SqlToYql(TStringBuilder() << "USE plato; " << prefix
+                << " (CHECKSUM_INTERVAL = " << value << ");");
+            UNIT_ASSERT(!res.IsOk());
+            UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Literal of Interval type is expected");
+        }
+        const auto duplicate = SqlToYql(TStringBuilder() << "USE plato; " << prefix
+            << " (CHECKSUM_INTERVAL = Interval('PT1H'), checksum_interval = Interval('PT2H'));");
+        UNIT_ASSERT(!duplicate.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(duplicate), "Duplicate replication setting");
+    }
+}
+
 Y_UNIT_TEST(CreateAsyncReplicationAvailabilityPeriod) {
     for (const auto& value : {"'UNLIMITED'", "'unlimited'", "Interval('PT0.000001S')", "Interval('PT10.001S')"}) {
         const auto res = SqlToYql(TStringBuilder()

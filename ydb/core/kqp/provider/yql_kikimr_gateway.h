@@ -1522,6 +1522,7 @@ struct TReplicationSettings : public TReplicationSettingsBase {
     TMaybe<TGlobalConsistency> GlobalConsistency;
     TMaybe<bool> InitialScan;
     TMaybe<NKikimrReplication::TAvailabilityPeriod> AvailabilityPeriod;
+    TMaybe<TDuration> ChecksumInterval;
 
     TRowConsistency& EnsureRowConsistency() {
         if (!RowConsistency) {

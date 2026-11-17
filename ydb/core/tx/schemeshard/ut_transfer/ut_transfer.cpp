@@ -67,6 +67,29 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
         });
     }
 
+    Y_UNIT_TEST(ChecksumIntervalUnsupported) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        CreateTable(runtime, env, txId);
+        for (const ui64 interval : {0, 3600000}) {
+            auto scheme = DefaultScheme("Transfer");
+            scheme.insert(scheme.find("Config {") + TStringBuf("Config {").size(),
+                TStringBuilder() << " ChecksumIntervalMilliSeconds: " << interval << " ");
+            TestCreateTransfer(runtime, ++txId, "/MyRoot", scheme, {NKikimrScheme::StatusInvalidParameter});
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Transfer"), {NLs::PathNotExist});
+        }
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme("Transfer"));
+        env.TestWaitNotification(runtime, txId);
+        TestAlterTransfer(runtime, ++txId, "/MyRoot", R"(Name: "Transfer" State { Paused {} })");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterTransfer(runtime, ++txId, "/MyRoot",
+            R"(Name: "Transfer" Config { ChecksumIntervalMilliSeconds: 3600000 })",
+            {NKikimrScheme::StatusInvalidParameter});
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(AvailabilityPeriodUnsupported) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));

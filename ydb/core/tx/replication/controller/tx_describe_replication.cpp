@@ -222,6 +222,7 @@ public:
         Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
         Result->Record.MutableConnectionParams()->CopyFrom(replication->GetConfig().GetSrcConnectionParams());
         Result->Record.MutableConsistencySettings()->CopyFrom(replication->GetConfig().GetConsistencySettings());
+        Result->Record.SetChecksumIntervalMilliSeconds(replication->GetConfig().GetChecksumIntervalMilliSeconds());
         if (replication->GetConfig().HasAvailabilityPeriod()) {
             Result->Record.MutableAvailabilityPeriod()->CopyFrom(replication->GetConfig().GetAvailabilityPeriod());
         } else if (!replication->GetConfig().HasTransferSpecific()) {

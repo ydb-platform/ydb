@@ -44,6 +44,20 @@ Y_UNIT_TEST_SUITE(ReplicationDescription) {
         UNIT_ASSERT(!status->LastResult);
     }
 
+    Y_UNIT_TEST(ChecksumInterval) {
+        Ydb::Replication::DescribeReplicationResult proto;
+        UNIT_ASSERT(!TDescription(proto).GetChecksumInterval());
+        proto.mutable_checksum_interval();
+        const auto disabled = TDescription(proto).GetChecksumInterval();
+        UNIT_ASSERT(disabled);
+        UNIT_ASSERT_VALUES_EQUAL(*disabled, TDuration::Zero());
+        proto.mutable_checksum_interval()->set_seconds(3600);
+        proto.mutable_checksum_interval()->set_nanos(1000000);
+        const auto enabled = TDescription(proto).GetChecksumInterval();
+        UNIT_ASSERT(enabled);
+        UNIT_ASSERT_VALUES_EQUAL(*enabled, TDuration::MilliSeconds(3600001));
+    }
+
     Y_UNIT_TEST(AvailabilityPeriodUnknown) {
         const TDescription desc{Ydb::Replication::DescribeReplicationResult()};
         UNIT_ASSERT(desc.GetAvailabilityPeriodKind() == EKind::Unknown);

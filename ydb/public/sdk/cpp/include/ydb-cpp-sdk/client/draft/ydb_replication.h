@@ -195,6 +195,9 @@ public:
     // Contains the effective duration only for Finite.
     const std::optional<TDuration>& GetAvailabilityPeriod() const;
 
+    // Zero disables periodic checks. Missing means the server did not report the setting.
+    const std::optional<TDuration>& GetChecksumInterval() const;
+
     EConsistencyLevel GetConsistencyLevel() const;
     const TGlobalConsistency& GetGlobalConsistency() const;
 
@@ -213,6 +216,7 @@ private:
     std::vector<TItem> Items_;
     EAvailabilityPeriodKind AvailabilityPeriodKind_ = EAvailabilityPeriodKind::Unknown;
     std::optional<TDuration> AvailabilityPeriod_;
+    std::optional<TDuration> ChecksumInterval_;
     std::optional<TTransactions> Transactions_;
 
     std::variant<

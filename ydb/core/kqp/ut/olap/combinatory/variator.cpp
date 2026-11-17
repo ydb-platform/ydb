@@ -47,7 +47,9 @@ std::shared_ptr<ICommand> BuildCommand(const TString& command) {
 
     auto it = CommandFactories.find(commandName);
     if (it == CommandFactories.end()) {
-        AFL_VERIFY(false)("Unknown command", command)("commandName", commandName);
+        YDB_LOG_VERIFY(false,
+            {"unknownCommand", command},
+            {"commandName", commandName});
         return nullptr;
     }
 

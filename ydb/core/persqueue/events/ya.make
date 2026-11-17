@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/keyvalue
     ydb/core/protos
+    ydb/core/persqueue/pqtablet/blob
     ydb/core/persqueue/public/counters
     ydb/core/tablet
     ydb/public/api/grpc/draft

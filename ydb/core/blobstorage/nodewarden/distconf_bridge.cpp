@@ -96,6 +96,7 @@ namespace NKikimr::NStorage {
                         &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId);
                     if (std::ranges::find(switchedPileIds, pileId) != switchedPileIds.end()) {
                         pss.SetBecameUnsyncedGeneration(generation); // BSC resets parts of its groups in the pile
+                        pss.SetFromHotStandby(false); // the writers have skipped the pile while it was NOT_SYNCHRONIZED_1
                         // and has to report them synced anew: BSC may have reported the pile synced while it was out,
                         // when no group needed syncing in it, and groups created since then have parts there too
                         pss.SetUnsyncedBSC(true);
@@ -407,6 +408,7 @@ namespace NKikimr::NStorage {
                                 case NKikimrBridge::TClusterState::SUSPENDED:
                                     // A suspended pile has left the data quorum. Its metadata replicas must not
                                     // prevent CMS and the other tablets from booting to finish the takedown.
+                                case NKikimrBridge::TClusterState::HOT_STANDBY:
                                     state = T::DISCONNECTED;
                                     break;
 

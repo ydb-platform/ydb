@@ -27,7 +27,7 @@ http:
 # A SelfCheck still in flight at a round boundary is sent again as soon as it settles.
 # These defaults target a committed failover within 20 s once a previously healthy
 # cluster suffers a provable failure and a surviving quorum can commit the change.
-# BSC gets half the SelfCheck operation timeout (2 s here). A shorter budget can
+# BSC gets half the SelfCheck operation timeout (1 s here). A shorter budget can
 # produce more fallback replies under load. Larger explicit overrides increase
 # failover latency; qualification must use the deployed settings.
 # GREY/missing evidence, role warm-up, unresolved history or unavailable survivor
@@ -36,7 +36,7 @@ timing:
   state_poll_interval_seconds: 1
   read_timeout_seconds: 1
   round_interval_seconds: 1
-  selfcheck_operation_timeout_seconds: 4
+  selfcheck_operation_timeout_seconds: 2
   evidence_ttl_seconds: 8
   confirm_seconds: 2
   bsc_warmup_seconds: 30

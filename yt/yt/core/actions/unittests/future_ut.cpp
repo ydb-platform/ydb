@@ -897,7 +897,7 @@ TEST_F(TFutureTest, ApplyIntToFutureInt)
     EXPECT_EQ(42, target.GetOrCrash().Value());
 }
 
-TEST_F(TFutureTest, TestCancelDelayed)
+TEST_F(TFutureTest, CancelDelayed)
 {
     auto future = NConcurrency::TDelayedExecutor::MakeDelayed(TDuration::Seconds(10));
     future.Cancel(TError("Canceled"));

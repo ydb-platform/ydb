@@ -58,9 +58,13 @@ bool TMaybeInf<T>::IsFinite() const noexcept
 template <std::unsigned_integral T>
 bool TMaybeInf<T>::CanIncrease(TMaybeInf delta) const noexcept
 {
+    if (delta.Value_ == 0) {
+        return true;
+    }
+
     return
         delta.IsFinite() &&
-        (IsFinite() || delta.Value_ == 0) &&
+        IsFinite() &&
         Value_ + delta.Value_ >= Value_ &&
         Value_ + delta.Value_ < TTraits::Infinity;
 }

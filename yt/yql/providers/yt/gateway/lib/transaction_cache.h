@@ -56,6 +56,7 @@ public:
         NYT::ITransactionPtr LayersSnapshotTx;
         THashMap<TString, NYT::ITransactionPtr> CheckpointTxs;
         TString DefaultTmpFolder;
+        TSecureTmpStatePtr UseSecureTmp; // set for clusters with a configured secure tmp
         THashMap<std::tuple<TString, TString, TString>, std::vector<NYT::TRichYPath>> RangeCache;
         THashMap<TString, std::pair<std::vector<TString>, std::vector<std::exception_ptr>>> PartialRangeCache;
 
@@ -171,7 +172,7 @@ public:
         size_t ExternalTempTablesCount = 0;
     };
 
-    TTransactionCache(const TString& userName);
+    TTransactionCache(const TString& userName, const TSecureTmpStatePtr& useSecureTmp);
 
     TEntry::TPtr GetEntry(const TString& server);
     TEntry::TPtr GetOrCreateEntry(const TString& cluster, const TString& server, const TString& token, const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics, bool createDumpTx = false);
@@ -186,6 +187,7 @@ private:
     TMutex Lock_;
     THashMap<TString, TEntry::TPtr> TxMap_;
     const TString UserName_;
+    const TSecureTmpStatePtr UseSecureTmp_;
 };
 
 } // NYql

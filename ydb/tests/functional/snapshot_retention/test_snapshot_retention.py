@@ -12,7 +12,7 @@ from ydb.tests.library.snapshot_retention import (
     retention_cluster_config,
 )
 from ydb.tests.oss.ydb_sdk_import import ydb
-from ydb.tests.stress.snapshot_retention.workload import (
+from ydb.tests.library.snapshot_retention.workload import (
     KEY_COUNT,
     SnapshotRetentionWorkload,
     expected_rows,

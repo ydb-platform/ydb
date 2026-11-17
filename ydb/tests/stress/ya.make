@@ -26,7 +26,6 @@ RECURSE(
     show_create/view
     show_create/table
     simple_queue
-    snapshot_retention
     statistics_workload
     system_tablet_backup
     testshard_workload

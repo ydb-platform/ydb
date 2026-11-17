@@ -12,10 +12,10 @@ namespace NYql::NDigest {
 namespace NDetail {
 
 inline void WriteCanonicalJson(const NKikimr::NBinaryJson::TContainerCursor& cursor,
-                                NJson::TJsonWriter& writer) {
+                                NJson::TJsonWriter& writer, bool writeNanAsString) {
     using NKikimr::NBinaryJson::EContainerType;
     using NKikimr::NBinaryJson::EEntryType;
-    const auto writeEntry = [&writer](const NKikimr::NBinaryJson::TEntryCursor& entry) {
+    const auto writeEntry = [&writer, writeNanAsString](const NKikimr::NBinaryJson::TEntryCursor& entry) {
         switch (entry.GetType()) {
             case EEntryType::BoolFalse:
             case EEntryType::BoolTrue:
@@ -29,7 +29,7 @@ inline void WriteCanonicalJson(const NKikimr::NBinaryJson::TContainerCursor& cur
                 break;
             case EEntryType::Number: {
                 const double number = entry.GetNumber();
-                if (!std::isfinite(number)) {
+                if (!writeNanAsString && !std::isfinite(number)) {
                     writer.UnsafeWrite(FloatToString(number));
                 } else {
                     writer.Write(number == 0.0 ? 0.0 : number);
@@ -37,7 +37,7 @@ inline void WriteCanonicalJson(const NKikimr::NBinaryJson::TContainerCursor& cur
                 break;
             }
             case EEntryType::Container:
-                WriteCanonicalJson(entry.GetContainer(), writer);
+                WriteCanonicalJson(entry.GetContainer(), writer, writeNanAsString);
                 break;
         }
     };
@@ -73,14 +73,16 @@ inline void WriteCanonicalJson(const NKikimr::NBinaryJson::TContainerCursor& cur
 
 // Decode the logical document instead of hashing its physical string/number
 // indexes. Shortest-roundtrip formatting preserves finite double values.
-// Unquoted nonfinite tokens distinguish numeric values from JSON strings.
-inline TString CanonicalJsonDocument(TStringBuf document) {
+// Digest strings use unquoted nonfinite tokens to distinguish them from strings;
+// exports retain JSON stringification of nonfinite numbers.
+inline TString CanonicalJsonDocument(TStringBuf document, bool writeNanAsString = false) {
     NJson::TJsonWriterConfig config;
     config.FloatToStringMode = PREC_AUTO;
+    config.WriteNanAsString = writeNanAsString;
     TStringStream output;
     NJson::TJsonWriter writer(&output, config);
     const auto reader = NKikimr::NBinaryJson::TBinaryJsonReader::Make(document);
-    NDetail::WriteCanonicalJson(reader->GetRootCursor(), writer);
+    NDetail::WriteCanonicalJson(reader->GetRootCursor(), writer, writeNanAsString);
     writer.Flush();
     return output.Str();
 }

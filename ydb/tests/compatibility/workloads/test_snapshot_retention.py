@@ -6,7 +6,7 @@ from ydb.tests.library.compatibility.fixtures import (
     RollingUpgradeAndDowngradeFixture,
 )
 from ydb.tests.library.snapshot_retention import SnapshotRetentionMonitor
-from ydb.tests.stress.snapshot_retention.workload import SnapshotRetentionWorkload, expected_rows
+from ydb.tests.library.snapshot_retention.workload import SnapshotRetentionWorkload, expected_rows
 
 
 def _workload(fixture):

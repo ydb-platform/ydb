@@ -11,7 +11,7 @@ from ydb.tests.library.snapshot_retention import (
     pinned_driver,
     retention_cluster_config,
 )
-from ydb.tests.stress.snapshot_retention.workload import (
+from ydb.tests.library.snapshot_retention.workload import (
     HOLD_SECONDS,
     SnapshotRetentionWorkload,
 )

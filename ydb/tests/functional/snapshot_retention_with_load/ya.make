@@ -13,7 +13,11 @@ REQUIREMENTS(cpu:4 ram:16)
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/snapshot_retention
-    ydb/tests/stress/snapshot_retention/workload
+    ydb/tests/library/snapshot_retention/workload
 )
 
 END()
+
+RECURSE(
+    runner
+)

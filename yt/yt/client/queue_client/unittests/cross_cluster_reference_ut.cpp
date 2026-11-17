@@ -18,7 +18,7 @@ class TCrossClusterReferenceFromStringTest
     , public ::testing::WithParamInterface<TClusterPathTestCase>
 { };
 
-TEST_P(TCrossClusterReferenceFromStringTest, TestFromString)
+TEST_P(TCrossClusterReferenceFromStringTest, FromString)
 {
     auto [cluster, path, str] = GetParam();
     EXPECT_EQ((TCrossClusterReference{.Cluster = cluster, .Path = path.data()}), TCrossClusterReference::FromString(str));
@@ -44,7 +44,7 @@ class TCrossClusterReferenceFromBadStringTest
     , public ::testing::WithParamInterface<std::string>
 { };
 
-TEST_P(TCrossClusterReferenceFromBadStringTest, TestFromString)
+TEST_P(TCrossClusterReferenceFromBadStringTest, FromString)
 {
     EXPECT_THROW(TCrossClusterReference::FromString(GetParam()), TErrorException);
 };

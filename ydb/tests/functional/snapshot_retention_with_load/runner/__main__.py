@@ -3,7 +3,7 @@ import logging
 import os
 
 from ydb.tests.oss.ydb_sdk_import import ydb
-from ydb.tests.stress.snapshot_retention.workload import SnapshotRetentionWorkload
+from ydb.tests.library.snapshot_retention.workload import SnapshotRetentionWorkload
 
 
 def main():

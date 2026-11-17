@@ -31,7 +31,7 @@ PEERDIR(
     ydb/tests/datashard/lib
     ydb/tests/library/compatibility
     ydb/tests/library/snapshot_retention
-    ydb/tests/stress/snapshot_retention/workload
+    ydb/tests/library/snapshot_retention/workload
 )
 
 END()

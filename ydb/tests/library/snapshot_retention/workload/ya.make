@@ -5,6 +5,7 @@ PY_SRCS(
 )
 
 PEERDIR(
+    ydb/tests/library/snapshot_retention
     ydb/tests/oss/ydb_sdk_import
     ydb/public/sdk/python/enable_v3_new_behavior
 )

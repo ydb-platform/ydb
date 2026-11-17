@@ -59,7 +59,11 @@ TString NormalizePathValue(TStringBuf key, TStringBuf value, const std::function
         return JoinSeq(',', paths);
     }
     if (!value.empty() && (key == "database" || key == "database_path" || key == "tenant")) {
-        return normalizer(CanonizePath(TString(value)));
+        TString database(value);
+        if (AppData()->FeatureFlags.GetEnableRelativePaths()) {
+            database = PrependDomainIfNeeded("/" + AppData()->DomainsInfo->GetDomain()->Name, database);
+        }
+        return normalizer(CanonizePath(database));
     }
     return normalizer(value);
 }

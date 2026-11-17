@@ -806,9 +806,6 @@ public:
             }
         }
 
-<<<<<<< HEAD
-        bool isReplicated = false;
-=======
         const auto& replicationConfig = table->ReplicationConfig();
         const auto replicationPathId = replicationConfig.HasOwnerPathId()
             ? TPathId::FromProto(replicationConfig.GetOwnerPathId()) : TPathId{};
@@ -835,10 +832,7 @@ public:
             }
         }
 
-        bool hasLegacyReplicationStream = false;
-        bool hasSchemaReplicationStream = false;
-        bool hasSchemaCdcStream = false;
->>>>>>> e0bfdd00e12 (additional validation for uniq replication (#56545))
+        bool isReplicated = false;
         if (path.Base()->GetAliveChildren()) {
             for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));

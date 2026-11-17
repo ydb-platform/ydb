@@ -255,6 +255,53 @@ class SupervisorRegressionTest(unittest.TestCase):
                 supervisor.cmd_heal(cluster, argparse.Namespace())
             self.assertEqual(cluster._macros(), [])
 
+    def test_lost_keeper_split_reply_can_be_healed_after_reloading_supervisor(self):
+        with tempfile.TemporaryDirectory() as run:
+            topology = Topology(["pile1", "pile2"], 3)
+            topology.save(os.path.join(run, "topology.yaml"))
+            labels = [node.label for node in topology.pile("pile1").nodes]
+            unavailable = {label: label == labels[0] for label in labels}
+            cluster = supervisor.Cluster(run)
+
+            def request(pile, method, path, body=None):
+                if path == "/state":
+                    return {"nodes": [{"label": label, "faults": {"unavailable": on}}
+                                      for label, on in unavailable.items()]}
+                if path == "/control":
+                    unavailable.update({label: True for label in labels})
+                    raise supervisor.SupervisorError("reply lost after applying keeper split")
+                return {}
+
+            cluster.request = request
+            with mock.patch.object(supervisor, "_scenario"):
+                with self.assertRaisesRegex(supervisor.SupervisorError, "reply lost"):
+                    supervisor.cmd_keeper_split(cluster, argparse.Namespace(pile="pile1"))
+            self.assertTrue(all(unavailable.values()))
+            recovered = supervisor.Cluster(run)
+            recovered.live_piles = lambda: ["pile1"]
+            recovered.alive = lambda pile: True
+
+            def heal(pile, method, path, body):
+                if path == "/control":
+                    unavailable[body["label"]] = body["on"]
+                return {}
+
+            recovered.request = heal
+            with mock.patch.object(supervisor, "_scenario"):
+                supervisor.cmd_heal(recovered, argparse.Namespace())
+            self.assertEqual(unavailable, {label: label == labels[0] for label in labels})
+            self.assertEqual(recovered._macros(), [])
+
+    def test_keeper_split_record_failure_does_not_apply_fault(self):
+        with tempfile.TemporaryDirectory() as run:
+            Topology(["pile1", "pile2"], 3).save(os.path.join(run, "topology.yaml"))
+            cluster = supervisor.Cluster(run)
+            with mock.patch.object(cluster, "request", return_value={"nodes": []}) as request, mock.patch.object(
+                    cluster, "_save_macros", side_effect=OSError("could not save macro")):
+                with self.assertRaisesRegex(supervisor.SupervisorError, "could not save macro"):
+                    supervisor.cmd_keeper_split(cluster, argparse.Namespace(pile="pile1"))
+            request.assert_called_once_with("pile1", "GET", "/state")
+
     def test_reset_cancels_every_attempted_barrier_and_preserves_prepare_error(self):
         class FakeCluster:
             def piles(self):

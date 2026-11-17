@@ -699,9 +699,13 @@ def cmd_keeper_split(cluster: Cluster, args) -> int:
     # what was already unavailable before the macro is not the macro's to undo
     already = [n["label"] for n in cluster.request(pile, "GET", "/state")["nodes"]
                if n["faults"].get("unavailable")]
-    cluster.request(pile, "POST", "/control", {"all": True, "op": "unavailable", "on": True})
-    cluster.record_macro({"kind": "keeper_split", "pile": pile, "already": already})
-    _scenario(cluster, "keeper_split", pile)
+    progress = _MutationReport("keeper_split", [pile])
+    # A lost fault reply must remain undoable by a later heal.
+    progress.step("record", "supervisor", lambda: cluster.record_macro(
+        {"kind": "keeper_split", "pile": pile, "already": already}))
+    progress.step("keeper_faults", pile, lambda: cluster.request(
+        pile, "POST", "/control", {"all": True, "op": "unavailable", "on": True}))
+    progress.step("scenario", "supervisor", lambda: _scenario(cluster, "keeper_split", pile))
     return 0
 
 

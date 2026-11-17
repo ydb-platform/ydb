@@ -23,7 +23,7 @@ FROM (
                 ss_item_sk AS item_sk,
                 Avg(ss_net_profit) AS rank_col
             FROM
-                `/Root/test/ds/store_sales` AS ss1
+                `store_sales` AS ss1
             WHERE
                 ss_store_sk == 2
             GROUP BY
@@ -33,7 +33,7 @@ FROM (
                     SELECT
                         Avg(ss_net_profit) AS rank_col
                     FROM
-                        `/Root/test/ds/store_sales`
+                        `store_sales`
                     WHERE
                         ss_store_sk == 2
                         AND ss_hdemo_sk IS NULL
@@ -60,7 +60,7 @@ FROM (
                 ss_item_sk AS item_sk,
                 Avg(ss_net_profit) AS rank_col
             FROM
-                `/Root/test/ds/store_sales` AS ss1
+                `store_sales` AS ss1
             WHERE
                 ss_store_sk == 2
             GROUP BY
@@ -70,7 +70,7 @@ FROM (
                     SELECT
                         Avg(ss_net_profit) AS rank_col
                     FROM
-                        `/Root/test/ds/store_sales`
+                        `store_sales`
                     WHERE
                         ss_store_sk == 2
                         AND ss_hdemo_sk IS NULL
@@ -83,9 +83,9 @@ FROM (
         rnk < 11
 ) AS descending
 ,
-    `/Root/test/ds/item` AS i1
+    `item` AS i1
 ,
-    `/Root/test/ds/item` AS i2
+    `item` AS i2
 WHERE
     asceding.rnk == descending.rnk
     AND i1.i_item_sk == asceding.item_sk

@@ -1,0 +1,7 @@
+<tmp_path>/program.sql:<main>:43:14: Error: Failed to execute:
+Traceback (most recent call last):
+  File "embedded:g", line 35, in g
+ValueError: The linear value has already been used
+
+	$c = Python::g(Callable<(DynamicLinear<Int32>,Int32)->Int32>, $s);
+	             ^

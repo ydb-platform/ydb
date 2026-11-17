@@ -17,7 +17,6 @@ DEPENDS(
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/stress
-    ydb/tests/stress/node_broker/workload
 )
 
 END()

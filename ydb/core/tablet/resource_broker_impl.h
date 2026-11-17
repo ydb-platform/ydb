@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
 
@@ -232,10 +233,14 @@ public:
 
     void UpdateRealResourceUsage(TInstant now);
 
+    TEvResourceBroker::TQueueUsage GetUsage() const;
+
     // Debug print of current state into specified stream.
     void OutputState(IOutputStream &os, const TString &prefix) const;
 
 private:
+    void UpdateTabletUsage(const TTaskPtr &task, bool insert);
+
     void HoldResources(TTaskPtr task);
     void ReleaseResources(TTaskPtr task);
 
@@ -255,6 +260,13 @@ public:
     TInstant UsageTimestamp;
     TQueueCounters QueueCounters;
     TQueueCountersPtr TotalCounters;
+
+    struct TTabletUsage {
+        ui64 Waiting = 0;
+        ui64 Running = 0;
+    };
+    // Usage of the queue by tablets (only for tasks with known owner).
+    THashMap<std::pair<ui64, ui32>, TTabletUsage> TabletUsage;
 };
 
 /**
@@ -366,6 +378,8 @@ public:
      */
     void UpdateTime(TInstant now);
 
+    TVector<TEvResourceBroker::TQueueUsage> GetQueueUsage() const;
+
     // Debug print of current state into specified stream.
     void OutputState(IOutputStream &os) const;
 
@@ -394,6 +408,8 @@ private:
     THashMap<TString, TTaskConfig> TaskConfigs;
     TResourceLimitPtr ResourceLimit;
     THashMap<std::pair<TActorId, ui64>, TTaskPtr> Tasks;
+    // Contains exactly the task IDs in Tasks for each client; empty clients are removed.
+    THashMap<TActorId, THashSet<ui64>> TasksByClient;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TQueueCountersPtr TotalCounters;
     ::NMonitoring::TDynamicCounters::TCounterPtr MissingTaskTypeCounter;
@@ -415,6 +431,7 @@ public:
     bool ReduceTaskResourcesInstant(ui64 taskId, const TResourceValues& reduceBy, const TActorId& sender) override;
 
     NKikimrResourceBroker::TResourceBrokerConfig GetConfig() const;
+    TVector<TEvResourceBroker::TQueueUsage> GetQueueUsage() const;
     void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config);
 
     using TOpError = THolder<TEvResourceBroker::TEvTaskOperationError>;
@@ -432,7 +449,7 @@ public:
 private:
     NKikimrResourceBroker::TResourceBrokerConfig Config;
     TScheduler Scheduler;
-    TMutex Lock;
+    mutable TMutex Lock;
     TActorSystem* ActorSystem;
 };
 
@@ -459,6 +476,7 @@ public:
             HFunc(TEvResourceBroker::TEvConfigure, Handle);
             HFunc(TEvResourceBroker::TEvConfigRequest, Handle);
             HFunc(TEvResourceBroker::TEvResourceBrokerRequest, Handle);
+            HFunc(TEvResourceBroker::TEvQueueUsageRequest, Handle);
             HFunc(NMon::TEvHttpInfo, Handle);
         default:
             Y_ABORT("TResourceBroker::StateWork unexpected event type: %" PRIx32 " event: %s",
@@ -477,6 +495,7 @@ private:
     void Handle(TEvResourceBroker::TEvConfigure::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvResourceBroker::TEvConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvResourceBroker::TEvResourceBrokerRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvResourceBroker::TEvQueueUsageRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx);
 
     NKikimrResourceBroker::TResourceBrokerConfig BootstrapConfig;

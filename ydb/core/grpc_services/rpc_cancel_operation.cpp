@@ -2,6 +2,9 @@
 #include "operation_helpers.h"
 #include "rpc_operation_request_base.h"
 
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/reassign_tablets.h>
+
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -23,6 +26,7 @@ namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
+using NHive::TEvReassignTablets;
 using namespace NSchemeShard;
 using namespace NKikimrIssues;
 using namespace NOperationId;
@@ -52,6 +56,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
             return "[CancelAnalyze]";
         case TOperationId::SET_NOT_NULL:
             return "[CancelSetNotNull]";
+        case TOperationId::REASSIGN_TABLETS:
+            return "[CancelReassignTablets]";
         default:
             return "[Untagged]";
         }
@@ -69,6 +75,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
             return new TEvForcedCompaction::TEvCancelRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::SET_NOT_NULL:
             return new TEvSetColumnConstraint::TEvCancelRequest(TxId, GetDatabaseName(), RawOperationId);
+        case TOperationId::REASSIGN_TABLETS:
+            return new TEvReassignTablets::TEvCancelRequest(RawOperationId, HiveGeneration, GetUserSID(*Request).value_or(TString()));
         default:
             Y_ABORT("unreachable");
         }
@@ -219,6 +227,17 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
         Reply(record.GetStatus(), record.GetIssues());
     }
 
+    void Handle(TEvReassignTablets::TEvCancelResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        YDB_LOG_DEBUG("Handle TEvReassignTablets::TEvCancelResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"record", record.ShortDebugString()});
+
+        Reply(record.GetStatus(), record.GetIssues());
+    }
+
 public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
@@ -255,6 +274,10 @@ public:
                 SendCancelScriptExecutionOperation();
                 break;
 
+            case TOperationId::REASSIGN_TABLETS:
+                SendCancelReassignTabletsOperation();
+                break;
+
             case TOperationId::INCREMENTAL_BACKUP:
                 return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Cancel isn't supported for incremental backup yet");
 
@@ -285,6 +308,7 @@ public:
             hFunc(TEvIndexBuilder::TEvCancelResponse, Handle);
             hFunc(TEvForcedCompaction::TEvCancelResponse, Handle);
             hFunc(TEvSetColumnConstraint::TEvCancelResponse, Handle);
+            hFunc(TEvReassignTablets::TEvCancelResponse, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperationResponse, Handle);
             hFunc(NStat::TEvStatistics::TEvAnalyzeOpCancelResponse, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigateResult);
@@ -303,6 +327,20 @@ public:
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvCancelScriptExecutionOperation(GetDatabaseName(), OperationId, GetUserSID(*Request)));
     }
 
+    void SendCancelReassignTabletsOperation() {
+        if (!IsAdministrator(AppData(), Request->GetInternalToken().Get())) {
+            return Reply(StatusIds::UNAUTHORIZED, TIssuesIds::ACCESS_DENIED, "Cluster administrator access is required");
+        }
+        ui64 hiveId = 0;
+        if (!TryGetReassignTabletsId(OperationId, hiveId, HiveGeneration, RawOperationId)) {
+            return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Invalid reassignment id");
+        }
+        Request->AddAuditLogPart("hive_id", ToString(hiveId));
+        Request->AddAuditLogPart("hive_generation", ToString(HiveGeneration));
+        Request->AddAuditLogPart("reassign_id", ToString(RawOperationId));
+        SendRequest(hiveId);
+    }
+
     void PassAway() override {
         // SAPipeClient_ is opened only on the ANALYZE path. Closing the default actor id is a no-op,
         // so this is safe regardless of operation kind.
@@ -313,6 +351,7 @@ public:
 private:
     TOperationId OperationId;
     ui64 RawOperationId = 0;
+    ui64 HiveGeneration = 0;
     TString AnalyzeOperationId_;
     TActorId SAPipeClient_;
 

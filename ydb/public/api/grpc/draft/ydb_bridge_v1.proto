@@ -18,6 +18,15 @@ service BridgeService {
     // Useful for monitoring and decision-making before state changes
     rpc GetClusterState(Ydb.Bridge.GetClusterStateRequest) returns (Ydb.Bridge.GetClusterStateResponse);
 
+    // List per-pile database synchronization counters.
+    rpc ListPileSynchronization(Ydb.Bridge.ListPileSynchronizationRequest) returns (Ydb.Bridge.ListPileSynchronizationResponse);
+
+    // List synchronization summaries by storage-owning database and pile.
+    rpc ListDatabaseSynchronization(Ydb.Bridge.ListDatabaseSynchronizationRequest) returns (Ydb.Bridge.ListDatabaseSynchronizationResponse);
+
+    // List all group synchronization, optionally restricted to a database or storage pool.
+    rpc ListGroupSynchronization(Ydb.Bridge.ListGroupSynchronizationRequest) returns (Ydb.Bridge.ListGroupSynchronizationResponse);
+
     // Update cluster state by providing a list of desired pile states
     // This is the main operation for failover and promotion scenarios
     rpc UpdateClusterState(Ydb.Bridge.UpdateClusterStateRequest) returns (Ydb.Bridge.UpdateClusterStateResponse);
@@ -30,5 +39,11 @@ service BridgeService {
 
     // Remove a DISCONNECTED pile from the cluster along with all its data, so that it becomes INACTIVE
     rpc RemovePile(Ydb.Bridge.RemovePileRequest) returns (Ydb.Bridge.RemovePileResponse);
+
+    // Report how far the rollback of a cluster prepared for bridge mode back to ordinary mode has gone
+    rpc GetRollbackStatus(Ydb.Bridge.GetRollbackStatusRequest) returns (Ydb.Bridge.GetRollbackStatusResponse);
+
+    // Roll a cluster converted from an ordinary one back to it, while it has the only pile, the original one
+    rpc Rollback(Ydb.Bridge.RollbackRequest) returns (Ydb.Bridge.RollbackResponse);
 
 }

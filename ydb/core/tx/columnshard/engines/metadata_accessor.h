@@ -34,6 +34,7 @@ class TManager;
 
 namespace NKikimr::NOlap {
 class IColumnEngine;
+class TPKRangesFilter;
 
 class ITableMetadataAccessor {
 private:
@@ -128,6 +129,7 @@ public:
 
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
         const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const = 0;
+    virtual bool ArePortionsLoaded(const IColumnEngine& engine, const TPKRangesFilter& ranges) const = 0;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const = 0;
 };
@@ -155,6 +157,7 @@ public:
 
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
         const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const override;
+    virtual bool ArePortionsLoaded(const IColumnEngine& engine, const TPKRangesFilter& ranges) const override;
 
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const override {
@@ -194,6 +197,10 @@ public:
 
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
         const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const override;
+
+    virtual bool ArePortionsLoaded(const IColumnEngine& /*engine*/, const TPKRangesFilter& /*ranges*/) const override {
+        return true;
+    }
 };
 
 }   // namespace NKikimr::NOlap

@@ -10,17 +10,17 @@ SELECT
     i_manufact,
     Sum(ss_ext_sales_price) AS ext_price
 FROM
-    `/Root/test/ds/date_dim`
+    `date_dim`
 ,
-    `/Root/test/ds/store_sales`
+    `store_sales`
 ,
-    `/Root/test/ds/item`
+    `item`
 ,
-    `/Root/test/ds/customer`
+    `customer`
 ,
-    `/Root/test/ds/customer_address`
+    `customer_address`
 ,
-    `/Root/test/ds/store`
+    `store`
 WHERE
     d_date_sk == ss_sold_date_sk
     AND ss_item_sk == i_item_sk

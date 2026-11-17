@@ -83,12 +83,21 @@ class TestMirror3dcChaos(Mirror3dcTestBase):
         states = {realm.DataCenter: realm.State for realm in group.FailRealms}
         self.assertEqual(len(group.FailRealms), 3, str(group))
         self.assertEqual(set(states), set(self.data_centers), str(group))
-        self.actions_logger.info('CONTROL GROUP_STATE group=%s generation=%s states=%s',
-                                 self.group_id, group.GroupGeneration,
-                                 {dc: self.REALM_STATES.EState.Name(state) for dc, state in sorted(states.items())})
-        logger.info('Chaos group %s generation %s: %s', self.group_id, group.GroupGeneration,
-                    {dc: self.REALM_STATES.EState.Name(state) for dc, state in states.items()})
-        return states
+        self.actions_logger.info(
+            'CONTROL GROUP_STATE group=%s generation=%s state=%s states=%s',
+            self.group_id,
+            group.GroupGeneration,
+            self.GROUP_STATES.EState.Name(group.Mirror3dcState),
+            {dc: self.DC_STATES.EState.Name(state) for dc, state in sorted(states.items())},
+        )
+        logger.info(
+            'Chaos group %s generation %s state %s: %s',
+            self.group_id,
+            group.GroupGeneration,
+            self.GROUP_STATES.EState.Name(group.Mirror3dcState),
+            {dc: self.DC_STATES.EState.Name(state) for dc, state in states.items()},
+        )
+        return group.Mirror3dcState, states
 
     def _check_background(self, workload, node_task):
         workload.check_errors()
@@ -109,15 +118,20 @@ class TestMirror3dcChaos(Mirror3dcTestBase):
             time.sleep(self.DC_CHANGE_POLL_INTERVAL)
         self._check_background(workload, node_task)
         with self.topology_lock:
-            # Wait for the stopped node to return before excluding any DC.
-            if state == self.DC_STATES.EXCLUDED and self.down_node is not None:
+            # Recovery waits below hold this lock, so let a stopped node return first.
+            if self.down_node is not None:
                 return False
             previous = len(self.excluded_dcs)
             now = time.monotonic()
             if self.last_change is not None:
                 self.assertGreaterEqual(now - self.last_change, self.DC_CHANGE_INTERVAL)
-            self.actions_logger.info('CONTROL DC_CHANGE_REQUEST dc=%s state=%s', dc, self.DC_STATES.EDataCenterState.Name(state))
-            self.define_dc_state(dc, state)
+            self.actions_logger.info('CONTROL DC_CHANGE_REQUEST dc=%s state=%s', dc, self.DC_STATES.EState.Name(state))
+            if state == self.DC_STATES.INCLUDED:
+                self.return_dc(dc)
+            else:
+                self.define_dc_state(dc, state)
+                if len(self.excluded_dcs) == 1:
+                    self.wait_for_two_copy_recovery()
             self.actions_logger.info('CONTROL DC_CHANGE_OK dc=%s excluded=%s', dc, sorted(self.excluded_dcs))
             self._log_topology()
             self.last_change = time.monotonic()
@@ -151,11 +165,17 @@ class TestMirror3dcChaos(Mirror3dcTestBase):
             try:
                 with self.topology_lock:
                     if len(self.excluded_dcs) == 2:
-                        states = self._states_locked()
+                        group_state, states = self._states_locked()
                         live_dc, = set(self.data_centers) - self.excluded_dcs
-                        if states[live_dc] != self.REALM_STATES.N2:
-                            self.actions_logger.info('CONTROL NODE_STOP_SKIPPED dc=%s state=%s reason=remaining_dc_not_N2',
-                                                     live_dc, self.REALM_STATES.EState.Name(states[live_dc]))
+                        if (
+                            group_state != self.GROUP_STATES.DC_SOLO_INV2
+                            or states[live_dc] != self.DC_STATES.INCLUDED
+                        ):
+                            self.actions_logger.info(
+                                'CONTROL NODE_STOP_SKIPPED dc=%s state=%s reason=solo_group_not_INV2',
+                                live_dc,
+                                self.GROUP_STATES.EState.Name(group_state),
+                            )
                             continue
                     node_id = rng.choice(self.recovery_node_ids)
                     base = self.bsc_client.query_base_config().BaseConfig
@@ -181,14 +201,17 @@ class TestMirror3dcChaos(Mirror3dcTestBase):
                         self.node_restarts += 1
                         logger.info('Chaos node %s returned, restart count=%d', node_id, self.node_restarts)
 
-    def _wait_states(self, expected, workload, node_task):
+    def _wait_states(self, expected_group_state, expected_roles, workload, node_task):
         deadline = time.monotonic() + 240
         while True:
             self._check_background(workload, node_task)
             actual = self._states()
+            expected = expected_group_state, expected_roles
             if actual == expected:
                 return
-            self.assertLess(time.monotonic(), deadline, f'DC states did not converge: {actual}, expected {expected}')
+            self.assertLess(
+                time.monotonic(), deadline, f'Group configuration did not converge: {actual}, expected {expected}'
+            )
             time.sleep(self.STATE_POLL_INTERVAL)
 
     def _random_transitions(self, workload, node_task, rng, duration):
@@ -199,7 +222,7 @@ class TestMirror3dcChaos(Mirror3dcTestBase):
         while time.monotonic() < deadline:
             self._check_background(workload, node_task)
             try:
-                states = self._states()
+                group_state, states = self._states()
                 last_query_success = time.monotonic()
             except grpc.RpcError as error:
                 # A BSC tablet can migrate when its host is restarted.
@@ -214,13 +237,15 @@ class TestMirror3dcChaos(Mirror3dcTestBase):
                             dict(self.changes), self.node_restarts, workload.stats())
                 last_report = time.monotonic()
             # Never start a second recovery while a realm is already R.
-            if self.REALM_STATES.R in states.values():
+            if self.DC_STATES.RECOVERING in states.values():
                 time.sleep(self.STATE_POLL_INTERVAL)
                 continue
             excluded = sorted(self.excluded_dcs)
             if pending is None:
                 if not excluded:
-                    if not all(state == self.REALM_STATES.N0 for state in states.values()):
+                    if group_state != self.GROUP_STATES.NORMAL or not all(
+                        state == self.DC_STATES.INCLUDED for state in states.values()
+                    ):
                         time.sleep(self.STATE_POLL_INTERVAL)
                         continue
                     pending = (rng.choice(self.data_centers), self.DC_STATES.EXCLUDED)
@@ -234,8 +259,8 @@ class TestMirror3dcChaos(Mirror3dcTestBase):
                     pending = (rng.choice(excluded), self.DC_STATES.INCLUDED)
             dc, state = pending
             if state == self.DC_STATES.EXCLUDED and excluded:
-                # Exclude the second DC only after BSC confirms N2/N2/F.
-                if states != self.recovered_realm_states():
+                # Exclude the second DC only after BSC confirms the group INV2 guarantee.
+                if group_state != self.GROUP_STATES.DC_FAILURE_INV2 or states != self.recovered_realm_states():
                     time.sleep(self.STATE_POLL_INTERVAL)
                     continue
             if self._change_dc(dc, state, workload, node_task):
@@ -249,8 +274,13 @@ class TestMirror3dcChaos(Mirror3dcTestBase):
         logger.info('Mirror3dc chaos seed=%d, duration=%s seconds', seed, duration)
         self.actions_logger.info('CONTROL TEST_START seed=%d duration=%s', seed, duration)
         stop_faults = threading.Event()
-        with KvChurnWorkload([node.endpoint for node in self.cluster.nodes.values()], self.path,
-                             seed=seed, readers=1, event_logger=self.actions_logger) as workload:
+        with KvChurnWorkload(
+            [node.endpoint for node in self.cluster.nodes.values()],
+            self.path,
+            seed=seed,
+            readers=1,
+            event_logger=self.actions_logger,
+        ) as workload:
             deadline = time.monotonic() + 30
             while not workload.stats()['deletes']:
                 workload.check_errors()
@@ -271,17 +301,24 @@ class TestMirror3dcChaos(Mirror3dcTestBase):
             # Keep KV traffic running during sequential DC cleanup as well.
             while self.excluded_dcs:
                 deadline = time.monotonic() + 240
-                while self.REALM_STATES.R in self._states().values():
+                while self.DC_STATES.RECOVERING in self._states()[1].values():
                     self._check_background(workload, node_task)
                     self.assertLess(time.monotonic(), deadline, 'DC recovery did not finish before cleanup')
                     time.sleep(self.STATE_POLL_INTERVAL)
                 dc = sorted(self.excluded_dcs)[-1]
                 self._change_dc(dc, self.DC_STATES.INCLUDED, workload, node_task)
-                expected = self.recovered_realm_states() if self.excluded_dcs else {
-                    name: self.REALM_STATES.N0 for name in self.data_centers
-                }
-                self._wait_states(expected, workload, node_task)
-            self._wait_states({dc: self.REALM_STATES.N0 for dc in self.data_centers}, workload, node_task)
+                expected = (
+                    self.recovered_realm_states()
+                    if self.excluded_dcs
+                    else {name: self.DC_STATES.INCLUDED for name in self.data_centers}
+                )
+                self._wait_states(self.recovered_group_state(), expected, workload, node_task)
+            self._wait_states(
+                self.GROUP_STATES.NORMAL,
+                {dc: self.DC_STATES.INCLUDED for dc in self.data_centers},
+                workload,
+                node_task,
+            )
             if self.ENABLE_NODE_RESTARTS:
                 self.assertGreater(self.node_restarts, 0, 'No node restarts executed')
             self.assertGreater(self.changes['exclude_1'], 0, 'No DC exclusions executed')

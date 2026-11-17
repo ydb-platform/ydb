@@ -49,6 +49,7 @@
 #include <yt/yt/core/rpc/stream.h>
 
 #include <yt/yt/core/ytree/convert.h>
+#include <yt/yt/core/ytree/fluent.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/yson/protobuf_helpers.h>
@@ -3024,11 +3025,8 @@ TFuture<TQuery> TClient::GetQuery(
     if (options.Timestamp) {
         req->set_timestamp(ToProto(options.Timestamp));
     }
-
-    ToProto(req->mutable_progress_parts(), options.ProgressParts);
-
-    if (options.MinProgressRevision) {
-        req->set_min_progress_revision(*options.MinProgressRevision);
+    if (options.ProgressOptions) {
+        req->set_progress_options(ToProto(ConvertToYsonString(options.ProgressOptions)));
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryPtr& rsp) {
@@ -3269,19 +3267,7 @@ TFuture<TGetPipelineDynamicSpecResult> TClient::GetPipelineDynamicSpec(
     const NYPath::TYPath& pipelinePath,
     const TGetPipelineDynamicSpecOptions& options)
 {
-    auto proxy = CreateApiServiceProxy();
-
-    auto req = proxy.GetPipelineDynamicSpec();
-    SetTimeoutOptions(*req, options);
-
-    req->set_pipeline_path(pipelinePath);
-
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineDynamicSpecPtr& rsp) {
-        return TGetPipelineDynamicSpecResult{
-            .Version = FromProto<NFlow::TVersion>(rsp->version()),
-            .Spec = TYsonString(rsp->spec()),
-        };
-    }));
+    return IFlowClient::GetPipelineDynamicSpec(pipelinePath, options);
 }
 
 TFuture<TSetPipelineDynamicSpecResult> TClient::SetPipelineDynamicSpec(

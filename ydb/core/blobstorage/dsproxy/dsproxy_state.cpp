@@ -99,8 +99,19 @@ namespace NKikimr {
         if (const auto& info = msg->Info; info && info->IsInlinePileView()) {
             // this is the view of the inline pile and it comes from the bridge proxy put in front of us
             InlinePileBridgeProxyId = ev->Sender;
+        } else if (info && !info->IsBridged()) {
+            // the group is an ordinary one again (the bridged cluster has been rolled back), the bridge proxy in front of
+            // us passes the requests through, and the ones without forced generation are served here
+            InlinePileBridgeProxyId = {};
         }
         ApplyGroupInfo(std::move(msg->Info), std::move(msg->NodeLayoutInfo), std::move(msg->StoragePoolCounters));
+        if (InlinePileBridgeProxyId && !InitQueue.empty()) {
+            // requests queued while we had no configuration (node warden had started us before the group info came) are
+            // sent to the group's service id again right away rather than when sessions to the inline pile get
+            // established, which may never happen while the pile is out; the requests of the bridge proxy stay in the
+            // queue
+            ProcessInitQueue();
+        }
     }
 
     void TBlobStorageGroupProxy::ApplyGroupInfo(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
@@ -355,7 +366,9 @@ namespace NKikimr {
             Send(MonActor, new NActors::TEvents::TEvPoison());
         }
 
-        // Reply error to all messages in the init queue
+        // Reply error to all messages in the init queue; the ones of the bridge proxy's clients too, as the bridge proxy
+        // stopping us may be gone already
+        InlinePileBridgeProxyId = {};
         ErrorDescription = "DsProxy got a Poison Pill";
         SetStateEstablishingSessionsTimeout();
 

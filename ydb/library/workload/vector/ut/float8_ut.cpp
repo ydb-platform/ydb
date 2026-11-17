@@ -48,14 +48,14 @@ Y_UNIT_TEST_SUITE(VectorWorkload) {
     Y_UNIT_TEST_QUAD(Float8BulkData, E5M2, Prefixed) {
         using T = std::conditional_t<E5M2, TFloat8E5M2, TFloat8E4M3>;
         TVectorWorkloadParams params;
-        params.VectorOpts.VectorType = E5M2 ? "float8_e5m2" : "float8_e4m3";
-        params.VectorOpts.VectorDimension = 67;
-        params.KmeansTreePrefixed = Prefixed;
         params.BulkSize = 3;
         TWorkloadVectorGenerateDataInitializer initializer(params);
         NLastGetopt::TOpts opts;
         initializer.ConfigureOpts(opts);
-        const char* argv[] = {"generator", "--rows", "5", "--prefix-count", "2", "--seed", "42"};
+        params.ConfigureOpts(opts, TWorkloadParams::ECommandType::Import, 0);
+        const char* argv[] = {"generator", "--rows", "5", "--prefix-count", "2", "--seed", "42",
+            "--vector-type", E5M2 ? "float8_e5m2" : "float8_e4m3", "--vector-dimension", "67",
+            "--kmeans-tree-prefixed", Prefixed ? "1" : "0"};
         NLastGetopt::TOptsParseResultException parsed(&opts, Y_ARRAY_SIZE(argv), argv);
         const auto generators = initializer.GetBulkInitialData();
         UNIT_ASSERT_VALUES_EQUAL(generators.size(), 1);

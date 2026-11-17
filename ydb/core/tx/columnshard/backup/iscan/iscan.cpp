@@ -340,6 +340,9 @@ public:
 
     void Handle(const TEvPrivate::TEvBackupExportRecordBatch::TPtr& ev) {
         const auto& event = *ev.Get()->Get();
+        if (event.Generation != Generation) {
+            return;
+        }
         DataQueue.emplace(event.Data, event.IsLast);
         ++TotalBatchesReceived;
         Counters.OnBatchReceived();
@@ -363,7 +366,7 @@ public:
 
     void SendIntermediateResult() {
         if (!CurrentBatch.HasMoreRows() && !CurrentBatch.IsLast && CurrentBatch.NeedResult) {
-            Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(false));
+            Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(false, Generation));
             CurrentBatch.NeedResult = false;
             ++TotalIntermediateResults;
             Counters.OnIntermediateResultSent();
@@ -387,7 +390,7 @@ public:
                     {"totalBatchesReceived", TotalBatchesReceived},
                     {"totalRowsFed", TotalRowsFed},
                     {"totalIntermediateResults", TotalIntermediateResults});
-                Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(true));
+                Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(true, Generation));
                 break;
             case NDataShard::EExportOutcome::Error:
                 Counters.OnError();
@@ -480,12 +483,19 @@ public:
     void Handle(const TEvPrivate::TEvBackupExportState::TPtr& ev) {
         const auto& event = *ev.Get()->Get();
         if (event.State == NTable::EScan::Reset) {
-            Fail(
-                "ColumnShard export failed: uploader requested a scan reset (EScan::Reset), but restarting the scan is not supported. "
-                "A possible cause is S3 throttling (HTTP 429 TooManyRequests); check uploader logs for the original error. "
-                "Reduce S3 load and start a new export, for example: "
-                "ydb -e <endpoint> -d <database> export s3 --s3-endpoint <s3-endpoint> --bucket <bucket> "
-                "--item source=<table>,destination=<new-prefix>. Increasing --retries does not enable scan resets.");
+            ++Generation;
+            DataQueue = {};
+            CurrentBatch = {};
+            Counters.SetQueueSize(0);
+            Counters.ResetSleeping();
+            LastActivityTime = TInstant::Now();
+
+            // Seek clears the export buffer (including compression and checksums)
+            // and repeats the Ready/Feed handshake with the existing uploader.
+            NTable::TLead lead;
+            LastState = Exporter->Seek(lead, 0);
+            AFL_VERIFY(LastState == NTable::EScan::Feed);
+            Send(SubscriberActorId, new TEvPrivate::TEvBackupExportReset(Generation));
             return;
         }
         if (event.State == NTable::EScan::Final) {
@@ -541,6 +551,7 @@ private:
     NDataShard::IExport::TTableColumns TableColumns;
     TActorId SubscriberActorId;
     ui64 TxId;
+    ui32 Generation = 0;
     TVector<std::pair<TString, NScheme::TTypeInfo>> ColumnTypes;
 
     TUploaderCounters Counters;

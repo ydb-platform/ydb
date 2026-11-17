@@ -120,6 +120,8 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/protobuf
+    contrib/libs/zstd
+    library/cpp/blockcodecs
     ydb/library/actors/util
     ydb/library/actors/core
     ydb/library/services

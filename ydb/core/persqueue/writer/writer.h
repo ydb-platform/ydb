@@ -220,6 +220,7 @@ struct TPartitionWriterOpts {
     TString SourceId;
     std::optional<ui32> ExpectedGeneration;
     std::optional<ui64> InitialSeqNo;
+    TDuration WriteSessionQuotaWaitTime = TDuration::Zero();
 
     TString Database;
     TString TopicPath;
@@ -254,6 +255,7 @@ struct TPartitionWriterOpts {
     TPartitionWriterOpts& WithTraceId(const TString& value) { TraceId = value; return *this; }
     TPartitionWriterOpts& WithRequestType(const TString& value) { RequestType = value; return *this; }
     TPartitionWriterOpts& WithInitialSeqNo(const std::optional<ui64> value) { InitialSeqNo = value; return *this; }
+    TPartitionWriterOpts& WithWriteSessionQuotaWaitTime(TDuration value) { WriteSessionQuotaWaitTime = value; return *this; }
     TPartitionWriterOpts& WithKafkaProducerInstanceId(const std::optional<NKafka::TProducerInstanceId>& value) { KafkaProducerInstanceId = value; return *this; }
     TPartitionWriterOpts& WithKafkaTransactionalId(const std::optional<TString>& value) { KafkaTransactionalId = value; return *this; }
     TPartitionWriterOpts& WithTrackProducerId(bool value) { TrackProducerId = value; return *this; }

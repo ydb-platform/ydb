@@ -428,7 +428,6 @@ private:
         TString database = "/Root";
         TIntrusiveConstPtr<NACLib::TUserToken> userToken;
         TMaybe<NKikimrKqp::TRlPath> rlPath;
-        TActorId checkpointCoordinator;
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager = std::make_shared<TStubResourceManager>();
         std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> caFactory; // unused on this path
 
@@ -458,7 +457,7 @@ private:
             .ArrayBufferMinFillPercentage = Nothing(),
             .BufferPageAllocSize = Nothing(),
             .Query = nullptr,
-            .CheckpointCoordinator = checkpointCoordinator,
+            .EnableCheckpoints = false,
             .EnableWatermarks = false,
         });
 

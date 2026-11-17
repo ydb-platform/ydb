@@ -3,12 +3,15 @@
 #include "dsproxy_test_state_ut.h"
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy_quorum_tracker.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/actor_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+using TDataCenterState = NKikimrBlobStorage::TDataCenterState;
 
 using namespace NKikimr;
 
@@ -177,15 +180,14 @@ void TestMaxAllowedFailures(TBlobStorageGroupType::EErasureSpecies erasure) {
 
 namespace {
 
-void CheckMirror3dcRealms(const TVector<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState>& realms,
+void CheckMirror3dcRealms(const TMirror3dcGroupState& realms,
         bool failNormalDisk, NKikimrProto::EReplyStatus expected) {
-    using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
     TTestBasicRuntime runtime(1, false);
     runtime.SetDispatchTimeout(TDuration::Seconds(10));
     SetupRuntime(runtime);
     TDSProxyEnv env;
     env.Configure(runtime, TBlobStorageGroupType(TErasureType::ErasureMirror3dc), 0, 0,
-        TBlobStorageGroupInfo::EEM_NONE, DormantTimeoutDefaultControl, false, realms);
+        TBlobStorageGroupInfo::EEM_NONE, DormantTimeoutDefaultControl, false, TVector<EMirror3dcFailRealmState>(realms.FailRealmStates.begin(), realms.FailRealmStates.end()), realms.State);
     TTestState state(runtime, env.Info);
     const ui64 tabletId = 123456;
     auto query = std::make_unique<TEvBlobStorage::TEvGetBlock>(tabletId, TInstant::Max());
@@ -203,8 +205,8 @@ void CheckMirror3dcRealms(const TVector<NKikimrBlobStorage::TGroupInfo::TFailRea
         UNIT_ASSERT(getBlock);
         ++requests;
         const auto vd = VDiskIDFromVDiskID(getBlock->Record.GetVDiskID());
-        UNIT_ASSERT(realms[vd.FailRealm] != R::F);
-        const bool error = realms[vd.FailRealm] == R::R || (failNormalDisk && vd.FailDomain == 0);
+        UNIT_ASSERT(realms.FailRealmStates[vd.FailRealm] != TDataCenterState::EXCLUDED);
+        const bool error = realms.FailRealmStates[vd.FailRealm] == TDataCenterState::RECOVERING || (failNormalDisk && vd.FailDomain == 0);
         TEvBlobStorage::TEvVGetBlock::TPtr request(
             static_cast<TEventHandle<TEvBlobStorage::TEvVGetBlock>*>(handle.Release()));
         auto response = state.CreateEventResultPtr(request, error ? NKikimrProto::ERROR : NKikimrProto::OK, tabletId);
@@ -216,12 +218,10 @@ void CheckMirror3dcRealms(const TVector<NKikimrBlobStorage::TGroupInfo::TFailRea
 
 Y_UNIT_TEST_SUITE(TDSProxyGetBlockQuorumTest) {
     Y_UNIT_TEST(Mirror3dcSkipsFailedRealmsAndIgnoresRecoveryErrors) {
-        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        CheckMirror3dcRealms({R::N1, R::R, R::F}, false, NKikimrProto::OK);
-        CheckMirror3dcRealms({R::F, R::N2, R::R}, true, NKikimrProto::OK);
-        CheckMirror3dcRealms({R::R, R::F, R::N1}, true, NKikimrProto::ERROR);
+        CheckMirror3dcRealms({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, false, NKikimrProto::OK);
+        CheckMirror3dcRealms({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2, {TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, true, NKikimrProto::OK);
+        CheckMirror3dcRealms({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}}, true, NKikimrProto::ERROR);
     }
-
 
 #define UNIT_TEST_QUORUM_RESPONSE(ERASURE) \
     Y_UNIT_TEST(QuorumResponse##ERASURE) { \

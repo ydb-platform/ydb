@@ -411,7 +411,9 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         Float8E5M2,
         Bit,
         Uint8,
-        Int8
+        Int8,
+        Uint4,
+        Int4
     };
 
     void DoVectorKnnPushdownTest(EVectorType vectorType) {
@@ -481,6 +483,34 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
                     // the target [96, 112, 128]. Keep the cosine winner unique.
                     SubstGlobal(insertQuery, "[13.0f, 14.0f, 15.0f]", "[13.0f, -14.0f, 15.0f]");
                 }
+                expectedMatchPk = 6;
+                break;
+            case EVectorType::Uint4:
+                insertQuery = R"(
+                    UPSERT INTO `/Root/TestTable` (pk, emb) VALUES
+                    (1, Untag(Knn::ToBinaryStringUint4([1ut, 2ut, 3ut]), "Uint4Vector")),
+                    (2, Untag(Knn::ToBinaryStringUint4([2ut, 3ut, 4ut]), "Uint4Vector")),
+                    (3, Untag(Knn::ToBinaryStringUint4([3ut, 4ut, 5ut]), "Uint4Vector")),
+                    (4, Untag(Knn::ToBinaryStringUint4([4ut, 5ut, 6ut]), "Uint4Vector")),
+                    (5, Untag(Knn::ToBinaryStringUint4([5ut, 6ut, 7ut]), "Uint4Vector")),
+                    (6, Untag(Knn::ToBinaryStringUint4([15ut, 14ut, 13ut]), "Uint4Vector"));
+                )";
+                targetVector = "Knn::ToBinaryStringUint4([15ut, 14ut, 13ut])";
+                tagName = "Uint4Vector";
+                expectedMatchPk = 6;
+                break;
+            case EVectorType::Int4:
+                insertQuery = R"(
+                    UPSERT INTO `/Root/TestTable` (pk, emb) VALUES
+                    (1, Untag(Knn::ToBinaryStringInt4([1t, 2t, 3t]), "Int4Vector")),
+                    (2, Untag(Knn::ToBinaryStringInt4([2t, 3t, 4t]), "Int4Vector")),
+                    (3, Untag(Knn::ToBinaryStringInt4([3t, 4t, 5t]), "Int4Vector")),
+                    (4, Untag(Knn::ToBinaryStringInt4([4t, 5t, 6t]), "Int4Vector")),
+                    (5, Untag(Knn::ToBinaryStringInt4([5t, 6t, 7t]), "Int4Vector")),
+                    (6, Untag(Knn::ToBinaryStringInt4([7t, -8t, 7t]), "Int4Vector"));
+                )";
+                targetVector = "Knn::ToBinaryStringInt4([7t, -8t, 7t])";
+                tagName = "Int4Vector";
                 expectedMatchPk = 6;
                 break;
             case EVectorType::Bit:
@@ -622,6 +652,14 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
 
     Y_UNIT_TEST(Float8E5M2VectorKnnPushdown) {
         DoVectorKnnPushdownTest(EVectorType::Float8E5M2);
+    }
+
+    Y_UNIT_TEST(Uint4VectorKnnPushdown) {
+        DoVectorKnnPushdownTest(EVectorType::Uint4);
+    }
+
+    Y_UNIT_TEST(Int4VectorKnnPushdown) {
+        DoVectorKnnPushdownTest(EVectorType::Int4);
     }
 
     Y_UNIT_TEST(BitVectorKnnPushdown) {

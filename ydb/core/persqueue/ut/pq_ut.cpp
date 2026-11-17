@@ -1,6 +1,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/pqtablet/blob/blob.h>
+#include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/public/write_id.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
@@ -17,6 +19,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/scope.h>
 #include <util/stream/mem.h>
 #include <util/stream/output.h>
 #include <util/stream/zlib.h>
@@ -595,6 +598,40 @@ Y_UNIT_TEST(BatchedMessagesWriteWithoutFeatureFlagFails) {
     PQGetPartInfo(0, 0, tc);
 }
 
+Y_UNIT_TEST(CmdWriteRejectsExplicitHashLongerThan255) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString ownerCookie = CmdSetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, 0).first;
+    auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* partitionRequest = request->Record.MutablePartitionRequest();
+    partitionRequest->SetPartition(0);
+    partitionRequest->SetOwnerCookie(ownerCookie);
+    partitionRequest->SetMessageNo(1);
+
+    auto* write = partitionRequest->AddCmdWrite();
+    write->SetSourceId("source");
+    write->SetSeqNo(1);
+    write->SetData("data");
+    write->SetLogicalMessageCount(1);
+    write->SetExplicitHash(TString(256, 'h'));
+
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
+        [](const TEvPersQueue::TEvResponse& event) {
+            return event.Record.GetErrorCode() != NPersQueue::NErrorCode::OK;
+        });
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(
+        static_cast<ui32>(response->Record.GetErrorCode()),
+        static_cast<ui32>(NPersQueue::NErrorCode::BAD_REQUEST));
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetErrorReason(), "too long explicit hash");
+}
+
 Y_UNIT_TEST(BatchedMessagesWriteWithoutMaxSeqNoFails) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;
@@ -1136,18 +1173,18 @@ void TestMirroredOffsetSurvivesRestart(bool kafkaBatch) {
             CmdWrite(0, "sourceid_before_gap", {{1, "before-gap"}}, tc);
             expected.push_back({.SeqNo = 1, .Offset = 0, .Data = "before-gap"});
         }
-        const ui64 oldEndOffset = prefill ? 1 : 0;
         constexpr ui64 mirroredOffset = 1000;
+        // Only an empty partition advances its boundaries to the replicated position.
+        const ui64 expectedStartOffset = prefill ? 0 : mirroredOffset;
+        const ui64 expectedEndOffset = prefill ? 1 : mirroredOffset;
         auto replicationData = MakeHolder<TEvPQ::TEvReplicationData>();
         replicationData->MirroredOffset = mirroredOffset;
         tc.Runtime->Send(new IEventHandle(partitionActor, tc.Edge, replicationData.Release(), 0, 17));
-        auto ack = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(tc.Edge, TDuration::Seconds(10));
-        UNIT_ASSERT(ack);
-        UNIT_ASSERT_VALUES_EQUAL(ack->Cookie, 17);
-        PQGetPartInfo(0, oldEndOffset, tc);
+        tc.Runtime->SimulateSleep(TDuration::Seconds(1));
+        PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
 
         PQTabletRestart(tc);
-        PQGetPartInfo(0, oldEndOffset, tc);
+        PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
 
         const TVector<TString> values = {"after-gap", TString(1_MB, 'x')};
         if (kafkaBatch) {
@@ -1889,6 +1926,373 @@ Y_UNIT_TEST(KafkaBatchKeyCompactificationKeepsPhysicalBatchIfAnyRecordIsActual) 
 
 Y_UNIT_TEST(KafkaBatchKeyCompactificationDropsPhysicalBatchWhenAllRecordsAreStale) {
     RunKafkaBatchKeyCompactificationTest(true);
+}
+
+void SetOffsetDeltaWithoutBatching(TTestContext& tc, bool enabled) {
+    for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
+        auto& flags = tc.Runtime->GetAppData(nodeIdx).FeatureFlags;
+        flags.SetEnableTopicMessagesBatching(false);
+        flags.SetEnableTopicWriteOffsetDeltaInKeys(enabled);
+    }
+    InitMaxHeaderSize(tc.Runtime->GetAppData(0).FeatureFlags);
+}
+
+TString MakeOrdinaryTestPayload(size_t size, ui32 seed, bool pseudorandom) {
+    TString payload(size, static_cast<char>('a' + seed % 26));
+    if (pseudorandom) {
+        // Fixed-seed xorshift32: reproducible bytes without long repeated runs.
+        ui32 state = 0x9e3779b9u ^ seed;
+        for (char& byte : payload) {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            byte = static_cast<char>(state & 0xff);
+        }
+    }
+    return payload;
+}
+
+void AssertOrdinaryMessage(TTestContext& tc, ui64 readOffset, ui64 expectedOffset,
+                          ui64 seqNo, const TString& payload) {
+    TPQCmdReadSettings settings{"", 0, static_cast<i64>(readOffset), 1, 64_MB, 1, false, {}, 0, 0, "user1"};
+    settings.ReadToBlobEnd = false;
+    // Do not let the reader hide accidentally stored client batches by cutting them.
+    settings.CanReadBatches = true;
+    const auto result = CmdReadAndGetResult(settings, tc);
+    UNIT_ASSERT_VALUES_EQUAL_C(result.ResultSize(), 1u, "readOffset=" << readOffset);
+    const auto& message = result.GetResult(0);
+    UNIT_ASSERT_VALUES_EQUAL(message.GetOffset(), expectedOffset);
+    UNIT_ASSERT_VALUES_EQUAL(message.GetSeqNo(), seqNo);
+    UNIT_ASSERT_VALUES_EQUAL(message.GetLogicalMessageCount(), 1u);
+    UNIT_ASSERT(!message.GetIsBatch());
+    UNIT_ASSERT_VALUES_EQUAL(message.GetData(), payload);
+}
+
+void CompactOrdinaryMessages(TTestContext& tc) {
+    bool completed = false;
+    auto observer = tc.Runtime->AddObserver<TEvKeyValue::TEvResponse>([&](TEvKeyValue::TEvResponse::TPtr& ev) {
+        if (ev->Get()->Record.GetCookie() == TPartition::ERequestCookie::WriteBlobsForCompaction) {
+            completed = true;
+        }
+    });
+    CmdRunCompaction(0, tc);
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return completed; };
+    tc.Runtime->DispatchEvents(options, TDuration::Seconds(10));
+    observer.Remove();
+    UNIT_ASSERT_C(completed, "forced compaction did not complete");
+}
+
+void CheckOrdinaryMessagesReadTail(bool enableOffsetDelta, bool pseudorandom = false) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(50000);
+    const auto previousFlags = tc.Runtime->GetAppData(0).FeatureFlags;
+    Y_DEFER { InitMaxHeaderSize(previousFlags); };
+    SetOffsetDeltaWithoutBatching(tc, enableOffsetDelta);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(1000);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(32_MB);
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    for (ui64 i = 0; i < 10; ++i) {
+        // Exceed the internal 500 KiB packing boundary in one write request.
+        data.emplace_back(i + 1, MakeOrdinaryTestPayload(100_KB, i + 1, pseudorandom));
+    }
+    CmdWrite({.Partition = 0, .SourceId = "sourceid_ordinary_tail", .Data = data, .TestContext = tc, .Offset = 100});
+    PQGetPartInfo(100, 110, tc);
+
+    const auto check = [&]() {
+        // Start at the tail: a read from the beginning can mask an incorrect key boundary.
+        for (ui64 i = data.size(); i > 0; --i) {
+            AssertOrdinaryMessage(tc, 100 + i - 1, 100 + i - 1, data[i - 1].first, data[i - 1].second);
+        }
+    };
+    check();
+    PQTabletRestart(tc);
+    check();
+    CompactOrdinaryMessages(tc);
+    PQTabletRestart(tc);
+    check();
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingReadTailFlagDisabled) {
+    CheckOrdinaryMessagesReadTail(false);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingReadTailFlagEnabled) {
+    CheckOrdinaryMessagesReadTail(true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingReadTailRandomDataFlagDisabled) {
+    CheckOrdinaryMessagesReadTail(false, true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingReadTailRandomDataFlagEnabled) {
+    CheckOrdinaryMessagesReadTail(true, true);
+}
+
+void CheckOrdinaryMessagesFlagToggle(bool withGaps, bool pseudorandom = false) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(50000);
+    const auto previousFlags = tc.Runtime->GetAppData(0).FeatureFlags;
+    Y_DEFER { InitMaxHeaderSize(previousFlags); };
+    SetOffsetDeltaWithoutBatching(tc, false);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(1000);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(32_MB);
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    TVector<std::pair<ui64, TString>> messages;
+    TVector<ui64> offsets;
+    ui64 nextOffset = 100;
+    for (bool enabled : {false, true, false}) {
+        SetOffsetDeltaWithoutBatching(tc, enabled);
+        PQTabletRestart(tc);
+
+        TVector<std::pair<ui64, TString>> data;
+        for (ui64 i = 0; i < 8; ++i) {
+            const ui64 seqNo = messages.size() + 1;
+            data.emplace_back(seqNo, MakeOrdinaryTestPayload(100_KB, seqNo, pseudorandom));
+            messages.push_back(data.back());
+            offsets.push_back(nextOffset + i);
+        }
+        CmdWrite({.Partition = 0, .SourceId = "sourceid_ordinary_toggle", .Data = data, .TestContext = tc,
+                  .Offset = static_cast<i64>(nextOffset)});
+        nextOffset += data.size();
+        PQGetPartInfo(100, nextOffset, tc);
+
+        const auto check = [&]() {
+            for (size_t i = 0; i < messages.size(); ++i) {
+                AssertOrdinaryMessage(tc, offsets[i], offsets[i], messages[i].first, messages[i].second);
+                if (i > 0 && offsets[i] > offsets[i - 1] + 1) {
+                    AssertOrdinaryMessage(tc, offsets[i - 1] + 1, offsets[i], messages[i].first, messages[i].second);
+                }
+            }
+        };
+        check();
+        CompactOrdinaryMessages(tc);
+        PQTabletRestart(tc);
+        check();
+        if (withGaps) {
+            nextOffset += 100;
+        }
+    }
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingToggle) {
+    CheckOrdinaryMessagesFlagToggle(false);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingToggleWithGaps) {
+    CheckOrdinaryMessagesFlagToggle(true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingToggleRandomData) {
+    CheckOrdinaryMessagesFlagToggle(false, true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingToggleWithGapsRandomData) {
+    CheckOrdinaryMessagesFlagToggle(true, true);
+}
+
+void CheckOrdinaryMultipartMessages(bool acrossBlobs, bool pseudorandom = false) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(50000);
+    const auto previousFlags = tc.Runtime->GetAppData(0).FeatureFlags;
+    Y_DEFER { InitMaxHeaderSize(previousFlags); };
+    SetOffsetDeltaWithoutBatching(tc, true);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(1000);
+    // Keep the 10 MiB write below the automatic compaction threshold as well.
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(32_MB);
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TVector<std::pair<ui64, TString>> data = {
+        {1, MakeOrdinaryTestPayload(1_KB, 1, pseudorandom)},
+        {2, MakeOrdinaryTestPayload(acrossBlobs ? 10_MB : 700_KB, 2, pseudorandom)},
+        {3, MakeOrdinaryTestPayload(1_KB, 3, pseudorandom)},
+    };
+    CmdWrite({.Partition = 0, .SourceId = "sourceid_ordinary_multipart", .Data = data, .TestContext = tc, .Offset = 100});
+    PQGetPartInfo(100, 103, tc);
+
+    const auto dataPrefix = TKeyPrefix(TKeyPrefix::TypeData, TPartitionId(0)).ToString();
+    bool hasMultipart = false;
+    bool hasContinuationKey = false;
+    for (const auto& rawKey : GetTabletKeys(tc)) {
+        if (rawKey.StartsWith(dataPrefix)) {
+            const auto key = TKey::FromString(rawKey);
+            hasMultipart |= key.GetInternalPartsCount() > 0;
+            hasContinuationKey |= key.GetPartNo() > 0;
+        }
+    }
+    UNIT_ASSERT(hasMultipart);
+    UNIT_ASSERT_VALUES_EQUAL(hasContinuationKey, acrossBlobs);
+
+    const auto check = [&]() {
+        for (ui64 i = 0; i < data.size(); ++i) {
+            AssertOrdinaryMessage(tc, 100 + i, 100 + i, data[i].first, data[i].second);
+        }
+    };
+    check();
+    PQTabletRestart(tc);
+    check();
+    CompactOrdinaryMessages(tc);
+    PQTabletRestart(tc);
+    check();
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartInOneBlob) {
+    CheckOrdinaryMultipartMessages(false);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartAcrossBlobs) {
+    CheckOrdinaryMultipartMessages(true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartInOneBlobRandomData) {
+    CheckOrdinaryMultipartMessages(false, true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartAcrossBlobsRandomData) {
+    CheckOrdinaryMultipartMessages(true, true);
+}
+
+TVector<TKey> GetOrdinaryDataKeys(TTestContext& tc) {
+    TVector<TKey> keys;
+    const auto prefix = TKeyPrefix(TKeyPrefix::TypeData, TPartitionId(0)).ToString();
+    for (const auto& rawKey : GetTabletKeys(tc)) {
+        if (rawKey.StartsWith(prefix)) {
+            keys.push_back(TKey::FromString(rawKey));
+        }
+    }
+    return keys;
+}
+
+TKey FindOrdinaryHeadKey(TTestContext& tc, ui64 offset, ui32 count) {
+    TMaybe<TKey> found;
+    for (const auto& key : GetOrdinaryDataKeys(tc)) {
+        if (key.IsHead() && key.GetOffset() == offset && key.GetCount() == count) {
+            UNIT_ASSERT_C(!found, "Multiple matching head keys");
+            found = key;
+        }
+    }
+    UNIT_ASSERT_C(found, "No head key with offset=" << offset << ", count=" << count);
+    return *found;
+}
+
+TString ReadOrdinaryStoredBlob(TTestContext& tc, const TKey& key) {
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    request->Record.AddCmdRead()->SetKey(key.ToString());
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+    TAutoPtr<IEventHandle> handle;
+    const auto* response = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.ReadResultSize(), 1);
+    const auto& result = response->Record.GetReadResult(0);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), static_cast<ui32>(NKikimrProto::OK));
+    return result.GetValue();
+}
+
+void CheckPersistedMixedHeadCompaction(bool enableAfterFirstWrite, bool multipart) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(50000);
+    const auto previousFlags = tc.Runtime->GetAppData(0).FeatureFlags;
+    Y_DEFER { InitMaxHeaderSize(previousFlags); };
+    SetOffsetDeltaWithoutBatching(tc, !enableAfterFirstWrite);
+    auto& config = tc.Runtime->GetAppData(0).PQConfig;
+    config.MutableCompactionConfig()->SetBlobsCount(1000);
+    config.MutableCompactionConfig()->SetBlobsSize(32_MB);
+    if (multipart) {
+        // Put the tail of the 9 MiB message below the 2 MiB level boundary.
+        // The following 1 MiB write will cross it, merging both head keys.
+        config.SetMaxBlobsPerLevel(256);
+    }
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TVector<std::pair<ui64, TString>> first = {
+        {1, MakeOrdinaryTestPayload(multipart ? 9_MB : 100_KB, 1, true)},
+    };
+    const TVector<std::pair<ui64, TString>> second = {
+        {2, MakeOrdinaryTestPayload(multipart ? 1_MB : 100_KB, 2, true)},
+    };
+    CmdWrite({.Partition = 0, .SourceId = "sourceid_mixed_head", .Data = first, .TestContext = tc, .Offset = 100});
+    CompactOrdinaryMessages(tc);
+    PQGetPartInfo(100, 101, tc);
+    const auto firstKey = FindOrdinaryHeadKey(tc, 100, 1);
+    UNIT_ASSERT_VALUES_EQUAL(firstKey.HasOffsetDelta(), !enableAfterFirstWrite);
+    UNIT_ASSERT_VALUES_EQUAL(firstKey.GetPartNo() > 0, multipart);
+    const TString firstBlob = ReadOrdinaryStoredBlob(tc, firstKey);
+    if (multipart) {
+        bool hasBeginning = false;
+        for (const auto& key : GetOrdinaryDataKeys(tc)) {
+            hasBeginning |= !key.HasSuffix() && key.GetOffset() == 100 && key.GetPartNo() == 0;
+        }
+        UNIT_ASSERT_C(hasBeginning, "The first message must span a body blob and a head blob");
+    }
+
+    SetOffsetDeltaWithoutBatching(tc, enableAfterFirstWrite);
+    PQTabletRestart(tc);
+    CmdWrite({.Partition = 0, .SourceId = "sourceid_mixed_head", .Data = second, .TestContext = tc, .Offset = 101});
+    bool hasNewKey = false;
+    for (const auto& key : GetOrdinaryDataKeys(tc)) {
+        if (key.IsFastWrite() && key.GetOffset() == 101 && key.GetCount() == 1) {
+            UNIT_ASSERT_VALUES_EQUAL(key.HasOffsetDelta(), enableAfterFirstWrite);
+            hasNewKey = true;
+        }
+    }
+    UNIT_ASSERT(hasNewKey);
+    UNIT_ASSERT(FindOrdinaryHeadKey(tc, 100, 1) == firstKey);
+
+    CompactOrdinaryMessages(tc);
+    PQGetPartInfo(100, 102, tc);
+    const auto mergedKey = FindOrdinaryHeadKey(tc, 100, 2);
+    // Compaction writes the merged key in the current format, preserving the packed batch headers.
+    UNIT_ASSERT_VALUES_EQUAL(mergedKey.HasOffsetDelta(), enableAfterFirstWrite);
+    if (enableAfterFirstWrite) {
+        // offset=100, endOffset=102, offsetDelta=2, including a multipart message's tail.
+        UNIT_ASSERT_VALUES_EQUAL(*mergedKey.GetOffsetDelta(), 2);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(mergedKey.GetPartNo(), firstKey.GetPartNo());
+    const TString mergedBlob = ReadOrdinaryStoredBlob(tc, mergedKey);
+    // This is the path that copies packed head batches without rewriting them.
+    UNIT_ASSERT(mergedBlob.StartsWith(firstBlob));
+    bool hasOldHeader = false;
+    bool hasNewHeader = false;
+    for (TBlobIterator it(mergedKey, mergedBlob); it.IsValid(); it.Next()) {
+        const auto batch = it.GetBatch();
+        UNIT_ASSERT(batch.GetOffset() == 100 || batch.GetOffset() == 101);
+        const bool old = batch.GetOffset() == 100;
+        UNIT_ASSERT_VALUES_EQUAL(batch.HasOffsetDelta(), old ? !enableAfterFirstWrite : enableAfterFirstWrite);
+        hasOldHeader |= old;
+        hasNewHeader |= !old;
+    }
+    UNIT_ASSERT(hasOldHeader && hasNewHeader);
+
+    const auto check = [&] {
+        AssertOrdinaryMessage(tc, 101, 101, 2, second[0].second);
+        AssertOrdinaryMessage(tc, 100, 100, 1, first[0].second);
+    };
+    check();
+    PQTabletRestart(tc);
+    UNIT_ASSERT(FindOrdinaryHeadKey(tc, 100, 2) == mergedKey);
+    check();
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingPersistedMixedHeadAfterEnable) {
+    CheckPersistedMixedHeadCompaction(true, false);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingPersistedMixedHeadAfterDisable) {
+    CheckPersistedMixedHeadCompaction(false, false);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingPersistedMultipartMixedHeadAfterEnable) {
+    CheckPersistedMixedHeadCompaction(true, true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingPersistedMultipartMixedHeadAfterDisable) {
+    CheckPersistedMixedHeadCompaction(false, true);
 }
 
 Y_UNIT_TEST(OffsetDeltaInKeysCanBeDisabledAfterWrites) {
@@ -5165,6 +5569,53 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlob) {
     PQGetPartInfo(1, 2, tc);
 
     WaitRetentionCleanup(tc, 2, 2, retentionSeconds);
+}
+
+void TestLegacyRetentionIdlePartition(bool subDomainOutOfSpace) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
+    constexpr ui32 retentionSeconds = 5;
+
+    PQTabletPrepare({.maxCountInPartition = 1000, .deleteTime = retentionSeconds, .partitions = 1,
+        .lowWatermark = 100, .meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS,
+        .AddDefaultConsumer = false}, {}, tc);
+
+    TString s{32, 'c'};
+    ui32 pp = 8 + 4 + 2 + 9;
+    TVector<std::pair<ui64, TString>> data;
+    for (ui32 i = 0; i < 10; ++i) {
+        data.push_back({i + 1, s.substr(pp)});
+    }
+    CmdWrite(0, "sourceid0", data, tc, false, {}, true);
+    CmdWrite(0, "sourceid1", data, tc, false);
+    CmdWrite(0, "sourceid2", data, tc, false);
+    PQGetPartInfo(0, 30, tc);
+
+    if (subDomainOutOfSpace) {
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, new TEvPQ::TEvSubDomainStatus(true), 0, GetPipeConfigWithRetries());
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvPQ::EvSubDomainStatus, 2);
+        tc.Runtime->DispatchEvents(options);
+    }
+
+    for (ui32 i = 0; i < 10; ++i) {
+        tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(retentionSeconds + 1));
+        DispatchUntilWakeup(tc);
+    }
+
+    PQGetPartInfo(20, 30, tc);
+}
+
+Y_UNIT_TEST(TestLegacyRetentionIdlePartition) {
+    TestLegacyRetentionIdlePartition(false);
+}
+
+Y_UNIT_TEST(TestLegacyRetentionIdlePartitionSubDomainOutOfSpace) {
+    TestLegacyRetentionIdlePartition(true);
 }
 
 Y_UNIT_TEST(TestRetentionDeletesLastBlobInFwz) {

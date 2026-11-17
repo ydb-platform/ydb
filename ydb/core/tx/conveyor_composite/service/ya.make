@@ -17,8 +17,9 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/config/validation
+    ydb/core/kqp/predictor
     ydb/core/kqp/runtime
     ydb/core/protos
     ydb/core/tx/conveyor_composite/tracing

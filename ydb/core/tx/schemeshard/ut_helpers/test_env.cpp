@@ -673,6 +673,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetDisableFileStoreSSDSystemSpaceAccounting(opts.DisableFileStoreSSDSystemSpaceAccounting_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
+    app.SetEnableCdcAggregator(opts.EnableCdcAggregator_);
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
     app.SetEnableAlterDatabaseCreateHiveFirst(opts.EnableAlterDatabaseCreateHiveFirst_);
     app.SetEnableTopicDiskSubDomainQuota(opts.EnableTopicDiskSubDomainQuota_);
@@ -1370,7 +1371,10 @@ void NSchemeShardUT_Private::TTestWithReboots::Prepare(const TString &dispatchNa
 
     TxId = 1000;
 
-    TestMkDir(*Runtime, TxId++, "/MyRoot", "DirA");
+    if (CreateDefaultDirectory) {
+        TestMkDir(*Runtime, TxId, "/MyRoot", "DirA");
+    }
+    ++TxId;
 
     // This allows tablet resolver to detect deleted tablets
     EnableTabletResolverScheduling();

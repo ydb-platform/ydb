@@ -23,6 +23,8 @@ struct TUserRequestContext : public TAtomicRefCount<TUserRequestContext> {
     TString SessionId;
     TDuration CurrentQueryStatsInterval = TDuration::Zero();
     bool UseBatchPool = false;
+    // TEvRead hints applied to row-table sources for this execution.
+    ui32 ReadHints = 0;
 
     // Workload manager info
     TString PoolId;

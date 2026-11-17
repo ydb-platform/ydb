@@ -218,9 +218,7 @@ protected:
             if (!IsSingleConsumerConnection(maybeInputConnection.Cast(), *getParents())) {
                 return aggregate;
             }
-        } else if (!IsDqCompletePureExpr(aggregateInput, /* isPrecomputePure */ false)
-            || !IsPureIsolatedLambda(aggregateInput.Ref())
-            || !IsKqpPureExpr(aggregateInput, /* checkDqSources */ true, /* checkIndexReads */ true)) {
+        } else if (!IsKqpCompletePureExpr(aggregateInput)) {
             return aggregate;
         }
 
@@ -436,7 +434,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteFlatMapOverFullTextMatch(TExprBase node, TExprContext& ctx) {
-        auto output = KqpRewriteFlatMapOverFullTextMatch(node, ctx, KqpCtx);
+        auto output = KqpRewriteFlatMapOverFullTextMatch(node, ctx, KqpCtx, TypesCtx);
         if (!output.IsValid()) {
             return {};
         }

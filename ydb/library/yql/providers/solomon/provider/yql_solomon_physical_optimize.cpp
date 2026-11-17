@@ -140,10 +140,6 @@ public:
     }
 
     TMaybeNode<TExprBase> SoWriteToShard(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
-        if (State_->IsRtmrMode()) {
-            return node;
-        }
-
         const auto write = node.Cast<TSoWriteToShard>();
         const auto stage =
             BuildSinkStage(write.Pos(), write.DataSink(), write.Shard(), write.Input(), ctx, getParents, /* allowPureStage */ false);

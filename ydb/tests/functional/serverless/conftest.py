@@ -89,7 +89,7 @@ def ydb_serverless_db_ctx(ydb_cluster, database, hostel_db, timeout_seconds=100,
         attributes={
             "cloud_id": "CLOUD_ID_VAL",
             "folder_id": "FOLDER_ID_VAL",
-            "database_id": "DATABASE_ID_VAL",
+            "database_id": database,
         },
     )
 
@@ -154,7 +154,7 @@ def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database, hostel_db,
         attributes={
             "cloud_id": "CLOUD_ID_VAL",
             "folder_id": "FOLDER_ID_VAL",
-            "database_id": "DATABASE_ID_VAL",
+            "database_id": database,
         },
     )
 
@@ -181,7 +181,7 @@ def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database, hostel_db,
         )
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture(scope='function')
 def ydb_serverless_db_with_exclusive_nodes(ydb_cluster, ydb_root, ydb_hostel_db, encryption_key):
     database_name = os.path.join(ydb_root, "serverless_with_exclusive_nodes")
 

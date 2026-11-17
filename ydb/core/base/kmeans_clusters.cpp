@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <span>
+#include <util/stream/str.h>
 
 namespace NKikimr::NKMeans {
 
@@ -78,6 +79,10 @@ namespace {
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3;
         else if (vectorType == "float8_e5m2")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2;
+        else if (vectorType == "uint4")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4;
+        else if (vectorType == "int4")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4;
         else if (vectorType == "uint8")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         else if (vectorType == "int8")
@@ -125,7 +130,7 @@ namespace {
 template <typename TCoord>
 struct TMetric {
     using TCoord_ = TCoord;
-    // Reduced-precision coordinates use float arithmetic and double sums.
+    // Reduced-precision floats use float arithmetic; packed 4-bit coordinates use int.
     using TArithmeticCoord = NVectorDistance::TArithmeticCoord<TCoord>;
     static constexpr bool IsFloatingPoint = std::is_floating_point_v<TArithmeticCoord>;
     using TSum = std::conditional_t<IsFloatingPoint, double, i64>;
@@ -353,13 +358,14 @@ public:
         return false;
     }
 
-    void FindClusters(const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+    void FindClustersImpl(ui32 clusterCount, std::function<TStringBuf(ui32)> getCentroid,
+        const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) {
         clusters.clear();
         if (!IsExpectedFormat(embedding)) {
             return;
         }
-        for (ui32 i = 0; const auto& cluster : Clusters) {
-            auto cl = std::make_pair(i, (double)TMetric::Distance(cluster, embedding));
+        for (ui32 i = 0; i < clusterCount; i++) {
+            auto cl = std::make_pair(i, (double)TMetric::Distance(getCentroid(i), embedding));
             // upper_bound, not lower_bound: on equal distances the cluster with the lower number wins,
             // the same way as in FindCluster(). Otherwise rows may be assigned to different clusters
             // during the K-means and the upload passes of the index build.
@@ -372,7 +378,6 @@ public:
                 clusters.insert(it, cl);
                 clusters.pop_back();
             }
-            ++i;
         }
         if (skipRatio > 0 && clusters.size() > 1) {
             double thresh = (clusters[0].second < 0 ? clusters[0].second/skipRatio : clusters[0].second*skipRatio);
@@ -383,6 +388,18 @@ public:
                 }
             }
         }
+    }
+
+    void FindClusters(const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        FindClustersImpl((ui32)Clusters.size(), [&](ui32 n) { return Clusters.at(n); }, embedding, clusters, n, skipRatio);
+    }
+
+    void FindClusters(TConstArrayRef<TStringBuf> centroids, const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        FindClustersImpl((ui32)centroids.size(), [&](ui32 n) { return centroids.at(n); }, embedding, clusters, n, skipRatio);
+    }
+
+    void FindClusters(TConstArrayRef<TCell> centroids, const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        FindClustersImpl((ui32)centroids.size(), [&](ui32 n) { return centroids.at(n).AsBuf(); }, embedding, clusters, n, skipRatio);
     }
 
     std::optional<ui32> FindCluster(const TStringBuf embedding) override {
@@ -454,6 +471,11 @@ public:
             return data.size() >= 2 && Dimensions == (data.size() - 2) * 8 - data[data.size() - 2];
         }
 
+        if constexpr (NVectorDistance::IsInt4<TCoord>) {
+            size_t count = 0;
+            return NKnnVectorSerialization::TryGetInt4ElementCount(TStringBuf(data.data(), data.size()), count)
+                && count == Dimensions;
+        }
         return data.size() == 1 + sizeof(TCoord) * Dimensions;
     }
 
@@ -472,6 +494,13 @@ public:
             return TStringBuilder() << "Vector dimension mismatch: got " << actualDim
                 << " expected " << Dimensions;
         }
+        if constexpr (NVectorDistance::IsInt4<TCoord>) {
+            size_t count = 0;
+            if (!NKnnVectorSerialization::TryGetInt4ElementCount(TStringBuf(data.data(), data.size()), count)) {
+                return "Invalid packed 4-bit vector payload or padding";
+            }
+            return TStringBuilder() << "Vector dimension mismatch: got " << count << " expected " << Dimensions;
+        }
         auto actualDim = (data.size() - 1) / sizeof(TCoord);
         return TStringBuilder() << "Vector dimension mismatch: got " << actualDim
             << " (size " << data.size() << " bytes) expected " << Dimensions
@@ -481,8 +510,11 @@ public:
     TString GetEmptyRow() const override {
         TString str;
         const size_t bufferSize = NKnnVectorSerialization::GetBufferSize<TCoord>(Dimensions);
-        str.resize(bufferSize);
+        str.resize(bufferSize, '\0');
         str[bufferSize - HeaderLen] = FormatByte;
+        if constexpr (NVectorDistance::IsInt4<TCoord>) {
+            str[bufferSize - HeaderLen - 1] = Dimensions % 2;
+        }
         if (IsBitQuantized()) {
             str[bufferSize - HeaderLen - 1] = 8 - Dimensions % 8;
         }
@@ -495,7 +527,11 @@ private:
     }
 
     auto GetCoords(const char* coords) const {
-        return std::span{reinterpret_cast<const TCoord*>(coords), Dimensions};
+        if constexpr (NVectorDistance::IsInt4<TCoord>) {
+            return NVectorDistance::TPackedInt4Coords<TCoord>(coords, Dimensions);
+        } else {
+            return std::span{reinterpret_cast<const TCoord*>(coords), Dimensions};
+        }
     }
 
     auto GetData(char* data) {
@@ -545,6 +581,29 @@ private:
     void Fill(TString& d, TSum* embedding, ui64& c) {
         Y_ENSURE(c > 0);
         const auto count = static_cast<TSum>(c);
+
+        if constexpr (NVectorDistance::IsInt4<TCoord>) {
+            TString packed;
+            TStringOutput output(packed);
+            NKnnVectorSerialization::TSerializer<TCoord> serializer(&output);
+            double norm = 0, scale = 0;
+            if constexpr (TMetric::AggregateNormalized) {
+                norm = GetCentroidNorm(embedding, c);
+                scale = GetNormalizedScale(embedding, c, norm);
+            }
+            for (size_t i = 0; i < Dimensions; ++i) {
+                double value;
+                if constexpr (TMetric::AggregateNormalized) {
+                    value = norm != 0 ? std::round(static_cast<double>(embedding[i]) / (static_cast<double>(c) * norm) * scale) : 0;
+                } else {
+                    value = embedding[i] / count;
+                }
+                serializer.HandleElement(TCoord(static_cast<int>(value)));
+            }
+            serializer.Finish();
+            d = std::move(packed);
+            return;
+        }
 
         if constexpr (TMetric::AggregateNormalized) {
             const double norm = GetCentroidNorm(embedding, c);
@@ -647,6 +706,10 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
             return handleMetric.template operator()<TFloat8E4M3>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2:
             return handleMetric.template operator()<TFloat8E5M2>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4:
+            return handleMetric.template operator()<TUint4>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4:
+            return handleMetric.template operator()<TInt4>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
             return handleMetric.template operator()<ui8>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
@@ -706,6 +769,18 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
                 return nullptr;
             }
             break;
+        case EFormat::Uint4Vector:
+        case EFormat::Int4Vector: {
+            size_t count = 0;
+            if (!NKnnVectorSerialization::TryGetInt4ElementCount(targetVector, count) || count == 0) {
+                error = "Invalid packed 4-bit target vector payload or padding";
+                return nullptr;
+            }
+            settings.set_vector_type(formatByte == EFormat::Uint4Vector
+                ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4 : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4);
+            settings.set_vector_dimension(count);
+            break;
+        }
         case EFormat::Uint8Vector:
             if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8, sizeof(ui8), "uint8")) {
                 return nullptr;
@@ -740,8 +815,13 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
 }
 
 namespace {
-    bool ValidateSettingsImpl(const Ydb::Table::VectorIndexSettings& settings, bool partial, TString& error) {
-        if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+    bool ValidateSettingsImpl(const Ydb::Table::VectorIndexSettings& settings, bool partial, TString& error, bool hnsw = false) {
+        auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count();
+        if (!hnsw) {
+            unknownCount += settings.has_m() + settings.has_ef_construction()
+                + settings.has_min_rows() + settings.has_delta_rows();
+        }
+        if (unknownCount > 0) {
             error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
             return false;
         }
@@ -752,6 +832,15 @@ namespace {
         }
         if (!Ydb::Table::VectorIndexSettings::Metric_IsValid(settings.metric())) {
             error = TStringBuilder() << "Invalid metric: " << static_cast<int>(settings.metric());
+            return false;
+        }
+
+        if (settings.has_m()
+            && !ValidateSettingInRange("M", settings.m(), MinHnswM, MaxHnswM, error)) {
+            return false;
+        }
+        if (settings.has_ef_construction()
+            && !ValidateSettingInRange("ef_construction", settings.ef_construction(), 1, MaxHnswEfConstruction, error)) {
             return false;
         }
 
@@ -800,8 +889,9 @@ namespace {
         return true;
     }
 
-    bool ValidateSettingsImpl(const Ydb::Table::KMeansTreeSettings& settings, bool partial, TString& error) {
+    bool ValidateSettingsImpl(const Ydb::Table::KMeansTreeSettings& settings, bool partial, TString& error, bool hnsw = false) {
         error = "";
+        const ui64 minClusters = hnsw ? 1 : MinClusters;
 
         if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
             error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
@@ -813,7 +903,7 @@ namespace {
             return false;
         }
 
-        if (!ValidateSettingsImpl(settings.settings(), partial, error)) {
+        if (!ValidateSettingsImpl(settings.settings(), partial, error, hnsw)) {
             return false;
         }
 
@@ -831,7 +921,7 @@ namespace {
             if (settings.has_clusters()) {
                 if (!ValidateSettingInRange("clusters",
                     std::optional<ui64>(settings.clusters()),
-                    MinClusters, MaxClusters,
+                    minClusters, MaxClusters,
                     error))
                 {
                     return false;
@@ -848,7 +938,7 @@ namespace {
 
             if (!ValidateSettingInRange("clusters",
                 settings.has_clusters() ? std::optional<ui64>(settings.clusters()) : std::nullopt,
-                MinClusters, MaxClusters,
+                minClusters, MaxClusters,
                 error))
             {
                 return false;
@@ -905,6 +995,14 @@ bool ValidateSettingsPartial(const Ydb::Table::VectorIndexSettings& settings, TS
 
 bool ValidateSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
     return ValidateSettingsImpl(settings, true, error);
+}
+
+bool ValidateHnswSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
+    return ValidateSettingsImpl(settings, false, error, true);
+}
+
+bool ValidateHnswSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
+    return ValidateSettingsImpl(settings, true, error, true);
 }
 
 ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector) {
@@ -989,6 +1087,21 @@ bool AutoSelectVectorSettings(Ydb::Table::VectorIndexSettings& vectorSettings, c
             vectorSettings.set_vector_dimension(embedding.size() - HeaderLen);
         }
         break;
+    case EFormat::Uint4Vector:
+    case EFormat::Int4Vector: {
+        size_t count = 0;
+        if (!NKnnVectorSerialization::TryGetInt4ElementCount(embedding, count) || count == 0) {
+            return false;
+        }
+        if (!hasVectorType) {
+            vectorSettings.set_vector_type(formatByte == EFormat::Uint4Vector
+                ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4 : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4);
+        }
+        if (!hasVectorDimension) {
+            vectorSettings.set_vector_dimension(count);
+        }
+        break;
+    }
     case EFormat::Uint8Vector:
         if (!hasVectorType) {
             vectorSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);

@@ -318,12 +318,11 @@ public:
     }
 
     TLockFeatures* GetLockOptional(const ui64 lockId) {
-        auto it = LockFeatures.find(lockId);
-        if (it != LockFeatures.end()) {
-            return &it->second;
-        } else {
-            return nullptr;
-        }
+        return LockFeatures.FindPtr(lockId);
+    }
+
+    const TLockFeatures* GetLockOptional(const ui64 lockId) const {
+        return LockFeatures.FindPtr(lockId);
     }
 
     bool HasReadLocks(const TInternalPathId pathId) const {

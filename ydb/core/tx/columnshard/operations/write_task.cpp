@@ -1,0 +1,101 @@
+#include "write_task.h"
+
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
+#include <ydb/core/tx/columnshard/tracing/probes.h>
+#include <ydb/core/tx/columnshard/tracing/write_orbit.h>
+#include <ydb/core/tx/data_events/write_data.h>
+
+namespace NKikimr::NColumnShard {
+
+LWTRACE_USING(YDB_CS);
+
+namespace {
+TString OverloadReason(const EOverloadStatus status) {
+    switch (status) {
+        case EOverloadStatus::SmallBlobsQuota:
+            return "The small blobs quota has been exhausted. Please wait for compaction to finish or delete unused data.";
+        case EOverloadStatus::OverloadMetadata:
+            return "The index metadata limit has been exceeded. Please wait for compaction to finish or delete unused data.";
+        case EOverloadStatus::OverloadCompaction:
+            return "The compaction queue is overloaded. Please wait for compaction to finish or reduce the database load.";
+        case EOverloadStatus::Disk:
+            return "The disk quota has been exhausted. Please increase the available database disk resources or delete unused data.";
+        case EOverloadStatus::ShardTxInFly:
+            return "The local transaction limit has been exceeded. Please add more resources or reduce the database load.";
+        case EOverloadStatus::ShardWritesInFly:
+            return "The limit on the number of in-flight write requests to a shard has been exceeded. Please add more resources or reduce the "
+                   "database load.";
+        case EOverloadStatus::ShardWritesSizeInFly:
+            return "The limit on the total size of in-flight write requests to the shard has been exceeded. Please add more resources or reduce "
+                   "the database load.";
+        case EOverloadStatus::RejectProbability:
+            return "The local database is overloaded. Please add more resources or reduce the database load.";
+        case EOverloadStatus::None:
+            return {};
+    }
+}
+
+}   // namespace
+
+bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
+    owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(ctx.Monotonic() - Created);
+    if (Orbit) {
+        LWTRACK(WriteDequeued, *Orbit, PathId.GetInternalPathId().GetRawValue(), owner->TabletID(), TxId, Cookie, ctx.Monotonic() - Created);
+    }
+
+    owner->OperationsManager->RegisterLock(LockId, owner->Generation());
+    owner->SubscribeLockIfNotAlready(LockId, LockNodeId);
+    auto writeOperation =
+        owner->OperationsManager->CreateWriteOperation(PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, IsBulk);
+
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+        {"writingSize", ArrowData->GetSize()},
+        {"operationId", writeOperation->GetIdentifier()},
+        {"inFlight", NOverload::TOverloadManagerServiceOperator::GetShardWritesInFly()},
+        {"sizeInFlight", NOverload::TOverloadManagerServiceOperator::GetShardWritesSizeInFly()});
+
+    AFL_VERIFY(writeOperation);
+    writeOperation->SetBehaviour(Behaviour);
+    writeOperation->SetDeadline(GetDeadline());
+    const auto applyToMvccSnapshot = MvccSnapshot.Valid() ? MvccSnapshot : owner->GetMaxReadVersionForSchema(Schema->GetVersion());
+    NOlap::TWritingContext wContext(owner->TabletID(), owner->SelfId(), Schema, owner->StoragesManager,
+        owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, applyToMvccSnapshot, LockId,
+        LockMode, writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationPortionsWriteActorId,
+        IsBulk, !owner->TablesManager.GetPrimaryIndexSafe().AreAllPortionsLoaded(PathId.GetInternalPathId()));
+    // We don't need to split here portions by the last level
+    // ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId.InternalPathId)->GetBucketPositions());
+    writeOperation->Start(*owner, ArrowData, SourceId, wContext, Orbit, TxId, ReceivedAt);
+    return true;
+}
+
+void TWriteTask::Abort(
+    TColumnShard* owner, const TString& reason, const TActorContext& ctx, const NKikimrDataEvents::TEvWriteResult::EStatus& status) const {
+    if (Orbit) {
+        TrackWriteFailed(*Orbit, PathId.GetInternalPathId().GetRawValue(), owner->TabletID(), TxId, Cookie, SourceId.ToString(), "write_queue",
+            ToString(status), reason);
+    }
+    auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(owner->TabletID(), TxId, status, reason);
+    owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
+    ctx.Send(SourceId, result.release(), 0, Cookie);
+}
+
+void TWriteTask::FailByOverload(TColumnShard* owner, const EOverloadStatus overloadStatus, const TActorContext& ctx) const {
+    AFL_VERIFY(overloadStatus != EOverloadStatus::None);
+    const TString reason = TStringBuilder{} << "Column shard " << owner->TabletID()
+                                            << " is overloaded. Reason: " << OverloadReason(overloadStatus);
+    if (Orbit) {
+        TrackWriteFailed(*Orbit, PathId.GetInternalPathId().GetRawValue(), owner->TabletID(), TxId, Cookie, SourceId.ToString(), "write_queue",
+            ToString(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED), reason);
+    }
+    auto result =
+        NEvents::TDataEvents::TEvWriteResult::BuildError(owner->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, reason);
+    owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
+    // only a timeout answers here, and the writer gives up at the same deadline: a subscription would reach nobody
+    owner->OverloadWriteFail(overloadStatus, NEvWrite::TWriteMeta(0, PathId, SourceId, {}, TGUID::CreateTimebased().AsGuidString(),
+                                                 owner->Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters()), ArrowData->GetSize(),
+        Cookie, std::move(result), ctx);
+}
+
+}   // namespace NKikimr::NColumnShard

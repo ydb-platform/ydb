@@ -47,7 +47,8 @@ public:
         Done,
         Removing,
         Paused,
-        Attaching,
+        Attaching, // Deprecated.
+        WaitingImport,
         Error = Max<ui8>()
     };
 
@@ -97,8 +98,6 @@ public:
 
         virtual const TPathId& GetDstPathId() const = 0;
         virtual void SetDstPathId(const TPathId& value) = 0;
-        virtual const TPathId& GetPendingDstPathId() const = 0;
-        virtual void SetPendingDstPathId(const TPathId& value) = 0;
 
         virtual const TString& GetStreamName() const = 0;
         virtual void SetStreamName(const TString& value) = 0;

@@ -26,15 +26,15 @@ IInvoker* GetCurrentInvoker();
  *  different from the "truly synchronous" invoker that always invokes actions synchronously,
  *  which corresponds to DFS over the recursion tree.
  */
-IInvokerPtr GetSyncInvoker();
+const IInvokerPtr& GetSyncInvoker();
 
 //! Returns the null invoker, i.e. the invoker whose |Invoke|
 //! method does nothing.
-IInvokerPtr GetNullInvoker();
+const IInvokerPtr& GetNullInvoker();
 
 //! Returns a special per-process invoker that handles all asynchronous finalization
 //! activities (fiber unwinding, abandoned promise cancelation etc).
-IInvokerPtr GetFinalizerInvoker();
+const IInvokerPtr& GetFinalizerInvoker();
 
 //! Returns a callback that runs #onSuccess when invoked or #onCancel when
 //! destroyed without having been invoked (e.g. discarded by an invoker).

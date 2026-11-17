@@ -43,11 +43,30 @@ SRCS(
     tty.cpp
     tty.h
     url_builder.cpp
-    utf8.cpp
     yql_panic.cpp
     yql_panic.h
     yql_paths.cpp
     yql_paths.h
+    cast.cpp
+    checked_deref_ptr.cpp
+    fp_bits.cpp
+    fp_bits.h
+    is_pod.cpp
+    is_pod.h
+    prefetch.cpp
+    prefetch.h
+    range_walker.cpp
+    range_walker.h
+    resetable_setting.cpp
+    runnable.cpp
+    runtime_dispatch.cpp
+    runtime_dispatch.h
+    std_allocator.cpp
+    std_allocator.h
+    unaligned_read.cpp
+    unaligned_read.h
+    utf8.cpp
+    utf8.h
 )
 
 PEERDIR(
@@ -57,6 +76,7 @@ PEERDIR(
     library/cpp/string_utils/quote
     library/cpp/threading/future
     library/cpp/deprecated/atomic
+    yql/essentials/public/utf8
 )
 
 END()

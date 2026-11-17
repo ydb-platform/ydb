@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
+    kqp_stage_graph_ut.cpp
     kqp_rbo_compatibility_ut.cpp
     kqp_rbo_lowering_ut.cpp
     kqp_rbo_yql_physical_ut.cpp

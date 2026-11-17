@@ -371,11 +371,13 @@ namespace NKikimr {
         TString StreamId; // unique stream id provided by the user (guid, possibly)
         TMaybe<ui64> TabletId; // tablet filter
         TMaybe<ui8> Channel; // channel filter
+        bool FullMemRec; // stream whole TMemRecLogoBlob instead of ingress only
 
-        TEvMonStreamQuery(TString streamId, TMaybe<ui64> tabletId, TMaybe<ui8> channel)
+        TEvMonStreamQuery(TString streamId, TMaybe<ui64> tabletId, TMaybe<ui8> channel, bool fullMemRec = false)
             : StreamId(std::move(streamId))
             , TabletId(tabletId)
             , Channel(channel)
+            , FullMemRec(fullMemRec)
         {}
     };
 

@@ -322,6 +322,7 @@ runs:
           ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
+          --remove-cpu-detect-via-ram
           -DUSE_EAT_MY_DATA
           --add-peerdirs-tests all
           --cleanup-child-processes
@@ -385,7 +386,7 @@ runs:
         fi
 
         params+=(
-          -DCONSISTENT_DEBUG --no-dir-outputs
+          -DCONSISTENT_DEBUG
           # Keep chunk archives separate to avoid merging and repacking them.
           --dont-merge-split-tests
           --test-failure-code 0 --build-all

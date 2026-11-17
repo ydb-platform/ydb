@@ -2,10 +2,12 @@
 
 #include "ydb_command.h"
 #include "ydb_common.h"
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_bridge.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_bridge.h>
 
 #include <util/generic/string.h>
+
+#include <optional>
 #include <vector>
 
 namespace NYdb::NConsoleClient {
@@ -23,7 +25,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    TString TargetDatabase;
+    TString DatabasePath;
     bool Bridged = false;
     TString RetainPile;
 };
@@ -40,6 +42,7 @@ private:
 
     TVector<TString> PileStateUpdates;
     TString FilePath;
+    std::optional<ui64> ExpectedGeneration;
 
     std::vector<NYdb::NBridge::TPileStateUpdate> Updates;
 };
@@ -52,8 +55,30 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    bool AllowEmptyDatabase;
+    enum class EView { Piles, Databases, Groups };
+
+    const bool AllowEmptyDatabase;
+    EView View = EView::Piles;
     bool Detailed = false;
+    bool NotSynced = false;
+    TString DatabasePath;
+    TString StoragePool;
+    std::optional<NBridge::TStoragePoolId> StoragePoolId;
+    std::optional<TString> PileName;
+    std::optional<NBridge::EStorageMode> StorageModeFilter;
+};
+
+class TCommandBridgeRollback : public TYdbCommand {
+public:
+    TCommandBridgeRollback(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    bool Prompt(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase = false;
+    bool SkipBscValidation = false;
 };
 
 class TCommandBridgeSwitchover : public TYdbCommand {

@@ -15,7 +15,9 @@ void TBlobStorageController::UpdateGroupStateActor(TGroupId groupId) {
             && !StoragePools.at(group->StoragePoolId).BridgeMode) {
         message->Info.emplace();
         message->Info->Generation = group->Generation;
+        message->Info->Topology = group->Topology;
         message->Info->States = *group->FailRealmStates;
+        message->Info->GroupState = group->Mirror3dcState;
         for (const TIndirectReferable<TVSlotInfo>::TPtr& slot : group->VDisksInGroup) {
             message->Info->VDisks.push_back({slot->GetVDiskId(),
                 MakeBlobStorageVDiskID(slot->VSlotId.NodeId, slot->VSlotId.PDiskId, slot->VSlotId.VSlotId)});

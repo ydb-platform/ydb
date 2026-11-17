@@ -10,9 +10,9 @@ $ws_wh = (
         ws1.ws_warehouse_sk AS wh1,
         ws2.ws_warehouse_sk AS wh2
     FROM
-        `/Root/test/ds/web_sales` AS ws1
+        `web_sales` AS ws1
     ,
-        `/Root/test/ds/web_sales` AS ws2
+        `web_sales` AS ws2
     WHERE
         ws1.ws_order_number == ws2.ws_order_number
         AND ws1.ws_warehouse_sk != ws2.ws_warehouse_sk
@@ -23,13 +23,13 @@ SELECT
     Sum(ws_ext_ship_cost) AS `total shipping cost`,
     Sum(ws_net_profit) AS `total net profit`
 FROM
-    `/Root/test/ds/web_sales` AS ws1
+    `web_sales` AS ws1
 ,
-    `/Root/test/ds/date_dim`
+    `date_dim`
 ,
-    `/Root/test/ds/customer_address`
+    `customer_address`
 ,
-    `/Root/test/ds/web_site`
+    `web_site`
 WHERE
     CAST(d_date AS Date) BETWEEN CAST('1999-5-01' AS Date) AND (
         CAST('1999-5-01' AS Date) + DateTime::IntervalFromDays(60)
@@ -49,7 +49,7 @@ WHERE
         SELECT
             wr_order_number
         FROM
-            `/Root/test/ds/web_returns`
+            `web_returns`
         ,
             $ws_wh AS ws_wh
         WHERE

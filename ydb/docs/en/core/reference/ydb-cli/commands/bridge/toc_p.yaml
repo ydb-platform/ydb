@@ -3,17 +3,19 @@ items:
     href: index.md
   - name: ydb admin cluster bridge convert
     href: convert.md
-  - name: ydb admin cluster bridge add-pile
-    href: add-pile.md
   - name: ydb admin cluster bridge list
     href: list.md
+  - name: ydb admin cluster bridge provision-pile
+    href: provision-pile.md
+  - name: ydb admin cluster bridge join-pile (rejoin)
+    href: rejoin.md
   - name: ydb admin cluster bridge switchover
     href: switchover.md
   - name: ydb admin cluster bridge failover
     href: failover.md
   - name: ydb admin cluster bridge takedown
     href: takedown.md
-  - name: ydb admin cluster bridge rejoin
-    href: rejoin.md
-  - name: ydb admin cluster bridge remove-pile
-    href: remove-pile.md
+  - name: ydb admin cluster bridge destroy-pile
+    href: destroy-pile.md
+  - name: ydb admin cluster bridge set-database-mode
+    href: set-database-mode.md

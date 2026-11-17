@@ -8,6 +8,8 @@
 
 #include <util/string/builder.h>
 
+#include <optional>
+
 namespace NKikimr::NSysView {
 namespace {
 
@@ -32,6 +34,24 @@ TTableDescription MakeTableDescription() {
     cover->SetTypeId(NScheme::NTypeIds::Uint32);
     table.AddKeyColumnIds(1);
     table.AddKeyColumnNames("key");
+    return table;
+}
+
+TTableDescription MakeTableWithColumnFamilies(EColumnCodec codec, std::optional<i32> level = std::nullopt) {
+    auto table = MakeTableDescription();
+    table.MutableColumns(1)->SetFamily(1);
+    table.MutableColumns(1)->SetFamilyName("archive");
+    for (ui32 id : {0, 1}) {
+        auto* family = table.MutablePartitionConfig()->AddColumnFamilies();
+        family->SetId(id);
+        if (id) {
+            family->SetName("archive");
+        }
+        family->SetColumnCodec(codec);
+        if (level) {
+            family->SetColumnCodecLevel(*level);
+        }
+    }
     return table;
 }
 
@@ -94,6 +114,39 @@ void AssertQueryEqual(TFormatResult result, const TString& expected) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(CreateTableFormatter) {
+    Y_UNIT_TEST(ZstdColumnFamilyCompressionLevels) {
+        for (const i32 level : {0, 7, 22}) {
+            auto table = MakeTableWithColumnFamilies(ColumnCodecZSTD, level);
+
+            TCreateTableFormatter formatter;
+            AssertQueryEqual(formatter.Format("table", "/Root/table", table, false, {}, {}),
+                TStringBuilder() << "CREATE TABLE `table` ("
+                    << "`key` Uint64, `value` String FAMILY `archive`, `cover` Uint32, "
+                    << "FAMILY `default` (COMPRESSION = 'zstd', COMPRESSION_LEVEL = " << level << "), "
+                    << "FAMILY `archive` (COMPRESSION = 'zstd', COMPRESSION_LEVEL = " << level << "), "
+                    << "PRIMARY KEY (`key`));");
+        }
+    }
+
+    Y_UNIT_TEST(ColumnFamilyCompressionWithoutLevel) {
+        const std::pair<EColumnCodec, TString> cases[] = {
+            {ColumnCodecPlain, "off"},
+            {ColumnCodecLZ4, "lz4"},
+            {ColumnCodecZSTD, "zstd"},
+        };
+        for (const auto& [codec, compression] : cases) {
+            auto table = MakeTableWithColumnFamilies(codec);
+
+            TCreateTableFormatter formatter;
+            AssertQueryEqual(formatter.Format("table", "/Root/table", table, false, {}, {}),
+                TStringBuilder() << "CREATE TABLE `table` ("
+                    << "`key` Uint64, `value` String FAMILY `archive`, `cover` Uint32, "
+                    << "FAMILY `default` (COMPRESSION = '" << compression << "'), "
+                    << "FAMILY `archive` (COMPRESSION = '" << compression << "'), "
+                    << "PRIMARY KEY (`key`));");
+        }
+    }
+
     Y_UNIT_TEST(GlobalIndexTypes) {
         const std::pair<EIndexType, TString> cases[] = {
             {EIndexTypeGlobal, "GLOBAL SYNC"},
@@ -135,6 +188,27 @@ Y_UNIT_TEST_SUITE(CreateTableFormatter) {
             AssertQueryEqual(disabledFormatter.Format("table", "/Root/table", table, false, {}, {}), inlineQuery);
             AssertQueryEqual(separateFormatter.Format("table", "/Root/table", table, false, {}, {}), separateQuery);
         }
+    }
+
+    Y_UNIT_TEST_TWIN(Int4VectorIndex, Signed) {
+        auto table = MakeTableDescription();
+        auto& index = AddIndex(table, EIndexTypeGlobalVectorKmeansTree);
+        auto* settings = index.MutableVectorIndexKmeansTreeDescription()->MutableSettings()->mutable_settings();
+        settings->set_vector_type(Signed
+            ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4
+            : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4);
+        const TString type = Signed ? "int4" : "uint4";
+        const TString indexQuery = TStringBuilder()
+            << "INDEX `idx` GLOBAL USING vector_kmeans_tree ON (`value`) "
+            << "WITH (distance = cosine, vector_type = '" << type << "', vector_dimension = 8, clusters = 4, levels = 2)";
+        const TString columns = "`key` Uint64, `value` String, `cover` Uint32";
+        TCreateTableFormatter formatter;
+        AssertQueryEqual(formatter.Format("table", "/Root/table", table, false, {}, {}),
+            TStringBuilder() << "CREATE TABLE `table` (" << columns << ", " << indexQuery << ", PRIMARY KEY (`key`));");
+        TCreateTableFormatter separateFormatter(true);
+        AssertQueryEqual(separateFormatter.Format("table", "/Root/table", table, false, {}, {}),
+            TStringBuilder() << "CREATE TABLE `table` (" << columns << ", PRIMARY KEY (`key`));"
+                << "ALTER TABLE `table` ADD " << indexQuery << ";");
     }
 
     Y_UNIT_TEST_TWIN(Float8VectorIndex, E5M2) {

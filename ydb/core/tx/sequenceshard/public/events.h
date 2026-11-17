@@ -26,6 +26,8 @@ namespace NSequenceShard {
             EvRedirectSequenceResult,
             EvGetSequence,
             EvGetSequenceResult,
+            EvAdvanceSequence,
+            EvAdvanceSequenceResult,
             EvEnd,
         };
 
@@ -446,6 +448,58 @@ namespace NSequenceShard {
             TEvGetSequenceResult() = default;
 
             TEvGetSequenceResult(EStatus status, ui64 origin) {
+                Record.SetStatus(status);
+                Record.SetOrigin(origin);
+            }
+        };
+
+        struct TEvAdvanceSequence
+            : public TEventPB<TEvAdvanceSequence, NKikimrTxSequenceShard::TEvAdvanceSequence, EvAdvanceSequence>
+        {
+            TEvAdvanceSequence() = default;
+
+            explicit TEvAdvanceSequence(const TPathId& pathId) {
+                SetPathId(pathId);
+            }
+
+            void SetPathId(const TPathId& pathId) {
+                auto* p = Record.MutablePathId();
+                p->SetOwnerId(pathId.OwnerId);
+                p->SetLocalId(pathId.LocalPathId);
+            }
+
+            TPathId GetPathId() const {
+                const auto& p = Record.GetPathId();
+                return TPathId(p.GetOwnerId(), p.GetLocalId());
+            }
+
+            struct TBuilder {
+                THolder<TEvAdvanceSequence> Msg;
+
+                TBuilder&& SetObserved(i64 observedMin, i64 observedMax) && {
+                    Msg->Record.SetObservedMin(observedMin);
+                    Msg->Record.SetObservedMax(observedMax);
+                    return std::move(*this);
+                }
+
+                THolder<TEvAdvanceSequence> Done() && {
+                    return std::move(Msg);
+                }
+            };
+
+            static TBuilder Build(const TPathId& pathId) {
+                return TBuilder{ MakeHolder<TEvAdvanceSequence>(pathId) };
+            }
+        };
+
+        struct TEvAdvanceSequenceResult
+            : public TEventPB<TEvAdvanceSequenceResult, NKikimrTxSequenceShard::TEvAdvanceSequenceResult, EvAdvanceSequenceResult>
+        {
+            using EStatus = NKikimrTxSequenceShard::TEvAdvanceSequenceResult::EStatus;
+
+            TEvAdvanceSequenceResult() = default;
+
+            TEvAdvanceSequenceResult(EStatus status, ui64 origin) {
                 Record.SetStatus(status);
                 Record.SetOrigin(origin);
             }

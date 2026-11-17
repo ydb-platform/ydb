@@ -70,6 +70,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
         "enable_dq_source_stream_lookup_join_shuffle_mode", True
     )
+    enable_streaming_aggregation = param.get("enable_streaming_aggregation", True)
 
     extra_feature_flags = {
         "enable_streaming_queries_counters",
@@ -86,7 +87,6 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.update({"enable_exactly_once_topics_writing", "enable_topic_deferred_publish"})
 
     for flag in (
-        "enable_streaming_aggregation",
         "enable_streaming_aggregation_advanced",
         "enable_streaming_query_state_recompute",
     ):
@@ -129,6 +129,11 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.add("enable_external_data_sources")
     else:
         disabled_feature_flags.append("enable_external_data_sources")
+
+    if enable_streaming_aggregation:
+        extra_feature_flags.add("enable_streaming_aggregation")
+    else:
+        disabled_feature_flags.append("enable_streaming_aggregation")
 
     replication_config = {
         "iam_service_control": {

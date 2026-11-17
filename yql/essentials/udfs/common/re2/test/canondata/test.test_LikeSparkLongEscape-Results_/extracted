@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>:3:8: Error: yql/essentials/udfs/common/re2/re2_udf.cpp:xxx: LIKE escape must be a single character
+	SELECT $pattern_from_like('ab', 'ab');
+	       ^

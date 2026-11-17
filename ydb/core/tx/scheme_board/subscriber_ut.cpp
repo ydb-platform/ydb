@@ -845,6 +845,72 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
         }
     }
 
+    Y_UNIT_TEST(ReplicaConfigMismatchWithCurrentSyncRequest) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
+
+        const auto stateStorageInfo = GetStateStorageInfo(runtime);
+        const auto participatingReplicas = CountParticipatingReplicas(*stateStorageInfo);
+
+        constexpr int DomainId = 1;
+        constexpr const char* Path = "TestPath";
+        const TActorId edge = runtime.AllocateEdgeActor();
+
+        const TActorId subscriber = runtime.Register(CreateSchemeBoardSubscriber(edge, Path, DomainId));
+        TBlockEvents<NInternalEvents::TEvNotify> notificationBlocker(runtime, [&](const NInternalEvents::TEvNotify::TPtr& ev) {
+            return ev->Recipient == subscriber;
+        });
+        runtime.WaitFor("initial path lookups", [&]() {
+            return notificationBlocker.size() == participatingReplicas;
+        }, TDuration::Seconds(10));
+        notificationBlocker.Stop().Unblock();
+
+        const auto requiredReplicas = GetReplicasRequiredForQuorum(stateStorageInfo->RingGroups);
+        for (const auto& replica : stateStorageInfo->SelectAllReplicas()) {
+            if (!FindPtr(requiredReplicas, replica)) {
+                runtime.Send(replica, edge, new TEvents::TEvPoisonPill());
+            }
+        }
+
+        const auto replica = requiredReplicas.front();
+        const auto replicaActor = runtime.GetLocalServiceId(replica);
+        HandshakeReplica(runtime, replica, edge);
+
+        constexpr ui64 cookie = 12345;
+        TBlockEvents<NInternalEvents::TEvSyncVersionRequest> syncRequestBlocker(runtime, [&](const NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
+            return ev->GetRecipientRewrite() == replicaActor && ev->Cookie == cookie;
+        });
+        runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, cookie));
+        runtime.WaitFor("sync request at replica", [&]() {
+            return syncRequestBlocker.size() == 1;
+        }, TDuration::Seconds(10));
+
+        const auto replicaSubscriber = syncRequestBlocker.front()->Sender;
+        TBlockEvents<NInternalEvents::TEvNotify> mismatchBlocker(runtime, [&](const NInternalEvents::TEvNotify::TPtr& ev) {
+            return ev->Recipient == replicaSubscriber;
+        });
+        auto newConfig = MakeIntrusive<TStateStorageInfo>(*stateStorageInfo);
+        newConfig->ClusterStateGeneration++;
+        runtime.Send(replica, edge, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, nullptr, newConfig));
+        runtime.Send(replica, edge, GenerateUpdate(GenerateDescribe(Path, TPathId(DomainId, 1), 1)));
+        runtime.WaitFor("notification with mismatched cluster state", [&]() {
+            return mismatchBlocker.size() == 1;
+        }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(mismatchBlocker.front()->Get()->GetRecord().GetClusterState().GetGeneration(), newConfig->ClusterStateGeneration);
+        mismatchBlocker.Stop().Unblock();
+        syncRequestBlocker.Stop().Unblock();
+
+        const auto syncResponse = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT(syncResponse);
+        UNIT_ASSERT_VALUES_EQUAL(syncResponse->Sender, subscriber);
+        UNIT_ASSERT_VALUES_EQUAL(syncResponse->Cookie, cookie);
+        UNIT_ASSERT_VALUES_EQUAL(syncResponse->Get()->Path, Path);
+        UNIT_ASSERT(syncResponse->Get()->Partial);
+        UNIT_ASSERT_VALUES_EQUAL(CountEvents<NInternalEvents::TEvSyncResponse>(runtime, false, edge), 0);
+    }
+
     Y_UNIT_TEST(ReconfigurationWithDelayedSyncRequest) {
         TTestBasicRuntime runtime;
         SetupMinimalRuntime(runtime);

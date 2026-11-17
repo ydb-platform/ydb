@@ -70,7 +70,9 @@ LIBRARY()
     )
 
     PEERDIR(
-        ydb/core/blobstorage/vdisk/common
+        ydb/core/blobstorage/base
+        ydb/core/blobstorage/groupinfo
+        ydb/core/blobstorage/testing/group_overseer
         ydb/core/tablet_flat
         ydb/core/protos
         ydb/core/wrappers

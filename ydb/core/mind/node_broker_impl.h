@@ -92,6 +92,8 @@ private:
 
     static constexpr TDuration MIN_LEASE_DURATION = TDuration::Minutes(5);
 
+    // the location with the pile name set, or dropped for nullopt
+    static TNodeLocation WithBridgePileName(const TNodeLocation& location, const std::optional<TString>& pileName);
 
     struct TNodeInfo : public TEvInterconnect::TNodeInfo {
         TNodeInfo() = delete;

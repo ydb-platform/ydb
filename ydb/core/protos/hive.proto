@@ -339,6 +339,7 @@ message THiveNodeStats {
     optional uint64 LastAliveTimestamp = 7;
     optional NKikimrSubDomains.TDomainKey NodeDomain = 8;
     optional string NodeName = 9;
+    optional uint32 BridgePileId = 10; // pile the node belongs to in bridge mode; unset when the node has none
 }
 
 message TEvResponseHiveNodeStats {

@@ -1,29 +1,29 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_blob_tracker.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <algorithm>
 
+using TDataCenterState = NKikimrBlobStorage::TDataCenterState;
+
 namespace NKikimr {
 namespace {
 
-using G = TBlobStorageGroupInfo;
-using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-using TStates = std::array<R::EState, 3>;
 using TCounts = std::array<ui32, 3>;
 
-void CheckCase(const TStates& states, const TCounts& copies, const TCounts& failures,
-        const TCounts& historicalCopies, G::EBlobState expected, bool expectedLost = false,
+void CheckCase(const TMirror3dcGroupState& states, const TCounts& copies, const TCounts& failures,
+        const TCounts& historicalCopies, TBlobStorageGroupInfo::EBlobState expected, bool expectedLost = false,
         NKikimrProto::EReplyStatus failureStatus = NKikimrProto::ERROR, const TCounts& transportFailures = {}) {
     std::array<ui32, 3> permutation = {0, 1, 2};
     do {
-        G::TDynamicInfo dynamic(TGroupId::Zero(), 1);
-        dynamic.FailRealmStates = {states[permutation[0]], states[permutation[1]], states[permutation[2]]};
-        const G info(G::TTopology(TBlobStorageGroupType::ErasureMirror3dc, 3, 4, 1),
+        TBlobStorageGroupInfo::TDynamicInfo dynamic(TGroupId::Zero(), 1);
+        dynamic.Mirror3dcState = {states.State, {states.FailRealmStates[permutation[0]], states.FailRealmStates[permutation[1]], states.FailRealmStates[permutation[2]]}};
+        const TBlobStorageGroupInfo info(TBlobStorageGroupInfo::TTopology(TBlobStorageGroupType::ErasureMirror3dc, 3, 4, 1),
             std::move(dynamic), "");
         for (ui32 cookie = 0; cookie < 3; ++cookie) {
             const TLogoBlobID id(1, 1, 1, 0, 8, cookie);
-            G::TVDiskIds subgroup;
+            TBlobStorageGroupInfo::TVDiskIds subgroup;
             info.PickSubgroup(id.Hash(), &subgroup, nullptr);
             TIngress historical;
             for (ui32 disk = 0; disk < 9; ++disk) {
@@ -39,11 +39,11 @@ void CheckCase(const TStates& states, const TCounts& copies, const TCounts& fail
             // Range returns full IDs with local ingress bits; also cover explicit part replies.
             for (bool fullId : {false, true}) {
                 TBlobStatusTracker tracker(id, &info);
-                G::TGroupVDisks failedGroupDisks(&info.GetTopology());
+                TBlobStorageGroupInfo::TGroupVDisks failedGroupDisks(&info.GetTopology());
                 for (ui32 disk = 0; disk < 9; ++disk) {
                     const ui32 realm = permutation[subgroup[disk].FailRealm];
                     if (disk / 3 < transportFailures[realm]) {
-                        failedGroupDisks += G::TGroupVDisks(&info.GetTopology(), subgroup[disk]);
+                        failedGroupDisks += TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), subgroup[disk]);
                         continue;
                     }
                     const bool present = disk / 3 < copies[realm];
@@ -74,52 +74,52 @@ void CheckCase(const TStates& states, const TCounts& copies, const TCounts& fail
 
 Y_UNIT_TEST_SUITE(TMirror3dcBlobStatusTrackerTest) {
     Y_UNIT_TEST(WriteLayoutDeterminesFull) {
-        CheckCase({R::N0, R::N0, R::N0}, {1, 1, 1}, {}, {}, G::EBS_FULL);
-        CheckCase({R::N1, R::F, R::F}, {2, 0, 0}, {}, {}, G::EBS_FULL);
-        CheckCase({R::N1, R::R, R::F}, {2, 2, 0}, {}, {}, G::EBS_FULL);
-        CheckCase({R::N1, R::N1, R::R}, {2, 0, 2}, {}, {}, G::EBS_RECOVERABLE_DOUBTED);
+        CheckCase({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, {1, 1, 1}, {}, {}, TBlobStorageGroupInfo::EBS_FULL);
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {2, 0, 0}, {}, {}, TBlobStorageGroupInfo::EBS_FULL);
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {2, 2, 0}, {}, {}, TBlobStorageGroupInfo::EBS_FULL);
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {2, 0, 2}, {}, {}, TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED);
     }
 
     Y_UNIT_TEST(EnsuredLayoutDeterminesAbsence) {
-        CheckCase({R::N1, R::F, R::F}, {}, {}, {}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
-        CheckCase({R::N1, R::F, R::F}, {}, {1, 3, 3}, {}, G::EBS_DISINTEGRATED);
-        CheckCase({R::N2, R::F, R::F}, {}, {1, 3, 3}, {}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {}, {}, TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY);
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {1, 3, 3}, {}, TBlobStorageGroupInfo::EBS_DISINTEGRATED);
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {1, 3, 3}, {}, TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY);
     }
 
     Y_UNIT_TEST(RecoveryFailuresFollowEnsuredAlternatives) {
         for (auto status : {NKikimrProto::ERROR, NKikimrProto::NOT_YET, NKikimrProto::VDISK_ERROR_STATE}) {
-            CheckCase({R::N1, R::N1, R::R}, {}, {1, 1, 1}, {},
-                G::EBS_DISINTEGRATED, false, status);
-            CheckCase({R::N1, R::N1, R::R}, {}, {2, 0, 2}, {},
-                G::EBS_UNRECOVERABLE_FRAGMENTARY, false, status);
-            CheckCase({R::N1, R::N1, R::R}, {}, {2, 2, 3}, {},
-                G::EBS_DISINTEGRATED, false, status);
+            CheckCase({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {1, 1, 1}, {},
+                TBlobStorageGroupInfo::EBS_DISINTEGRATED, false, status);
+            CheckCase({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {2, 0, 2}, {},
+                TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY, false, status);
+            CheckCase({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {2, 2, 3}, {},
+                TBlobStorageGroupInfo::EBS_DISINTEGRATED, false, status);
         }
     }
 
     Y_UNIT_TEST(FailedRealmCopiesDoNotCount) {
-        CheckCase({R::N1, R::F, R::F}, {0, 3, 3}, {}, {}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {0, 3, 3}, {}, {}, TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY);
     }
 
     Y_UNIT_TEST(TransportErrorsAndNotYetCombineForAbsence) {
-        CheckCase({R::N2, R::F, R::F}, {}, {1, 0, 0}, {}, G::EBS_UNRECOVERABLE_FRAGMENTARY,
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {1, 0, 0}, {}, TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY,
             false, NKikimrProto::NOT_YET);
-        CheckCase({R::N2, R::F, R::F}, {}, {1, 0, 0}, {}, G::EBS_DISINTEGRATED,
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {1, 0, 0}, {}, TBlobStorageGroupInfo::EBS_DISINTEGRATED,
             false, NKikimrProto::NOT_YET, {1, 0, 0});
     }
 
     Y_UNIT_TEST(IngressUsesCurrentWriteLayout) {
-        CheckCase({R::N1, R::F, R::F}, {1, 0, 0}, {}, {}, G::EBS_RECOVERABLE_DOUBTED);
-        CheckCase({R::N1, R::F, R::F}, {1, 0, 0}, {}, {2, 0, 0}, G::EBS_RECOVERABLE_FRAGMENTARY);
-        CheckCase({R::N1, R::F, R::F}, {}, {}, {2, 0, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY, true);
-        CheckCase({R::N1, R::N1, R::R}, {2, 0, 2}, {}, {2, 2, 0}, G::EBS_RECOVERABLE_FRAGMENTARY);
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, {}, TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED);
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, {2, 0, 0}, TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY);
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {}, {2, 0, 0}, TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY, true);
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {2, 0, 2}, {}, {2, 2, 0}, TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY);
     }
 
-    Y_UNIT_TEST(InvalidRealmStatesDoNotFallBackToLegacy) {
-        CheckCase({R::F, R::F, R::F}, {3, 3, 3}, {}, {}, G::EBS_DISINTEGRATED);
-        CheckCase({R::N0, R::N2, R::R}, {3, 3, 3}, {}, {}, G::EBS_DISINTEGRATED);
-        CheckCase({R::N1, R::N2, R::R}, {3, 3, 3}, {}, {}, G::EBS_DISINTEGRATED);
-        CheckCase({R::N2, R::N2, R::R}, {3, 3, 3}, {}, {}, G::EBS_DISINTEGRATED);
+    Y_UNIT_TEST(InvalidGroupConfigurationDoesNotFallBackToLegacy) {
+        CheckCase({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}},
+            {3, 3, 3}, {}, {}, TBlobStorageGroupInfo::EBS_DISINTEGRATED);
+        CheckCase({static_cast<EMirror3dcGroupState>(-1), {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}},
+            {3, 3, 3}, {}, {}, TBlobStorageGroupInfo::EBS_DISINTEGRATED);
     }
 }
 

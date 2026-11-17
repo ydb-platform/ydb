@@ -83,7 +83,6 @@ void TTargetBase::SetDstState(const EDstState value) {
     DstState = value;
     switch (DstState) {
     case EDstState::Alter:
-    case EDstState::Attaching:
         Replication->AddPendingAlterTarget(Id);
         break;
     default:
@@ -91,7 +90,7 @@ void TTargetBase::SetDstState(const EDstState value) {
         break;
     }
 
-    if (DstState != EDstState::Creating && DstState != EDstState::Attaching) {
+    if (DstState != EDstState::Creating) {
         Reset(DstCreator);
     }
     if (DstState != EDstState::Ready) {
@@ -122,14 +121,6 @@ bool TTargetBase::IsExpectedDstAlterer(const TActorId& actorId) const {
 
 void TTargetBase::SetDstPathId(const TPathId& value) {
     DstPathId = value;
-}
-
-const TPathId& TTargetBase::GetPendingDstPathId() const {
-    return PendingDstPathId;
-}
-
-void TTargetBase::SetPendingDstPathId(const TPathId& value) {
-    PendingDstPathId = value;
 }
 
 const TString& TTargetBase::GetStreamName() const {
@@ -248,20 +239,8 @@ const std::optional<TDuration> TTargetBase::GetLag() const {
 void TTargetBase::Progress(const TActorContext& ctx) {
     switch (DstState) {
     case EDstState::Creating:
-        if (!DstCreator && !ShouldWaitForAttachment(Replication)) {
-            DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
-        }
-        break;
-    case EDstState::Attaching:
         if (!DstCreator) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
-        }
-        if (Replication->GetDesiredState() == TReplication::EState::Done
-            || Replication->GetState() == TReplication::EState::Removing)
-        {
-            // Targets with a stream reach destination progress only after its
-            // removal, so DROP can now finish attachment reconciliation locally.
-            ctx.Send(DstCreator, new TEvPrivate::TEvCompleteDstAttachment());
         }
         break;
     case EDstState::Ready:
@@ -298,14 +277,15 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         }
         break;
     case EDstState::Paused:
+    case EDstState::WaitingImport:
         break;
     case EDstState::Error:
+    case EDstState::Attaching: // Deprecated.
         break;
     }
 
     if (DstCreator && Replication->GetYdbProxy()) {
-        // ALTER can replace the source proxy while an attachment creator is
-        // retained to reconcile local DDL that may already have been submitted.
+        // A config-only ALTER can replace the proxy while the creator is running.
         ctx.Send(DstCreator, new TEvPrivate::TEvUpdateYdbProxy(Replication->GetYdbProxy()));
     }
 }

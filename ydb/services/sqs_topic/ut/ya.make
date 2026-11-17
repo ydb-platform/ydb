@@ -1,6 +1,7 @@
 UNITTEST()
 
 SRCS(
+    consumer_attributes_ut.cpp
     utils_ut.cpp
 )
 

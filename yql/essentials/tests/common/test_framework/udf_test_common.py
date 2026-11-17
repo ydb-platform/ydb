@@ -129,7 +129,6 @@ def facade_runner(prov, cfg_dir, binary=None, secure_params={}, patch_cfg_file=N
             langver=langver,
             secure_params=secure_params,
             patch_cfg_file=patch_cfg_file,
-            ignore_extra_config=yql_utils.get_param('UDF_IGNORE_EXTRA_CONFIG') == '1',
         )
 
     return make

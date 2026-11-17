@@ -792,6 +792,27 @@ namespace NKikimr::NStorage {
         throw TExError() << "Pipe to BSC disconnected";
     }
 
+    std::optional<TInvokeRequestHandlerActor::TBridgePileControllerOp>
+            TInvokeRequestHandlerActor::GetBridgePileControllerOp() const {
+        using T = NKikimrBlobStorage::TEvControllerDistconfRequest;
+        switch (ControllerOp) {
+            case EControllerOp::ADD_BRIDGE_PILE:
+                return TBridgePileControllerOp(BSC_INTERFACE_BRIDGE_PILE_OPS, T::ValidateAddBridgePile, "add piles");
+            case EControllerOp::REMOVE_BRIDGE_PILE:
+                return TBridgePileControllerOp(BSC_INTERFACE_REMOVE_BRIDGE_PILE, T::ValidateRemoveBridgePile,
+                    "remove piles");
+            case EControllerOp::BRIDGE_ROLLBACK:
+                return TBridgePileControllerOp(BSC_INTERFACE_BRIDGE_ROLLBACK, T::ValidateBridgeRollback,
+                    "roll the bridged cluster back");
+            case EControllerOp::UNSET:
+            case EControllerOp::ENABLE_DISTCONF:
+            case EControllerOp::DISABLE_DISTCONF:
+            case EControllerOp::OTHER:
+                return std::nullopt;
+        }
+        Y_UNREACHABLE();
+    }
+
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
         const auto& response = ev->Get()->Record.GetResponse();
         YDB_LOG_DEBUG("Received TEvControllerConfigResponse",
@@ -805,17 +826,14 @@ namespace NKikimr::NStorage {
         auto request = std::make_unique<TEvBlobStorage::TEvControllerDistconfRequest>();
         auto& record = request->Record;
 
-        if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE || ControllerOp == EControllerOp::REMOVE_BRIDGE_PILE) {
-            const bool adding = ControllerOp == EControllerOp::ADD_BRIDGE_PILE;
-            if (response.GetStatus(0).GetInterfaceVersion() < (adding ? BSC_INTERFACE_BRIDGE_PILE_OPS :
-                    BSC_INTERFACE_REMOVE_BRIDGE_PILE)) {
-                throw TExError() << "BS_CONTROLLER is way too old to " << (adding ? "add" : "remove") << " piles";
+        if (const auto bridgeOp = GetBridgePileControllerOp()) {
+            const auto& [minInterfaceVersion, operation, what] = *bridgeOp;
+            if (response.GetStatus(0).GetInterfaceVersion() < minInterfaceVersion) {
+                throw TExError() << "BS_CONTROLLER is way too old to " << what;
             }
-            record.SetOperation(adding
-                ? NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateAddBridgePile
-                : NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateRemoveBridgePile);
+            record.SetOperation(operation);
             BridgePileOpPileId.CopyToProto(&record, &NKikimrBlobStorage::TEvControllerDistconfRequest::SetBridgePileId);
-            if (adding) {
+            if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE) {
                 record.MutableStorageConfig()->PackFrom(ProposedStorageConfig); // with static VDisks in the pile
             }
             NTabletPipe::SendData(SelfId(), ControllerPipeId, request.release());
@@ -868,6 +886,7 @@ namespace NKikimr::NStorage {
 
             case EControllerOp::ADD_BRIDGE_PILE:
             case EControllerOp::REMOVE_BRIDGE_PILE:
+            case EControllerOp::BRIDGE_ROLLBACK:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }
@@ -903,11 +922,13 @@ namespace NKikimr::NStorage {
             {"selfId", SelfId()},
             {"record", getRecord()});
 
-        if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE || ControllerOp == EControllerOp::REMOVE_BRIDGE_PILE) {
+        if (GetBridgePileControllerOp()) {
             if (record.GetStatus() != NKikimrBlobStorage::TEvControllerDistconfResponse::OK) {
                 throw TExError() << (ControllerOp == EControllerOp::ADD_BRIDGE_PILE
                     ? "Can't add pile to the cluster: BSC can't add parts of its groups to the pile: "
-                    : "Can't remove pile from the cluster: BSC can't delete parts of its groups in the pile: ")
+                    : ControllerOp == EControllerOp::REMOVE_BRIDGE_PILE
+                    ? "Can't remove pile from the cluster: BSC can't delete parts of its groups in the pile: "
+                    : "Can't roll the bridged cluster back: BSC can't make its groups ordinary ones: ")
                     << record.GetErrorReason();
             }
             NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId); // BSC is not needed anymore
@@ -946,6 +967,7 @@ namespace NKikimr::NStorage {
 
             case EControllerOp::ADD_BRIDGE_PILE:
             case EControllerOp::REMOVE_BRIDGE_PILE:
+            case EControllerOp::BRIDGE_ROLLBACK:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }

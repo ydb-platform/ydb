@@ -254,6 +254,28 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         }
     }
 
+    Y_UNIT_TEST(BillingTxType) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "index" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // with no progress from the shard the build stays in Filling and is billed every ReBillPeriod (10s)
+        TBlockEvents<TEvDataShard::TEvBuildIndexProgressResponse> progressBlocker(runtime);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        env.SimulateSleep(runtime, TDuration::Seconds(15));
+
+        UNIT_ASSERT_GT(GetTabletTxCompleted(runtime, TTestTxConfig::SchemeShard, "SchemeShard/TxBillingIndexBuild"), 0);
+    }
+
     void BaseCase(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -1172,6 +1194,64 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
     Y_UNIT_TEST_FLAG(IndexPartitioningIsPersistedUniq, AlwaysSetSystemOwner) {
         IndexPartitioningIsPersisted(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique, AlwaysSetSystemOwner);
+    }
+
+    // The index impl table is created with ShadowData and KeepEraseMarkers for the build.
+    // Both must stay turned off after the build is done, including after a SchemeShard restart.
+    void ShadowDataClearedAfterReboot(NKikimrSchemeOp::EIndexType indexType) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "value1");
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"Index", indexType, {"value"}, {}, {}});
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+            buildIndexOperation.DebugString()
+        );
+
+        const auto checkIndex = [&](const TString& stage) {
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index"), {
+                NLs::PathExist,
+                NLs::IndexType(indexType),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)
+            });
+
+            const auto desc = DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable", true);
+            TestDescribeResult(desc, {NLs::IsTable});
+            UNIT_ASSERT_C(desc.GetPathDescription().GetTable().HasPartitionConfig(), stage);
+            const auto& config = desc.GetPathDescription().GetTable().GetPartitionConfig();
+            UNIT_ASSERT_C(!config.HasShadowData(),
+                "ShadowData is present " << stage << ": " << config.ShortDebugString());
+            UNIT_ASSERT_C(!config.GetCompactionPolicy().GetKeepEraseMarkers(),
+                "KeepEraseMarkers is set " << stage << ": " << config.ShortDebugString());
+        };
+
+        checkIndex("before SchemeShard reboot");
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        checkIndex("after SchemeShard reboot");
+    }
+
+    Y_UNIT_TEST(ShadowDataClearedAfterReboot) {
+        ShadowDataClearedAfterReboot(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
+    }
+
+    Y_UNIT_TEST(ShadowDataClearedAfterRebootUniq) {
+        ShadowDataClearedAfterReboot(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
     }
 
     void DropIndex(NKikimrSchemeOp::EIndexType indexType) {

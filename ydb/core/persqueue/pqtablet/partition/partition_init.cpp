@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 #include <ydb/core/protos/pqdata_mlp.pb.h>
 
 #include <memory>
@@ -43,6 +44,7 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitMessageDeduplicatorStep>(this));
     Steps.push_back(MakeHolder<TDeleteKeysStep>(this));
     Steps.push_back(MakeHolder<TInitFieldsStep>(this));
+    Steps.push_back(MakeHolder<TNotifyWriteSessionsQuoterStep>(this));
 
     CurrentStep = Steps.begin();
 }
@@ -356,6 +358,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
         Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetEndWriteTimestamp());
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
         Partition()->MessageIdDeduplicator.NextMessageIdDeduplicatorWAL = meta.GetNextMessageIdDeduplicatorWAL();
+        Partition()->LastEmittedHeartbeat = TRowVersion::FromProto(meta.GetLastEmittedHeartbeat());
         if (Partition()->IsSupportive()) {
             const auto& counterData = meta.GetCounterData();
             Partition()->BytesWrittenGrpc.SetSavedValue(counterData.GetBytesWrittenGrpc());
@@ -988,7 +991,10 @@ TInitMessageDeduplicatorStep::TInitMessageDeduplicatorStep(TInitializer* initial
 }
 
 void TInitMessageDeduplicatorStep::Execute(const TActorContext &ctx) {
-    if (MirroringEnabled(Partition()->Config) || Partition()->Partition.IsSupportivePartition()) {
+    // Replicated topics can accept client writes while destination replication is disabled.
+    if ((MirroringEnabled(Partition()->Config) && !ReplicationEnabled(Partition()->Config))
+        || Partition()->Partition.IsSupportivePartition())
+    {
         return Done(ctx);
     }
     auto firstKey = MakeDeduplicatorWALKey(Partition()->Partition.OriginalPartitionId, 0);
@@ -1140,6 +1146,21 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     Done(ctx);
 }
 
+void TPartition::InitFirstCompactionPart()
+{
+    auto& head = CompactionBlobEncoder.Head;
+    head.TrailingOffsetDelta = 0;
+    if (CompactionBlobEncoder.HeadKeys.empty()) {
+        return;
+    }
+
+    TBatch batch = head.GetLastBatch();
+    batch.Unpack();
+    const auto& lastBlob = batch.Blobs.back();
+    head.TrailingOffsetDelta = lastBlob.IsLastPart() ? 0 : lastBlob.LogicalMessageCount;
+    FirstCompactionPart = std::make_pair(batch.GetOffset(), lastBlob.GetPartNo());
+}
+
 
 //
 // TInitEndWriteTimestampStep
@@ -1202,6 +1223,27 @@ void TInitFieldsStep::Execute(const TActorContext &ctx) {
     }
 
     return Done(ctx);
+}
+
+//
+// TNotifyWriteSessionsQuoterStep
+//
+
+TNotifyWriteSessionsQuoterStep::TNotifyWriteSessionsQuoterStep(TInitializer* initializer)
+    : TInitializerStep(initializer, "TNotifyWriteSessionsQuoterStep", false) {
+}
+
+void TNotifyWriteSessionsQuoterStep::Execute(const TActorContext& ctx) {
+    if (Partition()->IsSupportive()) {
+        return Done(ctx);
+    }
+
+    auto actorId = MakeWriteSessionsQuoterId();
+
+    Partition()->WriteSessionsQuoterNotified = true;
+    ctx.Send(actorId, new TEvWriteSessionsQuoter::TEvNotify(
+        Partition()->Config.GetYdbDatabasePath(), TopicName(), PartitionId().OriginalPartitionId, Partition()->TabletGeneration));
+    Done(ctx);
 }
 
 //

@@ -29,10 +29,15 @@ namespace {
 
 using TFamily = NKikimrReplication::TSchemaChange::TFamily;
 
+bool IsSupportedCodec(NKikimrSchemeOp::EColumnCodec codec) {
+    return codec == NKikimrSchemeOp::ColumnCodecPlain
+        || codec == NKikimrSchemeOp::ColumnCodecLZ4
+        || codec == NKikimrSchemeOp::ColumnCodecZSTD;
+}
+
 bool HasSupportedFamilySettings(const NKikimrSchemeOp::TFamilyDescription& family) {
     if (family.HasColumnCodec()) {
-        const auto codec = family.GetColumnCodec();
-        if (codec != NKikimrSchemeOp::ColumnCodecPlain && codec != NKikimrSchemeOp::ColumnCodecLZ4) {
+        if (!IsSupportedCodec(family.GetColumnCodec())) {
             return false;
         }
     } else if (family.GetCodec() > 1) {
@@ -155,6 +160,9 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             .Media = desired.GetMedia(),
             .Compression = desired.GetCompression(),
             .CacheMode = desired.GetCacheMode(),
+            .CompressionLevel = desired.GetCompression() == TFamily::COMPRESSION_ZSTD
+                ? std::make_optional(desired.GetCompressionLevel())
+                : std::nullopt,
         };
         const auto actualSettings = TFamilySettings::FromProto(actual);
         if (actual && expectedSettings == actualSettings) {
@@ -172,8 +180,25 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
         }
 
         if (!actual || actualSettings.Compression != expectedSettings.Compression) {
-            changed->SetColumnCodec(desired.GetCompression() == TFamily::COMPRESSION_LZ4
-                ? NKikimrSchemeOp::ColumnCodecLZ4 : NKikimrSchemeOp::ColumnCodecPlain);
+            switch (desired.GetCompression()) {
+                case TFamily::COMPRESSION_OFF:
+                    changed->SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
+                    break;
+                case TFamily::COMPRESSION_LZ4:
+                    changed->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+                    break;
+                case TFamily::COMPRESSION_ZSTD:
+                    changed->SetColumnCodec(NKikimrSchemeOp::ColumnCodecZSTD);
+                    break;
+                default:
+                    error = TStringBuilder() << "unsupported compression for column family '"
+                        << desired.GetName() << "'";
+                    return false;
+            }
+        }
+
+        if (const auto level = expectedSettings.CompressionLevel; level && level != actualSettings.CompressionLevel) {
+            changed->SetColumnCodecLevel(*level);
         }
 
         if (!actual || actualSettings.CacheMode != expectedSettings.CacheMode) {

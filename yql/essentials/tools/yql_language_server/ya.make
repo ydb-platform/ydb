@@ -25,6 +25,7 @@ END()
 
 RECURSE(
     api
+    ci
     core
     lsp
     service

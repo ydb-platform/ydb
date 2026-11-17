@@ -121,7 +121,7 @@ void TImportActor::PassAway() {
 }
 
 void TImportActor::OnSessionStateSaved() {
-    AFL_VERIFY(ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished());
+    YDB_LOG_VERIFY(ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished());
     NYDBTest::TControllers::GetColumnShardController()->OnImportFinished();
     if (ImportSession->GetTxId()) {
         ExecuteTransaction(std::make_unique<TTxProposeFinish>(
@@ -162,7 +162,8 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
         return;
     }
 
-    AFL_VERIFY(ev->Get()->Data)("error", "empty record batch");
+    YDB_LOG_VERIFY(ev->Get()->Data,
+        {"error", "empty record batch"});
     NArrow::TBatchSplittingContext context(48 * 1024 * 1024);
     auto blobsSplittedConclusion = NArrow::SplitByBlobSize(ev->Get()->Data, context);
     TString splitError;
@@ -180,7 +181,7 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
         return;
     }
 
-    AFL_VERIFY(PendingBlobs.empty());
+    YDB_LOG_VERIFY(PendingBlobs.empty());
     PendingPayloadSchema = NArrow::SerializeSchema(*ev->Get()->Data->schema());
     for (const auto& blob : blobsSplittedConclusion.GetResult()) {
         PendingBlobs.push_back(blob.GetData());
@@ -200,8 +201,8 @@ void TImportActor::SendNextBlob() {
 }
 
 void TImportActor::SendWriteRequest() {
-    AFL_VERIFY(!PendingBlobs.empty());
-    AFL_VERIFY(PendingPayloadSchema);
+    YDB_LOG_VERIFY(!PendingBlobs.empty());
+    YDB_LOG_VERIFY(PendingPayloadSchema);
     auto writeEvent = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(*writeEvent);
     writer.AddDataToPayload(TString(PendingBlobs.front()));
@@ -242,8 +243,13 @@ void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         AbortImport(ev->Get()->GetError());
         return;
     }
+<<<<<<< HEAD
     Counters.OnWriteFinished(TInstant::Now() - WriteStartTime, true);
     AFL_VERIFY(!PendingBlobs.empty());
+=======
+    Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
+    YDB_LOG_VERIFY(!PendingBlobs.empty());
+>>>>>>> 5632e5399e1 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/tx/columnshard/ (#59539))
     PendingBlobs.pop_front();
     WriteRetryState.reset();
     if (!PendingBlobs.empty()) {
@@ -259,7 +265,10 @@ void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
 }
 
 void TImportActor::SwitchStage(const EStage from, const EStage to) {
-    AFL_VERIFY(Stage == from)("from", from)("real", Stage)("to", to);
+    YDB_LOG_VERIFY(Stage == from,
+        {"from", from},
+        {"real", Stage},
+        {"to", to});
     Stage = to;
     StageStartTime = TInstant::Now();
 }
@@ -293,14 +302,16 @@ TImportActor::TImportActor(std::shared_ptr<NBackground::TSession> bgSession, con
 void TImportActor::OnSessionProgressSaved() {
     Counters.OnSaveProgressFinished(TInstant::Now() - SaveProgressStartTime);
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
-        AFL_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor)("real", Stage);
+        YDB_LOG_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor,
+            {"real", Stage});
         Stage = EStage::Finished;
         StageStartTime = TInstant::Now();
         SaveSessionState();
     } else {
-        AFL_VERIFY(Stage == EStage::WaitData)("real", Stage);
+        YDB_LOG_VERIFY(Stage == EStage::WaitData,
+            {"real", Stage});
         StageStartTime = TInstant::Now();
-        AFL_VERIFY(ImportActorId);
+        YDB_LOG_VERIFY(ImportActorId);
         Counters.OnReadStarted();
         ReadStartTime = TInstant::Now();
         TBase::Send(ImportActorId, new NColumnShard::TEvPrivate::TEvBackupImportRecordBatchResult());

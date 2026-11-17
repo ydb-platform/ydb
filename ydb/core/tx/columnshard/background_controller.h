@@ -41,12 +41,12 @@ public:
     }
 
     void OnCleanupSchemasStarted() {
-        AFL_VERIFY(!ActiveCleanupSchemas);
+        YDB_LOG_VERIFY(!ActiveCleanupSchemas);
         ActiveCleanupSchemas = true;
     }
 
     void OnCleanupSchemasFinished() {
-        AFL_VERIFY(ActiveCleanupSchemas);
+        YDB_LOG_VERIFY(ActiveCleanupSchemas);
         ActiveCleanupSchemas = false;
     }
 

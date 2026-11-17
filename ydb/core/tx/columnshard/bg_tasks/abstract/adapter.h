@@ -32,8 +32,8 @@ public:
         , TabletId(tabletId)
         , TabletExecutor(tabletExecutor)
     {
-        AFL_VERIFY(!!TabletActorId);
-        AFL_VERIFY(!!(ui64)TabletId);
+        YDB_LOG_VERIFY(!!TabletActorId);
+        YDB_LOG_VERIFY(!!(ui64)TabletId);
     }
 
     virtual ~ITabletAdapter() = default;
@@ -41,7 +41,7 @@ public:
     template <class T>
     T& GetTabletExecutorVerifiedAs() {
         T* result = dynamic_cast<T*>(&TabletExecutor);
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 

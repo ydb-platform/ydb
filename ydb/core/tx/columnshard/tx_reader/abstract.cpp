@@ -12,7 +12,38 @@ bool ITxReader::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TAc
             return NextReaderAfterLoad->Execute(txc, ctx);
         }
     }
+<<<<<<< HEAD
     IsStarted = true;
+=======
+    const TMonotonic attemptStart = TMonotonic::Now();
+    if (!IsStarted) {
+        YDB_LOG_VERIFY(Orbit,
+            {"stage", StageName});
+        IsStarted = true;
+        FirstAttemptInstant = attemptStart;
+    }
+    ++Attempts;
+    const bool finished = ExecuteAttempt(txc, ctx);
+    const TMonotonic attemptFinish = TMonotonic::Now();
+    ExecutionDuration += attemptFinish - attemptStart;
+    if (!finished) {
+        return false;
+    }
+    IsReady = true;
+    const TDuration duration = attemptFinish - FirstAttemptInstant;
+    NColumnShard::TraceStartupTxStageFinished(*Orbit, txc.Tablet, StageName, duration, ExecutionDuration, Attempts);
+    NextReaderAfterLoad = BuildNextReaderAfterLoad();
+    if (!NextReaderAfterLoad) {
+        return true;
+    }
+    // the next reader runs after this stage has finished, so it is named as its sibling
+    NextReaderAfterLoad->AddNamePrefix(NamePrefix);
+    NextReaderAfterLoad->SetOrbit(*Orbit);
+    return NextReaderAfterLoad->Execute(txc, ctx);
+}
+
+bool ITxReader::ExecuteAttempt(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
+>>>>>>> 5632e5399e1 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/tx/columnshard/ (#59539))
     {
         TMemoryProfileGuard g("ITxReader/" + StageName + "/Precharge");
         NColumnShard::TLoadTimeSignals::TLoadTimer timer = PrechargeCounters.StartGuard();

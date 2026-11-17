@@ -141,7 +141,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         {"event", "TEvWriteBlobsResult"});
 
     auto& putResult = ev->Get()->GetPutResult();
-    AFL_VERIFY(putResult.GetPutStatus() != NKikimrProto::OK);
+    YDB_LOG_VERIFY(putResult.GetPutStatus() != NKikimrProto::OK);
     OnYellowChannels(putResult);
     NOlap::TWritingBuffer& wBuffer = ev->Get()->MutableWritesBuffer();
     auto baseAggregations = wBuffer.GetAggregations();
@@ -160,7 +160,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         Counters.GetCSCounters().OnWritePutBlobsFail(TMonotonic::Now() - writeMeta.GetWriteStartInstant());
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
 
-        AFL_VERIFY(!writeMeta.HasLongTxId());
+        YDB_LOG_VERIFY(!writeMeta.HasLongTxId());
         auto operation = OperationsManager->GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         const TString errorMessage = ev->Get()->GetErrorMessage() ? ev->Get()->GetErrorMessage() : "put data fails";
         NColumnShard::TrackWriteFailed(writeMeta, "write_blob_result", ToString(ev->Get()->GetWriteResultStatus()), errorMessage);
@@ -170,7 +170,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::PutBlob);
         wBuffer.RemoveData(aggr, StoragesManager->GetInsertOperator());
     }
-    AFL_VERIFY(wBuffer.IsEmpty());
+    YDB_LOG_VERIFY(wBuffer.IsEmpty());
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorContext& ctx) {
@@ -189,7 +189,7 @@ public:
     }
 
     bool IsPrimary() const {
-        AFL_VERIFY(NeedSyncLocks());
+        YDB_LOG_VERIFY(NeedSyncLocks());
         return TabletId == ArbiterColumnShard;
     }
 
@@ -203,7 +203,7 @@ public:
         YDB_LOG_CREATE_CONTEXT(
             {"txId", TxId});
         const auto& locks = evWrite.Record.GetLocks();
-        AFL_VERIFY(!locks.GetLocks().empty());
+        YDB_LOG_VERIFY(!locks.GetLocks().empty());
         auto& lock = locks.GetLocks()[0];
         LockId = lock.GetLockId();
         SendingShards = std::set<ui64>(locks.GetSendingShards().begin(), locks.GetSendingShards().end());

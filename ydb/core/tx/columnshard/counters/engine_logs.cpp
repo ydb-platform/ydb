@@ -86,8 +86,10 @@ TEngineLogsCounters::TEngineLogsCounters()
 }
 
 void TEngineLogsCounters::OnActualizationTask(const ui32 evictCount, const ui32 removeCount) const {
-    AFL_VERIFY(evictCount * removeCount == 0)("evict", evictCount)("remove", removeCount);
-    AFL_VERIFY(evictCount + removeCount);
+    YDB_LOG_VERIFY(evictCount * removeCount == 0,
+        {"evict", evictCount},
+        {"remove", removeCount});
+    YDB_LOG_VERIFY(evictCount + removeCount);
     if (evictCount) {
         ActualizationTaskSizeEvict->Collect(evictCount);
     } else {
@@ -120,8 +122,8 @@ NKikimr::NColumnShard::TBaseGranuleDataClassSummary TBaseGranuleDataClassSummary
     TBaseGranuleDataClassSummary result;
     result.TotalPortionsSize = TotalPortionsSize + item.TotalPortionsSize;
     result.ColumnPortionsSize = ColumnPortionsSize + item.ColumnPortionsSize;
-    AFL_VERIFY(result.TotalPortionsSize >= 0);
-    AFL_VERIFY(result.ColumnPortionsSize >= 0);
+    YDB_LOG_VERIFY(result.TotalPortionsSize >= 0);
+    YDB_LOG_VERIFY(result.ColumnPortionsSize >= 0);
     result.PortionsCount = PortionsCount + item.PortionsCount;
     result.RecordsCount = RecordsCount + item.RecordsCount;
     result.MetadataMemoryPortionsSize = MetadataMemoryPortionsSize + item.MetadataMemoryPortionsSize;

@@ -41,32 +41,32 @@ public:
     }
 
     ui64 GetMemoryProcessId() const {
-        AFL_VERIFY(MemoryProcessGuard);
+        YDB_LOG_VERIFY(MemoryProcessGuard);
         return MemoryProcessGuard->GetProcessId();
     }
 
     ui64 GetMemoryScopeId() const {
-        AFL_VERIFY(MemoryScopeGuard);
+        YDB_LOG_VERIFY(MemoryScopeGuard);
         return MemoryScopeGuard->GetScopeId();
     }
 
     ui64 GetMemoryGroupId() const {
-        AFL_VERIFY(MemoryGroupGuard);
+        YDB_LOG_VERIFY(MemoryGroupGuard);
         return MemoryGroupGuard->GetGroupId();
     }
 
     void SetBlobs(NBlobOperations::NRead::TCompositeReadBlobs&& blobs) {
-        AFL_VERIFY(!Blobs);
+        YDB_LOG_VERIFY(!Blobs);
         Blobs = std::move(blobs);
     }
 
     NBlobOperations::NRead::TCompositeReadBlobs& MutableBlobs() {
-        AFL_VERIFY(!!Blobs);
+        YDB_LOG_VERIFY(!!Blobs);
         return *Blobs;
     }
 
     NBlobOperations::NRead::TCompositeReadBlobs ExtractBlobs() {
-        AFL_VERIFY(!!Blobs);
+        YDB_LOG_VERIFY(!!Blobs);
         auto result = std::move(*Blobs);
         Blobs.reset();
         return std::move(result);
@@ -77,12 +77,12 @@ public:
     }
 
     void SetAssembledData(std::vector<NArrow::TGeneralContainer>&& data) {
-        AFL_VERIFY(!AssembledData);
+        YDB_LOG_VERIFY(!AssembledData);
         AssembledData = std::move(data);
     }
 
     std::vector<NArrow::TGeneralContainer> ExtractAssembledData() {
-        AFL_VERIFY(!!AssembledData);
+        YDB_LOG_VERIFY(!!AssembledData);
         auto result = std::move(*AssembledData);
         AssembledData.reset();
         return result;
@@ -98,17 +98,17 @@ public:
     }
 
     void SetPortionAccessors(std::vector<std::shared_ptr<TPortionDataAccessor>>&& acc) {
-        AFL_VERIFY(!Accessors);
+        YDB_LOG_VERIFY(!Accessors);
         Accessors = std::move(acc);
     }
 
     const std::vector<std::shared_ptr<TPortionDataAccessor>>& GetPortionAccessors() const {
-        AFL_VERIFY(Accessors);
+        YDB_LOG_VERIFY(Accessors);
         return *Accessors;
     }
 
     std::vector<std::shared_ptr<TPortionDataAccessor>> ExtractPortionAccessors() {
-        AFL_VERIFY(Accessors);
+        YDB_LOG_VERIFY(Accessors);
         auto result = std::move(*Accessors);
         Accessors.reset();
         return result;
@@ -140,13 +140,13 @@ public:
     }
 
     void OnFinished(TCurrentContext&& context) {
-        AFL_VERIFY(!IsFinished);
+        YDB_LOG_VERIFY(!IsFinished);
         IsFinished = true;
         return DoOnFinished(std::move(context));
     }
 
     void OnError(const TString& errorMessage) {
-        AFL_VERIFY(!IsFinished);
+        YDB_LOG_VERIFY(!IsFinished);
         IsFinished = true;
         return DoOnError(errorMessage);
     }
@@ -202,7 +202,7 @@ public:
     }
 
     const std::shared_ptr<IFetchingStep>& GetStep(const ui32 index) const {
-        AFL_VERIFY(index < Steps.size());
+        YDB_LOG_VERIFY(index < Steps.size());
         return Steps[index];
     }
 
@@ -220,7 +220,7 @@ public:
     TScriptExecution(const std::shared_ptr<TScript>& script)
         : Script(script)
     {
-        AFL_VERIFY(Script);
+        YDB_LOG_VERIFY(Script);
     }
 
     const TString& GetScriptClassName() const {
@@ -236,7 +236,7 @@ public:
     }
 
     void Next() {
-        AFL_VERIFY(!IsFinished());
+        YDB_LOG_VERIFY(!IsFinished());
         ++StepIndex;
     }
 };
@@ -271,7 +271,7 @@ public:
     TString DebugString() const;
 
     std::shared_ptr<NGroupedMemoryManager::TProcessGuard> GetMemoryProcessGuardVerified() const {
-        AFL_VERIFY(MemoryProcessGuard);
+        YDB_LOG_VERIFY(MemoryProcessGuard);
         return MemoryProcessGuard;
     }
 

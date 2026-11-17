@@ -108,8 +108,16 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 }
 
 void TTxInit::Complete(const TActorContext& ctx) {
+<<<<<<< HEAD
     Self->Counters.GetCSCounters().Initialization.OnTxInitFinished(TMonotonic::Now() - StartInstant);
     AFL_VERIFY(!Self->IsTxInitFinished);
+=======
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", Self->TabletID()},
+        {"process", "TTxInit::Complete"});
+    Self->StartupTimeline.OnTxInitFinished();
+    YDB_LOG_VERIFY(!Self->IsTxInitFinished);
+>>>>>>> 5632e5399e1 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/tx/columnshard/ (#59539))
     Self->IsTxInitFinished = true;
     Self->TrySwitchToWork(ctx);
     if (Self->SpaceWatcher->SubDomainPathId) {
@@ -180,7 +188,8 @@ void TTxUpdateSchema::Complete(const TActorContext& ctx) {
         {"step", "TTxUpdateSchema.Complete"});
     Self->Counters.GetCSCounters().Initialization.OnTxUpdateSchemaFinished(TMonotonic::Now() - StartInstant);
     if (NormalizerTasks.empty()) {
-        AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
+        YDB_LOG_VERIFY(Self->NormalizerController.IsNormalizationFinished(),
+            {"details", Self->NormalizerController.DebugString()});
         Self->Execute(new TTxInit(Self), ctx);
         return;
     }
@@ -243,7 +252,8 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
         {"tabletId", Self->TabletID()},
         {"event", "TTxApplyNormalizer::Complete"});
-    AFL_VERIFY(!Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
+    YDB_LOG_VERIFY(!Self->NormalizerController.IsNormalizationFinished(),
+        {"details", Self->NormalizerController.DebugString()});
     YDB_LOG_WARN("",
         {"event", "apply_normalizer_changes"},
         {"details", Self->NormalizerController.DebugString()},
@@ -264,7 +274,8 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     if (Self->NormalizerController.SwitchNormalizer()) {
         Self->Execute(new TTxUpdateSchema(Self), ctx);
     } else {
-        AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
+        YDB_LOG_VERIFY(Self->NormalizerController.IsNormalizationFinished(),
+            {"details", Self->NormalizerController.DebugString()});
         Self->Execute(new TTxInit(Self), ctx);
     }
 }

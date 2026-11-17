@@ -90,9 +90,16 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
                     return;
                 }
             } else {
+<<<<<<< HEAD
                 auto insertionConclusion = Context.GetActualSchema()->CheckColumnsDefault(defaultFields);
                 auto conclusion = Context.GetActualSchema()->BuildDefaultBatch(Context.GetActualSchema()->GetIndexInfo().ArrowSchema(), 1, true);
                 AFL_VERIFY(!conclusion.IsFail())("error", conclusion.GetErrorMessage());
+=======
+                auto insertionConclusion = context.GetActualSchema()->CheckColumnsDefault(defaultFields);
+                auto conclusion = context.GetActualSchema()->BuildDefaultBatch(context.GetActualSchema()->GetIndexInfo().ArrowSchema(), 1, true);
+                YDB_LOG_VERIFY(!conclusion.IsFail(),
+                    {"error", conclusion.GetErrorMessage()});
+>>>>>>> 5632e5399e1 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/tx/columnshard/ (#59539))
                 auto batchDefault = conclusion.DetachResult();
                 NArrow::NMerger::TSortableBatchPosition pos(
                     batchDefault, 0, batchDefault->schema()->field_names(), batchDefault->schema()->field_names(), false);

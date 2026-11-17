@@ -306,32 +306,27 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             ++batchIdx;
         }
     }
-    if (PortionSchemas.size() == Batches.size()) {
-        for (auto&& columnId : resultFiltered->GetIndexInfo().GetColumnIds(false)) {
-            if (!resultFiltered->HasColumnId(columnId) || columnsData.contains(columnId)) {
-                continue;
-            }
-            bool differs = false;
-            std::optional<std::shared_ptr<arrow::Scalar>> firstFill;
-            for (const auto& portionSchema : PortionSchemas) {
-                if (!portionSchema) {
-                    continue;
-                }
-                const auto fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchema, *resultFiltered, columnId);
-                if (!firstFill) {
-                    firstFill = fill;
-                } else if (!NArrow::ScalarEqualsNullable(fill, *firstFill)) {
-                    differs = true;
-                    break;
-                }
-            }
-            const auto resultFill = ISnapshotSchema::GetAbsentColumnFill(*resultFiltered, *resultFiltered, columnId);
-            if (firstFill && !NArrow::ScalarEqualsNullable(*firstFill, resultFill)) {
+    for (auto&& columnId : resultFiltered->GetIndexInfo().GetColumnIds(false)) {
+        if (!resultFiltered->HasColumnId(columnId) || columnsData.contains(columnId)) {
+            continue;
+        }
+        bool differs = false;
+        std::optional<std::shared_ptr<arrow::Scalar>> firstFill;
+        for (const auto& portionSchema : PortionSchemas) {
+            const auto fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchema, *resultFiltered, columnId);
+            if (!firstFill) {
+                firstFill = fill;
+            } else if (!NArrow::ScalarEqualsNullable(fill, *firstFill)) {
                 differs = true;
+                break;
             }
-            if (differs) {
-                columnsData.emplace(columnId, TColumnData(Batches.size()));
-            }
+        }
+        const auto resultFill = ISnapshotSchema::GetAbsentColumnFill(*resultFiltered, *resultFiltered, columnId);
+        if (firstFill && !NArrow::ScalarEqualsNullable(*firstFill, resultFill)) {
+            differs = true;
+        }
+        if (differs) {
+            columnsData.emplace(columnId, TColumnData(Batches.size()));
         }
     }
 
@@ -361,7 +356,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         AFL_VERIFY(!!merger)("problem", "cannot create merger")(
             "class_name", commonContext.GetLoader()->GetAccessorConstructor().GetClassName());
         for (ui32 batchIdx = 0; batchIdx < columnData.size(); ++batchIdx) {
-            if (columnData[batchIdx] || batchIdx >= PortionSchemas.size() || !PortionSchemas[batchIdx]) {
+            if (columnData[batchIdx]) {
                 continue;
             }
             const auto fill = ISnapshotSchema::GetAbsentColumnFill(*PortionSchemas[batchIdx], *resultFiltered, columnId);

@@ -4,12 +4,14 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
 
 #include <util/generic/ylimits.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/dom/yson.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
@@ -215,6 +217,11 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromTypedValue(const 
         if (valueCase != Ydb::Value::kLow128) {
             return invalidLiteral;
         }
+        const auto decimal = NYql::NDecimal::FromHalfs(value.low_128(), value.high_128());
+        const ui32 precision = typed.type().decimal_type().precision();
+        if (precision > Max<ui8>() || !NKikimr::NMiniKQL::IsValidDecimal(static_cast<ui8>(precision), decimal)) {
+            return TConclusionStatus::Fail("Invalid Decimal default");
+        }
         scalar = fixedSizeBinary();
     } else {
         switch (typed.type().type_id()) {
@@ -350,13 +357,13 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromTypedValue(const 
                 scalar = std::make_shared<arrow::Int64Scalar>(value.int64_value());
                 break;
             case Ydb::Type::INTERVAL64:
-                if (valueCase != Ydb::Value::kInt64Value || std::abs(value.int64_value()) > NUdf::MAX_INTERVAL64) {
+                if (valueCase != Ydb::Value::kInt64Value || !NUdf::IsValidLayoutValue<NUdf::TInterval64>(value.int64_value())) {
                     return TConclusionStatus::Fail("Invalid Interval64 default");
                 }
                 scalar = std::make_shared<arrow::Int64Scalar>(value.int64_value());
                 break;
             case Ydb::Type::INTERVAL:
-                if (valueCase != Ydb::Value::kInt64Value || static_cast<ui64>(std::abs(value.int64_value())) >= NUdf::MAX_TIMESTAMP) {
+                if (valueCase != Ydb::Value::kInt64Value || !NUdf::IsValidLayoutValue<NUdf::TInterval>(value.int64_value())) {
                     return TConclusionStatus::Fail("Invalid Interval default");
                 }
                 scalar = std::make_shared<arrow::DurationScalar>(value.int64_value(), arrow::duration(arrow::TimeUnit::MICRO));

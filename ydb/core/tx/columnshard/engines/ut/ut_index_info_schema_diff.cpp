@@ -521,6 +521,26 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::TIMESTAMP, NScheme::NTypeIds::Timestamp, [](Ydb::Value& value) {
             value.set_uint64_value(NYql::NUdf::MAX_TIMESTAMP);
         }).GetErrorMessage(), "Invalid Timestamp");
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::INTERVAL, NScheme::NTypeIds::Interval, [](Ydb::Value& value) {
+            value.set_int64_value(Min<i64>());
+        }).GetErrorMessage(), "Invalid Interval");
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::INTERVAL64, NScheme::NTypeIds::Interval64, [](Ydb::Value& value) {
+            value.set_int64_value(Min<i64>());
+        }).GetErrorMessage(), "Invalid Interval64");
+    }
+
+    Y_UNIT_TEST(DecimalDefaultRejectsOutOfPrecision) {
+        auto parse = [](ui64 low, ui32 precision, ui32 scale) {
+            Ydb::TypedValue typed;
+            auto* decimal = typed.mutable_type()->mutable_decimal_type();
+            decimal->set_precision(precision);
+            decimal->set_scale(scale);
+            typed.mutable_value()->set_low_128(low);
+            TColumnDefaultScalarValue scalar;
+            return scalar.ParseFromTypedValue(typed, NScheme::TTypeInfo(NScheme::TDecimalType(precision, scale)));
+        };
+        UNIT_ASSERT_STRING_CONTAINS(parse(123, 1, 0).GetErrorMessage(), "Invalid Decimal");
+        UNIT_ASSERT(parse(9, 1, 0).IsSuccess());
     }
 }
 

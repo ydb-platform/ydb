@@ -1172,6 +1172,33 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         CompareYson(R"([[1u;[5u]];[2u;#]])", SelectYson(db, "SELECT Key, Value FROM `/Root/CsSetNull` ORDER BY Key;"));
     }
 
+    Y_UNIT_TEST(DropDefaultWithoutDefaultMatchesRowTable) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        const char* columns = R"(
+            Key Uint32 NOT NULL,
+            Value Uint32,
+            PRIMARY KEY (Key)
+        )";
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/DsNoDef` (" << columns << ");");
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/CsNoDef` (" << columns << ") WITH (STORE = COLUMN);");
+        for (const char* side : {"Ds", "Cs"}) {
+            for (ui32 repeat = 0; repeat != 2; ++repeat) {
+                ExecScheme(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "NoDef` ALTER COLUMN Value DROP DEFAULT;");
+                ExecScheme(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "NoDef` ALTER COLUMN Value SET DEFAULT NULL;");
+            }
+            ExecScheme(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "NoDef` ALTER COLUMN Value SET DEFAULT 5;");
+            ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/" << side << "NoDef` (Key) VALUES (1);");
+            for (ui32 repeat = 0; repeat != 2; ++repeat) {
+                ExecScheme(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "NoDef` ALTER COLUMN Value DROP DEFAULT;");
+            }
+            ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/" << side << "NoDef` (Key) VALUES (2);");
+        }
+        CompareYson(SelectYson(db, "SELECT Key, Value FROM `/Root/DsNoDef` ORDER BY Key;"),
+            SelectYson(db, "SELECT Key, Value FROM `/Root/CsNoDef` ORDER BY Key;"));
+        CompareYson(R"([[1u;[5u]];[2u;#]])", SelectYson(db, "SELECT Key, Value FROM `/Root/CsNoDef` ORDER BY Key;"));
+    }
+
     Y_UNIT_TEST(NullablePrimaryKeyDefault) {
         auto settings = DefaultsSettings();
         settings.AppConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);

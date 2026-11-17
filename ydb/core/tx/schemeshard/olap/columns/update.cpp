@@ -304,10 +304,6 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         CreatedDefaultValue = NOlap::TColumnDefaultScalarValue();
     }
     if (diffColumn.GetDropDefault().value_or(false)) {
-        if (!DefaultValue.GetValue()) {
-            errors.AddError("no default to drop");
-            return false;
-        }
         DefaultValue = NOlap::TColumnDefaultScalarValue();
     }
     if (diffColumn.GetDefaultScalar()) {

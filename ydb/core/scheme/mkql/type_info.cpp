@@ -1,4 +1,4 @@
-#include "kqp_types.h"
+#include "type_info.h"
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>

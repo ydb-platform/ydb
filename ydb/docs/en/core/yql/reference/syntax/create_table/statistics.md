@@ -1,5 +1,13 @@
 # STATISTICS
 
+{% if feature_flags.enable_column_statistics == false %}
+{% note warning "Experimental feature" %}
+
+This feature is under development and is disabled by default by the [`enable_column_statistics`](../../../../reference/configuration/feature_flags.md) flag. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the flag may cause errors, cluster instability, or make it impossible to change the YDB version. Do not enable this flag in production clusters. [Learn more](../../../../reference/configuration/feature_flags.md#experimental).
+
+{% endnote %}
+{% endif %}
+
 `STATISTICS` defines multi-column statistics for a new table. Run [ANALYZE](../analyze.md) to collect them.
 
 The [cost-based optimizer](../../../../concepts/query_execution/optimizer.md) uses the resulting data to choose a query plan. By default, `ANALYZE` collects information about the table as a whole and about each column separately. Use `STATISTICS` to also analyze combinations of values across multiple columns.

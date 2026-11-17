@@ -3052,6 +3052,28 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
+<<<<<<< HEAD
+=======
+    if (IsTopicMutateDisabled(ctx)
+        && (req.CmdWriteSize() > 0 || req.HasCmdEmitHeartbeat()))
+    {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+                   "Topic mutations are temporarily disabled");
+        return;
+    }
+
+    if (IsTopicMutateDisabled(ctx)
+        && req.HasCmdSetClientOffset())
+    {
+        const auto* consumer = GetConsumer(Config, req.GetCmdSetClientOffset().GetClientId());
+        if (!consumer || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+                       "Topic mutations are temporarily disabled");
+            return;
+        }
+    }
+
+>>>>>>> dcce6c6f21b (allow commits for consumers with type replication (#59306))
     if (req.HasWriteId()) {
         HandleEventForSupportivePartition(responseCookie, ev, ev->Sender, ctx);
         return;

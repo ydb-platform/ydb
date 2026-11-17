@@ -6,10 +6,10 @@ Run directory (YDBD_MOCK_RUN_DIR, default ~/ydbd_mock_work/run):
     endpoint_map.json   label -> 127.0.0.1:port, for the CLI shim
     cluster.json        how to respawn an instance
     macros.json         faults set by macros, cleared by `heal`
-    pids/<pile>.pid
-    state/<pile>/replica.json
-    logs/<pile>.log             instance stdout and stderr
-    logs/<pile>.events.jsonl    event log, survives a kill
+    pids/<encoded pile>.pid
+    state/<encoded pile>/replica.json
+    logs/<encoded pile>.log             instance stdout and stderr
+    logs/<encoded pile>.events.jsonl    event log, survives a kill
 """
 import argparse
 import asyncio
@@ -137,7 +137,7 @@ class Cluster:
 
     def pid(self, pile: str) -> typing.Optional[int]:
         try:
-            with open(self.path("pids", "%s.pid" % pile)) as f:
+            with open(self.path("pids", "%s.pid" % self.topology.pile_file_name(pile))) as f:
                 return int(f.read().strip())
         except (OSError, ValueError):
             return None
@@ -168,18 +168,18 @@ class Cluster:
             "run",
             "--topology", self.path("topology.yaml"),
             "--pile=%s" % pile,
-            "--state-dir", self.path("state", pile),
-            "--log-events", self.path("logs", "%s.events.jsonl" % pile),
+            "--state-dir", self.path("state", self.topology.pile_file_name(pile)),
+            "--log-events", self.path("logs", "%s.events.jsonl" % self.topology.pile_file_name(pile)),
             "--log-level", config.get("log_level", "INFO"),
         ]
         env = dict(os.environ)
         env["PYTHONDONTWRITEBYTECODE"] = "1"
         proc = None
         try:
-            with open(self.path("logs", "%s.log" % pile), mode) as log:
+            with open(self.path("logs", "%s.log" % self.topology.pile_file_name(pile)), mode) as log:
                 proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                         start_new_session=True, env=env)
-            with open(self.path("pids", "%s.pid" % pile), "w") as f:
+            with open(self.path("pids", "%s.pid" % self.topology.pile_file_name(pile)), "w") as f:
                 f.write("%d\n" % proc.pid)
         except BaseException:
             if proc is not None:
@@ -215,7 +215,7 @@ class Cluster:
 
     def log_tail(self, pile: str, lines: int = 20) -> str:
         try:
-            with open(self.path("logs", "%s.log" % pile)) as f:
+            with open(self.path("logs", "%s.log" % self.topology.pile_file_name(pile))) as f:
                 return "".join(f.readlines()[-lines:])
         except OSError:
             return "(no log)"
@@ -319,9 +319,11 @@ def cmd_up(cluster: Cluster, args) -> int:
             control_base_port=args.control_base_port, grpc_base_port=args.grpc_base_port)
     from ydb.apps.bridge_skipper.ydbd_mock.lib import instance
     instance.apply_overrides(topology, args.set or [])
-    piles_to_check = set(topology.pile_names)
     if os.path.exists(cluster.path("topology.yaml")):
-        piles_to_check.update(cluster.piles())
+        piles_to_check = cluster.piles()
+    else:
+        cluster._topo = topology
+        piles_to_check = topology.pile_names
     for name in sorted(piles_to_check):
         if cluster.alive(name):
             raise SupervisorError("pile %s is already running (pid %s); run `cluster down` first" % (
@@ -331,8 +333,8 @@ def cmd_up(cluster: Cluster, args) -> int:
         os.makedirs(cluster.path(sub), exist_ok=True)
     if args.fresh:
         for name in topology.pile_names:
-            for path in (cluster.path("state", name, "replica.json"),
-                         cluster.path("logs", "%s.events.jsonl" % name)):
+            for path in (cluster.path("state", topology.pile_file_name(name), "replica.json"),
+                         cluster.path("logs", "%s.events.jsonl" % topology.pile_file_name(name))):
                 if os.path.exists(path):
                     os.remove(path)
     topology.save(cluster.path("topology.yaml"))
@@ -373,7 +375,7 @@ def cmd_up(cluster: Cluster, args) -> int:
 
 def _remove_pid_file(cluster: Cluster, pile: str) -> None:
     try:
-        os.remove(cluster.path("pids", "%s.pid" % pile))
+        os.remove(cluster.path("pids", "%s.pid" % cluster.topology.pile_file_name(pile)))
     except OSError:
         pass
 
@@ -453,7 +455,7 @@ def cmd_state(cluster: Cluster, args) -> int:
 def read_events(cluster: Cluster, pile: str) -> typing.List[dict]:
     out = []
     try:
-        with open(cluster.path("logs", "%s.events.jsonl" % pile)) as f:
+        with open(cluster.path("logs", "%s.events.jsonl" % cluster.topology.pile_file_name(pile))) as f:
             for line in f:
                 line = line.strip()
                 if line:

@@ -1,5 +1,6 @@
 """Supervisor process bookkeeping that needs no running cluster."""
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -10,6 +11,97 @@ from unittest import mock
 
 from ydb.apps.bridge_skipper.ydbd_mock.lib import supervisor
 from ydb.apps.bridge_skipper.ydbd_mock.lib.topology import Topology
+
+
+class PilePathsTest(unittest.TestCase):
+    def test_path_like_pile_names_stay_local_and_have_distinct_files(self):
+        with tempfile.TemporaryDirectory() as root:
+            run = os.path.join(root, "run")
+            os.makedirs(run)
+            names = ["pile1", "", ".", "..", "%", "%2E", "../../foreign",
+                     os.path.join(root, "absolute"), "a/b", "a\\b", "пайл", "pile%1", "pile one", "__pile_1"]
+            Topology(names, 1).save(os.path.join(run, "topology.yaml"))
+            with open(os.path.join(run, "cluster.json"), "w") as config:
+                json.dump({"argv_prefix": ["mock"]}, config)
+            cluster = supervisor.Cluster(run)
+            states, events, logs, pids = [], [], [], []
+
+            def spawn(argv, stdout, **kwargs):
+                state = argv[argv.index("--state-dir") + 1]
+                event = argv[argv.index("--log-events") + 1]
+                self.assertEqual(os.path.commonpath([run, os.path.abspath(state)]), run)
+                self.assertEqual(os.path.commonpath([run, os.path.abspath(event)]), run)
+                self.assertEqual(os.path.commonpath([run, os.path.abspath(stdout.name)]), run)
+                states.append(state)
+                events.append(event)
+                logs.append(stdout.name)
+                stdout.write("child log\n")
+                with open(event, "w") as sink:
+                    sink.write('{"seq": 1, "kind": "start"}\n')
+                proc = mock.Mock(pid=100 + len(states))
+                proc.poll.return_value = None
+                return proc
+
+            with mock.patch.object(supervisor.subprocess, "Popen", side_effect=spawn):
+                for name in names:
+                    cluster.spawn(name)
+                    self.assertEqual(cluster.log_tail(name), "child log\n")
+                    self.assertEqual(supervisor.read_events(cluster, name), [{"seq": 1, "kind": "start"}])
+                    pids.append(cluster.pid(name))
+            for paths in (states, events, logs, pids):
+                self.assertEqual(len(set(paths)), len(names), paths)
+            for name in names:
+                supervisor._remove_pid_file(cluster, name)
+                self.assertIsNone(cluster.pid(name))
+            self.assertEqual(os.listdir(os.path.join(run, "pids")), [])
+            self.assertEqual(states[0], os.path.join(run, "state", "pile1"))
+
+    def test_existing_literal_pid_logs_and_events_still_load(self):
+        with tempfile.TemporaryDirectory() as run:
+            names = ["pile%1", "pile one", "пайл"]
+            Topology(names, 1).save(os.path.join(run, "topology.yaml"))
+            for directory in ("pids", "logs"):
+                os.makedirs(os.path.join(run, directory))
+            for name in names:
+                with open(os.path.join(run, "pids", name + ".pid"), "w") as sink:
+                    sink.write("42")
+                with open(os.path.join(run, "logs", name + ".log"), "w") as sink:
+                    sink.write("existing log")
+                with open(os.path.join(run, "logs", name + ".events.jsonl"), "w") as sink:
+                    sink.write('{"seq": 17}\n')
+            cluster = supervisor.Cluster(run)
+            for name in names:
+                self.assertEqual(cluster.pid(name), 42)
+                self.assertEqual(cluster.log_tail(name), "existing log")
+                self.assertEqual(supervisor.read_events(cluster, name), [{"seq": 17}])
+
+    def test_fresh_up_cleans_owned_files_and_preserves_foreign_files(self):
+        with tempfile.TemporaryDirectory() as root:
+            run = os.path.join(root, "run")
+            foreign = os.path.join(root, "foreign")
+            os.makedirs(foreign)
+            outside = [os.path.join(foreign, "replica.json"), foreign + ".events.jsonl"]
+            for path in outside:
+                with open(path, "w") as sink:
+                    sink.write("foreign sentinel")
+            owned = [os.path.join(run, "state", "__pile_0", "replica.json"),
+                     os.path.join(run, "logs", "__pile_0.events.jsonl")]
+            for path in owned:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w") as sink:
+                    sink.write("old owned file")
+            topology = os.path.join(root, "input.yaml")
+            Topology(["../../foreign", "safe"], 1).save(topology)
+            cluster = supervisor.Cluster(run)
+            args = supervisor.build_parser().parse_args(["up", "--fresh", "--topology", topology])
+            with mock.patch.object(cluster, "alive", return_value=False), mock.patch.object(
+                    cluster, "spawn"), mock.patch.object(cluster, "wait_responsive"), mock.patch.object(
+                    supervisor, "_print"):
+                supervisor.cmd_up(cluster, args)
+            for path in outside:
+                with open(path) as source:
+                    self.assertEqual(source.read(), "foreign sentinel")
+            self.assertFalse(any(os.path.exists(path) for path in owned))
 
 
 class PidIdentityTest(unittest.TestCase):

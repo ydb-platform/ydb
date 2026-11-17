@@ -4123,6 +4123,47 @@ Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Ti
     WaitForExactSupportivePartitionsCount(0);
 }
 
+Y_UNIT_TEST_F(Kafka_Expired_Writes_Without_Partitions_Are_Deleted_After_Restart, TPQTabletFixture)
+{
+    const NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
+    WaitForExactSupportivePartitionsCount(1);
+
+    CommitKafkaTransaction(producerInstanceId, txId);
+    WaitForTheTransactionToBeDeleted(txId);
+    WaitForExactSupportivePartitionsCount(0);
+
+    // The transaction is gone, but its empty write entry remains in the last
+    // persisted _txinfo snapshot. Restart restores it without a linked TxId.
+    const auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.TxWritesSize(), 1);
+    const auto& write = txInfo.GetTxWrites(0);
+    UNIT_ASSERT_VALUES_EQUAL(GetWriteId(write), TWriteId{producerInstanceId});
+    UNIT_ASSERT(write.HasCreatedAt());
+    UNIT_ASSERT(!write.HasOriginalPartitionId());
+    UNIT_ASSERT(!write.HasInternalPartitionId());
+
+    PQTabletRestart(*Ctx);
+    ResetPipe();
+    const auto restored = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(restored.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(GetWriteId(restored.GetTxWrites(0)), TWriteId{producerInstanceId});
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetTxWrites(0).GetCreatedAt(), write.GetCreatedAt());
+
+    const ui64 timeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs()
+        + KAFKA_TRANSACTION_DELETE_DELAY_MS;
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(timeoutMs + 1));
+    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+
+    // With no partitions, cleanup erases TxWrites synchronously. ASan catches
+    // advancing an iterator to the erased entry in the old implementation.
+    WaitForExactTxWritesCount(0);
+}
+
 Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_With_Delete_Partition_Done_Event_Drop, TPQTabletFixture)
 {
     NKafka::TProducerInstanceId producerInstanceId = {1, 0};

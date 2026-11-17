@@ -180,15 +180,12 @@ namespace NTable {
         }
 
         // Longer filters cannot prove absence from a shorter query prefix.
-        // The caller may further restrict which prefix lengths are safe to use.
-        bool MightHaveKeyPrefix(const NBloom::TPrefix& prefix,
-                ui32 maxPrefixLength = Max<ui32>()) const
+        bool MightHaveKeyPrefix(const NBloom::TPrefix& prefix) const
         {
             // Check from the longest (most selective) prefix first
             for (auto it = ByKeyPrefixes.rbegin(); it != ByKeyPrefixes.rend(); ++it) {
                 const auto& [prefixLen, bloom] = *it;
-                if (bloom && prefixLen > 0 && prefixLen <= prefix.Size()
-                        && prefixLen <= maxPrefixLength) {
+                if (bloom && prefixLen > 0 && prefixLen <= prefix.Size()) {
                     if (!bloom->MightHave(prefix.Get(prefixLen))) {
                         return false;
                     }

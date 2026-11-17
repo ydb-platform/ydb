@@ -109,8 +109,6 @@ namespace NKikimr::NTable {
     // Queries must use complete keys in increasing order; Reset() restarts traversal.
     // Prefixes, including empty keys, are rejected.
     // Missing bounds/bloom and unloaded parts conservatively mean "maybe".
-    // Bloom prefixes containing PG columns are ignored because equal PG values
-    // may have different binary encodings.
     THolder<NPage::IKeySpace> MakeCompactionKeySpace(
         TIntrusiveConstPtr<TKeyCellDefaults> keys,
         TConstArrayRef<TCompactionPartInfo> parts);

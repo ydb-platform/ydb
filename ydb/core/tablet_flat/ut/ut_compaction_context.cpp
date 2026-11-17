@@ -614,7 +614,7 @@ Y_UNIT_TEST_SUITE(TCompactionKeySpaceTest) {
         UNIT_ASSERT(checkedNegative);
     }
 
-    Y_UNIT_TEST(PartBloomChecksRespectAvailableCellsAndExplicitLimit) {
+    Y_UNIT_TEST(PartBloomChecksRespectAvailableCells) {
         NTest::TLayoutCook layout;
         layout.Col(0, 0, NScheme::NTypeIds::Uint32)
             .Col(0, 1, NScheme::NTypeIds::Uint32)
@@ -648,7 +648,6 @@ Y_UNIT_TEST_SUITE(TCompactionKeySpaceTest) {
             const NBloom::TPrefix prefix({&cell, 1});
             if (!shortBloom->MightHave(prefix.Get(1))) {
                 UNIT_ASSERT(!part->MightHaveKeyPrefix(prefix));
-                UNIT_ASSERT(part->MightHaveKeyPrefix(prefix, 0));
                 checkedShortNegative = true;
                 break;
             }
@@ -661,10 +660,8 @@ Y_UNIT_TEST_SUITE(TCompactionKeySpaceTest) {
             const NBloom::TPrefix prefix(key);
             if (!fullBloom->MightHave(prefix.Get(2))) {
                 // The first key cell is present, so only the full-key bloom
-                // can reject this key unless its length exceeds the limit.
+                // can reject this key.
                 UNIT_ASSERT(!part->MightHaveKeyPrefix(prefix));
-                UNIT_ASSERT(part->MightHaveKeyPrefix(prefix, 1));
-                UNIT_ASSERT(part->MightHaveKeyPrefix(prefix, 0));
                 checkedFullNegative = true;
                 break;
             }

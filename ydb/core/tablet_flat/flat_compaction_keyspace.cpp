@@ -13,14 +13,6 @@ namespace {
             : Keys(std::move(keys))
         {
             Y_ENSURE(Keys, "Compaction key space requires a key schema");
-            // Equal PG values may have different binary encodings. Only raw
-            // bloom prefixes before the first PG column can prove absence.
-            for (const auto& type : Keys->Types) {
-                if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    break;
-                }
-                ++BloomPrefixLimit;
-            }
             Parts.reserve(parts.size());
             for (const auto& part : parts) {
                 Y_ENSURE(bool(part.Part) != bool(part.ColdPart),
@@ -62,13 +54,13 @@ namespace {
                     }
                 }
 
-                if (part->ByKeyPrefixes.empty() || BloomPrefixLimit == 0) {
+                if (part->ByKeyPrefixes.empty()) {
                     return true;
                 }
                 if (!prefix) {
                     prefix.emplace(key);
                 }
-                if (part->MightHaveKeyPrefix(*prefix, BloomPrefixLimit)) {
+                if (part->MightHaveKeyPrefix(*prefix)) {
                     return true;
                 }
             }
@@ -88,7 +80,6 @@ namespace {
         };
 
         const TIntrusiveConstPtr<TKeyCellDefaults> Keys;
-        ui32 BloomPrefixLimit = 0;
         TVector<TPartCursor> Parts;
     };
 

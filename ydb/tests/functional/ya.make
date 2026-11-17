@@ -39,6 +39,7 @@ RECURSE(
     serializable
     serverless
     snapshot_retention
+    snapshot_retention_with_load
     split_merge
     sqs
     sqs_topic

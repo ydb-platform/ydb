@@ -6,13 +6,14 @@ its ordinary MVCC window. The anchor's generation determines the exact target
 rows, including values, deleted keys and newly inserted keys. Point, range and
 secondary-index reads use the same explicit transaction without SDK retries.
 
-The local stress runner and functional tests enable both `EnableSnapshotsLocking`
-and `EnableDataShardSnapshotLocking`. They use a five-second `KeepSnapshotTimeout`
-and shorter registry intervals. The original three-node fixtures keep KQP
+The functional suites, with and without concurrent load, enable both
+`EnableSnapshotsLocking` and `EnableDataShardSnapshotLocking`. They use a
+five-second `KeepSnapshotTimeout` and shorter registry intervals. The original
+three-node fixtures keep KQP
 sessions on node 1 and move target tablets to node 2. The tests check the session
 owner and actual tablet placement.
 
-Both runners use `retention_cluster_config` and `pinned_driver` from
+Both functional suites use `retention_cluster_config` and `pinned_driver` from
 `ydb.tests.library.snapshot_retention`. Functional fixtures override this common
 configuration for isolation modes, topology, and registry limits. Their
 additional compaction settings remain explicit overrides. `HeldSnapshot.owner_node_id`
@@ -74,10 +75,11 @@ progress on both the main table and index before compaction. The restart case
 checks real registry reconstruction and retained reads; deterministic coverage
 of the exact empty-registry startup window remains in C++.
 
-The normal stress profile keeps four concurrent readers for the configured
-duration. Fault profiles are explicit sequences: two remote tablet restarts, or
-a split followed by merge, with a background writer running throughout. Two
-groups of three snapshots are held before the first fault. Each group covers
+The functional suite `snapshot_retention_with_load` keeps four concurrent readers
+in its normal profile for the configured duration. Fault profiles are explicit
+sequences: two remote tablet restarts, or a split followed by merge, with a
+background writer running throughout. Two groups of three snapshots are held
+before the first fault. Each group covers
 point, range and index reads. The second group first accesses target after the
 second restart or merge; the first group is checked after both faults. Actual
 watermarks are checked before the first fault and again with a refreshed write
@@ -89,7 +91,7 @@ The shared writer helper propagates failures and stops and joins its thread
 before final fresh reads. Only the fault-mode writer may retry an uncertain
 acknowledgement of its idempotent generation replacement.
 
-The split/merge stress profile disables `EnableDataShardUncommittedWriteSeqNum`:
+The split/merge load profile disables `EnableDataShardUncommittedWriteSeqNum`:
 the default protocol exposed a separate writer failure, `Ancestor shard ... not
 found in lock`, during rerouting after a split. The normal and restart profiles
 keep that protocol enabled. No `BadRequest` is suppressed or retried, and the
@@ -107,7 +109,7 @@ Run the new tests (tests include their build):
 ```bash
 ./ya make --build relwithdebinfo -tA \
     ydb/tests/functional/snapshot_retention \
-    ydb/tests/stress/snapshot_retention/tests \
+    ydb/tests/functional/snapshot_retention_with_load \
     ydb/tests/compatibility/workloads \
     -DYDB_COMPAT_TARGET_REF=current \
     -F '*SnapshotRetention*' 2>&1 | tail -n 100

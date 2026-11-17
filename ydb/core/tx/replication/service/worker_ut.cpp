@@ -3,8 +3,7 @@
 #include "worker.h"
 #include "service.h"
 
-#include <ydb/core/testlib/basics/appdata.h>
-#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/replication/common/schema_change.h>
 
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
@@ -22,13 +21,6 @@
 #include <util/generic/scope.h>
 
 #include <util/string/builder.h>
-
-// TSessionInfo is private to service.cpp. Compile the production implementation
-// into this test, renaming its factory to avoid a duplicate exported symbol.
-#define CreateReplicationService CreateReplicationServiceForSessionTest
-#include "service.cpp"
-#undef CreateReplicationService
-#undef YDB_LOG_THIS_FILE_COMPONENT
 
 namespace NKikimr::NReplication::NService {
 
@@ -1643,142 +1635,195 @@ Y_UNIT_TEST_SUITE(Worker) {
 }
 
 
-struct TSessionInfoTestAccess {
-    struct TSnapshot {
-        size_t Workers = 0;
-        size_t WorkersWithHeartbeat = 0;
-        size_t HeartbeatBuckets = 0;
-        size_t HeartbeatMemberships = 0;
-        TRowVersion MinHeartbeat = TRowVersion::Min();
-    };
-
-    static TSnapshot Read(const TSessionInfo& session) {
-        TSnapshot result;
-        result.Workers = session.Workers.size();
-        result.WorkersWithHeartbeat = session.WorkersWithHeartbeat.size();
-        result.HeartbeatBuckets = session.WorkersByHeartbeat.size();
-        for (const auto& [version, workers] : session.WorkersByHeartbeat) {
-            Y_UNUSED(version);
-            result.HeartbeatMemberships += workers.size();
-        }
-        if (!session.WorkersByHeartbeat.empty()) {
-            result.MinHeartbeat = session.WorkersByHeartbeat.begin()->first;
-        }
-        return result;
-    }
-};
-
 namespace {
 
-class TSink: public TActor<TSink> {
+// Hold the child handshakes so lifecycle and tx-id tests do not start SDK
+// sessions or table writes. The worker itself is created by the service.
+class TServiceFixture {
+    NTestHelpers::TEnv<> Env{true, NTestHelpers::ERuntimeMode::Simulated};
+    TTestActorRuntime& Runtime = Env.GetRuntime();
+    const TActorId Controller = Env.GetSender();
+    const TActorId Service = Runtime.Register(CreateReplicationService());
+    NActors::TBlockEvents<TEvWorker::TEvHandshake> Handshakes{Runtime};
+    NActors::TBlockEvents<TEvService::TEvGetTxId> TxIdRequests{Runtime,
+        [this](const auto& ev) { return ev->Sender == Service && ev->GetRecipientRewrite() == Controller; }};
+    NActors::TBlockEvents<TEvService::TEvTxIdResult> TxIdResults{Runtime,
+        [this](const auto& ev) { return ev->Sender == Service; }};
+
+    struct TWorkerActors {
+        TActorId Worker;
+        TActorId Child;
+    };
+    THashMap<ui64, TWorkerActors> Workers;
+
+    void RequireStatus(ui64 id, NKikimrReplication::TEvWorkerStatus::EStatus expected,
+            NKikimrReplication::TEvWorkerStatus::EReason reason = NKikimrReplication::TEvWorkerStatus::REASON_ACK) {
+        const auto ev = Runtime.GrabEdgeEvent<TEvService::TEvWorkerStatus>(Controller, TDuration::Seconds(30));
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Sender, Service);
+        const auto& record = ev->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.GetWorker().GetReplicationId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetWorker().GetTargetId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetWorker().GetWorkerId(), id);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(record.GetStatus()), static_cast<int>(expected));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(record.GetReason()), static_cast<int>(reason));
+    }
+
 public:
-    TSink()
-        : TActor(&TThis::StateWork)
-    {}
-
-    IActorOps* GetOps() {
-        return this;
+    TServiceFixture() {
+        Runtime.SetFastSimulatedTime(false);
+        Runtime.Send(new IEventHandle(Service, Controller, new TEvService::TEvHandshake(42, 1)), 0, true);
+        UNIT_ASSERT(Runtime.GrabEdgeEvent<TEvService::TEvStatus>(Controller, TDuration::Seconds(30)));
     }
 
-    STATEFN(StateWork) {
-        if (ev->GetTypeRewrite() == TEvents::TEvPoison::EventType) {
-            PassAway();
-        }
+    TActorId Add(ui64 id) {
+        auto run = MakeHolder<TEvService::TEvRunWorker>();
+        run->Record.MutableController()->SetTabletId(42);
+        run->Record.MutableController()->SetGeneration(1);
+        run->Record.MutableWorker()->SetReplicationId(1);
+        run->Record.MutableWorker()->SetTargetId(1);
+        run->Record.MutableWorker()->SetWorkerId(id);
+        auto* command = run->Record.MutableCommand();
+        command->SetDatabase(Env.GetDatabase());
+        auto* reader = command->MutableRemoteTopicReader();
+        auto* connection = reader->MutableConnectionParams();
+        connection->SetEndpoint(Env.GetEndpoint());
+        connection->SetDatabase(Env.GetDatabase());
+        connection->MutableOAuthToken()->SetToken("root@builtin");
+        reader->SetTopicPath("/Root/topic");
+        reader->SetConsumerName("consumer");
+        reader->SetTopicPartitionId(0);
+        TPathId(1, 1).ToProto(command->MutableLocalTableWriter()->MutablePathId());
+        Runtime.Send(new IEventHandle(Service, Controller, run.Release()), 0, true);
+        RequireStatus(id, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
+        Runtime.WaitFor("worker child handshakes", [&] { return Handshakes.size() == 2; }, TDuration::Seconds(30));
+        const auto actor = Handshakes.front()->Sender;
+        UNIT_ASSERT_VALUES_EQUAL(Handshakes.back()->Sender, actor);
+        UNIT_ASSERT(Workers.emplace(id, TWorkerActors{actor, Handshakes.front()->GetRecipientRewrite()}).second);
+        Handshakes.clear();
+        return actor;
     }
-};
 
-class TSessionFixture {
-    IActorOps* const Ops;
-    TSessionInfo Session;
-
-    static TWorkerId Id(ui64 workerId) {
-        return TWorkerId(1, 1, workerId);
-    }
-
-public:
-    TSessionFixture(IActorOps* ops, const TActorId& controller)
-        : Ops(ops)
-        , Session(controller, 42)
-    {}
-
-    TActorId Add(ui64 workerId) {
-        return Session.RegisterWorker(Ops, Id(workerId), new TSink(), 0, {},
-            NKikimrProto::NMetricsConfig::TMetricsConfig::LEVEL_DEFAULT);
-    }
-
-    void Stop(ui64 workerId, bool byActorId = false) {
-        if (byActorId) {
-            Session.StopWorker(Ops, Session.GetWorkerActorId(Id(workerId)));
+    void Stop(ui64 id, bool gone = false) {
+        const auto actors = Workers.at(id);
+        if (gone) {
+            // A fatal child error makes the worker send Gone and terminate.
+            Runtime.Send(new IEventHandle(actors.Worker, actors.Child,
+                new TEvWorker::TEvGone(TEvWorker::TEvGone::SCHEME_ERROR, "test reader failure")), 0, true);
         } else {
-            Session.StopWorker(Ops, Id(workerId));
+            auto stop = MakeHolder<TEvService::TEvStopWorker>();
+            stop->Record.MutableController()->SetTabletId(42);
+            stop->Record.MutableController()->SetGeneration(1);
+            stop->Record.MutableWorker()->SetReplicationId(1);
+            stop->Record.MutableWorker()->SetTargetId(1);
+            stop->Record.MutableWorker()->SetWorkerId(id);
+            Runtime.Send(new IEventHandle(Service, Controller, stop.Release()), 0, true);
         }
+        RequireStatus(id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
+            gone ? NKikimrReplication::TEvWorkerStatus::REASON_ERROR : NKikimrReplication::TEvWorkerStatus::REASON_ACK);
+        Runtime.WaitFor("worker terminated", [&] { return !Runtime.FindActor(actors.Worker); }, TDuration::Seconds(30));
+        Workers.erase(id);
     }
 
     void Heartbeat(const TActorId& actor, ui64 step) {
-        using TEvent = TEvService::TEvHeartbeat;
-        TEvent::TPtr ev(static_cast<TEventHandle<TEvent>*>(
-            new IEventHandle({}, actor, new TEvent(TRowVersion(step, 0)))));
-        Session.Handle(Ops, ev);
+        Runtime.Send(new IEventHandle(Service, actor, new TEvService::TEvHeartbeat(TRowVersion(step, 0))), 0, true);
+        const auto ev = Runtime.GrabEdgeEvent<TEvService::TEvHeartbeat>(Controller, TDuration::Seconds(30));
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Sender, Service);
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(ev->Get()->Record.GetVersion()), TRowVersion(step, 0));
     }
 
-    auto Snapshot(TStringBuf label) const {
-        const auto state = TSessionInfoTestAccess::Read(Session);
-        Cerr << label << ": workers=" << state.Workers
-            << " heartbeat_workers=" << state.WorkersWithHeartbeat
-            << " heartbeat_buckets=" << state.HeartbeatBuckets
-            << " heartbeat_memberships=" << state.HeartbeatMemberships
-            << " min_heartbeat=" << state.MinHeartbeat << Endl;
-        return state;
+    void CheckIgnoredHeartbeat(const TActorId& actor, ui64 step) {
+        NActors::TBlockEvents<TEvService::TEvHeartbeat> reports{Runtime,
+            [this](const auto& ev) { return ev->Sender == Service; }};
+        Runtime.Send(new IEventHandle(Service, actor, new TEvService::TEvHeartbeat(TRowVersion(step, 0))), 0, true);
+        // The status response is a barrier: the preceding heartbeat has been
+        // processed by the same service mailbox before we check its output.
+        Runtime.Send(new IEventHandle(Service, Controller, new TEvService::TEvHandshake(42, 1)), 0, true);
+        UNIT_ASSERT(Runtime.GrabEdgeEvent<TEvService::TEvStatus>(Controller, TDuration::Seconds(30)));
+        UNIT_ASSERT_C(reports.empty(), "Repeated or older heartbeat must not be forwarded");
+    }
+
+    void AssignTxId(ui64 step) {
+        auto result = MakeHolder<TEvService::TEvTxIdResult>(42, 1);
+        auto* assignment = result->Record.AddVersionTxIds();
+        TRowVersion(step, 0).ToProto(assignment->MutableVersion());
+        assignment->SetTxId(step + 1000);
+        Runtime.Send(new IEventHandle(Service, Controller, result.Release()), 0, true);
+    }
+
+    void CheckTxId(const TActorId& actor, ui64 step, ui64 assignedStep, bool cached, TStringBuf reason) {
+        UNIT_ASSERT(TxIdRequests.empty());
+        UNIT_ASSERT(TxIdResults.empty());
+        Runtime.Send(new IEventHandle(Service, actor,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(step, 0)})), 0, true);
+        Runtime.WaitFor("tx-id response or controller request", [&] {
+            return !TxIdRequests.empty() || !TxIdResults.empty();
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL_C(TxIdResults.size(), cached ? 1 : 0, reason);
+        UNIT_ASSERT_VALUES_EQUAL_C(TxIdRequests.size(), cached ? 0 : 1, reason);
+        if (cached) {
+            const auto& ev = TxIdResults.front();
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), actor);
+            const auto& record = ev->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.VersionTxIdsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(record.GetVersionTxIds(0).GetVersion()), TRowVersion(assignedStep, 0));
+            UNIT_ASSERT_VALUES_EQUAL(record.GetVersionTxIds(0).GetTxId(), assignedStep + 1000);
+        } else {
+            const auto& record = TxIdRequests.front()->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.VersionsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(record.GetVersions(0)), TRowVersion(step, 0));
+        }
+        TxIdResults.clear();
+        TxIdRequests.clear();
     }
 };
 
-template <typename TTest>
-void WithSession(TTest&& test) {
-    TTestBasicRuntime runtime;
-    TAppPrepare app;
-    runtime.Initialize(app.Unwrap());
-    const auto controller = runtime.AllocateEdgeActor();
-    auto* ops = new TSink();
-    runtime.Register(ops);
-    runtime.RunCall([&] {
-        TSessionFixture fixture(ops->GetOps(), controller);
-        test(fixture);
-        return true;
-    });
+void CheckStoppedWorker(bool gone) {
+    TServiceFixture fixture;
+    const auto first = fixture.Add(1);
+    const auto second = fixture.Add(2);
+    fixture.Heartbeat(first, 100);
+    fixture.Heartbeat(second, 100);
+    fixture.Stop(1, gone);
+    fixture.AssignTxId(150);
+    fixture.Heartbeat(second, 110);
+    // The remaining worker supplies the whole heartbeat quorum, allowing the
+    // service to evict this assignment and ask the controller for it again.
+    fixture.CheckTxId(second, 140, 150, false,
+        "Stopped worker still participates in heartbeat quorum: expected a controller request");
 }
 
-void CheckStoppedWorker(bool byActorId) {
-    WithSession([&](TSessionFixture& fixture) {
-        const auto first = fixture.Add(1);
-        const auto second = fixture.Add(2);
-        fixture.Heartbeat(first, 100);
-        fixture.Heartbeat(second, 100);
-        fixture.Stop(1, byActorId);
-        const auto state = fixture.Snapshot(byActorId ? "after Gone" : "after StopWorker");
-        UNIT_ASSERT_VALUES_EQUAL(state.Workers, 1);
-        UNIT_ASSERT_VALUES_EQUAL_C(state.WorkersWithHeartbeat, 1,
-            "Stopped worker still participates in heartbeat quorum");
-        UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatMemberships, 1);
-        UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatBuckets, 1);
-    });
+void CheckRecreatedWorkerWaitsForHeartbeat(bool gone) {
+    TServiceFixture fixture;
+    const auto first = fixture.Add(1);
+    const auto second = fixture.Add(2);
+    fixture.Heartbeat(first, 100);
+    fixture.Heartbeat(second, 100);
+    fixture.Stop(1, gone);
+    UNIT_ASSERT_VALUES_UNEQUAL(fixture.Add(1), first);
+    fixture.AssignTxId(150);
+    fixture.Heartbeat(second, 110);
+    // The replacement has not sent a heartbeat yet. Its predecessor must not
+    // satisfy the quorum and enable eviction on the other worker's heartbeat.
+    fixture.CheckTxId(second, 140, 150, true,
+        "Recreated worker inherited heartbeat membership before its first heartbeat");
 }
 
-void CheckRecreatedWorker(bool byActorId) {
-    WithSession([&](TSessionFixture& fixture) {
-        const auto oldActor = fixture.Add(1);
-        fixture.Heartbeat(oldActor, 100);
-        fixture.Stop(1, byActorId);
-        const auto newActor = fixture.Add(1);
-        UNIT_ASSERT(oldActor != newActor);
-        fixture.Heartbeat(newActor, 200);
-        const auto state = fixture.Snapshot(byActorId ? "after Gone/recreate" : "after Stop/recreate");
-        UNIT_ASSERT_VALUES_EQUAL(state.Workers, 1);
-        UNIT_ASSERT_VALUES_EQUAL(state.WorkersWithHeartbeat, 1);
-        UNIT_ASSERT_VALUES_EQUAL_C(state.MinHeartbeat, TRowVersion(200, 0),
-            "Recreated worker retains the previous actor's heartbeat");
-        UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatBuckets, 1);
-        UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatMemberships, 1);
-    });
+void CheckRecreatedWorker(bool gone) {
+    TServiceFixture fixture;
+    const auto first = fixture.Add(1);
+    fixture.Heartbeat(first, 100);
+    fixture.Stop(1, gone);
+    const auto replacement = fixture.Add(1);
+    UNIT_ASSERT_VALUES_UNEQUAL(replacement, first);
+    fixture.AssignTxId(150);
+    fixture.Heartbeat(replacement, 200);
+    // Only the replacement's heartbeat may affect eviction. A newly added
+    // worker probes the assignment without having reported any progress yet.
+    const auto probe = fixture.Add(2);
+    fixture.CheckTxId(probe, 140, 150, true,
+        "Previous incarnation's heartbeat evicted a cached tx-id assignment");
 }
 
 } // anonymous namespace
@@ -1792,6 +1837,14 @@ Y_UNIT_TEST_SUITE(ReplicationServiceSession) {
         CheckStoppedWorker(true);
     }
 
+    Y_UNIT_TEST(StopAndRecreateWaitsForNewHeartbeat) {
+        CheckRecreatedWorkerWaitsForHeartbeat(false);
+    }
+
+    Y_UNIT_TEST(GoneAndRecreateWaitsForNewHeartbeat) {
+        CheckRecreatedWorkerWaitsForHeartbeat(true);
+    }
+
     Y_UNIT_TEST(StopAndRecreateDoesNotKeepOldHeartbeat) {
         CheckRecreatedWorker(false);
     }
@@ -1800,50 +1853,51 @@ Y_UNIT_TEST_SUITE(ReplicationServiceSession) {
         CheckRecreatedWorker(true);
     }
 
-    Y_UNIT_TEST(RepeatedRecreateDoesNotAccumulateBuckets) {
-        WithSession([](TSessionFixture& fixture) {
-            for (ui64 i = 1; i <= 1000; ++i) {
-                const auto actor = fixture.Add(1);
-                fixture.Heartbeat(actor, 100 * i);
-                fixture.Stop(1, i % 2);
-            }
-            const auto state = fixture.Snapshot("after 1000 worker replacements");
-            UNIT_ASSERT_VALUES_EQUAL(state.Workers, 0);
-            UNIT_ASSERT_VALUES_EQUAL_C(state.HeartbeatBuckets, 0,
-                "Stopped workers retain heartbeat buckets");
-            UNIT_ASSERT_VALUES_EQUAL(state.WorkersWithHeartbeat, 0);
-            UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatMemberships, 0);
-        });
+    Y_UNIT_TEST(RepeatedRecreateDoesNotKeepOldHeartbeat) {
+        TServiceFixture fixture;
+        auto actor = fixture.Add(1);
+        fixture.Heartbeat(actor, 100);
+        for (ui64 i = 1; i <= 16; ++i) {
+            fixture.Stop(1, i % 2);
+            const auto replacement = fixture.Add(1);
+            UNIT_ASSERT_VALUES_UNEQUAL(replacement, actor);
+            actor = replacement;
+            const ui64 boundary = 100 * i + 50;
+            fixture.AssignTxId(boundary);
+            fixture.Heartbeat(actor, 100 * (i + 1));
+            const auto probe = fixture.Add(2);
+            fixture.CheckTxId(probe, boundary - 10, boundary, true,
+                "Repeated worker replacement retains an old heartbeat");
+            fixture.Stop(2);
+        }
     }
 
-    Y_UNIT_TEST(HeartbeatUpdateDoesNotAccumulateBuckets) {
-        WithSession([](TSessionFixture& fixture) {
-            const auto actor = fixture.Add(1);
-            fixture.Heartbeat(actor, 100);
-            fixture.Heartbeat(actor, 200);
-            fixture.Heartbeat(actor, 200);
-            fixture.Heartbeat(actor, 150);
-            const auto state = fixture.Snapshot("heartbeat update control");
-            UNIT_ASSERT_VALUES_EQUAL(state.Workers, 1);
-            UNIT_ASSERT_VALUES_EQUAL(state.WorkersWithHeartbeat, 1);
-            UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatBuckets, 1);
-            UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatMemberships, 1);
-            UNIT_ASSERT_VALUES_EQUAL(state.MinHeartbeat, TRowVersion(200, 0));
-        });
+    Y_UNIT_TEST(HeartbeatUpdateIgnoresNonIncreasingVersions) {
+        TServiceFixture fixture;
+        const auto actor = fixture.Add(1);
+        fixture.Heartbeat(actor, 100);
+        fixture.Heartbeat(actor, 200);
+        fixture.CheckIgnoredHeartbeat(actor, 200);
+        fixture.CheckIgnoredHeartbeat(actor, 150);
+        fixture.AssignTxId(150);
+        fixture.Heartbeat(actor, 210);
+        const auto probe = fixture.Add(2);
+        fixture.CheckTxId(probe, 140, 150, true,
+            "A repeated or older heartbeat changed tx-id cache eviction");
     }
 
     Y_UNIT_TEST(StopBeforeFirstHeartbeat) {
-        WithSession([](TSessionFixture& fixture) {
-            fixture.Add(1);
-            fixture.Stop(1);
-            fixture.Add(1);
-            fixture.Stop(1, true);
-            const auto state = fixture.Snapshot("stop without heartbeat control");
-            UNIT_ASSERT_VALUES_EQUAL(state.Workers, 0);
-            UNIT_ASSERT_VALUES_EQUAL(state.WorkersWithHeartbeat, 0);
-            UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatBuckets, 0);
-            UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatMemberships, 0);
-        });
+        TServiceFixture fixture;
+        const auto first = fixture.Add(1);
+        fixture.Stop(1);
+        const auto second = fixture.Add(1);
+        UNIT_ASSERT_VALUES_UNEQUAL(first, second);
+        fixture.Stop(1, true);
+        const auto third = fixture.Add(1);
+        fixture.AssignTxId(150);
+        fixture.Heartbeat(third, 100);
+        fixture.CheckTxId(third, 140, 150, false,
+            "Stopping before the first heartbeat corrupted subsequent heartbeat quorum");
     }
 }
 

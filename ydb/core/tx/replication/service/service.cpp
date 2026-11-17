@@ -36,8 +36,6 @@
 namespace NKikimr::NReplication::NService {
 
 class TSessionInfo {
-    friend struct TSessionInfoTestAccess;
-
     using TMetricsConfig = NKikimrProto::NMetricsConfig::TMetricsConfig;
 
     class TWorkerInfo {

@@ -3,6 +3,7 @@ LIBRARY()
 PEERDIR(
     ydb/core/base
     ydb/core/protos
+    ydb/core/tx/replication/private_client
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/iam
     ydb/public/sdk/cpp/src/client/iam_private

@@ -61,6 +61,7 @@ SRCS(
     rpc_remove_directory.cpp
     rpc_rename_tables.cpp
     rpc_replication.cpp
+    rpc_replication_checksum.cpp
     rpc_rollback_transaction.cpp
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
@@ -184,6 +185,7 @@ JOIN_SRCS(
 )
 
 PEERDIR(
+    ydb/core/tx/replication/checksum
     contrib/libs/xxhash
     library/cpp/cgiparam
     library/cpp/digest/old_crc

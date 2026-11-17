@@ -6,6 +6,7 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
@@ -25,6 +26,12 @@ message DescribeReplicationRequest {
 message DescribeReplicationResponse {
     // Result of request will be inside operation.
     Ydb.Operations.Operation operation = 1;
+}
+
+message TableChecksum {
+    uint64 row_count = 1;
+    // Decimal SUM of row hashes; empty when SQL SUM is NULL (an empty table).
+    string hash = 2;
 }
 
 message ConnectionParams {
@@ -254,4 +261,37 @@ message DescribeTransferResult {
 
     optional BatchSettings batch_settings = 11;
     optional Stats stats = 12;
+}
+
+// Internal source-side protocol for replication controllers, not application use.
+// Only the fixed checksum query is executed, with the authenticated caller's read privileges.
+message StreamChecksumTablesInternalRequest {
+    message Table {
+        uint64 id = 1;
+        string path = 2;
+        string changefeed_name = 3;
+    }
+    repeated Table tables = 1;
+    VirtualTimestamp minimum_snapshot = 2;
+    google.protobuf.Duration timeout = 3;
+    // Validate source readiness without acquiring a snapshot or running a query.
+    bool probe_only = 4;
+}
+
+// Internal source-side response; not exposed by the application SDK.
+message StreamChecksumTablesInternalResponse {
+    message Table {
+        uint64 id = 1;
+        TableChecksum checksum = 2;
+        // Canonical column names and types, used to reject schema mismatches.
+        string schema = 3;
+    }
+    Ydb.StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+    // Sent before any table result, while the source snapshot is retained.
+    VirtualTimestamp snapshot = 3;
+    Table table = 4;
+    // All table identities/schemas have been revalidated before this marker.
+    bool complete = 5;
+    bool deferred = 6;
 }

@@ -420,6 +420,8 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
             return EnsureClient<TClient, TClientSettings>(TableClient);
         } else if constexpr (std::is_same_v<TClient, TTopicClient>) {
             return EnsureClient<TClient, TTopicClientSettings>(TopicClient);
+        } else if constexpr (std::is_same_v<TClient, TPrivateClient>) {
+            return EnsureClient<TClient, TCommonClientSettings>(ReplicationClient);
         } else {
             Y_ABORT("unreachable");
         }
@@ -544,6 +546,10 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         Call<TEvYdbProxy::TEvCommitOffsetResponse>(ev, &TTopicClient::CommitOffset);
     }
 
+    void Handle(TEvYdbProxy::TEvChecksumStreamRequest::TPtr& ev) {
+        Call<TEvYdbProxy::TEvChecksumStreamResponse>(ev, &TPrivateClient::StreamChecksumTablesInternal);
+    }
+
     static TCommonClientSettings BaseSettings(const TString& endpoint, const TString& database, bool ssl, const TString& caCert) {
         return TCommonClientSettings()
             .DiscoveryEndpoint(endpoint)
@@ -606,6 +612,7 @@ public:
             hFunc(TEvYdbProxy::TEvCopyTablesRequest, Handle);
             hFunc(TEvYdbProxy::TEvRenameTablesRequest, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTableRequest, Handle);
+            hFunc(TEvYdbProxy::TEvChecksumStreamRequest, Handle);
             // Topic
             hFunc(TEvYdbProxy::TEvCreateTopicRequest, Handle);
             hFunc(TEvYdbProxy::TEvAlterTopicRequest, Handle);
@@ -625,6 +632,7 @@ private:
     THolder<TSchemeClient> SchemeClient;
     THolder<TTableClient> TableClient;
     THolder<TTopicClient> TopicClient;
+    THolder<TPrivateClient> ReplicationClient;
 
 }; // TYdbProxy
 

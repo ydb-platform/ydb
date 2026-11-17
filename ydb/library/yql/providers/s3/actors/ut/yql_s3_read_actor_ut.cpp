@@ -296,7 +296,8 @@ public:
     }
 
     void Start(std::shared_ptr<TParquetGateway> gateway, NS3::TSource source, ui64 dataInflight = 200_MB, bool batched = true,
-        ui64 batchDecodeTargetBytes = 16_MB, IDqSchedulableWorkFactoryPtr workFactory = nullptr)
+        ui64 batchDecodeTargetBytes = 16_MB, IDqSchedulableWorkFactoryPtr workFactory = nullptr,
+        ::NMonitoring::TDynamicCounterPtr cpuCounters = nullptr)
     {
         NS3::TRange range;
         auto* path = range.AddPaths();
@@ -314,18 +315,30 @@ public:
                 CreateS3ReadActor(actor.TypeEnv, actor.HolderFactory, std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {
                 }), gateway, std::move(source), 0, TCollectStatsLevel::None,
                     TTxId{}, {}, {}, { encodedRange.Str() }, FakeActorId, CreateStructuredTokenCredentialsFactory(), GetHTTPDefaultRetryPolicy(),
-                    config, nullptr, nullptr, std::make_shared<TGuaranteeQuotaManager>(dataInflight, dataInflight), false, workFactory);
+                    config, nullptr, nullptr, std::make_shared<TGuaranteeQuotaManager>(dataInflight, dataInflight), false, workFactory, cpuCounters);
             actor.InitAsyncInput(input, inputActor);
         });
     }
 
-    void Pump() {
+    void Dispatch() {
         Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    }
+
+    void Pump() {
+        Dispatch();
         Execute([&](TFakeActor& actor) {
             TMaybe<TInstant> watermark;
             TUnboxedValueBatch buffer;
             actor.DqAsyncInput->GetAsyncInputData(buffer, watermark, Result.Finished, 1_MB);
         });
+    }
+
+    TString DebugInfo() {
+        TString result;
+        Execute([&](TFakeActor& actor) {
+            result = actor.DqAsyncInput->GetDebugInfo();
+        });
+        return result;
     }
 
     void ReadToEnd() {
@@ -433,6 +446,81 @@ void CheckQuotaCleanup(const TString& body, const NS3::TSource& source, ui64 exp
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TS3ParquetQuotaCleanup) {
+    Y_UNIT_TEST(CpuCountersWithoutCommonCounters) {
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto workFactory = std::make_shared<TCountingWorkFactory>();
+        workFactory->Throttle = true;
+        const auto group = counters->GetSubgroup("db", "/Root")->GetSubgroup("pool", "test")->GetSubgroup("kind", "reader");
+        {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = MakeParquet(10);
+            reader.Start(gateway, ParquetSource(), 200_MB, true, 16_MB, workFactory, counters);
+            reader.Pump();
+            const auto waiting = group->FindCounter("S3CpuWaiting");
+            UNIT_ASSERT(waiting);
+            UNIT_ASSERT_VALUES_EQUAL(waiting->Val(), 1);
+            for (const auto* name : { "QueueDataSize", "QueueDataLimit", "QueueBlockCount", "DownloadCount", "DownloadPaused" }) {
+                UNIT_ASSERT_C(!counters->FindCounter(name), name);
+            }
+            UNIT_ASSERT(!counters->FindHistogram("ChunkSizeBytes"));
+            reader.SendToWork(workFactory->WorkActorId, new TEvents::TEvPoison());
+            reader.ReadToEnd();
+            UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(group->FindCounter("S3CpuWaiting")->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(group->FindCounter("S3CpuActive")->Val(), 0);
+    }
+
+    Y_UNIT_TEST(DebugWaitingConsumer) {
+        for (bool batched : { true, false }) {
+            auto workFactory = std::make_shared<TCountingWorkFactory>();
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = MakeParquet(1000, 500);
+            reader.Start(gateway, ParquetSource(1), 1_KB, batched, 1_KB, workFactory);
+            reader.Dispatch();
+            const auto debug = reader.DebugInfo();
+            UNIT_ASSERT_STRING_CONTAINS(debug, "State: WaitingConsumer");
+            UNIT_ASSERT_STRING_CONTAINS(debug, "CpuHeld: 0");
+            UNIT_ASSERT_STRING_CONTAINS(debug, "Readers: 1 Waiting CPU: 0 CPU holders: 0 Finished: 0");
+            reader.ReadToEnd();
+            UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, 1000);
+        }
+    }
+
+    Y_UNIT_TEST(DebugFinishedAfterError) {
+        auto workFactory = std::make_shared<TCountingWorkFactory>();
+        TParquetReader reader;
+        auto gateway = std::make_shared<TParquetGateway>();
+        gateway->Body = MakeParquetWithCompressedSizes({ -1 });
+        reader.Start(gateway, ParquetSource(), 200_MB, true, 16_MB, workFactory);
+        reader.ReadToEnd();
+        UNIT_ASSERT(!reader.Result.Errors.empty());
+        const auto debug = reader.DebugInfo();
+        UNIT_ASSERT_STRING_CONTAINS(debug, "State: Finished");
+        UNIT_ASSERT_STRING_CONTAINS(debug, "CpuHeld: 0");
+        UNIT_ASSERT_STRING_CONTAINS(debug, "Readers: 0 Waiting CPU: 0 CPU holders: 0 Finished: 1");
+    }
+
+    Y_UNIT_TEST(DebugWaitingHttpWithoutCountersOrScheduler) {
+        TParquetReader reader;
+        auto gateway = std::make_shared<TParquetGateway>();
+        gateway->Body = MakeParquet(10);
+        gateway->HoldChunks = true;
+        reader.Start(gateway, ParquetSource(1));
+        reader.Pump();
+        UNIT_ASSERT(!gateway->PendingChunks.empty());
+        const auto debug = reader.DebugInfo();
+        UNIT_ASSERT_STRING_CONTAINS(debug, "State: WaitingHttp");
+        UNIT_ASSERT_STRING_CONTAINS(debug, "CpuHeld: 0");
+        UNIT_ASSERT_STRING_CONTAINS(debug, "Readers: 1 Waiting CPU: 0 CPU holders: 0 Finished: 0");
+        gateway->ReleaseChunks();
+        reader.ReadToEnd();
+        UNIT_ASSERT_STRING_CONTAINS(reader.DebugInfo(), "Readers: 0 Waiting CPU: 0 CPU holders: 0 Finished: 0");
+    }
+
     Y_UNIT_TEST(CancelWhileWaitingForCpu) {
         auto workFactory = std::make_shared<TCountingWorkFactory>();
         workFactory->Throttle = true;
@@ -445,6 +533,12 @@ Y_UNIT_TEST_SUITE(TS3ParquetQuotaCleanup) {
             UNIT_ASSERT(workFactory->Attempts > 0);
             UNIT_ASSERT_VALUES_EQUAL(workFactory->Starts, 0);
             UNIT_ASSERT_VALUES_EQUAL(workFactory->Waiting, 1);
+
+            const auto debug = reader.DebugInfo();
+            UNIT_ASSERT_STRING_CONTAINS(debug, TStringBuilder() << "ActorId: " << workFactory->WorkActorId);
+            UNIT_ASSERT_STRING_CONTAINS(debug, "State: WaitingCpu");
+            UNIT_ASSERT_STRING_CONTAINS(debug, "CpuHeld: 0");
+            UNIT_ASSERT_STRING_CONTAINS(debug, "Readers: 1 Waiting CPU: 1 CPU holders: 0 Finished: 0");
 
             // A retry must not register another waiter or cancel the first one.
             const auto attempts = workFactory->Attempts;

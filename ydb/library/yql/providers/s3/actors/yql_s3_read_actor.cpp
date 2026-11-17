@@ -1,7 +1,7 @@
 #include "yql_arrow_column_converters.h"
 #include "yql_arrow_push_down.h"
 #include "yql_s3_actors_util.h"
-#include "yql_s3_cpu_metrics.h"
+#include "yql_s3_actor_stats.h"
 #include "yql_s3_decompressor_actor.h"
 #include "yql_s3_raw_read_actor.h"
 #include "yql_s3_read_actor.h"
@@ -53,6 +53,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <map>
 #include <queue>
 
 #undef THROW
@@ -411,6 +412,7 @@ public:
 
     private:
         bool nextImpl() final {
+
             while (true) {
                 if (Coro->InputBuffer) {
                     RawDataBuffer.swap(Coro->InputBuffer);
@@ -423,7 +425,9 @@ public:
                     break;
                 }
                 Coro->CpuTime += Coro->GetCpuTimeDelta();
+                Coro->ActorStats->SetState(IS3ActorStats::EState::WaitingHttp);
                 Coro->ProcessOneEvent();
+                Coro->ActorStats->SetState(IS3ActorStats::EState::Processing);
                 Coro->StartCycleCount = GetCycleCountFast();
             }
             return false;
@@ -481,18 +485,20 @@ public:
             // StopExecution also cancels pending admission, unlike StopUnit.
             if (throttled) {
                 Work->StopExecution();
-                CpuMetrics.OnStop(TMonotonic::Now());
+                ActorStats->OnStop(TMonotonic::Now());
             }
         };
         for (;;) {
             const auto now = TMonotonic::Now();
             const auto delay = Work->TryStartExecution(now);
             throttled = delay.has_value();
-            CpuMetrics.OnAdmission(!delay, now);
+            ActorStats->OnAdmission(!delay, now);
             if (!delay) {
+                ActorStats->SetState(IS3ActorStats::EState::Processing);
                 break;
             }
 
+            ActorStats->SetState(IS3ActorStats::EState::WaitingCpu);
             // A delivered event means the scheduler woke us up.
             const auto resumeEv =
                 WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(&TS3ReadCoroImpl::ProcessEventWhileAcquiringSlot, now + *delay);
@@ -506,7 +512,7 @@ public:
             return;
         }
         Work->StopExecution();
-        CpuMetrics.OnStop(TMonotonic::Now());
+        ActorStats->OnStop(TMonotonic::Now());
         Working = false;
     }
 
@@ -591,7 +597,9 @@ public:
 
             if (IsPaused()) {
                 CpuTime += GetCpuTimeDelta();
+                ActorStats->SetState(IS3ActorStats::EState::WaitingConsumer);
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+                ActorStats->SetState(IS3ActorStats::EState::Processing);
                 HandleEvent(*ev);
                 StartCycleCount = GetCycleCountFast();
             }
@@ -633,7 +641,9 @@ public:
                                     ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
             if (IsPaused()) {
                 CpuTime += GetCpuTimeDelta();
+                ActorStats->SetState(IS3ActorStats::EState::WaitingConsumer);
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+                ActorStats->SetState(IS3ActorStats::EState::Processing);
                 HandleEvent(*ev);
                 StartCycleCount = GetCycleCountFast();
             }
@@ -791,9 +801,11 @@ public:
         SetUpstreamPause(true);
 
         while (!cache.Ready) {
+            ActorStats->SetState(IS3ActorStats::EState::WaitingHttp);
             auto ev = WaitForSpecificEvent<TEvS3Provider::TEvReadResult2>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
             HandleEvent(*ev);
         }
+        ActorStats->SetState(IS3ActorStats::EState::Processing);
 
         SetUpstreamPause(false);
 
@@ -821,7 +833,9 @@ public:
     void WaitIfPaused() {
         if (IsPaused()) {
             CpuTime += GetCpuTimeDelta();
+            ActorStats->SetState(IS3ActorStats::EState::WaitingConsumer);
             auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+            ActorStats->SetState(IS3ActorStats::EState::Processing);
             HandleEvent(*ev);
             StartCycleCount = GetCycleCountFast();
         }
@@ -1022,8 +1036,10 @@ public:
 
                     // if reordering is not allowed wait for row groups sequentially
                     while (ReadyRowGroups.empty() || (!ReadSpec->RowGroupReordering && ReadyRowGroups.top() > readyGroupCount)) {
+                        ActorStats->SetState(IS3ActorStats::EState::WaitingHttp);
                         ProcessOneEvent();
                     }
+                    ActorStats->SetState(IS3ActorStats::EState::Processing);
 
                     StartCycleCount = GetCycleCountFast();
 
@@ -1106,7 +1122,9 @@ public:
             if (IsPaused()) {
                 CpuTime += GetCpuTimeDelta();
                 LOG_CORO_D("RunCoroBlockArrowParserOverFile - PAUSED " << SourceContext->GetValue());
+                ActorStats->SetState(IS3ActorStats::EState::WaitingConsumer);
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+                ActorStats->SetState(IS3ActorStats::EState::Processing);
                 HandleEvent(*ev);
                 LOG_CORO_D("RunCoroBlockArrowParserOverFile - CONTINUE " << SourceContext->GetValue());
                 StartCycleCount = GetCycleCountFast();
@@ -1389,7 +1407,7 @@ public:
         const ::NMonitoring::TDynamicCounters::TCounterPtr& deferredQueueSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpInflightSize, const ::NMonitoring::TDynamicCounters::TCounterPtr& httpDataRps,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& rawInflightSize, bool asyncDecompressing, IDqSchedulableWorkFactoryPtr workFactory,
-        ::NMonitoring::TDynamicCounterPtr counters)
+        ::NMonitoring::TDynamicCounterPtr cpuCounters)
         : TActorCoroImpl(256_KB)
         , TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
@@ -1409,9 +1427,12 @@ public:
         , AsyncDecompressing(asyncDecompressing)
         , WorkFactory(std::move(workFactory))
         , Work(WorkFactory ? WorkFactory->CreateSchedulableWork() : nullptr)
-        , Counters(std::move(counters))
-        , CpuMetrics(Counters, Work.get(), "reader")
+        , ActorStats(std::make_shared<TS3ActorStats>(cpuCounters, Work.get()))
     {
+    }
+
+    std::shared_ptr<const IS3ActorStats> GetActorStats() const {
+        return ActorStats;
     }
 
     ~TS3ReadCoroImpl() override {
@@ -1470,14 +1491,15 @@ private:
             // Metadata reads can acquire quota before any row-group decode scope.
             // Release it on empty/filtered files and errors as well as normal EOF.
             StopUnit();
-            CpuMetrics.OnExit(TMonotonic::Now());
+            ActorStats->OnExit(TMonotonic::Now());
         };
+        ActorStats->SetState(IS3ActorStats::EState::Processing);
         LOG_CORO_D("Run start: WorkFactory=" << (WorkFactory ? "set" : "null") << " Work=" << (Work ? "set" : "null"));
         if (Work) {
             Work->RegisterForResume(SelfActorId);
         }
         if (AsyncDecompressing) {
-            DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression, WorkFactory, Counters));
+            DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression, WorkFactory));
         }
 
         FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
@@ -1653,8 +1675,7 @@ private:
     const bool AsyncDecompressing;
     const IDqSchedulableWorkFactoryPtr WorkFactory;
     std::unique_ptr<IDqSchedulableWork> Work;
-    const ::NMonitoring::TDynamicCounterPtr Counters;
-    TS3CpuMetrics CpuMetrics;
+    const std::shared_ptr<TS3ActorStats> ActorStats;
     bool Working = false;   // holds HDRF slot — allowed to consume CPU
 };
 
@@ -1683,7 +1704,7 @@ public:
         ::NMonitoring::TDynamicCounterPtr taskCounters, ui64 fileSizeLimit, ui64 readLimit, std::optional<ui64> rowsLimitHint,
         IMemoryQuotaManager::TPtr memoryQuotaManager, bool useRuntimeListing, TActorId fileQueueActor, ui64 fileQueueBatchSizeLimit,
         ui64 fileQueueBatchObjectCountLimit, ui64 fileQueueConsumersCountDelta, bool asyncDecoding, bool asyncDecompressing,
-        bool allowLocalFiles, IDqSchedulableWorkFactoryPtr workFactory)
+        bool allowLocalFiles, IDqSchedulableWorkFactoryPtr workFactory, ::NMonitoring::TDynamicCounterPtr cpuCounters)
         : TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
@@ -1702,6 +1723,7 @@ public:
         , ReadSpec(readSpec)
         , Counters(std::move(counters))
         , TaskCounters(std::move(taskCounters))
+        , CpuCounters(std::move(cpuCounters))
         , FileQueueActor(fileQueueActor)
         , FileSizeLimit(fileSizeLimit)
         , ReadLimit(readLimit)
@@ -1833,14 +1855,15 @@ public:
             TxId, requestId, RetryPolicy);
         auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, TxId, ComputeActorId, std::move(stuff), ReadSpec, pathIndex, object.GetPath(), Url,
             RowsRemained, ReadActorFactoryCfg, SourceContext, DeferredQueueSize, HttpInflightSize, HttpDataRps, RawInflightSize,
-            AsyncDecompressing, WorkFactory, Counters);
+            AsyncDecompressing, WorkFactory, CpuCounters);
+        auto stats = impl->GetActorStats();
         if (AsyncDecoding) {
             actorId = Register(new TS3ReadCoroActor(std::move(impl)));
         } else {
             actorId = RegisterWithSameMailbox(new TS3ReadCoroActor(std::move(impl)));
         }
 
-        CoroActors.insert(actorId);
+        CoroActors.emplace(actorId, std::move(stats));
     }
 
     NS3::FileQueue::TObjectPath ReadPathFromCache() {
@@ -1933,6 +1956,40 @@ private:
         return CpuTime;
     }
 
+    TString GetDebugInfo() const override {
+        TStringBuilder out;
+        out << "    S3 stream reader, TxId: " << TxId << '\n'
+            << "    Bootstrapped: " << Bootstrapped
+            << " CpuSchedulingEnabled: " << bool(WorkFactory)
+            << " AsyncDecoding: " << AsyncDecoding
+            << " AsyncDecompressing: " << AsyncDecompressing << '\n'
+            << "    ListedFiles: " << ListedFiles << " CompletedFiles: " << CompletedFiles
+            << " ReadyBlocks: " << Blocks.size() << '\n'
+            << "    FileQueueActor: " << FileQueueActor
+            << " RuntimeListing: " << UseRuntimeListing << '\n'
+            << "    WaitingFileQueueResponse: " << IsWaitingFileQueueResponse
+            << " FileQueueEmpty: " << IsFileQueueEmpty
+            << " FileQueueFinishConfirmed: " << IsConfirmedFileQueueFinish
+            << " PendingFileQueueEvents: " << FileQueueEvents.HasPendingEvents() << '\n'
+            << "    QueuedPathBatches: " << PathBatchQueue.size()
+            << " CurrentBatchEmpty: " << IsCurrentBatchEmpty << '\n';
+        size_t readers = 0, waitingCpu = 0, cpuHolders = 0, finished = 0;
+        for (const auto& [actorId, stats] : CoroActors) {
+            const auto snapshot = stats->GetSnapshot();
+            out << "      ActorId: " << actorId
+                << " State: " << IS3ActorStats::StateName(snapshot.State)
+                << " StateFor: " << (TMonotonic::Now() - snapshot.StateSince)
+                << " CpuHeld: " << snapshot.CpuHeld << '\n';
+            if (snapshot.State == IS3ActorStats::EState::Finished) ++finished;
+            else ++readers;
+            if (snapshot.State == IS3ActorStats::EState::WaitingCpu) ++waitingCpu;
+            if (snapshot.CpuHeld) ++cpuHolders;
+        }
+        out << "    Readers: " << readers << " Waiting CPU: " << waitingCpu
+            << " CPU holders: " << cpuHolders << " Finished: " << finished << '\n';
+        return out;
+    }
+
     ui64 GetBlockSize(const TReadyBlock& block) const {
         return ReadSpec->Arrow ? NUdf::GetSizeOfArrowBatchInBytes(*block.Batch) : block.Block.bytes();
     }
@@ -2005,7 +2062,7 @@ private:
             }
             SourceContext.reset();
 
-            for (const auto actorId : CoroActors) {
+            for (const auto& [actorId, stats] : CoroActors) {
                 Send(actorId, new TEvents::TEvPoison());
             }
             LOG_T("TS3StreamReadActor", "PassAway FileQueue HasPendingEvents=" << FileQueueEvents.HasPendingEvents());
@@ -2209,7 +2266,7 @@ private:
         *RowsRemained = SubtractSaturating(*RowsRemained, consumedRows);
         if (*RowsRemained == 0) {
             LOG_T("TS3StreamReadActor", "StopLoadsIfEnough(consumedRows = " << consumedRows << ") sends poison");
-            for (const auto actorId : CoroActors) {
+            for (const auto& [actorId, stats] : CoroActors) {
                 Send(actorId, new TEvents::TEvPoison());
             }
         }
@@ -2275,8 +2332,9 @@ private:
     ::NMonitoring::THistogramPtr DecodedChunkSizeHist;
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
+    const ::NMonitoring::TDynamicCounterPtr CpuCounters;
     ui64 DownloadSize = 0;
-    std::set<TActorId> CoroActors;
+    std::map<TActorId, std::shared_ptr<const IS3ActorStats>> CoroActors;
     TActorId FileQueueActor;
     const ui64 FileSizeLimit;
     const ui64 ReadLimit;
@@ -2440,7 +2498,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(cons
     const THashMap<TString, TString>& taskParams, const TVector<TString>& readRanges, const TActorId& computeActorId,
     IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const TS3ReadActorFactoryConfig& cfg, ::NMonitoring::TDynamicCounterPtr counters, ::NMonitoring::TDynamicCounterPtr taskCounters,
-    IMemoryQuotaManager::TPtr memoryQuotaManager, bool allowLocalFiles, IDqSchedulableWorkFactoryPtr workFactory)
+    IMemoryQuotaManager::TPtr memoryQuotaManager, bool allowLocalFiles, IDqSchedulableWorkFactoryPtr workFactory,
+    ::NMonitoring::TDynamicCounterPtr cpuCounters)
 {
     const IFunctionRegistry& functionRegistry = *holderFactory.GetFunctionRegistry();
 
@@ -2653,7 +2712,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(cons
             params.GetUrl(), credentials, pathPattern, pathPatternVariant, std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
             cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager, params.GetUseRuntimeListing(),
             fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta, params.GetAsyncDecoding(),
-            params.GetAsyncDecompressing(), allowLocalFiles, std::move(workFactory));
+            params.GetAsyncDecompressing(), allowLocalFiles, std::move(workFactory), std::move(cpuCounters));
 
         return { actor, actor };
     }

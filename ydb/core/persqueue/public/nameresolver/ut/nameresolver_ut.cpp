@@ -1,11 +1,6 @@
 #include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
-<<<<<<< HEAD
-=======
-#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/base/path.h>
->>>>>>> 9e3c656efd8 (Counter of slash-prefixed topic paths that receive the database prefix (#59492))
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/testlib/actor_helpers.h>
 
@@ -84,25 +79,19 @@ Y_UNIT_TEST_F(AbsolutePathsWithDatabasePrefixAreCounted, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/Root/Db2/topic")), "/Root/Db/Root/Db2/topic");
     UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 2);
 
-    ActorSystemStub.AppData.FeatureFlags.SetEnableRelativePaths(true);
-    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/topic", {}, {}, true)), "/topic");
-    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/topic")), "/Root/Db/topic");
-    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 3);
-
     SetFcc(false);
     UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/topic")), "/Root/Db/topic");
-    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 3);
 
     UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName("/Root/OtherDb", "/topic")), "/Root/OtherDb/topic");
     auto otherCounter = GetServiceCounters(ActorSystemStub.AppData.Counters, "pqproxy|pathResolution", false)
         ->GetSubgroup("database", "/Root/OtherDb")
         ->GetCounter("AbsolutePathWithDatabasePrefix", true);
     UNIT_ASSERT_VALUES_EQUAL(otherCounter->Val(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 3);
 
     UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName("Root/Db/", "/topic")), "/Root/Db/topic");
-    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 5);
+    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 4);
 }
 
 Y_UNIT_TEST_F(FederationRootDbConvertsLegacyRt3, TNameResolverFixture) {

@@ -119,14 +119,10 @@ TDiscoveryConverterPtr TDiscoveryConverter::ForFstClass(const TString& topic, co
     res->FstClass = true;
     res->Database = database;
     res->OriginalTopic = topic;
-<<<<<<< HEAD
     res->BuildFstClassNames();
-=======
-    res->BuildFstClassNames(enableRelativePaths);
     if (res->IsValid()) {
         CountTopicPathWithDatabasePrefix(database, topic, res->PrimaryPath);
     }
->>>>>>> 9e3c656efd8 (Counter of slash-prefixed topic paths that receive the database prefix (#59492))
     return TDiscoveryConverterPtr(res);
 }
 

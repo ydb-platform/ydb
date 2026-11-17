@@ -51,4 +51,27 @@ const std::set<i64> THistorgamBorders::PortionWidthBorders = [] {
     return result;
 }();
 
+NMonitoring::IHistogramCollectorPtr THistorgamBorders::TaskCountHistogram() {
+    NMonitoring::TBucketBounds bounds;
+    for (ui32 i = 1; i <= 8; ++i) {
+        bounds.push_back(i);
+    }
+    for (double base = 8; base < 16384; base *= 2) {
+        bounds.push_back(base * 1.25);
+        bounds.push_back(base * 1.5);
+        bounds.push_back(base * 2);
+    }
+    return NMonitoring::ExplicitHistogram(bounds);
+}
+
+NMonitoring::IHistogramCollectorPtr THistorgamBorders::TaskBytesHistogram() {
+    NMonitoring::TBucketBounds bounds;
+    for (double base = 1 << 20; base <= double(1ull << 35); base *= 2) {
+        bounds.push_back(base);
+        bounds.push_back(base * 1.25);
+        bounds.push_back(base * 1.5);
+    }
+    return NMonitoring::ExplicitHistogram(bounds);
+}
+
 }   // namespace NKikimr::NColumnShard

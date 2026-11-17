@@ -27,6 +27,5 @@ public:
     virtual void Stop() = 0;
     virtual ~ILogSink() = default;
 };
-using ILogSinkSPtr = std::shared_ptr<ILogSink>;
 
 }  // namespace NActors::NStructuredLog

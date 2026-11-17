@@ -14,7 +14,6 @@
 namespace NActors {
     namespace NStructuredLog {
         class ILogSink;
-        using ILogSinkSPtr = std::shared_ptr<ILogSink>;
     }
 
     namespace NLog {
@@ -185,7 +184,9 @@ namespace NActors {
             void SetUseLocalTimestamps(bool value);
             void SetEnableStructuredLogInJson(bool value);
 
-            using TLogSinkMap = std::map<TString, NStructuredLog::ILogSinkSPtr>;
+            // In TLogSinkMap the key is a textual description of the sink.
+            // Typically, the key looks like "key=value key=value ... " and describes the sink’s type and parameters.
+            using TLogSinkMap = std::map<TString, std::shared_ptr<NStructuredLog::ILogSink>>;
             using TLogSinkMapSPtr = TTrueAtomicSharedPtr<TLogSinkMap>;
 
             TLogSinkMapSPtr Sinks;

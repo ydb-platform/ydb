@@ -2,7 +2,6 @@
 
 #include "direct_block_group.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -16,9 +15,11 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 TRestoreRequestExecutor::TRestoreRequestExecutor(
     NActors::TActorSystem* actorSystem,
-    IDirectBlockGroupPtr directBlockGroup)
+    IDirectBlockGroupPtr directBlockGroup,
+    THostMask hosts)
     : ActorSystem(actorSystem)
     , DirectBlockGroup(std::move(directBlockGroup))
+    , Hosts(hosts)
     , Response(std::make_unique<TAggregatedListPBufferResponse>())
 {}
 
@@ -36,9 +37,20 @@ TRestoreRequestExecutor::~TRestoreRequestExecutor()
 
 void TRestoreRequestExecutor::Run()
 {
-    for (THostIndex i = 0; i < DirectBlockGroupHostCount; ++i) {
-        DoRun(i);
+    if (Hosts.Empty()) {
+        Reply(MakeError(S_OK));
+        return;
     }
+
+    for (const auto host: Hosts) {
+        DoRun(host);
+    }
+}
+
+NThreading::TFuture<TAggregatedListPBufferResponse>
+TRestoreRequestExecutor::GetFuture() const
+{
+    return Promise.GetFuture();
 }
 
 void TRestoreRequestExecutor::DoRun(THostIndex hostIndex)
@@ -53,12 +65,6 @@ void TRestoreRequestExecutor::DoRun(THostIndex hostIndex)
         });
 }
 
-NThreading::TFuture<TAggregatedListPBufferResponse>
-TRestoreRequestExecutor::GetFuture() const
-{
-    return Promise.GetFuture();
-}
-
 void TRestoreRequestExecutor::OnResponse(
     THostIndex hostIndex,
     TListPBufferResponse response)
@@ -69,7 +75,7 @@ void TRestoreRequestExecutor::OnResponse(
     }
 
     Response->Meta[hostIndex] = std::move(response.Meta);
-    if (Response->Meta.size() == DirectBlockGroupHostCount) {
+    if (Response->Meta.size() == Hosts.Count()) {
         Reply(MakeError(S_OK));
     }
 }

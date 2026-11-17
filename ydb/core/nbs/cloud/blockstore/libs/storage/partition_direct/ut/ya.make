@@ -11,6 +11,7 @@ SRCS(
     fast_path_service_ut.cpp
     flush_request_ut.cpp
     read_request_ut.cpp
+    restore_request_ut.cpp
     vchunk_ut.cpp
     write_request_test_fixture.cpp
     write_request_ut.cpp

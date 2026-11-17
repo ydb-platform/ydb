@@ -48,8 +48,11 @@ The later recovery listing still supplies the records to the dirty map.
 
 ## Restoring PB records
 
-`DoListPBuffers` runs [TRestoreRequestExecutor](../restore_request.cpp),
-aggregates PB metadata by vChunk and makes it available through
+`DoListPBuffers` snapshots all non-removed DBG slots, including appended hosts,
+and passes that host mask to [TRestoreRequestExecutor](../restore_request.cpp).
+The executor lists every selected host and reports success only after all have
+responded. Temporarily unavailable hosts remain in the mask and a listing error
+is returned as an error. The DBG aggregates PB metadata by vChunk through
 `RestoreDBGPBuffers`. `TVChunk::UpdateDirtyMap` inserts each recovered record's
 original `(Generation, Lsn)`, range and host into the dirty map. Reads and
 writes wait for the vChunk's dirty-map readiness future.
@@ -59,16 +62,11 @@ PB quorum starts in `PBufferIncompleteWrite`; it becomes written after a
 quorum is known. Restored data resumes the normal flush and erase machinery.
 PB's own restart replay is a separate layer described in the shared PB page.
 
-Two implementation boundaries need care when extending recovery:
-
-- `TRestoreRequestExecutor::Run` currently enumerates the five initial host
-  positions. Do not assume that this scans all positions appended later.
-- `TInflightInfo` registers incomplete records in `ReadyToClone`, but the
-  current vChunk maintenance path does not consume that queue. The presence
-  of the state is not evidence of an implemented automatic PB re-replication
-  worker. Reads overlapping such a record wait on its quorum-ready future.
-
-Tests of complete-quorum restart do not establish behavior for either case.
+`TInflightInfo` registers incomplete records in `ReadyToClone`, but the current
+vChunk maintenance path does not consume that queue. The presence of the state
+is not evidence of an implemented automatic PB re-replication worker. Reads
+overlapping such a record wait on its quorum-ready future. Tests of
+complete-quorum restart do not establish behavior for this case.
 
 ## Flush and erase gates
 

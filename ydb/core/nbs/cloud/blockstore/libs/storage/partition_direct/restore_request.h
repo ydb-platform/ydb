@@ -1,7 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <ydb/core/nbs/cloud/storage/core/protos/error.pb.h>
 
@@ -18,13 +17,16 @@ using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Collects PBuffer metadata from a fixed set of non-removed DBG slots.
 class TRestoreRequestExecutor
     : public std::enable_shared_from_this<TRestoreRequestExecutor>
 {
 public:
+    // The host mask includes temporarily unavailable slots.
     TRestoreRequestExecutor(
         NActors::TActorSystem* actorSystem,
-        IDirectBlockGroupPtr directBlockGroup);
+        IDirectBlockGroupPtr directBlockGroup,
+        THostMask hosts);
 
     ~TRestoreRequestExecutor();
 
@@ -39,6 +41,7 @@ private:
 
     NActors::TActorSystem const* ActorSystem;
     const IDirectBlockGroupPtr DirectBlockGroup;
+    const THostMask Hosts;
 
     NThreading::TPromise<TAggregatedListPBufferResponse> Promise =
         NThreading::NewPromise<TAggregatedListPBufferResponse>();

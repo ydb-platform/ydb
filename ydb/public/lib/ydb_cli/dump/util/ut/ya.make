@@ -3,6 +3,7 @@ UNITTEST()
 SIZE(SMALL)
 
 SRCS(
+    external_data_source_utils_ut.cpp
     replication_utils_ut.cpp
 )
 

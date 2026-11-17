@@ -9958,6 +9958,75 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
+    Y_UNIT_TEST_TWIN(IamExternalDataSourceExportImportWithoutInitialToken, omitInitialToken) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions().RunFakeConfigDispatcher(true).SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableExternalDataSources(true);
+        flags.SetEnableExternalDataSourceAuthMethodIam(true);
+        flags.SetEnableEdsIamBackupWithoutInitialToken(omitInitialToken);
+        ui64 txId = 100;
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+            Name: "IamSource"
+            SourceType: "Ydb"
+            Location: "localhost:2135"
+            Auth { Iam {
+                ServiceAccountId: "service-account"
+                ResourceId: "cloud-id"
+                InitialTokenSecretName: "/MyRoot/missing-initial-token"
+            } }
+            Properties { Properties { key: "database_name" value: "/Remote" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d" scheme: HTTP
+                items { source_path: "/MyRoot/IamSource" destination_prefix: "IamSource" }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        const auto& data = s3Mock.GetData();
+        const auto it = data.find("/IamSource/create_external_data_source.sql");
+        UNIT_ASSERT(it != data.end());
+        UNIT_ASSERT_STRING_CONTAINS(it->second, "RESOURCE_ID");
+        UNIT_ASSERT_STRING_CONTAINS(it->second, "cloud-id");
+        UNIT_ASSERT_STRING_CONTAINS(it->second, "service-account");
+        if (omitInitialToken) {
+            UNIT_ASSERT_C(!it->second.Contains("INITIAL_TOKEN"), it->second);
+        } else {
+            UNIT_ASSERT_STRING_CONTAINS(it->second, "INITIAL_TOKEN_SECRET_PATH");
+        }
+
+        TestDropExternalDataSource(runtime, ++txId, "/MyRoot", "IamSource");
+        env.TestWaitNotification(runtime, txId);
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d" scheme: HTTP
+                items { source_prefix: "IamSource" destination_path: "/MyRoot/IamSource" }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        const auto description = DescribePath(runtime, "/MyRoot/IamSource");
+        const auto& iam = description.GetPathDescription().GetExternalDataSourceDescription().GetAuth().GetIam();
+        UNIT_ASSERT_VALUES_EQUAL(iam.GetServiceAccountId(), "service-account");
+        UNIT_ASSERT_VALUES_EQUAL(iam.GetResourceId(), "cloud-id");
+        if (omitInitialToken) {
+            UNIT_ASSERT(iam.GetInitialTokenSecretName().empty());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(iam.GetInitialTokenSecretName(), "/MyRoot/missing-initial-token");
+        }
+    }
+
     Y_UNIT_TEST(ExternalDataSourceExportImport) {
         TTestBasicRuntime runtime;
         auto options = TTestEnvOptions()

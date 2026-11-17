@@ -6,6 +6,7 @@
 #include <util/string/join.h>
 
 #include <format>
+#include <optional>
 #include <ranges>
 
 namespace NYdb::NDump {
@@ -23,6 +24,22 @@ TString BuildCreateExternalDataSourceQuery(
     const Ydb::Table::DescribeExternalDataSourceResult& description,
     const TString& db)
 {
+    return BuildCreateExternalDataSourceQuery(description, db, EIamInitialTokenBackupMode::Preserve);
+}
+
+TString BuildCreateExternalDataSourceQuery(
+    const Ydb::Table::DescribeExternalDataSourceResult& description,
+    const TString& db,
+    EIamInitialTokenBackupMode mode)
+{
+    std::optional<Ydb::Table::DescribeExternalDataSourceResult> filtered;
+    const auto authMethod = description.properties().find("AUTH_METHOD");
+    if (mode == EIamInitialTokenBackupMode::Omit && authMethod != description.properties().end() && authMethod->second == "IAM") {
+        filtered.emplace(description);
+        filtered->mutable_properties()->erase("INITIAL_TOKEN_SECRET_NAME");
+        filtered->mutable_properties()->erase("INITIAL_TOKEN_SECRET_PATH");
+    }
+    const auto& properties = filtered ? filtered->properties() : description.properties();
     return std::format(
         "-- database: \"{}\"\n"
         "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}`\n"
@@ -35,10 +52,10 @@ TString BuildCreateExternalDataSourceQuery(
         description.self().name().c_str(),
         KeyValueToString("SOURCE_TYPE", description.source_type()),
         KeyValueToString("LOCATION", description.location()),
-        description.properties().empty()
+        properties.empty()
             ? ""
             : std::string(",\n") +
-                JoinSeq(",\n", std::views::transform(description.properties(), PropertyToString)).c_str()
+                JoinSeq(",\n", std::views::transform(properties, PropertyToString)).c_str()
     );
 }
 

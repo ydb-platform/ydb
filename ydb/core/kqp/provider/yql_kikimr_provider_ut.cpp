@@ -105,6 +105,26 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
         UNIT_ASSERT_VALUES_EQUAL(it->second, "NONE");
     }
 
+    Y_UNIT_TEST(TestFillIamAuthPropertiesWithoutInitialToken) {
+        NKikimrSchemeOp::TAuth auth;
+        auto* iam = auth.MutableIam();
+        iam->SetServiceAccountId("service-account");
+        iam->SetResourceId("cloud-id");
+
+        TExternalSourceAuth source(auth);
+        source.InitSecretValues({});
+        const auto properties = source.BuildAuthProperties();
+        UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("authMethod"), "IAM");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("iamServiceAccountId"), "service-account");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("iamResourceId"), "cloud-id");
+
+        const auto token = source.ComposeStructuredTokenJson();
+        UNIT_ASSERT_STRING_CONTAINS(token, "service-account");
+        UNIT_ASSERT_STRING_CONTAINS(token, "cloud-id");
+        UNIT_ASSERT_C(!token.Contains("initial"), token);
+    }
+
     Y_UNIT_TEST(TestFillAuthPropertiesServiceAccount) {
         THashMap<TString, TString> properties;
         NKikimrSchemeOp::TAuth auth;

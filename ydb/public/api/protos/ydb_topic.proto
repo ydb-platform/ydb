@@ -1003,8 +1003,8 @@ message Consumer {
     // Not set or zero value means no limit.
     optional int64 read_speed_messages_per_second = 12 [(Ydb.value) = ">= 0"];
 
-    // Whether commits into a replica topic are allowed for this consumer. Read-only, returned by Describe requests.
-    bool allow_commits_into_replica_topic = 13;
+    // Whether offsets for this consumer are replicated from the source topic. Read-only, returned by Describe requests.
+    bool replicate_offsets = 13;
 }
 
 // Consumer alter description.

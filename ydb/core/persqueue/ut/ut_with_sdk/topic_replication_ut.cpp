@@ -469,7 +469,7 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
 
         auto& runtime = env.Setup.GetRuntime();
         ui64 txId = 1006;
-        auto setAllowCommits = [&](bool allow) {
+        auto setReplicateOffsets = [&](bool replicateOffsets) {
             // The consumer option is read-only in the public API.
             NPQ::NTest::CreateDescriberActor(runtime, env.Setup.GetDatabase(), destination);
             const auto description = NPQ::NTest::GetDescriberResponse(runtime);
@@ -479,16 +479,19 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
             NPQ::NSchema::CopyConfig(scheme, topic.Info->Description);
             auto* consumer = NPQ::GetConsumer(*scheme.MutablePQTabletConfig(), "reader");
             UNIT_ASSERT(consumer);
-            consumer->SetAllowCommitsIntoReplicaTopic(allow);
+            consumer->SetReplicateOffsets(replicateOffsets);
             NPQ::NTest::DoRequest(runtime, txId, scheme);
             ++txId;
             return topic.Info->Description.GetPartitions(0).GetTabletId();
         };
 
-        const ui64 tabletId = setAllowCommits(true);
-        const auto allowed = env.Client.CommitOffset(destination, 0, "reader", 2,
+        const ui64 tabletId = setReplicateOffsets(false);
+        const auto allowed = env.Client.CommitOffset(destination, 0, "reader", 3,
             NYdb::NTopic::TCommitOffsetSettings().ClientTimeout(TDuration::Seconds(10))).GetValueSync();
         UNIT_ASSERT_C(allowed.IsSuccess(), allowed.GetIssues().ToString());
+        env.WaitForOffsets(destination, 3, 5);
+        env.Commit(destination, 2);
+        env.WaitForOffsets(destination, 2, 5);
 
         const auto otherConsumer = env.Client.CommitOffset(destination, 0, "replicator", 0).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(otherConsumer.GetStatus(), NYdb::EStatus::BAD_REQUEST);
@@ -507,7 +510,7 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
             unknownResponse->Get()->Record.ShortDebugString());
         UNIT_ASSERT_STRING_CONTAINS(unknownResponse->Get()->Record.GetErrorReason(), "Commits for consumer are disabled");
 
-        setAllowCommits(false);
+        setReplicateOffsets(true);
         const auto disabled = env.Client.CommitOffset(destination, 0, "reader", 3).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(disabled.GetStatus(), NYdb::EStatus::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(disabled.GetIssues().ToString(), "Commits for consumer are disabled");

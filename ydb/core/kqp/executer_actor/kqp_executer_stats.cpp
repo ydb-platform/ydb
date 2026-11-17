@@ -1613,6 +1613,8 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     ui64 tasksCount = 0;
     ui64 inputBytes = 0;
     ui64 outputBytes = 0;
+    ui64 hopInputEventsCount = 0;
+    ui64 hopLateEventsCount = 0;
 
     for (const auto& [stageId, stageStat] : StageStats) {
         memoryUsageBytes += stageStat.MaxMemoryUsage.Sum;
@@ -1623,11 +1625,23 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
         for (auto b : stageStat.EgressBytes) {
             outputBytes += b;
         }
+        if (const auto it = stageStat.Mkql.find("MultiHop_InputEventsCount"); it != stageStat.Mkql.end()) {
+            for (auto value : it->second) {
+                hopInputEventsCount += value;
+            }
+        }
+        if (const auto it = stageStat.Mkql.find("MultiHop_LateThrownEventsCount"); it != stageStat.Mkql.end()) {
+            for (auto value : it->second) {
+                hopLateEventsCount += value;
+            }
+        }
     }
     metrics->MemoryUsageBytes = memoryUsageBytes;
     metrics->TasksCount = tasksCount;
     metrics->InputBytes = inputBytes;
     metrics->OutputBytes = outputBytes;
+    metrics->HopInputEventsCount = hopInputEventsCount;
+    metrics->HopLateEventsCount = hopLateEventsCount;
 }
 
 void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) {

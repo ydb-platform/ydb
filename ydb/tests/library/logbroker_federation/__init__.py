@@ -625,7 +625,7 @@ class LogbrokerFederation(object):
 
         driver_config = ydb.DriverConfig(
             endpoint="localhost:{}".format(meta_port),
-            database=meta_database,
+            database="/" + meta_database,
         )
         with ydb.Driver(driver_config) as ydb_driver:
             session = ydb.retry_operation_sync(lambda: ydb_driver.table_client.session().create())
@@ -652,7 +652,7 @@ class LogbrokerFederation(object):
             cm_binary,
             "--server", "localhost",
             "--port", str(meta_port),
-            "--database", meta_database,
+            "--database", "/" + meta_database,
             "--dir", "/{}".format(meta_database),
             "-P", str(grpc_port),
             "-O", str(http_port),

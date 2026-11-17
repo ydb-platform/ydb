@@ -9,6 +9,7 @@
 #include <yql/essentials/core/langver/feature.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/cluster_mapping.h>
+#include <yql/essentials/sql/v1/proto_parser/token.h>
 
 #include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 
@@ -22,6 +23,7 @@
 #include <utility>
 
 namespace NSQLTranslationV1 {
+
 inline bool IsAnonymousName(const TString& name) {
     return name == "$_";
 }
@@ -59,6 +61,7 @@ struct TScopedState: public TThrRefBase {
     bool SimplePgByDefault = false;
     TNamedNodesMap NamedNodes;
     THashSet<std::pair</*prefix=*/TString, /*pragma=*/TString>> ActivePragmas;
+    THashSet<std::pair</*prefix=*/TString, /*pragma=*/TString>> QueryPragmas;
 
     struct TLocal {
         TVector<std::pair<TString, TDeferredAtom>> UsedClusters;
@@ -105,10 +108,20 @@ public:
              TParsers parsers,
              const NSQLTranslation::TTranslationSettings& settings,
              NSQLTranslation::TSQLHints hints,
+             const NSQLTranslation::TParsedTokenList& tokens,
              NYql::TIssues& issues,
              TString query = {});
 
     virtual ~TContext();
+
+    TString QueryText(const TTokenIndexRange& range, TQueryTextOptions options = {}) const;
+
+    TString ContextRecreationQuery() const;
+
+    template <typename T>
+    TString QueryText(const T& message, TQueryTextOptions options = {}) const {
+        return QueryText(GetTokenIndexRange(message), options);
+    }
 
     const NYql::TPosition& Pos() const;
 
@@ -179,6 +192,7 @@ public:
 
     bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
     void SetRelativePathPrefix(const TString& value);
+    void ResetRelativePathPrefix();
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
     TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
@@ -311,6 +325,7 @@ public:
     const TParsers Parsers;
 
 private:
+    const NSQLTranslation::TParsedTokenList& Tokens_;
     NYql::TPosition Position_;
     THolder<TStringOutput> IssueMsgHolder_;
     NSQLTranslation::TClusterMapping ClusterMapping_;
@@ -446,7 +461,7 @@ public:
     bool YqlSelectAllowUnnamedGroupByExpr = false;
     bool RuntimeUserAttrs = false;
     TMaybe<bool> DirectRowDependsOn;
-    TVector<size_t> ForAllStatementsParts;
+    TVector<TTokenIndexRange> ForAllStatementsParts;
     TMaybe<TString> Engine;
 };
 

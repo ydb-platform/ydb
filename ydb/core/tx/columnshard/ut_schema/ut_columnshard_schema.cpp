@@ -1,6 +1,6 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>

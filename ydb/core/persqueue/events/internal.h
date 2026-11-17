@@ -6,6 +6,7 @@
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
+#include <ydb/core/persqueue/common/heartbeat.h>
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/common/write_stats.h>
 #include <ydb/core/persqueue/common/partitioning_keys_manager.h>
@@ -253,6 +254,7 @@ struct TEvPQ {
         EvReplicationData,
         EvReplicationDataAck,
         EvPersistDone,
+        EvEmitHeartbeat,
         EvEnd,
     };
 
@@ -897,6 +899,16 @@ struct TEvPQ {
         const ui64 Cookie;
         TVector<TDeregisterBody> Deregistrations;
         TVector<TRegisterBody> Registrations;
+    };
+
+    struct TEvEmitHeartbeat : TEventLocal<TEvEmitHeartbeat, EvEmitHeartbeat> {
+        TEvEmitHeartbeat(ui64 cookie, NPQ::THeartbeat&& heartbeat)
+            : Cookie(cookie)
+            , Heartbeat(std::move(heartbeat))
+        {}
+
+        const ui64 Cookie;
+        NPQ::THeartbeat Heartbeat;
     };
 
     struct TEvUpdateCounters : public TEventLocal<TEvUpdateCounters, EvUpdateCounters> {
@@ -2037,26 +2049,30 @@ struct TEvWriteSessionsQuoter {
     static_assert(EvEnd <= InternalEventSpaceBegin(NPQ::NEvents::EServices::END));
 
     struct TEvNotify : TEventLocal<TEvNotify, EvNotify> {
-        TEvNotify(const TString& topic, ui32 partition, ui32 generation)
-            : Topic(topic)
+        TEvNotify(const TString& database, const TString& topic, ui32 partition, ui32 generation)
+            : Database(database)
+            , Topic(topic)
             , Partition(partition)
             , Generation(generation)
         {
         }
 
+        const TString Database;
         const TString Topic;
         const ui32 Partition;
         const ui32 Generation;
     };
 
     struct TEvAcquireQuota : TEventLocal<TEvAcquireQuota, EvAcquireQuota> {
-        TEvAcquireQuota(const TString& topic, ui32 partition, ui32 generation)
-            : Topic(topic)
+        TEvAcquireQuota(const TString& database, const TString& topic, ui32 partition, ui32 generation)
+            : Database(database)
+            , Topic(topic)
             , Partition(partition)
             , Generation(generation)
         {
         }
 
+        const TString Database;
         const TString Topic;
         const ui32 Partition;
         const ui32 Generation;
@@ -2076,13 +2092,15 @@ struct TEvWriteSessionsQuoter {
     };
 
     struct TEvRemove : TEventLocal<TEvRemove, EvRemove> {
-        TEvRemove(const TString& topic, ui32 partition, ui32 generation)
-            : Topic(topic)
+        TEvRemove(const TString& database, const TString& topic, ui32 partition, ui32 generation)
+            : Database(database)
+            , Topic(topic)
             , Partition(partition)
             , Generation(generation)
         {
         }
 
+        const TString Database;
         const TString Topic;
         const ui32 Partition;
         const ui32 Generation;

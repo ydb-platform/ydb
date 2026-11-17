@@ -8,6 +8,9 @@ SRCS(
 
 PEERDIR(
     yql/essentials/tools/purebench/gbenchmark
+)
+
+DEPENDS(
     yql/essentials/udfs/common/digest/impl
 )
 

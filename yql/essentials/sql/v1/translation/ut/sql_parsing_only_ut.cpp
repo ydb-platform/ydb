@@ -436,9 +436,11 @@ Y_UNIT_TEST(NoStatements) {
                 input, "", issues, /*maxErrors=*/8, settings);
             UNIT_ASSERT_C(message, issues.ToString());
 
-            NSQLTranslation::TSQLHints hints;
+            NSQLTranslation::TParsedTokenList tokens;
+            auto lexer = translator->MakeLexer(settings);
+            UNIT_ASSERT(NSQLTranslation::Tokenize(*lexer, input, "", tokens, issues, /*maxErrors=*/8));
             NYql::TAstParseResult result = translator->TextAndMessageToAst(
-                input, *message, hints, settings);
+                input, *message, tokens, settings);
 
             return std::move(result);
         },

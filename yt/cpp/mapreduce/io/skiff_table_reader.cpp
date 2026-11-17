@@ -222,12 +222,12 @@ TVector<TSkiffTableReader::TSkiffTableSchema> TSkiffTableReader::CreateSkiffTabl
                         children.size() == 2 && children[0]->GetWireType() == EWireType::Nothing &&
                         IsSupportedWireType(children[1]->GetWireType()),
                         "Expected schema of form 'variant8<nothing, supported-type>', got "
-                            << NSkiff::GetShortDebugString(columnSchema));
+                            << NSkiff::GetShortDebugString(columnSchema, /*includeNames*/ true));
                     wireType = children[1]->GetWireType();
                     required = false;
                 }
                 Y_ENSURE(IsSupportedWireType(wireType),
-                    "Expected column schema to be of a supported type, got " << NSkiff::GetShortDebugString(columnSchema));
+                    "Expected column schema to be of a supported type, got " << NSkiff::GetShortDebugString(columnSchema, /*includeNames*/ true));
                 columns.emplace_back(
                     EColumnType::Dense,
                     required,

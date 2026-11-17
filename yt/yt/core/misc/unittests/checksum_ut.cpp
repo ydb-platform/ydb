@@ -62,7 +62,7 @@ static std::vector<TCrcTestCase> Cases = {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TChecksumTest, TestStreams)
+TEST(TChecksumTest, Streams)
 {
     auto size = 0;
     for (const auto& test : Cases) {

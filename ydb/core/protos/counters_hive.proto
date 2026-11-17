@@ -16,10 +16,10 @@ enum ESimpleCounters {
     COUNTER_METRICS_CPU = 6 [(CounterOpts) = {Name: "MetricsCPU"}];
     COUNTER_METRICS_MEMORY = 7 [(CounterOpts) = {Name: "MetricsMemory"}];
     COUNTER_METRICS_NETWORK = 8 [(CounterOpts) = {Name: "MetricsNetwork"}];
-    COUNTER_BALANCE_SCATTER = 9 [(CounterOpts) = {Name: "BalanceScatter"}];
+    COUNTER_BALANCE_SCATTER = 9 [(CounterOpts) = {Name: "BalanceScatter"}]; // Max over resources of the scatter, in percent (per resource: THive::TBalanceCounters).
     COUNTER_WAITQUEUE_SIZE = 10 [(CounterOpts) = {Name: "WaitQueueSize"}];
-    COUNTER_BALANCE_USAGE_MIN = 11 [(CounterOpts) = {Name: "BalanceUsageMin"}];
-    COUNTER_BALANCE_USAGE_MAX = 12 [(CounterOpts) = {Name: "BalanceUsageMax"}];
+    COUNTER_BALANCE_USAGE_MIN = 11 [(CounterOpts) = {Name: "BalanceUsageMin"}]; // Min over alive nodes of the node usage, in percent.
+    COUNTER_BALANCE_USAGE_MAX = 12 [(CounterOpts) = {Name: "BalanceUsageMax"}]; // Max over alive nodes of the node usage, in percent.
     COUNTER_SEQUENCE_FREE = 13 [(CounterOpts) = {Name: "SequenceFree"}];
     COUNTER_SEQUENCE_ALLOCATED = 14 [(CounterOpts) = {Name: "SequenceAllocated"}];
     COUNTER_EVENTQUEUE_SIZE = 15 [(CounterOpts) = {Name: "EventQueueSize"}];
@@ -204,4 +204,5 @@ enum ETxTypes {
     TXTYPE_MON_MOVE_DATA = 74                             [(TxTypeOpts) = {Name: "TxMonMoveData"}];
     TXTYPE_MON_EVENTS = 75                                [(TxTypeOpts) = {Name: "TxMonEvents"}];
     TXTYPE_MON_NODE_INFO = 76                             [(TxTypeOpts) = {Name: "TxMonNodeInfo"}];
+    TXTYPE_REASSIGN_TABLETS = 77                          [(TxTypeOpts) = {Name: "TxReassignTablets"}];
 }

@@ -174,31 +174,33 @@ class AggregateTest(unittest.TestCase):
     def test_generated_headers_are_merged_across_build_roots(self) -> None:
         tt = self.tmp / "traces"
         tt.mkdir()
+        generated_header = f"{_TEST_YDB_ROOT}/core/protos/config.pb.h"
+        source_header = f"{_TEST_YDB_ROOT}/core/base/defs.h"
         for i in range(2):
-            header = f"/cache/build_root/run/{i:06x}/ydb/core/protos/config.pb.h"
+            header = f"/cache/build_root/run/{i:06x}/{generated_header}"
             (tt / f"tu{i}.json").write_text(json.dumps(_trace([
                 {"ph": "X", "name": "Source", "dur": 400000,
                  "args": {"detail": header}},
                 {"ph": "X", "name": "Source", "dur": 100000,
-                 "args": {"detail": "/w/ydb/core/base/defs.h"}},
+                 "args": {"detail": f"/w/{source_header}"}},
                 {"ph": "X", "name": "Source", "dur": 10000,
-                 "args": {"detail": "ydb/core/base/defs.h"}},
+                 "args": {"detail": source_header}},
                 {"ph": "X", "name": "ParseClass", "dur": 50000,
                  "args": {"detail": header + ":10:1"}},
             ])), encoding="utf-8")
 
         agg = collect_traces(tt, repo_root=Path("/w"), jobs=1)
-        self.assertEqual(agg.header_us["ydb/core/protos/config.pb.h"], 800000)
-        self.assertEqual(agg.header_tus["ydb/core/protos/config.pb.h"], 2)
-        self.assertEqual(agg.header_us["ydb/core/base/defs.h"], 220000)
-        self.assertEqual(agg.header_tus["ydb/core/base/defs.h"], 2)
-        self.assertEqual(agg.file_us["ydb/core/protos/config.pb.h"], 100000)
-        self.assertEqual(agg.file_tus["ydb/core/protos/config.pb.h"], 2)
+        self.assertEqual(agg.header_us[generated_header], 800000)
+        self.assertEqual(agg.header_tus[generated_header], 2)
+        self.assertEqual(agg.header_us[source_header], 220000)
+        self.assertEqual(agg.header_tus[source_header], 2)
+        self.assertEqual(agg.file_us[generated_header], 100000)
+        self.assertEqual(agg.file_tus[generated_header], 2)
 
         # A cache made with path normalization cannot serve a raw-path run.
         raw = collect_traces(tt, jobs=1)
-        self.assertNotIn("ydb/core/protos/config.pb.h", raw.header_us)
-        self.assertIn("/w/ydb/core/base/defs.h", raw.header_us)
+        self.assertNotIn(generated_header, raw.header_us)
+        self.assertIn(f"/w/{source_header}", raw.header_us)
 
 
 class ParallelAndCacheTest(unittest.TestCase):

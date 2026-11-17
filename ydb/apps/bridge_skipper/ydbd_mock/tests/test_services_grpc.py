@@ -181,6 +181,8 @@ class BridgeFlowTest(GrpcCase):
              "Invalid transition from SYNCHRONIZED to NOT_SYNCHRONIZED_1"),
             ([("pile2", ydb_bridge_common_pb2.PileState.UNSPECIFIED)], model.INTERNAL_ERROR,
              "Unsupported pile state"),
+            ([("pile2", ydb_bridge_common_pb2.PileState.HOT_STANDBY)], model.INTERNAL_ERROR,
+             "Unsupported pile state"),
             ([("pile2", getattr(ydb_bridge_common_pb2.PileState, "INACTIVE", 7))],
              model.BAD_REQUEST if model.PUB_INACTIVE is not None else model.INTERNAL_ERROR,
              "Pile can't be switched to INACTIVE state, it has to be removed from the cluster instead"

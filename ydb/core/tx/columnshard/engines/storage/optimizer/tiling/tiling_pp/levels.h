@@ -34,13 +34,14 @@ struct LastLevel: ICompactionUnit<TPortion> {
 
     void DoAddPortion(typename TPortion::TPtr p) override {
         const ui64 portionId = p->GetPortionId();
-        const ui64 measure = Measure(p);
+        const auto [begin, end] = Borders(p);
+        const ui64 measure = std::distance(begin, end);
         this->Counters.Portions->AddWidth(measure);
         AFL_VERIFY(WidthByPortionId.emplace(portionId, measure).second)("portion_id", portionId);
         if (measure == 0) {
             AFL_VERIFY(PortionIds.insert(portionId).second)("portion_id", portionId);
             p->AddRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
-            Portions.insert(Portions.end(), p);   // on startup the portions come sorted by end key
+            Portions.insert(begin, p);
         } else {
             AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
             Candidates.insert(p);
@@ -168,8 +169,11 @@ struct LastLevel: ICompactionUnit<TPortion> {
     }
 
     std::pair<typename PortionsEndSorted::iterator, typename PortionsEndSorted::iterator> Borders(typename TPortion::TConstPtr p) const {
-        // on startup the portions come sorted by end key, so a new one starts after every settled one
-        if (Portions.empty() || (*Portions.rbegin())->IndexKeyEndRef() < p->IndexKeyStartRef()) {
+        // loaded portions come from the highest key down, writes with growing keys land above everything
+        if (Portions.empty() || p->IndexKeyEndRef() < (*Portions.begin())->IndexKeyStartRef()) {
+            return std::make_pair(Portions.begin(), Portions.begin());
+        }
+        if ((*Portions.rbegin())->IndexKeyEndRef() < p->IndexKeyStartRef()) {
             return std::make_pair(Portions.end(), Portions.end());
         }
         auto begin = Portions.lower_bound(p->IndexKeyStartRef());

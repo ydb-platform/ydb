@@ -256,6 +256,11 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
         hFunc(TEvNodeWardenNotifySyncerFinished, Handle);
+        hFunc(NGroupSyncer::TEvRunMirror3dcRepair, Handle);
+        hFunc(NGroupSyncer::TEvMirror3dcRepairScanResult, Handle);
+        hFunc(TEvNodeWardenStandbyDirty, Handle);
+        hFunc(TEvNodeWardenRegisterBridgeProxy, Handle);
+        hFunc(TEvNodeWardenStandbySealed, Handle);
 
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse, Handle);
@@ -1231,6 +1236,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
     if (record.GetUpdateSyncers()) {
         ApplyWorkingSyncers(record);
     }
+    ApplyStandbySeals(record);
 }
 
 void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, TDuration backoff) {

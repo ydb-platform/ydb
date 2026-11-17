@@ -720,3 +720,50 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
 }
 }  // namespace NActors::NStructuredLog
+
+#include <ydb/library/actors/struct_log/meta_writer.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
+
+namespace NActors::NStructuredLog {
+Y_UNIT_TEST_SUITE(StructLogLabels) {
+    Y_UNIT_TEST(ContextNestingCopyAndMovePreserveLabels) {
+        TLogStack::TLogGuard guard;
+        YDB_LOG_UPDATE_CONTEXT(Label("tenant", "one"), {"count", 1});
+        {
+            TLogStack::TLogGuard nested;
+            YDB_LOG_UPDATE_CONTEXT(Label("tenant", "two"));
+            auto message = YDB_LOG_CREATE_MESSAGE({"request", TLogStack::GetTop()});
+            auto copy = message;
+            auto moved = std::move(copy);
+            TLogRecord::TMetaFlags flags;
+            TMetaWriter().WriteCanonical(flags, moved);
+            const TLogRecord::TMetaFlags expected{{"meta.message.request.count", "1"}, {"labels.request.tenant", "two"}};
+            UNIT_ASSERT_VALUES_EQUAL(flags, expected);
+            TStringBuilder text;
+            TTextWriter().Write(text, moved);
+            UNIT_ASSERT_VALUES_EQUAL(text, "request.count=1 request.tenant=two");
+        }
+        TLogRecord::TMetaFlags flags;
+        TMetaWriter().WriteCanonical(flags, TLogStack::GetTop());
+        const TLogRecord::TMetaFlags expected{{"meta.message.count", "1"}, {"labels.tenant", "one"}};
+        UNIT_ASSERT_VALUES_EQUAL(flags, expected);
+    }
+
+    Y_UNIT_TEST(LastWriteReplacesValueAndKind) {
+        auto message = YDB_LOG_CREATE_MESSAGE(Label("a", "label"), {"a", "field"}, {"b", "field"}, Label("b", "label"));
+        TLogRecord::TMetaFlags flags;
+        TMetaWriter().WriteCanonical(flags, message);
+        const TLogRecord::TMetaFlags expected{{"meta.message.a", "field"}, {"labels.b", "label"}};
+        UNIT_ASSERT_VALUES_EQUAL(flags, expected);
+        YDB_LOG_UPDATE_MESSAGE(message, Label("a", "new label"), {"b", "new field"});
+        flags.clear();
+        TMetaWriter().WriteCanonical(flags, message);
+        const TLogRecord::TMetaFlags updated{{"labels.a", "new label"}, {"meta.message.b", "new field"}};
+        UNIT_ASSERT_VALUES_EQUAL(flags, updated);
+        flags.clear();
+        TMetaWriter().Write(flags, message);
+        const TLogRecord::TMetaFlags legacy{{"meta.a", "new label"}, {"meta.b", "new field"}};
+        UNIT_ASSERT_VALUES_EQUAL(flags, legacy);
+    }
+}
+}

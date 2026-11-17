@@ -1,7 +1,7 @@
 #include "log.h"
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <ydb/library/actors/struct_log/create_message.h>
 #include <ydb/library/actors/struct_log/structured_message.h>
 
@@ -966,5 +966,135 @@ Y_UNIT_TEST_SUITE(TLoggingRuntimeSettingsTest) {
         CheckRuntimeMessage(env, PRI_INFO, 0, false);
         CheckRuntimeMessage(env, PRI_WARN, 1, true);
         CheckRuntimeMessage(env, PRI_INFO, 1, false);
+    }
+}
+
+namespace {
+    TString FindMeta(const TLogRecord::TMetaFlags& flags, const TString& name) {
+        for (const auto& [key, value] : flags) {
+            if (key == name) {
+                return value;
+            }
+        }
+        UNIT_FAIL("Missing metadata: " << name);
+        return {};
+    }
+
+    bool HasMeta(const TLogRecord::TMetaFlags& flags, const TString& name) {
+        return std::any_of(flags.begin(), flags.end(), [&](const auto& item) { return item.first == name; });
+    }
+}
+
+Y_UNIT_TEST_SUITE(TLoggerStructuredFormats) {
+    Y_UNIT_TEST(NativeRecordPreservesLegacyAndBriefBody) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulateMessages(TSettings::STRUCTURED_FORMAT);
+        env.Settings->NodeId = 42;
+        env.Settings->TenantName = "/tenant";
+        env.Settings->ShortHostName = "host";
+        env.Settings->ClusterName = "cluster";
+        const auto ts = TInstant::MicroSeconds(1234567);
+        auto fields = YDB_LOG_CREATE_MESSAGE({"max", Max<ui64>()}, {"quoted", "a \"b\"\\\nc"}, Label("request", "r"), {"component", "user"});
+        env.Runtime.Send(new IEventHandle{env.LoggerActor, {}, new TEvLog(PRI_INFO, 1, "source.cpp", 17, "hello", std::move(fields), ts)});
+        UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages.size(), 1);
+        const auto& record = env.ReceivedMessages.front();
+        const TString legacy = "1970-01-01T00:00:01.234567Z :FAKE INFO: hello (component=user max=18446744073709551615 quoted=\"a \\\"b\\\"\\\\\\nc\" request=r)";
+        UNIT_ASSERT_VALUES_EQUAL(record.Text, legacy);
+        UNIT_ASSERT(!HasMeta(record.MetaFlags, "_ydb_log_format"));
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "_ydb_message"), "hello");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "_ydb_timestamp_us"), "1234567");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "meta.message.max"), "18446744073709551615");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "meta.message.component"), "user");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "labels.request"), "r");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "labels.component"), "FAKE");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "labels.database"), "/tenant");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "labels.tag"), "KIKIMR");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "labels.log_type"), "debug");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "meta.location"), "source.cpp:17");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "meta.node_id"), "42");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "meta.priority"), "INFO");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "meta.npriority"), "6");
+        UNIT_ASSERT(HasMeta(record.MetaFlags, "meta.revision"));
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "_component"), "FAKE");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "_priority"), "INFO");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "host"), "host");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "cluster"), "cluster");
+    }
+
+    Y_UNIT_TEST(EmptyFieldsAndMissingFieldsHaveNoSuffix) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulateMessages(TSettings::STRUCTURED_FORMAT);
+        env.Settings->LogSourceLocation = false;
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "empty");
+        env.WriteLog(TInstant::MicroSeconds(123), EPrio::Info, "absent");
+        UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages.size(), 2);
+        for (const auto& record : env.ReceivedMessages) {
+            const auto brief = FindMeta(record.MetaFlags, "_ydb_message");
+            UNIT_ASSERT(brief == "empty" || brief == "absent");
+            UNIT_ASSERT(!HasMeta(record.MetaFlags, "meta.location"));
+            UNIT_ASSERT(record.Text.EndsWith(": " + brief));
+        }
+    }
+
+    Y_UNIT_TEST(RawJsonUsesLegacyPathWithoutNativeTimestamp) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulateMessages(TSettings::STRUCTURED_FORMAT);
+        env.Runtime.Send(new IEventHandle{env.LoggerActor, {}, new TEvLog(TInstant::MicroSeconds(123), TLevel{EPrio::Info}, 1, TString(R"({"message":"raw"})"), true)});
+        UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages.size(), 1);
+        UNIT_ASSERT(!HasMeta(env.ReceivedMessages.front().MetaFlags, "_ydb_timestamp_us"));
+    }
+}
+
+Y_UNIT_TEST_SUITE(TLoggerStructuredCompatibility) {
+    Y_UNIT_TEST(SystemDimensionsOverrideExplicitLabels) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulateMessages(TSettings::STRUCTURED_FORMAT);
+        YDB_LOG_CTX_COMP(env, PRI_INFO, 1, "dimensions", Label("component", "spoof"), Label("database", "spoof"));
+        UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages.size(), 1);
+        const auto& record = env.ReceivedMessages.front();
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "labels.component"), "FAKE");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "labels.database"), "static");
+        UNIT_ASSERT_VALUES_EQUAL(std::count_if(record.MetaFlags.begin(), record.MetaFlags.end(),
+            [](const auto& item) { return item.first == "labels.component"; }), 1);
+    }
+
+    Y_UNIT_TEST(NativeCompatibilityLineKeepsOriginalUtcTimestamp) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulateMessages(TSettings::STRUCTURED_FORMAT);
+        env.Settings->UseLocalTimestamps = true;
+        env.Settings->MessagePrefix = "ignored for the compatibility line";
+        env.WriteLog(TInstant::MicroSeconds(1234567), EPrio::Info, "brief");
+        UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages.front().Text, "1970-01-01T00:00:01.234567Z :FAKE INFO: brief");
+        UNIT_ASSERT_VALUES_EQUAL(FindMeta(env.ReceivedMessages.front().MetaFlags, "_ydb_timestamp_us"), "1234567");
+    }
+
+    Y_UNIT_TEST(LegacyModesKeepLabelNamesAndExistingJsonSwitch) {
+        for (const auto format : {TSettings::PLAIN_FULL_FORMAT, TSettings::PLAIN_SHORT_FORMAT, TSettings::JSON_FORMAT}) {
+            for (const bool enabled : {false, true}) {
+                TFixture env{NoBufferSettings()};
+                env.StartAccumulateMessages(format);
+                env.Settings->SetEnableStructuredLogInJson(enabled);
+                YDB_LOG_CTX_COMP(env, PRI_INFO, 1, "brief", Label("request", "r"));
+                UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages.size(), 1);
+                const auto& record = env.ReceivedMessages.front();
+                UNIT_ASSERT(!HasMeta(record.MetaFlags, "_ydb_timestamp_us"));
+                UNIT_ASSERT(!HasMeta(record.MetaFlags, "labels.request"));
+                if (format == TSettings::JSON_FORMAT) {
+                    NJson::TJsonValue json;
+                    UNIT_ASSERT(NJson::ReadJsonTree(record.Text, &json));
+                    UNIT_ASSERT_VALUES_EQUAL(json["message"].GetString(), enabled ? "brief" : "brief (request=r)");
+                    if (enabled) {
+                        UNIT_ASSERT_VALUES_EQUAL(json["request"].GetString(), "r");
+                        UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "meta.request"), "r");
+                    } else {
+                        UNIT_ASSERT(record.MetaFlags.empty());
+                    }
+                } else {
+                    UNIT_ASSERT(record.Text.EndsWith(": brief request=r"));
+                    UNIT_ASSERT_VALUES_EQUAL(FindMeta(record.MetaFlags, "meta.request"), "r");
+                }
+            }
+        }
     }
 }

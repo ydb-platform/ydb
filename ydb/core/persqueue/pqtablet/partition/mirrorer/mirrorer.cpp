@@ -889,7 +889,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
     LastReadEventTime = ctx.Now();
 
     if (auto* dataEvent = std::get_if<TPersQueueReadEvent::TDataReceivedEvent>(&event.value())) {
-        AddMessagesToQueue(std::move(dataEvent->GetCompressedMessages()), ctx);
+        AddMessagesToQueue(std::move(dataEvent->GetCompressedMessages()));
     } else if (auto* createStream = std::get_if<TPersQueueReadEvent::TStartPartitionSessionEvent>(&event.value())) {
         LOG_I(
             "Got create stream event for and will set",

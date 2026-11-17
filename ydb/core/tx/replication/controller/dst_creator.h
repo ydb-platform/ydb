@@ -1,13 +1,14 @@
 #pragma once
 
 #include "replication.h"
-#include "topic_mirror.h"
 
 namespace NKikimrSchemeOp {
     class TTableReplicationConfig;
 }
 
 namespace NKikimr::NReplication::NController {
+
+struct TTopicMirrorSettings;
 
 enum class EReplicationMode {
     ReadOnly,
@@ -34,7 +35,10 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
     ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
     EReplicationMode mode = EReplicationMode::ReadOnly,
     EConsistencyLevel consistency = EConsistencyLevel::Row, bool initialScan = true,
-    TReplication::EState desiredState = TReplication::EState::Ready,
-    const TTopicMirrorSettings& topicMirror = {});
+    TReplication::EState desiredState = TReplication::EState::Ready);
+IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
+    const TString& database, const TPathId& pathId,
+    ui64 rid, ui64 tid, const TString& srcPath, const TString& dstPath,
+    const TTopicMirrorSettings& topicMirror);
 
 }

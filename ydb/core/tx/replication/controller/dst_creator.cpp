@@ -2,6 +2,7 @@
 #include "logging.h"
 #include "private_events.h"
 #include "util.h"
+#include "topic_mirror.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
@@ -1182,26 +1183,38 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
-    TTopicMirrorSettings topicMirror;
     if (target->GetKind() == TReplication::ETargetKind::Topic) {
-        topicMirror = TTopicMirrorSettings(replication->GetConfig().GetSrcConnectionParams(),
+        const TTopicMirrorSettings topicMirror(replication->GetConfig().GetSrcConnectionParams(),
             target->GetSrcPath(), target->GetStreamConsumerName());
+        return CreateDstTopicCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
+            replication->GetDatabase(), replication->GetPathId(),
+            replication->GetId(), target->GetId(), target->GetSrcPath(), target->GetDstPath(), topicMirror);
     }
 
     return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
         replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
         EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
-        replication->GetConfig().GetInitialScan(), replication->GetDesiredState(), topicMirror);
+        replication->GetConfig().GetInitialScan(), replication->GetDesiredState());
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
-        TReplication::EState desiredState, const TTopicMirrorSettings& topicMirror)
+        TReplication::EState desiredState)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState, topicMirror);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState, {});
+}
+
+IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
+        const TString& database, const TPathId& pathId,
+        ui64 rid, ui64 tid, const TString& srcPath, const TString& dstPath,
+        const TTopicMirrorSettings& topicMirror)
+{
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, TReplication::ETargetKind::Topic,
+        srcPath, dstPath, EReplicationMode::ReadOnly, EConsistencyLevel::Row, database, true,
+        TReplication::EState::Ready, topicMirror);
 }
 
 }

@@ -49,6 +49,11 @@ private:
     using TEvListFlagChunksResult = TEvBlobStorage::TEvVPhantomFlagStorageListChunksResult;
     using TEvReadFlagChunk = TEvBlobStorage::TEvVPhantomFlagStorageReadChunk;
     using TEvReadFlagChunkResult = TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult;
+    using TFlagKeys = ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID>;
+
+    // Protobuf keys are smaller than their on-disk records. Leave room for lookahead and the reply envelope.
+    static constexpr ui32 MaxFlagChunkReadSize = static_cast<ui32>(
+        NActors::EventMaxByteSize - 1024 - TPhantomFlagStorageItem::ReadLookahead);
 
     struct TGetSnapshot {
         TActorId Requester;
@@ -81,8 +86,13 @@ private:
         ui64 Cookie;
         ui32 Channel;
         std::optional<ui32> ChunkIdx;
-        std::optional<ui32> Cursor;
-        ui32 ReadSize = 0;
+        ui32 ReadOffset;
+        ui32 ReadSize;
+        ui32 ChunkDataSize = 0;
+
+        ui32 GetBufferedReadSize() const {
+            return std::min(ReadSize + TPhantomFlagStorageItem::ReadLookahead, ChunkDataSize - ReadOffset);
+        }
     };
 
 private:
@@ -356,13 +366,13 @@ private:
             .Cookie = ev->Cookie,
             .Channel = ev->GetChannel(),
             .ChunkIdx = ev->Get()->GetChunkIndex(),
-            .Cursor = std::nullopt,
+            .ReadOffset = record.GetReadOffset(),
+            .ReadSize = MaxFlagChunkReadSize,
         };
-        const ui32 offset = record.GetCursor();
-        if (record.HasCursor()) {
-            request.Cursor = offset;
+        if (record.HasReadSize()) {
+            request.ReadSize = std::min(record.GetReadSize(), MaxFlagChunkReadSize);
         }
-        if (!request.ChunkIdx) {
+        if (!request.ChunkIdx || !request.ReadSize) {
             ReplyToFlagChunkRead(request, NKikimrProto::ERROR);
             return;
         }
@@ -377,36 +387,37 @@ private:
             ReplyToFlagChunkRead(request, NKikimrProto::NOT_FOUND);
             return;
         }
-        const ui32 dataSize = it->second.DataSize;
-        if (dataSize > Data.ChunkSize) {
+        request.ChunkDataSize = it->second.DataSize;
+        if (request.ChunkDataSize > Data.ChunkSize) {
             ReplyToFlagChunkRead(request, NKikimrProto::CORRUPTED);
             return;
         }
-        if (offset >= dataSize) {
+        if (request.ReadOffset > request.ChunkDataSize) {
             ReplyToFlagChunkRead(request, NKikimrProto::ERROR);
             return;
         }
+        if (request.ReadOffset == request.ChunkDataSize) {
+            ReplyToFlagChunkRead(request, NKikimrProto::OK, {}, request.ReadOffset);
+            return;
+        }
 
-        request.ReadSize = dataSize - offset;
+        request.ReadSize = std::min(request.ReadSize, request.ChunkDataSize - request.ReadOffset);
         ActiveFlagChunkRead.emplace(request);
         RequestInFlight = true;
         Send(Ctx.SyncLogCtx->PDiskCtx->PDiskId,
                 new NPDisk::TEvChunkRead(Ctx.SyncLogCtx->PDiskCtx->Dsk->Owner,
                         Ctx.SyncLogCtx->PDiskCtx->Dsk->OwnerRound,
-                        chunkIdx, offset, request.ReadSize, NPriRead::SyncLog, nullptr));
+                        chunkIdx, request.ReadOffset, request.GetBufferedReadSize(), NPriRead::SyncLog, nullptr));
     }
 
     void ReplyToFlagChunkRead(const TReadFlagsFromChunk& request, NKikimrProto::EReplyStatus status,
-            TString&& keys = {}, std::optional<ui32> nextCursor = std::nullopt) {
+            TFlagKeys&& keys = {}, ui32 nextReadOffset = 0) {
         std::unique_ptr<TEvReadFlagChunkResult> result = std::make_unique<TEvReadFlagChunkResult>(
                 status, request.VDiskId, request.ChunkIdx);
         if (status == NKikimrProto::OK) {
-            if (!keys.empty()) {
-                result->Record.SetKeys(std::move(keys));
-            }
-            if (nextCursor) {
-                result->Record.SetNextCursor(*nextCursor);
-            }
+            result->Record.MutableKeys()->Swap(&keys);
+            result->Record.SetNextReadOffset(nextReadOffset);
+            result->Record.SetEof(nextReadOffset == request.ChunkDataSize);
         }
         SendVDiskResponse(TActivationContext::AsActorContext(), request.Requester, result.release(),
                 request.Cookie, request.Channel, Ctx.SyncLogCtx->VCtx, {});
@@ -414,27 +425,22 @@ private:
 
     void FinishFlagChunkRead(const NPDisk::TEvChunkReadResult& result) {
         const TReadFlagsFromChunk request = *ActiveFlagChunkRead;
-        const ui32 offset = request.Cursor.value_or(0);
-        TString keys;
-        std::optional<ui32> nextCursor;
+        const ui32 bufferSize = request.GetBufferedReadSize();
+        TFlagKeys keys;
+        ui32 nextReadOffset = request.ReadOffset;
         NKikimrProto::EReplyStatus status = NKikimrProto::CORRUPTED;
-        if (request.ChunkIdx == result.ChunkIdx && result.Offset == offset && result.Data.IsReadable(0, request.ReadSize)) {
+        if (request.ChunkIdx == result.ChunkIdx && result.Offset == request.ReadOffset
+                && result.Data.IsReadable(0, bufferSize)) {
             const TBlobStorageGroupType& groupType = Ctx.SyncLogCtx->VCtx->Top->GType;
-            // Leave room for the protobuf envelope around the packed keys.
-            constexpr size_t maxKeys = (NActors::EventMaxByteSize - 1024) / TLogoBlobID::BinarySize;
-            TStringBuf data(result.Data.DataPtr<const char>(0, request.ReadSize), request.ReadSize);
-            if (ReadPhantomFlagStorageKeys(data, groupType, maxKeys, keys)) {
+            const TStringBuf data(result.Data.DataPtr<const char>(0, bufferSize), bufferSize);
+            const std::optional<ui32> consumed = ReadPhantomFlagStorageKeys(
+                data, request.ReadSize, request.ChunkDataSize - request.ReadOffset, groupType, keys);
+            if (consumed) {
                 status = NKikimrProto::OK;
-                if (!data.empty()) {
-                    if (request.Cursor) {
-                        nextCursor = offset + request.ReadSize - static_cast<ui32>(data.size());
-                    } else {
-                        status = NKikimrProto::TRYLATER_SIZE;
-                    }
-                }
+                nextReadOffset += *consumed;
             }
         }
-        ReplyToFlagChunkRead(request, status, std::move(keys), nextCursor);
+        ReplyToFlagChunkRead(request, status, std::move(keys), nextReadOffset);
         ActiveFlagChunkRead.reset();
         RequestInFlight = false;
         ProcessQueues();

@@ -159,22 +159,29 @@ namespace NKikimr {
         if (Record.HasChunkIndex()) {
             result << " ChunkIndex# " << Record.GetChunkIndex();
         }
-        if (Record.HasNextCursor()) {
-            result << " NextCursor# " << Record.GetNextCursor();
+        if (Record.HasNextReadOffset()) {
+            result << " NextReadOffset# " << Record.GetNextReadOffset();
         }
-        result << " KeyBytes# " << Record.GetKeys().size() << "}";
+        if (Record.HasEof()) {
+            result << " Eof# " << Record.GetEof();
+        }
+        result << " KeyCount# " << Record.KeysSize() << "}";
         return result;
     }
 
     TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TEvVPhantomFlagStorageReadChunk() = default;
 
     TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TEvVPhantomFlagStorageReadChunk(
-            const TVDiskID& source, const TVDiskID& target, ui32 chunkIndex, std::optional<ui32> cursor) {
+            const TVDiskID& source, const TVDiskID& target, ui32 chunkIndex, std::optional<ui32> readOffset,
+            std::optional<ui32> readSize) {
         VDiskIDFromVDiskID(source, Record.MutableSourceVDiskID());
         VDiskIDFromVDiskID(target, Record.MutableVDiskID());
         Record.SetChunkIndex(chunkIndex);
-        if (cursor) {
-            Record.SetCursor(*cursor);
+        if (readOffset) {
+            Record.SetReadOffset(*readOffset);
+        }
+        if (readSize) {
+            Record.SetReadSize(*readSize);
         }
     }
 

@@ -38,6 +38,10 @@ public:
 
     using TThreshold = TPhantomFlagThresholds::TThreshold;
 
+    // Enough bytes to finish a fixed record or a skip header starting at the last byte of the range.
+    static constexpr ui32 ReadLookahead = static_cast<ui32>(sizeof(EPhantomFlagStorageItem) + sizeof(TFlag) - 1);
+    static_assert(sizeof(TFlag) >= sizeof(TThreshold) && sizeof(TFlag) >= sizeof(ui32));
+
 public:
     static TPhantomFlagStorageItem CreateSkip(ui32 skipSize);
     static TPhantomFlagStorageItem CreateFlag(const TLogoBlobRec* blobRec);
@@ -47,6 +51,8 @@ public:
 
     // Advance data by one complete item on success.
     static std::optional<TPhantomFlagStorageItem> ReadFrom(TStringBuf& data);
+    // A length-framed skip can extend beyond the buffer, but must fit in the committed bytes.
+    static std::optional<TPhantomFlagStorageItem> ReadFrom(TStringBuf& data, size_t committedSize);
     void Serialize(TString* buffer) const;
     ui32 SerializedSize() const;
     static void AlignWriteBlock(TString* buffer, ui32 appendBlockSize, ui32 sizeLimit); 
@@ -61,8 +67,9 @@ private:
     std::variant<TSkip, TFlag, TThreshold> Data;
 };
 
-// Encode up to maxKeys DoNotKeep keys. On success, data points to the next key's record or is empty.
-bool ReadPhantomFlagStorageKeys(TStringBuf& data, const TBlobStorageGroupType& groupType, size_t maxKeys, TString& keys);
+// Encode DoNotKeep records that start within readSize. Return the number of committed bytes consumed.
+std::optional<ui32> ReadPhantomFlagStorageKeys(TStringBuf data, ui32 readSize, ui32 committedSize,
+    const TBlobStorageGroupType& groupType, ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID>& keys);
 
 struct TPhantomFlagStorageData {
     struct TChunk {

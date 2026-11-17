@@ -2899,7 +2899,7 @@ namespace NKikimr {
 
         TEvVPhantomFlagStorageReadChunk();
         TEvVPhantomFlagStorageReadChunk(const TVDiskID& source, const TVDiskID& target, ui32 chunkIndex,
-                std::optional<ui32> cursor = std::nullopt);
+                std::optional<ui32> readOffset = std::nullopt, std::optional<ui32> readSize = std::nullopt);
 
         std::optional<ui32> GetChunkIndex() const;
     };

@@ -92,7 +92,7 @@ def ydb_cluster(request):
         if 'rebalancing_timeout_ms' in param:
             environment.setenv('YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS', str(param['rebalancing_timeout_ms']))
         config = get_ydb_config(request)
-        config.yaml_config['feature_flags']['enable_secure_script_executions'] = False
+        config.yaml_config["feature_flags"]["enable_secure_script_executions"] = False
         config.yaml_config['feature_flags']['enable_streaming_query_disposition'] = True
         if 'aggregation_compute_threads' in param:
             config.yaml_config['table_service_config'].setdefault('aggregation_config', {})[

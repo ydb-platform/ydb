@@ -7,7 +7,9 @@
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/scheme_board/cache.h>
+#include <ydb/core/tx/tx.h>
 
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 
@@ -70,6 +72,68 @@ namespace NLongTxService {
             auto sender = runtime.AllocateEdgeActor();
             runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
             runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
+        }
+
+        NKikimrConfig::TAppConfig MakeSnapshotRegistrationTestConfig(bool locking = true) {
+            NKikimrConfig::TAppConfig config;
+            config.MutableFeatureFlags()->SetEnableSnapshotsLocking(locking);
+            auto& service = *config.MutableLongTxServiceConfig();
+            service.SetLocalSnapshotPromotionTimeSeconds(5);
+            service.SetSnapshotsExchangeIntervalSeconds(1);
+            service.SetSnapshotsRegistryUpdateIntervalSeconds(1);
+            service.SetPrefillTimeoutSeconds(1);
+            return config;
+        }
+
+        void CheckAutomaticSnapshotRegistrationWindow(ui64 ageMs, bool locking) {
+            TTenantTestRuntime runtime(MakeTenantTestConfig(false, 1), MakeSnapshotRegistrationTestConfig(locking));
+            StartSchemeCache(runtime);
+            SimulateSleep(runtime, TDuration::Seconds(10));
+            const auto service = MakeLongTxServiceID(runtime.GetNodeId(0));
+            const auto sender = runtime.AllocateEdgeActor();
+            TActorId serviceActor, firstAcquireActor;
+            TRowVersion original;
+            ui32 attempts = 0;
+
+            auto requestObserver = runtime.AddObserver<TEvLongTxService::TEvAcquireReadSnapshot>([&](auto& ev) {
+                if (ev->Sender == sender) {
+                    serviceActor = ev->GetRecipientRewrite();
+                }
+            });
+            auto stepObserver = runtime.AddObserver<TEvTxProxy::TEvAcquireReadStep>([&](auto& ev) {
+                if (++attempts == 1) {
+                    firstAcquireActor = ev->Sender;
+                }
+            });
+            auto replyObserver = runtime.AddObserver<TEvTxProxy::TEvAcquireReadStepResult>([&](auto& ev) {
+                // Control coordinator output independently of its planning activity.
+                ev->Get()->Record.SetStep(runtime.GetCurrentTime().MilliSeconds());
+                if (ev->GetRecipientRewrite() == firstAcquireActor) {
+                    original = TRowVersion(ev->Get()->Record.GetStep(), Max<ui64>());
+                }
+            });
+            auto completionObserver = runtime.AddObserver<>([&](auto& ev) {
+                if (firstAcquireActor && ev->Sender == firstAcquireActor && ev->GetRecipientRewrite() == serviceActor) {
+                    // The child has already accepted a fresh coordinator reply. Make it
+                    // reach the registration boundary only in the parent's mailbox.
+                    runtime.UpdateCurrentTime(TInstant::MilliSeconds(original.Step + ageMs));
+                }
+            });
+
+            runtime.Send(new IEventHandle(
+                             service, sender, new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1"), 0, 123), 0, true);
+            const auto response = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+            const auto& result = *response->Get();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::SUCCESS, result.Issues.ToString());
+            UNIT_ASSERT_VALUES_EQUAL(response->Cookie, 123);
+            UNIT_ASSERT_VALUES_EQUAL(bool(result.SnapshotHandle), locking);
+            const bool retry = locking && ageMs > 5000;
+            UNIT_ASSERT_VALUES_EQUAL(attempts, retry ? 2 : 1);
+            if (retry) {
+                UNIT_ASSERT(result.Snapshot > original);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.Snapshot, original);
+            }
         }
 
     }
@@ -356,6 +420,137 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
         // We expect multiple disconnects before unavailable result is returned
         UNIT_ASSERT_GE(disconnectCount, 3);
+    }
+
+    Y_UNIT_TEST(AutomaticSnapshotRegistrationWindow) {
+        for (const ui64 ageMs : { 4999, 5000, 5001 }) {
+            CheckAutomaticSnapshotRegistrationWindow(ageMs, true);
+        }
+    }
+
+    Y_UNIT_TEST(AutomaticSnapshotRegistrationWindowIsDisabledWithoutLocking) {
+        CheckAutomaticSnapshotRegistrationWindow(6000, false);
+    }
+
+    Y_UNIT_TEST(DelayedSnapshotRegistrationRetriesOnlyRetainedRequests) {
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, 1), MakeSnapshotRegistrationTestConfig());
+        StartSchemeCache(runtime);
+        SimulateSleep(runtime, TDuration::Seconds(10));
+        const auto service = MakeLongTxServiceID(runtime.GetNodeId(0));
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto otherSender = runtime.AllocateEdgeActor();
+        const auto beginSender = runtime.AllocateEdgeActor();
+        const ::NKikimr::TTableId table(0, 1), otherTable(0, 2), unrelatedTable(0, 3);
+        TActorId serviceActor, firstAcquireActor;
+        TRowVersion original, retried;
+        ui32 attempts = 0;
+
+        auto requestObserver = runtime.AddObserver<TEvLongTxService::TEvAcquireReadSnapshot>([&](auto& ev) {
+            if (ev->Sender == sender) {
+                serviceActor = ev->GetRecipientRewrite();
+            }
+        });
+        auto stepObserver = runtime.AddObserver<TEvTxProxy::TEvAcquireReadStep>([&](auto& ev) {
+            if (++attempts == 1) {
+                firstAcquireActor = ev->Sender;
+            }
+        });
+        auto replyObserver = runtime.AddObserver<TEvTxProxy::TEvAcquireReadStepResult>([&](auto& ev) {
+            ev->Get()->Record.SetStep(runtime.GetCurrentTime().MilliSeconds());
+            const TRowVersion version(ev->Get()->Record.GetStep(), Max<ui64>());
+            if (ev->GetRecipientRewrite() == firstAcquireActor) {
+                original = version;
+            } else {
+                retried = version;
+            }
+        });
+        NActors::TBlockEvents<IEventHandle> delayed(runtime, [&](const auto& ev) {
+            return firstAcquireActor && ev->Sender == firstAcquireActor && ev->GetRecipientRewrite() == serviceActor;
+        });
+
+        // All three requests share the first acquisition, but BeginTx does not
+        // create retention and must keep its original successful result.
+        runtime.Send(new IEventHandle(service, sender,
+                         new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", { table }), 0, 11), 0, true);
+        runtime.Send(new IEventHandle(service, otherSender,
+                         new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", { otherTable }), 0, 12), 0, true);
+        runtime.Send(new IEventHandle(service, beginSender,
+                         new TEvLongTxService::TEvBeginTx("/dc-1", NKikimrLongTxService::TEvBeginTx::MODE_READ_ONLY), 0, 13),
+            0, true);
+        runtime.WaitFor("the completed acquisition is delayed in the service mailbox", [&] {
+            return !delayed.empty();
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT(original > TRowVersion::Min());
+        SimulateSleep(runtime, TDuration::Seconds(6));
+        delayed.Stop().Unblock();
+
+        const auto begun = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvBeginTxResult>(beginSender);
+        UNIT_ASSERT_VALUES_EQUAL(begun->Cookie, 13);
+        UNIT_ASSERT_VALUES_EQUAL(begun->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(begun->Get()->GetLongTxId().Snapshot, original);
+        const auto acquired = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+        const auto other = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(otherSender);
+        UNIT_ASSERT_VALUES_EQUAL(acquired->Cookie, 11);
+        UNIT_ASSERT_VALUES_EQUAL(other->Cookie, 12);
+        for (const auto* result : { acquired->Get(), other->Get() }) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result->DatabaseName, "/dc-1");
+            UNIT_ASSERT_VALUES_EQUAL(result->Snapshot, retried);
+            UNIT_ASSERT(result->SnapshotHandle);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(attempts, 2);
+        UNIT_ASSERT(retried > original);
+
+        SimulateSleep(runtime, TDuration::Seconds(8));
+        const auto registry = runtime.GetAppData(0).SnapshotRegistryHolder->Get();
+        UNIT_ASSERT(registry);
+        UNIT_ASSERT(registry->HasSnapshot(table, retried));
+        UNIT_ASSERT(registry->HasSnapshot(otherTable, retried));
+        UNIT_ASSERT(!registry->HasSnapshot(unrelatedTable, retried));
+        UNIT_ASSERT(!registry->HasSnapshot(table, original));
+    }
+
+    Y_UNIT_TEST(RepeatedStaleSnapshotAcquisitionFailsWithoutRetention) {
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, 1), MakeSnapshotRegistrationTestConfig());
+        StartSchemeCache(runtime);
+        SimulateSleep(runtime, TDuration::Seconds(10));
+        const auto service = MakeLongTxServiceID(runtime.GetNodeId(0));
+        const auto sender = runtime.AllocateEdgeActor();
+        const ::NKikimr::TTableId table(0, 1);
+        TVector<TInstant> attempts;
+        auto observer = runtime.AddObserver<TEvTxProxy::TEvAcquireReadStepResult>([&](auto& ev) {
+            attempts.push_back(runtime.GetCurrentTime());
+            ev->Get()->Record.SetStep(runtime.GetCurrentTime().MilliSeconds() - 5001);
+        });
+
+        runtime.Send(new IEventHandle(service, sender,
+                         new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", { table }), 0, 123), 0, true);
+        const auto response = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Cookie, 123);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT(!response->Get()->SnapshotHandle);
+        UNIT_ASSERT_VALUES_EQUAL(attempts.size(), 4);
+        for (size_t i = 1; i < attempts.size(); ++i) {
+            UNIT_ASSERT(attempts[i] - attempts[i - 1] >= TDuration::MilliSeconds(100));
+        }
+
+        SimulateSleep(runtime, TDuration::Seconds(8));
+        const auto registry = runtime.GetAppData(0).SnapshotRegistryHolder->Get();
+        UNIT_ASSERT(registry);
+        UNIT_ASSERT(registry->GetActiveSnapshots(table).empty());
+
+        // Exhaustion must release the database's acquisition slot and must not
+        // leave a duplicate registration for this sender.
+        observer.Remove();
+        auto freshReply = runtime.AddObserver<TEvTxProxy::TEvAcquireReadStepResult>([&](auto& ev) {
+            ev->Get()->Record.SetStep(runtime.GetCurrentTime().MilliSeconds());
+        });
+        runtime.Send(new IEventHandle(service, sender,
+                         new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", { table }), 0, 124), 0, true);
+        const auto acquired = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(acquired->Cookie, 124);
+        UNIT_ASSERT_VALUES_EQUAL_C(acquired->Get()->Status, Ydb::StatusIds::SUCCESS, acquired->Get()->Issues.ToString());
+        UNIT_ASSERT(acquired->Get()->SnapshotHandle);
     }
 
     Y_UNIT_TEST(ExplicitSnapshotRegistrationWindow) {

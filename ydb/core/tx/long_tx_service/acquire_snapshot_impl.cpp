@@ -213,8 +213,12 @@ namespace NLongTxService {
         req.DatabaseName = databaseName;
         req.UserRequests.swap(state.PendingUserRequests);
         req.BeginTxRequests.swap(state.PendingBeginTxRequests);
-        Register(new TAcquireSnapshotActor(SelfId(), reqId, databaseName));
         state.ActiveRequests.insert(reqId);
+        StartAcquireSnapshotAttempt(reqId, databaseName);
+    }
+
+    void TLongTxServiceActor::StartAcquireSnapshotAttempt(ui64 requestId, const TString& databaseName) {
+        Register(new TAcquireSnapshotActor(SelfId(), requestId, databaseName));
 
         if (Settings.Counters) {
             Settings.Counters->AcquireReadSnapshotOutRequests->Inc();

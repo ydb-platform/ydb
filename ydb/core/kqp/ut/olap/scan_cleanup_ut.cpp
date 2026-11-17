@@ -2,10 +2,16 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
+#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
+#include <ydb/core/tx/tx.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -32,9 +38,166 @@ void SleepUntil(TTestActorRuntime& runtime, const TInstant deadline) {
     }
 }
 
+class TDelayedSnapshotCleanupController: public NYDBTest::NColumnShard::TController {
+public:
+    ui64 TargetTabletId = 0;
+    NOlap::TSnapshot DelayedSnapshot = NOlap::TSnapshot::Zero();
+    std::optional<NOlap::TSnapshot> ReplacementSnapshot;
+    bool HistoricalPortionErased = false;
+
+protected:
+    bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const NColumnShard::TColumnShard& shard) override {
+        const bool result = TController::DoOnWriteIndexComplete(changes, shard);
+        if (shard.TabletID() != TargetTabletId || changes.IsAborted()) {
+            return result;
+        }
+        if (const auto* compaction = dynamic_cast<const NOlap::TCompactColumnEngineChanges*>(&changes)) {
+            for (const auto& portion : compaction->GetSwitchedPortions()) {
+                if (!ReplacementSnapshot || *ReplacementSnapshot < portion->RecordSnapshotMax()) {
+                    ReplacementSnapshot = portion->RecordSnapshotMax();
+                }
+            }
+        }
+        if (const auto* cleanup = dynamic_cast<const NOlap::TCleanupPortionsColumnEngineChanges*>(&changes)) {
+            for (const auto& portion : cleanup->GetPortionsToDrop()) {
+                HistoricalPortionErased |= portion->IsVisible(DelayedSnapshot);
+            }
+        }
+        return result;
+    }
+};
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(KqpOlapScanCleanup) {
+    // YDB-59537: acquiring a version and publishing its retention are separate operations.
+    Y_UNIT_TEST(DelayedSnapshotAcquisitionKeepsFirstTableReadConsistent) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TDelayedSnapshotCleanupController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Cleanup);
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
+        auto& longTxConfig = *settings.AppConfig.MutableLongTxServiceConfig();
+        longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
+        longTxConfig.SetMaxClockSkewMs(1000);
+        longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        longTxConfig.SetSnapshotsExchangeIntervalSeconds(1);
+        longTxConfig.SetPrefillTimeoutSeconds(1);
+        TKikimrRunner kikimr(settings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        kikimr.RunCall([&] {
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            const auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/ColumnTable` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                )
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return true;
+        });
+
+        using namespace NYdb::NQuery;
+        auto queryClient = kikimr.GetQueryClient();
+        auto writeSession = kikimr.RunCall([&] { return queryClient.GetSession().GetValueSync().GetSession(); });
+        const auto upsert = [&](const TString& value) {
+            const auto result = kikimr.RunCall([&] {
+                return writeSession.ExecuteQuery(
+                    TStringBuilder() << "UPSERT INTO `/Root/ColumnTable` (Key, Value) VALUES (1u, \"" << value << "\");",
+                    TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        upsert("old");
+        runtime.WaitFor("the target ColumnShard is ready", [&] {
+            return csController->GetShardActualsCount() == 1;
+        }, TDuration::Seconds(30));
+        csController->TargetTabletId = csController->GetTheOnlyShard()->TabletID();
+        runtime.WaitFor("snapshot registry is ready", [&] {
+            return bool(runtime.GetAppData(0).SnapshotRegistryHolder->Get());
+        }, TDuration::Seconds(30));
+
+        using TService = NLongTxService::TEvLongTxService;
+        TActorId snapshotManager, acquireActor;
+        std::optional<TRowVersion> acquiredSnapshot;
+        bool acquiredWithHandle = false;
+        auto requestObserver = runtime.AddObserver<TService::TEvAcquireReadSnapshot>([&](auto& ev) {
+            if (!snapshotManager && !ev->Get()->Snapshot && ev->Get()->TableIds.empty()) {
+                snapshotManager = ev->Sender;
+            }
+        });
+        auto stepObserver = runtime.AddObserver<TEvTxProxy::TEvAcquireReadStep>([&](auto& ev) {
+            if (snapshotManager && !acquireActor) {
+                acquireActor = ev->Sender;
+            }
+        });
+        NActors::TBlockEvents<TEvTxProxy::TEvAcquireReadStepResult> delayed(runtime, [&](const auto& ev) {
+            return acquireActor && ev->GetRecipientRewrite() == acquireActor;
+        });
+        auto resultObserver = runtime.AddObserver<TService::TEvAcquireReadSnapshotResult>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == snapshotManager && ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+                acquiredSnapshot = ev->Get()->Snapshot;
+                acquiredWithHandle = bool(ev->Get()->SnapshotHandle);
+            }
+        });
+
+        auto readSession = kikimr.RunCall([&] { return queryClient.GetSession().GetValueSync().GetSession(); });
+        // Establish an interactive snapshot without visiting the target shard.
+        auto beginFuture = kikimr.RunInThreadPool([&] {
+            return readSession.ExecuteQuery("SELECT 1;", TTxControl::BeginTx(TTxSettings::SnapshotRO())).ExtractValueSync();
+        });
+        runtime.WaitFor("the original coordinator reply is delayed", [&] {
+            return !delayed.empty() || beginFuture.HasValue();
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT_C(!delayed.empty(), "snapshot acquisition finished before the coordinator reply was intercepted");
+        csController->DelayedSnapshot = NOlap::TSnapshot(delayed.front()->Get()->Record.GetStep(), Max<ui64>());
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        upsert("new");
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        runtime.WaitFor("both target versions are compacted", [&] {
+            return csController->ReplacementSnapshot && csController->DelayedSnapshot < *csController->ReplacementSnapshot;
+        }, TDuration::Seconds(30));
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+
+        // Let the real registry collections advance beyond the promotion/skew margin.
+        SleepUntil(runtime, runtime.GetCurrentTime() + TDuration::Seconds(10));
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::Cleanup);
+        runtime.WaitFor("history visible at the delayed version is erased", [&] {
+            return csController->HistoricalPortionErased;
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT(!acquiredSnapshot);
+
+        delayed.Stop().Unblock();
+        const auto beginResult = runtime.WaitFuture(beginFuture);
+        UNIT_ASSERT_C(beginResult.IsSuccess(), beginResult.GetIssues().ToString());
+        CompareYson("[[1]]", FormatResultSetYson(beginResult.GetResultSet(0)));
+        auto tx = beginResult.GetTransaction();
+        UNIT_ASSERT(tx && tx->IsActive());
+        UNIT_ASSERT(acquiredSnapshot && acquiredWithHandle);
+        runtime.WaitFor("the acquired version is published in the registry", [&] {
+            const auto registry = runtime.GetAppData(0).SnapshotRegistryHolder->Get();
+            return registry && registry->HasSnapshot(TTableId{}, *acquiredSnapshot);
+        }, TDuration::Seconds(30));
+
+        const auto result = kikimr.RunCall([&] {
+            return readSession.ExecuteQuery("SELECT Key, Value FROM `/Root/ColumnTable` ORDER BY Key;",
+                TTxControl::Tx(*tx)).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        // Safe reacquisition may choose a newer version after the delayed reply.
+        const NOlap::TSnapshot readSnapshot(acquiredSnapshot->Step, acquiredSnapshot->TxId);
+        const TString expected = readSnapshot < *csController->ReplacementSnapshot ? R"([[1u;["old"]]])" : R"([[1u;["new"]]])";
+        CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        const auto rollback = kikimr.RunCall([&] { return tx->Rollback().ExtractValueSync(); });
+        UNIT_ASSERT_C(rollback.IsSuccess(), rollback.GetIssues().ToString());
+    }
+
     // The test implements the case1 from this diagram https://github.com/ydb-platform/ydb/issues/49434#issuecomment-5277352717
     Y_UNIT_TEST(ScanThenCleanupDoesNotCrash) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();

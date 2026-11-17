@@ -231,7 +231,7 @@ public:
     void SetSharedCacheLimit(ui64 memoryLimit)
     {
         TWaitForFirstEvent<NMemory::TEvConsumerLimit> wait(Env);
-        Env.Send(NSharedCache::MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(memoryLimit));
+        Env.Send(NSharedCache::MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, memoryLimit));
         wait.Wait();
     }
 

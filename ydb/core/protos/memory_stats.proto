@@ -42,4 +42,13 @@ message TMemoryStats {
 
     optional uint64 CompactionDemand = 30;
     optional uint64 CompactionReclaimable = 31;
+
+    optional uint64 TabletsConsumption = 32;
+    optional uint64 TabletsDemand = 33;
+    optional uint64 TabletsReclaimable = 34;
+
+    optional uint64 TabletsElasticConsumption = 35;
+    optional uint64 TabletsElasticDemand = 36;
+    optional uint64 TabletsElasticReclaimable = 37;
+    optional uint64 TabletsElasticLimit = 38;
 }

@@ -23,6 +23,7 @@ PEERDIR(
 
 SRCS(
     node_broker_ut.cpp
+    tablet_memory_host_ut.cpp
     tenant_ut_local.cpp
     tenant_ut_pool.cpp
     tenant_node_enumeration_ut.cpp

@@ -10176,7 +10176,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         t.Export(Fs, Encrypted);
         UNIT_ASSERT_VALUES_EQUAL(t.Runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusImport.AtomicLoad()->Get(), 0);
         const ui64 id = t.StartImport(t.MakeImport(Fs, Encrypted));
-        t.Finish(id, Ydb::StatusIds::CANCELLED, "unsupported scheme object type");
+        t.Finish(id, Ydb::StatusIds::CANCELLED, "Unsupported scheme object type");
         t.AssertNotCreated();
         t.RebootSchemeShard();
         TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::CANCELLED);
@@ -10221,10 +10221,10 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         const TVector<std::pair<TString, TString>> cases = {
             {R"("rate_limiter_resources":[])", "must contain"},
             {R"("semaphores":[])", "must contain"},
-            {R"("rate_limiter_resources":{},"semaphores":[])", "failed to parse metadata"},
-            {R"("rate_limiter_resources":[],"semaphores":null)", "failed to parse metadata"},
-            {R"("rate_limiter_resources":[{"export_prefix":1,"resource_path":"a"}],"semaphores":[])", "failed to parse metadata"},
-            {R"("rate_limiter_resources":[],"semaphores":[{"export_prefix":"semaphores/001","name":1}])", "failed to parse metadata"},
+            {R"("rate_limiter_resources":{},"semaphores":[])", "Failed to parse metadata"},
+            {R"("rate_limiter_resources":[],"semaphores":null)", "Failed to parse metadata"},
+            {R"("rate_limiter_resources":[{"export_prefix":1,"resource_path":"a"}],"semaphores":[])", "Failed to parse metadata"},
+            {R"("rate_limiter_resources":[],"semaphores":[{"export_prefix":"semaphores/001","name":1}])", "Failed to parse metadata"},
         };
         auto check = [&](const TString& fields, TStringBuf issue) {
             t.WriteBackup(MakeContents());

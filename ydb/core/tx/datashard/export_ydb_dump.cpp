@@ -11,6 +11,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/yexception.h>
 #include <util/stream/buffer.h>
+#include <util/stream/format.h>
 #include <util/stream/output.h>
 
 namespace NKikimr::NDataShard {
@@ -96,10 +97,10 @@ bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) override {
             serialized = cell.ToStream<bool>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Double:
-            serialized = cell.ToStream<double>(out, ErrorString);
+            out << Prec(cell.AsValue<double>(), PREC_AUTO);
             break;
         case NScheme::NTypeIds::Float:
-            serialized = cell.ToStream<float>(out, ErrorString);
+            out << Prec(cell.AsValue<float>(), PREC_AUTO);
             break;
         case NScheme::NTypeIds::Date:
             out << TInstant::Days(cell.AsValue<ui16>());

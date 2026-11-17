@@ -3,6 +3,7 @@
 #include <ydb/library/yaml_config/tools/util/defaults.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config.h>
+#include <ydb/library/yaml_json/yaml_to_json.h>
 #include "rpc_config_base.h"
 
 #include <ydb/core/base/path.h>
@@ -355,16 +356,14 @@ public:
     {}
 
     bool IsDistconfEnableQuery() const {
-        NKikimrConfig::TAppConfig newConfig;
-        try {
-            auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
-            auto config = shim.StorageConfig
-                ? NFyaml::TDocument::Parse(*shim.StorageConfig)
-                : NFyaml::TDocument::Parse(shim.MainConfig.value_or(TString{"{}"}));
-            newConfig = NYamlConfig::YamlToProto(config.Root(), true, true);
-        } catch (const std::exception&) {
-            return false; // assuming no distconf enabled in this config
+        const auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
+        if (!shim.StorageConfig && !shim.MainConfig) {
+            return false;
         }
+        const auto& yaml = shim.StorageConfig ? *shim.StorageConfig : *shim.MainConfig;
+        const auto json = NYaml::Yaml2Json(YAML::Load(yaml), true);
+        NKikimrConfig::TAppConfig newConfig;
+        NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true), newConfig, /*transform=*/true, nullptr, /*relaxed=*/true);
         return newConfig.GetSelfManagementConfig().GetEnabled();
     }
 

@@ -9,6 +9,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/base/tablet_pipe.h>
 
 #include <atomic>
@@ -403,6 +404,55 @@ config:
         UNIT_ASSERT(yamlConfigFetched);
         UNIT_ASSERT(!storageYamlConfigFetched);
         UNIT_ASSERT_VALUES_EQUAL(yamlConfig, *yamlConfigFetched);
+    }
+
+    Y_UNIT_TEST(ReplaceConfigRoutesYamlAliasToDistconf) {
+        TKikimrWithGrpcAndRootSchema server({}, {}, false);
+        auto& runtime = *server.GetRuntime();
+        const TString yaml = R"(
+metadata: {kind: MainConfig, cluster: "", version: 1}
+config:
+  static_erasure: &erasure none
+  self_management_config: {enabled: true, erasure_species: *erasure}
+  host_configs:
+  - host_config_id: 1
+    drive: [{path: "SectorMap:1:64", type: ROT}]
+  hosts: [{host: "::1", port: 12001, host_config_id: 1}]
+)";
+        std::optional<TString> forwardedYaml;
+        auto prev = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvNodeConfigInvokeOnRoot) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
+                if (record.HasReplaceStorageConfig()) {
+                    forwardedYaml = record.GetReplaceStorageConfig().GetYAML();
+                    auto reply = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+                    reply->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, reply.release(), 0, ev->Cookie));
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Dispatched(runtime, [&] {
+            ReplaceConfig(server.GetChannel(), yaml, std::nullopt, std::nullopt, false, true,
+                [](const auto& resp) { UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS); });
+        });
+        runtime.SetObserverFunc(prev);
+        UNIT_ASSERT(forwardedYaml);
+        UNIT_ASSERT_VALUES_EQUAL(*forwardedYaml, yaml);
+    }
+
+    Y_UNIT_TEST(ReplaceConfigRejectsInvalidConfigSection) {
+        TKikimrWithGrpcAndRootSchema server;
+        ReplaceConfig(server.GetChannel(), R"(
+metadata: {kind: MainConfig, cluster: "", version: 1}
+config: []
+)", std::nullopt, std::nullopt, false, true,
+            [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::BAD_REQUEST);
+                UNIT_ASSERT_VALUES_EQUAL(resp.operation().issues_size(), 1);
+                UNIT_ASSERT_STRING_CONTAINS(resp.operation().issues(0).message(), "'config' must be an object");
+            });
     }
 
     Y_UNIT_TEST(ReplaceConfigWithInvalidHostConfig) {

@@ -235,6 +235,7 @@ PEERDIR(
     ydb/library/protobuf_printer
     ydb/library/services
     ydb/library/yaml_config
+    ydb/library/yaml_json
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/public/lib/fq

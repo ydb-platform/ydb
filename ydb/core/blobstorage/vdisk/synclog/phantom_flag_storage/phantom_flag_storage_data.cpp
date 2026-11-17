@@ -3,7 +3,6 @@
 #include <util/generic/overloaded.h>
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 
 namespace NKikimr::NSyncLog {
@@ -93,6 +92,11 @@ void TPhantomFlagStorageItem::Serialize(TString* buffer) const {
 }
 
 std::optional<TPhantomFlagStorageItem> TPhantomFlagStorageItem::ReadFrom(TStringBuf& data) {
+    return ReadFrom(data, data.size());
+}
+
+std::optional<TPhantomFlagStorageItem> TPhantomFlagStorageItem::ReadFrom(TStringBuf& data, size_t committedSize) {
+    Y_DEBUG_ABORT_UNLESS(data.size() <= committedSize);
     constexpr size_t typeSize = sizeof(EPhantomFlagStorageItem);
     if (data.size() < typeSize) {
         return std::nullopt;
@@ -128,26 +132,32 @@ std::optional<TPhantomFlagStorageItem> TPhantomFlagStorageItem::ReadFrom(TString
             return std::nullopt;
         }
         const ui32 size = ReadUnaligned<ui32>(payload);
-        if (size < headerSize || size > data.size()) {
+        if (size < headerSize || size > committedSize) {
             return std::nullopt;
         }
-        data.Skip(size);
+        data.Skip(std::min<size_t>(size, data.size()));
         return CreateSkip(size);
     }
     }
 }
 
-bool ReadPhantomFlagStorageKeys(TStringBuf& data, const TBlobStorageGroupType& groupType, size_t maxKeys, TString& keys) {
-    Y_DEBUG_ABORT_UNLESS(maxKeys);
+std::optional<ui32> ReadPhantomFlagStorageKeys(TStringBuf data, ui32 readSize, ui32 committedSize,
+        const TBlobStorageGroupType& groupType, ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID>& keys) {
+    Y_DEBUG_ABORT_UNLESS(readSize <= data.size() && data.size() <= committedSize);
     constexpr size_t flagItemSize = sizeof(EPhantomFlagStorageItem) + sizeof(TPhantomFlagStorageItem::TFlag);
-    keys.clear();
-    keys.reserve(std::min(maxKeys, data.size() / flagItemSize) * TLogoBlobID::BinarySize);
-    while (!data.empty()) {
-        const TStringBuf recordStart = data;
-        const std::optional<TPhantomFlagStorageItem> item = TPhantomFlagStorageItem::ReadFrom(data);
+    // TLogoBlobID has three tagged fixed64 fields. The enclosing Keys field adds a tag and a length.
+    constexpr size_t protoKeySize = 3 * (1 + sizeof(ui64)) + 2;
+    static_assert(protoKeySize <= flagItemSize);
+    keys.Clear();
+    keys.Reserve(static_cast<int>(data.size() / flagItemSize));
+    ui32 consumed = 0;
+    while (consumed < readSize) {
+        const std::optional<TPhantomFlagStorageItem> item = TPhantomFlagStorageItem::ReadFrom(
+            data, committedSize - consumed);
         if (!item) {
-            return false;
+            return std::nullopt;
         }
+        consumed += item->SerializedSize();
         if (item->GetType() != EPhantomFlagStorageItem::Flag) {
             continue;
         }
@@ -155,19 +165,13 @@ bool ReadPhantomFlagStorageKeys(TStringBuf& data, const TBlobStorageGroupType& g
         if (!record.Ingress.IsDoNotKeep(groupType)) {
             continue;
         }
-        if (keys.size() / TLogoBlobID::BinarySize == maxKeys) {
-            data = recordStart;
-            break;
-        }
         const TLogoBlobID key = record.LogoBlobID().FullID();
         if (!key.IsValid()) {
-            return false;
+            return std::nullopt;
         }
-        std::array<char, TLogoBlobID::BinarySize> encodedKey;
-        key.ToBinary(encodedKey.data());
-        keys.append(encodedKey.data(), encodedKey.size());
+        LogoBlobIDFromLogoBlobID(key, keys.Add());
     }
-    return true;
+    return consumed;
 }
 
 ui32 TPhantomFlagStorageItem::SerializedSize() const {

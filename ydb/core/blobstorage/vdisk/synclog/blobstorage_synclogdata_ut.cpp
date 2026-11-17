@@ -159,26 +159,55 @@ namespace NKikimr {
             const TLogoBlobRec ignored(ignoredKey, keep.Raw());
             const TLogoBlobRec next(nextKey, doNotKeep.Raw());
 
+            const TPhantomFlagStorageItem firstFlag = TPhantomFlagStorageItem::CreateFlag(&first);
+            const ui32 firstFlagSize = firstFlag.SerializedSize();
             TString encoded;
-            TPhantomFlagStorageItem::CreateFlag(&first).Serialize(&encoded);
+            firstFlag.Serialize(&encoded);
             TPhantomFlagStorageItem::CreateThreshold(2, firstKey).Serialize(&encoded);
             TPhantomFlagStorageItem::CreateFlag(&ignored).Serialize(&encoded);
-            TPhantomFlagStorageItem::CreateSkip(1).Serialize(&encoded);
-            const size_t nextOffset = encoded.size();
+            const ui32 paddingOffset = static_cast<ui32>(encoded.size());
+            constexpr ui32 blockSize = 4096;
+            TPhantomFlagStorageItem::AlignWriteBlock(&encoded, blockSize, blockSize);
+            const ui32 nextOffset = static_cast<ui32>(encoded.size());
             TPhantomFlagStorageItem::CreateFlag(&next).Serialize(&encoded);
-            TPhantomFlagStorageItem::AlignWriteBlock(&encoded, 4096, 4096);
+            const ui32 committedSize = static_cast<ui32>(encoded.size());
+            const TStringBuf bytes(encoded);
 
-            constexpr size_t pageKeys = 1;
-            TStringBuf remaining(encoded);
-            TString firstPage;
-            UNIT_ASSERT(ReadPhantomFlagStorageKeys(remaining, groupType, pageKeys, firstPage));
-            UNIT_ASSERT_VALUES_EQUAL(firstPage, firstKey.AsBinaryString());
-            UNIT_ASSERT_VALUES_EQUAL(encoded.size() - remaining.size(), nextOffset);
+            constexpr ui32 singleByte = 1;
+            using TProtoKeys = google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID>;
+            TProtoKeys firstPage;
+            const std::optional<ui32> firstRead = ReadPhantomFlagStorageKeys(
+                bytes.SubStr(0, firstFlagSize), singleByte, committedSize, groupType, firstPage);
+            UNIT_ASSERT(firstRead);
+            UNIT_ASSERT_VALUES_EQUAL(*firstRead, firstFlagSize);
+            UNIT_ASSERT_VALUES_EQUAL(firstPage.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(LogoBlobIDFromLogoBlobID(firstPage.Get(0)), firstKey);
 
-            TString lastPage;
-            UNIT_ASSERT(ReadPhantomFlagStorageKeys(remaining, groupType, pageKeys, lastPage));
-            UNIT_ASSERT_VALUES_EQUAL(lastPage, nextKey.AsBinaryString());
-            UNIT_ASSERT(remaining.empty());
+            // The lookahead contains the padding length but only part of the padding.
+            const ui32 middleReadSize = paddingOffset - firstFlagSize + singleByte;
+            const TStringBuf middleBytes = bytes.SubStr(firstFlagSize, middleReadSize + sizeof(ui32));
+            const ui32 middleCommittedSize = committedSize - firstFlagSize;
+            TProtoKeys middlePage;
+            const std::optional<ui32> middleRead = ReadPhantomFlagStorageKeys(
+                middleBytes, middleReadSize, middleCommittedSize, groupType, middlePage);
+            UNIT_ASSERT(middleRead);
+            UNIT_ASSERT_VALUES_EQUAL(*middleRead, nextOffset - firstFlagSize);
+            UNIT_ASSERT(*middleRead > middleBytes.size());
+            UNIT_ASSERT(middlePage.empty());
+
+            TProtoKeys lastPage;
+            const ui32 lastCommittedSize = committedSize - nextOffset;
+            const std::optional<ui32> lastRead = ReadPhantomFlagStorageKeys(
+                bytes.SubStr(nextOffset), singleByte, lastCommittedSize, groupType, lastPage);
+            UNIT_ASSERT(lastRead);
+            UNIT_ASSERT_VALUES_EQUAL(*lastRead, lastCommittedSize);
+            UNIT_ASSERT_VALUES_EQUAL(lastPage.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(LogoBlobIDFromLogoBlobID(lastPage.Get(0)), nextKey);
+
+            TProtoKeys badPage;
+            const ui32 truncatedSize = nextOffset - firstFlagSize - 1;
+            UNIT_ASSERT(!ReadPhantomFlagStorageKeys(
+                middleBytes, middleReadSize, truncatedSize, groupType, badPage));
         }
     }
 

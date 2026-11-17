@@ -855,19 +855,23 @@ message TEvVPhantomFlagStorageReadChunk {
     optional TVDiskID SourceVDiskID = 1;
     optional TVDiskID VDiskID = 2;
     optional uint32 ChunkIndex = 3;
-    // Set to zero for the first page, then pass NextCursor from the preceding reply for this chunk.
-    // Leave unset for a single full reply, which returns TRYLATER_SIZE if the keys do not fit.
-    optional uint32 Cursor = 4;
+    // Start at zero (the default) or pass NextReadOffset from a previous reply for this chunk.
+    optional uint32 ReadOffset = 4;
+    // Positive byte budget for the read. The donor caps it to fit the transport limit.
+    // A record starting within this budget is consumed in full. If unset, use the donor's limit.
+    optional uint32 ReadSize = 5;
 }
 
 message TEvVPhantomFlagStorageReadChunkResult {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional TVDiskID VDiskID = 2;
     optional uint32 ChunkIndex = 3;
-    // Consecutive whole-blob DoNotKeep keys in TLogoBlobID::ToBinary format.
-    optional bytes Keys = 4;
-    // Opaque byte offset. On success, absent when the chunk is exhausted.
-    optional uint32 NextCursor = 5;
+    // Whole-blob DoNotKeep keys.
+    repeated NKikimrProto.TLogoBlobID Keys = 4;
+    // On success, the byte offset after the last consumed record, including at EOF.
+    optional uint32 NextReadOffset = 5;
+    // On success, true when the committed data has been exhausted.
+    optional bool Eof = 6;
 }
 
 message THandoffDelLogoBlob {

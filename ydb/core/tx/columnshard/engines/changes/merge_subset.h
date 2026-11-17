@@ -42,8 +42,8 @@ public:
         : GranuleMeta(granule)
         , PortionsIndexSnapshot(portionsIndexSnapshot)
     {
-        AFL_VERIFY(GranuleMeta);
-        AFL_VERIFY(PortionsIndexSnapshot);
+        YDB_LOG_VERIFY(GranuleMeta);
+        YDB_LOG_VERIFY(PortionsIndexSnapshot);
     }
 
     virtual ~ISubsetToMerge() = default;

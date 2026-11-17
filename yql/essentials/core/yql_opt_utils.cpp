@@ -162,6 +162,17 @@ TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx) 
     // clang-format on
 }
 
+TExprNode::TPtr ExpandTraitsDefaultLambda(const TExprNode& lambda, TExprNode::TPtr finishType, TExprContext& ctx) {
+    YQL_ENSURE(lambda.IsLambda());
+    YQL_ENSURE(lambda.Head().ChildrenSize() <= 1, "Traits default lambda accepts at most one type argument");
+
+    if (lambda.Head().ChildrenSize() == 0) {
+        return lambda.TailPtr();
+    }
+
+    return ctx.ReplaceNode(lambda.TailPtr(), lambda.Head().Head(), std::move(finishType));
+}
+
 bool IsJustOrSingleAsList(const TExprNode& node) {
     return node.ChildrenSize() == 1U && node.IsCallable({"Just", "AsList"});
 }

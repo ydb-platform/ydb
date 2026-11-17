@@ -995,14 +995,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TDatabaseAliasTicketParser() : TActor(&TDatabaseAliasTicketParser::StateFunc) {}
 
         void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-            const TCgiParameters paths("database=alias&path=/alias/a,/alias/b&topic=relative");
+            const TCgiParameters paths("database=/alias&path=/alias/a,/alias/b&topic=relative");
             const auto normalizer = std::make_shared<const std::function<TString(TStringBuf)>>(
                 [normalizer = AppData()->GetPathNormalizer()](TStringBuf path) { return normalizer->NormalizePath(path); });
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("path"), "/Root/a,/alias/b");
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer, true).Get("path"), "/Root/a,/Root/b");
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("topic"), "relative");
             NJson::TJsonValue jsonPaths;
-            UNIT_ASSERT(NJson::ReadJsonTree(R"({"database":"alias","path":["/alias/a","/alias/b"],"message":"/alias"})", &jsonPaths));
+            UNIT_ASSERT(NJson::ReadJsonTree(R"({"database":"/alias","path":["/alias/a","/alias/b"],"message":"/alias"})", &jsonPaths));
             NormalizePathParameters(jsonPaths, normalizer);
             UNIT_ASSERT_VALUES_EQUAL(jsonPaths["database"].GetString(), "/Root");
             UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][0].GetString(), "/Root/a");
@@ -1085,7 +1085,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
 
         TStringStream relativeResponse;
-        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/describe?database=alias&path=/alias&direct=true", &relativeResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/describe?database=/alias&path=/alias&direct=true", &relativeResponse, headers), HTTP_OK);
         UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&relativeResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
 
         headers["Content-Type"] = "application/json";
@@ -1095,7 +1095,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         headers["Content-Type"] = "application/x-www-form-urlencoded";
         TStringStream formResponse;
-        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", "database=alias&path=/alias", &formResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", "database=/alias&path=/alias", &formResponse, headers), HTTP_OK);
         UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&formResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
 
         TStringStream directoryResponse;
@@ -1892,6 +1892,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         bool DatabaseCountsBridgedRoot = false;
         bool DatabaseCountsUnavailable = false;
         bool DatabaseCountsLegacyResponse = false;
+        bool DatabaseCountsLegacyPileCounts = false;
         bool DatabaseCountsMissingPile = false;
         bool ProvidePileMap = true;
         bool DropNodesInfo = false;
@@ -2121,6 +2122,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         // Shared storage contributes one owner, regardless of its serverless databases.
                         const ui64 owners = 3 + options.DatabaseCountsBridgedRoot - options.DatabaseCountsMixedOwner;
                         snapshot->set_bridge_databases(owners);
+                        auto* global = snapshot->mutable_bridge_databases_by_sync_status();
+                        global->set_total(owners);
+                        global->set_synced(1 + options.DatabaseCountsBridgedRoot);
+                        global->set_syncing(options.DatabaseCountsMixedOwner ? 0 : 1);
+                        global->set_pending(1);
                         for (ui32 pile : {0, 2, 3}) {
                             if (options.DatabaseCountsMissingPile && pile == 2) {
                                 continue;
@@ -2142,6 +2148,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
                             row->mutable_databases()->CopyFrom(*counts);
                             row->mutable_databases()->set_total(owners + 2);
                             row->mutable_databases()->set_not_required(counts->not_required() + 2);
+                        }
+                        if (options.DatabaseCountsLegacyResponse || options.DatabaseCountsLegacyPileCounts) {
+                            snapshot->clear_bridge_databases_by_sync_status();
                         }
                         if (options.DatabaseCountsLegacyResponse) {
                             snapshot->clear_bridge_databases();
@@ -2325,7 +2334,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
         });
         const auto& bridgeInfo = json["BridgeInfo"];
         const auto& piles = bridgeInfo["Piles"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(json["Version"].GetUInteger(), 11);
         UNIT_ASSERT_VALUES_EQUAL(piles.size(), 3);
+        for (const auto& pile : piles) {
+            UNIT_ASSERT(!pile.Has("DatabaseCountsBySyncStatus"));
+        }
         AssertBridgePileCounts(piles[0], 2, 2);
         AssertBridgePileAliveCounts(piles[0], 2, 1);
         AssertBridgePileCounts(piles[1], 1, 1);
@@ -2333,23 +2346,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(piles[1]["Sync"]["SecondsLeft"].GetStringRobust(), "12");
         if (staleGeneration) {
             UNIT_ASSERT(!bridgeInfo.Has("BridgeDatabases"));
+            UNIT_ASSERT(!bridgeInfo.Has("DatabaseCountsBySyncStatus"));
             UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
             UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
-            for (const auto& pile : piles) {
-                UNIT_ASSERT(!pile.Has("DatabaseCountsBySyncStatus"));
-            }
         } else {
             UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
             UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
-            UNIT_ASSERT_VALUES_EQUAL(piles[0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "3");
-            const auto& counts = piles[1]["DatabaseCountsBySyncStatus"];
+            const auto& counts = bridgeInfo["DatabaseCountsBySyncStatus"];
             for (const char* status : {"SYNCED", "PENDING"}) {
                 UNIT_ASSERT_VALUES_EQUAL(counts[status].GetStringRobust(), "1");
             }
             UNIT_ASSERT_VALUES_EQUAL(counts["SYNCING"].GetStringRobust(), "1");
             UNIT_ASSERT_VALUES_EQUAL(counts["UNKNOWN"].GetStringRobust(), "0");
             UNIT_ASSERT_VALUES_EQUAL(counts["NOT_REQUIRED"].GetStringRobust(), "0");
-            UNIT_ASSERT_VALUES_EQUAL(piles[2]["DatabaseCountsBySyncStatus"]["NOT_REQUIRED"].GetStringRobust(), "3");
         }
     }
 
@@ -2362,7 +2371,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
         UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
         UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
-        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "3");
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "1");
     }
 
     Y_UNIT_TEST(ClusterBridgeDatabaseCountsMixedOwner) {
@@ -2373,7 +2382,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& bridgeInfo = json["BridgeInfo"];
         UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "2");
         UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
-        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][1]["DatabaseCountsBySyncStatus"]["SYNCING"].GetStringRobust(), "0");
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["DatabaseCountsBySyncStatus"]["SYNCING"].GetStringRobust(), "0");
     }
 
     Y_UNIT_TEST(ClusterBridgeDatabaseCountsIncludesRoot) {
@@ -2384,7 +2393,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& bridgeInfo = json["BridgeInfo"];
         UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "4");
         UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
-        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][1]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "2");
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "2");
     }
 
     Y_UNIT_TEST_TWIN(ClusterBridgeDatabaseCountsUnavailable, legacyResponse) {
@@ -2395,6 +2404,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         });
         const auto& bridgeInfo = json["BridgeInfo"];
         UNIT_ASSERT(!bridgeInfo.Has("BridgeDatabases"));
+        UNIT_ASSERT(!bridgeInfo.Has("DatabaseCountsBySyncStatus"));
         UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
         UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
         for (const auto& pile : bridgeInfo["Piles"].GetArraySafe()) {
@@ -2410,12 +2420,24 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& bridgeInfo = json["BridgeInfo"];
         UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
         UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
-        UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
         const auto& piles = bridgeInfo["Piles"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(piles.size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(piles[0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "3");
-        UNIT_ASSERT(!piles[1].Has("DatabaseCountsBySyncStatus"));
-        UNIT_ASSERT_VALUES_EQUAL(piles[2]["DatabaseCountsBySyncStatus"]["NOT_REQUIRED"].GetStringRobust(), "3");
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["DatabaseCountsBySyncStatus"]["SYNCING"].GetStringRobust(), "1");
+    }
+
+    Y_UNIT_TEST(ClusterBridgeDatabaseCountsLegacyPileCounts) {
+        const auto json = GetClusterBridgeInfo({
+            .DatabaseCountsGeneration = 42,
+            .DatabaseCountsLegacyPileCounts = true,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
+        UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        UNIT_ASSERT(!bridgeInfo.Has("DatabaseCountsBySyncStatus"));
+        for (const auto& pile : bridgeInfo["Piles"].GetArraySafe()) {
+            UNIT_ASSERT(!pile.Has("DatabaseCountsBySyncStatus"));
+        }
     }
 
     Y_UNIT_TEST_TWIN(ClusterBridgeNoAliveNodes, offloadMerge) {

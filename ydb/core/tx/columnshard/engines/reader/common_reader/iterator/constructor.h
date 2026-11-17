@@ -72,7 +72,7 @@ public:
         : TBase(entityId)
         , StoragesManager(storagesManager)
     {
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(StoragesManager);
     }
 
     void Start(TReadActionsCollection& nextRead, TFetchingResultContext& context) {

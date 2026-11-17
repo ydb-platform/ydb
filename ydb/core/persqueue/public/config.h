@@ -27,6 +27,7 @@ namespace NPQ {
 
 bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& config, bool isLocalDC);
 bool IsTopicMessagesBatchingEnabled(const NActors::TActorContext& ctx);
+bool CanWriteOffsetDeltaInKeys();
 bool DetailedMetricsAreEnabled(const NKikimrPQ::TPQTabletConfig& config);
 const NKikimrPQ::TPQTabletConfig_TPartition* GetPartitionConfigFromAllPartitions(const NKikimrPQ::TPQTabletConfig& config Y_LIFETIME_BOUND, const ui32 partitionId) noexcept;
 

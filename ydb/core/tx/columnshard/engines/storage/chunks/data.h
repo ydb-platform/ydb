@@ -21,7 +21,7 @@ protected:
 
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& /*saver*/,
         const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/, const std::vector<ui64>& /*splitSizes*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return {};
     }
 

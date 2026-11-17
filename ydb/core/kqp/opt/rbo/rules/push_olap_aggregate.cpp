@@ -21,7 +21,8 @@ TIntrusivePtr<IOperator> TPushOlapAggregateRule::SimpleMatchAndApply(const TIntr
     }
 
     const auto aggregate = CastOperator<TOpAggregate>(input);
-    const auto olapAggregate = MatchOlapAggregate(*aggregate, ctx.ExprCtx);
+    const auto olapAggregate =
+        MatchOlapAggregate(*aggregate, ctx.KqpCtx.Config->GetEnableOlapScalarApply(), ctx.ExprCtx);
     if (!olapAggregate) {
         return input;
     }

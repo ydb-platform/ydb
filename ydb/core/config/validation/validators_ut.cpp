@@ -461,6 +461,65 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         UNIT_ASSERT(res.empty());
     }
 
+    Y_UNIT_TEST(SelectionBoundsForSuppliedSections) {
+        for (bool selfManagement : {false, true}) {
+            for (ui32 section : xrange<ui32>(4)) {
+                for (bool ringGroups : {false, true}) {
+                    NKikimrConfig::TAppConfig app;
+                    app.MutableSelfManagementConfig()->SetEnabled(selfManagement);
+                    auto* domains = app.MutableDomainsConfig();
+                    FillRing(domains->AddStateStorage()->MutableRing(), 3, 3);
+                    FillRing(domains->MutableExplicitStateStorageConfig()->MutableRing(), 3, 3);
+                    FillRing(domains->MutableExplicitStateStorageBoardConfig()->MutableRing(), 3, 3);
+                    FillRing(domains->MutableExplicitSchemeBoardConfig()->MutableRing(), 3, 3);
+                    auto* config = section == 0 ? domains->MutableStateStorage(0)
+                        : section == 1 ? domains->MutableExplicitStateStorageConfig()
+                        : section == 2 ? domains->MutableExplicitStateStorageBoardConfig()
+                        : domains->MutableExplicitSchemeBoardConfig();
+                    config->Clear();
+                    if (ringGroups) {
+                        FillRing(config->AddRingGroups(), 3, 3);
+                    }
+                    auto* group = ringGroups ? config->AddRingGroups() : config->MutableRing();
+                    FillRing(group, 3, 3);
+                    for (ui32 nToSelect : {0u, 9u, 3u}) {
+                        group->SetNToSelect(nToSelect);
+                        std::vector<TString> errors;
+                        const auto result = ValidateConfig(app, errors);
+                        if (nToSelect == 3) {
+                            UNIT_ASSERT_C(result == EValidationResult::Ok, errors.empty() ? "" : errors[0]);
+                        } else {
+                            UNIT_ASSERT_EQUAL(result, EValidationResult::Error);
+                            UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+                            UNIT_ASSERT_STRING_CONTAINS(errors[0],
+                                TStringBuilder() << "NToSelect# " << nToSelect << " must be in [1, 3]");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(LegacyNodesAreSeparateRings) {
+        NKikimrConfig::TStateStorageConfig config;
+        auto* group = config.MutableRing();
+        for (ui32 nodeId : {1u, 2u, 3u}) {
+            group->AddNode(nodeId);
+        }
+        group->SetNToSelect(3);
+        UNIT_ASSERT(ValidateStateStorageConfigSelection(config).empty());
+        group->SetNToSelect(9);
+        UNIT_ASSERT_STRING_CONTAINS(ValidateStateStorageConfigSelection(config), "must be in [1, 3]");
+    }
+
+    Y_UNIT_TEST(SelfManagementCanGenerateOmittedSections) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableSelfManagementConfig()->SetEnabled(true);
+        std::vector<TString> errors;
+        UNIT_ASSERT_EQUAL(ValidateConfig(app, errors), EValidationResult::Ok);
+        UNIT_ASSERT(errors.empty());
+    }
+
     Y_UNIT_TEST(NToSelect) {
         NKikimrConfig::TStateStorageConfig proposed;
         FillRing(proposed.MutableRing());
@@ -772,7 +831,7 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         std::vector<TString> err;
         auto res = ValidateConfig(proposed, err);
         UNIT_ASSERT_EQUAL(err.size(), 1);
-        UNIT_ASSERT_EQUAL(err[0], "New StateStorage configuration NToSelect has invalid value");
+        UNIT_ASSERT_EQUAL(err[0], "StateStorage Ring.NToSelect# 10 must be in [1, 8] (number of configured rings)");
         UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
     }
 

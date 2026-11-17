@@ -93,7 +93,12 @@ TPgResolvedCallBase::TPgResolvedCallBase(std::string_view name,
             if (argTypeIds[i]) {
                 return *argTypeIds[i];
             }
-            return ProcDesc.ArgTypes[i];
+            if (i < ProcDesc.ArgTypes.size()) {
+                return ProcDesc.ArgTypes[i];
+            }
+            Y_ENSURE(ProcDesc.VariadicType, "No type for NULL argument " << i << " of " << Name
+                                                                         << ": fixed arguments=" << ProcDesc.ArgTypes.size());
+            return ProcDesc.VariadicType;
         }();
         ArgDesc.emplace_back(NPg::LookupType(type));
     }

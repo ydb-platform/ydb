@@ -13,7 +13,7 @@ namespace NKikimr::NOlap::NActualizer {
 
 std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualizationInfo> TSchemeActualizer::BuildActualizationInfo(
     const TPortionInfo& portion) const {
-    AFL_VERIFY(TargetSchema);
+    YDB_LOG_VERIFY(TargetSchema);
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
     auto portionSchema = portion.GetSchema(VersionedIndex);
     if (portionSchema->GetVersion() < TargetSchema->GetVersion()) {
@@ -35,7 +35,7 @@ void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExterna
             return;
         }
     } else {
-        AFL_VERIFY(!PortionsInfo.contains(info.GetPortionId()));
+        YDB_LOG_VERIFY(!PortionsInfo.contains(info.GetPortionId()));
     }
     auto actualizationInfo = BuildActualizationInfo(info);
     if (!actualizationInfo) {
@@ -44,8 +44,8 @@ void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExterna
     }
     TSchemeGlobalCounters::OnAddPortion();
     NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(1);
-    AFL_VERIFY(PortionsToActualizeScheme[actualizationInfo->GetAddress()].emplace(info.GetPortionId()).second);
-    AFL_VERIFY(PortionsInfo.emplace(info.GetPortionId(), actualizationInfo->ExtractFindId()).second);
+    YDB_LOG_VERIFY(PortionsToActualizeScheme[actualizationInfo->GetAddress()].emplace(info.GetPortionId()).second);
+    YDB_LOG_VERIFY(PortionsInfo.emplace(info.GetPortionId(), actualizationInfo->ExtractFindId()).second);
 }
 
 void TSchemeActualizer::DoRemovePortion(const ui64 portionId) {
@@ -55,8 +55,8 @@ void TSchemeActualizer::DoRemovePortion(const ui64 portionId) {
         return;
     }
     auto itAddress = PortionsToActualizeScheme.find(it->second.GetRWAddress());
-    AFL_VERIFY(itAddress != PortionsToActualizeScheme.end());
-    AFL_VERIFY(itAddress->second.erase(portionId));
+    YDB_LOG_VERIFY(itAddress != PortionsToActualizeScheme.end());
+    YDB_LOG_VERIFY(itAddress->second.erase(portionId));
     NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(-1);
     if (itAddress->second.empty()) {
         PortionsToActualizeScheme.erase(itAddress);
@@ -142,7 +142,7 @@ void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
     TargetSchema = VersionedIndex.GetLastCriticalSchema();
     if (!TargetSchema) {
         TSchemeGlobalCounters::OnRefreshEmpty();
-        AFL_VERIFY(PortionsInfo.empty());
+        YDB_LOG_VERIFY(PortionsInfo.empty());
     } else {
         TSchemeGlobalCounters::OnRefreshValue();
         NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(-1 * PortionsInfo.size());

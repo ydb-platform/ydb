@@ -79,16 +79,8 @@ const TString StartTimeLabel = "StartTime";
 
 TProjectSettings HandleProjectSettings(TProjectSettings settings, const TQContext& qContext) {
     if (qContext.CanWrite()) {
-        auto pragmas = NYT::TNode::CreateList();
-        for (const auto& pragma : settings.Pragmas) {
-            auto values = NYT::TNode::CreateList();
-            for (const auto& value : pragma.Value) {
-                values.Add(value);
-            }
-            pragmas.Add(NYT::TNode()("Name", pragma.Name)("Value", values));
-        }
         qContext.GetWriter()->Put({.Component = FacadeComponent, .Label = ProjectSettingsLabel},
-                                  NYT::NodeToYsonString(NYT::TNode()("Pragmas", pragmas), NYT::NYson::EYsonFormat::Binary))
+                                  NYT::NodeToYsonString(settings.ToYson(), NYT::NYson::EYsonFormat::Binary))
             .GetValueSync();
     } else if (qContext.CanRead()) {
         settings = ProjectSettingsFromQContext(qContext);
@@ -212,20 +204,11 @@ void WriteEvaluationStatistics(NYson::TYsonWriter& writer, const TEvaluationStat
 
 TProjectSettings ProjectSettingsFromQContext(const TQContext& context) {
     YQL_ENSURE(context.CanRead());
-    TProjectSettings settings;
     auto item = context.GetReader()->Get({.Component = FacadeComponent, .Label = ProjectSettingsLabel}).GetValueSync();
     if (item) {
-        const auto projectSettings = NYT::NodeFromYsonString(item->Value);
-        const auto pragmas = projectSettings.HasKey("Pragmas") ? projectSettings["Pragmas"] : NYT::TNode::CreateList();
-        for (const auto& pragma : pragmas.AsList()) {
-            TVector<TString> values;
-            for (const auto& value : pragma["Value"].AsList()) {
-                values.push_back(value.AsString());
-            }
-            settings.AddPragma(pragma["Name"].AsString(), std::move(values));
-        }
+        return TProjectSettings::FromYson(NYT::NodeFromYsonString(item->Value));
     }
-    return settings;
+    return {};
 }
 
 TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context) {

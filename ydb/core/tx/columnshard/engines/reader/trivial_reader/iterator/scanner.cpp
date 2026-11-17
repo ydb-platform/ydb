@@ -97,7 +97,7 @@ bool TScanHead::IsReverse() const {
 }
 
 void TScanHead::Abort() {
-    AFL_VERIFY(!Context->IsActive());
+    YDB_LOG_VERIFY(!Context->IsActive());
     for (auto&& i : SyncPoints) {
         i->Abort();
     }
@@ -106,7 +106,7 @@ void TScanHead::Abort() {
 }
 
 TScanHead::~TScanHead() {
-    AFL_VERIFY(IsFinished() || !Context->IsActive());
+    YDB_LOG_VERIFY(IsFinished() || !Context->IsActive());
 }
 
 }   // namespace NKikimr::NOlap::NReader::NTrivial

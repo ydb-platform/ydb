@@ -28,7 +28,7 @@ public:
     TSchemaDiffView() = default;
 
     TString DebugString() const {
-        AFL_VERIFY(OriginalProto);
+        YDB_LOG_VERIFY(OriginalProto);
         return OriginalProto->DebugString();
     }
 

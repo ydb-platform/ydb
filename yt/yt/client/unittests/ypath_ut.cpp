@@ -928,7 +928,7 @@ class TRichYPathToStringTest
     , public ::testing::WithParamInterface<std::string>
 { };
 
-TEST_P(TRichYPathToStringTest, TestRichYPathToString)
+TEST_P(TRichYPathToStringTest, RichYPathToString)
 {
     auto path = NYPath::TRichYPath::Parse(GetParam());
     auto newPathString = ToString(path);

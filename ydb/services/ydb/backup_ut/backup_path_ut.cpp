@@ -1258,7 +1258,7 @@ void EmptyDirectoryIsOkImpl(TBackupTestFixture& f, bool isOlap) {
     {
         auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing/dir1/dir2");
         exportSettings
-            .AppendItem(typename TExportSettings::TItem{.Src = "/Table2"})
+            .AppendItem(typename TExportSettings::TItem{.Src = "Table2"})
             .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/dir2/dir3"});
         auto res = traits.Export(f, exportSettings);
         f.WaitOpSuccess(res);
@@ -1476,7 +1476,7 @@ void FilterByPathFailsWhenNoSchemaMappingImpl(TBackupTestFixture& f, bool /*isOl
     {
         auto exportSettings = traits.MakeExportSettingsNoPrefix(f, "/Root/RecursiveFolderProcessing/dir1");
         exportSettings
-            .AppendItem(typename TExportSettings::TItem{.Src = "/Table1", .Dst = "Prefix/t1"});
+            .AppendItem(typename TExportSettings::TItem{.Src = "Table1", .Dst = "Prefix/t1"});
         auto res = traits.Export(f, exportSettings);
         f.WaitOpSuccess(res);
 

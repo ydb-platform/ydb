@@ -66,16 +66,16 @@ public:
         , TargetScheme(std::move(targetScheme))
         , CurrentTierName(std::move(currentTierName))
     {
-        AFL_VERIFY(CurrentTierName);
+        YDB_LOG_VERIFY(CurrentTierName);
     }
 
     const TString& GetTargetTierName() const {
-        AFL_VERIFY(TargetTierName);
+        YDB_LOG_VERIFY(TargetTierName);
         return *TargetTierName;
     }
 
     void SetTargetTierName(TString value) {
-        AFL_VERIFY(!TargetTierName);
+        YDB_LOG_VERIFY(!TargetTierName);
         TargetTierName = std::move(value);
     }
 
@@ -97,7 +97,7 @@ public:
 
     NActualizer::TRWAddress GetRWAddress() {
         if (!RWAddress) {
-            AFL_VERIFY(TargetTierName);
+            YDB_LOG_VERIFY(TargetTierName);
             RWAddress = NActualizer::TRWAddress(CurrentScheme->GetIndexInfo().GetUsedStorageIds(CurrentTierName),
                 TargetScheme->GetIndexInfo().GetUsedStorageIds(*TargetTierName));
         }
@@ -117,7 +117,7 @@ public:
         if (ForcedMove) {
             return true;
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     }
 };
@@ -240,7 +240,7 @@ public:
                     }
                 }
             }
-            AFL_VERIFY(dataColumnIds.size() <= resultSchema->GetColumnsCount());
+            YDB_LOG_VERIFY(dataColumnIds.size() <= resultSchema->GetColumnsCount());
             if (dataColumnIds.contains((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
                 pkColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
             }
@@ -251,7 +251,8 @@ public:
         {
             seqDataColumnIds = dataColumnIds;
             for (auto&& i : pkColumnIds) {
-                AFL_VERIFY(seqDataColumnIds.erase(i))("id", i);
+                YDB_LOG_VERIFY(seqDataColumnIds.erase(i),
+                    {"id", i});
             }
         }
         return resultFiltered;
@@ -268,7 +269,7 @@ public:
     TDataAccessorsInitializationContext(const std::shared_ptr<const TVersionedIndex>& versionedIndex)
         : VersionedIndex(versionedIndex)
     {
-        AFL_VERIFY(VersionedIndex);
+        YDB_LOG_VERIFY(VersionedIndex);
     }
 };
 
@@ -325,7 +326,7 @@ public:
     }
 
     void SetActivityFlag(const std::shared_ptr<const TAtomicCounter>& flag) {
-        AFL_VERIFY(!ActivityFlag);
+        YDB_LOG_VERIFY(!ActivityFlag);
         ActivityFlag = flag;
     }
 
@@ -334,12 +335,12 @@ public:
     }
 
     const TPortionDataAccessor& GetPortionDataAccessor(const ui64 portionId) const {
-        AFL_VERIFY(FetchedDataAccessors);
+        YDB_LOG_VERIFY(FetchedDataAccessors);
         return FetchedDataAccessors->GetPortionAccessorVerified(portionId);
     }
 
     std::vector<TPortionDataAccessor> GetPortionDataAccessors(const std::vector<TPortionInfo::TConstPtr>& portions) const {
-        AFL_VERIFY(FetchedDataAccessors);
+        YDB_LOG_VERIFY(FetchedDataAccessors);
         std::vector<TPortionDataAccessor> result;
         for (auto&& i : portions) {
             result.emplace_back(GetPortionDataAccessor(i->GetPortionId()));
@@ -348,7 +349,7 @@ public:
     }
 
     void SetFetchedDataAccessors(TDataAccessorsResult&& result, const TDataAccessorsInitializationContext& context) {
-        AFL_VERIFY(!FetchedDataAccessors);
+        YDB_LOG_VERIFY(!FetchedDataAccessors);
         FetchedDataAccessors = std::move(result);
         OnDataAccessorsInitialized(context);
     }

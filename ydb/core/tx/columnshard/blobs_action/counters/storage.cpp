@@ -20,7 +20,7 @@ TStorageCounters::TStorageCounters(const TString& storageId)
 }
 
 std::shared_ptr<TConsumerCounters> TStorageCounters::GetConsumerCounter(const EConsumer consumer) {
-    AFL_VERIFY((ui32)consumer < Consumers.size());
+    YDB_LOG_VERIFY((ui32)consumer < Consumers.size());
     return Consumers[(ui32)consumer];
 }
 

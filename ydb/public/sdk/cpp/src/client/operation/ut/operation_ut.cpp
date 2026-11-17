@@ -1,5 +1,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 
@@ -56,6 +57,7 @@ namespace NYdb::inline Dev::NOperation {
                 }
             }
 
+            template <typename TOp = NExport::TExportToYtResponse>
             void CheckGet(const TGetOperationSettings* settings = nullptr,
                           std::optional<std::chrono::minutes> timeout = std::nullopt,
                           std::chrono::system_clock::time_point before = std::chrono::system_clock::now()) {
@@ -63,8 +65,8 @@ namespace NYdb::inline Dev::NOperation {
                 id.SetKind(TOperation::TOperationId::EXPORT);
                 id.AddOptionalValue("id", "42");
                 id.AddOptionalValue("kind", "yt");
-                auto result = settings ? Client_->Get<NExport::TExportToYtResponse>(id, *settings)
-                                       : Client_->Get<NExport::TExportToYtResponse>(id);
+                auto result = settings ? Client_->Get<TOp>(id, *settings)
+                                       : Client_->Get<TOp>(id);
                 ASSERT_TRUE(result.Wait(TDuration::Seconds(10)));
                 const auto after = std::chrono::system_clock::now();
                 EXPECT_TRUE(result.GetValueSync().Status().IsSuccess());
@@ -113,6 +115,18 @@ namespace NYdb::inline Dev::NOperation {
             settings.ClientTimeout(TDuration::Minutes(1));
             settings.Deadline(TDeadline::AfterDuration(std::chrono::minutes(2)));
             CheckGet(&settings, std::chrono::minutes(1), before);
+        }
+
+        TEST_F(TOperationClientTest, BackupOperationsSupportRequestSettings) {
+            CheckGet<NBackup::TIncrementalBackupResponse>();
+            CheckGet<NBackup::TBackupCollectionRestoreResponse>();
+            CheckGet<NBackup::TFullBackupResponse>();
+
+            TGetOperationSettings settings;
+            settings.ClientTimeout(TDuration::Minutes(1));
+            CheckGet<NBackup::TIncrementalBackupResponse>(&settings, std::chrono::minutes(1));
+            CheckGet<NBackup::TBackupCollectionRestoreResponse>(&settings, std::chrono::minutes(1));
+            CheckGet<NBackup::TFullBackupResponse>(&settings, std::chrono::minutes(1));
         }
 
     } // namespace

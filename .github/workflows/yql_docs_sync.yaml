@@ -60,7 +60,7 @@ jobs:
           if git show-ref --verify --quiet "$branch"; then
             while IFS= read -r committer; do
               if [[ "$committer" != '41898282+github-actions[bot]@users.noreply.github.com' ]]; then
-                echo '::error::The sync branch contains reviewer commits. Merge or close its PR before updating it.'
+                echo '::error::The sync branch contains reviewer commits. Merge or close its PR, then delete the branch before resuming sync.'
                 exit 1
               fi
             done < <(git log --format='%ce' "HEAD..$branch")

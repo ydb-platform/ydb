@@ -24,7 +24,7 @@ from ydb.tests.library.stability.utils.remote_execution import execute_command
 
 _FAILED_RUN_RETRY_DELAY_SECONDS = 10
 _WORKLOAD_TIMEOUT_GRACE_SECONDS = 60
-_PRE_POST_COMMAND_TIMEOUT_SECONDS = 300
+_PRE_POST_COMMAND_TIMEOUT_SECONDS = 3600
 
 
 class StressRunExecutor:

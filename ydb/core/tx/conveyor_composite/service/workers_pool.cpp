@@ -392,8 +392,8 @@ void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result, const
     THashSet<TString> scopeIds;
     for (auto&& t : result) {
         auto& link = FindCategoryLink(t.GetCategory());
-        link.GetCounters()->WaitingHistogram->Collect((t.GetStart() - t.GetCreateInstant()).MicroSeconds());
-        link.GetCounters()->TaskExecuteHistogram->Collect((t.GetFinish() - t.GetStart()).MicroSeconds());
+        link.GetCounters()->WaitingHistogram.Collect((t.GetStart() - t.GetCreateInstant()).MicroSeconds());
+        link.GetCounters()->TaskExecuteHistogram.Collect((t.GetFinish() - t.GetStart()).MicroSeconds());
         link.GetCounters()->ExecuteDuration->Add((t.GetFinish() - t.GetStart()).MicroSeconds());
         link.GetCPUUsage()->Exchange(t.GetPredictedDuration(), t.GetStart(), t.GetFinish());
         link.GetCategory()->PutTaskResult(std::move(t), scopeIds);

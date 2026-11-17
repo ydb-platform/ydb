@@ -12,11 +12,9 @@ ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex-E
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
 ydb/core/statistics/aggregator/ut AnalyzeSampling.CollectAndPersistStatistics+ColumnShard-SmallHistogramBudget
 ydb/core/sys_view/ut_large SystemViewLarge.AuthOwners_DropSubtreeDuringScan
-ydb/core/tx/replication/controller/ut_dst_creator DstCreator.AttachmentAlterRejectsDroppedIndexAfterRestart
-ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithoutSchemaChangesReportsError
-ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropSyncIndexWithGlobalConsistency
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.LocalRetentionGapBeforeSessionStartWithoutLaterMessageReportsDataLoss
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapAfterSessionStartWithLaterMessageReportsDataLoss
+ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapAfterSessionStartWithoutLaterMessageReportsDataLoss
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapBeforeSessionStartWithLaterMessageReportsDataLoss
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTableWithLocalBloomIndexes
 ydb/core/viewer/ut Viewer.TabletMerging
@@ -26,17 +24,17 @@ ydb/library/yql/providers/generic/connector/tests/datasource/postgresql py3test.
 ydb/library/yql/providers/generic/connector/tests/join py3test.sole chunk
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedVersionsTableIsRecreated
 ydb/tests/fq/generic/analytics py3test.sole chunk
-ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/config test_distconf_self_heal.py.TestKiKiMRDistConfSelfHealParallelCall2.test
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHeal2NodesDisconnected.test_state_storage
+ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealOverrides.test_state_storage
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealPileupReplicas.test_state_storage
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReassignNodeAfterReconfiguration.test_state_storage
+ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupCounters.test_warmup_counters_attribution[table]
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
 ydb/tests/functional/tenants test_system_views.py.TestQueryMetricsOneHourRestart.test_case
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
-ydb/tests/stress/simple_queue/tests py3test.sole chunk
-ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[light-column]
+ydb/tests/stress/statistics_workload/tests test_workload.py.TestStatisticsWorkload.test

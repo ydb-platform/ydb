@@ -254,6 +254,13 @@ public:
         }
 
         const auto& userTable = *it->second;
+        if (!userTable.IsIncrementalRestore() && !userTable.IsReplicated()) {
+            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
+                "Table is not replicated");
+            return true;
+        }
         if (tableId.GetSchemaVersion() != 0 && userTable.GetTableSchemaVersion() != tableId.GetSchemaVersion()) {
             TString error = TStringBuilder()
                 << "DataShard " << Self->TabletID() << " has table "

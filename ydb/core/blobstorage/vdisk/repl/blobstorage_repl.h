@@ -218,6 +218,13 @@ namespace NKikimr {
 
     struct TEvReplResume : TEventLocal<TEvReplResume, TEvBlobStorage::EvReplResume> {};
 
+    // outcome of the replication pass reported to Skeleton as a cookie of EvReplDone
+    enum class EReplDone : ui64 {
+        Finished = 0, // all blobs are replicated, replication will not resume
+        OnlyPhantomsRemain = 1, // only phantom-like blobs remain unreplicated after the pass
+        NonPhantomsRemain = 2, // some non-phantom blobs remain unreplicated after the pass
+    };
+
     ////////////////////////////////////////////////////////////////////////////
     // Message for recovered data (to Skeleton)
     ////////////////////////////////////////////////////////////////////////////

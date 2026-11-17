@@ -328,6 +328,7 @@ namespace NKikimr::NBsController {
                     .SuppressDegradedGroupsChecking = Cmd.GetIgnoreDegradedGroupsChecks(),
                     .SuppressDisintegratedGroupsChecking = Cmd.GetIgnoreDisintegratedGroupsChecks(),
                     .AllowDegradedWithSinglePhantomsOnly = SelfHeal,
+                    .TreatPhantomsOnlyVDisksAsWorking = Cmd.GetTreatPhantomsOnlyVDisksAsWorking(),
                 };
                 Success = Success && Self->ValidateConfigUpdates(*State, validationParameters, &Error, Response);
 

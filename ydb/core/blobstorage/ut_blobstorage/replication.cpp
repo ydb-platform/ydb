@@ -6,6 +6,9 @@
 #include <util/stream/null.h>
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
+#include <ydb/core/base/feature_flags_service.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/sys_view/common/events.h>
 
 #define SINGLE_THREAD 1
 
@@ -345,6 +348,251 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure, std::optional<ui32> 
     }
 }
 
+// Actor ignoring all the events it receives; the interesting ones are inspected by the filter function
+class TEventSink : public TActor<TEventSink> {
+public:
+    TEventSink()
+        : TActor(&TThis::StateFunc)
+    {}
+
+    STFUNC(StateFunc) {
+        Y_UNUSED(ev);
+    }
+};
+
+enum class EPhantomScenario {
+    Phantom, // blob was written only to the disk being formatted, so there is no data anywhere
+    PartiallyWritten, // blob was written to the disk being formatted and to the offline data center only
+    Committed, // blob was written to main replicas of all realms and two of them are formatted
+};
+
+// Mirror-3-dc group with whole data center offline and main replicas of the keep-flagged blob formatted. Phantom check
+// can't confirm the phantom while the data center is offline, but formatted disk has to report that only phantom-like
+// blobs remain when it doesn't form the write quorum together with offline data center.
+void DoPhantomWithOfflineDataCenterTest(EPhantomScenario scenario) {
+    constexpr ui32 offlineDataCenter = 2; // nodes 7, 8, 9
+    auto dataCenterOf = [](ui32 nodeId) { return (nodeId - 1) / 3; };
+
+    std::function<bool(ui32, std::unique_ptr<IEventHandle>&)> filterFunction;
+    TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+        .NodeCount = 9,
+        .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+        .PrepareRuntime = [&](TTestActorSystem& runtime) { runtime.FilterFunction = filterFunction; },
+    });
+    env.CreateBoxAndPool(1, 1);
+    env.Sim(TDuration::Minutes(1));
+
+    const auto base = env.FetchBaseConfig();
+    UNIT_ASSERT_VALUES_EQUAL(base.GroupSize(), 1);
+    const ui32 groupId = base.GetGroup(0).GetGroupId();
+    const auto groupInfo = env.GetGroupInfo(groupId);
+    const auto& topology = groupInfo->GetTopology();
+
+    const TString data = "hello";
+    const TLogoBlobID id(1, 1, 1, 0, data.size(), 0);
+
+    // main replica of every realm (part) of the blob; formatted ones are picked outside of the offline data center
+    const ui32 numFormatted = scenario == EPhantomScenario::Committed ? 2 : 1;
+    std::vector<TVDiskID> written;
+    std::set<ui32> formattedNodes;
+    for (ui32 partIdx = 0; partIdx < topology.GType.TotalPartCount(); ++partIdx) {
+        const TVDiskID vdiskId = groupInfo->GetVDiskInSubgroup(partIdx, id.Hash());
+        const ui32 nodeId = groupInfo->GetActorId(vdiskId).NodeId();
+        if (dataCenterOf(nodeId) == offlineDataCenter) {
+            if (scenario != EPhantomScenario::Phantom) {
+                written.push_back(vdiskId);
+            }
+        } else if (formattedNodes.size() < numFormatted) {
+            formattedNodes.insert(nodeId);
+            written.push_back(vdiskId);
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(formattedNodes.size(), numFormatted);
+
+    ui32 readerNodeId = 1;
+    while (formattedNodes.contains(readerNodeId)) {
+        ++readerNodeId;
+    }
+
+    std::set<std::tuple<ui32, ui32, ui32>> formattedVSlots;
+    for (const auto& vslot : base.GetVSlot()) {
+        const auto& vslotId = vslot.GetVSlotId();
+        if (vslot.GetGroupId() == groupId && formattedNodes.contains(vslotId.GetNodeId())) {
+            formattedVSlots.emplace(vslotId.GetNodeId(), vslotId.GetPDiskId(), vslotId.GetVSlotId());
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(formattedVSlots.size(), numFormatted);
+
+    // write parts of the blob directly to the chosen main replicas, as the proxy is free to choose other disks
+    for (const TVDiskID& vdiskId : written) {
+        const TActorId queueId = env.CreateQueueActor(vdiskId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, 0);
+        const TActorId edge = env.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
+        const ui32 partId = groupInfo->GetIdxInSubgroup(vdiskId, id.Hash()) + 1; // main replica stores its own part
+        env.Runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVPut(TLogoBlobID(id, partId),
+            TRope(data), vdiskId, false, nullptr, TInstant::Max(), NKikimrBlobStorage::TabletLog, false)),
+            edge.NodeId());
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
+    }
+
+    // keep the blob under the barrier to make it phantom-like one
+    {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(readerNodeId, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, id.Channel(),
+                true, id.Generation(), Max<ui32>(), new TVector<TLogoBlobID>(1, id), nullptr, TInstant::Max(), false));
+        });
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+    }
+
+    env.Sim(TDuration::Minutes(30)); // wait for ingress to spread over the group
+    env.Cleanup();
+    for (auto& [key, state] : env.PDiskMockStates) {
+        if (formattedNodes.contains(key.first)) {
+            state.Reset();
+        }
+    }
+
+    bool dataCenterOffline = true;
+    ui32 extraOfflineNodeId = 0;
+    std::map<std::tuple<ui32, ui32, ui32>, std::tuple<NKikimrBlobStorage::EVDiskStatus, bool>> statuses;
+    // nodeId -> (Replicated, DetailedReplicationStatus) as reported by formatted VDisks to Whiteboard
+    std::map<ui32, std::tuple<bool, NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E>> whiteboard;
+    filterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == NNodeWhiteboard::TEvWhiteboard::EvVDiskStateUpdate) {
+            const auto& record = ev->Get<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>()->Record;
+            if (record.GetVDiskId().GetGroupID() == groupId && formattedNodes.contains(ev->Recipient.NodeId())) {
+                if (record.HasReplicated()) {
+                    whiteboard[ev->Recipient.NodeId()] = {record.GetReplicated(), record.GetDetailedReplicationStatus()};
+                }
+                return false; // nobody else is interested in this event
+            }
+        }
+        const ui32 recipientNodeId = ev->Recipient.NodeId();
+        const bool offline = (dataCenterOffline && dataCenterOf(recipientNodeId) == offlineDataCenter) ||
+            recipientNodeId == extraOfflineNodeId;
+        if (offline && ev->Type == TEvBlobStorage::EvVGet) {
+            env.Runtime->Send(IEventHandle::ForwardOnNondelivery(std::move(ev),
+                TEvents::TEvUndelivered::Disconnected).release(), nodeId);
+            return false;
+        }
+        if (ev->GetTypeRewrite() == TEvBlobStorage::EvStatusUpdate) {
+            const auto *msg = ev->Get<TEvStatusUpdate>();
+            statuses[{msg->NodeId, msg->PDiskId, msg->VSlotId}] = {msg->Status, msg->OnlyPhantomsRemain};
+        }
+        return true;
+    };
+    env.Initialize();
+
+    // there is no Whiteboard in the test environment, so register a stub to make VDisks report to it
+    for (ui32 nodeId : formattedNodes) {
+        env.Runtime->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId),
+            env.Runtime->Register(new TEventSink, nodeId));
+    }
+
+    auto read = [&] {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(readerNodeId, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::EGetHandleClass::FastRead));
+        });
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+        return res->Get()->Responses[0].Status;
+    };
+
+    auto checkStatuses = [&](NKikimrBlobStorage::EVDiskStatus expectedStatus, bool expectedOnlyPhantomsRemain) {
+        for (const auto& vslotId : formattedVSlots) {
+            const auto it = statuses.find(vslotId);
+            UNIT_ASSERT(it != statuses.end());
+            const auto& [status, onlyPhantomsRemain] = it->second;
+            UNIT_ASSERT_VALUES_EQUAL(NKikimrBlobStorage::EVDiskStatus_Name(status),
+                NKikimrBlobStorage::EVDiskStatus_Name(expectedStatus));
+            UNIT_ASSERT_VALUES_EQUAL(onlyPhantomsRemain, expectedOnlyPhantomsRemain);
+        }
+    };
+
+    // phantom can't be confirmed while the data center is offline, but it looks like phantom unless formatted disks
+    // together with offline data center form the write quorum
+    env.Sim(TDuration::Minutes(360));
+    checkStatuses(NKikimrBlobStorage::EVDiskStatus::REPLICATING, scenario != EPhantomScenario::Committed);
+    UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::EReplyStatus_Name(read()), NKikimrProto::EReplyStatus_Name(
+        scenario == EPhantomScenario::Committed ? NKikimrProto::ERROR : NKikimrProto::NODATA));
+
+    if (scenario == EPhantomScenario::Phantom) {
+        // there is no feature flags service in the test environment, so BS_CONTROLLER is notified directly
+        auto setReportAsReady = [&](bool value) {
+            for (ui32 nodeId = 1; nodeId <= env.Settings.NodeCount; ++nodeId) {
+                env.Runtime->GetNode(nodeId)->AppData->FeatureFlags.SetReportPhantomsOnlyVDisksAsReady(value);
+            }
+            // nothing is expected in response, so pipe notifications go to the sink
+            const TActorId sink = env.Runtime->Register(new TEventSink, env.Settings.ControllerNodeId);
+            env.Runtime->SendToPipe(env.TabletId, sink, new TEvFeatureFlags::TEvChanged, 0,
+                TTestActorSystem::GetPipeConfigWithRetries());
+        };
+
+        auto checkShownAsReady = [&](bool expected) {
+            const TActorId edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+            env.Runtime->SendToPipe(env.TabletId, edge, new NSysView::TEvSysView::TEvGetVSlotsRequest, 0,
+                TTestActorSystem::GetPipeConfigWithRetries());
+            auto response = env.WaitForEdgeActorEvent<NSysView::TEvSysView::TEvGetVSlotsResponse>(edge);
+            ui32 numFound = 0;
+            for (const auto& entry : response->Get()->Record.GetEntries()) {
+                const auto& key = entry.GetKey();
+                if (formattedVSlots.contains({key.GetNodeId(), key.GetPDiskId(), key.GetVSlotId()})) {
+                    UNIT_ASSERT_VALUES_EQUAL(entry.GetInfo().GetStatusV2(), expected ? "READY" : "REPLICATING");
+                    UNIT_ASSERT(entry.GetInfo().GetPhantomOnly());
+                    ++numFound;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(numFound, formattedVSlots.size());
+
+            for (ui32 nodeId : formattedNodes) {
+                const auto it = whiteboard.find(nodeId);
+                UNIT_ASSERT(it != whiteboard.end());
+                const auto& [replicated, replicationStatus] = it->second;
+                UNIT_ASSERT_VALUES_EQUAL(replicated, expected);
+                UNIT_ASSERT_VALUES_EQUAL(NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E_Name(replicationStatus),
+                    NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E_Name(
+                        NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly));
+            }
+        };
+
+        // the feature flag affects only the way the VDisk is shown, but not its real status
+        checkShownAsReady(false);
+        setReportAsReady(true);
+        env.Sim(TDuration::Minutes(1));
+        checkShownAsReady(true);
+        checkStatuses(NKikimrBlobStorage::EVDiskStatus::REPLICATING, true);
+        setReportAsReady(false);
+        env.Sim(TDuration::Minutes(1));
+        checkShownAsReady(false);
+
+        // one more unavailable disk in the third data center may contain the blob, so it doesn't look like phantom
+        // anymore and the flag has to be reset by the next replication pass
+        const ui32 formattedDataCenter = dataCenterOf(*formattedNodes.begin());
+        const ui32 thirdDataCenter = 3 - offlineDataCenter - formattedDataCenter;
+        extraOfflineNodeId = thirdDataCenter * 3 + 1;
+        env.Sim(TDuration::Minutes(360));
+        checkStatuses(NKikimrBlobStorage::EVDiskStatus::REPLICATING, false);
+        UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::EReplyStatus_Name(read()),
+            NKikimrProto::EReplyStatus_Name(NKikimrProto::ERROR));
+
+        // and it is set again when the disk is back
+        extraOfflineNodeId = 0;
+        env.Sim(TDuration::Minutes(360));
+        checkStatuses(NKikimrBlobStorage::EVDiskStatus::REPLICATING, true);
+    }
+
+    // when the data center is back, phantom is confirmed and data is restored otherwise
+    dataCenterOffline = false;
+    env.Sim(TDuration::Minutes(360));
+    checkStatuses(NKikimrBlobStorage::EVDiskStatus::READY, false);
+    UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::EReplyStatus_Name(read()), NKikimrProto::EReplyStatus_Name(
+        scenario == EPhantomScenario::Phantom ? NKikimrProto::NODATA : NKikimrProto::OK));
+}
+
 Y_UNIT_TEST_SUITE(Replication) {
     Y_UNIT_TEST(Phantoms_mirror3dc) { DoTest(TBlobStorageGroupType::ErasureMirror3dc); }
     // Fork the 168 placements by formatted disk to keep each test below the timeout.
@@ -365,6 +613,18 @@ Y_UNIT_TEST_SUITE(Replication) {
 
     Y_UNIT_TEST(ReplStuck_mirror3dc) {
         DoTestCase(TBlobStorageGroupType::ErasureMirror3dc, {E::OK, E::FORMAT, E::OK, E::OK, E::OFFLINE, E::OK, E::OK, E::OFFLINE, E::OK}, true);
+    }
+
+    Y_UNIT_TEST(PhantomWithOfflineDataCenter_mirror3dc) {
+        DoPhantomWithOfflineDataCenterTest(EPhantomScenario::Phantom);
+    }
+
+    Y_UNIT_TEST(PartiallyWrittenWithOfflineDataCenter_mirror3dc) {
+        DoPhantomWithOfflineDataCenterTest(EPhantomScenario::PartiallyWritten);
+    }
+
+    Y_UNIT_TEST(CommittedWithOfflineDataCenter_mirror3dc) {
+        DoPhantomWithOfflineDataCenterTest(EPhantomScenario::Committed);
     }
 }
 

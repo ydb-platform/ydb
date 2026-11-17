@@ -570,9 +570,8 @@ Y_UNIT_TEST(RequestUnitForSuccessExplicitPrepare) {
 
     auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);
     UNIT_ASSERT(ru != result.GetResponseMetadata().end());
-    UNIT_ASSERT(atoi(ru->second.c_str()) > 1);
+    UNIT_ASSERT_VALUES_EQUAL(FromString<ui64>(ru->second), result.GetConsumedRu());
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-    UNIT_ASSERT(result.GetConsumedRu() > 1);
 }
 
 Y_UNIT_TEST(RequestUnitForExecute) {

@@ -488,5 +488,5 @@ message TFeatureFlags {
     optional bool EnableRowTableZstdCompression = 388 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
     optional bool EnableCsDefaultValues = 390 [default = false];
-    optional bool EnableReplicationControllerTopicMirroring = 391 [default = false];
+    optional bool EnableTopicReplication = 391 [default = false];
 }

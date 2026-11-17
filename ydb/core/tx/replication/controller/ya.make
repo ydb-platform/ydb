@@ -56,6 +56,7 @@ SRCS(
     target_transfer.cpp
     target_with_stream.cpp
     tenant_resolver.cpp
+    topic_mirror.cpp
     tx_assign_tx_id.cpp
     tx_alter_dst_result.cpp
     tx_alter_replication.cpp

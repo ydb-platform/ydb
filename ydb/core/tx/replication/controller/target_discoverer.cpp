@@ -16,6 +16,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/naming_conventions/scheme_object_names.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
@@ -32,7 +33,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
     void DescribeTopicParent(ui32 idx) {
         const auto& path = Paths.at(idx).first;
-        const auto absolutePath = CanonizePath(IsStartWithSlash(path) ? path
+        const bool isAbsolutePath = IsStartWithSlash(path);
+        const auto absolutePath = CanonizePath(isAbsolutePath ? path
             : Config.GetSrcConnectionParams().GetDatabase() + "/" + path);
         Send(YdbProxy, new TEvYdbProxy::TEvDescribePathRequest(TString(ExtractParent(absolutePath)), {}), 0, idx);
         TopicParents.insert(idx);
@@ -62,17 +64,12 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             if (isTopicParent) {
                 // DescribePath exposes a CDC stream as its hidden topic. Its parent is
                 // a table; the hidden topic's parent is the stream, also exposed as Topic.
-                if (entry.Type != NYdb::NScheme::ESchemeEntryType::Table
-                    && entry.Type != NYdb::NScheme::ESchemeEntryType::Topic)
+                if (!EqualToOneOf(entry.Type, NYdb::NScheme::ESchemeEntryType::Table,
+                    NYdb::NScheme::ESchemeEntryType::Topic))
                 {
                     return DescribeTopic(ev->Cookie);
                 }
-                Pending.erase(it);
-                NYdb::NIssue::TIssues issues;
-                issues.AddIssue("CDC topics cannot be replication sources");
-                Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
-                MaybeReply();
-                return;
+                return RejectTarget(ev->Cookie, "CDC topics cannot be replication sources");
             }
             switch (entry.Type) {
             case NYdb::NScheme::ESchemeEntryType::SubDomain:
@@ -89,13 +86,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 break;
             case NYdb::NScheme::ESchemeEntryType::Topic:
                 if (IsReplication()) {
-                    if (!AppData()->FeatureFlags.GetEnableReplicationControllerTopicMirroring()) {
-                        Pending.erase(it);
-                        NYdb::NIssue::TIssues issues;
-                        issues.AddIssue("Topic replication is disabled by EnableReplicationControllerTopicMirroring");
-                        Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
-                        MaybeReply();
-                        return;
+                    if (!AppData()->FeatureFlags.GetEnableTopicReplication()) {
+                        return RejectTarget(ev->Cookie, "Topic replication is disabled by EnableTopicReplication");
                     }
                     return DescribeTopicParent(ev->Cookie);
                 }
@@ -111,9 +103,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"path", path.first},
                 {"type", entry.Type});
 
-            NYdb::NIssue::TIssues issues;
-            issues.AddIssue(TStringBuilder() << "Unsupported entry type: " << entry.Type);
-            Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
+            return RejectTarget(ev->Cookie, TStringBuilder() << "Unsupported entry type: " << entry.Type);
         } else {
             YDB_LOG_ERROR("Describe path failed",
                 {"path", path.first},
@@ -226,41 +216,10 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             YDB_LOG_DEBUG("Describe topic succeeded",
                 {"path", path.first});
 
-            const auto& description = result.GetTopicDescription();
-            TString error;
-            if (IsReplication() && Config.GetConsistencySettings().GetLevelCase()
-                != NKikimrReplication::TConsistencySettings::kRow)
-            {
-                error = "Topic replication supports row consistency only";
-            } else if (IsReplication() && description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy()
-                != NYdb::NTopic::EAutoPartitioningStrategy::Disabled)
-            {
-                error = "Topic replication requires fixed partitions";
-            } else if (IsReplication() && !Config.GetSrcConnectionParams().GetOAuthToken().GetTokenSecretName().empty()) {
-                // TODO(KIKIMR-27673, #59067): remove after wiring mirrorer secret references.
-                error = "Topic mirroring secret references require the mirrorer secrets dependency";
-            }
-
-            if (IsReplication() && error.empty()) {
-                const auto& partitions = description.GetPartitions();
-                if (partitions.empty()) {
-                    error = "Source topic has no partitions";
+            if (IsReplication()) {
+                if (const auto error = CheckTopic(result.GetTopicDescription())) {
+                    return RejectTarget(ev->Cookie, error);
                 }
-                for (const auto& partition : partitions) {
-                    if (!partition.GetActive() || partition.GetPartitionId() >= partitions.size()
-                        || !partition.GetParentPartitionIds().empty() || !partition.GetChildPartitionIds().empty())
-                    {
-                        error = "Topic replication requires unsplit contiguous partitions";
-                        break;
-                    }
-                }
-            }
-
-            if (error) {
-                NYdb::NIssue::TIssues issues;
-                issues.AddIssue(error);
-                Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
-            } else if (IsReplication()) {
                 ToAdd.emplace_back(TReplication::ETargetKind::Topic,
                     std::make_shared<TTargetTopic::TTopicConfig>(path.first, path.second));
             } else {
@@ -281,6 +240,38 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         }
 
         Pending.erase(it);
+        MaybeReply();
+    }
+
+    TString CheckTopic(const NYdb::NTopic::TTopicDescription& description) const {
+        if (Config.GetConsistencySettings().GetLevelCase() != NKikimrReplication::TConsistencySettings::kRow) {
+            return "Topic replication supports row consistency only";
+        }
+        if (description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy()
+            != NYdb::NTopic::EAutoPartitioningStrategy::Disabled)
+        {
+            return "Topic replication requires fixed partitions";
+        }
+
+        const auto& partitions = description.GetPartitions();
+        if (partitions.empty()) {
+            return "Source topic has no partitions";
+        }
+        const auto invalidPartition = FindIf(partitions, [&](const auto& partition) {
+            return !partition.GetActive() || partition.GetPartitionId() >= partitions.size()
+                || !partition.GetParentPartitionIds().empty() || !partition.GetChildPartitionIds().empty();
+        });
+        if (invalidPartition != partitions.end()) {
+            return "Topic replication requires unsplit contiguous partitions";
+        }
+        return {};
+    }
+
+    void RejectTarget(ui32 idx, const TString& error) {
+        NYdb::NIssue::TIssues issues;
+        issues.AddIssue(error);
+        Failed.emplace_back(Paths.at(idx).first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
+        Pending.erase(idx);
         MaybeReply();
     }
 

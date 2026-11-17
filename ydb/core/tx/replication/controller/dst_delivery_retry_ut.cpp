@@ -131,7 +131,8 @@ Y_UNIT_TEST_SUITE(DstAlterRetry) {
             PipeCache = Runtime.AllocateEdgeActor();
             Runtime.RegisterService(MakeTxProxyID(), Allocator);
             auto* alterer = dropTopic
-                ? CreateDstRemover(Parent, PathId.OwnerId, {}, 1, 1, TReplication::ETargetKind::Topic, PathId)
+                ? CreateDstRemover(Parent, PathId.OwnerId, {}, 1, 1,
+                    TReplication::ETargetKind::Topic, PathId, TPathId(1, 3))
                 : CreateDstAlterer(
                 Parent,
                 PathId.OwnerId,

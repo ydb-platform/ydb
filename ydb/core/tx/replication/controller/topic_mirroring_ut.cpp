@@ -1,5 +1,6 @@
 #include "private_events.h"
 #include "dst_alterer.h"
+#include "topic_mirror.h"
 
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>
@@ -18,7 +19,7 @@ using namespace NTestHelpers;
 class TTopicMirroringFixture {
     static TFeatureFlags Flags() {
         TFeatureFlags flags;
-        flags.FeatureFlags.SetEnableReplicationControllerTopicMirroring(true);
+        flags.FeatureFlags.SetEnableTopicReplication(true);
         flags.FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
         return flags;
     }
@@ -37,9 +38,6 @@ public:
     explicit TTopicMirroringFixture(const TString& sourceHost = "localhost", bool stopBeforeCreateResult = false)
         : Destination(Flags(), true, stopBeforeCreateResult ? ERuntimeMode::Simulated : ERuntimeMode::RealThreads)
     {
-        auto& app = Destination.GetRuntime().GetAppData(0);
-        app.PersQueueMirrorReaderFactory->Initialize(
-            Destination.GetRuntime().GetAnyNodeActorSystem(), app.PQConfig.GetMirrorConfig().GetPQLibSettings());
         std::atomic<bool> createResultBlocked = false;
         auto observer = Destination.GetRuntime().AddObserver<TEvPrivate::TEvCreateDstResult>(
             [&](TEvPrivate::TEvCreateDstResult::TPtr& ev) {
@@ -104,8 +102,8 @@ public:
         const auto dropped = client.DropTopic("/Root/topic").GetValueSync();
         UNIT_ASSERT_C(dropped.IsSuccess(), dropped.GetIssues().ToString());
         for (const auto state : {TReplication::EState::Ready, TReplication::EState::Done}) {
-            Destination.GetRuntime().Register(CreateDstAlterer(Destination.GetSender(), SchemeShard,
-                1, 1, TReplication::ETargetKind::Topic, pathId, state));
+            Destination.GetRuntime().Register(CreateDstTopicAlterer(Destination.GetSender(), SchemeShard,
+                1, 1, pathId, state, {}));
             const auto result = Destination.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvAlterDstResult>(Destination.GetSender());
             UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, state == TReplication::EState::Ready
                 ? NKikimrScheme::StatusPathDoesNotExist : NKikimrScheme::StatusSuccess);

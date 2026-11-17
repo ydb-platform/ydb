@@ -386,46 +386,38 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         if (ev->Cookie != RetryGeneration) {
             return;
         }
+
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 return Retry();
             }
+
             return Error(ConvertStatus(result.GetStatus()), result.GetIssues().ToOneLineString());
         }
+
         if (TopicMirror.Error) {
             return Error(NKikimrScheme::StatusInvalidParameter, TopicMirror.Error);
         }
-        Ydb::Topic::CreateTopicRequest request;
-        const auto& description = result.GetTopicDescription();
-        description.SerializeTo(request);
-        request.mutable_partitioning_settings()->set_min_active_partitions(description.GetPartitions().size());
-        const auto& source = NYdb::TProtoAccessor::GetProto(description);
-        request.set_partition_total_read_speed_bytes_per_second(source.partition_total_read_speed_bytes_per_second());
-        request.set_partition_write_burst_messages(source.partition_write_burst_messages());
-        request.set_partition_total_read_speed_messages_per_second(source.partition_total_read_speed_messages_per_second());
-        request.set_content_based_deduplication(source.content_based_deduplication());
-        request.set_partition_write_speed_messages_per_second(source.partition_write_speed_messages_per_second());
-        request.set_partition_read_without_consumer_speed_bytes_per_second(source.partition_read_without_consumer_speed_bytes_per_second());
-        request.set_partition_read_without_consumer_speed_messages_per_second(source.partition_read_without_consumer_speed_messages_per_second());
-        for (int i = request.consumers_size() - 1; i >= 0; --i) {
-            if (request.consumers(i).name() == TopicMirror.Config.GetConsumer()) {
-                request.mutable_consumers()->DeleteSubrange(i, 1);
-            }
-        }
+
+        auto request = BuildTopicMirrorRequest(result.GetTopicDescription(), TopicMirror.Config.GetConsumer());
+
         std::pair<TString, TString> path;
         TString error;
         if (!TrySplitPathByDb(DstPath, Database, path, error)) {
             return Error(NKikimrScheme::StatusInvalidParameter, error);
         }
+
         TxBody.Clear();
         auto proposal = NPQ::NSchema::ProposeCreateTopic(TxBody, std::move(request), Database, path.first, path.second);
         if (!proposal) {
             return Error(NKikimrScheme::StatusInvalidParameter, proposal.GetErrorMessage());
         }
+
         // Start mirroring only after the controller has persisted the destination id.
         TxBody.MutableCreatePersQueueGroup()->MutablePQTabletConfig()
             ->SetReplicationSourceConsumer(TopicMirror.Config.GetConsumer());
+
         AllocateTxId();
     }
 
@@ -653,13 +645,15 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
             return CheckTableScheme(desc.GetTable(), error);
-        case TReplication::ETargetKind::Topic:
-            if (!TopicMirror.Config.GetConsumer().empty() && desc.HasPersQueueGroup()
-                && desc.GetPersQueueGroup().GetPQTabletConfig().GetReplicationSourceConsumer() == TopicMirror.Config.GetConsumer()) {
+        case TReplication::ETargetKind::Topic: {
+            const auto& expectedConsumer = TopicMirror.Config.GetConsumer();
+            const auto& actualConsumer = desc.GetPersQueueGroup().GetPQTabletConfig().GetReplicationSourceConsumer();
+            if (desc.HasPersQueueGroup() && !expectedConsumer.empty() && actualConsumer == expectedConsumer) {
                 return true;
             }
             error = "Destination topic was not created by this replication";
             return false;
+        }
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
@@ -1188,11 +1182,17 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
+    TTopicMirrorSettings topicMirror;
+    if (target->GetKind() == TReplication::ETargetKind::Topic) {
+        topicMirror = TTopicMirrorSettings(replication->GetConfig().GetSrcConnectionParams(),
+            target->GetSrcPath(), target->GetStreamConsumerName());
+    }
+
     return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
         replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
         EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
-        replication->GetConfig().GetInitialScan(), replication->GetDesiredState(), TTopicMirrorSettings(*replication, *target));
+        replication->GetConfig().GetInitialScan(), replication->GetDesiredState(), topicMirror);
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,

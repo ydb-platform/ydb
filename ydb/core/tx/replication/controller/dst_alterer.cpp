@@ -1,6 +1,7 @@
 #include "dst_alterer.h"
 #include "logging.h"
 #include "private_events.h"
+#include "topic_mirror.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/path.h>
@@ -349,17 +350,34 @@ private:
 IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
+
+    const auto desiredState = replication->GetState() == TReplication::EState::Removing
+        ? TReplication::EState::Done : replication->GetDesiredState();
+    if (target->GetKind() == TReplication::ETargetKind::Topic) {
+        const TTopicMirrorSettings topicMirror(replication->GetConfig().GetSrcConnectionParams(),
+            target->GetSrcPath(), target->GetStreamConsumerName());
+        return CreateDstTopicAlterer(ctx.SelfID, replication->GetSchemeShardId(),
+            replication->GetId(), target->GetId(), target->GetDstPathId(), desiredState, topicMirror);
+    }
+
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(),
-        replication->GetState() == TReplication::EState::Removing ? TReplication::EState::Done : replication->GetDesiredState(),
-        replication->GetPathId(), TTopicMirrorSettings(*replication, *target));
+        desiredState, replication->GetPathId());
 }
 
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState,
-        const TPathId& replicationPathId, const TTopicMirrorSettings& topicMirror)
+        const TPathId& replicationPathId)
 {
-    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState, replicationPathId, topicMirror);
+    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState, replicationPathId, {});
+}
+
+IActor* CreateDstTopicAlterer(const TActorId& parent, ui64 schemeShardId,
+        ui64 rid, ui64 tid, const TPathId& dstPathId, TReplication::EState desiredState,
+        const TTopicMirrorSettings& topicMirror)
+{
+    return new TDstAlterer(parent, schemeShardId, rid, tid, TReplication::ETargetKind::Topic,
+        dstPathId, desiredState, {}, topicMirror);
 }
 
 }

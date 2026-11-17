@@ -494,10 +494,10 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         auto result = discover(disabled, false);
         UNIT_ASSERT(!result->Get()->IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(result->Get()->Failed.front().Error.GetIssues().ToOneLineString(),
-            "EnableReplicationControllerTopicMirroring");
+            "EnableTopicReplication");
 
         TFeatureFlags flags;
-        flags.FeatureFlags.SetEnableReplicationControllerTopicMirroring(true);
+        flags.FeatureFlags.SetEnableTopicReplication(true);
         TEnv enabled(flags);
         enabled.CreateTopic("/Root", *MakeTopicDescription(DummyTopic()));
         result = discover(enabled, false);
@@ -506,9 +506,8 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         result = discover(enabled, true);
         UNIT_ASSERT(!result->Get()->IsSuccess());
         result = discover(enabled, false, true);
-        UNIT_ASSERT(!result->Get()->IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Failed.front().Error.GetIssues().ToOneLineString(),
-            "mirrorer secrets dependency");
+        UNIT_ASSERT(result->Get()->IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ToAdd.front().Kind, TReplication::ETargetKind::Topic);
 
         enabled.CreateTable("/Root", *MakeTableDescription(DummyTable()));
         const auto created = enabled.Send<TEvYdbProxy::TEvAlterTableResponse>(enabled.GetYdbProxy(),

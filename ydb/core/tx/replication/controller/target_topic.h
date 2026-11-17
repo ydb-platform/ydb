@@ -14,6 +14,8 @@ public:
 
     explicit TTargetTopic(TReplication* replication, ui64 id, const IConfig::TPtr& config);
 
+    TString BuildStreamConsumerName() const override;
+
 protected:
     TString BuildStreamPath() const override;
     IActor* CreateWorkerRegistar(const TActorContext& ctx) const override;

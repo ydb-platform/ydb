@@ -96,8 +96,10 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
             }
             if (record.HasPathDropTxId()) {
                 return SubscribeTx(record.GetPathDropTxId());
+            } else {
+                return Error(record.GetStatus(), record.GetReason());
             }
-            return Retry();
+            break;
         case NKikimrScheme::StatusResourceExhausted:
             return Retry();
         case NKikimrScheme::StatusSuccess:

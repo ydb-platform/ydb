@@ -16,9 +16,17 @@ using EStreamState = TReplication::EStreamState;
 
 namespace {
 
-bool ShouldWaitForAttachment(const TReplication* replication) {
-    return !replication->GetConfig().GetInitialScan()
-        && replication->GetDesiredState() == TReplication::EState::Paused;
+bool CanAttachDestination(const TReplication* replication, ETargetKind kind) {
+    if (replication->GetState() == TReplication::EState::Removing
+        || replication->GetDesiredState() == TReplication::EState::Done) {
+        return false;
+    }
+
+    if (replication->GetDesiredState() == TReplication::EState::Paused) {
+        return kind != ETargetKind::Topic && replication->GetConfig().GetInitialScan();
+    }
+
+    return true;
 }
 
 } // anonymous namespace
@@ -260,21 +268,18 @@ void TTargetBase::Progress(const TActorContext& ctx) {
             WorkerRegistarProxy = Replication->GetYdbProxy();
         }
         break;
-    case EDstState::Alter: {
-        const bool needsCreator = !DstCreator && !DstPathId;
-        const bool canAttach = Replication->GetState() != TReplication::EState::Removing
-            && !(Kind == ETargetKind::Topic && Replication->GetDesiredState() == TReplication::EState::Paused)
-            && !ShouldWaitForAttachment(Replication)
-            && Replication->GetDesiredState() != TReplication::EState::Done;
+    case EDstState::Alter:
         if (Workers) {
             RemoveWorkers(ctx);
-        } else if (needsCreator && canAttach) {
-            DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
-        } else if (!DstCreator && !DstAlterer) {
-            DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
+        } else if (!DstCreator) {
+            const bool canAttach = !DstPathId && CanAttachDestination(Replication, Kind);
+            if (canAttach) {
+                DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
+            } else if (!DstAlterer) {
+                DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
+            }
         }
         break;
-    }
     case EDstState::Done:
         break;
     case EDstState::Removing:

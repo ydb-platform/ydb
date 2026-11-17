@@ -9,6 +9,10 @@ TTargetTopic::TTargetTopic(TReplication* replication, ui64 id, const IConfig::TP
 {
 }
 
+TString TTargetTopic::BuildStreamConsumerName() const {
+    return GetStreamName();
+}
+
 TString TTargetTopic::BuildStreamPath() const {
     return GetSrcPath();
 }

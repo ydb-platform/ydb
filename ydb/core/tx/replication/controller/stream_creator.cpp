@@ -135,7 +135,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     }
 
     bool IsOwnedChangefeed() const {
-        return Kind == TReplication::ETargetKind::Table || Kind == TReplication::ETargetKind::IndexTable;
+        return Kind == TReplication::ETargetKind::Table
+            || Kind == TReplication::ETargetKind::IndexTable;
     }
 
     enum class ETopicOperation {

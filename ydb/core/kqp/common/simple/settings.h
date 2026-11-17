@@ -26,16 +26,17 @@ struct TKqpQuerySettings {
     explicit TKqpQuerySettings(NKikimrKqp::EQueryType queryType)
         : QueryType(queryType) {}
 
+    // Every field, for comparison and for the cache key. The binding names all
+    // of them: a field added to the struct and not listed here does not compile.
+    auto Fields() const {
+        const auto& [documentApiRestricted, isInternalCall, isAnalyze, runtimeParameterSizeLimit,
+            runtimeParameterSizeLimitSatisfied, queryType, syntax, usePessimisticLocks] = *this;
+        return std::tie(documentApiRestricted, isInternalCall, isAnalyze, runtimeParameterSizeLimit,
+            runtimeParameterSizeLimitSatisfied, queryType, syntax, usePessimisticLocks);
+    }
+
     bool operator==(const TKqpQuerySettings& other) const {
-        return
-            DocumentApiRestricted == other.DocumentApiRestricted &&
-            IsInternalCall == other.IsInternalCall &&
-            IsAnalyze == other.IsAnalyze &&
-            QueryType == other.QueryType &&
-            Syntax == other.Syntax &&
-            UsePessimisticLocks == other.UsePessimisticLocks &&
-            RuntimeParameterSizeLimit == other.RuntimeParameterSizeLimit &&
-            RuntimeParameterSizeLimitSatisfied == other.RuntimeParameterSizeLimitSatisfied;
+        return Fields() == other.Fields();
     }
 
     bool operator!=(const TKqpQuerySettings& other) {
@@ -52,6 +53,13 @@ struct TKqpQuerySettings {
             DocumentApiRestricted, IsInternalCall, IsAnalyze, QueryType, Syntax,
             UsePessimisticLocks, RuntimeParameterSizeLimitSatisfied);
         return THash<decltype(tuple)>()(tuple);
+    }
+
+    // Appends bytes that are equal exactly when operator== is true.
+    void AppendCacheKey(TString& out) const {
+        std::apply([&out](const auto&... field) {
+            (out.append(reinterpret_cast<const char*>(&field), sizeof(field)), ...);
+        }, Fields());
     }
 
     TString SerializeToString() const {

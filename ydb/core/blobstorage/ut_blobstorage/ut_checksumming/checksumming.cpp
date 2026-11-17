@@ -695,6 +695,20 @@ Y_UNIT_TEST(DsProxyReadsWholePartChecksumBlob) {
     UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), data);
 }
 
+Y_UNIT_TEST(CheckIntegrityAcceptsWholePartChecksumBlock42) {
+    TTestEnv env(TErasureType::CrcModeWholePart, TBlobStorageGroupType::Erasure4Plus2Block);
+    const TString data = GenData(16_KB, 9);
+    UNIT_ASSERT_VALUES_EQUAL(env.Write(data)->Get()->Status, NKikimrProto::OK);
+
+    env.SendToDsProxy(new TEvBlobStorage::TEvCheckIntegrity(env.LastBlobId, TInstant::Max(),
+        NKikimrBlobStorage::EGetHandleClass::FastRead));
+    const auto result = env.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCheckIntegrityResult>(env.Sender, false);
+    const auto& response = *result->Get();
+    UNIT_ASSERT_VALUES_EQUAL_C(response.Status, NKikimrProto::OK, response.ErrorReason);
+    UNIT_ASSERT_C(response.PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK, response.DataInfo);
+    UNIT_ASSERT_C(response.DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK, response.DataInfo);
+}
+
 Y_UNIT_TEST(DsProxyRejectsInvalidVGetChecksum) {
     TTestEnv env(TErasureType::CrcModeWholePart);
     const TString data = GenData(16_KB, 10);

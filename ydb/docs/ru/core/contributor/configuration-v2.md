@@ -86,92 +86,13 @@
 - `DropDonor`: Удалить диски-доноры после завершения миграции данных.
 - `BootstrapCluster`: Инициировать первоначальное создание кластера.
 
-### Проверка выбора колец StateStorage и аварийное восстановление
+### Проверка выбора колец StateStorage
 
-В каждой заданной группе колец StateStorage значение `NToSelect` должно находиться в диапазоне от единицы до числа настроенных колец включительно. Кольцо с несколькими узлами по-прежнему считается одним кольцом. В устаревшем представлении `Node` каждый узел соответствует отдельному кольцу из одного узла. При приёме конфигурации недопустимые значения отклоняются без изменения.
+В каждой заданной группе колец StateStorage, StateStorageBoard или SchemeBoard значение `NToSelect` должно находиться в диапазоне от единицы до числа настроенных колец включительно. Узлы внутри одного кольца не увеличивают это число. В устаревшем представлении `Node` каждый узел соответствует отдельному кольцу из одного узла.
 
-При включённом self-management отсутствующие секции StateStorage могут быть сгенерированы. Однако заданная устаревшая секция `domains_config.state_storage` не игнорируется: она используется при запуске и переносе в управляемую конфигурацию, поэтому границы выбора колец проверяются и для неё.
+При включённом self-management также проверяются заданная устаревшая секция `domains_config.state_storage` и явные секции StateStorage. Отсутствующие секции могут быть сгенерированы механизмом self-management.
 
-Если уже зафиксированная конфигурация содержит недопустимое значение выбора колец, Distconf сохраняет доступ к её метаданным для диагностики, но не применяет и не распространяет эту конфигурацию. Более старые или конфликтующие конфигурации не могут заменить отклонённую зафиксированную версию. Описанная ниже аварийная процедура передаёт исправленный **полный protobuf `TStorageConfig`** через `UpdateConfig`; это не обычная замена YAML через `ReplaceStorageConfig`.
-
-Для базовой конфигурации (`BaseConfig`) корневого узла должен быть доступен кворум связанных узлов. Сбор конфигурации и новое предложение также должны удовлетворять необходимым кворумам конфигурации и дисков, включая кворумы статических групп хранения, где они применимы. Восстановление не обходит конфликты истории, отсутствие кворумов или незафиксированные последующие предложения, которые уже могли быть выбраны. Одного набора дисков с историческими метаданными без связности узлов недостаточно.
-
-1. Сохраните резервную копию последних зафиксированных метаданных и основного YAML с помощью команды чтения метаданных. Если диск требует ключа, добавьте используемую в вашей установке опцию `--main-key NUM`.
-
-   ```bash
-   ydbd admin bs disk metadata read /dev/DEVICE --json --committed-yaml current.yaml > metadata.json
-   ```
-
-2. Извлеките полную конфигурацию в JSON-файл для редактирования. Если присутствует отдельный документ storage YAML, извлеките и его. JSON, выдаваемый этой командой, сохраняет имена полей protobuf и кодирует сжатые байтовые поля в base64. Для следующих команд нужны Python 3 и `zstd`.
-
-   ```bash
-   python3 - <<'PY'
-   import base64
-   import json
-   from pathlib import Path
-   import subprocess
-
-   config = json.loads(Path("metadata.json").read_text())["CommittedStorageConfig"]
-   Path("replacement-config.json").write_text(json.dumps(config, indent=2))
-   if "CompressedStorageYaml" in config:
-       data = base64.b64decode(config["CompressedStorageYaml"])
-       decoded = subprocess.run(["zstd", "-q", "-d", "-c"], input=data,
-                                stdout=subprocess.PIPE, check=True).stdout
-       Path("current-storage.yaml").write_bytes(decoded)
-   PY
-   ```
-
-3. Исправьте недопустимые значения `NToSelect` в секциях верхнего уровня `StateStorageConfig`, `StateStorageBoardConfig` и `SchemeBoardConfig` файла `replacement-config.json`. Сохраните остальные параметры топологии, настройки хранилища и историю принятых конфигураций.
-
-   Исправьте соответствующие заданные секции в `current.yaml`, сохраните результат как `corrected-main.yaml` и увеличьте его `metadata.version`. Если присутствует отдельный storage YAML, исправьте его как `corrected-storage.yaml`, увеличьте `metadata.version` этого документа и установите в `replacement-config.json` значение `ExpectedStorageYamlVersion`, равное новой версии storage YAML плюс один. Исправление только видимых полей protobuf оставляет вложенный YAML несогласованным. Не редактируйте метаданные PDisk напрямую.
-
-4. Сохраните следующий код как `pack-repair.py`. `ConfigComposite` содержит сжатый zstd фрейм с основным YAML и следующим за ним компонентом fetched YAML. Этот рецепт для Linux с порядком байтов little-endian соответствует внутреннему формату документов размером менее 4 ГиБ; компонент fetched YAML остаётся пустым, как и в существующей CLI-команде записи метаданных.
-
-   ```python
-   import base64
-   import json
-   from pathlib import Path
-   import struct
-   import subprocess
-   import sys
-
-   def compress(data):
-       encoded = subprocess.run(["zstd", "-q", "-c"], input=data,
-                                stdout=subprocess.PIPE, check=True).stdout
-       return base64.b64encode(encoded).decode("ascii")
-
-   if len(sys.argv) not in (3, 4):
-       raise SystemExit("Usage: pack-repair.py CONFIG MAIN_YAML [STORAGE_YAML]")
-   config = json.loads(Path(sys.argv[1]).read_text())
-   main = Path(sys.argv[2]).read_bytes()
-   if len(main) >= 0xffffffff:
-       raise SystemExit("Main YAML is too large")
-   if "CompressedStorageYaml" in config and len(sys.argv) != 4:
-       raise SystemExit("Provide corrected dedicated storage YAML")
-   frame = struct.pack("<I", len(main)) + main + struct.pack("<I", 0)
-   config["ConfigComposite"] = compress(frame)
-   if len(sys.argv) == 4:
-       config["CompressedStorageYaml"] = compress(Path(sys.argv[3]).read_bytes())
-   config.pop("Fingerprint", None)
-   Path("repair-request.json").write_text(json.dumps({"UpdateConfig": {"Config": config}}))
-   ```
-
-   Запустите скрипт с исправленными документами. Последний аргумент можно опустить, только если в конфигурации нет отдельного storage YAML:
-
-   ```bash
-   python3 pack-repair.py replacement-config.json corrected-main.yaml corrected-storage.yaml
-   ```
-
-5. Отправьте запрос на защищённый endpoint мониторинга узла с обычными для вашей установки параметрами аутентификации:
-
-   ```bash
-   curl -H 'Content-Type: application/json' --data-binary @repair-request.json \
-     'http://NODE:MONITOR_PORT/actors/nodewarden?page=distconf'
-   ```
-
-   Сервер проверяет итоговый выбор колец в protobuf и заданные секции во вложенном YAML после разрешения селекторов. Он назначает новое поколение с номером больше, чем у всех обнаруженных конфигураций, пересчитывает fingerprint, сохраняет предыдущую принятую конфигурацию и фиксирует исправление через обычный совместный кворум записи. Вызывающая сторона не помечает замену как зафиксированную и не перезаписывает метаданные на отдельных дисках.
-
-6. Проверьте возвращённые статус RPC и ошибку: успешный HTTP-ответ сам по себе не подтверждает успешное восстановление. Убедитесь, что статус равен `OK`, затем отправьте `{"QueryConfig":{"RequireFresh":true}}` на тот же endpoint. В соответствии с принятой процедурой работы с инцидентами проверьте, что принятое поколение выше отклонённого, узлы перешли на одну конфигурацию, а метаданные сохранены.
+Границы выбора колец проверяются при валидации `AppConfig` и перед распространением нового предложения Distconf. Недопустимые значения отклоняются без изменения `NToSelect`.
 
 ### Интеграция и дополнительные механизмы
 

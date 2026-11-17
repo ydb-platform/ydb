@@ -50,15 +50,15 @@ public:
 class TEngineUncommittedPortionsReader: public IEngineTxReader {
 private:
     using TBase = IEngineTxReader;
-    const std::vector<TPortionAddress> Addresses;
+    const std::vector<TPortionAddress> PortionAddresses;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
 
 public:
     TEngineUncommittedPortionsReader(const TString& name, TColumnEngineForLogs* self, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector,
-        std::vector<TPortionAddress>&& addresses)
+        std::vector<TPortionAddress>&& portionAddresses)
         : TBase(name, self, dsGroupSelector)
-        , Addresses(std::move(addresses))
+        , PortionAddresses(std::move(portionAddresses))
     {
     }
 };

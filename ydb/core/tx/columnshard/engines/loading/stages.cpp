@@ -20,10 +20,10 @@ bool TEngineShardingInfoReader::DoPrecharge(NTabletFlatExecutor::TTransactionCon
 bool TEngineUncommittedPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     std::vector<std::pair<std::shared_ptr<TGranuleMeta>, TPortionInfo::TPtr>> portions;
-    for (const auto& address : Addresses) {
-        const auto granule = Self->GetGranulePtrVerified(address.GetPathId());
-        if (!db.LoadPortionVerified(
-                address, [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+    for (const auto& portionAddress : PortionAddresses) {
+        const auto granule = Self->GetGranulePtrVerified(portionAddress.GetPathId());
+        if (!db.LoadPortionVerified(portionAddress,
+                [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
                     const TIndexInfo& indexInfo = portion->GetSchema(Self->GetVersionedIndex())->GetIndexInfo();
                     AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
                     portions.emplace_back(granule, portion->Build());
@@ -40,9 +40,11 @@ bool TEngineUncommittedPortionsReader::DoExecute(NTabletFlatExecutor::TTransacti
 bool TEngineUncommittedPortionsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
     bool ready = true;
-    for (const auto& address : Addresses) {
-        ready &=
-            db.Table<NColumnShard::Schema::IndexPortions>().Key(address.GetPathId().GetRawValue(), address.GetPortionId()).Select().IsReady();
+    for (const auto& portionAddress : PortionAddresses) {
+        ready &= db.Table<NColumnShard::Schema::IndexPortions>()
+                     .Key(portionAddress.GetPathId().GetRawValue(), portionAddress.GetPortionId())
+                     .Select()
+                     .IsReady();
     }
     return ready;
 }

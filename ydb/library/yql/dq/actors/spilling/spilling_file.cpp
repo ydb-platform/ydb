@@ -394,6 +394,7 @@ private:
         } else {
             MoveFileToClosed(it);
         }
+        EnqueueFileDeletes();
     }
 
     void HandleWork(TEvPrivate::TEvCloseFileResponse::TPtr& ev) {
@@ -911,6 +912,7 @@ private:
 
         if (!IoThreadPool_->AddAndOwn(std::move(op))) {
             Counters_->SpillingIOQueueSize->Set(IoThreadPool_->Size());
+            EnqueueFileDeletes();
             return false;
         }
 
@@ -938,10 +940,15 @@ private:
         }
 
         MoveFileToClosed(it);
+        EnqueueFileDeletes();
     }
 
     void HandleWork(TEvPrivate::TEvDeleteFiles::TPtr&) {
         DeleteFilesScheduled_ = false;
+        EnqueueFileDeletes();
+    }
+
+    void EnqueueFileDeletes() {
         if (Stopping_) {
             return;
         }
@@ -1016,19 +1023,14 @@ private:
                 UnlinkFiles();
                 return;
             }
-            bool queued = false;
             if (FilesToDelete) {
                 for (auto& name : FileNames) {
                     if (name) {
                         FilesToDelete->push_back(std::move(name));
-                        queued = true;
                     }
                 }
             }
             FileNames.clear();
-            if (queued && ActorSystem) {
-                ActorSystem->Send(Service, new TEvPrivate::TEvDeleteFiles);
-            }
         }
 
         void Process(void*) override {

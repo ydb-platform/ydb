@@ -565,6 +565,7 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
     auto& session = Sessions[nodeId];
     session.SetReady();
     session.SupportsSourceOffsets = ev->Get()->Record.GetSupportsSourceOffsets();
+    session.SupportsChecksumRanges = ev->Get()->Record.GetSupportsChecksumRanges();
 
     for (const auto& protoId : ev->Get()->Record.GetWorkers()) {
         const auto id = TWorkerId::Parse(protoId);

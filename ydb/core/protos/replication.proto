@@ -338,6 +338,7 @@ message TEvHandshake {
 message TEvStatus {
     repeated TWorkerIdentity Workers = 1;
     optional bool SupportsSourceOffsets = 2 [default = false];
+    optional bool SupportsChecksumRanges = 3 [default = false];
 }
 
 message TEvSourceOffsetReport {

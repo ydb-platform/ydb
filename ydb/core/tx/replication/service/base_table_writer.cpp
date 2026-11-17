@@ -1,3 +1,4 @@
+#include <ydb/core/tx/replication/common/tx_id_range.h>
 #include "base_table_writer.h"
 #include "json_change_record.h"
 #include "service.h"
@@ -562,8 +563,8 @@ class TLocalTableWriter
                     continue;
                 }
 
-                if (auto it = TxIds.upper_bound(version); !IndexBuild && it != TxIds.end()) {
-                    record->RewriteTxId(it->second);
+                if (auto it = TxIds.upper_bound(version); !IndexBuild && it != TxIds.end() && it->second.Begin <= version) {
+                    record->RewriteTxId(it->second.TxId);
                     if (PendingTxId.empty()) {
                         records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
                     } else {
@@ -646,21 +647,26 @@ class TLocalTableWriter
 
         for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
             const auto version = TRowVersion::FromProto(kv.GetVersion());
-            TxIds.emplace(version, kv.GetTxId());
+            const auto begin = kv.HasBegin() ? TRowVersion::FromProto(kv.GetBegin()) : TRowVersion::Min();
+            TxIds.emplace(version, TTxIdRange(kv.GetTxId(), begin));
 
+        }
+
+        {
             auto pendingIt = PendingTxId.begin();
             auto blockedIt = BlockedRecords.begin();
 
-            auto processPending = [this, &records, &version, txId = kv.GetTxId()](auto& it) -> bool {
+            auto processPending = [this, &records](auto& it) -> bool {
                 Y_ABORT_UNLESS(PendingRecords.contains(*it));
                 auto& record = PendingRecords.at(*it);
 
                 const auto recordVersion = TRowVersion(record->GetStep(), record->GetTxId());
-                if (recordVersion >= version) {
+                const auto assignment = TxIds.upper_bound(recordVersion);
+                if (assignment == TxIds.end() || recordVersion < assignment->second.Begin) {
                     return false;
                 }
 
-                record->RewriteTxId(txId);
+                record->RewriteTxId(assignment->second.TxId);
                 records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
 
                 it = PendingTxId.erase(it);
@@ -907,7 +913,7 @@ private:
     bool RefreshingSchema = false;
 
     THashMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
-    TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
+    TMap<TRowVersion, TTxIdRange> TxIds; // key is non-inclusive right hand edge
     TSet<ui64> PendingTxId;
     TSet<ui64> BlockedRecords;
     TRowVersion PendingHeartbeat = TRowVersion::Min();

@@ -15,6 +15,7 @@ public:
     void SetReady();
     bool IsReady() const;
     bool SupportsSourceOffsets = false;
+    bool SupportsChecksumRanges = false;
 
     void AttachWorker(const TWorkerId& id);
     void DetachWorker(const TWorkerId& id);

@@ -3599,6 +3599,27 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Restore reservations before admitting new checksum work.
+        {
+            auto rowset = db.Table<Schema::ChecksumAdmissions>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+            Self->ChecksumAdmissions.clear();
+            Self->ChecksumAdmissionWaiters.clear();
+            Self->NextChecksumAdmissionOrder = 0;
+            while (!rowset.EndOfSet()) {
+                const auto key = std::make_pair(rowset.GetValue<Schema::ChecksumAdmissions::ControllerId>(),
+                    rowset.GetValue<Schema::ChecksumAdmissions::RequestId>());
+                auto& state = Self->ChecksumAdmissions[key];
+                Y_ABORT_UNLESS(state.ParseFromString(rowset.GetValue<Schema::ChecksumAdmissions::State>()));
+                Self->NextChecksumAdmissionOrder = Max(Self->NextChecksumAdmissionOrder, state.GetOrder());
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         // Read CdcStreamScanShardStatus
         {
             auto rowset = db.Table<Schema::CdcStreamScanShardStatus>().Range().Select();

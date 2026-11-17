@@ -5,9 +5,10 @@
 namespace NSQLTranslationV1 {
 
 bool TSymlinkTranslation::SymlinkPath(const TRule_symlink_path& node, TDeferredAtom& result) {
+    const auto pos = Ctx_.Position(node);
     switch (node.Alt_case()) {
         case TRule_symlink_path::kAltSymlinkPath1:
-            result = TDeferredAtom(Context().Pos(), Id(node.GetAlt_symlink_path1().GetRule_an_id_or_type1(), *this));
+            result = TDeferredAtom(pos, Id(node.GetAlt_symlink_path1().GetRule_an_id_or_type1(), *this));
             break;
         case TRule_symlink_path::kAltSymlinkPath2: {
             TString bindName;
@@ -18,7 +19,7 @@ bool TSymlinkTranslation::SymlinkPath(const TRule_symlink_path& node, TDeferredA
             if (!named) {
                 return false;
             }
-            MakeTableFromExpression(Context().Pos(), Context(), named, result);
+            MakeTableFromExpression(pos, Context(), named, result);
             break;
         }
         case TRule_symlink_path::ALT_NOT_SET:
@@ -42,7 +43,7 @@ bool TSymlinkTranslation::SymlinkRef(const TRule_symlink_ref& node, TSymlinkRef&
         return false;
     }
     if (result.Cluster.Empty()) {
-        Error() << "No cluster name given and no default cluster is selected";
+        Ctx_.Error(node) << "No cluster name given and no default cluster is selected";
         return false;
     }
 
@@ -50,14 +51,13 @@ bool TSymlinkTranslation::SymlinkRef(const TRule_symlink_ref& node, TSymlinkRef&
 }
 
 TNodePtr TSymlinkTranslation::Build(const TRule_create_symlink_stmt& node) {
-    Token(node.GetToken1());
-    const TPosition stmtPos = Ctx_.Pos();
+    const auto pos = Ctx_.Position(node);
     Ctx_.BodyPart();
     TSymlinkRef link;
     if (!SymlinkRef(node.GetRule_symlink_ref4(), link)) {
         return {};
     }
-    if (link.Service == YtProviderName && !Ctx_.EnsureAvailable(stmtPos, NYql::NFeature::YtSymlinks)) {
+    if (link.Service == YtProviderName && !Ctx_.EnsureAvailable(pos, NYql::NFeature::YtSymlinks)) {
         return {};
     }
 
@@ -66,22 +66,21 @@ TNodePtr TSymlinkTranslation::Build(const TRule_create_symlink_stmt& node) {
         return {};
     }
 
-    return BuildCreateSymlink(Ctx_.Pos(), link, target, node.HasBlock3(), Ctx_.Scoped);
+    return BuildCreateSymlink(pos, link, target, node.HasBlock3(), Ctx_.Scoped);
 }
 
 TNodePtr TSymlinkTranslation::Build(const TRule_drop_symlink_stmt& node) {
-    Token(node.GetToken1());
-    const TPosition stmtPos = Ctx_.Pos();
+    const auto pos = Ctx_.Position(node);
     Ctx_.BodyPart();
     TSymlinkRef link;
     if (!SymlinkRef(node.GetRule_symlink_ref4(), link)) {
         return {};
     }
-    if (link.Service == YtProviderName && !Ctx_.EnsureAvailable(stmtPos, NYql::NFeature::YtSymlinks)) {
+    if (link.Service == YtProviderName && !Ctx_.EnsureAvailable(pos, NYql::NFeature::YtSymlinks)) {
         return {};
     }
 
-    return BuildDropSymlink(Ctx_.Pos(), link, node.HasBlock3(), Ctx_.Scoped);
+    return BuildDropSymlink(pos, link, node.HasBlock3(), Ctx_.Scoped);
 }
 
 } // namespace NSQLTranslationV1

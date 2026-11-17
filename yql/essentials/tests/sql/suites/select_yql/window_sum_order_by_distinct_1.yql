@@ -1,4 +1,4 @@
-/* custom error: distinct over window is not supported */
+/* custom error: YqlSelect unsupported: Aggregation 'Sum' */
 PRAGMA YqlSelect = 'force';
 
 SELECT

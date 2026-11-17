@@ -226,17 +226,13 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
 
             {
                 TInactiveZone inactive(activeZone);
-                const auto describeResult = DescribePrivatePath(runtime, "/MyRoot/Table/Stream");
-                TestDescribeResult(describeResult, {
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
                     NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated),
                     NLs::StreamHasAggregatorTabletId(true),
                 });
-
-                const ui64 aggregatorTabletId = describeResult.GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId();
-                const auto sender = runtime.AllocateEdgeActor();
-                ForwardToTablet(runtime, aggregatorTabletId, sender, new NCdcAggregator::TEvCdcAggregator::TEvDescribeTracking());
-                const auto trackingResult = runtime.GrabEdgeEvent<NCdcAggregator::TEvCdcAggregator::TEvDescribeTrackingResult>(sender);
-                UNIT_ASSERT_VALUES_EQUAL(trackingResult->Get()->Record.SourcesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    DescribeCdcAggregatorSources(runtime, GetCdcAggregatorTabletId(runtime, "/MyRoot/Table/Stream")),
+                    GetSortedTableShards(runtime, "/MyRoot/Table"));
             }
         });
     }

@@ -65,32 +65,6 @@ TCdcIndexTestCase MakeCdcIndexTestCase(NKikimrSchemeOp::EIndexType type) {
     };
 }
 
-ui64 GetCdcAggregatorTabletId(TTestActorRuntime& runtime, const TString& streamPath) {
-    const ui64 aggregatorTabletId = DescribePrivatePath(runtime, streamPath)
-        .GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId();
-    UNIT_ASSERT(aggregatorTabletId);
-    return aggregatorTabletId;
-}
-
-TVector<ui64> DescribeCdcAggregatorSources(TTestActorRuntime& runtime, ui64 aggregatorTabletId) {
-    const auto sender = runtime.AllocateEdgeActor();
-    ForwardToTablet(runtime, aggregatorTabletId, sender, new NCdcAggregator::TEvCdcAggregator::TEvDescribeTracking());
-    const auto result = runtime.GrabEdgeEvent<NCdcAggregator::TEvCdcAggregator::TEvDescribeTrackingResult>(sender);
-
-    TVector<ui64> sources;
-    for (const auto& source : result->Get()->Record.GetSources()) {
-        sources.push_back(source.GetDataShardId());
-    }
-    Sort(sources);
-    return sources;
-}
-
-TVector<ui64> GetSortedTableShards(TTestActorRuntime& runtime, const TString& tablePath) {
-    auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, tablePath);
-    Sort(shards);
-    return shards;
-}
-
 void AssertOperationInFlight(TTestActorRuntime& runtime, ui64 txId) {
     const auto subscriber = runtime.AllocateEdgeActor();
     ForwardToTablet(runtime, TTestTxConfig::SchemeShard, subscriber, new TEvSchemeShard::TEvNotifyTxCompletion(txId));

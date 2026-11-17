@@ -1,5 +1,6 @@
 #include "mirror_describer.h"
 
+#include <ydb/core/persqueue/common/proxy/mirror_credentials.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <google/protobuf/util/message_differencer.h>
@@ -17,11 +18,15 @@ TMirrorDescriber::TMirrorDescriber(
     ui64 tabletId,
     TActorId readBalancerActorId,
     TString topicName,
-    const NKikimrPQ::TMirrorPartitionConfig& config
+    const NKikimrPQ::TMirrorPartitionConfig& config,
+    const TString& database,
+    const TString& topicPath
 )
     : TBaseTabletActor(tabletId, readBalancerActorId, NKikimrServices::PQ_MIRROR_DESCRIBER)
     , TopicName(std::move(topicName))
     , Config(config)
+    , Database(database)
+    , TopicPath(topicPath)
 {
 }
 
@@ -32,21 +37,40 @@ void TMirrorDescriber::Bootstrap(const TActorContext& ctx) {
 void TMirrorDescriber::StartInit(const TActorContext& ctx) {
     Become(&TThis::StateInit);
     DescribeRetryTimeout = DESCRIBE_RETRY_TIMEOUT_START;
+<<<<<<< HEAD
     ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials);
 }
 
 void TMirrorDescriber::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     YDB_LOG_NOTICE("Killed",
         {"logPrefix", NPQ_LOG_PREFIX});
+=======
+    ++DescribeGeneration;
+    DescribeTopicRequestInFlight = false;
+    CredentialsRequestInFlight = false;
+    if (auto initializer = std::exchange(CredentialsInitializer, {})) {
+        ctx.Send(initializer, new TEvents::TEvPoisonPill());
+    }
+    ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials, 0, DescribeGeneration);
+}
+
+void TMirrorDescriber::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+    LOG_N("Killed");
+    if (auto initializer = std::exchange(CredentialsInitializer, {})) {
+        ctx.Send(initializer, new TEvents::TEvPoisonPill());
+    }
+>>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
     CredentialsProvider = nullptr;
     Die(ctx);
 }
 
 void TMirrorDescriber::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
+    const auto& tabletConfig = ev->Get()->Config;
     bool equalConfigs = google::protobuf::util::MessageDifferencer::Equals(
         Config,
-        ev->Get()->Config.GetPartitionConfig().GetMirrorFrom()
+        tabletConfig.GetPartitionConfig().GetMirrorFrom()
     );
+<<<<<<< HEAD
     YDB_LOG_DEBUG("Got new config, equal with",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"previous", equalConfigs});
@@ -54,6 +78,18 @@ void TMirrorDescriber::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr&
         Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
         YDB_LOG_INFO("Changing config",
             {"logPrefix", NPQ_LOG_PREFIX});
+=======
+    const bool equalPathsContext = Database == tabletConfig.GetYdbDatabasePath() && TopicPath == tabletConfig.GetTopicPath();
+    LOG_D(
+        "Got new config, equal with",
+        {"previous", equalConfigs && equalPathsContext}
+    );
+    if (!equalConfigs || !equalPathsContext) {
+        Config = tabletConfig.GetPartitionConfig().GetMirrorFrom();
+        Database = tabletConfig.GetYdbDatabasePath();
+        TopicPath = tabletConfig.GetTopicPath();
+        LOG_I("Changing config");
+>>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
         StartInit(ctx);
     }
 }
@@ -132,6 +168,7 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     PQ_ENSURE(factory);
+<<<<<<< HEAD
     auto future = factory->GetCredentialsProvider(Config.GetCredentials());
     future.Subscribe(
         [
@@ -153,16 +190,44 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*
             actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
         }
     );
+=======
+    CredentialsInitializer = ctx.Register(CreateMirrorCredentialsInitializer(
+        SelfId(), DescribeGeneration, Config.GetCredentials(), Database, TopicPath, factory
+    ));
+>>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
     CredentialsRequestInFlight = true;
 }
 
 void TMirrorDescriber::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx) {
+<<<<<<< HEAD
     CredentialsRequestInFlight = false;
     if (ev->Get()->Error) {
         YDB_LOG_WARN("Cannot initialize credentials",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"provider", ev->Get()->Error.value()});
         ScheduleWithIncreasingTimeout<TEvPQ::TEvInitCredentials>(SelfId(), CredentialsInitInterval, INIT_INTERVAL_MAX, ctx);
+=======
+    if (ev->Cookie != DescribeGeneration) {
+        LOG_D(
+            "Ignoring stale credentials",
+            {"cookie", ev->Cookie},
+                    {"generation",
+            DescribeGeneration}
+        );
+        return;
+    }
+    CredentialsInitializer = {};
+    CredentialsRequestInFlight = false;
+    if (ev->Get()->Error) {
+        LOG_W(
+            "Cannot initialize credentials",
+            {"provider", ev->Get()->Error.value()}
+        );
+        ctx.Schedule(CredentialsInitInterval, std::make_unique<IEventHandle>(
+            SelfId(), SelfId(), new TEvPQ::TEvInitCredentials(), 0, DescribeGeneration
+        ));
+        CredentialsInitInterval = Min(CredentialsInitInterval * 2, INIT_INTERVAL_MAX);
+>>>>>>> 155ca05c7e3 ([KIKIMR-27673] Support secret references in topic mirroring credentials (#59067))
         return;
     }
 
@@ -199,9 +264,11 @@ NActors::IActor* CreateMirrorDescriber(
     const ui64 tabletId,
     const NActors::TActorId& readBalancerActorId,
     const TString& topicName,
-    const NKikimrPQ::TMirrorPartitionConfig& config
+    const NKikimrPQ::TMirrorPartitionConfig& config,
+    const TString& database,
+    const TString& topicPath
 ) {
-    return new TMirrorDescriber(tabletId, readBalancerActorId, topicName, config);
+    return new TMirrorDescriber(tabletId, readBalancerActorId, topicName, config, database, topicPath);
 }
 
 

@@ -175,7 +175,8 @@ void TestRestart(ERestartPoint point) {
     UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetResult(0).GetStatus(), NKikimrProto::OK);
 }
 
-void TestRollingWipe(bool delaySelf) {
+void TestRollingWipe(bool delaySelf,
+        std::optional<NKikimrBlobStorage::TSyncGuidInfo::EState> injectedSelfState = {}) {
     TEnvironmentSetup env(TEnvironmentSetup::TSettings{
         .NodeCount = 8,
         .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
@@ -191,6 +192,15 @@ void TestRollingWipe(bool delaySelf) {
     const TVDiskID unavailableDisk = info->GetVDiskId(unavailableOrder);
     const TActorId unavailableActor = info->GetActorId(unavailableOrder);
     const ui32 unavailableNode = unavailableActor.NodeId();
+    ui64 conflictingGuid = 0;
+    if (injectedSelfState) {
+        const auto edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId);
+        env.Runtime->Send(new IEventHandle(unavailableActor, edge,
+            new TEvBlobStorage::TEvVSyncGuid(unavailableDisk, unavailableDisk)), unavailableNode);
+        const auto reply = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVSyncGuidResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetReadInfo().GetState(), NKikimrBlobStorage::TSyncGuidInfo::Final);
+        conflictingGuid = reply->Get()->Record.GetReadInfo().GetGuid() == 1 ? 2 : 1;
+    }
     env.StopNode(unavailableNode);
     const ui64 tabletId = 1;
     const ui32 blockedGeneration = 42;
@@ -217,6 +227,20 @@ void TestRollingWipe(bool delaySelf) {
             recoveredNodes.insert(nodeId);
         }
         if (returning && nodeId == unavailableNode) {
+            if (injectedSelfState && type == TEvBlobStorage::EvVSyncGuidResult) {
+                auto& record = ev->Get<TEvBlobStorage::TEvVSyncGuidResult>()->Record;
+                if (record.HasReadInfo()) {
+                    // A legacy responder can report a Final without GUID history.
+                    record.ClearGuidHistory();
+                    record.ClearRecoveredGuid();
+                    auto* read = record.MutableReadInfo();
+                    read->Clear();
+                    if (info->GetOrderNumber(VDiskIDFromVDiskID(record.GetVDiskID())) == unavailableOrder) {
+                        read->SetState(*injectedSelfState);
+                        read->SetGuid(conflictingGuid);
+                    }
+                }
+            }
             if (type == TEvBlobStorage::EvVDiskGuidObtained) {
                 const ui32 order = info->GetOrderNumber(ev->Get<TEvVDiskGuidObtained>()->VDiskId);
                 // Select the first survey quorum without changing any reply contents.
@@ -272,6 +296,11 @@ void TestRollingWipe(bool delaySelf) {
         env.Runtime->Send(reply.release(), unavailableNode);
     }
     waitUntil([&] { return decision.has_value(); }, "Returning VDisk must reach a GUID decision");
+    if (injectedSelfState == NKikimrBlobStorage::TSyncGuidInfo::Final) {
+        UNIT_ASSERT_C(*decision == NSyncer::EDecision::Inconsistency, NSyncer::EDecisionToStr(*decision));
+        env.Runtime->FilterFunction = {};
+        return;
+    }
     UNIT_ASSERT_C(*decision == NSyncer::EDecision::Good, NSyncer::EDecisionToStr(*decision));
     waitUntil([&] { return recoveredNodes.contains(unavailableNode); }, "Returning VDisk must start");
     env.Sim(TDuration::Minutes(1));
@@ -284,7 +313,7 @@ void TestRollingWipe(bool delaySelf) {
     UNIT_ASSERT_VALUES_EQUAL(result->Record.GetGeneration(), blockedGeneration);
 }
 
-void TestRestartWithTwoUnavailablePeers() {
+void TestRestartWithTwoUnavailablePeers(bool legacyGuidReplies = false) {
     TEnvironmentSetup env(TEnvironmentSetup::TSettings{
         .NodeCount = 8,
         .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
@@ -307,20 +336,30 @@ void TestRestartWithTwoUnavailablePeers() {
     std::optional<NSyncer::EDecision> decision;
     bool replicated = false;
     bool durabilityReplicated = false;
+    const auto edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId);
     env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+        if (ev->Recipient == edge && ev->GetTypeRewrite() == TEvBlobStorage::EvVStatusResult) {
+            const auto& record = ev->Get<TEvBlobStorage::TEvVStatusResult>()->Record;
+            replicated = record.GetReplicated();
+            durabilityReplicated = record.GetDurabilityReplicated();
+            return false;
+        }
+        if (legacyGuidReplies && nodeId == actor.NodeId()
+                && ev->GetTypeRewrite() == TEvBlobStorage::EvVSyncGuidResult) {
+            auto& record = ev->Get<TEvBlobStorage::TEvVSyncGuidResult>()->Record;
+            // Isolate scheduler completion from the history-survey gate.
+            record.ClearGuidHistory();
+            record.ClearRecoveredGuid();
+        }
         if (nodeId == actor.NodeId() && ev->GetTypeRewrite() == TEvBlobStorage::EvVDiskGuidRecovered) {
             decision = ev->Get<TEvVDiskGuidRecovered>()->Outcome.Decision;
         }
         return true;
     };
     env.StartNode(actor.NodeId());
-    const auto edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId);
     for (ui32 attempt = 0; attempt < 120 && !(replicated && durabilityReplicated); ++attempt) {
         env.Sim(TDuration::Seconds(1));
         env.Runtime->Send(new IEventHandle(actor, edge, new TEvBlobStorage::TEvVStatus(disk)), actor.NodeId());
-        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(edge);
-        replicated = result->Get()->Record.GetReplicated();
-        durabilityReplicated = result->Get()->Record.GetDurabilityReplicated();
     }
     env.Runtime->FilterFunction = {};
     UNIT_ASSERT_C(decision.has_value(), "TEvVDiskGuidRecovered must complete with two unavailable peers");
@@ -333,6 +372,7 @@ void TestRestartWithTwoUnavailablePeers() {
 
 Y_UNIT_TEST_SUITE(RecoverLostDataRestart) {
     Y_UNIT_TEST(RestartWithTwoUnavailablePeers) { TestRestartWithTwoUnavailablePeers(); }
+    Y_UNIT_TEST(RestartWithLegacyGuidRepliesAndTwoUnavailablePeers) { TestRestartWithTwoUnavailablePeers(true); }
     Y_UNIT_TEST(DuringFullSync) { TestRestart(ERestartPoint::FullSync); }
     Y_UNIT_TEST(DuringOsiris) { TestRestart(ERestartPoint::OsirisWriteReply); }
     Y_UNIT_TEST(AfterOsirisBeforeFinalCommit) { TestRestart(ERestartPoint::OsirisDone); }
@@ -342,5 +382,10 @@ Y_UNIT_TEST_SUITE(RecoverLostDataRestart) {
     Y_UNIT_TEST(GuidPublicationPreservesDbBirthLsn) { TestRestart(ERestartPoint::GuidPublicationWithFinal); }
     Y_UNIT_TEST(RollingWipeWithDelayedSelfGuid) { TestRollingWipe(true); }
     Y_UNIT_TEST(RollingWipeWithPreservedLocalState) { TestRollingWipe(false); }
-
+    Y_UNIT_TEST(RollingWipeRejectsConflictingLegacyFinal) {
+        TestRollingWipe(false, NKikimrBlobStorage::TSyncGuidInfo::Final);
+    }
+    Y_UNIT_TEST(RollingWipeRetainsIdentityOverTentativeGuid) {
+        TestRollingWipe(false, NKikimrBlobStorage::TSyncGuidInfo::InProgress);
+    }
 }

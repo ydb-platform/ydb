@@ -1,0 +1,24 @@
+.. Searching for a P project file *.pproj locally in the current folder
+.. Found P project file: /home/ydynnikov/w/ydb-dev-02/ydb/core/blobstorage/models/sync_guid_recovery_p/Recovery.pproj
+.. Checking /tmp/sync-guid-rebuild/publication-pex/PEx/target/SyncGuidRecoveryProofs-jar-with-dependencies.jar
+WARNING: sun.reflect.Reflection.getCallerClass is not supported. This will impact performance.
+.. Test case :: tcProofClosedSurvey
+... Checker is using 'dfs' strategy with 1 threads (seed:1)
+--------------------
+   Time     Memory    Tasks (run/fin/pen)    Schedules   Timelines     States   
+ 00:00:00   0.0 GB         0 / 1 / 0             3           1           57     
+
+--------------------
+... Checking statistics:
+..... Found 0 bugs.
+... Search statistics:
+..... Explored 57 distinct states over 1 timelines
+..... Explored 3 distinct schedules
+..... Finished 1 search tasks (0 pending)
+..... Number of steps explored: 15 (min), 19 (avg), 24 (max).
+... Elapsed 0 seconds and used 0.0 GB
+.. [0;30;47m Result: correct for any depth [m
+. Done
+... Checker run finished.
+~~ [PTool]: Thanks for using P! ~~
+... Checker run terminated.

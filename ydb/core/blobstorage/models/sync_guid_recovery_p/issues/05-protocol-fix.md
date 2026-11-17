@@ -1,3 +1,6 @@
+> Historical investigation and evidence. For the reconstructed series, current
+> scope and verification results, see [AUDIT.md](../AUDIT.md).
+
 # Protocol fix and C++ validation
 
 ## Revision

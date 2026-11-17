@@ -1,3 +1,6 @@
+> Historical investigation and evidence. For the reconstructed series, current
+> scope and verification results, see [AUDIT.md](../AUDIT.md).
+
 # Related GitHub issues and pull requests
 
 Repository: [`ydb-platform/ydb`](https://github.com/ydb-platform/ydb). Research date: **2026-11-12**. States and merge dates below were read from the GitHub API; dates in the table are UTC.

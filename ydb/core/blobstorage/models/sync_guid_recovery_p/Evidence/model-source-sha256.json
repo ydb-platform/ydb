@@ -1,0 +1,13 @@
+{
+  "PSpec/Invariants.p": "ef1d3b30ec7c573e520dfebe8eb08af45fa818ed15b3259c22a295c0eb0f3c9d",
+  "PSrc/Events.p": "99f5ee4d01d7101e4e68c3d12aefc58cee7eb5626fa206ecd7f5a661c1300f7f",
+  "PSrc/GuidRecovery.p": "30f863f9698225707d412d3b7f7a8a08def12be2781c684210ae6ce64bcacb24",
+  "PSrc/Quorum.p": "ea62122cec6263e6ae3b4440be442c3b229ef85304fd74428bfdbb89c5ccb033",
+  "PSrc/Storage.p": "e3b9b6728cfffc56a48c486c0bb35f1b913b43e1557aa9f765dee11804fe4160",
+  "PTst/Scenarios.p": "ce7ba997e3bd9094d74cf38e2737d357538dec8eeb3ed754ceab6e46072e7a3e",
+  "PTst/Tests.p": "7217c60275fab933181da010a48a0dcc3518c9415a96c2df34f99e33b933dc77",
+  "Proofs/ClosedSurvey.p": "730828dedc4b1504d52a8ed944514ef1343f95f6808f153e20aae07e5085c9fe",
+  "Proofs/FullSyncRetry.p": "791c1989420ad8408ef6eb4765ab97fe69c135231ae9facf236cf83a292ebab5",
+  "Proofs/GuidConflict.p": "2f9f4e0fb6b5e0ddd61d961eca5aeaa524b4a54d347c8f6860e328369e463cbd",
+  "Proofs/GuidPublication.p": "173c946d2fe32a8335e47cab8fe2fc63a773cf8f9a1f21c37af5825a68fa7f3f"
+}

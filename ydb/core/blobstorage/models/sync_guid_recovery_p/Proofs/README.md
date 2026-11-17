@@ -1,25 +1,28 @@
-# Component obligations
+# Compact component checks
 
 ```sh
 p compile --pproj Proofs.pproj --mode pex --outdir PGeneratedProofs
-jar=PGeneratedProofs/PEx/target/SyncGuidRecoveryProofs-jar-with-dependencies.jar
-p check "$jar" --mode pex --testcase tcProofClosedSurvey --sch-pex dfs \
-  --schedules 0 --seed 1 --memout 1 --max-steps 10000 --fail-on-maxsteps \
-  --checker-args :--state-caching:exact --outdir PCheckerOutput/ProofClosedSurvey
+for testcase in tcProofClosedSurvey tcProofFullSyncRetry tcProofGuidConflict tcProofGuidPublication; do
+  p check PGeneratedProofs/PEx/target/SyncGuidRecoveryProofs-jar-with-dependencies.jar \
+    --mode pex --testcase "$testcase" --sch-pex dfs --schedules 0 --seed 1 \
+    --memout 1 --max-steps 10000 --fail-on-maxsteps \
+    --checker-args :--state-caching:exact --outdir "PCheckerOutput/$testcase" || break
+done
 ```
 
-`tcProofClosedSurvey` exercises the actual `TVDiskGuidRecoveryActor` through
-initialization, intact-Final and lost-data paths. Conflicting late replies are
-injected before each history/publication/local-commit acknowledgement and after
-the result. `ClosedSurveyIsSilent` closes voting at `eCommitGuidHistory` and
-requires its acknowledgement before the verdict. Expected history and
-publication/commit GUIDs and single completion are checked.
-Inspection of the corresponding `ignore TEvVDiskGuidObtained` handlers extends
-this argument to every payload: consuming a late reply changes only its queue.
-This does not forbid the legitimate publications/commits after a verdict.
+- `tcProofClosedSurvey`: the P `TVDiskGuidRecoveryActor` ignores late conflicting
+  replies after starting history commit, waits for its acknowledgement, then
+  publishes/commits the expected GUID and completes once.
+- `tcProofFullSyncRetry`: `RESTART` or `NODATA`, a partial snapshot followed by
+  interruption, unchanged `OldSyncState`, another full-sync request, then
+  `SyncDone` only after local import acknowledgement. Scheduler retry is a
+  small harness contract, not an execution of the C++ scheduler.
+- `tcProofGuidConflict`: a minority `RemoteFinal` conflicts with retained identity;
+  tentative `InProgress` cannot replace that identity.
 
-2026-11-16: exact DFS, seed 1: 57 states, 3 schedules,
-`correct for any depth`, exit 0. PChecker also passed 50 schedules.
-Removing the history-commit wait fails this proof's monitor on the first schedule.
-Revision: working-tree changes on `e2d9710abc7dc917f5122d67fd693d5cff054fa8`
-(commit date 2026-11-16).
+- `tcProofGuidPublication`: successful durable writes in arbitrary order, first quorum
+  notification, and optional post-quorum cancellation in both topologies. Failed
+  requests are exercised separately by TRecoveryStorage, outside this harness.
+
+These are checks of P components and their explicit harness assumptions.
+They do not establish general C++ refinement. See [audit](../AUDIT.md).

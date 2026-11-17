@@ -1,13 +1,16 @@
+> Historical investigation and evidence. For the reconstructed series, current
+> scope and verification results, see [AUDIT.md](../AUDIT.md).
+
 # VDisk returns Good after rolling peer wipes but misses committed Block metadata
 
-**Status:** reproduced on `mr006` in an eight-VDisk `Erasure4Plus2Block` group; also reproduced in the reduced P model for normal nine-VDisk `ErasureMirror3dc`. This is a metadata correctness issue. **Umbrella:** [[EPIC] Make VDisk recovery safe across rolling wipes](%5BEPIC%5D.md).
+**Status:** reproduced on `mr006` in an eight-VDisk `Erasure4Plus2Block` group; also reproduced in the reduced P model for normal nine-VDisk `ErasureMirror3dc`. This is a metadata correctness issue. **Umbrella:** [[EPIC] Make VDisk recovery safe across rolling wipes](EPIC.md).
 
 ## Reproduction provenance
 
 - **Reproduced:** 2026-11-12, with captured test events around 00:29:21 UTC+3.
 - **Tested Git SHA:** `c28196d089ffdd61c365f15abc76cee36af8cbde`; commit date: 2026-11-12T00:27:29+03:00.
 - **Production baseline:** [`6e3629b18daf4a2441d2b129fa3b1ae84564610f`](https://github.com/ydb-platform/ydb/commit/6e3629b18daf4a2441d2b129fa3b1ae84564610f); commit date: 2026-11-11T17:52:44+03:00. The test revision adds regressions without production changes.
-- **Evidence:** [captured final console log](evidence/historical-rolling-wipe-baseline.log) and [shared test details](%5BEPIC%5D.md#reproduced-revision-and-test-evidence). UTC log timestamps `2026-11-11T21:29:21–22Z` correspond to the reproduction date above.
+- **Evidence:** [captured final console log](evidence/historical-rolling-wipe-baseline.log) and [shared test details](EPIC.md#reproduced-revision-and-test-evidence). UTC log timestamps `2026-11-11T21:29:21–22Z` correspond to the reproduction date above.
 
 ## Description
 
@@ -21,9 +24,9 @@ group quorum; its first GUID quorum is `{0,1,2,3,4}`.
 The tested working tree is based on Git SHA
 `a68bd12f36af20329023baf319990155fa1ebf10` (commit date
 2026-11-12T20:12:20+03:00), with uncommitted model changes identified by
-[source hashes and results](../sync_guid_recovery_p/Evidence/results.json).
-See the [trace excerpt](../sync_guid_recovery_p/Evidence/tcMirror3dcStaleMetadata.excerpt.txt)
-and [direct checker commands](../sync_guid_recovery_p/README.md).
+source hashes and results (historical artifact, not tracked in this series).
+See the trace excerpt (historical artifact, not tracked in this series)
+and [direct checker commands](../README.md).
 This is a P reproduction, not an end-to-end mirror-3-dc C++ test.
 
 ### Metadata-history gap
@@ -50,7 +53,7 @@ Expected: after `A` returns to operation and reports `Replicated`, it returns `T
 
 Actual: `A` returns `NODATA`. The recovered-peer control passed before `A` restarted, and the `Good` and replication assertions passed before the direct query failed.
 
-Regression: `RecoverLostDataRestart::RollingWipeWithPreservedLocalState` in [recover_lost_data_restart.cpp](../core/blobstorage/ut_blobstorage/recover_lost_data_restart.cpp).
+Regression: `RecoverLostDataRestart::RollingWipeWithPreservedLocalState` in [recover_lost_data_restart.cpp](../../../ut_blobstorage/recover_lost_data_restart.cpp).
 
 Final-run failure:
 

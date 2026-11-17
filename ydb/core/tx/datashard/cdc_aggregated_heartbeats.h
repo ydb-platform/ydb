@@ -1,5 +1,6 @@
 #pragma once
 
+#include "change_exchange.h"
 #include "change_record_cdc_serializer.h"
 
 #include <ydb/core/change_exchange/change_exchange.h>
@@ -25,7 +26,7 @@ class TCdcAggregatedHeartbeats {
     using TRecordInfo = NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo;
 
 public:
-    struct TEvRetryHeartbeat: public TEventLocal<TEvRetryHeartbeat, NChangeExchange::TEvChangeExchangePrivate::EvEnd> {
+    struct TEvRetryHeartbeat: public TEventLocal<TEvRetryHeartbeat, TEvChangeExchange::EvRetryHeartbeat> {
     };
 
     explicit TCdcAggregatedHeartbeats(THolder<IChangeRecordSerializer> serializer, ui64 sourceDataShardId);

@@ -661,11 +661,12 @@ class TCdcChangeSenderMain
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
         if (AggregatedHeartbeats) {
-            auto [passed, buffered] = AggregatedHeartbeats->BufferHeartbeats(std::move(ev->Get()->Records));
-            ForgetRecords(std::move(buffered));
-            return ProcessRecords(std::move(passed));
+            auto [records, heartbeats] = AggregatedHeartbeats->BufferHeartbeats(std::move(ev->Get()->Records));
+            ForgetRecords(std::move(heartbeats));
+            ProcessRecords(std::move(records));
+        } else {
+            ProcessRecords(std::move(ev->Get()->Records));
         }
-        ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {

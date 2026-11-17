@@ -35,6 +35,7 @@ struct TEvChangeExchange {
         EvRemoveSender,
         // Split/merge
         EvSplitAck,
+        EvRetryHeartbeat,
 
         EvEnd,
     };

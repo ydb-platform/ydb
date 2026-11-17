@@ -41,7 +41,12 @@ public:
             return;
         }
 
-        if (rec.GetEvictVDisks() && !Actions.at(rec.GetAction())) {
+        if (rec.HasDataMigration() && rec.GetDataMigration() != "full") {
+            ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "data_migration must be \"full\"", ctx);
+            return;
+        }
+
+        if (rec.GetDataMigration() == "full" && !Actions.at(rec.GetAction())) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "data_migration is not supported for this action", ctx);
             return;
         }
@@ -128,7 +133,7 @@ private:
         request->Record.SetUser(WALLE_CMS_USER);
         request->Record.SetSchedule(true);
         request->Record.SetDryRun(task.GetDryRun());
-        request->Record.SetEvictVDisks(task.GetEvictVDisks());
+        request->Record.SetEvictVDisks(task.GetDataMigration() == "full");
         const auto &action = task.GetAction();
         if (action == "temporary-unreachable") {
             request->Record.SetPriority(WALLE_SOFT_MAINTENANCE_PRIORITY);

@@ -3268,6 +3268,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
                 MakeWalleDataMigrationJson(nodeId, migration));
             UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+            UNIT_ASSERT_C(response.Contains("data_migration must be \"full\""), response);
         }
         for (const TString action : {"prepare", "deactivate", "change-disk"}) {
             const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",

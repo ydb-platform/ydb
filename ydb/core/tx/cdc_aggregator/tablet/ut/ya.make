@@ -5,6 +5,7 @@ PEERDIR(
 )
 
 SRCS(
+    cdc_aggregator_heartbeat_publication_ut.cpp
     tablet_ut.cpp
 )
 

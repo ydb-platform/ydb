@@ -394,6 +394,13 @@ std::shared_ptr<TTokenSource::TTokenVersion> TTokenSource::Capture() const {
 
 std::vector<TString> TTokenSource::RedactionTokens(const std::shared_ptr<TTokenVersion>& first) const {
     std::lock_guard lock(Mutex);
+    // Most records have one credential version, regardless of RPC concurrency.
+    // Avoid building and sorting sets until an older request retains a version.
+    if (first == Current || (!first && (Active.empty()
+            || (Active.size() == 1 && Active.begin()->first == Current.get()))))
+    {
+        return Current->Value.empty() ? std::vector<TString>{} : std::vector<TString>{Current->Value};
+    }
     std::set<TString> unique;
     std::set<const TTokenVersion*> visited;
     const auto collect = [&](auto version) {

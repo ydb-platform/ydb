@@ -180,6 +180,8 @@ using TYdbClock = std::function<TMonotonic()>;
 // Call methods from the owning actor. Completions may run on foreign SDK threads;
 // they own their payload and must marshal it to the actor without accessing it.
 // Completion functions must not throw.
+// When tokens is supplied, that shared source owns credential loading and
+// tokenLoader is ignored. Otherwise tokenLoader belongs to a new private source.
 std::shared_ptr<IYdbClients> CreateYdbClients(
     const TConfig& config,
     const TLoadedCredentials& credentials,

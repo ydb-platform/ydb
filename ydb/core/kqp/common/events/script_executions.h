@@ -507,21 +507,20 @@ struct TEvDescribeSecretsResponse : public TEventLocal<TEvDescribeSecretsRespons
 
         explicit TDescription(std::vector<TString> secretValues)
             : SecretValues(std::move(secretValues))
-            , SecretRevisions(SecretValues.size())
             , Status(Ydb::StatusIds::SUCCESS)
         {}
 
-        TDescription(std::vector<TString> secretValues, std::vector<std::optional<TSecretRevision>> revisions)
+        TDescription(std::vector<TString> secretValues, std::vector<TSecretRevision> revisions)
             : SecretValues(std::move(secretValues))
             , SecretRevisions(std::move(revisions))
             , Status(Ydb::StatusIds::SUCCESS)
         {
-            Y_ENSURE(SecretValues.size() == SecretRevisions.size(), "Secret values and revisions must have the same size");
+            Y_ENSURE(SecretValues.size() == SecretRevisions->size(), "Secret values and revisions must have the same size");
         }
 
         const std::vector<TString> SecretValues;
-        // One revision per value; nullopt when the resolver provides no metadata.
-        const std::vector<std::optional<TSecretRevision>> SecretRevisions;
+        // Revisions for all values in the same order; nullopt when the resolver provides no metadata.
+        const std::optional<std::vector<TSecretRevision>> SecretRevisions;
         const Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         const NYql::TIssues Issues;
     };

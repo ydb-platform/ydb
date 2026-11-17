@@ -327,14 +327,17 @@ message TTableServiceConfig {
 
     reserved 51; // optional bool EnableColumnsWithDefault = 51 [default = true];
 
-    optional bool EnableAstCache = 52 [default = false, (InvalidateCompileCache) = true];
-    optional bool EnablePgConstsToParams = 53 [default = false, (InvalidateCompileCache) = true];
+    reserved 52; // EnableAstCache
+    reserved "EnableAstCache";
+    reserved 53; // EnablePgConstsToParams
+    reserved "EnablePgConstsToParams";
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000, (InvalidateCompileCache) = true];
 
     optional bool EnableOlapSink = 55 [default = true, (InvalidateCompileCache) = true];
 
-    optional bool EnablePerStatementQueryExecution = 56 [default = false, (InvalidateCompileCache) = true];
+    reserved 56; // EnablePerStatementQueryExecution
+    reserved "EnablePerStatementQueryExecution";
     optional bool EnableCreateTableAs = 57 [default = true, (InvalidateCompileCache) = true];
 
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3, (InvalidateCompileCache) = true];

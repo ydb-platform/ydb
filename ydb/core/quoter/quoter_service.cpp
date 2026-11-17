@@ -1368,6 +1368,12 @@ void TQuoterService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr
 
     switch (navEntry.Kind) {
     case NSchemeCache::TSchemeCacheNavigate::KindKesus:
+        // SchemeShard publishes a Kesus path before its tablet is created,
+        // so the scheme cache may resolve it without a tablet id.
+        if (!navEntry.KesusInfo || !navEntry.KesusInfo->Description.GetKesusTabletId()) {
+            BLOG_I("Path resolved as Kesus without tablet, it is probably being created. Path: " << path);
+            return BreakQuoter(quotersIndexIt, quoterIt, "KesusNotReady");
+        }
         BLOG_I("path resolved as Kesus " << path);
         return CreateKesusQuoter(navEntry, quotersIndexIt, quoterIt);
     default:

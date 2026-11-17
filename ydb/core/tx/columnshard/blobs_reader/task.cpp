@@ -9,7 +9,7 @@ namespace NKikimr::NOlap::NBlobOperations::NRead {
 
 bool ITask::AddError(const TString& storageIdExt, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
     const TString storageId = storageIdExt ? storageIdExt : IStoragesManager::DefaultStorageId;
-    AFL_VERIFY(--BlobsWaitingCount >= 0);
+    YDB_LOG_VERIFY(--BlobsWaitingCount >= 0);
     if (TaskFinishedWithError || AbortFlag) {
         YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
             {"event", "SkipError"},
@@ -34,7 +34,8 @@ bool ITask::AddError(const TString& storageIdExt, const TBlobRange& range, const
     }
     {
         auto it = AgentsWaiting.find(storageId);
-        AFL_VERIFY(it != AgentsWaiting.end())("storage_id", storageId);
+        YDB_LOG_VERIFY(it != AgentsWaiting.end(),
+            {"storageId", storageId});
         it->second->OnReadError(range, status);
         if (it->second->IsFinished()) {
             AgentsWaiting.erase(it);
@@ -52,7 +53,7 @@ bool ITask::AddError(const TString& storageIdExt, const TBlobRange& range, const
 
 void ITask::AddData(const TString& storageIdExt, const TBlobRange& range, const TString& data, const bool fromCache) {
     const TString storageId = storageIdExt ? storageIdExt : IStoragesManager::DefaultStorageId;
-    AFL_VERIFY(--BlobsWaitingCount >= 0);
+    YDB_LOG_VERIFY(--BlobsWaitingCount >= 0);
     if (TaskFinishedWithError || AbortFlag) {
         YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
             {"event", "SkipDataAfterError"},
@@ -72,7 +73,8 @@ void ITask::AddData(const TString& storageIdExt, const TBlobRange& range, const 
     Y_ABORT_UNLESS(BlobsFetchingStarted);
     {
         auto it = AgentsWaiting.find(storageId);
-        AFL_VERIFY(it != AgentsWaiting.end())("storage_id", storageId);
+        YDB_LOG_VERIFY(it != AgentsWaiting.end(),
+            {"storageId", storageId});
         it->second->OnReadResult(range, data, fromCache);
         if (it->second->IsFinished()) {
             AgentsWaiting.erase(it);
@@ -89,7 +91,7 @@ void ITask::StartBlobsFetching(const THashSet<TBlobRange>& rangesInProgress) {
         {"event", "start"});
     Y_ABORT_UNLESS(!BlobsFetchingStarted);
     BlobsFetchingStarted = true;
-    AFL_VERIFY(BlobsWaitingCount == 0);
+    YDB_LOG_VERIFY(BlobsWaitingCount == 0);
     for (auto&& agent : Agents) {
         agent.second->Start(rangesInProgress);
         if (!agent.second->IsFinished()) {
@@ -118,9 +120,9 @@ ITask::ITask(const TReadActionsCollection& actions, const TString& taskCustomer,
     , TaskCustomer(taskCustomer)
 {
     Agents = actions;
-    //    AFL_VERIFY(!Agents.IsEmpty());
+    //    YDB_LOG_VERIFY(!Agents.IsEmpty());
     for (auto&& i : Agents) {
-        AFL_VERIFY(i.second->GetExpectedBlobsCount());
+        YDB_LOG_VERIFY(i.second->GetExpectedBlobsCount());
     }
 }
 
@@ -153,12 +155,12 @@ bool ITask::OnError(const TString& storageId, const TBlobRange& range, const IBl
 }
 
 ITask::~ITask() {
-    AFL_VERIFY(!NActors::TlsActivationContext || DataIsReadyFlag || TaskFinishedWithError || AbortFlag || !BlobsFetchingStarted);
+    YDB_LOG_VERIFY(!NActors::TlsActivationContext || DataIsReadyFlag || TaskFinishedWithError || AbortFlag || !BlobsFetchingStarted);
 }
 
 TCompositeReadBlobs ITask::ExtractBlobsData() {
-    AFL_VERIFY(AgentsWaiting.empty());
-    AFL_VERIFY(!ResultsExtracted);
+    YDB_LOG_VERIFY(AgentsWaiting.empty());
+    YDB_LOG_VERIFY(!ResultsExtracted);
     ResultsExtracted = true;
     TCompositeReadBlobs result;
     for (auto&& i : Agents) {

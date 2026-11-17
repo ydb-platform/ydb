@@ -80,7 +80,7 @@ private:
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(
         NBlobOperations::NRead::TCompositeReadBlobs&& /*blobsOriginal*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return THashMap<TChunkAddress, TString>();
     }
 
@@ -105,7 +105,7 @@ private:
     }
 
     virtual NColumnShard::TInternalPathId GetPathId() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return NColumnShard::TInternalPathId::FromRawValue(0);
     }
 
@@ -124,7 +124,7 @@ private:
     }
 
     virtual void InitUsedRawBytes() override {
-        AFL_VERIFY(!UsedRawBytes);
+        YDB_LOG_VERIFY(!UsedRawBytes);
         UsedRawBytes = 0;
     }
 
@@ -137,7 +137,7 @@ private:
     }
 
     virtual bool DoAddTxConflict() override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     }
 
@@ -154,7 +154,7 @@ protected:
     virtual TConclusionStatus DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override {
         const ui32 recordsCount = GetRecordsCount();
-        AFL_VERIFY(!subColumnName);
+        YDB_LOG_VERIFY(!subColumnName);
         if (columnId == (ui64)IIndexInfo::ESpecialColumn::PLAN_STEP || columnId == (ui64)IIndexInfo::ESpecialColumn::TX_ID ||
             columnId == (ui64)IIndexInfo::ESpecialColumn::WRITE_ID) {
             context.MutableResources().AddVerified(columnId,

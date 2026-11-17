@@ -1062,8 +1062,14 @@ class ReaderStream:
         for session in self._partition_sessions.values():
             futures.extend(w.future for w in session._ack_waiters)
 
-        if futures:
-            await asyncio.wait(futures)
+        if not futures:
+            return
+
+        all_acks_received = asyncio.ensure_future(asyncio.wait(futures))
+        try:
+            await asyncio.wait((all_acks_received, self._first_error), return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            all_acks_received.cancel()
 
     async def close(self, flush: bool):
         if self._closed:

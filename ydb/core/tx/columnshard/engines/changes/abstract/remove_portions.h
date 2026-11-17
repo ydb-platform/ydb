@@ -40,7 +40,7 @@ public:
     }
 
     bool AddPortion(const TPortionInfo::TConstPtr& info) {
-        AFL_VERIFY(!info->HasRemoveSnapshot());
+        YDB_LOG_VERIFY(!info->HasRemoveSnapshot());
         return Portions.emplace(info->GetAddress(), info).second;
     }
 };

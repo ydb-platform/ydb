@@ -36,7 +36,7 @@ bool TReadOnlyController::DoOnWriteIndexComplete(
     }
     if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
         CompactionFinishedCounter.Inc();
-        AFL_VERIFY(CompactionsLimit.Dec() >= 0);
+        YDB_LOG_VERIFY(CompactionsLimit.Dec() >= 0);
     }
     return true;
 }

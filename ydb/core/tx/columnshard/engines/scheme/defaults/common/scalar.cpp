@@ -88,7 +88,9 @@ NKikimrColumnShardColumnDefaults::TColumnDefault TColumnDefaultScalarValue::Seri
             resultScalar.SetInt64(static_cast<const arrow::DurationScalar&>(scalar).value);
             break;
         default:
-            AFL_VERIFY(false)("problem", "incorrect type for statistics usage")("type", scalar.type->ToString());
+            YDB_LOG_VERIFY(false,
+                {"problem", "incorrect type for statistics usage"},
+                {"type", scalar.type->ToString()});
     }
     return result;
 }

@@ -246,7 +246,7 @@ WINDOW <window_name> AS (
 | [`PARTITION BY`](window.md#partition) | Делит строки на независимые разделы. Без `PARTITION BY` все входные строки образуют один раздел. Ключом может быть колонка или выражение; выражению можно назначить алиас. |
 | [`ORDER BY`](window.md#partition) | Задаёт порядок строк внутри раздела. Направление `ASC` используется по умолчанию, `DESC` задаёт обратный порядок. Для упорядочивания результата запроса нужен отдельный `ORDER BY` после секции `WINDOW`. |
 | [`ROWS`](window.md#frame) | Задаёт рамку по смещениям в строках относительно текущей строки. На рамке вычисляются агрегатные функции, а также `FIRST_VALUE`, `LAST_VALUE` и `NTH_VALUE`. Функции `ROW_NUMBER`, `LAG` и `LEAD` работают со всем разделом независимо от рамки. |
-| Рамка по умолчанию | Если рамка не задана, при наличии оконного `ORDER BY` используется `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`, а без него — `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`. Для получения последнего значения всего раздела через `LAST_VALUE` явно задайте конец рамки `UNBOUNDED FOLLOWING`. |
+| Рамка по умолчанию | В Query Service по умолчанию включена прагма [`AnsiCurrentRow`](../pragma.md#ansicurrentrow). Если рамка не задана, при наличии оконного `ORDER BY` используется `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`: она включает все строки от начала раздела до последней строки с теми же значениями ключей сортировки, что и текущая. При отключённой прагме используется `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`. Без оконного `ORDER BY` используется `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`. Для получения последнего значения всего раздела через `LAST_VALUE` явно задайте конец рамки `UNBOUNDED FOLLOWING`. |
 | [`COMPACT`](window.md) | Выбирает выполнение в памяти для рамки `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`. Потребление памяти зависит от размера раздела. |
 
 Вместо `<frame_bound>`, `<frame_start>` и `<frame_end>` указывается одна из форм:
@@ -259,7 +259,7 @@ CURRENT ROW
 UNBOUNDED FOLLOWING
 ```
 
-Формы `PRECEDING` отсчитываются назад, `FOLLOWING` — вперёд; `UNBOUNDED` означает границу раздела. Если указана только одна граница, она задаёт начало, а конец считается равным `CURRENT ROW`. Начало не может быть `UNBOUNDED FOLLOWING`, а конец — `UNBOUNDED PRECEDING`. `<frame_offset>` — неотрицательное целое число. Для однозначного порядка строк при одинаковых значениях `<sort_key>` добавьте в оконный `ORDER BY` ключ, различающий эти строки.
+Формы `PRECEDING` отсчитываются назад, `FOLLOWING` — вперёд; `UNBOUNDED` означает границу раздела. Если указана только одна граница, она задаёт начало, а конец считается равным `CURRENT ROW`. `<frame_offset>` — неотрицательное целое число. Для однозначного порядка строк при одинаковых значениях `<sort_key>` добавьте в оконный `ORDER BY` ключ, различающий эти строки.
 
 ### Другие формы записи {#select-alternative-overview}
 

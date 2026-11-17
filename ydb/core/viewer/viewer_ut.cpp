@@ -995,14 +995,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TDatabaseAliasTicketParser() : TActor(&TDatabaseAliasTicketParser::StateFunc) {}
 
         void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-            const TCgiParameters paths("database=alias&path=/alias/a,/alias/b&topic=relative");
+            const TCgiParameters paths("database=/alias&path=/alias/a,/alias/b&topic=relative");
             const auto normalizer = std::make_shared<const std::function<TString(TStringBuf)>>(
                 [normalizer = AppData()->GetPathNormalizer()](TStringBuf path) { return normalizer->NormalizePath(path); });
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("path"), "/Root/a,/alias/b");
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer, true).Get("path"), "/Root/a,/Root/b");
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("topic"), "relative");
             NJson::TJsonValue jsonPaths;
-            UNIT_ASSERT(NJson::ReadJsonTree(R"({"database":"alias","path":["/alias/a","/alias/b"],"message":"/alias"})", &jsonPaths));
+            UNIT_ASSERT(NJson::ReadJsonTree(R"({"database":"/alias","path":["/alias/a","/alias/b"],"message":"/alias"})", &jsonPaths));
             NormalizePathParameters(jsonPaths, normalizer);
             UNIT_ASSERT_VALUES_EQUAL(jsonPaths["database"].GetString(), "/Root");
             UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][0].GetString(), "/Root/a");
@@ -1085,7 +1085,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
 
         TStringStream relativeResponse;
-        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/describe?database=alias&path=/alias&direct=true", &relativeResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/describe?database=/alias&path=/alias&direct=true", &relativeResponse, headers), HTTP_OK);
         UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&relativeResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
 
         headers["Content-Type"] = "application/json";
@@ -1095,7 +1095,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         headers["Content-Type"] = "application/x-www-form-urlencoded";
         TStringStream formResponse;
-        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", "database=alias&path=/alias", &formResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", "database=/alias&path=/alias", &formResponse, headers), HTTP_OK);
         UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&formResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
 
         TStringStream directoryResponse;

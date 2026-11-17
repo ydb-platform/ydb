@@ -124,6 +124,7 @@ public:
 
     void Rewind() override {
         Delegated_->clear();
+        FmrFallbackOperations_.clear();
         TExecTransformerBase::Rewind();
     }
 
@@ -361,6 +362,7 @@ private:
 
         return State_->Gateway->Run(optimizedNode, ctx,
             IYtGateway::TRunOptions(State_->SessionId)
+                .SkipFmr(FmrFallbackOperations_.contains(input->UniqueId()))
                 .UserDataBlocks(files)
                 .UdfModules(State_->Types->UdfModules)
                 .UdfResolver(State_->Types->UdfResolver)
@@ -408,12 +410,18 @@ private:
                 return pair;
             },
             [&](TFuture<IYtGateway::TRunResult>& future) {
-                return WrapModifyFuture(future, [operationHash, state = State_](const IYtGateway::TRunResult& res,
-                                                                                const TExprNode::TPtr& input,
-                                                                                TExprNode::TPtr& output,
-                                                                                TExprContext& ctx)
+                return WrapFutureCallback(future, [this, operationHash, state = State_](const IYtGateway::TRunResult& res,
+                                                                                    const TExprNode::TPtr& input,
+                                                                                    TExprNode::TPtr& output,
+                                                                                    TExprContext& ctx)
                 {
-                    return FinalizeOutputOp(state, operationHash, res, input, output, ctx, MarkFinished);
+                    if (RepeatOperation(res, input)) {
+                        return TStatus(TStatus::Repeat, false);
+                    }
+                    auto resultNode = FinalizeOutputOp(state, operationHash, res, input, output, ctx, MarkFinished);
+                    input->SetState(TExprNode::EState::ExecutionComplete);
+                    output->SetResult(std::move(resultNode));
+                    return input != output ? TStatus(TStatus::Repeat, true) : TStatus(TStatus::Ok);
                 });
             }
         }, callbackPairOrFuture);
@@ -466,11 +474,14 @@ private:
 
         auto future = std::get<TFuture<IYtGateway::TRunResult>>(callbackPairOrFuture);
         return std::make_pair(IGraphTransformer::TStatus::Async, future.Apply(
-            [operationHash, state = State_](const TFuture<IYtGateway::TRunResult>& completedFuture) {
+            [this, operationHash, state = State_](const TFuture<IYtGateway::TRunResult>& completedFuture) {
                 return TAsyncTransformCallback(
-                    [completedFuture, operationHash, state](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                    [this, completedFuture, operationHash, state](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                         output = input;
                         const auto& res = completedFuture.GetValue();
+                        if (RepeatOperation(res, input)) {
+                            return TStatus(TStatus::Repeat, false);
+                        }
                         if (!res.Success()) {
                             YQL_ENSURE(!res.Issues().Empty());
                             if (res.Issues().begin()->IssueCode == TIssuesIds::YT_MAX_DATAWEIGHT_PER_JOB_EXCEEDED) {
@@ -512,6 +523,18 @@ private:
                         }
                     });
             }));
+    }
+
+    template <class TResult>
+    bool RepeatOperation(const TResult& result, const TExprNode::TPtr& input) {
+        if (!result.Success() || (!result.FmrFallback && !result.Repeat())) {
+            return false;
+        }
+        if (result.FmrFallback) {
+            FmrFallbackOperations_.insert(input->UniqueId());
+        }
+        input->SetState(TExprNode::EState::ExecutionRequired);
+        return true;
     }
 
     TStatusCallbackPair HandleIsolatedOp(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -607,6 +630,7 @@ private:
 
         auto future = State_->Gateway->Publish(clonedNode, ctx,
             IYtGateway::TPublishOptions(State_->SessionId)
+                .SkipFmr(FmrFallbackOperations_.contains(input->UniqueId()))
                 .PublicId(State_->Types->TranslateOperationId(input->UniqueId()))
                 .DestinationRowSpec(nextDescription.RowSpec)
                 .Config(std::move(config))
@@ -614,8 +638,13 @@ private:
                 .OperationHash(nextDescription.Hash.GetOrElse(""))
             );
 
-        return WrapFuture(future, [](const IYtGateway::TPublishResult& /*res*/, const TExprNode::TPtr& input, TExprContext& ctx) {
-            return ctx.NewWorld(input->Pos());
+        return WrapFutureCallback(future, [this](const IYtGateway::TPublishResult& res, const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) {
+            if (RepeatOperation(res, input)) {
+                return TStatus(TStatus::Repeat, false);
+            }
+            input->SetState(TExprNode::EState::ExecutionComplete);
+            input->SetResult(ctx.NewWorld(input->Pos()));
+            return TStatus(TStatus::Ok);
         });
     }
 
@@ -1080,6 +1109,7 @@ private:
     }
 
     const TYtState::TPtr State_;
+    THashSet<ui64> FmrFallbackOperations_;
 
     struct TDelegatedInfo {
         IDataProvider* DelegatedProvider;

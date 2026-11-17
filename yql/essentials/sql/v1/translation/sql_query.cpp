@@ -203,7 +203,7 @@ bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
 
 } // namespace
 
-bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber) {
+bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, const TTokenIndexRange& range) {
     TStatementName statementName = TStatementName::From(core);
     const size_t blocksBeforeStatement = blocks.size();
 
@@ -226,7 +226,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
     }
 
     if (NeedUseForAllStatements(altCase)) {
-        Ctx_.ForAllStatementsParts.push_back(statementNumber);
+        Ctx_.ForAllStatementsParts.push_back(range);
     }
 
     switch (altCase) {
@@ -1124,7 +1124,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     }
                     auto& alt = node.GetBlock7().GetAlt2();
                     if (!ParseViewQuery(features, alt.GetRule_define_action_or_subquery_body3(),
-                                        alt.GetToken2(), alt.GetToken4(), context.ServiceId, context.Cluster))
+                                        alt.GetToken2(), context.ServiceId, context.Cluster))
                     {
                         return false;
                     }
@@ -4506,8 +4506,6 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
             return nullptr;
         }
 
-        size_t statementNumber = 0;
-
         const auto& stmtList = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
 
         if (!stmtList.HasBlock2() && Ctx_.Settings.Flags.contains("AllowNoStatements")) {
@@ -4532,7 +4530,7 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
         if (!checkExplainToken(firstStmt)) {
             return nullptr;
         }
-        if (!Statement(blocks, firstStmt.GetRule_sql_stmt_core2(), statementNumber++)) {
+        if (!Statement(blocks, firstStmt.GetRule_sql_stmt_core2(), GetTokenIndexRange(firstStmt))) {
             return nullptr;
         }
         for (auto block : statements.GetBlock2()) {
@@ -4540,7 +4538,7 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
             if (!checkExplainToken(stmt)) {
                 return nullptr;
             }
-            if (!Statement(blocks, stmt.GetRule_sql_stmt_core2(), statementNumber++)) {
+            if (!Statement(blocks, stmt.GetRule_sql_stmt_core2(), GetTokenIndexRange(stmt))) {
                 return nullptr;
             }
         }
@@ -4681,9 +4679,8 @@ TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_co
         return nullptr;
     }
 
-    size_t statementNumber = 0;
     for (const auto& statement : statements) {
-        if (!Statement(blocks, statement, statementNumber++)) {
+        if (!Statement(blocks, statement, GetTokenIndexRange(statement))) {
             return nullptr;
         }
     }

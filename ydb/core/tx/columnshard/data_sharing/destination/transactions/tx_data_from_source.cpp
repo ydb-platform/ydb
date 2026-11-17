@@ -25,7 +25,7 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
         ui64* lastPortionPtr = index.GetLastPortionPointer();
         for (auto&& i : PortionsByPathId) {
             auto it = Session->GetPathIds().find(i.first);
-            AFL_VERIFY(it != Session->GetPathIds().end());
+            YDB_LOG_VERIFY(it != Session->GetPathIds().end());
             i.second.InitPortionIds(lastPortionPtr, it->second);
         }
         dbWrapper.WriteCounter(TColumnEngineForLogs::LAST_PORTION, *lastPortionPtr);

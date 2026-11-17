@@ -1,0 +1,33 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "TaggedType";
+                                    "baz";
+                                    [
+                                        "DataType";
+                                        "Int32"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "3"
+                    ]
+                ]
+            }
+        ];
+        "Unordered" = %true
+    }
+]

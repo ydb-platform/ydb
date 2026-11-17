@@ -66,7 +66,6 @@ PEERDIR(
     yql/essentials/udfs/common/histogram
     yql/essentials/udfs/common/hyperloglog
     yql/essentials/udfs/common/ip_base
-    yql/essentials/udfs/common/json
     yql/essentials/udfs/common/json2
     yql/essentials/udfs/common/math
     yql/essentials/udfs/common/pire

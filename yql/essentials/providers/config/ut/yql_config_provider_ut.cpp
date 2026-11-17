@@ -36,6 +36,44 @@ IGraphTransformer::TStatus ApplyPragma(IDataProvider& provider, TExprContext& ct
 } // namespace
 
 Y_UNIT_TEST_SUITE(TConfigProviderFlagsTest) {
+Y_UNIT_TEST(PartialTypeCheckToleratesMissingFullResultDataSink) {
+    TTypeAnnotationContext types;
+    TExprContext ctx;
+    auto provider = CreateConfigProvider(types, /*config=*/nullptr, "testuser", {}, /*forPartialTypeCheck=*/true);
+    UNIT_ASSERT(provider->Initialize(ctx));
+
+    const auto status = ApplyPragma(*provider, ctx, "FullResultDataSink", {"yt"});
+    UNIT_ASSERT_C(status == IGraphTransformer::TStatus::Ok, ctx.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT(ctx.IssueManager.GetIssues().Empty());
+    UNIT_ASSERT(types.FullResultDataSink.empty());
+}
+
+Y_UNIT_TEST(FullResultDataSinkRejectsMissingProvider) {
+    TTypeAnnotationContext types;
+    TExprContext ctx;
+    auto provider = CreateConfigProvider(types, /*config=*/nullptr, "testuser", {});
+    UNIT_ASSERT(provider->Initialize(ctx));
+
+    UNIT_ASSERT(ApplyPragma(*provider, ctx, "FullResultDataSink", {"yt"}) == IGraphTransformer::TStatus::Error);
+    UNIT_ASSERT_STRING_CONTAINS(ctx.IssueManager.GetIssues().ToString(), "Unknown datasink for full result provider: yt");
+    UNIT_ASSERT(types.FullResultDataSink.empty());
+}
+
+Y_UNIT_TEST(FullResultDataSinkValidatesArgumentCount) {
+    for (bool partial : {false, true}) {
+        for (const auto& args : {TVector<TString>{}, TVector<TString>{"yt", "extra"}}) {
+            TTypeAnnotationContext types;
+            TExprContext ctx;
+            auto provider = CreateConfigProvider(types, /*config=*/nullptr, "testuser", {}, partial);
+            UNIT_ASSERT(provider->Initialize(ctx));
+
+            UNIT_ASSERT(ApplyPragma(*provider, ctx, "FullResultDataSink", args) == IGraphTransformer::TStatus::Error);
+            UNIT_ASSERT_STRING_CONTAINS(ctx.IssueManager.GetIssues().ToString(), "Expected 1 argument");
+            UNIT_ASSERT(types.FullResultDataSink.empty());
+        }
+    }
+}
+
 Y_UNIT_TEST(ProjectSettingsOverrideConfigAndQueryOverridesProject) {
     TTypeAnnotationContext types;
     types.ProjectSettings.AddPragma("config.flags", TVector<TString>{"UdfSupportsYield", "true"});
@@ -96,9 +134,10 @@ Y_UNIT_TEST(StrictValidationRejectsUnknownAndSystemProjectSettings) {
 
         types.DataSourceMap["config"] = provider;
         UNIT_ASSERT(!(provider->Initialize(ctx) && types.ValidateProjectSettings(ctx)));
-        UNIT_ASSERT_STRING_CONTAINS(ctx.IssueManager.GetIssues().ToString(), name);
-        UNIT_ASSERT_VALUES_EQUAL(ctx.IssueManager.GetIssues().Size(), 1);
-        const auto& issue = *ctx.IssueManager.GetIssues().begin();
+        const auto issues = ctx.IssueManager.GetIssues();
+        UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), name);
+        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1);
+        const auto& issue = *issues.begin();
         UNIT_ASSERT_VALUES_EQUAL(issue.GetCode(), static_cast<ui32>(TIssuesIds::DEFAULT_ERROR));
         UNIT_ASSERT(issue.GetSeverity() == TSeverityIds::S_ERROR);
     }

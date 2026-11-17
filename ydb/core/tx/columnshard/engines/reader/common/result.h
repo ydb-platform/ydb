@@ -41,22 +41,22 @@ private:
 
 public:
     void Cut(const ui32 limit) {
-        AFL_VERIFY(!Extracted);
+        YDB_LOG_VERIFY(!Extracted);
         ResultBatch.Cut(limit);
     }
 
     const arrow::Table& GetResultBatch() const {
-        AFL_VERIFY(!Extracted);
+        YDB_LOG_VERIFY(!Extracted);
         return *ResultBatch.GetRecordBatch();
     }
 
     ui64 GetRecordsCount() const {
-        AFL_VERIFY(!Extracted);
+        YDB_LOG_VERIFY(!Extracted);
         return ResultBatch.GetRecordsCount();
     }
 
     std::shared_ptr<arrow::Schema> GetResultSchema() const {
-        AFL_VERIFY(!Extracted);
+        YDB_LOG_VERIFY(!Extracted);
         return ResultBatch.GetResultSchema();
     }
 
@@ -64,7 +64,7 @@ public:
         std::vector<std::shared_ptr<TPartialReadResult>>&& resultsExt, const ui32 maxRecordsInResult);
 
     NArrow::TShardedRecordBatch ExtractShardedBatch() {
-        AFL_VERIFY(!Extracted);
+        YDB_LOG_VERIFY(!Extracted);
         Extracted = true;
         return std::move(ResultBatch);
     }

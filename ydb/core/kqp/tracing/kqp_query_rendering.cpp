@@ -269,7 +269,7 @@ TQueryTraceDescription DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery& quer
 } // namespace
 
 TQueryTraceDescription DescribeQueryTrace(NKikimrKqp::EQueryType queryType,
-        size_t statementCount, const NKqpProto::TKqpPhyQuery& physicalQuery,
+        const NKqpProto::TKqpPhyQuery& physicalQuery,
         const TMaybe<TString>& commandTag) {
     switch (queryType) {
         case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
@@ -278,9 +278,6 @@ TQueryTraceDescription DescribeQueryTrace(NKikimrKqp::EQueryType queryType,
             return {"EXECUTE SCRIPT", "EXECUTE SCRIPT"};
         default:
             break;
-    }
-    if (statementCount > 1) {
-        return {"EXECUTE SCRIPT", "EXECUTE SCRIPT"};
     }
     return DescribePhysicalQuery(physicalQuery, commandTag);
 }

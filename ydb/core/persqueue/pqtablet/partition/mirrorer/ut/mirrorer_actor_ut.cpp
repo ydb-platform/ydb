@@ -480,7 +480,7 @@ struct TMirrorerEnv {
     }
 
     void Dispatch(TDuration timeout = TDuration::MilliSeconds(20)) {
-        Runtime.DispatchEvents(TDispatchOptions(), timeout);
+        Runtime.SimulateSleep(timeout);
     }
 
     void Advance(TDuration delay) {

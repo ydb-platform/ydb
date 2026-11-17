@@ -448,6 +448,7 @@ public:
             limits.TaskScheduling.UseWorkerPool = config.GetTaskSchedulerUseWorkerPool();
             limits.TaskScheduling.WorkerSliceCpuUs = config.GetTaskSchedulerWorkerSliceCpuUs();
             limits.TaskScheduling.WorkerActivationUs = config.GetTaskSchedulerWorkerActivationUs();
+            limits.TaskScheduling.PreferLocalConsumer = config.GetTaskSchedulerPreferLocalConsumer();
             limits.TaskScheduling.Trace.Enabled = config.GetEnableTaskExecutionTrace();
             limits.TaskScheduling.Trace.MaxQueries = config.GetTaskExecutionTraceMaxQueries();
             limits.TaskScheduling.Trace.MaxEvents = config.GetTaskExecutionTraceMaxEvents();

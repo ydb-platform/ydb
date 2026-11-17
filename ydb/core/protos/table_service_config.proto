@@ -591,6 +591,8 @@ message TTableServiceConfig {
         optional uint32 TaskExecutionTraceMaxEvents = 22 [default = 100000];
         optional uint64 TaskExecutionTraceMaxBytes = 23 [default = 8388608];
         optional uint64 TaskExecutionTraceRetentionMs = 24 [default = 600000];
+        // Prefer a consumer just made ready by a local write on the same worker.
+        optional bool TaskSchedulerPreferLocalConsumer = 25 [default = false];
     }
 
     optional TDqChannelConfig DqChannelConfig = 133 [(InvalidateCompileCache) = false];

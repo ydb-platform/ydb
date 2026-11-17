@@ -79,6 +79,31 @@ struct TQueues {
     }
 };
 
+// Run the consumer until it waits for all dependencies in this input group.
+void BlockOnLocalInput(TQueues& queues, const std::shared_ptr<TExecution>& execution, TVector<ui64> channels) {
+    auto claim = queues.Pool->Take({}, 100);
+    UNIT_ASSERT(claim && claim->Task == execution->Task);
+    UNIT_ASSERT(claim->Execution->TryAcquire());
+    const auto generation = claim->Task->TryDispatch();
+    UNIT_ASSERT(generation && claim->Task->Start(*generation));
+    TVector<TTaskDependencyVersion> dependencies;
+    for (ui64 channel : channels) {
+        const auto dependency = InputDependency(channel);
+        dependencies.push_back({dependency, claim->Task->Observe(dependency)});
+    }
+    claim->Task->ReportWait({
+        .Reason = ETaskWaitReason::Input,
+        .Origin = ETaskWaitOrigin::Operator,
+        .Precision = ETaskWaitPrecision::Exact,
+        .Condition = TTaskWaitCondition::All(std::move(dependencies)),
+    });
+    claim->Task->SealWait(ETaskWaitCoverage::Complete);
+    claim->Task->Complete({.RunnerInvoked = true});
+    claim->Execution->Release();
+    queues.Pool->Finish(*claim, 10);
+    UNIT_ASSERT(claim->Task->GetSnapshot().State == ETaskSchedulingState::Blocked);
+}
+
 struct TTestRuntime : TTestActorRuntimeBase {
     TTestRuntime() : TTestActorRuntimeBase(1, true) { InitNodes(); }
     ~TTestRuntime() override { CleanupNodes(); }
@@ -206,6 +231,50 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
         t.Run(std::move(*claim), false);
     }
 
+    Y_UNIT_TEST(PendingWakeupCoversOneReadyTask) {
+        TQueues t;
+        const auto query = Id(100);
+        UNIT_ASSERT(!t.Pool->Take(Id(900), 100));
+        UNIT_ASSERT(!t.Pool->Take(Id(901), 100));
+
+        auto first = t.Add(query, 1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(t.Wakeups.size(), 1);
+        t.Pool->NotifyAvailable();
+        UNIT_ASSERT_VALUES_EQUAL(t.Wakeups.size(), 1);
+
+        auto second = t.Add(query, 2, 2);
+        UNIT_ASSERT_VALUES_EQUAL(t.Wakeups.size(), 2);
+        UNIT_ASSERT(t.Wakeups[0] != t.Wakeups[1]);
+        auto firstClaim = t.Pool->Take(t.Wakeups[0], 100);
+        auto secondClaim = t.Pool->Take(t.Wakeups[1], 100);
+        UNIT_ASSERT(firstClaim && firstClaim->Task == first->Task);
+        UNIT_ASSERT(secondClaim && secondClaim->Task == second->Task);
+        t.Run(std::move(*firstClaim), false);
+        t.Run(std::move(*secondClaim), false);
+    }
+
+    Y_UNIT_TEST(RescheduleParksUntilWorkArrives) {
+        TQueues t;
+        const auto query = Id(100);
+        const auto worker = Id(900);
+        t.Pool->Reschedule(worker);
+        UNIT_ASSERT(t.Wakeups.empty());
+
+        auto execution = t.Add(query, 1, 1);
+        UNIT_ASSERT(t.Wakeups == TVector<TActorId>({worker}));
+        auto claim = t.Pool->Take(worker, 100);
+        UNIT_ASSERT(claim && claim->Task == execution->Task);
+        t.Run(std::move(*claim), false);
+
+        execution = t.Add(query, 2, 2);
+        UNIT_ASSERT_VALUES_EQUAL(t.Wakeups.size(), 1);
+        t.Pool->Reschedule(worker);
+        UNIT_ASSERT(t.Wakeups == TVector<TActorId>({worker, worker}));
+        claim = t.Pool->Take(worker, 100);
+        UNIT_ASSERT(claim && claim->Task == execution->Task);
+        t.Run(std::move(*claim), false);
+    }
+
     Y_UNIT_TEST(QueryWeightsDistributeCpuService) {
         TQueues t;
         t.Add(Id(100), 1, 1);
@@ -267,6 +336,91 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
             t.Run(std::move(*claim), true);
         }
         UNIT_ASSERT(upstreamRan);
+    }
+
+    Y_UNIT_TEST(FreshLocalInputPrefersItsConsumerWithinTheQuery) {
+        for (bool enabled : {false, true}) {
+            TQueues t;
+            const auto query = Id(100);
+            auto consumer = t.Add(query, 2, 2);
+            BlockOnLocalInput(t, consumer, {42});
+            auto other = t.Add(query, 3, 3);
+            TLocalConsumerHint hint;
+            {
+                std::optional<TLocalConsumerScope> locality;
+                if (enabled) {
+                    locality.emplace(hint, query, 1);
+                }
+                consumer->Task->Signal(InputDependency(42), ETaskPriority::Normal, true);
+            }
+            if (enabled) {
+                UNIT_ASSERT(hint.Consumer == consumer->Task->Actor);
+                UNIT_ASSERT_VALUES_EQUAL(hint.Channel, 42);
+            } else {
+                UNIT_ASSERT(!hint.Consumer);
+            }
+            auto next = t.Pool->Take({}, 100, hint);
+            UNIT_ASSERT(next && next->Task == (enabled ? consumer->Task : other->Task));
+            t.Run(std::move(*next), false);
+        }
+    }
+
+    Y_UNIT_TEST(FreshLocalInputDoesNotBypassTheOtherRequiredInput) {
+        TQueues t;
+        const auto query = Id(100);
+        auto consumer = t.Add(query, 2, 2);
+        BlockOnLocalInput(t, consumer, {42, 43});
+        TLocalConsumerHint hint;
+        {
+            TLocalConsumerScope locality(hint, query, 1);
+            consumer->Task->Signal(InputDependency(42), ETaskPriority::Normal, true);
+            UNIT_ASSERT(!hint.Consumer);
+            UNIT_ASSERT(!t.Pool->Take({}, 100));
+            // A remote notification will still make the task ready, but is
+            // never a hint for the current worker.
+            consumer->Task->Signal(InputDependency(43));
+            UNIT_ASSERT(!hint.Consumer);
+        }
+        auto next = t.Pool->Take({}, 100);
+        UNIT_ASSERT(next && next->Task == consumer->Task);
+        t.Run(std::move(*next), false);
+    }
+
+    Y_UNIT_TEST(FreshLocalInputDoesNotChangeWhichQueryWins) {
+        TQueues t;
+        const auto query = Id(100);
+        auto consumer = t.Add(query, 2, 2);
+        BlockOnLocalInput(t, consumer, {42});
+        auto other = t.Add(Id(200), 1, 3);
+        TLocalConsumerHint hint;
+        {
+            TLocalConsumerScope locality(hint, query, 1);
+            consumer->Task->Signal(InputDependency(42), ETaskPriority::Normal, true);
+        }
+        UNIT_ASSERT(hint.Consumer == consumer->Task->Actor);
+        auto next = t.Pool->Take({}, 100, hint);
+        UNIT_ASSERT(next && next->Task == other->Task);
+        t.Run(std::move(*next), false);
+    }
+
+    Y_UNIT_TEST(LocalInputHintExpiresWhenAnotherWorkerRunsTheConsumer) {
+        TQueues t;
+        const auto query = Id(100);
+        auto consumer = t.Add(query, 2, 2);
+        BlockOnLocalInput(t, consumer, {42});
+        TLocalConsumerHint hint;
+        {
+            TLocalConsumerScope locality(hint, query, 1);
+            consumer->Task->Signal(InputDependency(42), ETaskPriority::Normal, true);
+        }
+        UNIT_ASSERT(hint.Consumer == consumer->Task->Actor);
+        auto startedElsewhere = t.Pool->Take({}, 100);
+        UNIT_ASSERT(startedElsewhere && startedElsewhere->Task == consumer->Task);
+        auto other = t.Add(query, 3, 3);
+        t.Run(std::move(*startedElsewhere), true);
+        auto next = t.Pool->Take({}, 100, hint);
+        UNIT_ASSERT(next && next->Task == other->Task);
+        t.Run(std::move(*next), false);
     }
 
     Y_UNIT_TEST(AReusableWorkerExecutesDifferentQueriesWithoutTaskActorPermits) {

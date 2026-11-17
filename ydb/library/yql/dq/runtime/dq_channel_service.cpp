@@ -202,6 +202,8 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
     }
 
     EDqFillLevel fillLevel = FillLevel;
+    const bool hasData = data.Rows && !data.Checkpoint;
+    bool freshLocalData = false;
 
     RefreshMemoryPressure();
     auto maxInflightBytes = GetMaxInflightBytes();
@@ -222,6 +224,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
             }
             InflightBytes += data.Bytes;
             *Registry->LocalBufferInflightBytes += data.Bytes;
+            freshLocalData = hasData && Queue.empty();
             Queue.push(std::move(data));
             fillLevel = InflightBytes.load() >= maxInflightBytes ? EDqFillLevel::SoftLimit : EDqFillLevel::NoLimit;
         }
@@ -232,6 +235,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
         }
         InflightBytes += data.Bytes;
         *Registry->LocalBufferInflightBytes += data.Bytes;
+        freshLocalData = hasData && Queue.empty();
         Queue.push(std::move(data));
         fillLevel = InflightBytes.load() >= maxInflightBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
     }
@@ -248,7 +252,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
     }
 
     ReadyHook.Mark();
-    NotifyInput(Finished.load());
+    NotifyInput(Finished.load(), freshLocalData);
 }
 
 bool TLocalBuffer::IsFinished() {
@@ -466,12 +470,13 @@ void TLocalBuffer::BindStorage(std::shared_ptr<TLocalBuffer>& self, IDqChannelSt
     Storage = std::move(storage);
 }
 
-void TLocalBuffer::NotifyInput(bool force) {
+void TLocalBuffer::NotifyInput(bool force, bool freshLocalData) {
     if (NeedToNotifyInput.exchange(false) || force) {
         LastInputNotificationTime.store(TInstant::Now());
         if (auto task = GetInputTask()) {
             task->Signal(InputDependency(Info.ChannelId),
-                         InflightBytes.load() >= GetMaxInflightBytes() ? ETaskPriority::Drain : ETaskPriority::Normal);
+                         InflightBytes.load() >= GetMaxInflightBytes() ? ETaskPriority::Drain : ETaskPriority::Normal,
+                         freshLocalData);
             if (!task->ObserveOnly) {
                 return;
             }

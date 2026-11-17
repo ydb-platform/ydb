@@ -173,6 +173,7 @@ struct TTaskSchedulerSettings {
     bool UseWorkerPool = false;
     ui64 WorkerSliceCpuUs = 1000;
     ui64 WorkerActivationUs = 2000;
+    bool PreferLocalConsumer = false;
 };
 
 struct TTaskSchedulerMetrics;
@@ -190,7 +191,8 @@ public:
                           std::shared_ptr<TQueryTaskTrace> trace = {});
 
     void RequestExecution();
-    void Signal(TTaskDependencyId dependency, ETaskPriority priority = ETaskPriority::Normal);
+    // freshLocalData is only for a data chunk just pushed into an in-memory local channel.
+    void Signal(TTaskDependencyId dependency, ETaskPriority priority = ETaskPriority::Normal, bool freshLocalData = false);
     ui64 Observe(TTaskDependencyId dependency);
     // The owner calls these around a single Fetch attempt. Intermediate failed
     // probes must not leak into the next successful Fetch's wait description.

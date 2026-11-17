@@ -128,6 +128,26 @@ boost remain in force. `RunnableSelections`, `RecheckSelections`, and
 `BufferedOutputSelections` complement the existing run/progress counters. These
 measure why candidates were selected, not proof that output rows were produced.
 
+## Local consumer hint (experiment)
+
+Set `TaskSchedulerPreferLocalConsumer: true` in `DqChannelConfig` to try the
+consumer of a fresh local chunk on the producer's worker. The chunk must enter
+an empty in-memory channel during the producer's slice and make a task waiting
+on that input ready. Remote data, spill reloads and control-only chunks are not
+hints.
+
+The normal policy chooses the query first. Within it, the hint can beat task
+distance or work kind, but does not override aging or known readiness. The
+worker tries the hint on its next selection in the same activation. The task
+remains in the normal queue; another worker can claim it without waiting for
+the producer, and a claim of a later ready revision does not use a stale hint.
+
+Compare with the flag off on the same binary. Check
+`LocalConsumerHints`, `LocalConsumerSelections`, and
+`LocalConsumerPrioritySwitches` in `TaskSchedulerWorkers`. Only the last
+counter means the order changed. A `selected` trace event for a match includes
+`local_producer_task`, `local_channel`, and `locality_changed_selection`.
+
 ## Dispatcher baseline (`TaskSchedulerUseWorkerPool: false`)
 
 Each query execution graph hashes to one dispatcher on each participating node,

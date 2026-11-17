@@ -39,6 +39,30 @@ public:
     virtual void OnSliceFinished(TTaskSliceResult result) = 0;
 };
 
+// A hint for the next selection of the worker that produced these data.
+struct TLocalConsumerHint {
+    NActors::TActorId Query, Consumer;
+    ui64 ReadyRevision = 0;
+    ui64 ProducerTask = 0;
+    ui64 Channel = 0;
+};
+
+// Capture a synchronous local input notification during a worker slice. No
+// channel or task state is retained after the slice, just the ready revision.
+class TLocalConsumerScope {
+public:
+    TLocalConsumerScope(TLocalConsumerHint& hint, NActors::TActorId query, ui64 producerTask);
+    ~TLocalConsumerScope();
+    TLocalConsumerScope(const TLocalConsumerScope&) = delete;
+    TLocalConsumerScope& operator=(const TLocalConsumerScope&) = delete;
+
+    static bool Captures(NActors::TActorId query);
+    static void Record(NActors::TActorId actor, ui64 readyRevision, ui64 channel);
+
+private:
+    TLocalConsumerHint* const Previous;
+};
+
 // Concurrent node-local metadata. No queue lock is held during task execution.
 class TTaskWorkPool : public std::enable_shared_from_this<TTaskWorkPool> {
 public:
@@ -61,9 +85,11 @@ public:
     // Returns no work and parks the worker atomically with respect to enqueue
     // and availability notifications. A zero worker ID performs a non-parking
     // inspection/claim, useful in deterministic tests.
-    std::optional<TClaim> Take(NActors::TActorId worker, ui64 reserveCpuUs);
+    std::optional<TClaim> Take(NActors::TActorId worker, ui64 reserveCpuUs, const TLocalConsumerHint& hint = {});
+    void Reschedule(NActors::TActorId worker);
     void Return(TClaim claim);
     void Finish(const TClaim& claim, ui64 cpuUs);
+    void RecordActivation(bool ranSlice);
     void RecordExecution(const TTaskRunProgress& progress, ui64 cpuUs);
     void DeferQuery(NActors::TActorId query, TMonotonic until);
     void ResumeQuery(NActors::TActorId query, TMonotonic now = TMonotonic::Now());
@@ -93,7 +119,7 @@ private:
         TMonotonic NotBefore;
     };
     ui32 CountWorkLocked(ui32 limit) const;
-    TVector<NActors::TActorId> WakeLocked();
+    TVector<NActors::TActorId> WakeLocked(NActors::TActorId preferred = {});
     void Wake(TVector<NActors::TActorId> workers);
 
     const ui32 MaxQueryConcurrency;
@@ -102,15 +128,18 @@ private:
     THashMap<NActors::TActorId, TQuery> Queries;
     THashSet<NActors::TActorId> ReadyQueries;
     THashSet<NActors::TActorId> IdleWorkers;
+    THashSet<NActors::TActorId> PendingWorkers;
     ui64 Sequence = 0;
     ui64 Selections = 0;
     double ServiceFloor = 0;
     NMonitoring::TDynamicCounters::TCounterPtr WorkerSlices, WorkerRuns, WorkerCpuUs, QuotaRejected, LeaseRetries, InlineCompletions, Wakeups, EmptyTakes;
+    NMonitoring::TDynamicCounters::TCounterPtr WorkerActivations, EmptyActivations;
 public:
     void RecordInlineCompletion() { if (InlineCompletions) { ++*InlineCompletions; } }
 private:
     NMonitoring::TDynamicCounters::TCounterPtr SelectionsCount, SelectionCpuUs, SelectionLockWaitUs;
     NMonitoring::TDynamicCounters::TCounterPtr RunnableSelections, RecheckSelections, BufferedOutputSelections;
+    NMonitoring::TDynamicCounters::TCounterPtr LocalConsumerHints, LocalConsumerSelections, LocalConsumerPrioritySwitches;
 };
 
 void StartDqComputeWorkers(NActors::TActorSystem* actorSystem, ui32 poolId,

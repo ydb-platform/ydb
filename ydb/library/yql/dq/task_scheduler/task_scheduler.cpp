@@ -155,7 +155,7 @@ void TTaskSchedulingHandle::RequestExecution() {
     }
 }
 
-void TTaskSchedulingHandle::Signal(TTaskDependencyId dependency, ETaskPriority priority) {
+void TTaskSchedulingHandle::Signal(TTaskDependencyId dependency, ETaskPriority priority, bool freshLocalData) {
     bool enqueue = false;
     {
         std::lock_guard lock(Mutex);
@@ -174,6 +174,25 @@ void TTaskSchedulingHandle::Signal(TTaskDependencyId dependency, ETaskPriority p
         }
         if (State == EState::Blocked && Wait.IsSatisfied(Versions)) {
             enqueue = MakeReadyLocked();
+            if (enqueue && freshLocalData && !ObserveOnly && TLocalConsumerScope::Captures(Query)) {
+                const auto changed = [&](const TTaskDependencyVersion& term) {
+                    const auto it = Versions.find(term.Id);
+                    return (it == Versions.end() ? 0 : it->second) != term.Version;
+                };
+                // The fresh input must participate in a satisfied input wait.
+                // An opaque notification alone is not a locality signal.
+                for (const auto& wait : LastWaits) {
+                    if (wait.Reason == ETaskWaitReason::Input && wait.Precision != ETaskWaitPrecision::Opaque
+                        && AnyOf(wait.Condition.AnyOf, [&](const auto& group) {
+                            return AnyOf(group, [&](const auto& term) { return term.Id == dependency && changed(term); })
+                                && AllOf(group, changed);
+                        }))
+                    {
+                        TLocalConsumerScope::Record(Actor, Revision, dependency >> 1);
+                        break;
+                    }
+                }
+            }
         }
         if (Metrics && !enqueue) {
             ++*Metrics->Coalesced;

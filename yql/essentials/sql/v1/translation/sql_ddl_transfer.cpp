@@ -4,7 +4,6 @@
 #include "secret_settings.h"
 #include "sql_expression.h"
 
-#include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 #include <yql/essentials/utils/yql_paths.h>
 
 #include <util/string/join.h>
@@ -16,41 +15,13 @@ namespace {
 TString GetLambdaText(TTranslation& ctx, TContext& context, const TRule_lambda_or_parameter& lambdaOrParameter) {
     static const TString StatementSeparator = ";\n";
 
-    TVector<TString> statements;
-    NYql::TIssues issues;
-    if (!SplitQueryToStatements(context.Lexers, context.Parsers, context.Query, statements, issues, context.Settings)) {
-        return {};
-    }
-
     TStringBuilder result;
-    for (const auto id : context.ForAllStatementsParts) {
-        result << statements[id] << "\n";
-    }
+    result << context.ContextRecreationQuery();
 
     switch (lambdaOrParameter.Alt_case()) {
         case NSQLv1Generated::TRule_lambda_or_parameter::kAltLambdaOrParameter1: {
             const auto& lambda = lambdaOrParameter.GetAlt_lambda_or_parameter1().GetRule_lambda1();
-
-            auto& beginToken = lambda.GetRule_smart_parenthesis1().GetToken1();
-            const NSQLv1Generated::TToken* endToken = nullptr;
-            switch (lambda.GetBlock2().GetBlock2().GetAltCase()) {
-                case TRule_lambda_TBlock2_TBlock2::AltCase::kAlt1:
-                    endToken = &lambda.GetBlock2().GetBlock2().GetAlt1().GetToken3();
-                    break;
-                case TRule_lambda_TBlock2_TBlock2::AltCase::kAlt2:
-                    endToken = &lambda.GetBlock2().GetBlock2().GetAlt2().GetToken3();
-                    break;
-                case TRule_lambda_TBlock2_TBlock2::AltCase::ALT_NOT_SET:
-                    YQL_ENSURE(false, "Unreachable");
-            }
-
-            auto begin = GetQueryPosition(context.Query, beginToken);
-            auto end = GetQueryPosition(context.Query, *endToken);
-            if (begin == std::string::npos || end == std::string::npos) {
-                return {};
-            }
-
-            result << "$__ydb_transfer_lambda = " << context.Query.substr(begin, end - begin + endToken->value().size()) << StatementSeparator;
+            result << "$__ydb_transfer_lambda = " << context.QueryText(lambda) << StatementSeparator;
 
             return result;
         }

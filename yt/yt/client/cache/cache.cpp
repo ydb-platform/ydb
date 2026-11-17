@@ -30,7 +30,7 @@ class TClientsCache
 {
 public:
     TClientsCache(const TClientsCacheConfigPtr& config, const TClientsCacheAuthenticationOptionsPtr& clientsOptions)
-        : Config_(GetClustersConfigWithNormalClusterName(config))
+        : Config_(CloneConfigWithNormalizedClusterNames(config))
         , ClientsOptions_(clientsOptions)
     { }
 
@@ -53,7 +53,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO(ignat): move this logic to ads/bsyeti/libs/ytex/client/.
-TClientsCacheConfigPtr GetClustersConfigWithNormalClusterName(const TClientsCacheConfigPtr& config)
+TClientsCacheConfigPtr CloneConfigWithNormalizedClusterNames(const TClientsCacheConfigPtr& config)
 {
     YT_VERIFY(config);
 
@@ -67,6 +67,7 @@ TClientsCacheConfigPtr GetClustersConfigWithNormalClusterName(const TClientsCach
         newConfig->PerClusterConnection[ToString(GetNormalClusterName(cluster))] =
             CloneYsonStruct(connection, /*postprocess*/ false, /*setDefaults*/ false);
     }
+
     return newConfig;
 }
 

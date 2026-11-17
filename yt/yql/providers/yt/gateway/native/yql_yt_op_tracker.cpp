@@ -7,6 +7,7 @@
 #include <yt/cpp/mapreduce/interface/job_statistics.h>
 
 #include <util/datetime/base.h>
+#include <util/string/builder.h>
 #include <util/system/guard.h>
 #include <util/system/yassert.h>
 
@@ -64,6 +65,104 @@ const static TStringBuf CUSTOM_STATISTICS[] = {
     "Udf_AppliesCount",
 };
 
+THashMap<TString, i64> GetProgressDataStatistics(
+    const NYT::TJobStatistics& operationStatistic,
+    const NYT::TOperationAttributes& attributes,
+    bool final)
+{
+    if (!attributes.Type) {
+        return {};
+    }
+    using NYT::ETaskName;
+    using NYT::EOperationType;
+    TVector<NYT::TTaskName> inputTasks;
+    TVector<NYT::TTaskName> outputTasks;
+    switch (*attributes.Type) {
+        case EOperationType::Map:
+            inputTasks = outputTasks = {ETaskName::Map, ETaskName::OrderedMap};
+            break;
+        case EOperationType::Reduce:
+        case EOperationType::JoinReduce:
+            inputTasks = outputTasks = {ETaskName::SortedReduce, ETaskName::JoinReduce};
+            break;
+        case EOperationType::Merge:
+            inputTasks = outputTasks = {ETaskName::SortedMerge, ETaskName::OrderedMerge, ETaskName::UnorderedMerge};
+            break;
+        case EOperationType::MapReduce:
+            inputTasks = {ETaskName::PartitionMap0, ETaskName::Partition0};
+            outputTasks = {ETaskName::PartitionReduce, ETaskName::SortedReduce};
+            break;
+        case EOperationType::Sort: {
+            inputTasks = {ETaskName::Partition0, ETaskName::SimpleSort};
+            outputTasks = {ETaskName::FinalSort, ETaskName::SortedMerge, ETaskName::UnorderedMerge};
+            // Simple sort can either write the result or feed sorted_merge. Its
+            // job statistics alone cannot distinguish these plans while running.
+            if (final) {
+                bool hasSortedMerge = false;
+                const auto mergeStatistics = operationStatistic.TaskName({ETaskName::SortedMerge});
+                for (const auto& name : mergeStatistics.GetStatisticsNames()) {
+                    if (mergeStatistics.GetStatistics(name).Count()) {
+                        hasSortedMerge = true;
+                        break;
+                    }
+                }
+                if (!hasSortedMerge) {
+                    outputTasks.emplace_back(ETaskName::SimpleSort);
+                }
+            }
+            break;
+        }
+        default:
+            return {};
+    }
+
+    const auto inputStatistics = operationStatistic.TaskName(std::move(inputTasks));
+    const auto outputStatistics = operationStatistic.TaskName(std::move(outputTasks));
+    const auto mapperStatistics = operationStatistic.TaskName({ETaskName::PartitionMap0});
+
+    THashMap<TString, i64> counters;
+    if (inputStatistics.HasStatistics("data/input/uncompressed_data_size")) {
+        if (auto sum = inputStatistics.GetStatistics("data/input/uncompressed_data_size").Sum()) {
+            counters["input_bytes"] = *sum;
+        }
+    }
+    if (inputStatistics.HasStatistics("data/input/row_count")) {
+        if (auto sum = inputStatistics.GetStatistics("data/input/row_count").Sum()) {
+            counters["input_rows"] = *sum;
+        }
+    }
+
+    if (!attributes.BriefSpec || !attributes.BriefSpec->HasKey("output_table_paths")) {
+        return counters;
+    }
+    // Brief spec truncates the list, but preserves its full size in @count.
+    const auto& outputTableAttributes = (*attributes.BriefSpec)["output_table_paths"].GetAttributes();
+    if (!outputTableAttributes.HasKey("count")) {
+        return counters;
+    }
+    const auto outputCount = outputTableAttributes["count"].AsInt64();
+    const auto addOutputStatistics = [&] (i64 outputIndex, TStringBuf metric, TStringBuf counter) {
+        const TString name = TStringBuilder() << "data/output/" << outputIndex << "/" << metric;
+        if (!operationStatistic.HasStatistics(name)) {
+            return;
+        }
+        if (auto sum = outputStatistics.GetStatistics(name).Sum()) {
+            counters[TString(counter)] += *sum;
+        }
+
+        if (*attributes.Type == EOperationType::MapReduce && outputIndex > 0) {
+            if (auto sum = mapperStatistics.GetStatistics(name).Sum()) {
+                counters[TString(counter)] += *sum;
+            }
+        }
+    };
+    for (i64 outputIndex = 0; outputIndex < outputCount; ++outputIndex) {
+        addOutputStatistics(outputIndex, "uncompressed_data_size", "output_bytes");
+        addOutputStatistics(outputIndex, "row_count", "output_rows");
+    }
+    return counters;
+}
+
 TOperationTracker::TOperationTracker()
     : Thread_(TThread::TParams{Tracker, (void*)this}.SetName("yt_op_tracker"))
 {
@@ -85,7 +184,8 @@ void TOperationTracker::Stop() {
 
 TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& operation, TMaybe<ui32> publicId,
     const TString& ytServer, const TString& ytClusterName, const TOperationProgressWriter& progressWriter,
-    const TStatWriter& statWriter, std::function<void(NYT::TOperationId)> onOperationStarted, bool isExternalProgress)
+    const TStatWriter& statWriter, std::function<void(NYT::TOperationId)> onOperationStarted,
+    bool isExternalProgress, bool enableProgressDataStatistics)
 {
     auto future = operation->GetStartedFuture().Apply([operation](const auto& f) {
         f.GetValue();
@@ -108,8 +208,9 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
     });
 
     auto checker = [
-        future, operation, ytServer, progress, progressWriter, ytClusterName,
-        jobStatisticsUpdateTimer = TInstant::Now(), lastRetriableErrorStatus, isExternalProgress
+        future, operation, ytServer, progress, progressWriter, ytClusterName, enableProgressDataStatistics,
+        jobStatisticsUpdateTimer = TInstant::Now(), lastRetriableErrorStatus, isExternalProgress,
+        cachedDataStatistics = THashMap<TString, i64>{}
     ] () mutable {
         bool done = future.Wait(TDuration::Zero());
 
@@ -128,14 +229,17 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
                     }
                 }
 
-                auto attributes = operation->GetAttributes(
-                                                NYT::TGetOperationOptions()
-                                                    .AttributeFilter(
-                                                        NYT::TOperationAttributeFilter()
-                                                            .Add(NYT::EOperationAttribute::Alerts)
-                                                            .Add(NYT::EOperationAttribute::State)
-                                                            .Add(NYT::EOperationAttribute::BriefProgress)
-                                            ));
+                const bool updateJobStatistics = TInstant::Now() - jobStatisticsUpdateTimer >= TDuration::Minutes(1);
+                auto attributeFilter = NYT::TOperationAttributeFilter()
+                    .Add(NYT::EOperationAttribute::Alerts)
+                    .Add(NYT::EOperationAttribute::State)
+                    .Add(NYT::EOperationAttribute::BriefProgress);
+                if (updateJobStatistics && enableProgressDataStatistics) {
+                    attributeFilter
+                        .Add(NYT::EOperationAttribute::Type)
+                        .Add(NYT::EOperationAttribute::BriefSpec);
+                }
+                auto attributes = operation->GetAttributes(NYT::TGetOperationOptions().AttributeFilter(attributeFilter));
 
                 if (auto alerts = attributes.Alerts) {
                     for (const auto& [alertType, ytError] : *alerts) {
@@ -149,8 +253,12 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
                     progress.Alerts.push_back(TOperationProgress::TAlert{"start_error", *lastRetriableErrorStatus});
                 }
 
-                if (TInstant::Now() - jobStatisticsUpdateTimer >= TDuration::Minutes(1)) {
+                if (updateJobStatistics) {
                     auto operationStatistic = operation->GetJobStatistics();
+                    if (enableProgressDataStatistics) {
+                        auto progressStatistic = operationStatistic.JobState({NYT::EJobState::Running, NYT::EJobState::Completed});
+                        cachedDataStatistics = GetProgressDataStatistics(progressStatistic, attributes, false);
+                    }
 
                     if (operationStatistic.HasStatistics("data/input/data_weight") && operationStatistic.HasStatistics("data/output/0/data_weight")) {
                         if (auto inputOperationStatisticSum = operationStatistic.GetStatistics("data/input/data_weight").Sum()) {
@@ -185,6 +293,9 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
                     progress.Counters->Failed = briefProgress->Failed;
                     progress.Counters->Lost = briefProgress->Lost;
                     progress.Counters->Pending = briefProgress->Pending;
+                    if (enableProgressDataStatistics) {
+                        progress.Counters->Custom = cachedDataStatistics;
+                    }
                     stage = "Running";
                 } else {
                     auto state = attributes.State;
@@ -226,16 +337,21 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
     }
 
     // Make a final progress write
-    return future.Apply([operation, progress, progressWriter, statWriter, ytServer, ytClusterName, lastRetriableErrorStatus] (const TFuture<void>& f) mutable {
+    return future.Apply([
+        operation, progress, progressWriter, statWriter, ytServer, ytClusterName, lastRetriableErrorStatus,
+        enableProgressDataStatistics
+    ] (const TFuture<void>& f) mutable {
         f.GetValue();
 
-        auto attributes = operation->GetAttributes(
-                                NYT::TGetOperationOptions()
-                                    .AttributeFilter(
-                                        NYT::TOperationAttributeFilter()
-                                            .Add(NYT::EOperationAttribute::Alerts)
-                                            .Add(NYT::EOperationAttribute::BriefProgress)
-                            ));
+        auto attributeFilter = NYT::TOperationAttributeFilter()
+            .Add(NYT::EOperationAttribute::Alerts)
+            .Add(NYT::EOperationAttribute::BriefProgress);
+        if (enableProgressDataStatistics) {
+            attributeFilter
+                .Add(NYT::EOperationAttribute::Type)
+                .Add(NYT::EOperationAttribute::BriefSpec);
+        }
+        auto attributes = operation->GetAttributes(NYT::TGetOperationOptions().AttributeFilter(attributeFilter));
 
         if (auto alerts = attributes.Alerts) {
             for (const auto& [alertType, ytError] : *alerts) {
@@ -249,8 +365,8 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
             progress.Alerts.push_back(TOperationProgress::TAlert{"start_error", *lastRetriableErrorStatus});
         }
 
+        progress.Counters.ConstructInPlace();
         if (auto briefProgress = attributes.BriefProgress) {
-            progress.Counters.ConstructInPlace();
             progress.Counters->Completed = briefProgress->Completed;
             progress.Counters->Running = briefProgress->Running;
             progress.Counters->Total = briefProgress->Total;
@@ -260,6 +376,9 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
             progress.Counters->Pending = briefProgress->Pending;
         }
         auto operationStatistic = operation->GetJobStatistics();
+        if (enableProgressDataStatistics) {
+            progress.Counters->Custom = GetProgressDataStatistics(operationStatistic, attributes, true);
+        }
 
         TVector<TOperationStatistics::TEntry> statEntries;
         for (auto statName : YT_STATISTICS) {

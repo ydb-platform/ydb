@@ -7,6 +7,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/tx_scheme.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/tx.h>
@@ -114,10 +115,21 @@ namespace TEvSchemeShard {
         EvShredInfoResponse,
         EvShredManualStartupRequest,
 
+        EvChecksumAdmission,
+        EvChecksumAdmissionResult,
+
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD)");
+
+    struct TEvChecksumAdmission
+        : public TEventPB<TEvChecksumAdmission, NKikimrReplication::TEvChecksumAdmission, EvChecksumAdmission>
+    {};
+
+    struct TEvChecksumAdmissionResult
+        : public TEventPB<TEvChecksumAdmissionResult, NKikimrReplication::TEvChecksumAdmissionResult, EvChecksumAdmissionResult>
+    {};
 
     struct TEvProcessingResponse: public TEventPB<TEvProcessingResponse,
         NKikimrScheme::TEvProcessingResponse, EvProcessingResponse> {

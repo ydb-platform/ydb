@@ -438,6 +438,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     SubscribeToTempTableOwners();
 
     InitializeTablePartitionsFormatSweep();
+    ctx.Send(SelfId(), new TEvPrivate::TEvProgressChecksumAdmission());
 
     Become(&TThis::StateWork);
 }
@@ -736,6 +737,10 @@ TMessageSeqNo TSchemeShard::NextRound() {
 }
 
 void TSchemeShard::Clear() {
+    ChecksumAdmissions.clear();
+    ChecksumAdmissionWaiters.clear();
+    NextChecksumAdmissionOrder = 0;
+    ChecksumAdmissionWakeupScheduled = false;
     HasOrphanPlaceholders = false;
 
     // disarm ref handles: the whole state resets, PathsById clears first
@@ -5971,6 +5976,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
     ConfigureStatsOperations(appData->SchemeShardConfig, ctx);
     MaxCdcInitialScanShardsInFlight = appData->SchemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
+    MaxReplicationChecksumShardsInFlight = appData->SchemeShardConfig.GetMaxReplicationChecksumShardsInFlight();
     MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
     MaxBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxBuildIndexShardsInFlight();
     MaxStoredIndexBuilds = appData->SchemeShardConfig.GetMaxStoredIndexBuilds();
@@ -6294,6 +6300,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         // } // NForcedCompaction
 
         //namespace NCdcStreamScan {
+        HFuncTraced(TEvSchemeShard::TEvChecksumAdmission, Handle);
+        HFuncTraced(TEvPrivate::TEvProgressChecksumAdmission, Handle);
         HFuncTraced(TEvPrivate::TEvRunCdcStreamScan, Handle);
         HFuncTraced(TEvDataShard::TEvCdcStreamScanResponse, Handle);
         // } // NCdcStreamScan
@@ -9000,6 +9008,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         ConfigureStatsBatching(schemeShardConfig, ctx);
         ConfigureStatsOperations(schemeShardConfig, ctx);
         MaxCdcInitialScanShardsInFlight = schemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
+        MaxReplicationChecksumShardsInFlight = schemeShardConfig.GetMaxReplicationChecksumShardsInFlight();
         MaxRestoreBuildIndexShardsInFlight = schemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
         MaxBuildIndexShardsInFlight = schemeShardConfig.GetMaxBuildIndexShardsInFlight();
         MaxStoredIndexBuilds = schemeShardConfig.GetMaxStoredIndexBuilds();

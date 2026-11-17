@@ -6,6 +6,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     mirrorer_actor_ut.cpp
+    mirrorer_credentials_ut.cpp
 )
 
 PEERDIR(

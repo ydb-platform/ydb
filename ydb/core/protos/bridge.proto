@@ -13,6 +13,7 @@ message TClusterState {
         // listed in BridgeConfig, but has no resources in the cluster (not added yet, or already removed); takes no part in
         // any quorum, connections not allowed
         INACTIVE = 5;
+        HOT_STANDBY = 6; // connected, receives best-effort writes, takes no part in quorums; rejoin before promotion
     }
     repeated EPileState PerPileState = 1; // a state for every realm, including primary
     uint32 PrimaryPile = 2; // the current primary (must be SYNCHRONIZED)
@@ -54,6 +55,9 @@ message TClusterStateDetails {
         uint32 BridgePileId = 1;
         uint64 BecameUnsyncedGeneration = 2; // when did it become unsynced?
         bool UnsyncedBSC = 3; // true if BSC-managed part is not synced with this configuration yet
+        // the pile has gone to NOT_SYNCHRONIZED_2 right from HOT_STANDBY, writers taking it into account from now on and
+        // the background ones before, so BSC may take the part reconciled while in standby for synced
+        bool FromHotStandby = 4;
     }
     repeated TPileSyncState PileSyncState = 2; // per-pile sync state for current generation
 

@@ -1,12 +1,51 @@
 """Node gRPC listener ownership across failed starts and cancellation."""
 import asyncio
+import os
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest import mock
 
 from ydb.apps.bridge_skipper.ydbd_mock.lib import instance
+from ydb.apps.bridge_skipper.ydbd_mock.lib.replica import Replica
 from ydb.apps.bridge_skipper.ydbd_mock.lib.testkit import LiveCluster
 from ydb.apps.bridge_skipper.ydbd_mock.lib.topology import Topology, TopologyError
+
+
+class PersistentPilePathsTest(unittest.IsolatedAsyncioTestCase):
+    async def test_existing_literal_replica_paths_still_load(self):
+        with tempfile.TemporaryDirectory() as root:
+            names = ["pile%1", "pile one", "пайл"]
+            for name in names:
+                Replica(len(names), os.path.join(root, name, "replica.json")).set_detached(True)
+            cluster = LiveCluster(topology=Topology.with_free_ports(names, 1), state_root=root)
+            try:
+                await cluster.start()
+                for name in names:
+                    self.assertTrue((await cluster.state(name))["detached"])
+            finally:
+                await cluster.stop()
+
+    async def test_testkit_replica_paths_are_local_distinct_and_survive_recreation(self):
+        with tempfile.TemporaryDirectory() as root:
+            run = os.path.join(root, "nested", "run")
+            names = ["", ".", "..", "%", "../../foreign", os.path.join(root, "absolute")]
+            cluster = LiveCluster(topology=Topology.with_free_ports(names, 1), state_root=run)
+            try:
+                await cluster.start()
+                paths = [os.path.abspath(proc.inst.replica.path) for proc in cluster.procs.values()]
+                self.assertEqual(len(set(paths)), len(names))
+                for path in paths:
+                    self.assertEqual(os.path.commonpath([run, path]), run)
+                status, state = await cluster.http("", "POST", "/replica", {"detach": True})
+                self.assertEqual(status, 200, state)
+                self.assertTrue(state["detached"])
+                await cluster.stop()
+                await cluster.start()
+                for name in names:
+                    self.assertEqual((await cluster.state(name))["detached"], name == "")
+            finally:
+                await cluster.stop()
 
 
 class ControlledGrpcServer:

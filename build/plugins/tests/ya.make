@@ -9,6 +9,7 @@ TEST_SRCS(
     test_gobuild.py
     test_java.py
     test_nots_checks.py
+    test_pybuild.py
     test_requirements.py
     test_res.py
     test_yql_prebuilt.py
@@ -18,6 +19,7 @@ TEST_SRCS(
 
 PEERDIR(
     build/plugins
+    build/plugins/lib/nots/package_manager
     build/plugins/lib/proxy
     build/plugins/lib/test_const/proxy
     build/plugins/tests/fake_ymake
@@ -25,6 +27,7 @@ PEERDIR(
 )
 
 DATA(
+    arcadia/devtools/frontend_build_platform/nots/constants/src/tier0-settings.yaml
     arcadia/build/rules/go/extended_lint.yaml
     arcadia/build/rules/go/migrations.yaml
     arcadia/build/rules/go/risky_imports.yaml

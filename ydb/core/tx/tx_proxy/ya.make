@@ -28,9 +28,6 @@ GENERATE_ENUM_SERIALIZATION(read_table_impl.h)
 GENERATE_ENUM_SERIALIZATION(upload_rows_counters.h)
 
 PEERDIR(
-    ydb/library/actors/core
-    ydb/library/actors/helpers
-    ydb/library/actors/interconnect
     util/draft
     ydb/core/actorlib_impl
     ydb/core/base
@@ -40,6 +37,7 @@ PEERDIR(
     ydb/core/formats
     ydb/core/grpc_services/local_rpc
     ydb/core/io_formats/arrow/scheme
+    ydb/core/kqp/predictor
     ydb/core/protos
     ydb/core/scheme
     ydb/core/security/sasl
@@ -56,6 +54,9 @@ PEERDIR(
     ydb/core/tx/tx_allocator
     ydb/core/tx/tx_allocator_client
     ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/actors/helpers
+    ydb/library/actors/interconnect
     ydb/library/login
     ydb/library/mkql_proto/protos
     ydb/public/lib/base

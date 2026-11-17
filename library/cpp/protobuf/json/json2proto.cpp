@@ -11,6 +11,7 @@
 
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
 #include <util/string/ascii.h>
 #include <util/string/cast.h>
@@ -550,6 +551,85 @@ Json2RepeatedField(const NJson::TJsonValue& json,
 }
 
 namespace NProtobufJson {
+    namespace {
+        class TJsonReaderValidationCallbacks: public NJson::TParserCallbacks {
+        public:
+            TJsonReaderValidationCallbacks(NJson::TJsonValue& value, ui64 maxDepth)
+                : TParserCallbacks(value, true)
+                , MaxDepth(maxDepth)
+            {
+            }
+
+            bool OnOpenMap() override {
+                return TParserCallbacks::OnOpenMap() && IsWithinDepthLimit(ValuesStack.size());
+            }
+
+            bool OnOpenArray() override {
+                return TParserCallbacks::OnOpenArray() && IsWithinDepthLimit(ValuesStack.size());
+            }
+
+            bool OnMapKey(const TStringBuf& key) override {
+                // The previous value is already stored, including null and containers.
+                Y_ENSURE(!ValuesStack.back()->Has(key), "duplicate JSON key \"" << key << "\"");
+                // ReadJsonTree counts the pending field value as an extra stack entry.
+                return TParserCallbacks::OnMapKey(key) && IsWithinDepthLimit(ValuesStack.size() + 1);
+            }
+
+        private:
+            bool IsWithinDepthLimit(size_t depth) const {
+                return MaxDepth == 0 || depth <= MaxDepth;
+            }
+
+            const ui64 MaxDepth;
+        };
+
+        void ValidateFieldAliases(const NJson::TJsonValue& json, const google::protobuf::Descriptor& descriptor,
+                                  const TJson2ProtoConfig& config) {
+            const auto& jsonMap = json.GetMap();
+            for (int f = 0; f < descriptor.field_count(); ++f) {
+                const auto* field = descriptor.field(f);
+                THashSet<TString> names{GetFieldName(*field, config)};
+                if (!field->json_name().empty()) {
+                    names.insert(TString(field->json_name()));
+                }
+                if (!field->name().empty()) {
+                    names.insert(TString(field->name()));
+                }
+
+                auto matched = jsonMap.end();
+                for (const auto& name : names) {
+                    const auto it = jsonMap.find(name);
+                    if (it != jsonMap.end()) {
+                        Y_ENSURE(matched == jsonMap.end(), "multiple JSON keys \"" << matched->first << "\" and \"" << name
+                                                                                   << "\" for field \"" << field->full_name() << "\"");
+                        matched = it;
+                    }
+                }
+            }
+        }
+
+        void ValidateOneofConflicts(const NJson::TJsonValue& json, const google::protobuf::Descriptor& descriptor,
+                                    const TJson2ProtoConfig& config) {
+            THashMap<const google::protobuf::OneofDescriptor*, const google::protobuf::FieldDescriptor*> oneofs;
+            for (int f = 0; f < descriptor.field_count(); ++f) {
+                const auto* field = descriptor.field(f);
+                const auto* oneof = field->containing_oneof();
+                if (!oneof || !HasFieldValue(json, ResolveFieldNameInJson(json, *field, config))) {
+                    continue;
+                }
+
+                const auto [it, inserted] = oneofs.emplace(oneof, field);
+                Y_ENSURE(inserted, "multiple fields \"" << it->second->name() << "\" and \"" << field->name()
+                                                        << "\" for oneof \"" << oneof->full_name() << "\"");
+            }
+        }
+    } // namespace
+
+    void NDetail::ReadJsonTreeWithDuplicateKeyValidation(IInputStream& in, const NJson::TJsonReaderConfig& config, NJson::TJsonValue& value) {
+        TJsonReaderValidationCallbacks callbacks(value, config.MaxDepth);
+        Y_ENSURE(NJson::ReadJson(&in, &config, &callbacks), "Failed to parse JSON");
+    }
+
     void MergeJson2Proto(const NJson::TJsonValue& json, google::protobuf::Message& proto, const TJson2ProtoConfig& config) {
         if (json.IsNull()) {
             return;
@@ -610,6 +690,13 @@ namespace NProtobufJson {
         }
         Y_ENSURE(json.IsMap(), "Failed to merge json to proto for message: " << descriptor->full_name() << ", expected json map.");
 
+        if (!config.AllowMultipleFieldAliases && config.AllowFieldNameAliases) {
+            ValidateFieldAliases(json, *descriptor, config);
+        }
+        if (!config.AllowOneofConflicts) {
+            ValidateOneofConflicts(json, *descriptor, config);
+        }
+
         for (int f = 0, endF = descriptor->field_count(); f < endF; ++f) {
             const google::protobuf::FieldDescriptor* field = descriptor->field(f);
             Y_ASSERT(!!field);
@@ -651,7 +738,12 @@ namespace NProtobufJson {
         jsonCfg.AllowComments = config.AllowComments;
 
         NJson::TJsonValue jsonValue;
-        ReadJsonTree(json, &jsonCfg, &jsonValue, /* throwOnError = */ true);
+        if (!config.AllowDuplicateJsonKeys) {
+            TMemoryInput in(json);
+            NDetail::ReadJsonTreeWithDuplicateKeyValidation(in, jsonCfg, jsonValue);
+        } else {
+            ReadJsonTree(json, &jsonCfg, &jsonValue, /* throwOnError = */ true);
+        }
 
         MergeJson2Proto(jsonValue, proto, config);
     }

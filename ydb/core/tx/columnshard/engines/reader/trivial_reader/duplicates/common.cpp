@@ -15,7 +15,8 @@ TPortionStore::TPortionStore(THashMap<ui64, TPortionInfo::TConstPtr>&& portions)
 
 TPortionInfo::TConstPtr TPortionStore::GetPortionVerified(const ui64 portionId) const {
     auto* findPortion = Portions.FindPtr(portionId);
-    AFL_VERIFY(findPortion)("portion", portionId);
+    YDB_LOG_VERIFY(findPortion,
+        {"portion", portionId});
     return *findPortion;
 }
 
@@ -41,7 +42,7 @@ TBordersIterator::TBordersIterator(std::vector<TBorder>&& borders, const ui64 po
 }
 
 TBordersBatch TBordersIterator::Next() {
-    AFL_VERIFY(NextBorder < Borders.size());
+    YDB_LOG_VERIFY(NextBorder < Borders.size());
     TBordersBatch batch;
     for (; NextBorder < Borders.size() && (batch.GetPortionIds().size() < PortionsCountSoftLimit || Borders[NextBorder].GetPortionIds().empty());
          ++NextBorder) {

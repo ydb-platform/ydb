@@ -52,6 +52,9 @@ message TPileSynchronizationResult {
     // Known storage-owning databases whose pools are all bridged; shared storage counts once.
     // Omitted for pool-filtered reports. Serverless databases without own storage pools do not increase this count.
     optional uint64 bridge_databases = 5;
+    // Each fully bridged storage owner is counted once, using all required copies in all piles.
+    // Omitted for pool- or pile-filtered reports.
+    TDatabaseSyncCounts bridge_databases_by_sync_status = 6;
 }
 
 message TDatabaseSynchronizationResult {
@@ -104,7 +107,7 @@ message TGroupSyncCounts {
     uint64 unknown = 5;
 }
 
-// One known storage owner per pile; shared storage counts once.
+// Known storage owners classified by synchronization status; shared storage counts once.
 // total = synced + syncing + pending + unknown + not_required.
 message TDatabaseSyncCounts {
     uint64 total = 1;

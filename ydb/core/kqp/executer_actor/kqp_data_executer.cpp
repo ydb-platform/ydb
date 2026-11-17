@@ -17,7 +17,7 @@
 #include <ydb/core/kqp/common/simple/reattach.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -60,7 +60,7 @@ public:
         const TExecuterConfig& executerConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings,
         TPartitionPrunerConfig partitionPrunerConfig,
         const TShardIdToTableInfoPtr& shardIdToTableInfo,
@@ -73,7 +73,7 @@ public:
         TVector<NKikimr::TTableId> tableIdsForSnapshot)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
             database, userToken, std::move(formatsSettings), counters,
-            executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
+            executerConfig, userRequestContext, TWilsonKqp::DataExecuter,
             "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService, useKqpTasksGraphV2)
         , ShardIdToTableInfo(shardIdToTableInfo)
         , TableIdsForSnapshot(std::move(tableIdsForSnapshot))
@@ -127,7 +127,7 @@ public:
             !HasOlapTable &&
             (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
         );
-        AFL_ENSURE(!forceSnapshot || Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+        YDB_LOG_ENSURE(!forceSnapshot || Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
 
         return forceSnapshot;
     }
@@ -214,7 +214,7 @@ public:
             MakeResponseAndPassAway();
             return;
         }  else if (Request.LocksOp == ELocksOp::Commit) {
-            AFL_ENSURE(!ReadOnlyTx);
+            YDB_LOG_ENSURE(!ReadOnlyTx);
             Become(&TKqpDataExecuter::FinalizeState);
             YDB_LOG_DEBUG("Send Commit to BufferActor",
                 {"marker", "KQPDATA"},
@@ -330,7 +330,7 @@ public:
     }
 
     void HandleFinalize(TEvents::TEvUndelivered::TPtr& ev) {
-        AFL_ENSURE(ev->Sender == BufferActorId);
+        YDB_LOG_ENSURE(ev->Sender == BufferActorId);
         YDB_LOG_WARN("Got Undelivered from BufferActor",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},
@@ -1259,7 +1259,7 @@ private:
                     // shards it sent EvLocks to; other shards (e.g. locked by plain
                     // reads) are registered without it.
                     if (const auto* meta = shardMetas.FindPtr(lock.GetDataShard())) {
-                        AFL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+                        YDB_LOG_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath, *meta);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::PESSIMISTIC_LOCK | IKqpTransactionManager::EAction::READ, Request.QuerySpanId);
                     } else {
@@ -1394,7 +1394,7 @@ private:
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     NFormats::TFormatsSettings formatsSettings, TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
@@ -1403,7 +1403,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TVector<NKikimr::TTableId> tableIdsForSnapshot)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, std::move(formatsSettings), counters, executerConfig,
-        std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
+        std::move(asyncIoFactory), creator, userRequestContext, federatedQuerySetup, GUCSettings,
         std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig,
         channelService, useKqpTasksGraphV2, std::move(tableIdsForSnapshot));
 }

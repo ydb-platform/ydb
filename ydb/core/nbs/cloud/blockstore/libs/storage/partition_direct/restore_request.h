@@ -35,7 +35,7 @@ public:
     NThreading::TFuture<TAggregatedListPBufferResponse> GetFuture() const;
 
 private:
-    void DoRun(THostIndex hostIndex);
+    void DoListPBuffers(THostIndex hostIndex);
     void OnResponse(THostIndex hostIndex, TListPBufferResponse response);
     void Reply(NProto::TError error);
 

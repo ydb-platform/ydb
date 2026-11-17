@@ -40,7 +40,7 @@ void TRestoreRequestExecutor::Run()
     Y_ABORT_UNLESS(!HostsToList.Empty());
 
     for (const auto host: HostsToList) {
-        DoRun(host);
+        DoListPBuffers(host);
     }
 }
 
@@ -50,7 +50,7 @@ TRestoreRequestExecutor::GetFuture() const
     return Promise.GetFuture();
 }
 
-void TRestoreRequestExecutor::DoRun(THostIndex hostIndex)
+void TRestoreRequestExecutor::DoListPBuffers(THostIndex hostIndex)
 {
     auto future = DirectBlockGroup->ListPBuffers(hostIndex);
     future.Subscribe(

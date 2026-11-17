@@ -9,10 +9,9 @@ DATA(
     arcadia/ydb/tests/functional/sqs/with_quotas
 )
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
-    REQUIREMENTS(ram:32 cpu:1)
-ELSE()
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(ram:32)
 ENDIF()
 
 DEPENDS(

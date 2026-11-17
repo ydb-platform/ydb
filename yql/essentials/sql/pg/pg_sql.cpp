@@ -6644,10 +6644,10 @@ public:
     }
 
     NYql::TAstParseResult TextAndMessageToAst(const TString& query, const google::protobuf::Message& protoAst,
-                                              const NSQLTranslation::TSQLHints& hints, const NSQLTranslation::TTranslationSettings& settings) final {
+                                              const NSQLTranslation::TParsedTokenList& tokens, const NSQLTranslation::TTranslationSettings& settings) final {
         Y_UNUSED(query);
         Y_UNUSED(protoAst);
-        Y_UNUSED(hints);
+        Y_UNUSED(tokens);
         Y_UNUSED(settings);
         ythrow yexception() << "Unsupported method";
     }

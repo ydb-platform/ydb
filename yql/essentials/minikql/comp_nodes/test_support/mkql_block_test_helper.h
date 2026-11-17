@@ -3,10 +3,10 @@
 #include "mkql_block_fuzzer.h"
 
 #include <yql/essentials/ast/yql_expr.h>
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_test_setup.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/udf_value_test_support/stream_view.h>
 #include <yql/essentials/public/udf/udf_type_printer.h>
 

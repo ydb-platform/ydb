@@ -1,3 +1,4 @@
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -10,7 +11,6 @@
 #include <yql/essentials/utils/sort.h>
 
 #include "mkql_computation_node_ut.h"
-#include "mkql_program_builder_test_utils.h"
 
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 

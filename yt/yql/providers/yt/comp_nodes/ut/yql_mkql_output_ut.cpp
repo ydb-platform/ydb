@@ -1,5 +1,6 @@
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_test_registrar.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_test_setup.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>

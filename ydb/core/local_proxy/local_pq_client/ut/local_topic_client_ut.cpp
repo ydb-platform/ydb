@@ -38,15 +38,14 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(configured->Get()->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
 
         TAutoPtr<IEventHandle> notification;
-        const auto* update = runtime.GrabEdgeEventIf<NConsole::TEvConsole::TEvConfigNotificationRequest>(notification,
-            [](const auto& event) {
-                const auto& mapping = event.Record.GetConfig().GetResourcePathPrefixMapping();
-                return mapping.RulesSize() == 1 && mapping.GetRules(0).GetSrc() == TOPIC_PATH
-                    && mapping.GetRules(0).GetDst() == "/Root/missing-topic";
-            }, TEST_TIMEOUT);
+        const auto* update = runtime.GrabEdgeEventIf<NConsole::TEvConsole::TEvConfigNotificationRequest>(notification, [](const auto& event) {
+            const auto& mapping = event.Record.GetConfig().GetResourcePathPrefixMapping();
+            return mapping.RulesSize() == 1 && mapping.GetRules(0).GetSrc() == TOPIC_PATH &&
+                   mapping.GetRules(0).GetDst() == "/Root/missing-topic";
+        }, TEST_TIMEOUT);
         UNIT_ASSERT(update);
-        runtime.Send(new IEventHandle(notification->Sender, sender,
-            new NConsole::TEvConsole::TEvConfigNotificationResponse(update->Record), 0, notification->Cookie));
+        runtime.Send(new IEventHandle(
+            notification->Sender, sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(update->Record), 0, notification->Cookie));
         // The dispatcher must enqueue the update to every proxy before the SDK request.
         runtime.Send(dispatcher, sender, new NConsole::TEvConfigsDispatcher::TEvGetConfigRequest(kind));
         runtime.GrabEdgeEventRethrow<NConsole::TEvConfigsDispatcher::TEvGetConfigResponse>(sender, TEST_TIMEOUT);

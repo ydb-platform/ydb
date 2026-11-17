@@ -290,7 +290,9 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
             auto pickBlob = [&](const auto& blobs) {
                 std::vector<const TLayout::TLayoutRecord*> recs;
                 for (ui64 sstId : brokenSstIds) {
-                    recs.insert(recs.end(), inplaceBlobs[sstId].begin(), inplaceBlobs[sstId].end());
+                    if (const auto it = blobs.find(sstId); it != blobs.end()) {
+                        recs.insert(recs.end(), it->second.begin(), it->second.end());
+                    }
                 }
                 if (recs.empty()) {
                     for (const auto& [key, value] : blobs) {
@@ -322,6 +324,8 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
             for (ui32 i = 0; i < v.size(); ++i) {
                 std::swap(v[i], v[i + RandomNumber(v.size() - i)]);
             }
+            UNIT_ASSERT_C(!v.empty(), "all corruptions are done, but scrubber reported checkpoints# "
+                << passedCheckpoints << " expected# " << (ui32)TEvScrubNotify::ALL);
             const ui32 num = 1 + RandomNumber(Min<ui32>(v.size(), 10));
             for (ui32 i = 0; i < num; ++i) {
                 ++checkpoints[v[i]].first;

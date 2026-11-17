@@ -1320,10 +1320,13 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         const ui64 replacementGuid = 2; // the physical device still contains GUID 1
         const ui32 replacementGroupId = TGroupID(EGroupConfigurationType::Static, DOMAIN_ID, 1).GetRaw();
         std::set<TActorId> oldActors;
+        std::set<TActorId> stoppedActors;
+        std::set<ui32> vslotsWaitingForError;
         for (const auto& vdisk : ss.GetVDisks()) {
             const auto& loc = vdisk.GetVDiskLocation();
             oldActors.insert(runtime.GetLocalServiceId(MakeBlobStorageVDiskID(nodeId, loc.GetPDiskID(),
                 loc.GetVDiskSlotID()), 0));
+            vslotsWaitingForError.insert(loc.GetVDiskSlotID());
         }
         const TActorId oldPDiskActor = runtime.GetLocalServiceId(MakeBlobStoragePDiskID(nodeId, 0), 0);
         bool oldPDiskStopped = false;
@@ -1338,8 +1341,15 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             if (type == TEvents::TEvPoisonTaken::EventType && ev->Sender == oldPDiskActor) {
                 oldPDiskStopped = true;
             }
-            if (type == TEvents::TEvGone::EventType) {
-                oldActors.erase(ev->Sender);
+            if (type == TEvents::TEvGone::EventType && oldActors.contains(ev->Sender)) {
+                stoppedActors.insert(ev->Sender);
+            }
+            if (type == TEvStatusUpdate::EventType && !oldActors.contains(ev->Sender)) {
+                const auto *msg = ev->Get<TEvStatusUpdate>();
+                if (msg->NodeId == nodeId && msg->PDiskId == replacementPDiskId
+                        && msg->Status == NKikimrBlobStorage::EVDiskStatus::ERROR) {
+                    vslotsWaitingForError.erase(msg->VSlotId);
+                }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
@@ -1374,7 +1384,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             return ev->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenStorageConfigConfirm;
         }, {edge});
-        runtime.SimulateSleep(TDuration::Seconds(1));
+        TDispatchOptions waitForPoison;
+        waitForPoison.CustomFinalCondition = [&] { return bool(oldPDiskPoison); };
+        runtime.DispatchEvents(waitForPoison);
 
         // The replacement has to wait for the old PDisk to unlock the device, however long this takes.
         UNIT_ASSERT(oldPDiskPoison);
@@ -1382,23 +1394,23 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             == (replacementPDiskId == 0 ? oldPDiskActor : TActorId()));
         holdOldPDiskPoison = false;
         runtime.Send(oldPDiskPoison.Release(), 0);
-        runtime.SimulateSleep(TDuration::Seconds(1)); // let VDisks consume the asynchronous YardInit results
+
+        // Simulated time can run ahead of the real PDisk I/O threads. Wait for their results and the
+        // replacement VDisks' error announcements rather than exhausting a simulated polling budget.
+        TDispatchOptions waitForReplacement;
+        waitForReplacement.CustomFinalCondition = [&] {
+            return oldPDiskStopped && stoppedActors.size() == oldActors.size() && vslotsWaitingForError.empty();
+        };
+        runtime.DispatchEvents(waitForReplacement);
 
         for (const auto& vdisk : ss.GetVDisks()) {
             const auto& loc = vdisk.GetVDiskLocation();
-            auto status = NKikimrProto::NOTREADY;
-            for (ui32 attempt = 0; status == NKikimrProto::NOTREADY && attempt < 30; ++attempt) {
-                runtime.Send(new IEventHandle(MakeBlobStorageVDiskID(nodeId, replacementPDiskId, loc.GetVDiskSlotID()),
-                    edge, new TEvBlobStorage::TEvVStatus(VDiskIDFromVDiskID(vdisk.GetVDiskID()))), 0);
-                const auto response = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVStatusResult>(edge,
-                    TDuration::Seconds(30));
-                UNIT_ASSERT(response);
-                status = response->Get()->Record.GetStatus();
-                if (status == NKikimrProto::NOTREADY) {
-                    runtime.SimulateSleep(TDuration::Seconds(1)); // the replacement is still initializing
-                }
-            }
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::VDISK_ERROR_STATE);
+            runtime.Send(new IEventHandle(MakeBlobStorageVDiskID(nodeId, replacementPDiskId, loc.GetVDiskSlotID()),
+                edge, new TEvBlobStorage::TEvVStatus(VDiskIDFromVDiskID(vdisk.GetVDiskID()))), 0);
+            const auto response = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVStatusResult>(edge,
+                TDuration::Seconds(30));
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrProto::VDISK_ERROR_STATE);
         }
         runtime.Send(new IEventHandle(MakeBlobStoragePDiskID(nodeId, replacementPDiskId), edge,
             new NPDisk::TEvYardInit(1, TVDiskID(replacementGroupId, 1, 0, 0, 0), replacementGuid)), 0);
@@ -1407,7 +1419,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT_VALUES_EQUAL(init->Get()->Status, NKikimrProto::CORRUPTED);
         UNIT_ASSERT_STRING_CONTAINS(init->Get()->ErrorReason, "guid error expected# 2 on-disk# 1");
         UNIT_ASSERT(oldPDiskStopped);
-        UNIT_ASSERT(oldActors.empty());
+        UNIT_ASSERT_VALUES_EQUAL(stoppedActors.size(), oldActors.size());
     }
 
     CUSTOM_UNIT_TEST(TestStaticServiceSetReplacesObsoletePDiskOnSamePath) {

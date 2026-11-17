@@ -305,6 +305,9 @@ void TConfigFlags::InitFlags() {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
             return false;
         }
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
         auto dataSink = args[0];
         if (auto p = Types_.DataSinkMap.FindPtr(dataSink)) {
             if ((*p)->GetName() != dataSink) {

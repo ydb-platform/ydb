@@ -914,8 +914,9 @@ public:
             ui64 publishedRowCount = 0;
             TString srcFilePath = Services_->GetTmpTablePath(GetOutTable(publish.Input().Item(0)).Cast<TYtOutTable>().Name().Value());
             const i64 numParts = NFile::ReadSplittedPartsCount(srcFilePath);
+            const bool copyParts = numParts > 0 && publish.Input().Size() == 1 && !append;
 
-            if (numParts > 0) {
+            if (copyParts) {
                 // Part files are already formatted — hardlink or copy them directly.
                 for (i64 p = 0; p < numParts; ++p) {
                     NFs::HardLinkOrCopy(
@@ -956,6 +957,9 @@ public:
                 if (dstIsDynamic && NFs::Exists(destFilePath + ".attr")) {
                     TIFStream input(destFilePath + ".attr");
                     destAttrs = NYT::NodeFromYsonStream(&input);
+                }
+                if (!copyParts) {
+                    attrs.AsMap().erase("splitted");
                 }
 
                 const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *options.Config());

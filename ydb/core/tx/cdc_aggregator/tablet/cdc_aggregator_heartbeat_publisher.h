@@ -28,7 +28,7 @@ namespace TEvCdcAggregatorHeartbeatPublisher {
         {
         }
 
-        const NPQ::THeartbeat Heartbeat;
+        NPQ::THeartbeat Heartbeat;
     };
 }
 

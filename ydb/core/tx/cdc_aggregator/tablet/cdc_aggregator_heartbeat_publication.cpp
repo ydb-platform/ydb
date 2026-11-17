@@ -31,11 +31,16 @@ TVector<ui32> TCdcAggregatorHeartbeatPublication::TakePartitionsToEmit() {
             partitionIds.push_back(partitionId);
         }
     }
-    std::sort(partitionIds.begin(), partitionIds.end());
     return partitionIds;
 }
 
 bool TCdcAggregatorHeartbeatPublication::CompleteEmit(ui32 partitionId, const TRowVersion& emittedVersion) {
+    const auto partitionEmittedVersion = EmittedVersionByPartitionId.find(partitionId);
+    if (partitionEmittedVersion == EmittedVersionByPartitionId.end()) {
+        return false;
+    }
+    partitionEmittedVersion->second = std::max(partitionEmittedVersion->second, emittedVersion);
+
     const auto inFlight = InFlightVersionByPartitionId.find(partitionId);
     if (inFlight == InFlightVersionByPartitionId.end()) {
         return false;
@@ -43,13 +48,11 @@ bool TCdcAggregatorHeartbeatPublication::CompleteEmit(ui32 partitionId, const TR
     const auto inFlightVersion = inFlight->second;
     InFlightVersionByPartitionId.erase(inFlight);
 
-    auto& partitionEmittedVersion = EmittedVersionByPartitionId.at(partitionId);
-    partitionEmittedVersion = std::max(partitionEmittedVersion, emittedVersion);
-    if (partitionEmittedVersion < inFlightVersion) {
+    if (partitionEmittedVersion->second < inFlightVersion) {
         FailedPartitionIds.insert(partitionId);
         return false;
     }
-    if (partitionEmittedVersion < Heartbeat->Version) {
+    if (partitionEmittedVersion->second < Heartbeat->Version) {
         InFlightVersionByPartitionId.emplace(partitionId, Heartbeat->Version);
         return true;
     }
@@ -60,6 +63,12 @@ void TCdcAggregatorHeartbeatPublication::FailEmit(ui32 partitionId) {
     if (InFlightVersionByPartitionId.erase(partitionId)) {
         FailedPartitionIds.insert(partitionId);
     }
+}
+
+void TCdcAggregatorHeartbeatPublication::StopEmit(ui32 partitionId) {
+    EmittedVersionByPartitionId.erase(partitionId);
+    InFlightVersionByPartitionId.erase(partitionId);
+    FailedPartitionIds.erase(partitionId);
 }
 
 void TCdcAggregatorHeartbeatPublication::RetryFailedEmits() {

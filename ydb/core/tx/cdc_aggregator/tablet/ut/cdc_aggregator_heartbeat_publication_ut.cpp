@@ -4,12 +4,20 @@
 
 #include <util/string/cast.h>
 
+#include <algorithm>
+
 namespace NKikimr::NCdcAggregator {
 
 namespace {
 
 NPQ::THeartbeat MakeHeartbeat(ui64 step) {
     return NPQ::THeartbeat{.Version = TRowVersion(step, 0), .Data = ToString(step)};
+}
+
+TVector<ui32> TakeSortedPartitionsToEmit(TCdcAggregatorHeartbeatPublication& publication) {
+    auto partitionIds = publication.TakePartitionsToEmit();
+    std::sort(partitionIds.begin(), partitionIds.end());
+    return partitionIds;
 }
 
 } // namespace
@@ -21,7 +29,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorHeartbeatPublicationTest) {
         publication.SetHeartbeat(MakeHeartbeat(100));
 
         // when
-        const auto partitionIds = publication.TakePartitionsToEmit();
+        const auto partitionIds = TakeSortedPartitionsToEmit(publication);
 
         // then
         UNIT_ASSERT_VALUES_EQUAL(partitionIds, TVector<ui32>({0, 1}));
@@ -118,7 +126,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorHeartbeatPublicationTest) {
 
         // then
         UNIT_ASSERT(!emitAgain);
-        UNIT_ASSERT(publication.HasFailedEmits());
+        UNIT_ASSERT(publication.GetFailedEmitCount() > 0);
         UNIT_ASSERT(publication.TakePartitionsToEmit().empty());
     }
 
@@ -132,7 +140,7 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorHeartbeatPublicationTest) {
         publication.FailEmit(0);
 
         // then
-        UNIT_ASSERT(publication.HasFailedEmits());
+        UNIT_ASSERT(publication.GetFailedEmitCount() > 0);
         UNIT_ASSERT(publication.TakePartitionsToEmit().empty());
     }
 
@@ -160,8 +168,53 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorHeartbeatPublicationTest) {
         publication.FailEmit(0);
 
         // then
-        UNIT_ASSERT(!publication.HasFailedEmits());
+        UNIT_ASSERT(publication.GetFailedEmitCount() == 0);
         UNIT_ASSERT_VALUES_EQUAL(publication.TakePartitionsToEmit(), TVector<ui32>({0}));
+    }
+
+    Y_UNIT_TEST(ShouldNotEmitWhenPartitionIsStopped) {
+        // given
+        TCdcAggregatorHeartbeatPublication publication({0, 1});
+        publication.SetHeartbeat(MakeHeartbeat(100));
+        publication.TakePartitionsToEmit();
+        publication.StopEmit(0);
+        publication.CompleteEmit(1, TRowVersion(100, 0));
+        publication.SetHeartbeat(MakeHeartbeat(200));
+
+        // when
+        const auto partitionIds = publication.TakePartitionsToEmit();
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(partitionIds, TVector<ui32>({1}));
+    }
+
+    Y_UNIT_TEST(ShouldKeepEmittedVersionWhenResponseArrivesAfterRetry) {
+        // given
+        TCdcAggregatorHeartbeatPublication publication({0});
+        publication.SetHeartbeat(MakeHeartbeat(100));
+        publication.CompleteEmit(0, TRowVersion(200, 0));
+        publication.SetHeartbeat(MakeHeartbeat(150));
+
+        // when
+        const auto partitionIds = publication.TakePartitionsToEmit();
+
+        // then
+        UNIT_ASSERT(partitionIds.empty());
+    }
+
+    Y_UNIT_TEST(ShouldWaitForRetryWhenPartitionDidNotEmitAndHeartbeatAdvanced) {
+        // given
+        TCdcAggregatorHeartbeatPublication publication({0});
+        publication.SetHeartbeat(MakeHeartbeat(100));
+        publication.TakePartitionsToEmit();
+        publication.SetHeartbeat(MakeHeartbeat(200));
+
+        // when
+        const bool emitAgain = publication.CompleteEmit(0, TRowVersion::Min());
+
+        // then
+        UNIT_ASSERT(!emitAgain);
+        UNIT_ASSERT_VALUES_EQUAL(publication.GetFailedEmitCount(), 1);
     }
 }
 

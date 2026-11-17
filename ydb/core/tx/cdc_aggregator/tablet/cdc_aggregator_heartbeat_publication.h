@@ -19,14 +19,15 @@ public:
         return Heartbeat;
     }
 
-    bool HasFailedEmits() const {
-        return !FailedPartitionIds.empty();
+    size_t GetFailedEmitCount() const {
+        return FailedPartitionIds.size();
     }
 
     void SetHeartbeat(const NPQ::THeartbeat& heartbeat);
     TVector<ui32> TakePartitionsToEmit();
     bool CompleteEmit(ui32 partitionId, const TRowVersion& emittedVersion);
     void FailEmit(ui32 partitionId);
+    void StopEmit(ui32 partitionId);
     void RetryFailedEmits();
 
 private:

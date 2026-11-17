@@ -1,5 +1,5 @@
-#include "cdc_aggregator_heartbeat_publication.h"
 #include "cdc_aggregator_heartbeat_publisher.h"
+#include "cdc_aggregator_heartbeat_publication.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
@@ -17,7 +17,7 @@ namespace NKikimr::NCdcAggregator {
 
 namespace {
 
-TVector<ui32> GetPartitionIds(const TVector<TCdcAggregatorHeartbeatPublisherPartition>& partitions) {
+TVector<ui32> MakePartitionIds(const TVector<TCdcAggregatorHeartbeatPublisherPartition>& partitions) {
     TVector<ui32> partitionIds;
     for (const auto& partition : partitions) {
         partitionIds.push_back(partition.PartitionId);
@@ -47,10 +47,23 @@ std::optional<TRowVersion> ParseEmittedVersion(const NKikimrClient::TResponse& r
     return TRowVersion(result.GetStep(), result.GetTxId());
 }
 
+bool IsPermanentEmitError(NPersQueue::NErrorCode::EErrorCode errorCode) {
+    switch (errorCode) {
+    case NPersQueue::NErrorCode::BAD_REQUEST:
+    case NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE:
+    case NPersQueue::NErrorCode::WRONG_PARTITION_NUMBER:
+    case NPersQueue::NErrorCode::TABLET_IS_DROPPED:
+        return true;
+    default:
+        return false;
+    }
+}
+
 } // namespace
 
 class TCdcAggregatorHeartbeatPublisher : public TActorBootstrapped<TCdcAggregatorHeartbeatPublisher> {
-    static constexpr TDuration RetryDelay = TDuration::Seconds(1);
+    static constexpr TDuration MinRetryDelay = TDuration::Seconds(1);
+    static constexpr TDuration MaxRetryDelay = TDuration::Seconds(30);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -59,10 +72,11 @@ public:
 
     TCdcAggregatorHeartbeatPublisher(TString streamPath, const TVector<TCdcAggregatorHeartbeatPublisherPartition>& partitions)
         : StreamPath(std::move(streamPath))
-        , Publication(GetPartitionIds(partitions))
+        , Publication(MakePartitionIds(partitions))
     {
         for (const auto& partition : partitions) {
             TabletIdByPartitionId.emplace(partition.PartitionId, partition.TabletId);
+            PartitionIdsByTabletId[partition.TabletId].push_back(partition.PartitionId);
         }
     }
 
@@ -81,55 +95,64 @@ private:
             sFunc(TEvents::TEvPoison, PassAway);
         default:
             YDB_LOG_WARN("Unexpected event",
+                {"streamPath", StreamPath},
                 {"eventType", ev->GetTypeRewrite()});
         }
     }
 
     void Handle(TEvCdcAggregatorHeartbeatPublisher::TEvPublishHeartbeat::TPtr& ev) {
+        if (!Publication.GetFailedEmitCount()) {
+            RetryDelay = MinRetryDelay;
+        }
         Publication.SetHeartbeat(ev->Get()->Heartbeat);
         EmitHeartbeat(Publication.TakePartitionsToEmit());
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         const auto& response = ev->Get()->Record;
-        if (!response.GetPartitionResponse().HasCookie()) {
-            YDB_LOG_WARN("Heartbeat emit response without partition",
-                {"response", response.ShortDebugString()});
-            return;
-        }
-
         const ui32 partitionId = response.GetPartitionResponse().GetCookie();
-        const auto emittedVersion = ParseEmittedVersion(response);
-        if (!emittedVersion) {
-            YDB_LOG_WARN("Heartbeat emit failed",
+        if (const auto emittedVersion = ParseEmittedVersion(response)) {
+            if (Publication.CompleteEmit(partitionId, *emittedVersion)) {
+                EmitHeartbeat({partitionId});
+            }
+        } else if (IsPermanentEmitError(response.GetErrorCode())) {
+            YDB_LOG_WARN("Heartbeat emit stopped",
+                {"streamPath", StreamPath},
+                {"partitionId", partitionId},
+                {"response", response.ShortDebugString()});
+            Publication.StopEmit(partitionId);
+        } else {
+            YDB_LOG_DEBUG("Heartbeat emit failed",
+                {"streamPath", StreamPath},
                 {"partitionId", partitionId},
                 {"response", response.ShortDebugString()});
             Publication.FailEmit(partitionId);
-        } else if (Publication.CompleteEmit(partitionId, *emittedVersion)) {
-            EmitHeartbeat({partitionId});
         }
         ScheduleRetryIfNeeded();
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            FailTabletEmits(ev->Get()->TabletId);
+            FailTabletEmits(ev->Get()->TabletId, ev->Get()->ClientId);
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-        FailTabletEmits(ev->Get()->TabletId);
+        FailTabletEmits(ev->Get()->TabletId, ev->Get()->ClientId);
     }
 
-    void FailTabletEmits(ui64 tabletId) {
-        if (const auto pipe = PipeByTabletId.find(tabletId); pipe != PipeByTabletId.end()) {
-            NTabletPipe::CloseClient(SelfId(), pipe->second);
-            PipeByTabletId.erase(pipe);
+    void FailTabletEmits(ui64 tabletId, const TActorId& clientId) {
+        const auto pipe = PipeByTabletId.find(tabletId);
+        if (pipe == PipeByTabletId.end() || pipe->second != clientId) {
+            return;
         }
-        for (const auto& [partitionId, partitionTabletId] : TabletIdByPartitionId) {
-            if (partitionTabletId == tabletId) {
-                Publication.FailEmit(partitionId);
-            }
+        PipeByTabletId.erase(pipe);
+
+        YDB_LOG_DEBUG("Heartbeat emit pipe lost",
+            {"streamPath", StreamPath},
+            {"tabletId", tabletId});
+        for (const auto partitionId : PartitionIdsByTabletId.at(tabletId)) {
+            Publication.FailEmit(partitionId);
         }
         ScheduleRetryIfNeeded();
     }
@@ -141,10 +164,16 @@ private:
     }
 
     void ScheduleRetryIfNeeded() {
-        if (!RetryScheduled && Publication.HasFailedEmits()) {
-            RetryScheduled = true;
-            Schedule(RetryDelay, new TEvents::TEvWakeup());
+        if (RetryScheduled || !Publication.GetFailedEmitCount()) {
+            return;
         }
+        YDB_LOG_WARN("Heartbeat emit retry scheduled",
+            {"streamPath", StreamPath},
+            {"failedPartitions", Publication.GetFailedEmitCount()},
+            {"delay", RetryDelay});
+        RetryScheduled = true;
+        Schedule(RetryDelay, new TEvents::TEvWakeup());
+        RetryDelay = Min(RetryDelay * 2, MaxRetryDelay);
     }
 
     void EmitHeartbeat(const TVector<ui32>& partitionIds) {
@@ -172,8 +201,10 @@ private:
 private:
     const TString StreamPath;
     THashMap<ui32, ui64> TabletIdByPartitionId;
+    THashMap<ui64, TVector<ui32>> PartitionIdsByTabletId;
     TCdcAggregatorHeartbeatPublication Publication;
     THashMap<ui64, TActorId> PipeByTabletId;
+    TDuration RetryDelay = MinRetryDelay;
     bool RetryScheduled = false;
 };
 

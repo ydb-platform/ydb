@@ -18,7 +18,8 @@ def test_hermetic_node_modules_requires_explicit_enablement(hermetic, local_cli,
         "TS_LOCAL_CLI": local_cli,
         "_SUPPORTS_HERMETIC_NODE_MODULES": supported,
     }
-    unit = SimpleNamespace(get=values.get, get_subst=values.get)
+    raw_values = dict(values, TS_LOCAL_CLI="$_TS_LOCAL_CLI_DEFAULT")
+    unit = SimpleNamespace(get=raw_values.get, get_subst=values.get)
 
     assert nots._use_hermetic_node_modules(unit) == (
         hermetic == "yes" and local_cli == "no" and supported == "yes"
@@ -349,6 +350,7 @@ def test_settings_files_invalidate_graph_configuration(monkeypatch, tmp_path, li
     errors = []
     unit = SimpleNamespace(
         get=lambda name: values.get(name, ""),
+        get_subst=lambda name: values.get(name, ""),
         set=lambda pair: values.update([pair]),
         resolve=lambda value: value.replace("$S", str(tmp_path)),
         onpeerdir=lambda _: None,

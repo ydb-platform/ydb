@@ -25,28 +25,34 @@ is anonymous. The account must have permission to describe and read the table
 and its `indexImplTable` tables; direct index access may require cluster admin
 rights and `EnableAccessToIndexImplTables` on the server.
 
-Sync and unique indexes can be checked while writes continue. All key pages
-and point reads of the main table and these indexes share one `SnapshotReadOnly`
-transaction. The result describes that snapshot, including rows deleted or
-changed after validation started. If the transaction expires or is lost, the
-script returns an error; it never resumes with a new snapshot.
+After describing the schema, the script executes one SELECT for all supported
+indexes through the streaming scan query API. The main table and all sync and
+unique indexes share one snapshot and can be checked while writes continue.
+The result describes that snapshot. A failed or truncated stream is
+an error; the script never restarts part of the check with a new snapshot.
 
-Async indexes have different guarantees: YDB does not allow reading their
-`indexImplTable` in a consistent SQL transaction, and normal replication may
-lag. The script reads them with `ReadTable` and reports observations, but always
-marks their result `inconclusive`, even when observed values match. It never
-claims an atomic result or identifies async lag as confirmed corruption.
+The SELECT combines each main-table projection and its physical `indexImplTable`
+with `UNION ALL`, assigning them +1 and -1 respectively. It groups by the index
+and every stored column, including primary keys and covering columns, and
+returns groups whose sum is nonzero. This detects missing rows, extra rows and
+different values, including when either side is empty. Both sides empty means
+no differences. NULLs and NaNs are handled by SQL grouping. JSON and YSON
+covering values are compared as stored bytes; specialized indexes are skipped.
+PostgreSQL values are compared and reported in their text representation.
 
-The script enumerates primary keys from both sides, then reads one row at a time
-by full primary key and compares all columns stored in the index, including
-covering columns. Sync key enumeration uses bounded pages within the same
-transaction. Reading both directions detects missing and extra index rows even
-when either table is empty. Memory usage is bounded by a page or stream batch
-and the rows being compared; expect several requests per row. A mismatch may
-be reported in both directions. Indexes that are still building cause an error.
+Async indexes are included in the same scan, but normal replication may lag,
+and late changes can be applied with an older MVCC version. A shared scan
+version does not make those reads repeatable. Their result is always
+`inconclusive`, even when observed values match. Async differences are
+observations, not confirmed corruption.
 
-Mismatches are printed as JSON lines with the index name, table primary key,
-index key and missing row or differing values. Each index gets a summary.
+Only differences are streamed to the client. Client memory usage is bounded by
+a stream batch; the server scans and groups all indexed data. Indexes that are
+still building cause an error.
+
+Differences are printed as JSON lines with the index name, table primary key,
+index key, row values and a missing/extra reason. A changed value produces a
+missing expected row and an extra actual row. Each index gets a summary.
 
 Exit codes:
 

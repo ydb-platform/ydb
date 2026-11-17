@@ -4,17 +4,15 @@
 import argparse
 import decimal
 import json
-import math
 import os
 import posixpath
 import sys
 
 import ydb
-from ydb import _apis, convert, issues
+from ydb import _apis, issues
 
 
 INDEX_TYPES = {"global_index", "global_async_index", "global_unique_index"}
-PAGE_SIZE = 64
 
 
 def _quote(name):
@@ -44,123 +42,44 @@ class Table:
         self.primary_key = list(self.description.primary_key)
         self.columns = [column.name for column in self.description.columns]
         self.types = {column.name: column.type for column in self.description.columns}
-        self.key_type = _apis.ydb_value.Type()
-        for name in self.primary_key:
-            self.key_type.tuple_type.elements.add().CopyFrom(self.types[name])
 
     def key(self, row):
         return {name: row[name] for name in self.primary_key}
 
-    def _select(self, tx, columns, key=None, after=False, limit=PAGE_SIZE):
-        predicates, equal_prefix, parameters, parameter_types = [], [], {}, {}
-        if key is not None:
-            for position, name in enumerate(self.primary_key):
-                column = _quote(name)
-                value = key[name]
-                if value is None:
-                    equal, greater = f"{column} IS NULL", f"{column} IS NOT NULL"
-                elif isinstance(value, decimal.Decimal) and value.is_nan():
-                    # Storage orders Decimal NaN last, but SQL = and > never match it.
-                    equal, greater = f"{column} != {column}", "FALSE"
-                else:
-                    parameter = f"$key{position}"
-                    parameters[parameter] = value
-                    parameter_types[parameter] = self.types[name]
-                    equal, greater = f"{column} = {parameter}", f"{column} > {parameter}"
-                    kind = self.types[name]
-                    if kind.HasField("optional_type"):
-                        kind = kind.optional_type.item
-                    if kind.HasField("decimal_type"):
-                        greater = f"({greater} OR {column} != {column})"
-                if after:
-                    predicates.append("(" + " AND ".join(equal_prefix + [greater]) + ")")
-                equal_prefix.append(equal)
-        predicate = " OR ".join(predicates) if after else " AND ".join(equal_prefix)
-        declarations = "\n".join(
-            f"DECLARE {name} AS {convert.type_to_native(kind)};" for name, kind in parameter_types.items()
-        )
-        query = f"{declarations}\nSELECT {', '.join(map(_quote, columns))} FROM {_quote(self.path)}"
-        if predicate:
-            query += " WHERE " + predicate
-        query += f" ORDER BY {', '.join(map(_quote, self.primary_key))} LIMIT {limit};"
-        previous_id = tx.tx_id
-        result = tx.execute(ydb.DataQuery(query, parameter_types), parameters)
-        if not tx.tx_id or (previous_id and previous_id != tx.tx_id):
-            raise RuntimeError("Validation snapshot was lost")
-        return result[0].rows
 
-    def rows(self, session, tx=None, **kwargs):
-        if tx is not None:
-            columns = kwargs.get("columns", self.columns)
-            last = None
-            while True:
-                page = self._select(tx, columns, last, after=last is not None)
-                if not page:
-                    return
-                yield from page
-                last = self.key(page[-1])
-        stream = session.read_table(self.path, use_snapshot=True, **kwargs)
-        try:
-            for part in stream:
-                yield from part.rows
-        finally:
-            stream.cancel()
-
-    def point(self, session, row, columns, tx=None):
-        if tx is not None:
-            rows = self._select(tx, columns, row, limit=1)
-        else:
-            bound = ydb.KeyBound.inclusive([row[name] for name in self.primary_key], self.key_type)
-            rows = list(self.rows(session, key_range=ydb.KeyRange(bound, bound), row_limit=1, columns=columns))
-        return rows[0] if rows else None
-
-
-def _equal(left, right):
-    if isinstance(left, decimal.Decimal) and isinstance(right, decimal.Decimal) and left.is_nan() and right.is_nan():
-        return True
-    if isinstance(left, float) and isinstance(right, float) and math.isnan(left) and math.isnan(right):
-        return True
-    return left == right
-
-
-def _check_index(session, table, index, name, tx=None):
-    mismatches = 0
-    counts = []
-    for source, target in ((table, index), (index, table)):
-        count = 0
-        for key in source.rows(session, tx=tx, columns=source.primary_key):
-            count += 1
-            row = source.point(session, key, index.columns, tx=tx)
-            if row is None:
-                if tx is not None:
-                    raise RuntimeError(f"{source.path}: row disappeared from validation snapshot")
-                # Async observations have independent snapshots; deletion is expected under writes.
-                continue
-            other = target.point(session, row, index.columns, tx=tx)
-            details = {
-                "index": name,
-                "pk": table.key(row),
-                "index_key": index.key(row),
-            }
-            if other is None:
-                details["reason"] = "missing index row" if source is table else "extra index row"
-            else:
-                table_row, index_row = (row, other) if source is table else (other, row)
-                differences = {
-                    column: {"table": table_row[column], "index": index_row[column]}
-                    for column in index.columns
-                    if not _equal(row[column], other[column])
-                }
-                if not differences:
-                    continue
-                details["reason"] = "values differ"
-                details["columns"] = differences
-            mismatches += 1
-            print(json.dumps(details, ensure_ascii=True, default=repr))
-        counts.append(count)
-    status = "inconclusive" if tx is None else ("inconsistent" if mismatches else "consistent")
-    print(f"{name}: {status} (table rows: {counts[0]}, index rows: {counts[1]}, mismatches: {mismatches})")
-    return mismatches == 0
+def _query(table, indexes, columns):
+    branches = []
+    for position, (_, index, _) in enumerate(indexes):
+        projection = []
+        for number, name in enumerate(columns):
+            expression = "NULL"
+            if name in index.columns:
+                expression = _quote(name)
+                kind = table.types[name]
+                if kind.HasField("optional_type"):
+                    kind = kind.optional_type.item
+                if kind.HasField("pg_type"):
+                    # The Python SDK cannot decode PostgreSQL result columns.
+                    if kind.pg_type.type_name in ("pgbpchar", "bpchar"):
+                        # Casting char(n) to text would trim stored trailing spaces.
+                        expression = f"FromPg(Pg::bpcharout({expression}))"
+                    else:
+                        expression = f"FromPg(PgCast({expression}, PgText))"
+                elif kind.type_id in (_apis.ydb_value.Type.JSON, _apis.ydb_value.Type.JSON_DOCUMENT,
+                                      _apis.ydb_value.Type.YSON):
+                    # Payload types cannot be GROUP BY keys; compare their stored bytes.
+                    expression = f"ToBytes({expression})"
+            projection.append(f"{expression} AS c{number}")
+        for source, delta in ((table, 1), (index, -1)):
+            branches.append(
+                f"SELECT {position}u AS index_id, {', '.join(projection)}, {delta} AS delta "
+                f"FROM {_quote(source.path)}"
+            )
+    keys = "index_id, " + ", ".join(f"c{number}" for number in range(len(columns)))
+    return (
+        f"SELECT {keys}, SUM(delta) AS balance FROM (\n" + "\nUNION ALL\n".join(branches) +
+        f"\n) AS entries GROUP BY {keys} HAVING SUM(delta) != 0;"
+    )
 
 
 def _validate(driver, session, path):
@@ -178,23 +97,43 @@ def _validate(driver, session, path):
     if not indexes:
         print("No supported indexes to validate")
         return True
+    columns = sorted({name for _, index, _ in indexes for name in index.columns})
+    mismatches = [0] * len(indexes)
+    # One scan snapshot covers every sync comparison. Async updates can arrive
+    # with older MVCC versions, so even matching async observations are inconclusive.
+    # Consume the entire stream before declaring success; do not retry partial scans.
+    stream = driver.table_client.scan_query(_query(table, indexes, columns))
+    try:
+        for part in stream:
+            if part.result_set.truncated:
+                raise ydb.TruncatedResponseError("Validation result was truncated by the server")
+            for result in part.result_set.rows:
+                position = result["index_id"]
+                name, index, asynchronous = indexes[position]
+                row = {column: result[f"c{number}"] for number, column in enumerate(columns)}
+                details = {
+                    "index": name,
+                    "pk": table.key(row),
+                    "index_key": index.key(row),
+                    "reason": "missing index row" if result["balance"] > 0 else "extra index row",
+                    "row": {column: row[column] for column in index.columns},
+                }
+                if asynchronous:
+                    details["status"] = "inconclusive"
+                print(json.dumps(details, ensure_ascii=True, default=repr))
+                mismatches[position] += 1
+    finally:
+        stream.cancel()
     consistent = True
-    # All sync indexes, key pages and point reads share this transaction. Never
-    # retry an individual statement in a new transaction after snapshot loss.
-    with session.transaction(ydb.SnapshotReadOnly(), allow_split_transactions=False) as tx:
-        try:
-            for name, index, asynchronous in indexes:
-                if not asynchronous and not _check_index(session, table, index, name, tx=tx):
-                    consistent = False
-        finally:
-            if tx.tx_id:
-                tx.rollback()
     inconclusive = False
-    for name, index, asynchronous in indexes:
+    for (name, _, asynchronous), count in zip(indexes, mismatches):
         if asynchronous:
             inconclusive = True
-            print(f"{name}: async observations cannot confirm atomic consistency; replication may lag")
-            _check_index(session, table, index, name)
+            print(f"{name}: async replication may lag; consistency could not be confirmed")
+        elif count:
+            consistent = False
+        status = "inconclusive" if asynchronous else ("inconsistent" if count else "consistent")
+        print(f"{name}: {status} (mismatches: {count})")
     status = "inconsistent" if not consistent else ("inconclusive" if inconclusive else "consistent")
     print(f"{path}: {status}")
     return False if not consistent else (None if inconclusive else True)

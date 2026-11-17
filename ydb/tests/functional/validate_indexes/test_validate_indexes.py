@@ -1,5 +1,6 @@
 import contextlib
 import io
+import json
 import subprocess
 import threading
 import time
@@ -81,7 +82,7 @@ class TestValidateIndexes(unittest.TestCase):
         response = self.cluster.client.tablet_service.ExecuteTabletMiniKQL(
             ydb_tablet_pb2.ExecuteTabletMiniKQLRequest(
                 tablet_id=tablet_id,
-                program=f"((let change {operation}) (return (AsList change)))",
+                program=f"((return (AsList {operation})))",
             )
         )
         self.assertEqual(response.status, ydb.StatusCode.SUCCESS, str(response))
@@ -111,6 +112,30 @@ class TestValidateIndexes(unittest.TestCase):
                 code, output, error = self._run()
                 self.assertEqual(code, 3 if kind == "ASYNC" else 0, output + error)
                 self.assertIn("inconclusive" if kind == "ASYNC" else "consistent", output)
+                self.assertFalse(any(line.startswith("{") for line in output.splitlines()), output)
+
+    def test_all_null_row_and_empty_side(self):
+        for side in ("main", "index"):
+            with self.subTest(side=side):
+                self._create(rows=False)
+                self._execute(f"UPSERT INTO `{self.table}` (tenant, id, value, payload) VALUES (NULL, NULL, NULL, NULL);")
+                code, output, error = self._run()
+                self.assertEqual(code, 0, output + error)
+                path = self.table if side == "main" else self.index
+                name = path.rsplit("/", 1)[1]
+                keys = [("tenant", "Utf8"), ("id", "Uint64")]
+                if side == "index":
+                    keys.insert(0, ("value", "Utf8"))
+                key = "'(" + " ".join(
+                    f"'('{column} (Nothing (OptionalType (DataType '{kind}))))" for column, kind in keys
+                ) + ")"
+                self._corrupt(path, f"(EraseRow '__user__{name} {key})")
+                code, output, error = self._run()
+                self.assertEqual(code, 1, output + error)
+                differences = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+                self.assertEqual(len(differences), 1, output)
+                self.assertEqual(differences[0]["pk"], {"tenant": None, "id": None})
+                self.assertEqual(differences[0]["reason"], "extra index row" if side == "main" else "missing index row")
 
     def test_missing_index_row(self):
         self._create()
@@ -297,29 +322,86 @@ class TestValidateIndexes(unittest.TestCase):
         code, output, error = self._run()
         self.assertEqual(code, 0, output + error)
 
-    def test_snapshot_survives_changes_between_reads(self):
-        self._create()
-        original_rows = validator.Table.rows
-        changed = False
+    def test_json_covering_values(self):
+        self.table = f"/Root/json_cover_{uuid.uuid4().hex}"
+        self.pool.retry_operation_sync(lambda session: session.execute_scheme(f"""
+            CREATE TABLE `{self.table}` (
+                id Uint64, value Utf8, document JsonDocument, text Json, PRIMARY KEY (id),
+                INDEX by_value GLOBAL ON (value) COVER (document, text)
+            );
+        """))
+        self._execute(f"""
+            UPSERT INTO `{self.table}` (id, value, document, text) VALUES
+                (1u, 'first', JsonDocument('{{"a": 1}}'), Json('{{"a": 1}}'));
+        """)
+        code, output, error = self._run()
+        self.assertEqual(code, 0, output + error)
+        self._corrupt(self.table + "/by_value/indexImplTable", """(UpdateRow '__user__indexImplTable
+            '('('value (Utf8 'first)) '('id (Uint64 '1)))
+            '('('text (Json 'null))))""")
+        code, output, error = self._run()
+        self.assertEqual(code, 1, output + error)
+        self.assertIn('"id": 1', output)
 
-        def interleaved_rows(table, *args, **kwargs):
-            nonlocal changed
-            for row in original_rows(table, *args, **kwargs):
-                if not changed and table.path == self.table:
-                    changed = True
-                    self._execute(f"""
-                        DELETE FROM `{self.table}` WHERE tenant = 'a' AND id = 1u;
-                        UPSERT INTO `{self.table}` (tenant, id, value, payload) VALUES
-                            ('a', 2u, 'changed', 'changed'), ('new', 4u, 'inserted', 'inserted');
-                    """)
-                yield row
+    def test_postgresql_indexed_values(self):
+        self.table = f"/Root/pg_indexed_{uuid.uuid4().hex}"
+        self.pool.retry_operation_sync(lambda session: session.execute_scheme(f"""
+            CREATE TABLE `{self.table}` (
+                id Uint64, value pgint4, payload pgtext, amount pgnumeric, PRIMARY KEY (id),
+                INDEX by_value GLOBAL ON (value) COVER (payload, amount)
+            );
+        """))
+        self._execute(f"""
+            UPSERT INTO `{self.table}` (id, value, payload, amount) VALUES
+                (1u, 42p, 'original'p, PgNumeric('1234567890123456789012345678901234567890.123456789'));
+        """)
+        code, output, error = self._run()
+        self.assertEqual(code, 0, output + error)
+        name = self.table.rsplit("/", 1)[1]
+        self._corrupt(self.table, f"(EraseRow '__user__{name} '('('id (Uint64 '1))))")
+        code, output, error = self._run()
+        self.assertEqual(code, 1, output + error)
+        differences = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+        self.assertEqual(len(differences), 1, output + error)
+        self.assertEqual(differences[0]["pk"], {"id": 1})
+        self.assertEqual(differences[0]["index_key"]["value"], "42")
+        self.assertEqual(differences[0]["row"]["amount"], "1234567890123456789012345678901234567890.123456789")
 
-        with self.pool.checkout() as session, mock.patch.object(validator.Table, "rows", interleaved_rows):
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertTrue(validator.validate(self.driver, session, self.table))
-        self.assertTrue(changed, "Validation did not overlap the independent write")
+    def test_postgresql_primary_key(self):
+        self.table = f"/Root/pg_key_{uuid.uuid4().hex}"
+        self.pool.retry_operation_sync(lambda session: session.execute_scheme(f"""
+            CREATE TABLE `{self.table}` (
+                id pgint4, value pgtext, payload pgtext, PRIMARY KEY (id),
+                INDEX by_value GLOBAL ON (value) COVER (payload)
+            );
+        """))
+        self._execute(f"""
+            UPSERT INTO `{self.table}` (id, value, payload) VALUES
+                (1p, 'key'p, 'original'p), (NULL, 'null-key'p, NULL);
+        """)
+        code, output, error = self._run()
+        self.assertEqual(code, 0, output + error)
 
-    def _hot_table(self, asynchronous=False):
+    def test_postgresql_char_preserves_trailing_spaces(self):
+        self.table = f"/Root/pg_char_{uuid.uuid4().hex}"
+        self.pool.retry_operation_sync(lambda session: session.execute_scheme(f"""
+            CREATE TABLE `{self.table}` (
+                id Uint64, value Utf8, payload pgbpchar, PRIMARY KEY (id),
+                INDEX by_value GLOBAL ON (value) COVER (payload)
+            );
+        """))
+        self._execute(f"UPSERT INTO `{self.table}` (id, value, payload) VALUES (1u, 'first', PgBpChar('x  '));")
+        code, output, error = self._run()
+        self.assertEqual(code, 0, output + error)
+        name = self.table.rsplit("/", 1)[1]
+        self._corrupt(self.table, f"(EraseRow '__user__{name} '('('id (Uint64 '1))))")
+        code, output, error = self._run()
+        self.assertEqual(code, 1, output + error)
+        differences = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+        self.assertEqual(len(differences), 1, output + error)
+        self.assertEqual(differences[0]["row"]["payload"], "x  ")
+
+    def _hot_table(self, asynchronous=False, partitioned=False, rows=130):
         self.table = f"/Root/hot_{uuid.uuid4().hex}"
         async_index = ", INDEX by_async GLOBAL ASYNC ON (value)" if asynchronous else ""
         self.pool.retry_operation_sync(lambda session: session.execute_scheme(f"""
@@ -329,10 +411,10 @@ class TestValidateIndexes(unittest.TestCase):
                 INDEX by_value GLOBAL ON (value) COVER (payload),
                 INDEX by_payload GLOBAL ON (payload) COVER (value)
                 {async_index}
-            );
+            ) {"WITH (PARTITION_AT_KEYS = (8, 16, 32, 64, 96))" if partitioned else ""};
         """))
         self._execute(f"UPSERT INTO `{self.table}` (id, value, payload) VALUES " +
-                      ",".join(f"({key}u, {key}u, 'initial')" for key in range(130)) + ";")
+                      ",".join(f"({key}u, {key}u, 'initial')" for key in range(rows)) + ";")
 
     @contextlib.contextmanager
     def _writer(self):
@@ -380,6 +462,22 @@ class TestValidateIndexes(unittest.TestCase):
             self.assertEqual(code, 0, output + error)
             self.assertGreater(len(writes), before + 1, "Writes did not overlap validation")
 
+    def test_writes_overlap_query_execution(self):
+        self._hot_table(rows=4096, partitioned=True)
+        original_call = ydb.Driver.__call__
+        query_writes = []
+        with self._writer() as writes:
+            def record_query_start(driver, request, stub, method, *args, **kwargs):
+                if method == "StreamExecuteScanQuery":
+                    query_writes.append(len(writes))
+                return original_call(driver, request, stub, method, *args, **kwargs)
+
+            with self.pool.checkout() as session, mock.patch.object(ydb.Driver, "__call__", record_query_start):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertTrue(validator.validate(self.driver, session, self.table))
+            self.assertEqual(len(query_writes), 1)
+            self.assertGreater(len(writes), query_writes[0] + 1, "Writes must commit during the query itself")
+
     def test_hot_table_with_persistent_corruption(self):
         self._hot_table()
         self._corrupt(self.table + "/by_value/indexImplTable", """(EraseRow '__user__indexImplTable
@@ -419,52 +517,104 @@ class TestValidateIndexes(unittest.TestCase):
         self.assertIn("by_value: inconsistent", output)
         self.assertIn("by_async: inconclusive", output)
 
-    def test_same_snapshot_across_indexes(self):
-        self._hot_table()
-        original_check = validator._check_index
-        changed = False
+    def test_all_indexes_use_one_read_request(self):
+        self._hot_table(asynchronous=True)
+        original_call = ydb.Driver.__call__
+        reads = []
 
-        def interleaved_check(*args, **kwargs):
-            nonlocal changed
-            result = original_check(*args, **kwargs)
-            if not changed:
-                changed = True
-                self._execute(f"""
-                    DELETE FROM `{self.table}`;
-                    UPSERT INTO `{self.table}` (id, value, payload) VALUES (999u, 999u, 'replacement');
-                """)
-            return result
+        def record_reads(driver, request, stub, method, *args, **kwargs):
+            if method in {"ExecuteDataQuery", "StreamReadTable", "StreamExecuteScanQuery", "ExecuteQuery"}:
+                reads.append(request)
+            return original_call(driver, request, stub, method, *args, **kwargs)
 
         output = io.StringIO()
-        with self.pool.checkout() as session, mock.patch.object(validator, "_check_index", interleaved_check):
+        with self.pool.checkout() as session, mock.patch.object(ydb.Driver, "__call__", record_reads):
             with contextlib.redirect_stdout(output):
-                self.assertTrue(validator.validate(self.driver, session, self.table))
-        self.assertTrue(changed)
-        self.assertEqual(output.getvalue().count("table rows: 130, index rows: 130"), 2, output.getvalue())
+                self.assertIsNone(validator.validate(self.driver, session, self.table))
+        self.assertIn("by_value: consistent", output.getvalue())
+        self.assertIn("by_payload: consistent", output.getvalue())
+        self.assertIn("by_async: inconclusive", output.getvalue())
+        self.assertEqual(len(reads), 1, "Validation must use one server-side query for all indexes")
 
-    def test_lost_snapshot_is_not_restarted(self):
+    def test_failed_stream_is_not_restarted(self):
         self._create()
-        session = self.driver.table_client.session().create()
-        self.addCleanup(lambda: session.delete() if session.initialized() else None)
-        original_rows = validator.Table.rows
-        deleted = False
+        original_next = ydb._utilities.SyncResponseIterator.__next__
+        responses = []
 
-        def lose_session(table, *args, **kwargs):
-            nonlocal deleted
-            for row in original_rows(table, *args, **kwargs):
-                if not deleted:
-                    deleted = True
-                    session.delete()
-                yield row
+        def fail_after_response(stream):
+            if responses:
+                raise ydb.Unavailable("Validation stream was interrupted")
+            response = original_next(stream)
+            responses.append(response)
+            return response
 
         output = io.StringIO()
-        with mock.patch.object(validator.Table, "rows", lose_session), contextlib.redirect_stdout(output):
-            with self.assertRaises(ydb.Error):
-                validator.validate(self.driver, session, self.table)
-        self.assertTrue(deleted)
+        with self.pool.checkout() as session:
+            with mock.patch.object(ydb._utilities.SyncResponseIterator, "__next__", fail_after_response):
+                with contextlib.redirect_stdout(output), self.assertRaises(ydb.Unavailable):
+                    validator.validate(self.driver, session, self.table)
+        self.assertTrue(responses, "A real server response must precede the injected interruption")
         self.assertNotIn("consistent", output.getvalue())
 
-    def test_nullable_composite_pagination(self):
+    def test_truncated_stream_is_error(self):
+        self._create()
+        original_next = ydb._utilities.SyncResponseIterator.__next__
+
+        def truncate_response(stream):
+            response = original_next(stream)
+            response.result_set.truncated = True
+            return response
+
+        output = io.StringIO()
+        with self.pool.checkout() as session:
+            with mock.patch.object(ydb._utilities.SyncResponseIterator, "__next__", truncate_response):
+                with contextlib.redirect_stdout(output), self.assertRaises(ydb.TruncatedResponseError):
+                    validator.validate(self.driver, session, self.table)
+        self.assertNotIn("consistent", output.getvalue())
+
+    def test_hot_partitioned_table(self):
+        self._hot_table(partitioned=True)
+        with self._writer() as writes:
+            before = len(writes)
+            code, output, error = self._run()
+            self.assertEqual(code, 0, output + error)
+            self.assertGreater(len(writes), before + 1)
+
+    def test_consistent_then_corrupt_then_repaired_during_writes(self):
+        self._hot_table()
+        with self._writer() as writes:
+            before = len(writes)
+            code, output, error = self._run()
+            self.assertEqual(code, 0, output + error)
+            self._corrupt(self.table + "/by_value/indexImplTable", """(EraseRow '__user__indexImplTable
+                '('('value (Uint64 '0)) '('id (Uint64 '0))))""")
+            code, output, error = self._run()
+            self.assertEqual(code, 1, output + error)
+            differences = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+            self.assertTrue(differences, output)
+            self.assertEqual({row["pk"]["id"] for row in differences}, {0}, output)
+            self.assertIn("by_payload: consistent", output)
+            self._execute(f"UPSERT INTO `{self.table}` (id, value, payload) VALUES (0u, 999u, 'repaired');")
+            code, output, error = self._run()
+            self.assertEqual(code, 0, output + error)
+            self.assertGreater(len(writes), before + 3)
+
+    def test_all_extra_rows_are_reported(self):
+        self._create(rows=False)
+        values = ",".join(f"('a', {key}u, 'first', 'payload')" for key in range(1050))
+        self._execute(f"UPSERT INTO `{self.table}` (tenant, id, value, payload) VALUES {values};")
+        name = self.table.rsplit("/", 1)[1]
+        self._corrupt(self.table, " ".join(
+            f"(EraseRow '__user__{name} '('('tenant (Utf8 'a)) '('id (Uint64 '{key}))))"
+            for key in range(1050)
+        ))
+        code, output, error = self._run()
+        self.assertEqual(code, 1, output + error)
+        differences = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+        self.assertEqual({row["pk"]["id"] for row in differences}, set(range(1050)), output + error)
+        self.assertTrue(all("extra" in row["reason"] for row in differences))
+
+    def test_nullable_composite_keys(self):
         self._create(rows=False)
         values = []
         for key in range(130):
@@ -473,9 +623,9 @@ class TestValidateIndexes(unittest.TestCase):
         self._execute(f"UPSERT INTO `{self.table}` (tenant, id, value, payload) VALUES " + ",".join(values) + ";")
         code, output, error = self._run()
         self.assertEqual(code, 0, output + error)
-        self.assertIn("table rows: 130, index rows: 130", output)
+        self.assertIn("by_value: consistent", output)
 
-    def test_decimal_nan_key_pagination(self):
+    def test_decimal_nan_keys(self):
         self.table = f"/Root/nan_keys_{uuid.uuid4().hex}"
         self.pool.retry_operation_sync(lambda session: session.execute_scheme(f"""
             CREATE TABLE `{self.table}` (
@@ -489,9 +639,9 @@ class TestValidateIndexes(unittest.TestCase):
         self._execute(f"UPSERT INTO `{self.table}` (id, seq, indexed, payload) VALUES " + ",".join(values) + ";")
         code, output, error = self._run()
         self.assertEqual(code, 0, output + error)
-        self.assertIn("table rows: 135, index rows: 135", output)
+        self.assertIn("by_id: consistent", output)
 
-    def test_missing_decimal_nan_key_after_page_boundary(self):
+    def test_missing_decimal_nan_key(self):
         self.table = f"/Root/missing_nan_{uuid.uuid4().hex}"
         self.pool.retry_operation_sync(lambda session: session.execute_scheme(f"""
             CREATE TABLE `{self.table}` (

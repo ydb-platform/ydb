@@ -277,6 +277,13 @@ class SupervisorRegressionTest(unittest.TestCase):
                 with self.assertRaisesRegex(supervisor.SupervisorError, "reply lost"):
                     supervisor.cmd_keeper_split(cluster, argparse.Namespace(pile="pile1"))
             self.assertTrue(all(unavailable.values()))
+            retried = supervisor.Cluster(run)
+            retried.request = request
+            with mock.patch.object(supervisor, "_scenario"):
+                with self.assertRaisesRegex(supervisor.SupervisorError, "reply lost"):
+                    supervisor.cmd_keeper_split(retried, argparse.Namespace(pile="pile1"))
+            self.assertEqual(retried._macros(), [
+                {"kind": "keeper_split", "pile": "pile1", "already": [labels[0]]}])
             recovered = supervisor.Cluster(run)
             recovered.live_piles = lambda: ["pile1"]
             recovered.alive = lambda pile: True
@@ -291,6 +298,57 @@ class SupervisorRegressionTest(unittest.TestCase):
                 supervisor.cmd_heal(recovered, argparse.Namespace())
             self.assertEqual(unavailable, {label: label == labels[0] for label in labels})
             self.assertEqual(recovered._macros(), [])
+
+    def test_undelivered_keeper_split_reports_intent_and_can_be_revived_or_healed(self):
+        for heal_first in (False, True):
+            with self.subTest(heal_first=heal_first), tempfile.TemporaryDirectory() as run:
+                topology = Topology(["pile1", "pile2"], 3)
+                topology.save(os.path.join(run, "topology.yaml"))
+                unavailable = {node.label: False for node in topology.pile("pile1").nodes}
+                cluster = supervisor.Cluster(run)
+
+                def request(pile, method, path, body=None):
+                    if path == "/state":
+                        return {"nodes": [{"label": label, "faults": {"unavailable": on}}
+                                          for label, on in unavailable.items()]}
+                    raise supervisor.SupervisorError("instance died before receiving the fault")
+
+                cluster.request = request
+                with self.assertRaises(supervisor.PartialMutationError) as failed:
+                    supervisor.cmd_keeper_split(cluster, argparse.Namespace(pile="pile1"))
+                self.assertFalse(any(unavailable.values()))
+                self.assertTrue(failed.exception.report["uncertain"])
+                self.assertTrue(failed.exception.report["recorded_intent"])
+                for hint in ("revive", "heal"):
+                    self.assertIn(hint, failed.exception.report["recovery"])
+                    self.assertIn(hint, str(failed.exception))
+
+                recovered = supervisor.Cluster(run)
+                running = False
+                recovered.alive = lambda pile: running
+                recovered.live_piles = lambda: ["pile1"] if running else []
+
+                def restored_request(pile, method, path, body):
+                    if path == "/control":
+                        labels = unavailable if body.get("all") else [body["label"]]
+                        unavailable.update({label: body["on"] for label in labels})
+                    return {}
+
+                def spawn(pile):
+                    nonlocal running
+                    running = True
+                    return mock.Mock()
+
+                recovered.request = restored_request
+                with mock.patch.object(supervisor, "_scenario"), mock.patch.object(
+                        recovered, "spawn", side_effect=spawn), mock.patch.object(recovered, "wait_responsive"):
+                    if heal_first:
+                        supervisor.cmd_heal(recovered, argparse.Namespace())
+                    supervisor.cmd_revive(recovered, argparse.Namespace(pile="pile1"))
+                    self.assertEqual(list(unavailable.values()), [not heal_first] * len(unavailable))
+                    supervisor.cmd_heal(recovered, argparse.Namespace())
+                self.assertFalse(any(unavailable.values()))
+                self.assertEqual(recovered._macros(), [])
 
     def test_keeper_split_record_failure_does_not_apply_fault(self):
         with tempfile.TemporaryDirectory() as run:

@@ -4,6 +4,7 @@
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/retro_tracing/collector/retro_span_deserialization.h>
 #include <ydb/library/actors/retro_tracing/span/retro_span.h>
@@ -350,8 +351,7 @@ namespace NKikimr::NStorage {
 
     TDistributedConfigKeeper::TProcessCollectConfigsResult TDistributedConfigKeeper::ProcessCollectConfigs(
             TEvGather::TCollectConfigs *res, std::optional<TString> selfAssemblyUUID, bool dryRun,
-            bool allowConflictingGenerationAdvance, const NKikimrBlobStorage::TStorageConfig *collectionQuorumConfig,
-            bool allowInvalidStateStorageHistory) {
+            bool allowConflictingGenerationAdvance, const NKikimrBlobStorage::TStorageConfig *collectionQuorumConfig) {
         if (res->GetMetadataOnly()) {
             return {.ErrorReason = "Configuration bodies are required for recovery"};
         }
@@ -691,21 +691,6 @@ namespace NKikimr::NStorage {
                                    : "The newest applied configuration has not been recovered yet"};
         }
 
-        if (const auto *config = recoveryProposal ?: persistedConfig) {
-            if (auto error = ValidateStateStorageSelections(*config)) {
-                // An explicit operator update may use a committed history entry as
-                // its predecessor without ever installing its invalid selections.
-                if (allowInvalidStateStorageHistory && !recoveryProposal && config->GetGeneration()
-                    && !persistentConfigs.at(TStorageConfigMeta(*config)).HavingDisksCommitted.empty()
-                    && !ValidateConfig(*config)) {
-                    return {.RecoveredConfig = *config,
-                            .RequiresGenerationAdvance = true,
-                            .RequiresStateStorageRepair = true};
-                }
-                return {.ErrorReason = TStringBuilder() << "Invalid recovered state storage configuration: " << *error};
-            }
-        }
-
         if (recoveryProposal) {
             return {.RecoveredConfig = *persistedConfig,
                     .RequiresRecoveryProposition = true,
@@ -1043,15 +1028,7 @@ namespace NKikimr::NStorage {
         }
         switch (task.Request.GetRequestCase()) {
             case TEvScatter::kCollectConfigs: {
-                auto drives = GetDrives(*StorageConfig);
-                // Include discovered metadata when a rejected committed config could not become active.
-                for (const auto& [path, metadata] : MetadataByPath) {
-                    drives.push_back(path);
-                }
-                std::ranges::sort(drives);
-                const auto [begin, end] = std::ranges::unique(drives);
-                drives.erase(begin, end);
-                task.ConfigReaderActor = ReadConfig(std::move(drives), cookie);
+                task.ConfigReaderActor = ReadConfig(GetDrives(*StorageConfig), cookie);
                 ++task.AsyncOperationsPending;
                 break;
             }
@@ -1425,13 +1402,6 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig,
                                                      bool onlyOutdated) {
         const ui32 rootNodeId = GetRootNodeId();
-        if (committedStorageConfig) {
-            if (auto error = ValidateIncomingStorageConfig(*committedStorageConfig)) {
-                YDB_LOG_ERROR("Storage configuration propagation rejected", {"error", *error},
-                    {"generation", committedStorageConfig->GetGeneration()});
-                committedStorageConfig = nullptr;
-            }
-        }
         if (committedStorageConfig && !IsBridged()) {
             const ui64 generation = committedStorageConfig->GetGeneration();
             const bool belowKnown = IsBelowKnownAppliedConfig(*committedStorageConfig);
@@ -1502,9 +1472,16 @@ namespace NKikimr::NStorage {
             UpdateFingerprint(configToPropose);
         }
 
-        if (auto error = ValidateIncomingStorageConfig(*configToPropose)) {
-            return error;
+#define VALIDATE_SELECTION(NAME) \
+        if (configToPropose->Has##NAME##Config()) { \
+            if (TString error = NConfig::ValidateStateStorageConfigSelection(configToPropose->Get##NAME##Config())) { \
+                return TStringBuilder() << #NAME << ' ' << error; \
+            } \
         }
+        VALIDATE_SELECTION(StateStorage)
+        VALIDATE_SELECTION(StateStorageBoard)
+        VALIDATE_SELECTION(SchemeBoard)
+#undef VALIDATE_SELECTION
 
         YDB_LOG_INFO("StartProposition",
             {"marker", "NWDC60"},

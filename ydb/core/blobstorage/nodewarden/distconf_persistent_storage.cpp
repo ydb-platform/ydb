@@ -394,6 +394,9 @@ namespace NKikimr::NStorage {
 
                 if (m.HasCommittedStorageConfig()) {
                     const auto& config = m.GetCommittedStorageConfig();
+                    if (!LocalCommittedStorageConfig || LocalCommittedStorageConfig->GetGeneration() < config.GetGeneration()) {
+                        LocalCommittedStorageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
+                    }
                     EnumerateConfigDrives(config, SelfId().NodeId(), processDrive);
                 }
 
@@ -415,30 +418,6 @@ namespace NKikimr::NStorage {
                 ReadConfig(newDrivesToRead);
                 PrevDrivesToRead = std::move(drivesToRead);
             } else {
-                // Keep invalid committed data available for collection, but never install it or copy it to other disks.
-                const NKikimrBlobStorage::TStorageConfig *latestCommitted = nullptr;
-                for (const auto& [path, metadata] : MetadataByPath) {
-                    if (metadata.HasCommittedStorageConfig()) {
-                        const auto& config = metadata.GetCommittedStorageConfig();
-                        if (!latestCommitted || latestCommitted->GetGeneration() < config.GetGeneration()) {
-                            latestCommitted = &config;
-                        }
-                    }
-                }
-                bool invalidCommitted = false;
-                for (const auto& [path, metadata] : MetadataByPath) {
-                    if (metadata.HasCommittedStorageConfig() && latestCommitted &&
-                        metadata.GetCommittedStorageConfig().GetGeneration() == latestCommitted->GetGeneration()) {
-                        if (auto error = ValidateStateStorageSelections(metadata.GetCommittedStorageConfig())) {
-                            YDB_LOG_ERROR("Stored storage configuration rejected", {"error", *error}, {"path", path},
-                                {"generation", latestCommitted->GetGeneration()});
-                            invalidCommitted = true;
-                        }
-                    }
-                }
-                if (latestCommitted && !invalidCommitted) {
-                    LocalCommittedStorageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(*latestCommitted);
-                }
                 // apply locally committed storage configuration if any, or else apply startup YAML config
                 ApplyStorageConfig(*(LocalCommittedStorageConfig ?: BaseConfig));
 
@@ -484,7 +463,7 @@ namespace NKikimr::NStorage {
                     if (!drivesToWrite.empty()) {
                         PersistConfig({}, drivesToWrite);
                     }
-                } else if (!invalidCommitted) {
+                } else {
                     // no local commit -- drop all metadata records
                     MetadataByPath.clear();
                 }

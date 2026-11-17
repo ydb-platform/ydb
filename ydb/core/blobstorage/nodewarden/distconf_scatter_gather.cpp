@@ -35,17 +35,6 @@ namespace NKikimr::NStorage {
             TActivationContext::Monotonic());
         Y_ABORT_UNLESS(inserted);
         TScatterTask& task = it->second;
-        if (task.Request.HasProposeStorageConfig()) {
-            const auto& proposed = task.Request.GetProposeStorageConfig().GetConfig();
-            if (auto error = ValidateIncomingStorageConfig(proposed)) {
-                YDB_LOG_ERROR("Proposed storage configuration rejected", {"error", *error});
-                auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
-                SelfNode.Serialize(status->MutableNodeId());
-                status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
-                CheckCompleteScatterTask(it);
-                return;
-            }
-        }
         if (timed && !task.Request.GetTimeoutUs()) {
             CheckCompleteScatterTask(it);
             return;

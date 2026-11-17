@@ -188,39 +188,56 @@ EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, 
 }
 
 
-TString ValidateStateStorageSelections(const NKikimrConfig::TDomainsConfig& domains) {
+TString ValidateStateStorageConfigSelection(const NKikimrConfig::TStateStorageConfig& config) {
+    const auto validate = [](const auto& group, const TString& path) -> TString {
+        const ui32 rings = group.RingSize() ? group.RingSize() : group.NodeSize();
+        if (!group.GetNToSelect() || group.GetNToSelect() > rings) {
+            return TStringBuilder() << path << ".NToSelect# " << group.GetNToSelect()
+                << " must be in [1, " << rings << "] (number of configured rings)";
+        }
+        return {};
+    };
+    if (config.HasRing()) {
+        if (TString error = validate(config.GetRing(), "Ring")) {
+            return error;
+        }
+    }
+    for (ui32 i = 0; i < config.RingGroupsSize(); ++i) {
+        if (TString error = validate(config.GetRingGroups(i), TStringBuilder() << "RingGroups[" << i << ']')) {
+            return error;
+        }
+    }
+    return {};
+}
+
+EValidationResult ValidateStateStorageConfig(const NKikimrConfig::TAppConfig& proposed, std::vector<TString>& msg) {
+    const auto& domains = proposed.GetDomainsConfig();
     for (const auto& config : domains.GetStateStorage()) {
         if (TString error = ValidateStateStorageConfigSelection(config)) {
-            return TStringBuilder() << "StateStorage " << error;
+            msg.push_back(TStringBuilder() << "StateStorage " << error);
+            return EValidationResult::Error;
         }
     }
 #define VALIDATE_SELECTION(NAME) \
     if (domains.HasExplicit##NAME##Config()) { \
         if (TString error = ValidateStateStorageConfigSelection(domains.GetExplicit##NAME##Config())) { \
-            return TStringBuilder() << #NAME << ' ' << error; \
+            msg.push_back(TStringBuilder() << #NAME << ' ' << error); \
+            return EValidationResult::Error; \
         } \
     }
     VALIDATE_SELECTION(StateStorage)
     VALIDATE_SELECTION(StateStorageBoard)
     VALIDATE_SELECTION(SchemeBoard)
 #undef VALIDATE_SELECTION
-    return {};
-}
-
-EValidationResult ValidateStateStorageConfig(const NKikimrConfig::TAppConfig& proposed, std::vector<TString>& msg) {
-    if (proposed.GetSelfManagementConfig().GetEnabled()) {
-        // Self-management may generate omitted sections, but supplied selections
-        // must still be valid before they can reach the state storage proxy.
-        if (TString error = ValidateStateStorageSelections(proposed.GetDomainsConfig())) {
-            msg.push_back(std::move(error));
-            return EValidationResult::Error;
+    if (proposed.HasSelfManagementConfig()) {
+        const auto& sm = proposed.GetSelfManagementConfig();
+        if (sm.GetEnabled()) {
+            return EValidationResult::Ok;
         }
-        return EValidationResult::Ok;
     }
     if (!proposed.HasDomainsConfig()) {
         return EValidationResult::Ok;
     }
-    const auto& domains = proposed.GetDomainsConfig();
     bool isExplicit = domains.HasExplicitStateStorageConfig() && domains.HasExplicitStateStorageBoardConfig() && domains.HasExplicitSchemeBoardConfig();
     if (!isExplicit) {
         if (domains.DomainSize() < 1) {
@@ -496,9 +513,6 @@ TString ValidateStateStorageConfig(
     if (TString error = validateStructure("New", newSSConfig)) {
         return error;
     }
-    if (TString error = ValidateStateStorageConfigSelection(newSSConfig)) {
-        return TStringBuilder() << "New " << name << ' ' << error;
-    }
     if (oldSSConfig.HasRing() || oldSSConfig.RingGroupsSize()) {
         if (TString error = validateStructure("Old", oldSSConfig)) {
             return error;
@@ -510,6 +524,10 @@ TString ValidateStateStorageConfig(
             return TStringBuilder() << "New " << name << " configuration first ring group is WriteOnly";
         }
         for (auto &rg : info->RingGroups) {
+            if (rg.NToSelect < 1 || rg.NToSelect > rg.Rings.size()) {
+                return TStringBuilder() << "New " << name << " configuration NToSelect has invalid value";
+            }
+
             ui32 disabledCnt = 0;
             for (auto &ring : rg.Rings) {
                 if (ring.IsDisabled) {
@@ -564,6 +582,10 @@ TString ValidateStateStorageConfig(
     for (auto& rg : newSSConfig.GetRingGroups()) {
         if (rg.RingSize() && rg.NodeSize()) {
             return TStringBuilder() << name << " Ring and Node are defined, use the one of them";
+        }
+        const size_t numItems = Max(rg.RingSize(), rg.NodeSize());
+        if (!rg.HasNToSelect() || numItems < 1 || rg.GetNToSelect() < 1 || rg.GetNToSelect() > numItems) {
+            return TStringBuilder() << name << " invalid ring group selection";
         }
         for (auto &ring : rg.GetRing()) {
             if (ring.RingSize() > 0) {

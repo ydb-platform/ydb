@@ -42,7 +42,7 @@ EValidationResult ValidateStateStorageConfig(
     const NKikimrConfig::TAppConfig& proposed,
     std::vector<TString>& msg);
 
-TString ValidateStateStorageSelections(const NKikimrConfig::TDomainsConfig& domains);
+TString ValidateStateStorageConfigSelection(const NKikimrConfig::TStateStorageConfig& config);
 
 EValidationResult ValidateAuthConfig(
     const NKikimrProto::TAuthConfig& authConfig,

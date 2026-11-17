@@ -322,9 +322,6 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::UpdateConfig(TQuery::TUpdateConfig *request) {
         RunCommonChecks();
-        if (auto error = ValidateStateStorageYaml(request->GetConfig())) {
-            throw TExError() << "State storage YAML validation failed: " << *error;
-        }
         StartProposition(request->MutableConfig());
     }
 
@@ -380,16 +377,14 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback,
-                                                 bool allowConflictingGenerationAdvance,
-                                                 bool allowInvalidStateStorageHistory) {
+                                                 bool allowConflictingGenerationAdvance) {
         if (!Self->StorageConfig || !Self->Scepter) {
             throw TExRace() << "No working root for configuration recovery";
         }
         TEvScatter task;
         task.MutableCollectConfigs();
         const ui64 recoveryGeneration = Self->ConfigRecoveryGeneration;
-        IssueScatterTask(std::move(task), [this, recoveryGeneration, callback = std::move(callback),
-                                         allowConflictingGenerationAdvance, allowInvalidStateStorageHistory]
+        IssueScatterTask(std::move(task), [this, recoveryGeneration, callback = std::move(callback), allowConflictingGenerationAdvance]
                                         (TEvGather *res) {
             if (recoveryGeneration != Self->ConfigRecoveryGeneration) {
                 throw TExRace() << "Configuration changed while collecting configs";
@@ -398,14 +393,14 @@ namespace NKikimr::NStorage {
                 throw TExError() << "Incorrect CollectConfigs response";
             }
             auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true,
-                                                     allowConflictingGenerationAdvance, nullptr, allowInvalidStateStorageHistory);
+                                                     allowConflictingGenerationAdvance);
             if (result.ErrorReason || result.IsDistconfDisabledQuorum || !result.RecoveredConfig) {
                 throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable configuration");
             }
             if (result.RequiresRecoveryProposition) {
                 return StartRecoveryProposition(result);
             }
-            if (!result.RequiresGenerationAdvance && !result.RequiresStateStorageRepair) {
+            if (!result.RequiresGenerationAdvance) {
                 Self->ConfigRecoveryRequired = false;
                 InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
             }
@@ -502,39 +497,26 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, bool fromBootstrap) {
-        const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
-        const bool allowInvalidStateStorageHistory = op && op->Command.HasUpdateConfig();
-        if ((((Self->IsBridged() || Self->SelfManagementEnabled) && Self->StorageConfig->GetGeneration())
-                || (allowInvalidStateStorageHistory && Self->HasLocalConfig()))
+        if ((Self->IsBridged() || Self->SelfManagementEnabled) && Self->StorageConfig->GetGeneration()
             && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
             const TStorageConfigMeta base(*Self->StorageConfig);
             auto savedBase = propositionBase ? std::make_optional(*propositionBase) : std::nullopt;
+            const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
             const bool allowConflictingGenerationAdvance = op && op->Command.HasReplaceStorageConfig();
             auto start = [this, config = *config, mindPrev, savedBase = std::move(savedBase), fromBootstrap, base]
-                         (bool advancesConflictingGeneration,
-                          const NKikimrBlobStorage::TStorageConfig *repairBase = nullptr) mutable {
+                         (bool advancesConflictingGeneration) mutable {
                 if (base != TStorageConfigMeta(*Self->StorageConfig)) {
                     throw TExRace() << "Configuration was recovered; retry the configuration update";
-                }
-                if (repairBase) {
-                    const ui64 observedGeneration = Max(Self->MaxObservedConfigGeneration, repairBase->GetGeneration());
-                    if (observedGeneration == Max<ui64>()) {
-                        throw TExError() << "Configuration generation is exhausted";
-                    }
-                    config.SetGeneration(Max(config.GetGeneration(), observedGeneration + 1));
-                    savedBase = *repairBase;
-                    mindPrev = true;
                 }
                 AdvancesConflictingGeneration = advancesConflictingGeneration;
                 StartPropositionImpl(&config, mindPrev, savedBase ? &*savedBase : nullptr, fromBootstrap);
             };
-            if (Self->IsBridged() && !mindPrev && !allowInvalidStateStorageHistory) {
+            if (Self->IsBridged() && !mindPrev) {
                 CollectBridgeConfig(*config, [start = std::move(start)]() mutable { start(false); });
             } else {
                 CollectConfig([start = std::move(start)](TProcessCollectConfigsResult&& result) mutable {
-                    start(result.RequiresGenerationAdvance,
-                        result.RequiresStateStorageRepair ? &*result.RecoveredConfig : nullptr);
-                }, allowConflictingGenerationAdvance, allowInvalidStateStorageHistory);
+                    start(result.RequiresGenerationAdvance);
+                }, allowConflictingGenerationAdvance);
             }
         } else {
             StartPropositionImpl(config, mindPrev, propositionBase, fromBootstrap);

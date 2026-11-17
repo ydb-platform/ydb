@@ -472,9 +472,6 @@ namespace NKikimr::NStorage {
         THashMap<TString, TCacheItem> Cache;
         std::set<std::tuple<TString, TActorId>> CacheSubscriptions;
 
-        std::optional<TString> ValidateIncomingStorageConfig(const NKikimrBlobStorage::TStorageConfig& config,
-            bool initialBase = false) const;
-
         friend void ::Out<ERootState>(IOutputStream&, ERootState);
 
     public:
@@ -597,7 +594,6 @@ namespace NKikimr::NStorage {
             bool IsDistconfDisabledQuorum = false;
             std::optional<NKikimrBlobStorage::TStorageConfig> RecoveredConfig;
             bool RequiresGenerationAdvance = false;
-            bool RequiresStateStorageRepair = false;
             bool RequiresRecoveryProposition = false;
             std::optional<NKikimrBlobStorage::TStorageConfig> PropositionBase;
             std::optional<NKikimrBlobStorage::TStorageConfig> ConfigToPropose;
@@ -605,8 +601,7 @@ namespace NKikimr::NStorage {
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
             std::optional<TString> selfAssemblyUUID, bool dryRun = false, bool allowConflictingGenerationAdvance = false,
-            const NKikimrBlobStorage::TStorageConfig *collectionQuorumConfig = nullptr,
-            bool allowInvalidStateStorageHistory = false);
+            const NKikimrBlobStorage::TStorageConfig *collectionQuorumConfig = nullptr);
 
         void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
         bool IsBelowKnownAppliedConfig(const NKikimrBlobStorage::TStorageConfig& config) const;
@@ -967,8 +962,6 @@ namespace NKikimr::NStorage {
             const NKikimrBlobStorage::TStorageConfig& proposed);
 
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config);
-
-    std::optional<TString> ValidateStateStorageSelections(const NKikimrBlobStorage::TStorageConfig& config);
 
     std::optional<TString> ValidateBridgeClusterState(const NKikimrBridge::TClusterState& state);
 

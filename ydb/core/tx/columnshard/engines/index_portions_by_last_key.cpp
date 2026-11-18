@@ -34,7 +34,7 @@ TConstArrayRef<TCell> GetLastKey(const TConstArrayRef<TCell> row) {
 
 // byte equality is value equality for every key type of a column table
 bool IsSameKey(const TConstArrayRef<TCell> lhs, const TConstArrayRef<TCell> rhs) {
-    AFL_VERIFY(lhs.size() == rhs.size());
+    YDB_LOG_VERIFY(lhs.size() == rhs.size());
     for (ui32 i = 0; i < lhs.size(); ++i) {
         if (lhs[i].IsNull() != rhs[i].IsNull() || lhs[i].AsBuf() != rhs[i].AsBuf()) {
             return false;
@@ -48,15 +48,17 @@ std::vector<TRawTypeValue> BuildKey(
     const NTable::TScheme::TTableInfo& info, const TPortionInfo& portion, const ui64& pathId, const ui64& portionId) {
     std::vector<TRawTypeValue> key;
     key.emplace_back(&pathId, sizeof(pathId), NScheme::NTypeIds::Uint64);
-    AFL_VERIFY(portion.GetMeta()
+    YDB_LOG_VERIFY(portion.GetMeta()
                    .IndexKeyViewEnd()
                    .ForEachValue(*portion.GetMeta().GetPkSchema(),
                        [&](const std::optional<std::string_view> value) {
-        key.emplace_back(ToRawValue(value, info, LastKeyFirstTag + key.size() - 1));
+            key.emplace_back(ToRawValue(value, info, LastKeyFirstTag + key.size() - 1));
                        })
                    .IsSuccess());
     key.emplace_back(&portionId, sizeof(portionId), NScheme::NTypeIds::Uint64);
-    AFL_VERIFY(key.size() == info.KeyColumns.size())("key", key.size())("table_key", info.KeyColumns.size());
+    YDB_LOG_VERIFY(key.size() == info.KeyColumns.size(),
+        {"key", key.size()},
+        {"tableKey", info.KeyColumns.size()});
     return key;
 }
 
@@ -67,8 +69,9 @@ bool TIndexPortionsByLastKey::Exists(const NTable::TDatabase& db) {
 }
 
 void TIndexPortionsByLastKey::Create(NTable::TDatabase& db, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& pkColumns) {
-    AFL_VERIFY(!Exists(db));
-    AFL_VERIFY(pkColumns.size())("pk_columns", pkColumns.size());
+    YDB_LOG_VERIFY(!Exists(db));
+    YDB_LOG_VERIFY(pkColumns.size(),
+        {"pkColumns", pkColumns.size()});
     auto& alter = db.Alter();
     alter.AddTable("IndexPortionsByLastKey", TableId);
     alter.AddColumn(TableId, "PathId", PathIdTag, NScheme::NTypeIds::Uint64, false, false);
@@ -107,8 +110,8 @@ void TIndexPortionsByLastKey::Erase(NTable::TDatabase& db, const TPortionInfo& p
 bool TIndexPortionsByLastKey::ReadBatch(NTable::TDatabase& db, const TInternalPathId pathId, const std::optional<TOwnedCellVec>& below,
     const ui32 rowsLimit, std::vector<ui64>& portionIds, std::optional<TOwnedCellVec>& lastKey) {
     const auto* info = GetTableInfo(db);
-    AFL_VERIFY(info);
-    AFL_VERIFY(rowsLimit);
+    YDB_LOG_VERIFY(info);
+    YDB_LOG_VERIFY(rowsLimit);
     const ui64 rawPathId = pathId.GetRawValue();
     const TRawTypeValue pathIdValue(&rawPathId, sizeof(rawPathId), NScheme::NTypeIds::Uint64);
 
@@ -123,7 +126,9 @@ bool TIndexPortionsByLastKey::ReadBatch(NTable::TDatabase& db, const TInternalPa
             maxKey.emplace_back(ToRawValue((*below)[i], *info, LastKeyFirstTag + i));
         }
         maxKey.emplace_back();
-        AFL_VERIFY(maxKey.size() == info->KeyColumns.size())("key", maxKey.size())("table_key", info->KeyColumns.size());
+        YDB_LOG_VERIFY(maxKey.size() == info->KeyColumns.size(),
+            {"key", maxKey.size()},
+            {"tableKey", info->KeyColumns.size()});
         // a null PortionId sorts first, so (PathId, below, null) exclusive skips every portion with the last key `below`
         range.MaxInclusive = false;
     } else {

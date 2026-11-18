@@ -8,7 +8,7 @@ For an overview of the mechanisms and their operating conditions, see [SelfHeal]
 
 Sentinel, a component of [CMS](../../concepts/glossary.md#cms), continuously monitors the state of [PDisks](../../concepts/glossary.md#pdisk) and nodes. If a fault persists long enough (about one hour by default), Sentinel initiates relocation of the affected [VDisks](../../concepts/glossary.md#vdisk) to healthy hardware so that the [failure model](../../concepts/topology.md#cluster-config) is satisfied again.
 
-The [Blob Storage Controller](../../concepts/glossary.md#ds-controller) executes the command: data is replicated in the background. The relocation itself can take from minutes to a day, depending on the data volume and the hardware. Once the command has been accepted, CMS treats the task as issued; distributed storage is responsible for completing replication.
+[BSController](../../concepts/glossary.md#ds-controller) executes the command: data is replicated in the background. The relocation itself can take from minutes to a day, depending on the data volume and the hardware. Once the command has been accepted, CMS treats the task as issued; distributed storage is responsible for completing replication.
 
 Storage SelfHeal is enabled by default for [dynamic groups](../../concepts/glossary.md#dynamic-group). On clusters with configuration V2, you can also enable [static group SelfHeal](../configuration-management/configuration-v2/static-group-self-heal.md). With configuration V1, static group SelfHeal cannot be enabled.
 
@@ -18,13 +18,13 @@ SelfHeal can relocate VDisks of dynamic groups before prolonged host maintenance
 
 In the default `FAULTY` mode, the PDisks of the host being maintained are marked as faulty. If several of these disks belong to the same storage group, failure model checks can block relocation because all of them count as faulty at the same time.
 
-In `MAINTENANCE` mode, Sentinel sends a separate status, `LONG_TERM_MAINTENANCE_PLANNED`, to the Blob Storage Controller. A healthy PDisk remains `ACTIVE`. The maintenance status triggers VDisk relocation and prevents new VDisks from being placed on that PDisk, but does not itself increase the group's faulty disk count. This allows eviction to be requested for several healthy PDisks in the same group without artificially exceeding the failure model.
+In `MAINTENANCE` mode, Sentinel sends a separate status, `LONG_TERM_MAINTENANCE_PLANNED`, to BSController. A healthy PDisk remains `ACTIVE`. The maintenance status triggers VDisk relocation and prevents new VDisks from being placed on that PDisk, but does not itself increase the group's faulty disk count. This allows eviction to be requested for several healthy PDisks in the same group without artificially exceeding the failure model.
 
 Relocation within a group proceeds sequentially. Before each relocation, the other VDisks in the group must be ready. If the group has faulty VDisks or replication is in progress, SelfHeal first waits for the group to recover. Spare resources are also required to place new VDisks. The `MAINTENANCE` mode retains fault tolerance checks and does not grant permission to shut down the host before relocation is complete.
 
 Sentinel continues monitoring the actual PDisk state, so real faults are handled independently of the maintenance status. When CMS removes the VDisk eviction request, Sentinel resets the maintenance status to `NO_REQUEST`.
 
-To check the statuses during relocation, run the following [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md) command:
+To check the statuses during relocation, use [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md). Before running the command, [install the utility](../../reference/ydb-dstool/install.md) and configure [connection and authentication](../../reference/ydb-dstool/connect.md):
 
 ```bash
 ydb-dstool -e <bs_endpoint> pdisk list
@@ -65,7 +65,7 @@ While SelfHeal is disabled, VDisks from faulty PDisks are not relocated automati
 
 ## SelfHeal settings {#settings}
 
-The parameters below control different stages of Sentinel operation: polling PDisk state, confirming a persistent state, and retries when sending a new status to the [Blob Storage Controller](../../concepts/glossary.md#ds-controller). For each state, the time until confirmation is the product of **State update interval** and the cycle limit for that state. For example, for most failure states the defaults are 60 seconds and 60 cycles, so the transition to `FAULTY` starts after about one hour. Configuration update intervals and status-change retries are not part of that product.
+The parameters below control different stages of Sentinel operation: polling PDisk state, confirming a persistent state, and retries when sending a new status to [BSController](../../concepts/glossary.md#ds-controller). For each state, the time until confirmation is the product of **State update interval** and the cycle limit for that state. For example, for most failure states the defaults are 60 seconds and 60 cycles, so the transition to `FAULTY` starts after about one hour. Configuration update intervals and status-change retries are not part of that product.
 
 {% note warning %}
 

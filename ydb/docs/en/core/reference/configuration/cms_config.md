@@ -25,7 +25,7 @@ cms_config:
 | `cluster_limits.disabled_nodes_ratio_limit` | `13` | Maximum percentage of [cluster](../../concepts/glossary.md#cluster) nodes that can be simultaneously unavailable. |
 | `disable_maintenance` | `false` | Flag that suspends new cluster maintenance operations. |
 | `sentinel_config.enable` | `true` | Enables Sentinel, the CMS component that monitors disks and initiates [storage SelfHeal](../../devops/concepts/selfheal-storage.md). |
-| `sentinel_config.dry_run` | `false` | If `true`, Sentinel does not send disk status changes to the Blob Storage Controller. |
+| `sentinel_config.dry_run` | `false` | If `true`, Sentinel does not send disk status changes to [BSController](../../concepts/glossary.md#ds-controller). |
 | `sentinel_config.evict_vdisks_status` | `FAULTY` | Selects the [VDisk eviction mode](#evict-vdisks-status) before host maintenance: `FAULTY`, `MAINTENANCE`, or `DISABLED`. The value `UNKNOWN` is equivalent to `FAULTY`. |
 
 ## VDisk Eviction Mode Before Maintenance {#evict-vdisks-status}

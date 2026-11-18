@@ -8623,6 +8623,11 @@ selector_config: []
             nodeState->SetState(nodeId == 3 ? NKikimr::BAD : NKikimr::GOOD); // node 3 is bad
         }
         runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        // the root accepts the self-heal command first and reassigns the node after that
+        const std::unique_ptr<TEventHandle<NStorage::TEvNodeConfigInvokeOnRootResult>> response =
+            runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            response->Get()->Record.DebugString());
         UNIT_ASSERT_C(SimUntil(runtime, [&] { return numReplaced >= 2; }), "self-heal didn't reassign the node");
         runtime.FilterEnqueue = {};
     }

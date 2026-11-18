@@ -168,6 +168,27 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 66);
     }
 
+    Y_UNIT_TEST(PessimizeAllNodesInLargePool) {
+        constexpr ui64 endpointCount = 101;
+        std::vector<TEndpointRecord> endpoints;
+        for (ui64 nodeId = 1; nodeId <= endpointCount; ++nodeId) {
+            endpoints.emplace_back("node-" + std::to_string(nodeId) + ":2136", 0, "", nodeId);
+        }
+
+        TEndpointElectorSafe elector;
+        elector.SetNewState(std::move(endpoints));
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 0);
+
+        for (ui64 nodeId = 1; nodeId <= endpointCount; ++nodeId) {
+            elector.PessimizeNode(nodeId);
+            UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey(nodeId), true).Priority,
+                                     std::numeric_limits<std::int32_t>::max());
+        }
+
+        // Every endpoint is pessimized, so discovery must see the whole pool as unhealthy.
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 100);
+    }
+
     Y_UNIT_TEST(Election) {
         TEndpointElectorSafe elector;
         elector.SetNewState(std::vector<TEndpointRecord>{{"Two", 2}, {"One_A", 1}, {"Three", 3}, {"One_B", 1}});

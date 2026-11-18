@@ -1,6 +1,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_create_cdc_stream.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -62,6 +63,46 @@ TCdcIndexTestCase MakeCdcIndexTestCase(NKikimrSchemeOp::EIndexType type) {
             }
         )", NKikimrSchemeOp::EIndexType_Name(type).c_str(), description.c_str()),
     };
+}
+
+void AssertOperationInFlight(TTestActorRuntime& runtime, ui64 txId) {
+    const auto subscriber = runtime.AllocateEdgeActor();
+    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, subscriber, new TEvSchemeShard::TEvNotifyTxCompletion(txId));
+    TAutoPtr<IEventHandle> handle;
+    UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle, TDuration::Seconds(1)));
+}
+
+void TestCreateUint64Table(TTestActorRuntime& runtime, ui64 txId, const TString& name, ui32 partitionCount) {
+    TestCreateTable(runtime, txId, "/MyRoot", Sprintf(R"(
+        Name: "%s"
+        Columns { Name: "key" Type: "Uint64" }
+        Columns { Name: "value" Type: "Uint64" }
+        KeyColumnNames: ["key"]
+        UniformPartitionsCount: %u
+    )", name.c_str(), partitionCount));
+}
+
+TString MakeAggregatedCdcStreamScheme(const TString& tableName, const TString& streamName) {
+    return Sprintf(R"(
+        TableName: "%s"
+        StreamDescription {
+          Name: "%s"
+          Mode: ECdcStreamModeKeysOnly
+          Format: ECdcStreamFormatProto
+          ResolvedTimestampsIntervalMs: 1000
+        }
+    )", tableName.c_str(), streamName.c_str());
+}
+
+void TestCreateAggregatedCdcStream(TTestActorRuntime& runtime, ui64 txId, const TString& tableName, const TString& streamName) {
+    TestCreateCdcStream(runtime, txId, "/MyRoot", MakeAggregatedCdcStreamScheme(tableName, streamName));
+}
+
+void TestSplitTableInTwo(TTestActorRuntime& runtime, ui64 txId, ui64 sourceTabletId) {
+    TestSplitTable(runtime, txId, "/MyRoot/Table", Sprintf(R"(
+        SourceTabletId: %lu
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
+    )", sourceTabletId));
 }
 
 } // anonymous namespace
@@ -1816,6 +1857,11 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         });
         UNIT_ASSERT_VALUES_UNEQUAL(rotatedDescribeResult.GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId(), oldAggregatorTabletId);
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/RotatedStream/streamImpl"), {NLs::PathExist});
+
+        const auto tableShards = GetSortedTableShards(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(DescribeCdcAggregatorSources(runtime,
+            rotatedDescribeResult.GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId()), tableShards);
+        UNIT_ASSERT_VALUES_EQUAL(DescribeCdcAggregatorSources(runtime, oldAggregatorTabletId), tableShards);
     }
 
     Y_UNIT_TEST(AggregatorDroppedWithStream) {
@@ -1856,6 +1902,458 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
         env.TestWaitTabletDeletion(runtime, aggregatorTabletId);
+    }
+
+    Y_UNIT_TEST(ShouldCompleteStreamCreationWhenCdcAggregatorConfirmsTracking) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult> blockedResults(runtime);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              ResolvedTimestampsIntervalMs: 1000
+            }
+        )");
+        runtime.WaitFor("TEvConfigureTrackingResult", [&] { return blockedResults.size(); });
+        AssertOperationInFlight(runtime, txId);
+
+        // when
+        blockedResults.Stop().Unblock();
+
+        // then
+        env.TestWaitNotification(runtime, txId);
+        const auto sources = DescribeCdcAggregatorSources(runtime, GetCdcAggregatorTabletId(runtime, "/MyRoot/Table/Stream"));
+        UNIT_ASSERT_VALUES_EQUAL(sources.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(sources, GetSortedTableShards(runtime, "/MyRoot/Table"));
+    }
+
+    Y_UNIT_TEST(ShouldConfigureCdcAggregatorWhenSchemeShardRebootsInConfigureParts) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult> blockedResults(runtime);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              ResolvedTimestampsIntervalMs: 1000
+            }
+        )");
+        runtime.WaitFor("TEvConfigureTrackingResult", [&] { return blockedResults.size(); });
+        blockedResults.Stop();
+
+        // when
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // then
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated),
+        });
+        const auto sources = DescribeCdcAggregatorSources(runtime, GetCdcAggregatorTabletId(runtime, "/MyRoot/Table/Stream"));
+        UNIT_ASSERT_VALUES_EQUAL(sources, GetSortedTableShards(runtime, "/MyRoot/Table"));
+    }
+
+    Y_UNIT_TEST(ShouldReportSplitToCdcAggregatorWhenSchemeShardRebootsBeforeAck) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              ResolvedTimestampsIntervalMs: 1000
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 aggregatorTabletId = GetCdcAggregatorTabletId(runtime, "/MyRoot/Table/Stream");
+        const auto parentShards = GetSortedTableShards(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(parentShards.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(DescribeCdcAggregatorSources(runtime, aggregatorTabletId), parentShards);
+
+        TBlockEvents<NCdcAggregator::TEvCdcAggregator::TEvPartitioningChangedAck> blockedAcks(runtime);
+
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+            SourceTabletId: %lu
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
+        )", parentShards.front()));
+        runtime.WaitFor("TEvPartitioningChangedAck", [&] { return blockedAcks.size(); });
+        AssertOperationInFlight(runtime, txId);
+        blockedAcks.Stop();
+
+        TVector<NKikimrCdcAggregator::TEvPartitioningChangedAck> repeatedAcks;
+        auto observeRepeatedAcks = runtime.AddObserver<NCdcAggregator::TEvCdcAggregator::TEvPartitioningChangedAck>([&](auto& ev) {
+            repeatedAcks.push_back(ev->Get()->Record);
+        });
+
+        // when
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // then
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT(!repeatedAcks.empty());
+        for (const auto& ack : repeatedAcks) {
+            UNIT_ASSERT_C(ack.GetStatus() == NKikimrCdcAggregator::TEvPartitioningChangedAck::SUCCESS, ack.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(ack.GetOperationId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(ack.GetParentDataShardId(), parentShards.front());
+        }
+        const auto childShards = GetSortedTableShards(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(childShards.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(DescribeCdcAggregatorSources(runtime, aggregatorTabletId), childShards);
+    }
+
+    Y_UNIT_TEST(ShouldCompleteStreamCreationWhenCdcAggregatorRepliesAgainAfterReboot) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateUint64Table(runtime, ++txId, "Table", 2);
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult> blockedResults(runtime);
+
+        TestCreateAggregatedCdcStream(runtime, ++txId, "Table", "Stream");
+        runtime.WaitFor("TEvConfigureTrackingResult", [&] { return blockedResults.size(); });
+        const ui64 aggregatorTabletId = blockedResults.front()->Get()->Record.GetOrigin();
+        RebootTablet(runtime, aggregatorTabletId, runtime.AllocateEdgeActor());
+        runtime.WaitFor("repeated TEvConfigureTrackingResult", [&] { return blockedResults.size() >= 2; });
+
+        // when
+        blockedResults.Stop().Unblock();
+
+        // then
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(DescribeCdcAggregatorSources(runtime, aggregatorTabletId), GetSortedTableShards(runtime, "/MyRoot/Table"));
+    }
+
+    Y_UNIT_TEST(ShouldKeepStreamCreationInFlightWhenCdcAggregatorRejectsTracking) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateUint64Table(runtime, ++txId, "Table", 2);
+        env.TestWaitNotification(runtime, txId);
+
+        ui32 rejectedResults = 0;
+        auto rejectResults = runtime.AddObserver<NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult>([&](auto& ev) {
+            ev->Get()->Record.SetStatus(NKikimrCdcAggregator::TEvConfigureTrackingResult::CONFLICT);
+            ++rejectedResults;
+        });
+
+        // when
+        TestCreateAggregatedCdcStream(runtime, ++txId, "Table", "Stream");
+
+        // then
+        runtime.WaitFor("rejected TEvConfigureTrackingResult", [&] { return rejectedResults > 0; });
+        AssertOperationInFlight(runtime, txId);
+    }
+
+    Y_UNIT_TEST(ShouldIgnoreConfigureTrackingResultWhenOriginIsNotStreamCdcAggregator) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateUint64Table(runtime, ++txId, "Table", 2);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 aggregatorTabletId = 0;
+        auto replaceFirstOrigin = runtime.AddObserver<NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (!aggregatorTabletId) {
+                aggregatorTabletId = record.GetOrigin();
+                record.SetOrigin(aggregatorTabletId + 1);
+            }
+        });
+
+        TestCreateAggregatedCdcStream(runtime, ++txId, "Table", "Stream");
+        runtime.WaitFor("TEvConfigureTrackingResult", [&] { return aggregatorTabletId != 0; });
+        AssertOperationInFlight(runtime, txId);
+
+        // when
+        RebootTablet(runtime, aggregatorTabletId, runtime.AllocateEdgeActor());
+
+        // then
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_VALUES_EQUAL(DescribeCdcAggregatorSources(runtime, aggregatorTabletId), GetSortedTableShards(runtime, "/MyRoot/Table"));
+    }
+
+    Y_UNIT_TEST(ShouldIgnoreConfigureTrackingResultWhenOperationPartDoesNotConfigureCdcAggregator) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateUint64Table(runtime, ++txId, "Table", 2);
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult> blockedResults(runtime);
+
+        TestCreateAggregatedCdcStream(runtime, ++txId, "Table", "Stream");
+        runtime.WaitFor("TEvConfigureTrackingResult", [&] { return blockedResults.size(); });
+        blockedResults.Stop();
+
+        auto misroutedResult = MakeHolder<NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult>();
+        misroutedResult->Record = blockedResults.front()->Get()->Record;
+        misroutedResult->Record.SetOperationPartId(1);
+        bool misroutedResultDelivered = false;
+        auto observeMisroutedResult = runtime.AddObserver<NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult>([&](auto& ev) {
+            if (ev->Get()->Record.GetOperationPartId() == 1) {
+                misroutedResultDelivered = true;
+            }
+        });
+
+        // when
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), misroutedResult.Release());
+        runtime.WaitFor("misrouted TEvConfigureTrackingResult", [&] { return misroutedResultDelivered; });
+        blockedResults.Unblock();
+
+        // then
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+    }
+
+    Y_UNIT_TEST(ShouldConfigureCdcAggregatorWhenTopicTabletsAreCreated) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateUint64Table(runtime, ++txId, "Table", 2);
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvHive::TEvCreateTablet> blockedTopicTablets(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTabletType() == TTabletTypes::PersQueue;
+        });
+        std::optional<ui64> aggregatorOwnerIdx;
+        auto observeAggregatorCreation = runtime.AddObserver<TEvHive::TEvCreateTablet>([&](auto& ev) {
+            if (ev->Get()->Record.GetTabletType() == TTabletTypes::CdcAggregator) {
+                aggregatorOwnerIdx = ev->Get()->Record.GetOwnerIdx();
+            }
+        });
+        bool aggregatorCreated = false;
+        auto observeAggregatorCreated = runtime.AddObserver<TEvHive::TEvCreateTabletReply>([&](auto& ev) {
+            if (aggregatorOwnerIdx && ev->Get()->Record.GetOwnerIdx() == *aggregatorOwnerIdx) {
+                aggregatorCreated = true;
+            }
+        });
+        bool configurePartsStarted = false;
+        auto observeConfigureParts = runtime.AddObserver<TEvPrivate::TEvProgressOperation>([&](auto& ev) {
+            if (aggregatorCreated && ev->Get()->TxId == txId && ev->Get()->TxPartId == 0) {
+                configurePartsStarted = true;
+            }
+        });
+        TVector<NKikimrCdcAggregator::TEvConfigureTracking> configureRequests;
+        auto observeConfigureRequests = runtime.AddObserver<NCdcAggregator::TEvCdcAggregator::TEvConfigureTracking>([&](auto& ev) {
+            configureRequests.push_back(ev->Get()->Record);
+        });
+
+        TestCreateAggregatedCdcStream(runtime, ++txId, "Table", "Stream");
+        runtime.WaitFor("PersQueue TEvCreateTablet", [&] { return blockedTopicTablets.size(); });
+        runtime.WaitFor("ConfigureParts of the stream", [&] { return configurePartsStarted; });
+        AssertOperationInFlight(runtime, txId);
+        UNIT_ASSERT(configureRequests.empty());
+
+        // when
+        blockedTopicTablets.Stop().Unblock();
+
+        // then
+        env.TestWaitNotification(runtime, txId);
+        const auto topicDescription = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl", true);
+        TMap<ui32, ui64> topicPartitions;
+        for (const auto& partition : topicDescription.GetPathDescription().GetPersQueueGroup().GetPartitions()) {
+            topicPartitions.emplace(partition.GetPartitionId(), partition.GetTabletId());
+        }
+        UNIT_ASSERT(!topicPartitions.empty());
+        UNIT_ASSERT(!configureRequests.empty());
+        for (const auto& request : configureRequests) {
+            TMap<ui32, ui64> targetPartitions;
+            for (const auto& partition : request.GetConfig().GetTargetPartitions()) {
+                targetPartitions.emplace(partition.GetPartitionId(), partition.GetTabletId());
+            }
+            UNIT_ASSERT_C(targetPartitions == topicPartitions, request.ShortDebugString());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldConfigureEveryCdcAggregatorWhenStreamsAreCreatedInOneOperation) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateUint64Table(runtime, ++txId, "Table1", 1);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateUint64Table(runtime, ++txId, "Table2", 2);
+        env.TestWaitNotification(runtime, txId);
+
+        auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(++txId, TTestTxConfig::SchemeShard);
+        for (const auto* tableName : {"Table1", "Table2"}) {
+            auto& transaction = *request->Record.AddTransaction();
+            transaction.SetWorkingDir("/MyRoot");
+            transaction.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
+            UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(
+                MakeAggregatedCdcStreamScheme(tableName, "Stream"), transaction.MutableCreateCdcStream()));
+        }
+
+        // when
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request.release(), 0);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        // then
+        env.TestWaitNotification(runtime, txId);
+        for (const auto* tableName : {"Table1", "Table2"}) {
+            const TString tablePath = TString("/MyRoot/") + tableName;
+            UNIT_ASSERT_VALUES_EQUAL(
+                DescribeCdcAggregatorSources(runtime, GetCdcAggregatorTabletId(runtime, tablePath + "/Stream")),
+                GetSortedTableShards(runtime, tablePath));
+        }
+    }
+
+    Y_UNIT_TEST(ShouldWaitForEveryCdcAggregatorWhenTableWithTwoAggregatedStreamsIsSplit) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateUint64Table(runtime, ++txId, "Table", 1);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateAggregatedCdcStream(runtime, ++txId, "Table", "Stream1");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateAggregatedCdcStream(runtime, ++txId, "Table", "Stream2");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 firstAggregatorTabletId = GetCdcAggregatorTabletId(runtime, "/MyRoot/Table/Stream1");
+        const ui64 secondAggregatorTabletId = GetCdcAggregatorTabletId(runtime, "/MyRoot/Table/Stream2");
+        const auto parentShards = GetSortedTableShards(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(parentShards.size(), 1u);
+
+        TBlockEvents<NCdcAggregator::TEvCdcAggregator::TEvPartitioningChangedAck> blockedAcks(runtime, [&](const auto& ev) {
+            return ev->Get()->Record.GetOrigin() == firstAggregatorTabletId;
+        });
+
+        TestSplitTableInTwo(runtime, ++txId, parentShards.front());
+        runtime.WaitFor("TEvPartitioningChangedAck", [&] { return blockedAcks.size(); });
+        AssertOperationInFlight(runtime, txId);
+
+        // when
+        blockedAcks.Stop().Unblock();
+
+        // then
+        env.TestWaitNotification(runtime, txId);
+        const auto childShards = GetSortedTableShards(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(childShards.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(DescribeCdcAggregatorSources(runtime, firstAggregatorTabletId), childShards);
+        UNIT_ASSERT_VALUES_EQUAL(DescribeCdcAggregatorSources(runtime, secondAggregatorTabletId), childShards);
+    }
+
+    void CompleteSplitWhenCdcAggregatorAcksWith(NKikimrCdcAggregator::TEvPartitioningChangedAck::EStatus status) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateUint64Table(runtime, ++txId, "Table", 1);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateAggregatedCdcStream(runtime, ++txId, "Table", "Stream");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto parentShards = GetSortedTableShards(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(parentShards.size(), 1u);
+
+        ui32 replacedAcks = 0;
+        auto replaceAckStatus = runtime.AddObserver<NCdcAggregator::TEvCdcAggregator::TEvPartitioningChangedAck>([&](auto& ev) {
+            ev->Get()->Record.SetStatus(status);
+            ++replacedAcks;
+        });
+
+        // when
+        TestSplitTableInTwo(runtime, ++txId, parentShards.front());
+
+        // then
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT(replacedAcks > 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetSortedTableShards(runtime, "/MyRoot/Table").size(), 2u);
+    }
+
+    Y_UNIT_TEST(ShouldCompleteSplitWhenCdcAggregatorRejectsPartitioningChange) {
+        CompleteSplitWhenCdcAggregatorAcksWith(NKikimrCdcAggregator::TEvPartitioningChangedAck::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(ShouldCompleteSplitWhenCdcAggregatorIsNotReady) {
+        CompleteSplitWhenCdcAggregatorAcksWith(NKikimrCdcAggregator::TEvPartitioningChangedAck::NOT_READY);
     }
 
     void Metering(bool serverless) {

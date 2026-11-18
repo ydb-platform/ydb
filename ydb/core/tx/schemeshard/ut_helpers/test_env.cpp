@@ -14,6 +14,8 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/cdc_aggregator/public/events.h>
+#include <ydb/core/tx/cdc_aggregator/service/service.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
@@ -811,6 +813,11 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         IActor* txProxy = CreateTxProxy(runtime.GetTxAllocatorTabletIds());
         TActorId txProxyId = runtime.Register(txProxy, node);
         runtime.RegisterService(MakeTxProxyID(), txProxyId, node);
+    }
+
+    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+        const TActorId cdcAggregatorServiceId = runtime.Register(NCdcAggregator::CreateCdcAggregatorService(), node);
+        runtime.RegisterService(NCdcAggregator::MakeCdcAggregatorServiceId(runtime.GetNodeId(node)), cdcAggregatorServiceId, node);
     }
 
     // Create sequence proxies

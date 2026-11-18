@@ -25,6 +25,8 @@ message TCdcAggregatorStreamTopic {
 
 message TEvConfigureTracking {
     optional TTrackingConfig Config = 1;
+    optional uint64 OperationId = 2;
+    optional uint32 OperationPartId = 3;
 }
 
 message TEvConfigureTrackingResult {
@@ -38,6 +40,8 @@ message TEvConfigureTrackingResult {
     optional EStatus Status = 1;
     optional string Error = 2;
     optional fixed64 Origin = 3;
+    optional uint64 OperationId = 4;
+    optional uint32 OperationPartId = 5;
 }
 
 message TEvWriteHeartbeats {
@@ -94,6 +98,8 @@ message TEvPartitioningChangedAck {
     optional EStatus Status = 1;
     optional string Error = 2;
     optional fixed64 Origin = 3;
+    optional uint64 OperationId = 4;
+    optional fixed64 ParentDataShardId = 5;
 }
 
 message TEvDescribeTracking {

@@ -53,6 +53,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -1601,6 +1602,8 @@ public:
     void Handle(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NCdcAggregator::TEvCdcAggregator::TEvConfigureTrackingResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NCdcAggregator::TEvCdcAggregator::TEvPartitioningChangedAck::TPtr& ev, const TActorContext& ctx);
     void Handle(NReplication::TEvController::TEvCreateReplicationResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NReplication::TEvController::TEvAlterReplicationResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NReplication::TEvController::TEvDropReplicationResult::TPtr &ev, const TActorContext &ctx);

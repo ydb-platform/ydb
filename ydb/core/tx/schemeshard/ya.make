@@ -403,6 +403,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/test_tablet
     ydb/core/tx
+    ydb/core/tx/cdc_aggregator/public
     ydb/core/tx/datashard
     ydb/core/tx/schemeshard/common
     ydb/core/tx/schemeshard/generated

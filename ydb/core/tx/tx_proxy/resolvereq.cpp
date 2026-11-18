@@ -146,7 +146,7 @@ namespace {
             NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
             YDB_LOG_CTX_COMP_SAMPLED_BY(ctx, (resp->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR), NKikimrServices::TX_PROXY, TxId, "HANDLE EvNavigateKeySetResult TResolveTablesActor",
-                {"tabletId", ctx.SelfID},
+                {"selfId", ctx.SelfID},
                 {"txId", TxId},
                 {"errorCount", resp->ErrorCount},
                 {"marker", "P1"});
@@ -267,7 +267,7 @@ namespace {
             NSchemeCache::TSchemeCacheRequest* request = ev->Get()->Request.Get();
 
             YDB_LOG_CTX_COMP_SAMPLED_BY(ctx, (request->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR), NKikimrServices::TX_PROXY, TxId, "HANDLE EvResolveKeySetResult TResolveTablesActor",
-                {"tabletId", ctx.SelfID},
+                {"selfId", ctx.SelfID},
                 {"txId", TxId},
                 {"errorCount", request->ErrorCount},
                 {"marker", "P2"});

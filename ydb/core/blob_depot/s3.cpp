@@ -1,7 +1,10 @@
 #include "s3.h"
+#include "config.h"
 #include "s3_router_events.h"
+#include "s3_request_timer.h"
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
@@ -27,29 +30,45 @@ namespace NKikimr::NBlobDepot {
             Self->Send(MakeBlobStorageNodeWardenID(Self->SelfId().NodeId()),
                 new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(Self->TabletID(), *settings));
             WrapperId = MakeBlobDepotS3RouterID(Self->TabletID());
-            BasePath = TStringBuilder() << settings->GetSettings().GetObjectKeyPattern() << '/' << Self->Config.GetName();
+            BasePath = MakeS3BasePath(settings->GetSettings(), Self->Config.GetName());
             Bucket = settings->GetSettings().GetBucket();
-            SyncMode = settings->HasSyncMode();
-            AsyncMode = settings->HasAsyncMode();
-            Enabled = true;
+            const auto& route = settings->GetSettings();
+            const auto& defaults = AppData()->AwsClientConfig;
+            const auto requestMs = route.HasRequestTimeoutMs() ? route.GetRequestTimeoutMs() : defaults.GetRequestTimeoutMs();
+            const auto httpMs = route.HasHttpRequestTimeoutMs() ? route.GetHttpRequestTimeoutMs() : defaults.GetHttpRequestTimeoutMs();
+            const auto connectMs = route.HasConnectionTimeoutMs() ? route.GetConnectionTimeoutMs() : defaults.GetConnectionTimeoutMs();
+            const auto ioTimeout = Max(TS3RequestTimer::Timeout, TDuration::MilliSeconds(Max(requestMs, httpMs)));
+            // Allow twice the SDK's default eleven attempts (including connect time).
+            // An incremental namespace scan covers arrivals beyond this window.
+            PutWatchWindow = ClampVal((ioTimeout + TDuration::MilliSeconds(connectMs)) * 22,
+                TDuration::Hours(1), TDuration::Days(1));
+            const TString legacyPath = TStringBuilder() << settings->GetSettings().GetObjectKeyPattern()
+                << '/' << Self->Config.GetName();
+            // Canonical LIST can reach objects a legacy scanner never saw.
+            OrphanScanEnabled = !ValidateS3BasePath(BasePath) && (Self->Config.GetS3NamespaceValidated() ||
+                (!Self->HasAsyncS3History() && BasePath == legacyPath));
+            if (Self->IsDataCoolingEnabled()) {
+                UploadPutsInFlight = settings->GetAsyncMode().GetUploadPutsInFlight();
+            }
 
             CurrentMaxWritesInFlight = MaxWritesInFlight();
             CurrentMaxDeletesInFlight = MaxDeletesInFlight();
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = CurrentMaxDeletesInFlight;
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = CurrentMaxWritesInFlight;
         } else {
-            SyncMode = false;
-            AsyncMode = false;
-            Enabled = false;
+            OrphanScanEnabled = false;
         }
     }
 
     void TS3Manager::TerminateAllActors() {
-        for (TActorId actorId : ActiveUploaders) {
-            Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, Self->SelfId(), nullptr, 0));
+        for (const auto& entry : ActiveUploaders) {
+            Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, entry.first, Self->SelfId(), nullptr, 0));
         }
         for (TActorId actorId : ActiveDeleters) {
             Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, Self->SelfId(), nullptr, 0));
+        }
+        if (PutProbe) {
+            Self->Send(PutProbe, new TEvents::TEvPoison);
         }
         if (ScannerActorId) {
             Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, ScannerActorId, Self->SelfId(), nullptr, 0));
@@ -63,17 +82,31 @@ namespace NKikimr::NBlobDepot {
 
     void TS3Manager::Handle(TAutoPtr<IEventHandle> ev) {
         STRICT_STFUNC_BODY(
+            fFunc(TEvPrivate::EvUploadResult, HandleUploadResult)
+            fFunc(TEvPrivate::EvRunCooling, HandleCoolingWakeup)
+            fFunc(TEvPrivate::EvCoolingTimer, HandleCoolingWakeup)
+            fFunc(TEvPrivate::EvS3ProbeWakeup, HandleProbeWakeup)
+            fFunc(TEvPrivate::EvS3ProbeFinished, HandleProbeFinished)
             fFunc(TEvPrivate::EvDeleteResult, HandleDeleter)
             fFunc(TEvPrivate::EvScanFound, HandleScanner)
+            cFunc(TEvPrivate::EvResumeS3Scan, HandleResumeScanner)
             cFunc(TEvPrivate::EvDeleteThrottleWakeup, HandleDeleteThrottleWakeup)
             cFunc(TEvPrivate::EvPutThrottleWakeup, HandlePutThrottleWakeup)
         )
     }
 
     void TS3Manager::OnDataLoaded() {
-        if (Enabled) {
-            RunScannerActor();
+        if (OrphanScanEnabled) {
+            if (NextOrphanScan > TActivationContext::Now()) {
+                ScheduleScan(NextOrphanScan - TActivationContext::Now());
+            } else {
+                RunScannerActor();
+            }
         }
+        if (WrapperId && NumPutWatches) {
+            RunPutProbe();
+        }
+        MaybeScheduleCooling();
     }
 
     void TBlobDepot::InitS3Manager() {

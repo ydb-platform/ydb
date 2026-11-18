@@ -46,9 +46,6 @@ namespace NKikimr::NBlobDepot {
                     NIceDb::TUpdate<Schema::Config::ConfigProtobuf>(ConfigProtobuf)
                 );
 
-                const bool success = Self->Config.ParseFromString(ConfigProtobuf);
-                Y_ABORT_UNLESS(success);
-
                 return true;
             }
 
@@ -58,6 +55,8 @@ namespace NKikimr::NBlobDepot {
                     {"id", Self->GetLogId()});
 
                 if (!std::exchange(Self->Configured, true)) {
+                    const bool success = Self->Config.ParseFromString(ConfigProtobuf);
+                    Y_ABORT_UNLESS(success);
                     Self->StartOperation();
                 } else {
                     // TODO(alexvru): handle it in a better way, without tablet restart

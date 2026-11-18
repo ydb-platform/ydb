@@ -18,8 +18,10 @@ UNITTEST_FOR(ydb/core/blob_depot)
 
     SRCS(
         closed_interval_set_ut.cpp
+        config_ut.cpp
         given_id_range_ut.cpp
         s3_limits_ut.cpp
+        value_chain_ut.cpp
     )
 
     PEERDIR(

@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "blob_depot_tablet.h"
-#include "data.h"
+#include "cooling_index.h"
 
 #include <ydb/core/util/backoff.h>
 
@@ -14,17 +14,12 @@ namespace NKikimr::NBlobDepot {
         // (acquired via TEvNodeWardenAcquireBlobDepotS3Router on Init, released on
         // TerminateAllActors). All S3 traffic is forwarded through the router.
         TActorId WrapperId;
-        TActorId UploaderId;
         TString BasePath;
         TString Bucket;
 
-        bool Enabled = false;
-        bool SyncMode = false;
-        bool AsyncMode = false;
+        bool OrphanScanEnabled = false;
 
         ui64 NextKeyId = 1;
-
-        THashSet<TActorId> ActiveUploaders;
 
     public:
         TS3Manager(TBlobDepot *self);
@@ -35,10 +30,16 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TAutoPtr<IEventHandle> ev);
 
-        void OnKeyWritten(const TData::TKey& key, const TValueChain& valueChain);
-
         const TActorId& GetWrapperId() const { return WrapperId; }
+        void MaybeScheduleCooling();
 
+        TInstant GetPutWatchRetireAt() const { return TActivationContext::Now() + PutWatchWindow; }
+        void RunPutProbe();
+        void SetNumPutWatches(ui64 count) {
+            NumPutWatches = count;
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_COOLING_UNFINISHED_PUT_WATCHES] = count;
+        }
+        void EnqueuePutWatch(TS3Locator locator, TInstant retireAt, NTabletFlatExecutor::TTransactionContext& txc);
         void AddTrashToCollect(TS3Locator locator);
 
         ui64 GetTotalS3TrashObjects() const { return TotalS3TrashObjects; }
@@ -85,15 +86,61 @@ namespace NKikimr::NBlobDepot {
     private: ///////////////////////////////////////////////////////////////////////////////////////////////////////////
         class TUploaderActor;
         struct TEvUploadResult;
+        class TTxStageCoolingPack;
+        class TTxPublishCoolingPack;
+
+        using TPack = TCoolingIndex::TPack;
+        ui32 UploadPutsInFlight = 0;
+        THashSet<TS3ObjectKey> CoolingObjectsInFlight;
+        THashMap<TActorId, std::pair<TS3Locator, TPack>> ActiveUploaders;
+
+        TBackoff CoolingBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
+        TMonotonic CoolingBackoffUntil;
+        bool CoolingRunScheduled = false;
+        TWakeupTimer CoolingTimer;
+        void ScheduleCooling(TMonotonic when);
+        void HandleCoolingWakeup(TAutoPtr<IEventHandle> ev);
+        void HandleUploadResult(TAutoPtr<IEventHandle> ev);
+        void RunCooling();
+        void FinishCoolingPack(TS3Locator locator, const TPack& pack, const TEvUploadResult *failure = nullptr);
+        bool CanCollectScannedObject(const TS3Locator& locator) const;
 
     private: ///////////////////////////////////////////////////////////////////////////////////////////////////////////
         class TScannerActor;
         class TTxProcessScannedKeys;
         struct TEvScanFound;
 
+        class TUnfinishedPutProbe;
+        enum class EProbeResult { Missing, Deleted, Error };
+        struct TEvProbeFinished;
+        struct TPutWatch {
+            TS3Locator Locator;
+            TInstant Due;
+            TInstant RetireAt;
+            TDuration Interval;
+        };
+        TDuration PutWatchWindow = TDuration::Hours(1);
+        ui64 NumPutWatches = 0;
+        std::deque<TPutWatch> DuePutWatches;
+        bool ReadingPutWatches = false;
+        bool PutWatchPageChanged = false;
+        TActorId PutProbe;
+        TMonotonic NextProbeAt;
+        TWakeupTimer ProbeTimer;
+        void ReadDuePutWatches();
+        void SchedulePutProbe(TInstant when);
+        void UpdatePutWatchCount(NTabletFlatExecutor::TTransactionContext& txc, bool added);
+        void HandleProbeWakeup(TAutoPtr<IEventHandle> ev);
+        void HandleProbeFinished(TAutoPtr<IEventHandle> ev);
+
         TActorId ScannerActorId;
+        TInstant NextOrphanScan; // set when the first finite watch retires
+        TString ScanMarker;
+        bool ScanScheduled = false;
+        void ScheduleScan(TDuration delay);
 
         void RunScannerActor();
+        void HandleResumeScanner();
         void HandleScanner(TAutoPtr<IEventHandle> ev);
 
     private: ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -110,7 +157,7 @@ namespace NKikimr::NBlobDepot {
         ui64 TotalS3TrashObjects = 0;
         ui64 TotalS3TrashSize = 0;
 
-        // Throttling state for S3 SlowDown responses on delete requests.
+        // Retry delay for failed deletes. SlowDown also decreases concurrency.
         TBackoff DeleteBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
         TMonotonic DeleteThrottleUntil;
         bool DeleteWakeupScheduled = false;

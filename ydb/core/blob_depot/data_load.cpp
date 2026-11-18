@@ -77,11 +77,23 @@ namespace NKikimr::NBlobDepot {
                     break;
             }
 
-            TS3Locator s3;
-            bool progress = false;
-            while (!LoadTrashS3(*tx, s3, progress)) {
-                RestartLoadTx(accounting, tx, std::exchange(progress, false));
-            }
+            LoadS3Table<Schema::CoolingS3Puts>(tx, accounting, [&](TS3Locator item, auto& rows) {
+                const auto retireAt = rows.template GetValue<Schema::CoolingS3Puts::RetireAt>();
+                if (rows.template GetValueOrDefault<Schema::CoolingS3Puts::Published>()) {
+                    TrackPublishedRetriedPut(item, retireAt);
+                } else {
+                    // A staged PUT may have reached the router just before the previous tablet stopped.
+                    // Once in the watch queue, its deadline and backoff survive subsequent restarts.
+                    Self->S3Manager->EnqueuePutWatch(item, Max(retireAt, Self->S3Manager->GetPutWatchRetireAt()), *tx);
+                }
+            });
+            LoadS3Table<Schema::TrashS3>(tx, accounting, [&](TS3Locator item, auto& rows) {
+                if (rows.template GetValueOrDefault<Schema::TrashS3::CheckReferences>()) {
+                    PendingS3RefChecks.emplace(item.GetObjectKey(), item.Len);
+                } else {
+                    Self->S3Manager->AddTrashToCollect(item);
+                }
+            });
 
             TScanRange r{
                 .Begin = TKey::Min(),
@@ -89,11 +101,18 @@ namespace NKikimr::NBlobDepot {
                 .PrechargeRows = 10'000,
                 .PrechargeBytes = 1'000'000,
             };
-            progress = false;
+            bool progress = false;
             while (!ScanRange(r, tx.GetTxc(), &progress, [](const TKey&, const TValue&) { return true; })) {
                 RestartLoadTx(accounting, tx, std::exchange(progress, false));
             }
 
+            while (!PendingS3RefChecks.empty()) {
+                CheckPendingS3References(*tx, &tx);
+                FinishLoadTx(accounting, tx);
+                CommitTrash(&tx);
+                tx.RunSuccessorTx();
+            }
+            S3ReferencesLoaded = true;
             FinishLoadTx(accounting, tx);
             Self->Data->OnLoadComplete();
         }));
@@ -132,38 +151,67 @@ namespace NKikimr::NBlobDepot {
         return ELoadTrashResult::Complete;
     }
 
-    bool TData::LoadTrashS3(NTabletFlatExecutor::TTransactionContext& txc, TS3Locator& from, bool& progress) {
-        NIceDb::TNiceDb db(txc.DB);
-        auto table = db.Table<Schema::TrashS3>().GreaterOrEqual(from.Generation, from.KeyId);
-        static constexpr ui64 PrechargeRows = 10'000;
-        static constexpr ui64 PrechargeBytes = 1'000'000;
-        if (!table.Precharge(PrechargeRows, PrechargeBytes)) {
-            return false;
-        }
-        auto rows = table.Select();
-        if (!rows.IsReady()) {
-            return false;
-        }
+    template<typename TTable, typename F>
+    void TData::LoadS3Table(TCoroTx::TContextBase& tx, TLoadCycleAccounting& accounting, F&& process) {
+        TS3Locator from;
+        bool progress = false;
         const ui32 generation = Self->Executor()->Generation();
-        while (rows.IsValid()) {
-            TS3Locator item{
-                .Len = rows.GetValue<Schema::TrashS3::Len>(),
-                .Generation = rows.GetValue<Schema::TrashS3::Generation>(),
-                .KeyId = rows.GetValue<Schema::TrashS3::KeyId>(),
-            };
-            if (item.Generation == generation) {
-                return true; // we don't want to read newly added items by this tablet's generation
-            }
-            if (item != from) {
-                Self->S3Manager->AddTrashToCollect(item);
-                from = item;
-                progress = true;
-            }
-            if (!rows.Next()) {
+        auto loadBatch = [&] {
+            NIceDb::TNiceDb db(tx.GetTxc()->DB);
+            auto table = db.Table<TTable>().GreaterOrEqual(from.Generation, from.KeyId);
+            if (!table.Precharge(10'000, 1'000'000)) {
                 return false;
             }
+            auto rows = table.Select();
+            if (!rows.IsReady()) {
+                return false;
+            }
+            size_t processed = 0;
+            while (rows.IsValid()) {
+                TS3Locator item{
+                    .Len = rows.template GetValue<typename TTable::Len>(),
+                    .Generation = rows.template GetValue<typename TTable::Generation>(),
+                    .KeyId = rows.template GetValue<typename TTable::KeyId>(),
+                };
+                if (item.Generation == generation) {
+                    break; // rows created by this generation are already tracked
+                }
+                if (item != from) {
+                    process(item, rows);
+                    from = item;
+                    progress = true;
+                    if (++processed == 128) {
+                        return false; // commit this page and yield before migrating more staged rows
+                    }
+                }
+                if (!rows.Next()) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        while (!loadBatch()) {
+            RestartLoadTx(accounting, tx, std::exchange(progress, false));
         }
-        return true;
+        // A later table may fault before reading its first row. Commit the final
+        // batch of staged PUT conversions before that can roll back its watches.
+        if (tx.GetTxc()->DB.HasChanges()) {
+            RestartLoadTx(accounting, tx, true);
+        }
+    }
+
+    void TData::CheckPendingS3References(NTabletFlatExecutor::TTransactionContext& txc, void* cookie) {
+        NIceDb::TNiceDb db(txc.DB);
+        for (size_t n = 0; n < 1000 && !PendingS3RefChecks.empty(); ++n) {
+            const auto it = PendingS3RefChecks.begin();
+            const auto [generation, keyId] = it->first;
+            if (RefCountS3.contains(it->first)) {
+                db.Table<Schema::TrashS3>().Key(generation, keyId).Delete();
+            } else {
+                AddToS3Trash({.Len = it->second, .Generation = generation, .KeyId = keyId}, txc, cookie);
+            }
+            PendingS3RefChecks.erase(it);
+        }
     }
 
     void TData::OnLoadComplete() {
@@ -282,6 +330,7 @@ namespace NKikimr::NBlobDepot {
         BarrierServer->OnDataLoaded();
         BlocksManager->OnDataLoaded();
         S3Manager->OnDataLoaded();
+        ScheduleHotWriteAdmission();
         StartGroupAssimilator();
         TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADING_KEYS] = 0;
         TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADED] = 1;

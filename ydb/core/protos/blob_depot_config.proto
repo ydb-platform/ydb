@@ -22,23 +22,23 @@ message TS3BackendSettings {
     optional NKikimrSchemeOp.TS3Settings Settings = 1; // how to connect to S3 (mandatory field)
 
     message TAsyncMode {
-        // data (when written) is first stored in ordinary data channel and then asynchronously transferred to S3 storage by
-        // BlobDepot tablet; amount of stored data can be controlled by following settings
-        //
-        // future operation may include modes when data is uploaded by agents directly to the storage
-
-        // when do we fully stop processing new queries until some data is uploaded
+        // Acknowledged data starts on Data channels. The tablet then packs eligible data into S3 objects.
+        // Maximum referenced hot bytes plus outstanding write credits for this depot.
         optional uint64 MaxPendingBytes = 2;
 
-        // when do we start throttling (if set, this must be strictly less than MaxPendingBytes, which also must be set)
+        // Start throttling at this many charged bytes. Requires MaxPendingBytes.
         optional uint64 ThrottleStartBytes = 3;
 
-        // upload rate (bytes per second) at ThrottleStartBytes amount of data (which linearly drops to 0 as amount increases
-        // up to MaxPendingBytes)
+        // Foreground write admission rate at ThrottleStartBytes. It drops linearly to zero at MaxPendingBytes.
         optional uint64 ThrottleMaxBytesPerSecond = 4;
 
-        // number of concurrent puts
+        // Number of concurrent background uploads and repacks.
         optional uint32 UploadPutsInFlight = 5 [default = 1];
+        // Retain up to this many bytes of recent committed data on Data channels.
+        optional uint64 HotTargetBytes = 6 [default = 0];
+        optional uint32 TargetObjectBytes = 7 [default = 16777216];
+        // Sparse objects become eligible below this percentage of live bytes. Zero disables repacking.
+        optional uint32 RepackBelowLivePercent = 8 [default = 50];
     }
 
     message TSyncMode {
@@ -76,6 +76,13 @@ message TBlobDepotConfig {
     optional bool HiveContacted = 5;
     optional NKikimrHive.TEvCreateTablet HiveParams = 6; // extra hive parameters
     optional uint64 TenantHiveId = 7;
-    optional TS3BackendSettings S3BackendSettings = 8; // if set, then this tablet stores all its data in S3 (except for some cache/inflight)
+    optional TS3BackendSettings S3BackendSettings = 8;
+    // S3 path suffix shared by the tablet and its agents. New BSC depots include a per-depot UUID.
     optional string Name = 9;
+    // Async packs can survive later mode changes. Their locators use the configured bucket and key prefix.
+    optional bool S3NamespacePinned = 10;
+    // BSC checked that no other group owns this physical S3 namespace.
+    optional bool S3NamespaceValidated = 11;
+    // Once BSC has authorized async cooling, shared objects can survive subsequent mode changes.
+    optional bool EverAuthorizedDataCooling = 12;
 }

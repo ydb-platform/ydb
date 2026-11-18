@@ -1,5 +1,6 @@
 #pragma once
 
+#include "blob_limits.h"
 #include "defs.h"
 
 namespace NKikimr::NBlobDepot {
@@ -24,14 +25,6 @@ namespace NKikimr::NBlobDepot {
         std::array<ui8, 256> ChannelToIndex;
         std::vector<std::tuple<ui8, ui32>> ChannelGroups;
     };
-
-#pragma pack(push, 1)
-    struct TVirtualGroupBlobFooter {
-        TLogoBlobID StoredBlobId;
-    };
-#pragma pack(pop)
-
-    static constexpr ui32 MaxBlobSize = 10 << 20; // 10 MB BlobStorage hard limit
 
     enum class EBlobType : ui32 {
         VG_COMPOSITE_BLOB = 0, // data + footer
@@ -137,10 +130,14 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
+    using TS3ObjectKey = std::pair<ui32, ui64>; // generation and key id
+
     struct TS3Locator {
         ui32 Len = 0;
         ui32 Generation = 0;
         ui64 KeyId = 0;
+
+        TS3ObjectKey GetObjectKey() const { return {Generation, KeyId}; }
 
         static TS3Locator FromProto(const NKikimrBlobDepot::TS3Locator& locator) {
             return {
@@ -171,11 +168,15 @@ namespace NKikimr::NBlobDepot {
             const size_t a = hash % 36;
             const size_t b = hash / 36 % 36;
             static const char vec[] = "0123456789abcdefghijklmnopqrstuvwxyz";
-            return TStringBuilder() << basePath
-                << '/' << Generation
+            TStringBuilder name;
+            if (basePath) {
+                name << basePath << '/';
+            }
+            name << Generation
                 << '/' << vec[a]
                 << '/' << vec[b]
                 << '/' << KeyId;
+            return name;
         }
 
         static std::optional<TS3Locator> FromObjectName(const TString& name, ui64 len, TString *error) {
@@ -193,7 +194,7 @@ namespace NKikimr::NBlobDepot {
                     .Generation = generation,
                     .KeyId = keyId,
                 };
-                if (res.MakeObjectName(TString()) != '/' + name) {
+                if (res.MakeObjectName(TString()) != name) {
                     *error = "object name does not match";
                     return std::nullopt;
                 }
@@ -253,25 +254,59 @@ namespace NKikimr::NBlobDepot {
     using TValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>;
 
     template<typename TCallback>
-    void EnumerateBlobsForValueChain(const TValueChain& valueChain, ui64 tabletId, TCallback&& callback) {
-        for (const auto& item : valueChain) {
-            if (item.HasBlobLocator()) {
-                const auto& locator = item.GetBlobLocator();
-                const auto& blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
-                if (locator.GetFooterLen() == 0) {
-                    callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
-                } else if (locator.GetTotalDataLen() + locator.GetFooterLen() > MaxBlobSize) {
-                    callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
-                    callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_FOOTER_BLOB, 0, locator.GetFooterLen()), 0, 0);
-                } else {
-                    callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_COMPOSITE_BLOB, 0, locator.GetTotalDataLen() +
-                        locator.GetFooterLen()), 0, locator.GetTotalDataLen());
-                }
-            }
-            if (item.HasS3Locator()) {
-                callback(TS3Locator::FromProto(item.GetS3Locator()));
+    void EnumerateBlobsForValueChainItem(const NKikimrBlobDepot::TValueChain& item, ui64 tabletId, TCallback&& callback) {
+        if (item.HasBlobLocator()) {
+            const auto& locator = item.GetBlobLocator();
+            const auto blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
+            if (locator.GetFooterLen() == 0) {
+                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
+            } else if (locator.GetTotalDataLen() + locator.GetFooterLen() > MaxBlobSize) {
+                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
+                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_FOOTER_BLOB, 0, locator.GetFooterLen()), 0, 0);
+            } else {
+                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_COMPOSITE_BLOB, 0, locator.GetTotalDataLen() +
+                    locator.GetFooterLen()), 0, locator.GetTotalDataLen());
             }
         }
+        if (item.HasS3Locator()) {
+            callback(TS3Locator::FromProto(item.GetS3Locator()));
+        }
+    }
+
+    template<typename TCallback>
+    void EnumerateBlobsForValueChain(const TValueChain& valueChain, ui64 tabletId, TCallback&& callback) {
+        for (const auto& item : valueChain) {
+            EnumerateBlobsForValueChainItem(item, tabletId, callback);
+        }
+    }
+
+    // Resolve and copy logical payloads, excluding footers even when they share a physical blob with the data.
+    template<typename TCallback>
+    bool EnumerateValueChainPayload(const TValueChain& valueChain, ui64 tabletId, TCallback&& callback) {
+        for (const auto& item : valueChain) {
+            const ui64 begin = item.GetSubrangeBegin();
+            bool valid = true;
+            const auto emit = [&](auto locator, ui32 payloadSize) {
+                const ui64 end = item.HasSubrangeEnd() ? item.GetSubrangeEnd() : payloadSize;
+                if (begin > end || end > payloadSize) {
+                    valid = false;
+                } else if (begin != end) {
+                    callback(locator, static_cast<ui32>(begin), static_cast<ui32>(end));
+                }
+            };
+            EnumerateBlobsForValueChainItem(item, tabletId, TOverloaded{
+                [&](TLogoBlobID id, ui32, ui32 end) {
+                    if (end) {
+                        emit(id, end);
+                    }
+                },
+                [&](TS3Locator locator) { emit(locator, locator.Len); }
+            });
+            if (!valid) {
+                return false;
+            }
+        }
+        return true;
     }
 
     inline bool IsSameValueChain(const TValueChain& x, const TValueChain& y) {

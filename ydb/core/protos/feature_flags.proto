@@ -502,4 +502,7 @@ message TFeatureFlags {
     optional bool ShareShardedMkqlProgram = 399 [default = false];
     // Disables client access to built-in PostgreSQL compatibility in YDB.
     optional bool DisablePgCompatibility = 400 [default = false];
+    // Enable after all nodes support packed S3 mappings and the rollback window has closed.
+    // Then reconfigure existing async groups through BSC to validate their S3 namespaces.
+    optional bool EnableBlobDepotDataCooling = 401 [default = false];
 }

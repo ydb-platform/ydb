@@ -1,5 +1,6 @@
 #include "blob_depot.h"
 #include "blob_depot_tablet.h"
+#include "config.h"
 #include "blocks.h"
 #include "garbage_collection.h"
 #include "data.h"
@@ -44,6 +45,7 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvBlobDepot::TEvCollectGarbage, BarrierServer->Handle);
             hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
             hFunc(TEvBlobDepot::TEvPrepareWriteS3, Handle);
+            hFunc(TEvBlobDepot::TEvHotWriteCredit, Handle);
 
             default:
                 Y_ABORT();
@@ -151,6 +153,7 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvBlobDepot::EvPushNotifyResult, handleFromAgentPipe);
                 fFunc(TEvBlobDepot::EvCollectGarbage, handleFromAgentPipe);
                 fFunc(TEvBlobDepot::EvPrepareWriteS3, handleFromAgentPipe);
+                fFunc(TEvBlobDepot::EvHotWriteCredit, handleFromAgentPipe);
 
                 fFunc(TEvPrivate::EvDeliver, handleDelivery);
 
@@ -169,6 +172,8 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
                 cFunc(TEvPrivate::EvCheckExpiredAgents, HandleCheckExpiredAgents);
+                cFunc(TEvPrivate::EvRunHotWriteAdmission, RunHotWriteAdmission);
+                fFunc(TEvPrivate::EvWakeHotWriteAdmission, WakeHotWriteAdmission);
 
                 cFunc(TEvPrivate::EvCommitCertainKeys, Data->HandleCommitCertainKeys);
                 cFunc(TEvPrivate::EvDoGroupMetricsExchange, DoGroupMetricsExchange);
@@ -179,8 +184,13 @@ namespace NKikimr::NBlobDepot {
                 cFunc(TEvPrivate::EvJsonUpdate, JsonHandler.HandleUpdate);
 
                 fFunc(TEvPrivate::EvUploadResult, S3Manager->Handle);
+                fFunc(TEvPrivate::EvRunCooling, S3Manager->Handle);
+                fFunc(TEvPrivate::EvCoolingTimer, S3Manager->Handle);
+                fFunc(TEvPrivate::EvS3ProbeWakeup, S3Manager->Handle);
+                fFunc(TEvPrivate::EvS3ProbeFinished, S3Manager->Handle);
                 fFunc(TEvPrivate::EvDeleteResult, S3Manager->Handle);
                 fFunc(TEvPrivate::EvScanFound, S3Manager->Handle);
+                fFunc(TEvPrivate::EvResumeS3Scan, S3Manager->Handle);
                 fFunc(TEvPrivate::EvDeleteThrottleWakeup, S3Manager->Handle);
                 fFunc(TEvPrivate::EvPutThrottleWakeup, S3Manager->Handle);
 
@@ -196,6 +206,13 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
+        // An unlimited-deadline restore waiting for space can have no other event in flight.
+        for (const auto& [key, eventType] : InternalHotWriteWaiters) {
+            const TActorId actor = key.second;
+            if (actor != SelfId() && actor != GroupAssimilatorId) {
+                TActivationContext::Send(new IEventHandle(eventType, 0, actor, SelfId(), nullptr, 0));
+            }
+        }
         for (const TActorId& actorId : {GroupAssimilatorId, CopyBlobActorId}) {
             if (actorId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
@@ -207,6 +224,34 @@ namespace NKikimr::NBlobDepot {
         S3Manager->TerminateAllActors();
 
         TActor::PassAway();
+    }
+
+    bool TBlobDepot::ReadyForAgentQueries() const {
+        return Configured &&
+            (!Config.GetIsDecommittingGroup() || DecommitState >= EDecommitState::BlocksFinished);
+    }
+
+    void TBlobDepot::InitDataCooling() {
+        const auto& s3 = Config.GetS3BackendSettings();
+        if (AppData()->FeatureFlags.GetEnableBlobDepotDataCooling() && s3.HasAsyncMode()) {
+            if (!Config.GetS3NamespaceValidated() || !Config.GetEverAuthorizedDataCooling()) {
+                YDB_LOG_WARN_COMP(BLOB_DEPOT, "Data cooling requires BSC to validate the stored S3 namespace",
+                    {"id", GetLogId()});
+            } else if (const auto error = ValidateDataCooling(s3)) {
+                YDB_LOG_WARN_COMP(BLOB_DEPOT, "Invalid stored data cooling settings",
+                    {"id", GetLogId()}, {"error", *error});
+            } else {
+                const auto& async = s3.GetAsyncMode();
+                ui64 hotTargetBytes = async.GetHotTargetBytes();
+                if (async.HasThrottleStartBytes()) {
+                    // Admission throttles at the threshold itself, so leave headroom below it.
+                    const ui64 start = async.GetThrottleStartBytes();
+                    hotTargetBytes = Min(hotTargetBytes, start ? start - 1 : 0);
+                }
+                CoolingIndex = std::make_unique<TCoolingIndex>(*Data, TabletID(), hotTargetBytes,
+                    async.GetTargetObjectBytes(), async.GetRepackBelowLivePercent());
+            }
+        }
     }
 
     void TBlobDepot::InitChannelKinds() {

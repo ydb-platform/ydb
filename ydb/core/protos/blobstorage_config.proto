@@ -707,6 +707,9 @@ message TUpdateBridgeGroupInfo {
 message TReconfigureVirtualGroup {
     string Name = 1;
     optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 2;
+    // Confirm the new route accesses the same S3 objects, including writes already in flight.
+    // The bucket and physical key prefix must remain the same.
+    bool ConfirmS3RouteChange = 3;
 }
 
 message TRecommissionGroups {

@@ -292,11 +292,10 @@ private:
     }
 
     void Handle(NConsole::TEvConsole::TEvGetOperationResponse::TPtr &ev, const TActorContext& ctx) {
-        auto &rec = ev->Get()->Record.GetResponse();
-        if (rec.operation().ready())
-            ReplyWithError(rec.operation().status(), rec.operation().issues(), ctx);
-        else
-            ReplyGetOperationResponse(false, ctx);
+        TEvGetOperationRequest::TResponse response;
+        response.mutable_operation()->CopyFrom(ev->Get()->Record.GetResponse().operation());
+        response.mutable_operation()->set_id(GetProtoRequest()->id());
+        Reply(response, ctx);
     }
 
     void HandleResponse(typename TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {

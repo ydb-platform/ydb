@@ -383,6 +383,9 @@ public:
                 TRpcRequestSettings::Make(settings));
         }
 
+        // The returned future waits for completion. Keep that wait on the
+        // server so OperationTimeout applies without cancelling the durable job.
+        request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
         auto promise = NThreading::NewPromise<TStatus>();
         auto extractor = [promise](Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
             if (operation) {

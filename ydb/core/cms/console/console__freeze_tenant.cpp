@@ -79,13 +79,15 @@ namespace NKikimr::NConsole {
 
             void Handle(NSchemeShard::TEvSchemeShard::TEvDatabaseFreezeResult::TPtr& ev) {
                 const auto& result = ev->Get()->Record;
-                if (result.GetEpoch() != Operation.GetEpoch() || !result.GetReady()) {
+                if (result.GetEpoch() != Operation.GetEpoch()) {
                     return;
                 }
                 auto resultEvent = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDatabaseFreezeResult>();
                 resultEvent->Record.CopyFrom(result);
                 Send(Owner, resultEvent.Release());
-                PassAway();
+                if (result.GetReady()) {
+                    PassAway();
+                }
             }
 
             void Reconnect() {
@@ -147,6 +149,14 @@ namespace NKikimr::NConsole {
         return it != DatabaseFreezeOperations.end() && !it->second.GetReady();
     }
 
+    void TTenantsManager::IndexDatabaseFreezeOperation(const NKikimrConsole::TDatabaseFreezeOperation& operation) {
+        if (!operation.GetIdempotencyKey() || !operation.GetDomainOwnerId() || !operation.GetDomainLocalPathId()) {
+            return;
+        }
+        const auto key = std::make_pair(TDomainId(operation.GetDomainOwnerId(), operation.GetDomainLocalPathId()), operation.GetIdempotencyKey());
+        DatabaseFreezeIdempotencyKeys.emplace(key, operation.GetEpoch());
+    }
+
     void TTenantsManager::FillDatabaseFreezeOperation(ui64 epoch, Ydb::Operations::Operation& result) {
         const auto& operation = DatabaseFreezeOperations.at(epoch);
         result.set_id(NOperationId::ProtoToString(MakeOperationId(operation.GetPath(), epoch, TTenant::SET_FREEZE)));
@@ -158,6 +168,8 @@ namespace NKikimr::NConsole {
                 issue->set_message(operation.GetIssue());
                 issue->set_severity(NYql::TSeverityIds::S_ERROR);
             }
+        } else if (const auto progress = DatabaseFreezeProgress.find(epoch); progress != DatabaseFreezeProgress.end()) {
+            result.mutable_metadata()->PackFrom(progress->second);
         }
     }
 
@@ -241,15 +253,14 @@ namespace NKikimr::NConsole {
                 return fail(Ydb::StatusIds::UNAVAILABLE, "Database is not running");
             }
             if (request.idempotency_key()) {
-                for (const auto& [epoch, operation] : Self->DatabaseFreezeOperations) {
-                    if (operation.GetPath() == tenant->Path && operation.GetTenantTxId() == tenant->TxId && operation.GetDomainOwnerId() == tenant->DomainId.OwnerId && operation.GetDomainLocalPathId() == tenant->DomainId.LocalPathId && operation.GetIdempotencyKey() == request.idempotency_key())
-                    {
-                        if (operation.GetFreeze() != request.freeze()) {
-                            return fail(Ydb::StatusIds::BAD_REQUEST, "Idempotency key has a different freeze value");
-                        }
-                        Self->FillDatabaseFreezeOperation(epoch, result);
-                        return true;
+                const auto key = std::make_pair(tenant->DomainId, TString(request.idempotency_key()));
+                if (const auto found = Self->DatabaseFreezeIdempotencyKeys.find(key); found != Self->DatabaseFreezeIdempotencyKeys.end()) {
+                    const auto& operation = Self->DatabaseFreezeOperations.at(found->second);
+                    if (operation.GetFreeze() != request.freeze()) {
+                        return fail(Ydb::StatusIds::BAD_REQUEST, "Idempotency key has a different freeze value");
                     }
+                    Self->FillDatabaseFreezeOperation(found->second, result);
+                    return true;
                 }
             }
             if (request.generation() && request.generation() != tenant->Generation) {
@@ -274,7 +285,6 @@ namespace NKikimr::NConsole {
             Y_ENSURE(Epoch && Self->NextDatabaseFreezeEpoch);
             auto& operation = Self->DatabaseFreezeOperations[Epoch];
             operation.SetPath(tenant->Path);
-            operation.SetTenantTxId(tenant->TxId);
             operation.SetDomainOwnerId(tenant->DomainId.OwnerId);
             operation.SetDomainLocalPathId(tenant->DomainId.LocalPathId);
             operation.SetEpoch(Epoch);
@@ -300,9 +310,11 @@ namespace NKikimr::NConsole {
                     ctx.Send(it->second, new TEvents::TEvPoisonPill);
                     Self->DatabaseFreezeWorkers.erase(it);
                 }
+                Self->DatabaseFreezeProgress.erase(CancelledEpoch);
                 Self->NotifyDatabaseFreeze(CancelledEpoch, ctx);
             }
             if (Start) {
+                Self->IndexDatabaseFreezeOperation(Self->DatabaseFreezeOperations.at(Epoch));
                 Self->StartDatabaseFreeze(Epoch, ctx);
             }
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
@@ -345,6 +357,7 @@ namespace NKikimr::NConsole {
                 Self->DatabaseFreezeOperations.at(Epoch).CopyFrom(Completed);
             }
             Self->DatabaseFreezeWorkers.erase(Epoch);
+            Self->DatabaseFreezeProgress.erase(Epoch);
             Self->NotifyDatabaseFreeze(Epoch, ctx);
             Self->TxProcessor->TxCompleted(this, ctx);
         }
@@ -361,8 +374,22 @@ namespace NKikimr::NConsole {
     void TTenantsManager::Handle(NSchemeShard::TEvSchemeShard::TEvDatabaseFreezeResult::TPtr& ev, const TActorContext& ctx) {
         const auto epoch = ev->Get()->Record.GetEpoch();
         auto worker = DatabaseFreezeWorkers.find(epoch);
-        if (worker != DatabaseFreezeWorkers.end() && worker->second == ev->Sender) {
-            TxProcessor->ProcessTx(CreateTxFreezeTenantDone(epoch, ev->Get()->Record.GetStatus(), ev->Get()->Record.GetIssue()), ctx);
+        if (worker == DatabaseFreezeWorkers.end() || worker->second != ev->Sender
+            || DatabaseFreezeOperations.at(epoch).GetReady())
+        {
+            return;
+        }
+        const auto& result = ev->Get()->Record;
+        if (result.GetReady()) {
+            TxProcessor->ProcessTx(CreateTxFreezeTenantDone(epoch, result.GetStatus(), result.GetIssue()), ctx);
+        } else {
+            // Progress is disposable. Persist only the final result, and rebuild
+            // diagnostics from SchemeShard after a Console restart.
+            auto& progress = DatabaseFreezeProgress[epoch];
+            progress.set_progress(result.GetIssue());
+            const auto now = ctx.Now();
+            progress.mutable_update_time()->set_seconds(now.Seconds());
+            progress.mutable_update_time()->set_nanos((now.MicroSeconds() % 1000000) * 1000);
         }
     }
 

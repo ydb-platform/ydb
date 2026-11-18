@@ -1896,6 +1896,8 @@ void TTenantsManager::ClearState()
     TenantIdToName.clear();
     RemovedTenants.clear();
     DatabaseFreezeOperations.clear();
+    DatabaseFreezeIdempotencyKeys.clear();
+    DatabaseFreezeProgress.clear();
     DatabaseFreezeSubscribers.clear();
     NextDatabaseFreezeEpoch = 1;
     SlotStats.Clear();
@@ -3107,12 +3109,13 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         const auto epoch = freezeRowset.GetValue<Schema::DatabaseFreezeOperations::Epoch>();
         Y_ENSURE(operation.GetEpoch() == epoch && epoch < Max<ui64>());
         NextDatabaseFreezeEpoch = Max(NextDatabaseFreezeEpoch, epoch + 1);
-        if (auto tenant = GetTenant(operation.GetPath()); tenant && tenant->TxId == operation.GetTenantTxId()
+        if (auto tenant = GetTenant(operation.GetPath()); tenant
             && tenant->DomainId.OwnerId == operation.GetDomainOwnerId()
             && tenant->DomainId.LocalPathId == operation.GetDomainLocalPathId())
         {
             tenant->FreezeEpoch = Max(tenant->FreezeEpoch, epoch);
         }
+        IndexDatabaseFreezeOperation(operation);
         DatabaseFreezeOperations[epoch] = std::move(operation);
         if (!freezeRowset.Next()) {
             return false;

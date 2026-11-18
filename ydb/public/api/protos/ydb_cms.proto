@@ -4,6 +4,8 @@ option cc_enable_arenas = true;
 package Ydb.Cms;
 option java_package = "com.yandex.ydb.cms";
 
+import "google/protobuf/timestamp.proto";
+
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
@@ -259,6 +261,16 @@ message AlterDatabaseRequest {
 
 message AlterDatabaseResponse {
     Ydb.Operations.Operation operation = 1;
+}
+
+// Operation.metadata for an unfinished database freeze or thaw.
+// Diagnostics are best-effort and become available again after Console recovery.
+message DatabaseFreezeMetadata {
+    // Latest diagnostic from SchemeShard: current stage and reasons for waiting.
+    // This is informational text, not the final operation status or an error.
+    string progress = 1;
+    // Time Console last received this diagnostic. Progress is not persisted.
+    google.protobuf.Timestamp update_time = 2;
 }
 
 // List all databases known by CMS.

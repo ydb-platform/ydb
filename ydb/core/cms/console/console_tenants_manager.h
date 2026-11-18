@@ -756,6 +756,7 @@ public:
     ITransaction* CreateTxFreezeTenant(TEvConsole::TEvAlterTenantRequest::TPtr& ev);
     ITransaction* CreateTxFreezeTenantDone(ui64 epoch, ui32 status, const TString& issue);
     void StartDatabaseFreeze(ui64 epoch, const TActorContext& ctx);
+    void IndexDatabaseFreezeOperation(const NKikimrConsole::TDatabaseFreezeOperation& operation);
     void FillDatabaseFreezeOperation(ui64 epoch, Ydb::Operations::Operation& result);
     void NotifyDatabaseFreeze(ui64 epoch, const TActorContext& ctx);
     bool IsDatabaseFreezePending(TTenant::TPtr tenant) const;
@@ -1085,6 +1086,8 @@ private:
     THashMap<TString, TRemovedTenant> RemovedTenants;
     ui64 NextDatabaseFreezeEpoch = 1;
     THashMap<ui64, NKikimrConsole::TDatabaseFreezeOperation> DatabaseFreezeOperations;
+    THashMap<std::pair<TDomainId, TString>, ui64> DatabaseFreezeIdempotencyKeys;
+    THashMap<ui64, Ydb::Cms::DatabaseFreezeMetadata> DatabaseFreezeProgress;
     THashMap<ui64, TActorId> DatabaseFreezeWorkers;
     THashMap<ui64, TVector<TActorId>> DatabaseFreezeSubscribers;
     TTenantsConfig Config;

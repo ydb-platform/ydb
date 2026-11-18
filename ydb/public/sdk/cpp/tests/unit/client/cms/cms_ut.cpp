@@ -28,6 +28,8 @@ namespace {
         const TReply Reply;
         std::atomic<bool> HasFreeze = false;
         std::atomic<bool> Freeze = false;
+        std::atomic<int> OperationMode = Ydb::Operations::OperationParams::OPERATION_MODE_UNSPECIFIED;
+        std::atomic<i64> OperationTimeoutSeconds = 0;
 
         explicit TCmsService(TReply reply)
             : Reply(reply)
@@ -38,6 +40,8 @@ namespace {
                                    Ydb::Cms::AlterDatabaseResponse* response) override {
             HasFreeze = request->has_freeze();
             Freeze = request->freeze();
+            OperationMode = request->operation_params().operation_mode();
+            OperationTimeoutSeconds = request->operation_params().operation_timeout().seconds();
             if (Reply.TransportFailure) {
                 return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Injected transport failure");
             }
@@ -141,6 +145,7 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
         const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().AlterAttributes({{"test", "value"}}));
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT(!server.Cms.HasFreeze);
+        UNIT_ASSERT_VALUES_EQUAL(server.Cms.OperationMode.load(), static_cast<int>(Ydb::Operations::OperationParams::OPERATION_MODE_UNSPECIFIED));
     }
 
     Y_UNIT_TEST(FreezeAndThawWithOperationIdSucceed) {
@@ -150,6 +155,17 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT(server.Cms.HasFreeze);
             UNIT_ASSERT_VALUES_EQUAL(server.Cms.Freeze.load(), freeze);
+            UNIT_ASSERT_VALUES_EQUAL(server.Cms.OperationMode.load(), static_cast<int>(Ydb::Operations::OperationParams::SYNC));
+        }
+    }
+
+    Y_UNIT_TEST(OperationTimeoutIsForwardedInSyncMode) {
+        for (const bool freeze : {false, true}) {
+            TServer server;
+            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(freeze).OperationTimeout(TDuration::Seconds(1)));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(server.Cms.OperationMode.load(), static_cast<int>(Ydb::Operations::OperationParams::SYNC));
+            UNIT_ASSERT_VALUES_EQUAL(server.Cms.OperationTimeoutSeconds.load(), 1);
         }
     }
 

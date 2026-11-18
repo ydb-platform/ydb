@@ -41,15 +41,14 @@ message TAlterTenantResponse {
 // Kept separately from create/remove transactions and retained across thaw.
 message TDatabaseFreezeOperation {
     optional string Path = 1;
-    optional uint64 TenantTxId = 2;
-    optional uint64 Epoch = 3;
-    optional bool Freeze = 4;
-    optional bool Ready = 5;
-    optional uint32 Status = 6;
-    optional string Issue = 7;
-    optional string IdempotencyKey = 8;
-    optional uint64 DomainOwnerId = 9;
-    optional uint64 DomainLocalPathId = 10;
+    optional uint64 Epoch = 2;
+    optional bool Freeze = 3;
+    optional bool Ready = 4;
+    optional uint32 Status = 5;
+    optional string Issue = 6;
+    optional string IdempotencyKey = 7;
+    optional uint64 DomainOwnerId = 8;
+    optional uint64 DomainLocalPathId = 9;
 }
 
 message TListTenantsRequest {

@@ -1,4 +1,4 @@
-* Added `TAlterDatabaseSettings::Freeze(bool)` to fence database row-table writes and wait for CDC delivery, or resume writes.
+* Added `TAlterDatabaseSettings::Freeze(bool)` to fence database row-table writes and wait for CDC delivery, or resume writes. `OperationTimeout` limits the wait without cancelling the accepted operation.
 
 * Fixed node-startup config fetches omitting their seed-node marker when no requestor hosts are supplied.
 

@@ -260,6 +260,15 @@ protected:
     bool IsItPossibleToStartBalancer(EBalancerType balancerType);
     void StartHiveBalancer(TBalancerSettings&& settings);
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
+<<<<<<< HEAD
+=======
+    void StartPileDrain(TBridgePileInfo& pile);
+    bool HasTabletsToDrain(TBridgePileId pileId) const;
+    // marks for drain the piles that have tablets their placement does not allow there (anymore)
+    void MarkPilesWithMisplacedTablets(NIceDb::TNiceDb& db);
+    void OnBridgeTabletPlacementChanged(NKikimrConfig::THiveConfig::EBridgeTabletPlacement previous);
+    void ProcessPileDrains();
+>>>>>>> b9ba65f528e (add setting in hive_config to have tablets in non-primary piles (#59308))
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
     // starts a new reassign for every tablet in the list
@@ -1034,6 +1043,10 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
 
     NKikimrConfig::THiveConfig::EHiveBootStrategy GetBootStrategy() const {
         return CurrentConfig.GetBootStrategy();
+    }
+
+    NKikimrConfig::THiveConfig::EBridgeTabletPlacement GetBridgeTabletPlacement() const {
+        return CurrentConfig.GetBridgeTabletPlacement();
     }
 
     NKikimrConfig::THiveConfig::EHiveChannelBalanceStrategy GetChannelBalanceStrategy() const {

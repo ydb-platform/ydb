@@ -976,7 +976,12 @@ namespace TEvDataShard {
         }
     };
 
-    struct TEvUploadRowsRequest : public TEventPBWithArena<TEvUploadRowsRequest,
+    // First base is destroyed last, after protobuf/arena payload storage.
+    struct TMemoryReservation {
+        std::shared_ptr<void> MemoryReservation;
+    };
+
+    struct TEvUploadRowsRequest : public TMemoryReservation, public TEventPBWithArena<TEvUploadRowsRequest,
                                                         NKikimrTxDataShard::TEvUploadRowsRequest,
                                                         TEvDataShard::EvUploadRowsRequest,
                                                         16*1024, 32*1024> {

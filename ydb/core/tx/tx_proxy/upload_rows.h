@@ -32,6 +32,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
                                  bool writeToIndexImplTable = false,
                                  bool disableChangeCollection = false,
                                  ui64 cookie = 0,
-                                 TBackoff backoff = TBackoff(0));
+                                 TBackoff backoff = TBackoff(0),
+                                 std::shared_ptr<void> memoryReservation = {});
 } // namespace NTxProxy
 } // namespace NKikimr

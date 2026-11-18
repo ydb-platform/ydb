@@ -23,6 +23,7 @@
 
 #include <fmt/format.h>
 
+#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <thread>
@@ -113,6 +114,10 @@ public:
     };
 
     grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) {
+        if (MaxClientTimeout != TDuration::Max()) {
+            CHECK_EXP(context->deadline() <= std::chrono::system_clock::now() + std::chrono::microseconds(MaxClientTimeout.MicroSeconds()),
+                "ListDirectory client deadline exceeds the completion timeout");
+        }
         if (BootstrapDatabase) {
             CHECK_EXP(request->path() == "/", "Expected cluster-root discovery");
             CheckClientMetadata(context, "x-ydb-database", BootstrapDatabase);
@@ -195,6 +200,7 @@ public:
         BootstrapDatabase.clear();
         Database = TEST_DATABASE;
         Directories.clear();
+        MaxClientTimeout = TDuration::Max();
     }
 
     void ExpectClientCert(const TString& cert) {
@@ -205,6 +211,7 @@ public:
     TString BootstrapDatabase;
     TString Token;
     TString ExpectedClientCert;
+    TDuration MaxClientTimeout = TDuration::Max();
     THashMap<TString, TDirectory> Directories;
 };
 

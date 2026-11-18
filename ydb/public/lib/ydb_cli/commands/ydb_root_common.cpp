@@ -51,7 +51,7 @@ namespace NYdb::NConsoleClient {
 
 namespace {
 
-TScopedDriver ResolveDatabase(TClientCommand::TConfig& config) {
+TScopedDriver ResolveDatabase(TClientCommand::TConfig& config, const TDeadline& deadline = TDeadline::Max()) {
     if (!config.NeedToConnect || config.Database.empty() || config.Database.StartsWith('/')) {
         return {};
     }
@@ -62,7 +62,7 @@ TScopedDriver ResolveDatabase(TClientCommand::TConfig& config) {
     }
     TScopedDriver driver{TDriver(driverConfig)};
     NScheme::TSchemeClient client(driver);
-    auto root = client.ListDirectory("/").GetValueSync();
+    auto root = client.ListDirectory("/", NScheme::TListDirectorySettings().Deadline(deadline)).GetValueSync();
     if (!root.IsSuccess()) {
         Cerr << "Cannot resolve the relative database path; specify an absolute database path starting with '/'." << Endl;
     }
@@ -244,9 +244,10 @@ int TClientCommandRootCommon::Process(TConfig& config) {
             TClientCommand::Prepare(config);
             ExtractParams(config);
             config.BuildInfoCommandTag = "completion-scheme";
-            const auto bootstrapDriver = ResolveDatabase(config);
+            const auto deadline = TDeadline::AfterDuration(TDuration::Seconds(3));
+            const auto bootstrapDriver = ResolveDatabase(config, deadline);
             TScopedDriver driver(TDriver(config.CreateDriverConfigWithBuildInfo()));
-            RunSchemeCompletion(driver, config.Database, *SchemeCompletionContext_);
+            RunSchemeCompletion(driver, config.Database, *SchemeCompletionContext_, deadline);
         } catch (...) {
         }
         return EXIT_SUCCESS;

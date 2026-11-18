@@ -12,6 +12,7 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/minikql/aligned_page_pool.h>
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/parse_double.h>
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/config.h>
@@ -33,6 +34,8 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
 #include <util/generic/algorithm.h>
+
+#include <cmath>
 
 namespace NYql {
 
@@ -750,12 +753,11 @@ TMaybe<TString> ConvertValueForQL(const TExprNode::TPtr& node) {
             return {value};
         }
         if (TCoFloat::Match(node.Get()) || TCoDouble::Match(node.Get())) {
-            double parsed;
-            if (!TryFromString(value, parsed)) {
+            auto literal = ConvertFloatingValueForQL(value, TCoFloat::Match(node.Get()));
+            if (!literal) {
                 YQL_CLOG(ERROR, ProviderYt) << "YtQLFilter: unsupported const value " << value;
-                return {};
             }
-            return {value};
+            return literal;
         }
         if (TCoString::Match(node.Get()) || TCoUtf8::Match(node.Get())) {
             return {value.Quote()};
@@ -852,6 +854,10 @@ TMaybe<ui32> GenerateInputQueryComparison(const TStringBuf& opName, const TExprN
                 addNullComparison = true;
             }
         }
+        const bool addNanComparison = IsDataTypeFloat(dataSlot) && (opName == ">" || opName == ">=");
+        if (addNanComparison) {
+            result << "(";
+        }
         QuoteColumnForQL(columnName, result);
         result << " ";
         ConvertComparisonForQL(opName, result);
@@ -860,9 +866,15 @@ TMaybe<ui32> GenerateInputQueryComparison(const TStringBuf& opName, const TExprN
             return {};
         }
         result << " " << valueStr.GetRef();
+        if (addNanComparison) {
+            // NaN is above infinity in chunk constraints; keep IEEE comparisons under NOT.
+            result << " AND ";
+            QuoteColumnForQL(columnName, result);
+            result << " <= inf)";
+        }
 
         const ui32 valueDepth = valueStr->StartsWith('-') || valueStr->StartsWith('+') ? 2 : 1;
-        const ui32 comparisonDepth = 1 + Max(1U, valueDepth);
+        const ui32 comparisonDepth = 1 + Max(1U, valueDepth) + (addNanComparison ? 1 : 0);
         return addNullComparison
             ? 1 + Max(2U, comparisonDepth)
             : comparisonDepth;
@@ -1085,6 +1097,26 @@ void EnsureSpecDoesntUseNativeYtTypes(const NYT::TNode& spec, TStringBuf tableNa
             throw yexception() << "Cannot " << (read ? "read" : "modify") << " table \"" << tableName << "\" with type_v3 schema using yson codec";
         }
     }
+}
+
+TMaybe<TString> ConvertFloatingValueForQL(TStringBuf value, bool isFloat) {
+    double parsed;
+    // QL supports infinities, but not NaN literals.
+    // TODO(YQLOVERYT-568): fold comparisons with NaN in the core optimizer.
+    if (!TryDoubleFromString(value, parsed) || std::isnan(parsed)) {
+        return {};
+    }
+    if (isFloat) {
+        // Match YQL's Float constructor, then widen exactly to QL Double.
+        parsed = static_cast<float>(parsed);
+    }
+    // The double overload round-trips exactly through QL's parser and normalizes forms such as hex.
+    auto literal = FloatToString(parsed);
+    // Keep integral-looking floating-point values out of the QL integer lexer.
+    if (std::isfinite(parsed) && !literal.Contains('.') && !literal.Contains('e')) {
+        literal += ".0";
+    }
+    return {literal};
 }
 
 TMaybe<TString> GenerateInputQuery(const TExprNode::TPtr& qlFilterNode, ui32 depthLimit) {

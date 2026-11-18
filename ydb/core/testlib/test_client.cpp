@@ -1289,9 +1289,19 @@ namespace Tests {
             if (!initial.HasImmediateControlsConfig()) {
                 initial.MutableImmediateControlsConfig()->CopyFrom(Settings->Controls);
             }
+
+            TMap<TString, TString> labels;
+            for (const auto& label : initial.GetLabels()) {
+                labels[label.GetName()] = label.GetValue();
+            }
+
+            labels["tenant"] = canonicalTenantName;
+            labels["node_id"] = ToString(Runtime->GetNodeId(nodeIdx));
+            labels["host"] = Settings->GrpcHost;
             auto *dispatcher = NConsole::CreateConfigsDispatcher(
                     NKikimr::NConfig::TConfigsDispatcherInitInfo {
                         .InitialConfig = initial,
+                        .Labels = std::move(labels),
                     });
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);

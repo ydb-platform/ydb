@@ -1,15 +1,21 @@
+#include "managed_config.h"
 #include "trace_file.h"
 #include "ydb_setup.h"
 
 #include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/cms/console/immediate_controls_configurator.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/cdc_aggregator/public/events.h>
+#include <ydb/core/tx/cdc_aggregator/service/service.h>
+#include <ydb/core/tx/replication/service/service.h>
 
 #include <ydb/library/aws_init/aws.h>
+#include <ydb/services/dynamic_config/grpc_service.h>
 #include <ydb/services/keyvalue/grpc_service_v1.h>
 #include <ydb/services/keyvalue/grpc_service_v2.h>
 #include <ydb/services/persqueue_v1/grpc_pq_schema.h>
@@ -358,6 +364,7 @@ private:
 
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
         auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerbosityLevel >= EVerbosity::InitLogs);
+        serverSettings.SetEnableFeatureFlagsConfigurator(true);
         SetStorageSettings(serverSettings);
 
         for (const auto& [tenantPath, tenantInfo] : StorageMeta_.GetTenants()) {
@@ -387,7 +394,9 @@ private:
             .SetPqGateway(Settings_.PqGateway)
             .SetDataShardExportFactory(Settings_.DataShardExportFactory);
 
-        serverSettings.RegisterGrpcService<NKikimr::NGRpcService::TKeyValueGRpcServiceV1>("keyvalue")
+        serverSettings
+            .RegisterGrpcService<NKikimr::NGRpcService::TGRpcDynamicConfigService>("dynamic_config", std::nullopt, /* rlAllowed */ true)
+            .RegisterGrpcService<NKikimr::NGRpcService::TKeyValueGRpcServiceV1>("keyvalue")
             .RegisterGrpcService<NKikimr::NGRpcService::TKeyValueGRpcServiceV2>("keyvalue");
 
         serverSettings.StoragePoolTypes.clear();
@@ -522,6 +531,7 @@ private:
 
         Client_ = MakeHolder<NKikimr::Tests::TClient>(serverSettings);
         Client_->InitRootScheme();
+        InitializeManagedConfig(*Server_->GetRuntime(), *Server_->GetSettings().AppConfig, Settings_.HealthCheckTimeout);
 
         if (Settings_.SchemeLimits) {
             NKikimrSubDomains::TSubDomainSettings subdomain;
@@ -571,6 +581,20 @@ private:
         futures.reserve(nodesCount);
         for (i32 nodeIdx = 0; nodeIdx < nodesCount; ++nodeIdx) {
             const auto node = tenantNodesIdx ? tenantNodesIdx[nodeIdx] : nodeIdx;
+            const auto nodeId = GetRuntime()->GetNodeId(node);
+            const auto userPool = GetRuntime()->GetAppData(node).UserPoolId;
+            const auto replication =
+                GetRuntime()->Register(NKikimr::NReplication::CreateReplicationService(), node, userPool, NActors::TMailboxType::HTSwap);
+            GetRuntime()->RegisterService(NKikimr::NReplication::MakeReplicationServiceId(nodeId), replication, node);
+            const auto cdc =
+                GetRuntime()->Register(NKikimr::NCdcAggregator::CreateCdcAggregatorService(), node, userPool, NActors::TMailboxType::HTSwap);
+            GetRuntime()->RegisterService(NKikimr::NCdcAggregator::MakeCdcAggregatorServiceId(nodeId), cdc, node);
+
+            // The basic runtime can send its control subscription before the tenant dispatcher exists.
+            GetRuntime()->Register(NKikimr::NConsole::CreateImmediateControlsConfigurator(
+                                       GetRuntime()->GetAppData(node).Icb, Server_->GetSettings().Controls, /* allowExistingControls */ true),
+                node, GetRuntime()->GetAppData(node).SystemPoolId, NActors::TMailboxType::Revolving);
+
             if (Settings_.GrpcEnabled) {
                 if (node > 0) {
                     // Port for first static node also used in cluster initialization
@@ -876,7 +900,7 @@ private:
         if (query.UserSID) {
             event.SetUserToken(NACLib::TUserToken(Settings_.YqlToken, query.UserSID,
                 query.GroupSIDs ? *query.GroupSIDs : TVector<NACLib::TSID>{ GetRuntime()->GetAppData(targetNodeIndex).AllAuthenticatedUsers })
-                                   .SerializeAsString());
+                    .SerializeAsString());
         }
 
         const auto& database = GetDatabasePath(query.Database);

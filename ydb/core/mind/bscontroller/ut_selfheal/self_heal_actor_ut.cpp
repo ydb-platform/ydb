@@ -1,3 +1,4 @@
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/mind/bscontroller/self_heal.h>
@@ -202,6 +203,30 @@ Y_UNIT_TEST_SUITE(SelfHealActorTest) {
         TestGroupDeletion(true, true);
     }
 
+    Y_UNIT_TEST_TWIN(BlockParityFailureModel, block82) {
+        for (ui32 failures = 1; failures <= 3; ++failures) {
+            RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
+                auto info = CreateGroup(block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block);
+                RegisterDiskResponders(runtime, info);
+                const ui32 index = info->GetTotalVDisksNum() - 1;
+                std::vector<E> status(info->GetTotalVDisksNum(), E::READY);
+                for (ui32 i = 0; i < failures; ++i) {
+                    status[index - i] = E::ERROR;
+                }
+                auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+                ev->GroupsToUpdate[info->GroupID] = Convert(info, {index}, status);
+                runtime.Send(new IEventHandle(selfHealId, parentId, ev.release()), 1);
+                if (failures <= 2) {
+                    const auto id = info->GetVDiskId(index);
+                    ValidateCmd(parentId, runtime, id.GroupID.GetRawId(), id.GroupGeneration,
+                        id.FailRealm, id.FailDomain, id.VDisk);
+                } else {
+                    ValidateNoCmd(parentId, runtime);
+                }
+            });
+        }
+    }
+
     Y_UNIT_TEST(SingleErrorDisk) {
         RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
             auto info = CreateGroup();
@@ -213,9 +238,9 @@ Y_UNIT_TEST_SUITE(SelfHealActorTest) {
         });
     }
 
-    Y_UNIT_TEST(ReadyFaultyDiskWithPhantomsOnlyIsNotReassigned) {
+    Y_UNIT_TEST_TWIN(ReadyFaultyDiskWithPhantomsOnlyIsNotReassigned, block82) {
         RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
-            auto info = CreateGroup();
+            auto info = CreateGroup(block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block);
             RegisterDiskResponders(runtime, info);
             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
             ev->GroupsToUpdate[info->GroupID] = Convert(info, {0}, {E::READY, E::REPLICATING}, {1});
@@ -224,9 +249,9 @@ Y_UNIT_TEST_SUITE(SelfHealActorTest) {
         });
     }
 
-    Y_UNIT_TEST(ReadyFaultyDiskWaitsForPhantomsOnlyReplicationToFinish) {
+    Y_UNIT_TEST_TWIN(ReadyFaultyDiskWaitsForPhantomsOnlyReplicationToFinish, block82) {
         RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
-            auto info = CreateGroup();
+            auto info = CreateGroup(block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block);
             RegisterDiskResponders(runtime, info);
 
             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
@@ -246,9 +271,9 @@ Y_UNIT_TEST_SUITE(SelfHealActorTest) {
         });
     }
 
-    Y_UNIT_TEST(UnavailableFaultyDiskWithPhantomsOnlyIsReassigned) {
+    Y_UNIT_TEST_TWIN(UnavailableFaultyDiskWithPhantomsOnlyIsReassigned, block82) {
         RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
-            auto info = CreateGroup();
+            auto info = CreateGroup(block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block);
             RegisterDiskResponders(runtime, info);
             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
             ev->GroupsToUpdate[info->GroupID] = Convert(info, {0}, {E::ERROR, E::REPLICATING}, {1});
@@ -320,9 +345,9 @@ Y_UNIT_TEST_SUITE(SelfHealActorTest) {
         });
     }
 
-    Y_UNIT_TEST(NoMoreThanOneReplicating) {
+    Y_UNIT_TEST_TWIN(NoMoreThanOneReplicating, block82) {
         RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
-            auto info = CreateGroup();
+            auto info = CreateGroup(block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block);
             RegisterDiskResponders(runtime, info);
             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
             ev->GroupsToUpdate[info->GroupID] = Convert(info, {0}, {E::ERROR, E::REPLICATING});

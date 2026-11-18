@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/mind/bscontroller/layout_helpers.h>
 #include <ydb/core/sys_view/common/events.h>
@@ -105,8 +106,9 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         Test(TBlobStorageGroupType::ErasureMirror3dc, 3, 5, 1);
     }
 
-    Y_UNIT_TEST(TestBlock4Plus2) {
-        Test(TBlobStorageGroupType::Erasure4Plus2Block, 1, 10, 2);
+    Y_UNIT_TEST_TWIN(TestBlock4Plus2, block82) {
+        const auto erasure = block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block;
+        Test(erasure, 1, TBlobStorageGroupType(erasure).BlobSubgroupSize() + 2, 2);
     }
 
     Y_UNIT_TEST(TestMirror3of4) {

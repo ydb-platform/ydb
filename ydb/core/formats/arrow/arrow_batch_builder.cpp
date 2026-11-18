@@ -284,10 +284,14 @@ arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NKi
     return arrow::Status::OK();
 }
 
-void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) {
+arrow::Status TArrowBatchBuilder::TryAppendCell(const TCell& cell, ui32 colNum) {
     NumBytes += cell.Size();
     auto ydbType = YdbSchema[colNum].second;
-    auto status = NKikimr::NArrow::AppendCell(*BatchBuilder, cell, colNum, ydbType);
+    return NKikimr::NArrow::AppendCell(*BatchBuilder, cell, colNum, ydbType);
+}
+
+void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) {
+    auto status = TryAppendCell(cell, colNum);
     Y_ABORT_UNLESS(status.ok(), "Failed to append cell: %s", status.ToString().c_str());
 }
 
@@ -333,13 +337,19 @@ void TArrowBatchBuilder::AddRow(const TConstArrayRef<TCell>& key, const TConstAr
 }
 
 void TArrowBatchBuilder::AddRow(const TConstArrayRef<TCell>& row) {
+    auto status = TryAddRow(row);
+    Y_ABORT_UNLESS(status.ok(), "Failed to add row: %s", status.ToString().c_str());
+}
+
+arrow::Status TArrowBatchBuilder::TryAddRow(const TConstArrayRef<TCell>& row) {
     ++NumRows;
 
     size_t offset = 0;
     for (size_t i = 0; i < row.size(); ++i, ++offset) {
         auto& cell = row[i];
-        AppendCell(cell, offset);
+        ARROW_RETURN_NOT_OK(TryAppendCell(cell, offset));
     }
+    return arrow::Status::OK();
 }
 
 void TArrowBatchBuilder::AddRow(const NUdf::TUnboxedValue& row, size_t membersCount, const TVector<ui32>* columnOrder) {

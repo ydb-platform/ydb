@@ -9,6 +9,12 @@ PEERDIR(
     ydb/tests/stress/backup/workload
 )
 
+IF (SANITIZER_TYPE == "thread")
+    SUPPRESSIONS(
+        ${ARCADIA_ROOT}/ydb/tests/tsan.supp
+    )
+ENDIF()
+
 END()
 
 RECURSE_FOR_TESTS(

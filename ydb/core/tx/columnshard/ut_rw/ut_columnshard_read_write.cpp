@@ -2566,6 +2566,202 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestWriteOverload(table);
     }
 
+    // A column shard with one standalone table on the given compaction planner, and the requests of ALTER TABLE ... COMPACT
+    // (TEvCompactTable with the id of the schemeshard operation) sent by hand in the schemeshard's place, see
+    // TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr&).
+    class TForcedCompactionTest {
+    public:
+        using TResult = NKikimrTxDataShard::TEvCompactTableResult;
+        using EBackground = NKikimr::NYDBTest::ICSController::EBackground;
+
+    private:
+        static constexpr ui64 TableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> Pk = TTestSchema::YdbPkSchema();
+        std::vector<NArrow::NTest::TTestColumn> Schema = TTestSchema::YdbSchema();   // of the current version
+        ui32 SchemaVersion = 1;
+        TTestSchema::TTableSpecials Specials;
+        ui64 WriteId = 0;
+        ui64 TxId = 100;
+        TTestActorRuntimeBase::TEventObserverHolder ReplyObserver;
+
+    public:
+        TTestBasicRuntime Runtime;
+        NKikimr::NYDBTest::TControllers::TGuard<TDefaultTestsController> Controller;
+        TActorId Sender;
+        // the schema versions of the live portions when the shard sent its last reply (background compaction may go on
+        // rewriting portions after it)
+        std::optional<std::set<ui64>> VersionsOnReply;
+
+        explicit TForcedCompactionTest(const TString& planner)
+            : Specials(TTestSchema::TTableSpecials().WithCompactionPlanner(planner))
+            , Controller(NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>())
+        {
+            TTester::Setup(Runtime);
+            Controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            Controller->SetOverrideTasksActualizationLag(TDuration::Zero());
+            Sender = Runtime.AllocateEdgeActor();
+            CreateTestBootstrapper(Runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+            Runtime.DispatchEvents(options);
+            Y_UNUSED(SetupSchema(Runtime, Sender, TTestSchema::CreateStandaloneTableTxBody(TableId, Schema, Pk, Specials), /*txId=*/10));
+            ReplyObserver = Runtime.AddObserver<TEvDataShard::TEvCompactTableResult>([this](TEvDataShard::TEvCompactTableResult::TPtr&) {
+                VersionsOnReply = PortionSchemaVersions();
+            });
+        }
+
+        void DisableBackground(const EBackground id) {
+            Controller->DisableBackground(id);
+        }
+
+        void EnableBackground(const EBackground id) {
+            Controller->EnableBackground(id);
+        }
+
+        // a batch of the given key range, written with the current schema
+        void WriteBatch(const std::pair<ui64, ui64>& keys) {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(Runtime, Sender, WriteId++, TableId, MakeTestBlob(keys, Schema), Schema, true, &writeIds,
+                NEvWrite::EModificationType::Upsert, /*lockId=*/1, SchemaVersion));
+            const ui64 txId = ++TxId;
+            const auto planStep = ProposeCommit(Runtime, Sender, txId, writeIds);
+            PlanCommit(Runtime, Sender, planStep, txId);
+        }
+
+        // `count` batches of one and the same key range: with tiling++ they intersect until compaction merges them
+        void WriteOverlappingBatches(const ui32 count) {
+            for (ui32 i = 0; i < count; ++i) {
+                WriteBatch({ 0, 75 * 1000 });
+            }
+            Runtime.SimulateSleep(TDuration::Seconds(3));   // the writes become portions
+        }
+
+        // the next schema version: one more column, SCHEME_NEED_ACTUALIZATION off (the portions keep their version)
+        void AlterSchema() {
+            ++SchemaVersion;
+            Schema.emplace_back("extra" + ToString(SchemaVersion), TTypeInfo(NTypeIds::Uint64));
+            NKikimrTxColumnShard::TSchemaTxBody tx;
+            UNIT_ASSERT(tx.ParseFromString(TTestSchema::AlterTableTxBody(TableId, /*standalone=*/true, SchemaVersion, Schema, Pk, Specials)));
+            tx.MutableAlterTable()->MutableSchema()->SetVersion(SchemaVersion);
+            tx.MutableAlterTable()->MutableSchema()->MutableOptions()->SetSchemeNeedActualization(false);
+            Y_UNUSED(SetupSchema(Runtime, Sender, tx.SerializeAsString(), ++TxId));
+        }
+
+        // the schemeshard's request; `cascade` unset leaves the flag out of the message
+        void SendCompact(const ui64 operationId, const std::optional<bool> cascade) {
+            auto request = std::make_unique<TEvDataShard::TEvCompactTable>(/*ownerId=*/1, TableId);
+            request->Record.SetOperationId(operationId);
+            if (cascade) {
+                request->Record.SetCascade(*cascade);
+            }
+            VersionsOnReply.reset();
+            ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, request.release());
+        }
+
+        void SendCompactWithoutOperationId() {
+            VersionsOnReply.reset();
+            ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, TableId));
+        }
+
+        // Drives the background loop until the shard replies: each manual wakeup runs EnqueueBackgroundActivities (which
+        // starts compactions and rewrites and re-checks the held request), SimulateSleep lets the asynchronous work
+        // complete.
+        TResult::EStatus WaitResult() {
+            TEvDataShard::TEvCompactTableResult::TPtr ev;
+            for (ui32 i = 0; i < 120 && !ev; ++i) {
+                RunBackground(1);
+                ev = Runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(Sender, TDuration::MilliSeconds(1));
+            }
+            UNIT_ASSERT_C(ev, "no reply");
+            UNIT_ASSERT(VersionsOnReply);
+            return ev->Get()->Record.GetStatus();
+        }
+
+        // a couple of background rounds without a reply: the request is held (or nobody is waiting)
+        void AssertNoReply(const TString& why) {
+            RunBackground(2);
+            UNIT_ASSERT_C(!Runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(Sender, TDuration::MilliSeconds(1)), why);
+        }
+
+        // tiling++: drives the background loop until every portion has settled into the last level
+        void WaitSettled() {
+            for (ui32 i = 0; i < 120; ++i) {
+                bool settled = true;
+                for (const auto& [_, granule] : Engine().GetTables()) {
+                    const auto needCompaction = granule->GetOptimizerPlanner().NeedCompaction();
+                    UNIT_ASSERT_C(needCompaction.IsSuccess(), needCompaction.GetErrorMessage());
+                    settled &= !*needCompaction;
+                }
+                if (settled) {
+                    return;
+                }
+                RunBackground(1);
+            }
+            UNIT_ASSERT_C(false, "the portions did not settle");
+        }
+
+        void Reboot() {
+            RebootTablet(Runtime, TTestTxConfig::TxTablet0, Sender);
+        }
+
+        // portions queued for the schema rewrite (counted by the test controller)
+        i64 QueuedForActualization() {
+            return Controller->GetNeedActualizationCount().Val();
+        }
+
+        // live portions by schema version
+        std::map<ui64, i64> PortionsByVersion() {
+            std::map<ui64, i64> counts;
+            for (const auto& [_, granule] : Engine().GetTables()) {
+                for (const auto& [_, portion] : granule->GetPortions()) {
+                    if (!portion->HasRemoveSnapshot()) {
+                        ++counts[portion->GetSchemaVersion()];
+                    }
+                }
+            }
+            return counts;
+        }
+
+        std::set<ui64> PortionSchemaVersions() {
+            std::set<ui64> versions;
+            for (const auto& [version, _] : PortionsByVersion()) {
+                versions.emplace(version);
+            }
+            return versions;
+        }
+
+        void AssertVersions(const std::set<ui64>& expected) {
+            UNIT_ASSERT_EQUAL_C(PortionSchemaVersions(), expected, PortionVersionsString());
+        }
+
+        void AssertVersionsOnReply(const std::set<ui64>& expected) {
+            UNIT_ASSERT(VersionsOnReply);
+            UNIT_ASSERT_EQUAL_C(
+                *VersionsOnReply, expected, "on reply: " << JoinSeq(",", *VersionsOnReply) << "; now: " << PortionVersionsString());
+        }
+
+    private:
+        void RunBackground(const ui32 rounds) {
+            for (ui32 i = 0; i < rounds; ++i) {
+                ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
+                Runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+        }
+
+        const NOlap::TColumnEngineForLogs& Engine() {
+            return Controller->GetTheOnlyShard()->GetTablesManager().GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+        }
+
+        // "version:count,..." for the assertion messages
+        TString PortionVersionsString() {
+            TStringBuilder sb;
+            for (const auto& [version, count] : PortionsByVersion()) {
+                sb << (sb.empty() ? "" : ",") << version << ":" << count;
+            }
+            return TString(sb);
+        }
+    };
+
     Y_UNIT_TEST(ForcedCompactionColumnStoreRejected) {
         // Forced compaction (ALTER TABLE ... COMPACT) is not supported for tables that belong to a column
         // store: the shard answers NOT_NEEDED even though the request is well-formed.
@@ -2593,363 +2789,134 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
     }
 
-    Y_UNIT_TEST(ForcedCompactionHeldUntilNoIntersections) {
-        // A standalone tiling++ column table with intersecting portions: the shard holds the request until
-        // background compaction settles every portion into the regular last level, then replies OK.
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        csControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-            runtime.DispatchEvents(options);
-        }
-
-        const ui64 tableId = 1;
-        auto schema = TTestSchema::YdbSchema();
-        auto pk = TTestSchema::YdbPkSchema();
-        auto specials = TTestSchema::TTableSpecials().WithForcedCompaction(true);   // standalone + tiling++
-        TString txBody = TTestSchema::CreateStandaloneTableTxBody(tableId, schema, pk, specials);
-        Y_UNUSED(SetupSchema(runtime, sender, txBody, /*txId=*/10));
-
-        // Write several overlapping (identical key range) portions; with compaction disabled they stay
-        // intersecting, so the table is not yet fully compacted.
-        ui64 writeId = 0;
-        ui64 txId = 100;
-        const TString data = MakeTestBlob({ 0, 75 * 1000 }, schema);
-        for (ui32 i = 0; i < 5; ++i, ++txId) {
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, data, schema, true, &writeIds));
-            auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
-        }
-        // Let indexation move the committed data into engine portions (compaction remains disabled).
-        runtime.SimulateSleep(TDuration::Seconds(3));
-
-        // Portions still intersect -> the request is held, no result is produced yet.
-        auto request = std::make_unique<TEvDataShard::TEvCompactTable>(/*ownerId=*/1, tableId);
-        request->Record.SetOperationId(1);
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, request.release());
-        runtime.SimulateSleep(TDuration::Seconds(2));   // let the handler run (compaction still disabled)
-        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1)));
-
-        // Enable compaction and drive the background loop: each manual wakeup runs EnqueueBackgroundActivities
-        // (which starts a compaction and re-checks the held request); SimulateSleep lets the async compaction
-        // complete. Once every portion settles into the last level, RecheckForcedCompactions replies OK.
-        csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-        TEvDataShard::TEvCompactTableResult::TPtr ev;
-        for (int i = 0; i < 120 && !ev; ++i) {
-            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
-            runtime.SimulateSleep(TDuration::Seconds(1));
-            ev = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1));
-        }
-        UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
-    }
-
-    Y_UNIT_TEST(ForcedCompactionActualizesSchema) {
-        // ALTER TABLE ... COMPACT WITH (CASCADE = true) on a column table: besides compacting, every portion older
-        // than the current schema is rewritten even though SCHEME_NEED_ACTUALIZATION is not set, and the shard replies
-        // OK only once that is done too. A plain request of another operation turns the rewrite off; a retry of the
-        // operation being served (the schemeshard repeats its request until the shard answers) changes nothing.
-        // A schema change meanwhile does not have the already rewritten portions rewritten again, the others get the
-        // new schema.
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        csControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-            runtime.DispatchEvents(options);
-        }
-
-        const ui64 tableId = 1;
-        auto schema = TTestSchema::YdbSchema();
-        auto pk = TTestSchema::YdbPkSchema();
-        auto specials = TTestSchema::TTableSpecials().WithForcedCompaction(true);   // standalone + tiling++
-        Y_UNUSED(SetupSchema(runtime, sender, TTestSchema::CreateStandaloneTableTxBody(tableId, schema, pk, specials), /*txId=*/10));
-
-        ui64 writeId = 0;
-        ui64 txId = 100;
-        const TString data = MakeTestBlob({ 0, 75 * 1000 }, schema);
-        for (ui32 i = 0; i < 3; ++i, ++txId) {
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, data, schema, true, &writeIds));
-            auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
-        }
-
-        const auto sendCompact = [&](const std::optional<bool> cascade, const ui64 operationId) {
-            auto request = std::make_unique<TEvDataShard::TEvCompactTable>(/*ownerId=*/1, tableId);
-            request->Record.SetOperationId(operationId);
-            if (cascade) {
-                request->Record.SetCascade(*cascade);
-            }
-            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, request.release());
-        };
-        // Drives the background loop (see ForcedCompactionHeldUntilNoIntersections) until the shard replies.
-        const auto waitCompactionResult = [&]() {
-            TEvDataShard::TEvCompactTableResult::TPtr ev;
-            for (int i = 0; i < 120 && !ev; ++i) {
-                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
-                runtime.SimulateSleep(TDuration::Seconds(1));
-                ev = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1));
-            }
-            UNIT_ASSERT(ev);
-            return ev->Get()->Record.GetStatus();
-        };
-        const auto queuedForActualization = [&]() {
-            return csControllerGuard->GetNeedActualizationCount().Val();
-        };
-        // live portions by schema version
-        const auto portionsByVersion = [&]() {
-            std::map<ui64, ui32> counts;
-            const auto& engine =
-                csControllerGuard->GetTheOnlyShard()->GetTablesManager().GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
-            for (const auto& [_, granule] : engine.GetTables()) {
-                for (const auto& [_, portion] : granule->GetPortions()) {
-                    if (!portion->HasRemoveSnapshot()) {
-                        ++counts[portion->GetSchemaVersion()];
-                    }
-                }
-            }
-            return counts;
-        };
-        const auto portionSchemaVersions = [&]() {
-            std::set<ui64> versions;
-            for (const auto& [version, _] : portionsByVersion()) {
-                versions.emplace(version);
-            }
-            return versions;
-        };
-        // "version:count,..." for the assertion messages
-        const auto portionVersionsString = [&]() {
-            TStringBuilder sb;
-            for (const auto& [version, count] : portionsByVersion()) {
-                sb << (sb.empty() ? "" : ",") << version << ":" << count;
-            }
-            return TString(sb);
-        };
-
-        // Plain forced compaction: every portion settles into the last level with schema version 1.
-        sendCompact(std::nullopt, 1);
-        UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
-        UNIT_ASSERT_EQUAL_C(portionSchemaVersions(), std::set<ui64>({ 1 }), portionVersionsString());
-
-        // Registers schema version `version` = the previous one plus a column; SCHEME_NEED_ACTUALIZATION stays off.
-        auto schemaVN = schema;
-        const auto alterSchema = [&](const ui32 version) {
-            schemaVN.emplace_back("extra" + ToString(version), TTypeInfo(NTypeIds::Uint64));
-            NKikimrTxColumnShard::TSchemaTxBody tx;
-            UNIT_ASSERT(tx.ParseFromString(TTestSchema::AlterTableTxBody(tableId, /*standalone=*/true, version, schemaVN, pk, specials)));
-            tx.MutableAlterTable()->MutableSchema()->SetVersion(version);
-            tx.MutableAlterTable()->MutableSchema()->MutableOptions()->SetSchemeNeedActualization(false);
-            Y_UNUSED(SetupSchema(runtime, sender, tx.SerializeAsString(), ++txId));
-        };
-
-        // A new schema version without SCHEME_NEED_ACTUALIZATION: the portions keep version 1.
-        alterSchema(2);
-
-        // Without CASCADE nothing is rewritten: there are no intersections either, so the request is answered
+    Y_UNIT_TEST(ForcedCompactionCascadeRewritesPortionsToCurrentSchema) {
+        // The two planners with forced compaction support. A plain request is answered as soon as the planner has
+        // nothing left to do: tiling++ holds it until background compaction has settled every portion into the last
+        // level and answers OK then, lc-buckets has no such end state and answers NOT_NEEDED at once, intersections or
+        // not. A request without an operation id is not the schemeshard's: NOT_NEEDED at once whatever the state.
+        // Portions written with an older schema are left alone by a plain request and rewritten with the current
+        // schema by CASCADE, which is answered OK once no live portion is older; with nothing to rewrite CASCADE is
         // NOT_NEEDED at once.
-        sendCompact(false, 2);
-        UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
-        UNIT_ASSERT_EQUAL_C(portionSchemaVersions(), std::set<ui64>({ 1 }), portionVersionsString());
-        UNIT_ASSERT_VALUES_EQUAL(queuedForActualization(), 0);
+        using TResult = TForcedCompactionTest::TResult;
+        using EBackground = TForcedCompactionTest::EBackground;
+        for (const TString planner : { "tiling++", "lc-buckets" }) {
+            TForcedCompactionTest t(planner);
+            // the overlapping batches stay as written (and with lc-buckets a background compaction would rewrite the
+            // portions it merges with the current schema on its own, so it stays off)
+            t.DisableBackground(EBackground::Compaction);
+            t.WriteOverlappingBatches(2);
 
-        // CASCADE with the rewrites (TTL tasks) disabled: the portions are queued and the request is held.
-        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::TTL);
-        sendCompact(true, 3);
-        runtime.SimulateSleep(TDuration::Seconds(2));
-        const auto queued = queuedForActualization();
-        UNIT_ASSERT_GT(queued, 0);
-        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1)));
+            t.SendCompactWithoutOperationId();
+            UNIT_ASSERT_VALUES_EQUAL_C(t.WaitResult(), TResult::NOT_NEEDED, planner);
 
-        // An unrelated schema change meanwhile (the option is off in both versions) leaves the queue alone.
-        alterSchema(3);
-        runtime.SimulateSleep(TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(queuedForActualization(), queued);
-        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1)));
+            t.SendCompact(1, false);
+            if (planner == "tiling++") {
+                t.AssertNoReply("held while the portions intersect");
+                t.EnableBackground(EBackground::Compaction);
+                UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::NOT_NEEDED);
+            }
+            t.AssertVersionsOnReply({ 1 });
 
-        // A retry of the operation changes nothing: the queue stays, the request stays held. A plain request of another
-        // operation (the CASCADE one was cancelled on the schemeshard) turns the rewrite off: the queue is dropped and
-        // the request is answered at once; it supersedes the held one, which gets no reply of its own.
-        sendCompact(true, 3);
-        runtime.SimulateSleep(TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(queuedForActualization(), queued);
-        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1)));
-        sendCompact(false, 4);
-        runtime.SimulateSleep(TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(queuedForActualization(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
-        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1)));
-        UNIT_ASSERT_EQUAL_C(portionSchemaVersions(), std::set<ui64>({ 1 }), portionVersionsString());
+            t.AlterSchema();   // version 2
+            t.SendCompact(2, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(t.WaitResult(), TResult::NOT_NEEDED, planner);
+            t.AssertVersions({ 1 });
+            UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), 0);
 
-        // A batch written with the current schema (3) in another key range: a plain forced compaction leaves it in the
-        // last level next to the old portions, which keep version 1 (OK after compacting the batch if it was small
-        // enough for the accumulator, NOT_NEEDED at once if it went straight to the last level).
-        {
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 100 * 1000, 175 * 1000 }, schemaVN), schemaVN, true,
-                &writeIds, NEvWrite::EModificationType::Upsert, /*lockId=*/1, /*schemaVersion=*/3));
-            const ui64 commitTxId = ++txId;
-            auto planStep = ProposeCommit(runtime, sender, commitTxId, writeIds);
-            PlanCommit(runtime, sender, planStep, commitTxId);
+            t.SendCompact(3, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(t.WaitResult(), TResult::OK, planner);
+            t.AssertVersionsOnReply({ 2 });
+
+            t.SendCompact(4, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(t.WaitResult(), TResult::NOT_NEEDED, planner);
         }
-        sendCompact(false, 5);
-        {
-            const auto status = waitCompactionResult();
-            UNIT_ASSERT_C(status == NKikimrTxDataShard::TEvCompactTableResult::OK ||
-                              status == NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED, (int)status);
-        }
-        UNIT_ASSERT_EQUAL_C(portionSchemaVersions(), std::set<ui64>({ 1, 3 }), portionVersionsString());
-
-        // CASCADE for real, with a schema change in the middle: only the portions older than the schema current at
-        // the request (3) are queued, the change to 4 neither drops nor extends the queue, and the queued portions are
-        // rewritten with the newest schema (4) while the portions at 3 are left alone. The reply leaves the shard only
-        // when no live portion is older than 3 any more.
-        sendCompact(true, 6);
-        runtime.SimulateSleep(TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(queuedForActualization(), portionsByVersion().at(1));
-        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1)));
-        alterSchema(4);
-        runtime.SimulateSleep(TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(queuedForActualization(), portionsByVersion().at(1));
-        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1)));
-        // A retry of the operation after the schema change keeps the threshold at 3: the portions at 3 stay out of the
-        // queue (a new operation would take 4 as its threshold and queue them).
-        sendCompact(true, 6);
-        runtime.SimulateSleep(TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(queuedForActualization(), portionsByVersion().at(1));
-        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1)));
-        csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::TTL);
-        std::optional<std::set<ui64>> versionsOnReply;
-        auto observer = runtime.AddObserver<TEvDataShard::TEvCompactTableResult>([&](TEvDataShard::TEvCompactTableResult::TPtr&) {
-            versionsOnReply = portionSchemaVersions();
-        });
-        UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
-        UNIT_ASSERT(versionsOnReply);
-        UNIT_ASSERT_EQUAL_C(*versionsOnReply, std::set<ui64>({ 3, 4 }), portionVersionsString());
-
-        // Yet another schema version and another CASCADE: the shard takes the new current schema as the threshold
-        // rather than reporting the portions at the previous one as done.
-        alterSchema(5);
-        versionsOnReply.reset();
-        sendCompact(true, 7);
-        UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
-        UNIT_ASSERT(versionsOnReply);
-        UNIT_ASSERT_EQUAL_C(*versionsOnReply, std::set<ui64>({ 5 }), portionVersionsString());
     }
 
-    Y_UNIT_TEST(ForcedCompactionCascadeWithLcBuckets) {
-        // lc-buckets has no settled end state a forced compaction could wait for: a plain request is answered NOT_NEEDED
-        // at once, a CASCADE one waits for the rewrite of the portions older than the current schema and replies OK.
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        csControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
-        // no background compaction: it would rewrite the portions it merges with the current schema on its own
-        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    Y_UNIT_TEST(ForcedCompactionCascadeRetryNewOperationRestart) {
+        // The schemeshard repeats its request every few seconds until the shard answers and tells the shards nothing
+        // when the operation is cancelled. A request with the id of the operation being served is such a retry: it
+        // changes nothing, neither the rewrite queue nor whether the request is held. A plain request of another
+        // operation turns the rewrite of a cancelled CASCADE off: the queue is dropped, the request is answered
+        // NOT_NEEDED at once and the superseded one gets no reply of its own. A restart forgets the operation and its
+        // rewrite; the retry that follows starts it anew.
+        using TResult = TForcedCompactionTest::TResult;
+        using EBackground = TForcedCompactionTest::EBackground;
+        TForcedCompactionTest t("tiling++");
+        t.DisableBackground(EBackground::Compaction);
+        t.WriteOverlappingBatches(2);
+        t.EnableBackground(EBackground::Compaction);
+        t.SendCompact(1, false);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);   // settled, every portion at version 1
+        t.AlterSchema();   // version 2
+        t.DisableBackground(EBackground::TTL);   // the rewrite tasks: the queue stays as it is
 
-        TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-            runtime.DispatchEvents(options);
-        }
+        t.SendCompact(2, true);
+        t.AssertNoReply("held until the portions are rewritten");
+        const i64 queued = t.QueuedForActualization();
+        UNIT_ASSERT_VALUES_EQUAL(queued, t.PortionsByVersion().at(1));
 
-        const ui64 tableId = 1;
-        auto schema = TTestSchema::YdbSchema();
-        auto pk = TTestSchema::YdbPkSchema();
-        auto specials = TTestSchema::TTableSpecials().WithCompactionPlanner("lc-buckets");
-        Y_UNUSED(SetupSchema(runtime, sender, TTestSchema::CreateStandaloneTableTxBody(tableId, schema, pk, specials), /*txId=*/10));
+        t.SendCompact(2, true);   // a retry
+        t.AssertNoReply("a retry is held like the request it repeats");
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), queued);
 
-        ui64 writeId = 0;
-        ui64 txId = 100;
-        const TString data = MakeTestBlob({ 0, 75 * 1000 }, schema);
-        for (ui32 i = 0; i < 2; ++i, ++txId) {
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, data, schema, true, &writeIds));
-            auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
-        }
-        runtime.SimulateSleep(TDuration::Seconds(3));   // indexation
+        t.SendCompact(3, false);   // another operation: the CASCADE one has been cancelled on the schemeshard
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::NOT_NEEDED);
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), 0);
+        t.AssertNoReply("the superseded request is not answered");
+        t.AssertVersions({ 1 });
 
-        const auto sendCompact = [&](const bool cascade, const ui64 operationId) {
-            auto request = std::make_unique<TEvDataShard::TEvCompactTable>(/*ownerId=*/1, tableId);
-            request->Record.SetCascade(cascade);
-            request->Record.SetOperationId(operationId);
-            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, request.release());
-        };
-        // Drives the background loop (see ForcedCompactionHeldUntilNoIntersections) until the shard replies.
-        const auto waitCompactionResult = [&]() {
-            TEvDataShard::TEvCompactTableResult::TPtr ev;
-            for (int i = 0; i < 120 && !ev; ++i) {
-                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
-                runtime.SimulateSleep(TDuration::Seconds(1));
-                ev = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1));
-            }
-            UNIT_ASSERT(ev);
-            return ev->Get()->Record.GetStatus();
-        };
-        // schema versions of the live portions
-        const auto portionSchemaVersions = [&]() {
-            std::set<ui64> versions;
-            const auto& engine =
-                csControllerGuard->GetTheOnlyShard()->GetTablesManager().GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
-            for (const auto& [_, granule] : engine.GetTables()) {
-                for (const auto& [_, portion] : granule->GetPortions()) {
-                    if (!portion->HasRemoveSnapshot()) {
-                        versions.emplace(portion->GetSchemaVersion());
-                    }
-                }
-            }
-            return versions;
-        };
+        t.SendCompact(4, true);
+        t.AssertNoReply("held until the portions are rewritten");
+        t.Reboot();
+        t.EnableBackground(EBackground::TTL);
+        t.AssertNoReply("the operation is forgotten with the restart: nothing is rewritten, nobody is answered");
+        t.AssertVersions({ 1 });
+        t.SendCompact(4, true);   // the schemeshard's retry
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        t.AssertVersionsOnReply({ 2 });
+    }
 
-        // The overlapping portions are no reason to wait: without a rewrite there is nothing to do.
-        sendCompact(false, 1);
-        UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
-        UNIT_ASSERT_EQUAL(portionSchemaVersions(), std::set<ui64>({ 1 }));
+    Y_UNIT_TEST(ForcedCompactionCascadeThresholdIsSchemaAtRequest) {
+        // CASCADE queues the portions older than the schema current at the request and rewrites them with the newest
+        // schema at the time of the rewrite. A schema change meanwhile neither drops nor extends the queue: the portions
+        // at the threshold version are left alone (a new operation would queue them), the queued ones get the new
+        // schema, and the reply waits for the queue only. A retry after the schema change keeps the threshold.
+        using TResult = TForcedCompactionTest::TResult;
+        using EBackground = TForcedCompactionTest::EBackground;
+        TForcedCompactionTest t("tiling++");
+        t.DisableBackground(EBackground::Compaction);
+        t.WriteOverlappingBatches(2);
+        t.EnableBackground(EBackground::Compaction);
+        t.SendCompact(1, false);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);   // settled, every portion at version 1
 
-        // A new schema version without SCHEME_NEED_ACTUALIZATION: the portions keep version 1.
-        auto schemaV2 = schema;
-        schemaV2.emplace_back("extra", TTypeInfo(NTypeIds::Uint64));
-        {
-            NKikimrTxColumnShard::TSchemaTxBody tx;
-            UNIT_ASSERT(tx.ParseFromString(TTestSchema::AlterTableTxBody(tableId, /*standalone=*/true, /*version=*/2, schemaV2, pk, specials)));
-            tx.MutableAlterTable()->MutableSchema()->SetVersion(2);
-            tx.MutableAlterTable()->MutableSchema()->MutableOptions()->SetSchemeNeedActualization(false);
-            Y_UNUSED(SetupSchema(runtime, sender, tx.SerializeAsString(), ++txId));
-        }
+        t.AlterSchema();   // version 2
+        t.AlterSchema();   // version 3
+        t.WriteBatch({ 100 * 1000, 175 * 1000 });   // another key range, written with schema 3
+        t.WaitSettled();   // into the last level, through the accumulator if it was small enough for it
+        t.AssertVersions({ 1, 3 });
 
-        // CASCADE with the rewrites (TTL tasks) disabled: the portions are queued and the request is held ...
-        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::TTL);
-        sendCompact(true, 2);
-        runtime.SimulateSleep(TDuration::Seconds(2));
-        UNIT_ASSERT_GT(csControllerGuard->GetNeedActualizationCount().Val(), 0);
-        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1)));
+        t.DisableBackground(EBackground::TTL);
+        t.SendCompact(2, true);
+        t.AssertNoReply("held until the portions older than schema 3 are rewritten");
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), t.PortionsByVersion().at(1));   // only those
+        t.AlterSchema();   // version 4
+        t.AssertNoReply("still held");
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), t.PortionsByVersion().at(1));
+        t.SendCompact(2, true);   // a retry after the schema change keeps the threshold at 3 (a new operation would take 4)
+        t.AssertNoReply("still held");
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), t.PortionsByVersion().at(1));
 
-        // ... and answered OK once every portion has the current schema.
-        csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::TTL);
-        UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
-        UNIT_ASSERT_EQUAL(portionSchemaVersions(), std::set<ui64>({ 2 }));
+        t.EnableBackground(EBackground::TTL);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        t.AssertVersionsOnReply({ 3, 4 });
 
-        // Nothing left to rewrite: NOT_NEEDED at once again.
-        sendCompact(true, 3);
-        UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+        t.AlterSchema();   // version 5
+        t.SendCompact(3, true);   // a new operation: its threshold is the new current schema
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        t.AssertVersionsOnReply({ 5 });
     }
 
     Y_UNIT_TEST(WriteReadDuplicate) {

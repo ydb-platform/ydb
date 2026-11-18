@@ -257,10 +257,8 @@ NColumnShardStats::TOperation MeasurementPrototype(const NColumnShardStats::TOpe
 }
 
 void AddRead(google::protobuf::RepeatedPtrField<NColumnShardStats::TDataSource>& sources, const NColumnShardStats::TDataSource& read) {
-    Y_ABORT_UNLESS(!read.GetStorageId().empty() && read.HasKind() &&
-            read.GetReadBytes().GetBoundary() != NColumnShardStats::BOUNDARY_UNKNOWN &&
-            read.GetReadBytes().GetRepresentation() != NColumnShardStats::REPRESENTATION_UNKNOWN,
-        "invalid data source");
+    Y_ABORT_UNLESS(!read.GetStorageId().empty() && read.HasKind() && read.GetReadBytes().GetBoundary() != NColumnShardStats::BOUNDARY_UNKNOWN &&
+                       read.GetReadBytes().GetRepresentation() != NColumnShardStats::REPRESENTATION_UNKNOWN, "invalid data source");
     for (auto& source : sources) {
         if (SameSource(source, read)) {
             source.SetReads(source.GetReads() + read.GetReads());

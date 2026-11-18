@@ -430,7 +430,9 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     }
 
     if (CommonSourcePath) {
-        NConsoleClient::AdjustPath(CommonSourcePath, config);
+        if (!Items.empty() || !CommonDestinationPrefix || !ExclusionPatterns.empty()) {
+            NConsoleClient::AdjustPath(CommonSourcePath, config);
+        }
         settings.SourcePath(CommonSourcePath);
     }
 

@@ -491,6 +491,31 @@ Y_UNIT_TEST_SUITE(ExportTest) {
         }
     }
 
+    Y_UNIT_TEST_F(NativeExpansionPreservesRootPath, TExportFixture) {
+        for (const auto* rootPath : {"Root/db/dir", "dir", "/Root/db/dir"}) {
+            Service<TSchemeImpl>().Database = "/Root/db";
+            Service<TExportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonSourcePrefix(rootPath)
+                .ExpectCommonDstPrefix("dst");
+
+            RunCli({
+                "-e", GetEndpoint(),
+                "-d", "/Root/db",
+                "export", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--root-path", rootPath,
+                "--destination-prefix", "dst",
+            });
+        }
+    }
+
     Y_UNIT_TEST_F(ApplyExcludeClientFilter, TExportFixture) {
         const TString path = GetDatabase() + "/tenant/a";
         Service<TSchemeImpl>().BootstrapDatabase = "tenant";

@@ -1,3 +1,22 @@
+<<<<<<< HEAD
+=======
+* Fixed node-startup config fetches omitting their seed-node marker when no requestor hosts are supplied.
+
+* Added optional `ClientTimeout` and `Deadline` settings to `TOperationClient::Get()` without cancelling the server operation or changing defaults.
+
+* Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
+
+* Added support for tablet reassignment operation IDs.
+
+## v3.27.0
+
+* Fixed static login credentials failing permanently when the initial Login operation returns a transient service error.
+
+* Added draft `TBridgeClient::Rollback()` to roll a cluster converted into a bridged one back to ordinary mode, and `TBridgeClient::GetRollbackStatus()` to show the progress of the rollback.
+
+* Topic and PersQueue writers now schedule RAW and pre-encoded messages on the configured compression executor, reducing request construction on the caller thread.
+
+>>>>>>> eb24e03bf75 (Change fetch for seed-nodes permissions (#59838))
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
 * Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
 

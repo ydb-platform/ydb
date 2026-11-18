@@ -48,6 +48,10 @@ public:
         return {};
     }
 
+    void ForEachActiveSnapshot(const NKikimr::TTableId&, const TRowVersion&, const TRowVersion&,
+        TFunctionRef<void(const TRowVersion&)>) const override {
+    }
+
     TRowVersion GetBorder() const override {
         return TRowVersion::Max();
     }

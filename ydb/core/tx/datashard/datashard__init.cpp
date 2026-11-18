@@ -85,7 +85,10 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         bool done = ReadEverything(txc);
 
         if (done && Self->State != TShardState::Offline) {
-            Self->SnapshotManager.Fix_KIKIMR_14259(txc.DB);
+            // Persisted removal ranges already describe unavailable history.
+            // Preserve retained gaps while the snapshot registry is rebuilding.
+            Self->SnapshotManager.CleanupUnretainedRowVersions(
+                txc.DB, TRowVersion::Min(), Self->SnapshotManager.GetLowWatermark());
             for (const auto& pr : Self->TableInfos) {
                 pr.second->Fix_KIKIMR_17222(txc.DB);
             }

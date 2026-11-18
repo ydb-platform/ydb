@@ -180,19 +180,6 @@ namespace {
     };
 }
 
-void IImmutableSnapshotRegistry::ForEachActiveSnapshot(const NKikimr::TTableId& tableId,
-    const TRowVersion& from, const TRowVersion& to,
-    TFunctionRef<void(const TRowVersion&)> visitor) const
-{
-    if (from >= to) {
-        return;
-    }
-    const auto snapshots = GetActiveSnapshots(tableId);
-    for (auto it = snapshots.lower_bound(from); it != snapshots.end() && *it < to; ++it) {
-        visitor(*it);
-    }
-}
-
 IImmutableSnapshotRegistryHolderPtr CreateImmutableSnapshotRegistryHolder() {
     return MakeIntrusive<TImmutableSnapshotRegistryHolder>();
 }

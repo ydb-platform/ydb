@@ -22,11 +22,10 @@ public:
 
     // Visit explicit table-specific and all-table registrations in [from, to),
     // in ascending order without duplicates. References are valid during the
-    // callback. The production registry overrides this to avoid materializing
-    // a set; the default preserves compatibility with existing implementations.
+    // callback.
     virtual void ForEachActiveSnapshot(const NKikimr::TTableId& tableId,
         const TRowVersion& from, const TRowVersion& to,
-        TFunctionRef<void(const TRowVersion&)> visitor) const;
+        TFunctionRef<void(const TRowVersion&)> visitor) const = 0;
 
     virtual TRowVersion GetBorder() const = 0;
 

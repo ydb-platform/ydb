@@ -212,8 +212,6 @@ public:
     void PersistUpdateSnapshotFlags(NIceDb::TNiceDb& db, const TSnapshotKey& key);
     void PersistRemoveAllSnapshots(NIceDb::TNiceDb& db);
 
-    void Fix_KIKIMR_14259(NTable::TDatabase& db);
-
     // Optional additional cleanup of every user table, subject to retention and
     // local acquisitions. A watermark can contain retained points below it; it
     // does not prove that the entire preceding range has already been removed.
@@ -232,7 +230,6 @@ public:
 private:
     TSnapshotRetentionPolicy GetSnapshotRetentionPolicy() const;
     TRowVersion GetLeastAcquiredPipelineSnapshot() const;
-    bool IsSnapshotAcquiredByIterator(const TTableId& tableId, const TRowVersion& version) const;
     bool CleanupRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to,
         const TSnapshotRetentionPolicy& policy);
 
@@ -262,8 +259,6 @@ private:
     THashMap<TSnapshotKey, size_t> References;
 
     TMonotonic LastAdvanceWatermark{};
-    bool SnapshotRegistryWarningLogged = false;
-    bool SnapshotRegistryLagWarningLogged = false;
 };
 
 }   // namespace NDataShard

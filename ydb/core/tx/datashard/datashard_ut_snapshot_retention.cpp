@@ -6,8 +6,12 @@
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/actors/core/interconnect.h>
 
+#include <util/generic/hash_set.h>
 #include <util/string/printf.h>
 
 #include <iterator>
@@ -20,7 +24,7 @@ namespace {
 class TSnapshotRetentionTest {
 public:
     explicit TSnapshotRetentionTest(bool serviceRegistry = false, ui32 nodeCount = 1,
-        bool enableDataShardLocking = true)
+        bool enableDataShardLocking = true, TDuration promotionTime = TDuration::Seconds(1))
     {
         NKikimrConfig::TAppConfig app;
         app.MutableFeatureFlags()->SetEnableSnapshotsLocking(false);
@@ -29,10 +33,10 @@ public:
         }
         app.MutableDataShardConfig()->SetCleanupSnapshotPeriod(100);
         auto* config = app.MutableLongTxServiceConfig();
-        config->SetLocalSnapshotPromotionTimeSeconds(1);
+        config->SetLocalSnapshotPromotionTimeSeconds(promotionTime.Seconds());
         config->SetMaxClockSkewMs(200);
-        // Publish registry states explicitly. Keep service maintenance outside
-        // the simulated duration of these tests so it cannot overwrite them.
+        // Tests that inject registry states keep maintenance outside their
+        // simulated duration. Integration tests restore real maintenance below.
         config->SetSnapshotsRegistryUpdateIntervalSeconds(3600);
         if (serviceRegistry) {
             config->SetSnapshotsRegistryUpdateIntervalSeconds(1);
@@ -116,6 +120,21 @@ public:
         GetRuntime().SimulateSleep(TDuration::Seconds(3));
     }
 
+    ui64 GetSimpleCounter(ui64 shard, const TString& name) {
+        auto& runtime = GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(shard, sender, new TEvTablet::TEvGetCounters(),
+            0, GetPipeConfigWithRetries());
+        const auto response = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(sender);
+        for (const auto& counter : response->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+            if (counter.GetName() == name) {
+                return counter.GetValue();
+            }
+        }
+        UNIT_ASSERT_C(false, "Counter not found: " << name);
+        return 0;
+    }
+
     NTable::TRowVersionRanges GetRemovedRanges(ui64 shard) {
         auto& runtime = GetRuntime();
         const auto tablet = ResolveTablet(runtime, shard);
@@ -182,6 +201,21 @@ private:
     TPortManager PortManager_;
 };
 
+std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeSnapshotUpdate(const TTableId& tableId,
+    const TRowVersion& snapshot, ui64 lockTxId, ui64 lockNodeId, ui32 value,
+    NKikimrDataEvents::ELockMode lockMode = NKikimrDataEvents::OPTIMISTIC)
+{
+    auto request = MakeWriteRequestOneKeyValue(std::nullopt,
+        NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+        NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE,
+        tableId, TShardedTableOptions::DefaultColumns(), 1, value);
+    request->SetLockId(lockTxId, lockNodeId);
+    request->Record.SetLockMode(lockMode);
+    request->Record.MutableMvccSnapshot()->SetStep(snapshot.Step);
+    request->Record.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
+    return request;
+}
+
 void TestPersistentAndRegistryRetention(bool registryReleasedFirst) {
     TSnapshotRetentionTest test;
     test.WriteVersion(1);
@@ -233,6 +267,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionCleanup) {
         test.RunCleanup();
         UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
         UNIT_ASSERT(test.IsRemoved(test.ShardB, snapshot));
+        UNIT_ASSERT_VALUES_EQUAL(test.GetSimpleCounter(test.ShardA, "DataShard/MvccSnapshotRegistryWaiting"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(test.GetSimpleCounter(test.ShardA, "DataShard/MvccSnapshotRegistryCleanupLagMs"), 0u);
         const auto result = test.ReadSnapshot(test.ShardA, test.TableA, snapshot);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
     }
@@ -352,10 +388,14 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionCleanup) {
         test.WriteVersion(2);
         test.RunCleanup();
         UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+        UNIT_ASSERT_VALUES_EQUAL(test.GetSimpleCounter(test.ShardA, "DataShard/MvccSnapshotRegistryWaiting"), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(test.GetSimpleCounter(test.ShardA, "DataShard/MvccSnapshotRegistryCleanupLagMs"), 0u);
 
         test.PublishRegistry();
         test.RunCleanup();
         UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+        UNIT_ASSERT_VALUES_EQUAL(test.GetSimpleCounter(test.ShardA, "DataShard/MvccSnapshotRegistryWaiting"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(test.GetSimpleCounter(test.ShardA, "DataShard/MvccSnapshotRegistryCleanupLagMs"), 0u);
     }
 
     Y_UNIT_TEST(BorderProtectsContinuousRange) {
@@ -395,15 +435,22 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionCleanup) {
         test.RunCleanup();
         UNIT_ASSERT_VALUES_EQUAL(test.GetCleanupBoundary(test.ShardA), boundary);
         UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+        UNIT_ASSERT_VALUES_EQUAL(test.GetSimpleCounter(test.ShardA, "DataShard/MvccSnapshotRegistryWaiting"), 0u);
+        const auto initialLag = test.GetSimpleCounter(test.ShardA, "DataShard/MvccSnapshotRegistryCleanupLagMs");
+        UNIT_ASSERT(initialLag > 0);
 
         test.GetRuntime().SimulateSleep(TDuration::Seconds(10));
         test.WriteVersion(4);
         test.RunCleanup();
         UNIT_ASSERT_VALUES_EQUAL(test.GetCleanupBoundary(test.ShardA), boundary);
+        UNIT_ASSERT_VALUES_EQUAL(test.GetSimpleCounter(test.ShardA, "DataShard/MvccSnapshotRegistryWaiting"), 0u);
+        UNIT_ASSERT(test.GetSimpleCounter(test.ShardA, "DataShard/MvccSnapshotRegistryCleanupLagMs") > initialLag);
 
         test.PublishRegistry();
         test.RunCleanup();
         UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+        UNIT_ASSERT_VALUES_EQUAL(test.GetSimpleCounter(test.ShardA, "DataShard/MvccSnapshotRegistryWaiting"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(test.GetSimpleCounter(test.ShardA, "DataShard/MvccSnapshotRegistryCleanupLagMs"), 0u);
     }
 }
 
@@ -729,6 +776,157 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionRead) {
     }
 }
 
+Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionWrite) {
+    Y_UNIT_TEST(RetainedSnapshotReadLockIsBrokenByNewerWrite) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        const auto snapshot = test.WriteVersion(1);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        // Advance the cleanup horizon without changing the key we will lock.
+        ExecSQL(test.Server, test.Sender, "UPSERT INTO `/Root/table-a` (key, value) VALUES (2, 20);");
+        runtime.SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        test.RunCleanup();
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardA));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+
+        const ui64 lockTxId = 1234567890001;
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
+        const auto tables = GetTablesByPathId(test.Server, test.ShardA).first;
+        auto request = GetBaseReadRequest(test.TableA, tables.at(test.TableA.PathId).GetDescription(),
+            1, NKikimrDataEvents::FORMAT_CELLVEC, snapshot);
+        request->Record.SetLockTxId(lockTxId);
+        request->Record.SetLockNodeId(runtime.GetNodeId(0));
+        AddKeyQuery(*request, {1});
+        const auto read = SendRead(test.Server, test.ShardA, request.release(), test.Sender);
+        UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(read.get()), "1, 1\n");
+        UNIT_ASSERT_VALUES_EQUAL(read->Record.GetTxLocks().size(), 1u);
+        const auto lock = read->Record.GetTxLocks(0);
+        UNIT_ASSERT_C(lock.GetCounter() < TSysTables::TLocksTable::TLock::ErrorMin, lock.ShortDebugString());
+        UNIT_ASSERT(!lock.GetHasWrites());
+
+        // The concurrent commit happens after the old-version read acquired its lock.
+        ExecSQL(test.Server, test.Sender, "UPSERT INTO `/Root/table-a` (key, value) VALUES (1, 2);");
+        CommitLock(runtime, test.Sender, test.ShardA, lock,
+            NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        const TVector<ui64> shards{test.ShardA};
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, test.TableA),
+            "key = 1, value = 2\nkey = 2, value = 20\n");
+    }
+
+    Y_UNIT_TEST_TWIN(RetainedSnapshotWriteCommits, SnapshotIsolation) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        const auto snapshot = test.WriteVersion(1);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        ExecSQL(test.Server, test.Sender, "UPSERT INTO `/Root/table-a` (key, value) VALUES (2, 20);");
+        runtime.SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        test.RunCleanup();
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardA));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+
+        const ui64 lockTxId = 1234567890001;
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
+        auto request = MakeSnapshotUpdate(test.TableA, snapshot, lockTxId, runtime.GetNodeId(0), 3,
+            SnapshotIsolation ? NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION : NKikimrDataEvents::OPTIMISTIC);
+        const auto written = Write(runtime, test.Sender, test.ShardA, std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL(written.GetTxLocks().size(), 1u);
+        const auto lock = written.GetTxLocks(0);
+        UNIT_ASSERT_C(lock.GetCounter() < TSysTables::TLocksTable::TLock::ErrorMin, lock.ShortDebugString());
+        UNIT_ASSERT(lock.GetHasWrites());
+
+        // Keep the original snapshot and lock mode on the final commit too,
+        // as KQP does for SnapshotRW transactions.
+        auto commit = std::make_unique<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        commit->Record.SetLockMode(
+            SnapshotIsolation ? NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION : NKikimrDataEvents::OPTIMISTIC);
+        commit->Record.MutableMvccSnapshot()->SetStep(snapshot.Step);
+        commit->Record.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
+        auto* locks = commit->Record.MutableLocks();
+        locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+        locks->AddSendingShards(test.ShardA);
+        locks->AddReceivingShards(test.ShardA);
+        *locks->AddLocks() = lock;
+        Write(runtime, test.Sender, test.ShardA, std::move(commit));
+
+        const TVector<ui64> shards{test.ShardA};
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, test.TableA),
+            "key = 1, value = 3\nkey = 2, value = 20\n");
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatIntReadResult(test.ReadSnapshot(test.ShardA, test.TableA, snapshot).get()), "1, 1\n");
+    }
+
+    Y_UNIT_TEST_TWIN(RemovedSnapshotWriteIsRejected, Reregister) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        const auto snapshot = test.WriteVersion(1);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        test.WriteVersion(2);
+        runtime.SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry();
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+
+        if (Reregister) {
+            // Membership cannot make already removed history readable again.
+            test.PublishRegistry({snapshot}, {test.TableA});
+        }
+        const ui64 lockTxId = 1234567890001;
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
+        auto request = MakeSnapshotUpdate(test.TableA, snapshot, lockTxId, runtime.GetNodeId(0), 3);
+        const auto rejected = Write(runtime, test.Sender, test.ShardA, std::move(request),
+            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        UNIT_ASSERT(!rejected.GetIssues().empty());
+        UNIT_ASSERT_C(rejected.GetIssues(0).message().Contains("snapshot"), rejected.ShortDebugString());
+        UNIT_ASSERT(rejected.GetTxLocks().empty());
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+        const TVector<ui64> shards{test.ShardA};
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, test.TableA), "key = 1, value = 2\n");
+    }
+
+    Y_UNIT_TEST(SnapshotWriteForcedOnlineIsRejected) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        const auto snapshot = test.WriteVersion(1);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        ExecSQL(test.Server, test.Sender, "UPSERT INTO `/Root/table-a` (key, value) VALUES (2, 20);");
+        runtime.SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        test.RunCleanup();
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardA));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+
+        auto alter = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto& transaction = *alter->Record.MutableTransaction()->MutableModifyScheme();
+        transaction.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        transaction.SetWorkingDir("/Root");
+        auto* description = transaction.MutableAlterTable();
+        description->SetName("table-a");
+        description->MutablePartitionConfig()->MutablePipelineConfig()->SetDisableImmediate(true);
+        runtime.Send(new IEventHandle(MakeTxProxyID(), test.Sender, alter.Release()));
+        const auto altered = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(test.Sender);
+        UNIT_ASSERT_VALUES_EQUAL(altered->Get()->Record.GetStatus(),
+            TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+        WaitTxNotification(test.Server, test.Sender, altered->Get()->Record.GetTxId());
+        test.TableA = ResolveTableId(test.Server, test.Sender, "/Root/table-a");
+        test.PublishRegistry({snapshot}, {test.TableA});
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+
+        const ui64 lockTxId = 1234567890001;
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
+        auto request = MakeSnapshotUpdate(test.TableA, snapshot, lockTxId, runtime.GetNodeId(0), 3);
+        const auto rejected = Write(runtime, test.Sender, test.ShardA, std::move(request),
+            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        UNIT_ASSERT(!rejected.GetIssues().empty());
+        UNIT_ASSERT_C(rejected.GetIssues(0).message().Contains("planned transaction"), rejected.ShortDebugString());
+        UNIT_ASSERT(rejected.GetTxLocks().empty());
+        const TVector<ui64> shards{test.ShardA};
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, test.TableA),
+            "key = 1, value = 1\nkey = 2, value = 20\n");
+    }
+}
+
 Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
     Y_UNIT_TEST(CleanupWhilePreparingCopySnapshotIsTransferred) {
         TSnapshotRetentionTest test;
@@ -997,7 +1195,21 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
         auto& runtime = test.GetRuntime();
         using TService = NLongTxService::TEvLongTxService;
         TBlockEvents<TService::TEvPropagateSnapshots> publication(runtime);
+        // Let maintenance publish any collection already received before the
+        // block, so the baseline also reflects the producer's buffered state.
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        const auto initialRegistry = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
+        UNIT_ASSERT(initialRegistry);
+        const auto collectionTime = initialRegistry->GetOldestCollectionTime();
+        const auto& config = runtime.GetAppData(1).LongTxServiceConfig;
+        const auto margin = TDuration::Seconds(config.GetLocalSnapshotPromotionTimeSeconds())
+            + TDuration::MilliSeconds(config.GetMaxClockSkewMs());
+        const TRowVersion cleanupFloor((collectionTime - margin).MilliSeconds(), 0);
+        const auto initialRemoved = test.GetRemovedRanges(test.ShardB);
+        const auto cleanupLimit = Max(cleanupFloor,
+            initialRemoved.empty() ? TRowVersion::Min() : std::prev(initialRemoved.end())->Upper);
         const auto snapshot = test.WriteVersion(1);
+        UNIT_ASSERT(cleanupLimit < snapshot);
         const auto sender = runtime.AllocateEdgeActor();
         runtime.Send(NLongTxService::MakeLongTxServiceID(runtime.GetNodeId(0)), sender,
             new TService::TEvAcquireReadSnapshot("/Root", { test.TableA, test.TableB }, snapshot), 0, true);
@@ -1008,17 +1220,24 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(registered->Get()->Snapshot, snapshot);
 
         runtime.SimulateSleep(TDuration::MilliSeconds(100));
-        test.WriteVersion(2);
-        test.RunCleanup();
-        UNIT_ASSERT(!publication.empty());
-        const auto& registry = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
-        UNIT_ASSERT(registry);
-        UNIT_ASSERT(!registry->GetActiveSnapshots(test.TableB).contains(snapshot));
-        // The freshness floor must protect the snapshot before its registration arrives.
-        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
-        UNIT_ASSERT(!test.IsRemoved(test.ShardB, snapshot));
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatIntReadResult(test.ReadSnapshot(test.ShardB, test.TableB, snapshot).get()), "1, 1\n");
+        // Keep cleanup running for several promotion/skew windows while the
+        // real service cannot publish either its snapshots or a newer floor.
+        const auto cleanupStarted = runtime.GetCurrentTime();
+        for (ui32 value = 2; value <= 6; ++value) {
+            test.WriteVersion(value);
+            test.RunCleanup();
+            UNIT_ASSERT(!publication.empty());
+            const auto registry = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(registry);
+            UNIT_ASSERT_VALUES_EQUAL(registry->GetOldestCollectionTime(), collectionTime);
+            UNIT_ASSERT(!registry->HasSnapshot(test.TableB, snapshot));
+            UNIT_ASSERT(test.GetCleanupBoundary(test.ShardB) <= cleanupLimit);
+            UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+            UNIT_ASSERT(!test.IsRemoved(test.ShardB, snapshot));
+            UNIT_ASSERT_VALUES_EQUAL(
+                FormatIntReadResult(test.ReadSnapshot(test.ShardB, test.TableB, snapshot).get()), "1, 1\n");
+        }
+        UNIT_ASSERT(margin < runtime.GetCurrentTime() - cleanupStarted);
 
         publication.Stop().Unblock();
         runtime.WaitFor("explicit snapshot published to the remote node", [&] {
@@ -1040,6 +1259,370 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
         UNIT_ASSERT(test.IsRemoved(test.ShardB, snapshot));
         const auto removed = test.ReadSnapshot(test.ShardB, test.TableB, snapshot);
         UNIT_ASSERT_VALUES_EQUAL(removed->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(YoungLocalSnapshotSurvivesCleanupBeforePromotion) {
+        const auto promotionTime = TDuration::Seconds(10);
+        TSnapshotRetentionTest test(true, 1, true, promotionTime);
+        auto& runtime = test.GetRuntime();
+        using TService = NLongTxService::TEvLongTxService;
+        test.WriteVersion(1);
+        const auto initialRegistry = runtime.GetAppData(0).SnapshotRegistryHolder->Get();
+        UNIT_ASSERT(initialRegistry);
+        const auto collectionTime = initialRegistry->GetOldestCollectionTime();
+
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.Send(NLongTxService::MakeLongTxServiceID(runtime.GetNodeId(0)), sender,
+            new TService::TEvAcquireReadSnapshot("/Root", { test.TableA }), 0, true);
+        auto acquired = runtime.GrabEdgeEventRethrow<TService::TEvAcquireReadSnapshotResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            acquired->Get()->Status, Ydb::StatusIds::SUCCESS, acquired->Get()->Issues.ToString());
+        UNIT_ASSERT(acquired->Get()->SnapshotHandle);
+        const auto snapshot = acquired->Get()->Snapshot;
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        for (ui32 value = 2; value <= 3; ++value) {
+            test.WriteVersion(value);
+            test.RunCleanup();
+            const auto age = runtime.GetCurrentTime() - TInstant::MilliSeconds(snapshot.Step);
+            UNIT_ASSERT(TDuration::Seconds(2) < age);
+            UNIT_ASSERT(age < promotionTime);
+            const auto registry = runtime.GetAppData(0).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(registry);
+            UNIT_ASSERT(collectionTime < registry->GetOldestCollectionTime());
+            UNIT_ASSERT(!registry->HasSnapshot(test.TableA, snapshot));
+            UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+            UNIT_ASSERT_VALUES_EQUAL(
+                FormatIntReadResult(test.ReadSnapshot(test.ShardA, test.TableA, snapshot).get()), "1, 1\n");
+        }
+
+        runtime.WaitFor("young snapshot promoted into the local registry", [&] {
+            const auto registry = runtime.GetAppData(0).SnapshotRegistryHolder->Get();
+            return registry && registry->HasSnapshot(test.TableA, snapshot);
+        }, TDuration::Seconds(30));
+        test.WriteVersion(4);
+        test.RunCleanup();
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardA));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatIntReadResult(test.ReadSnapshot(test.ShardA, test.TableA, snapshot).get()), "1, 1\n");
+
+        acquired->Get()->SnapshotHandle.Reset();
+        runtime.WaitFor("released snapshot removed from the local registry", [&] {
+            const auto registry = runtime.GetAppData(0).SnapshotRegistryHolder->Get();
+            return registry && !registry->HasSnapshot(test.TableA, snapshot);
+        }, TDuration::Seconds(30));
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+        const auto removed = test.ReadSnapshot(test.ShardA, test.TableA, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(removed->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(LiveSnapshotOwnerExpiresAndCannotResurrectRemovedHistory) {
+        TSnapshotRetentionTest test(true, 3);
+        auto& runtime = test.GetRuntime();
+        using TService = NLongTxService::TEvLongTxService;
+        for (ui32 node = 0; node < 3; ++node) {
+            runtime.GetAppData(node).LongTxServiceConfig.SetUnavailableNodeSnapshotsExpirationTimeSeconds(5);
+        }
+        test.WriteVersion(1);
+
+        // Isolate a live session owner, while the exchange leader and the
+        // target's node remain connected and continue collecting snapshots.
+        std::optional<ui32> leaderIndex;
+        auto captureLeader = runtime.AddObserver<TService::TEvCollectSnapshots>([&](auto& ev) {
+            if (ev->Sender == ev->GetRecipientRewrite()) {
+                leaderIndex = ev->Sender.NodeId() - runtime.GetFirstNodeId();
+            }
+        });
+        runtime.WaitFor("snapshot exchange leader", [&] { return leaderIndex.has_value(); }, TDuration::Seconds(30));
+        captureLeader.Remove();
+        UNIT_ASSERT(*leaderIndex < 3);
+        const ui32 ownerIndex = *leaderIndex == 0 ? 1 : 0;
+        const ui32 ownerNodeId = runtime.GetNodeId(ownerIndex);
+
+        Ydb::Table::CreateSessionRequest createSession;
+        auto created = NKqpHelpers::AwaitResponse(runtime,
+            NRpcService::DoLocalRpc<NKqpHelpers::TEvCreateSessionRequest>(
+                std::move(createSession), "/Root", "", runtime.GetActorSystem(ownerIndex)));
+        UNIT_ASSERT_VALUES_EQUAL_C(created.operation().status(), Ydb::StatusIds::SUCCESS, created.ShortDebugString());
+        Ydb::Table::CreateSessionResult session;
+        UNIT_ASSERT(created.operation().result().UnpackTo(&session));
+        const TString sessionId = session.session_id();
+        UNIT_ASSERT(!sessionId.empty());
+        auto execute = [&](Ydb::Table::ExecuteDataQueryRequest&& request) {
+            return NKqpHelpers::AwaitResponse(runtime,
+                NRpcService::DoLocalRpc<NKqpHelpers::TEvExecuteDataQueryRequest>(
+                    std::move(request), "/Root", "", runtime.GetActorSystem(ownerIndex)));
+        };
+
+        TActorId snapshotManager;
+        TRowVersion snapshot = TRowVersion::Min();
+        bool registered = false;
+        auto captureRequest = runtime.AddObserver<TService::TEvAcquireReadSnapshot>([&](auto& ev) {
+            if (!snapshotManager && ev->Sender.NodeId() == ownerNodeId) {
+                snapshotManager = ev->Sender;
+            }
+        });
+        auto captureSnapshot = runtime.AddObserver<TService::TEvAcquireReadSnapshotResult>([&](auto& ev) {
+            if (snapshotManager && ev->GetRecipientRewrite() == snapshotManager
+                && ev->Get()->Status == Ydb::StatusIds::SUCCESS)
+            {
+                snapshot = ev->Get()->Snapshot;
+                registered = bool(ev->Get()->SnapshotHandle);
+            }
+        });
+        auto begin = NKqpHelpers::MakeSimpleRequestRPC(
+            "SELECT key, value FROM `/Root/table-a` ORDER BY key;", sessionId, {}, false);
+        begin.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_only();
+        auto started = execute(std::move(begin));
+        captureRequest.Remove();
+        captureSnapshot.Remove();
+        UNIT_ASSERT_VALUES_EQUAL_C(started.operation().status(), Ydb::StatusIds::SUCCESS, started.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(NKqpHelpers::FormatResult(started),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
+        UNIT_ASSERT_VALUES_EQUAL(snapshotManager.NodeId(), ownerNodeId);
+        UNIT_ASSERT(snapshot);
+        UNIT_ASSERT(registered);
+        Ydb::Table::ExecuteQueryResult startedResult;
+        UNIT_ASSERT(started.operation().result().UnpackTo(&startedResult));
+        const TString txId = startedResult.tx_meta().id();
+        UNIT_ASSERT(!txId.empty());
+        runtime.WaitFor("live owner's snapshot published on every node", [&] {
+            for (ui32 node = 0; node < 3; ++node) {
+                const auto registry = runtime.GetAppData(node).SnapshotRegistryHolder->Get();
+                if (!registry || !registry->HasSnapshot(test.TableB, snapshot)) {
+                    return false;
+                }
+            }
+            return true;
+        }, TDuration::Seconds(30));
+
+        size_t dropped = 0;
+        auto isolateOwner = [&](auto& ev) {
+            const auto sender = ev->Sender;
+            const auto recipient = ev->GetRecipientRewrite();
+            if ((sender.NodeId() == ownerNodeId) != (recipient.NodeId() == ownerNodeId)) {
+                ++dropped;
+                // Let the real exchange round finish without the isolated
+                // child, just as an interconnect failure would do.
+                runtime.Send(new IEventHandle(sender, TActorId(),
+                    new TEvInterconnect::TEvNodeDisconnected(recipient.NodeId())),
+                    sender.NodeId() - runtime.GetFirstNodeId(), true);
+                ev.Reset();
+            }
+        };
+        auto collect = runtime.AddObserver<TService::TEvCollectSnapshots>(isolateOwner);
+        auto propagate = runtime.AddObserver<TService::TEvPropagateSnapshots>(isolateOwner);
+        for (ui32 value = 2; value <= 7; ++value) {
+            test.WriteVersion(value);
+            test.RunCleanup();
+        }
+        UNIT_ASSERT(dropped);
+        runtime.WaitFor("isolated live owner's remote snapshot expires", [&] {
+            const auto registry = runtime.GetAppData(2).SnapshotRegistryHolder->Get();
+            return registry && !registry->HasSnapshot(test.TableB, snapshot);
+        }, TDuration::Seconds(30));
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardB, snapshot));
+        UNIT_ASSERT(runtime.GetAppData(ownerIndex).SnapshotRegistryHolder->Get()->HasSnapshot(test.TableB, snapshot));
+
+        // Data and RPC traffic still work, and the original session and
+        // transaction are alive even though healthy peers expired its state.
+        const auto alive = execute(NKqpHelpers::MakeSimpleRequestRPC("SELECT 1;", sessionId, txId, false));
+        UNIT_ASSERT_VALUES_EQUAL_C(alive.operation().status(), Ydb::StatusIds::SUCCESS, alive.ShortDebugString());
+        collect.Remove();
+        propagate.Remove();
+        runtime.WaitFor("live owner's old snapshot republished after exchange recovery", [&] {
+            const auto registry = runtime.GetAppData(2).SnapshotRegistryHolder->Get();
+            return registry && registry->HasSnapshot(test.TableB, snapshot);
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT(test.IsRemoved(test.ShardB, snapshot));
+
+        // Registry membership cannot restore history removed during expiry.
+        // The transaction's first target read must fail instead of returning
+        // empty or incomplete data.
+        const auto stale = execute(NKqpHelpers::MakeSimpleRequestRPC(
+            "SELECT key, value FROM `/Root/table-b` ORDER BY key;", sessionId, txId, false));
+        UNIT_ASSERT_C(stale.operation().status() == Ydb::StatusIds::ABORTED
+            || stale.operation().status() == Ydb::StatusIds::PRECONDITION_FAILED, stale.ShortDebugString());
+        const TString staleIssues = stale.operation().ShortDebugString();
+        UNIT_ASSERT_C(staleIssues.Contains("snapshot"), stale.ShortDebugString());
+        const auto fresh = execute(NKqpHelpers::MakeSimpleRequestRPC(
+            "SELECT key, value FROM `/Root/table-b` ORDER BY key;", sessionId, {}, true));
+        UNIT_ASSERT_VALUES_EQUAL_C(fresh.operation().status(), Ydb::StatusIds::SUCCESS, fresh.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(NKqpHelpers::FormatResult(fresh),
+            "{ items { uint32_value: 1 } items { uint32_value: 7 } }");
+
+        Ydb::Table::DeleteSessionRequest deleteSession;
+        deleteSession.set_session_id(sessionId);
+        auto closed = NKqpHelpers::AwaitResponse(runtime,
+            NRpcService::DoLocalRpc<NKqpHelpers::TEvDeleteSessionRequest>(
+                std::move(deleteSession), "/Root", "", runtime.GetActorSystem(ownerIndex)));
+        UNIT_ASSERT_VALUES_EQUAL_C(closed.operation().status(), Ydb::StatusIds::SUCCESS, closed.ShortDebugString());
+    }
+
+    Y_UNIT_TEST_TWIN(KqpCommittingQueryRetainsScopedSnapshots, UseIndex) {
+        TSnapshotRetentionTest test(true, 2);
+        auto& runtime = test.GetRuntime();
+        using TService = NLongTxService::TEvLongTxService;
+        auto pinTarget = runtime.AddObserver<TEvHive::TEvCreateTablet>([&](auto& ev) {
+            ev->Get()->Record.ClearAllowedNodeIDs();
+            ev->Get()->Record.AddAllowedNodeIDs(runtime.GetNodeId(1));
+        });
+        const auto options = TShardedTableOptions().Columns({
+            {"key", "Uint32", true, false},
+            {"indexed", "Uint32", false, false},
+            {"value", "Uint32", false, false},
+        }).Indexes({{"by_index", {"indexed"}, {}, NKikimrSchemeOp::EIndexTypeGlobal}});
+        const auto [targetShards, targetId] = CreateShardedTable(test.Server, test.Sender, "/Root", "table-c", options);
+        pinTarget.Remove();
+        const ui64 targetShard = targetShards.at(0);
+        const TString indexPath = "/Root/table-c/by_index/indexImplTable";
+        const auto indexId = ResolveTableId(test.Server, test.Sender, indexPath);
+        const ui64 indexShard = NKqp::GetTableShards(test.Server, test.Sender, indexPath).at(0);
+        UNIT_ASSERT_VALUES_EQUAL(ResolveTablet(runtime, targetShard).NodeId(), runtime.GetNodeId(1));
+        UNIT_ASSERT_VALUES_EQUAL(ResolveTablet(runtime, indexShard).NodeId(), runtime.GetNodeId(1));
+
+        const auto writeGeneration = [&](ui32 generation) {
+            ExecSQL(test.Server, test.Sender, Sprintf(
+                "UPSERT INTO `/Root/table-a` (key, value) VALUES (1, %u);"
+                "UPSERT INTO `/Root/table-b` (key, value) VALUES (1, %u);"
+                "UPSERT INTO `/Root/table-c` (key, indexed, value) VALUES (2, %u, %u);",
+                generation, generation, generation == 1 ? 100u : 200u, generation));
+        };
+        const auto makeQuery = [&](ui32 indexed) -> TString {
+            const TString filter = UseIndex ? Sprintf(" VIEW by_index WHERE indexed = %uu", indexed) : TString();
+            return TStringBuilder() << "SELECT key, value FROM ("
+                << "SELECT key, value FROM `/Root/table-a` UNION ALL "
+                << "SELECT key, value FROM `/Root/table-c`" << filter << ") ORDER BY key;";
+        };
+        const TString sessionId = NKqpHelpers::CreateSessionRPC(runtime, "/Root");
+        const auto makeRequest = [&](const TString& query) {
+            auto request = NKqpHelpers::MakeSimpleRequestRPC(query, sessionId, {}, true);
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_only();
+            request.mutable_query_cache_policy()->set_keep_in_cache(true);
+            return request;
+        };
+        const TString originalRows = "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 1 } }";
+        writeGeneration(1);
+        const TString query = makeQuery(100);
+        const auto warmed = NKqpHelpers::AwaitResponse(runtime, NKqpHelpers::SendRequest(runtime, makeRequest(query), "/Root"));
+        UNIT_ASSERT_VALUES_EQUAL_C(warmed.operation().status(), Ydb::StatusIds::SUCCESS, warmed.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(NKqpHelpers::FormatResult(warmed), originalRows);
+        // Reuse the cached plan in the same session, after its wildcard handle
+        // is gone and real writes have advanced the coordinator's read step.
+        test.RunCleanup();
+        writeGeneration(2);
+        writeGeneration(1);
+
+        TActorId snapshotManager;
+        TRowVersion snapshot = TRowVersion::Min();
+        THashSet<TPathId> requestedTables, readTables;
+        bool acquiredWithHandle = false;
+        auto captureRequest = runtime.AddObserver<TService::TEvAcquireReadSnapshot>([&](auto& ev) {
+            for (const auto& tableId : ev->Get()->TableIds) {
+                if (tableId.PathId == targetId.PathId && !snapshotManager) {
+                    snapshotManager = ev->Sender;
+                    for (const auto& requested : ev->Get()->TableIds) {
+                        requestedTables.insert(requested.PathId);
+                    }
+                    break;
+                }
+            }
+        });
+        auto captureSnapshot = runtime.AddObserver<TService::TEvAcquireReadSnapshotResult>([&](auto& ev) {
+            if (snapshotManager && ev->GetRecipientRewrite() == snapshotManager
+                && ev->Get()->Status == Ydb::StatusIds::SUCCESS)
+            {
+                snapshot = ev->Get()->Snapshot;
+                acquiredWithHandle = bool(ev->Get()->SnapshotHandle);
+            }
+        });
+        auto captureReads = runtime.AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (snapshot && record.HasSnapshot() && TRowVersion::FromProto(record.GetSnapshot()) == snapshot) {
+                readTables.insert(TPathId(record.GetTableId().GetOwnerId(), record.GetTableId().GetTableId()));
+            }
+        });
+        const auto delayedPath = UseIndex ? indexId.PathId : targetId.PathId;
+        TBlockEvents<TEvDataShard::TEvRead> reads(runtime, [&](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return snapshot && record.HasSnapshot() && TRowVersion::FromProto(record.GetSnapshot()) == snapshot
+                && TPathId(record.GetTableId().GetOwnerId(), record.GetTableId().GetTableId()) == delayedPath;
+        });
+        auto pending = NKqpHelpers::SendRequest(runtime, makeRequest(query), "/Root");
+        runtime.WaitFor("the committing query's first target read is blocked", [&] {
+            return !reads.empty() || pending.HasValue() || pending.HasException();
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT_C(!reads.empty(), "The query must acquire a scoped snapshot before its first target read");
+        UNIT_ASSERT(acquiredWithHandle);
+        UNIT_ASSERT(!requestedTables.contains(TPathId{}));
+        UNIT_ASSERT(requestedTables.contains(test.TableA.PathId));
+        UNIT_ASSERT(requestedTables.contains(targetId.PathId));
+        UNIT_ASSERT(!requestedTables.contains(test.TableB.PathId));
+        if constexpr (UseIndex) {
+            UNIT_ASSERT(requestedTables.contains(indexId.PathId));
+        }
+        captureRequest.Remove();
+        captureSnapshot.Remove();
+
+        // The writer uses a newer snapshot, so it cannot hit the query's read blocker.
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        for (ui32 i = 0; i < 3; ++i) {
+            writeGeneration(2);
+            test.RunCleanup();
+        }
+        runtime.WaitFor("the scoped snapshot is published without a wildcard", [&] {
+            for (ui32 node = 0; node < 2; ++node) {
+                const auto registry = runtime.GetAppData(node).SnapshotRegistryHolder->Get();
+                if (!registry || !registry->HasSnapshot(test.TableA, snapshot)
+                    || !registry->HasSnapshot(targetId, snapshot)
+                    || (UseIndex && !registry->HasSnapshot(indexId, snapshot))
+                    || registry->HasSnapshot(TTableId{}, snapshot) || registry->HasSnapshot(test.TableB, snapshot))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }, TDuration::Seconds(30));
+        test.RunCleanup();
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(targetShard));
+        UNIT_ASSERT(!test.IsRemoved(targetShard, snapshot));
+        if constexpr (UseIndex) {
+            UNIT_ASSERT(snapshot < test.GetCleanupBoundary(indexShard));
+            UNIT_ASSERT(!test.IsRemoved(indexShard, snapshot));
+        }
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardB));
+        UNIT_ASSERT(test.IsRemoved(test.ShardB, snapshot));
+        UNIT_ASSERT(!pending.HasValue() && !pending.HasException());
+
+        reads.Stop().Unblock();
+        const auto result = NKqpHelpers::AwaitResponse(runtime, pending);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.operation().status(), Ydb::StatusIds::SUCCESS, result.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(NKqpHelpers::FormatResult(result), originalRows);
+        UNIT_ASSERT(readTables.contains(targetId.PathId));
+        if constexpr (UseIndex) {
+            UNIT_ASSERT(readTables.contains(indexId.PathId));
+        }
+        runtime.WaitFor("the committing query releases its scoped snapshot", [&] {
+            const auto registry = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
+            return registry && !registry->HasSnapshot(targetId, snapshot)
+                && (!UseIndex || !registry->HasSnapshot(indexId, snapshot));
+        }, TDuration::Seconds(30));
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(targetShard, snapshot));
+        if constexpr (UseIndex) {
+            UNIT_ASSERT(test.IsRemoved(indexShard, snapshot));
+        }
+        const auto fresh = NKqpHelpers::AwaitResponse(runtime,
+            NKqpHelpers::SendRequest(runtime, makeRequest(makeQuery(200)), "/Root"));
+        UNIT_ASSERT_VALUES_EQUAL_C(fresh.operation().status(), Ydb::StatusIds::SUCCESS, fresh.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(NKqpHelpers::FormatResult(fresh),
+            "{ items { uint32_value: 1 } items { uint32_value: 2 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
+        NKqpHelpers::CloseSession(runtime, sessionId);
     }
 
     Y_UNIT_TEST(KqpFirstRemoteReadAfterCleanup) {

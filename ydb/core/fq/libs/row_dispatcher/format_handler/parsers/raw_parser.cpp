@@ -94,6 +94,10 @@ public:
         return Offsets;
     }
 
+    std::optional<ui64> GetLastMessageOffset() const override {
+        return Offsets.empty() ? std::nullopt : std::optional<ui64>(Offsets.back());
+    }
+
     TValueStatus<std::span<NYql::NUdf::TUnboxedValue>> GetParsedColumn(ui64 columnId) override {
         Y_ENSURE(columnId == 0, "Invalid column id for raw parser");
         return std::span<NYql::NUdf::TUnboxedValue>(ParsedColumn);

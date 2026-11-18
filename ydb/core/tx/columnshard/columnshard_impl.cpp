@@ -420,11 +420,13 @@ void TColumnShard::RunAlterTable(
             if (it->second.ActorId) {
                 Send(it->second.ActorId, new TEvents::TEvPoisonPill);
             }
+
             ColumnConstraintValidators.erase(it++);
         } else {
             ++it;
         }
     }
+
     const auto& internalPathId = TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
     Y_ABORT_UNLESS(TablesManager.HasTable(internalPathId), "AlterTable on a dropped or non-existent table");
     const auto& pathId = TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId);
@@ -2023,7 +2025,7 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvDataShard::TEvCancelTransactionProposal, Handle);
         HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
         HFunc(TEvDataShard::TEvKqpScan, Handle);
-        HFunc(TEvDataShard::TEvValidateRowConditionRequest, Handle);
+        HFunc(TEvColumnShard::TEvValidateRowConditionRequest, Handle);
         HFunc(TEvPrivate::TEvColumnConstraintValidationFinished, Handle);
         HFunc(TEvColumnShard::TEvInternalScan, Handle);
         HFunc(TEvTxProcessing::TEvPlanStep, Handle);

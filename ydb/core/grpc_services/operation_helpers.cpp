@@ -229,6 +229,7 @@ void ToOperation(const NKikimrSetColumnConstraint::TSetColumnConstraint& constra
                 operation->set_ready(true);
                 operation->set_status(constraint.GetFailureStatus());
             }
+
             break;
         default:
             operation->set_ready(false);

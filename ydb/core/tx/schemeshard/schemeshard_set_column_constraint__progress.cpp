@@ -437,26 +437,28 @@ public:
 
 struct TTxReplyValidateRowCondition : public TSchemeShard::TIndexBuilder::TTxBase {
 private:
-    TEvDataShard::TEvValidateRowConditionResponse::TPtr Response;
+    const TTabletId TabletId;
+    const NKikimrSetColumnConstraint::EValidateStatus Status;
+    const bool IsValid;
+    google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> Issues;
 
 public:
-    explicit TTxReplyValidateRowCondition(
-        TSchemeShard* self,
-        TIndexBuildId operationId,
-        TEvDataShard::TEvValidateRowConditionResponse::TPtr& response)
-        : TTxBase(self, operationId, TXTYPE_CREATE_SET_COLUMN_CONSTRAINT)
-        , Response(response)
-    {}
+    template<typename TRecord>
+    TTxReplyValidateRowCondition(TSchemeShard* self, TRecord& record)
+        : TTxBase(self, TIndexBuildId(record.GetId()), TXTYPE_CREATE_SET_COLUMN_CONSTRAINT)
+        , TabletId(record.GetTabletId())
+        , Status(record.GetStatus())
+        , IsValid(record.GetIsValid())
+    {
+        Issues.Swap(record.MutableIssues());
+    }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
-        const auto& record = Response->Get()->Record;
-        const TTabletId tabletId = TTabletId(record.GetTabletId());
-
         YDB_LOG_INFO("TTxReplyValidateRowCondition",
             {"buildId", BuildId},
-            {"tabletId", tabletId},
-            {"status", record.GetStatus()},
-            {"isValid", record.GetIsValid()},
+            {"tabletId", TabletId},
+            {"status", Status},
+            {"isValid", IsValid},
         );
 
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
@@ -486,7 +488,7 @@ public:
         TShardIdx shardIdx;
         bool found = false;
         for (const auto& [idx, shardStatus] : operationInfo.ValidationShards) {
-            if (Self->ShardInfos.at(idx).TabletID == tabletId) {
+            if (Self->ShardInfos.at(idx).TabletID == TabletId) {
                 shardIdx = idx;
                 found = true;
                 break;
@@ -495,16 +497,12 @@ public:
 
         if (!found) {
             YDB_LOG_WARN("TTxReplyValidateRowCondition: shard not found",
-                {"tabletId", tabletId},
+                {"tabletId", TabletId},
             );
             return true;
         }
 
-        // There is a scenario where, even when using a pipe,
-        // we may send a TEvValidateRowConditionRequest to a DataShard twice.
-        // As a result, we may receive two responses.
-        // Therefore, we should ignore extra responses so that
-        // `DoneValidationShards` does not end up containing duplicates.
+        // Retrying a validation request after a pipe reconnect can produce a duplicate reply.
         if (!operationInfo.InProgressValidationShards.contains(shardIdx)) {
             YDB_LOG_NOTICE("TTxReplyValidateRowCondition: superfluous shard event",
                 {"buildId", BuildId},
@@ -516,21 +514,23 @@ public:
         auto oldValidationFailedValue = operationInfo.ValidationFailed;
 
         auto& shardStatus = operationInfo.ValidationShards.at(shardIdx);
-        shardStatus.ValidateStatus = record.GetStatus();
+        shardStatus.ValidateStatus = Status;
 
-        if (record.IssuesSize() > 0) {
+        if (!Issues.empty()) {
             TStringBuilder issuesText;
-            for (size_t i = 0; i < record.IssuesSize(); ++i) {
+            for (int i = 0; i < Issues.size(); ++i) {
                 if (i > 0) {
                     issuesText << "; ";
                 }
-                issuesText << record.GetIssues(i).message();
+
+                issuesText << Issues[i].message();
             }
+
             shardStatus.DebugMessage = issuesText;
         }
 
-        if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::DONE) {
-            if (!record.GetIsValid()) {
+        if (Status == NKikimrSetColumnConstraint::EValidateStatus::DONE) {
+            if (!IsValid) {
                 YDB_LOG_NOTICE("TTxReplyValidateRowCondition: validation failed on shard",
                     {"shardIdx", shardIdx},
                 );
@@ -542,10 +542,10 @@ public:
 
             Progress(BuildId);
 
-        } else if (record.GetStatus() == NKikimrSetColumnConstraint::BAD_REQUEST || record.GetStatus() == NKikimrSetColumnConstraint::UNAVAILABLE) {
+        } else if (Status == NKikimrSetColumnConstraint::BAD_REQUEST || Status == NKikimrSetColumnConstraint::UNAVAILABLE) {
             YDB_LOG_ERROR("TTxReplyValidateRowCondition: error on shard",
                 {"shardIdx", shardIdx},
-                {"status", record.GetStatus()},
+                {"status", Status},
             );
 
             operationInfo.ValidationFailed = true;
@@ -558,7 +558,7 @@ public:
         } else {
             YDB_LOG_DEBUG("TTxReplyValidateRowCondition: shard still in progress",
                 {"shardIdx", shardIdx},
-                {"status", record.GetStatus()},
+                {"status", Status},
             );
         }
 
@@ -700,6 +700,7 @@ private:
                 shards.push_back(partition->ShardIdx);
             }
         }
+
         for (const auto shardIdx : shards) {
             // We can initate shards after schemeshard's reboot.
             if (operationInfo.DoneValidationShards.contains(shardIdx)) {
@@ -725,33 +726,34 @@ private:
     }
 
     void SendValidateRowConditionRequest(TShardIdx shardIdx, TSetColumnConstraintOperationInfo& operationInfo) {
-        auto ev = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
-        auto& record = ev->Record;
+        const auto& shard = Self->ShardInfos.at(shardIdx);
+        const auto enqueue = [&](auto ev) {
+            auto& record = ev->Record;
+            record.SetId(ui64(BuildId));
+            record.SetTabletId(ui64(shard.TabletID));
+            record.SetOwnerId(operationInfo.TablePathId.OwnerId);
+            record.SetPathId(operationInfo.TablePathId.LocalPathId);
+            record.SetSeqNoGeneration(Self->Generation());
+            record.SetSeqNoRound(++operationInfo.ValidationShards.at(shardIdx).SeqNoRound);
 
-        record.SetId(ui64(BuildId));
+            for (const auto& columnName : operationInfo.SetNotNullColumns) {
+                record.AddNotNullColumns(TString(columnName));
+            }
 
-        TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;
-        record.SetTabletId(ui64(shardId));
+            YDB_LOG_NOTICE("TTxProgressSetColumnConstraint: TEvValidateRowConditionRequest",
+                {"record", record.ShortDebugString()},
+            );
 
-        record.SetOwnerId(operationInfo.TablePathId.OwnerId);
-        record.SetPathId(operationInfo.TablePathId.LocalPathId);
-        if (Self->ColumnTables.contains(operationInfo.TablePathId)) {
-            record.SetDatabaseName(TPath::Init(operationInfo.DomainPathId, Self).PathString());
+            ToTabletSend.emplace(shard.TabletID, std::move(ev));
+        };
+
+        if (shard.TabletType == ETabletType::ColumnShard) {
+            auto ev = MakeHolder<TEvColumnShard::TEvValidateRowConditionRequest>();
+            ev->Record.SetDatabaseName(TPath::Init(operationInfo.DomainPathId, Self).PathString());
+            enqueue(std::move(ev));
+        } else {
+            enqueue(MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>());
         }
-
-        auto& shardStatus = operationInfo.ValidationShards.at(shardIdx);
-        record.SetSeqNoGeneration(Self->Generation());
-        record.SetSeqNoRound(++shardStatus.SeqNoRound);
-
-        for (const auto& columnName : operationInfo.SetNotNullColumns) {
-            record.AddNotNullColumns(TString(columnName));
-        }
-
-        YDB_LOG_NOTICE("TTxProgressSetColumnConstraint: TEvValidateRowConditionRequest",
-            {"record", record.ShortDebugString()},
-        );
-
-        ToTabletSend.emplace(shardId, std::move(ev));
     }
 
     template<typename Send>
@@ -964,11 +966,12 @@ ITransaction* TSchemeShard::CreateTxReplyCompletedSetColumnConstraint(TTxId comp
     return new NSetColumnConstraint::TTxReplyCompleted(this, completedTxId);
 }
 
-ITransaction* TSchemeShard::CreateTxReplyValidateRowCondition(
-    TIndexBuildId operationId,
-    TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev)
-{
-    return new NSetColumnConstraint::TTxReplyValidateRowCondition(this, operationId, ev);
+void TSchemeShard::Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(new NSetColumnConstraint::TTxReplyValidateRowCondition(this, ev->Get()->Record), ctx);
+}
+
+void TSchemeShard::Handle(TEvColumnShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(new NSetColumnConstraint::TTxReplyValidateRowCondition(this, ev->Get()->Record), ctx);
 }
 
 } // namespace NSchemeShard

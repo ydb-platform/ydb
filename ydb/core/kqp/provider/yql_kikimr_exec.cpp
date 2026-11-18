@@ -2384,6 +2384,7 @@ public:
                                         "SET NOT NULL for column tables is disabled"));
                                     return SyncError();
                                 }
+
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableSetColumnConstraint()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
                                         << "SET NOT NULL is currently not supported."));

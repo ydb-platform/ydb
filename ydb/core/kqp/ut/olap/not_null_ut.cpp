@@ -64,6 +64,7 @@ struct TFixture {
         } else {
             create << "WITH (STORE = ROW, UNIFORM_PARTITIONS = " << shardCount << ");";
         }
+
         Success(create, true);
     }
 
@@ -97,20 +98,24 @@ struct TFixture {
             } else if (value == EWriteValue::Null) {
                 rows.AddMember("v").EmptyOptional(EPrimitiveType::Utf8);
             }
+
             rows.EndStruct().EndList();
             return Kikimr.RunCall([&] {
                 return Kikimr.GetTableClient().BulkUpsert("/Root/t", rows.Build()).GetValueSync();
             });
         }
+
         TStringBuilder query;
         query << ToString(mode) << " INTO `/Root/t` (k, w";
         if (value != EWriteValue::Missing) {
             query << ", v";
         }
+
         query << ") VALUES (" << key << "u, 7u";
         if (value != EWriteValue::Missing) {
             query << (value == EWriteValue::Filled ? ", 'filled'u" : ", NULL");
         }
+
         query << ");";
         return Execute(query);
     }
@@ -121,6 +126,33 @@ struct TFixture {
         CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
     }
 };
+
+struct TValidationRequestIds {
+    ui64 SchemeShardId;
+    ui64 ShardId;
+    ui64 OperationId;
+};
+
+std::optional<TValidationRequestIds> GetValidationRequestIds(IEventHandle& event, ETableKind tableKind) {
+    const auto ids = [](const auto& record) -> TValidationRequestIds {
+        return { record.GetOwnerId(), record.GetTabletId(), record.GetId() };
+    };
+
+    switch (event.GetTypeRewrite()) {
+        case TEvDataShard::TEvValidateRowConditionRequest::EventType:
+            UNIT_ASSERT(tableKind == ETableKind::Row);
+            return ids(event.Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record);
+        case TEvColumnShard::TEvValidateRowConditionRequest::EventType: {
+            UNIT_ASSERT(tableKind == ETableKind::Column);
+            const auto& record = event.Get<TEvColumnShard::TEvValidateRowConditionRequest>()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetDatabaseName(), "/Root");
+            return ids(record);
+        }
+
+        default:
+            return std::nullopt;
+    }
+}
 
 const TString SetNotNull = "ALTER TABLE `/Root/t` ALTER COLUMN v SET NOT NULL;";
 
@@ -160,8 +192,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                     ++batches;
                 }
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         const auto alter = f.Execute(SetNotNull, true);
         runtime.SetObserverFunc(previous);
         UNIT_ASSERT_VALUES_EQUAL_C(alter.GetStatus(),
@@ -173,6 +207,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             UNIT_ASSERT_GT(batches, 1);
             UNIT_ASSERT_VALUES_EQUAL(scannedRows, rowCount);
         }
+
         auto result = f.Execute("SELECT COUNT(*), COUNT(v) FROM `/Root/t`;");
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(position == ENullPosition::None ? "[[100000u;100000u]]" : "[[100000u;99999u]]",
@@ -189,31 +224,40 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         ui32 inFlight = 0;
         ui32 peakInFlight = 0;
         bool capture = true;
+        const auto responseType = Arg<0>() == ETableKind::Column
+            ? TEvColumnShard::TEvValidateRowConditionResponse::EventType
+            : TEvDataShard::TEvValidateRowConditionResponse::EventType;
         const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
-                if (shards.insert(ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record.GetTabletId()).second) {
+            if (const auto request = GetValidationRequestIds(*ev, Arg<0>())) {
+                if (shards.insert(request->ShardId).second) {
                     peakInFlight = Max(peakInFlight, ++inFlight);
                     UNIT_ASSERT_LE(inFlight, 10);
                 }
+
                 if (capture) {
                     requests.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
-            } else if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionResponse::EventType) {
+            } else if (ev->GetTypeRewrite() == responseType) {
                 UNIT_ASSERT_GT(inFlight, 0);
                 --inFlight;
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         auto alter = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
         });
+
         runtime.WaitFor("first validation wave", [&] { return requests.size() == Min(shardCount, 10u); });
+
         UNIT_ASSERT(!alter.HasValue());
         capture = false;
         for (auto& request : requests) {
             runtime.Send(request.Release());
         }
+
         const auto result = runtime.WaitFuture(alter);
         runtime.SetObserverFunc(previous);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -230,6 +274,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             const auto result = f.Write(mode, key, value);
             UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), success, result.GetIssues().ToString());
         };
+
         checkWrite(1, EWriteValue::Filled, true);
         checkWrite(2, EWriteValue::Null, true);
         checkWrite(3, EWriteValue::Missing, true);
@@ -239,16 +284,20 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         TVector<TAutoPtr<IEventHandle>> requests;
         bool capture = true;
         const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (capture && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+            if (capture && GetValidationRequestIds(*ev, Arg<0>())) {
                 requests.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         auto alter = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
         });
+
         runtime.WaitFor("validation started", [&] { return !requests.empty(); });
+
         checkWrite(2, EWriteValue::Filled, true);
         checkWrite(3, EWriteValue::Null, false);
         checkWrite(4, EWriteValue::Missing, false);
@@ -256,10 +305,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             f.Failure(TStringBuilder() << ToString(mode)
                 << " INTO `/Root/t` (k, v) VALUES (4u, Just('filled'u));");
         }
+
         capture = false;
         for (auto& request : requests) {
             runtime.Send(request.Release());
         }
+
         const auto result = runtime.WaitFuture(alter);
         runtime.SetObserverFunc(previous);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -281,6 +332,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         for (ui32 i = 0; i < 200; ++i) {
             create << "v" << i << " Utf8, ";
         }
+
         create << "PRIMARY KEY(k)) PARTITION BY HASH(k) WITH (STORE = COLUMN, PARTITION_COUNT = " << shardCount << ");";
         f.Success(create, true);
         f.Success("UPSERT INTO `/Root/wide` (k, v199) VALUES (1u, 'filled'u);");
@@ -293,8 +345,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ColumnTagsSize(), 1);
                 ++scans;
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         f.Success("ALTER TABLE `/Root/wide` ALTER COLUMN v199 SET NOT NULL;", true);
         runtime.SetObserverFunc(previous);
         UNIT_ASSERT_VALUES_EQUAL(scans, shardCount);
@@ -315,6 +369,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             f.Failure("UPSERT INTO `/Root/t` (k, v) VALUES (1u, NULL);");
         }
+
         f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (2u, 'two'u);");
     }
 
@@ -526,13 +581,17 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                 capture = false;
                 return TTestActorRuntime::EEventAction::DROP;
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         auto write = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery("UPSERT INTO `/Root/t` (k, v) VALUES (1u, NULL);",
                 NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         });
+
         runtime.WaitFor("write using old schema", [&] { return !!delayed; });
+
         f.Success(SetNotNull, true);
         runtime.Send(delayed.Release());
         const auto result = runtime.WaitFuture(write);
@@ -548,29 +607,36 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         bool capture = true;
         ui32 validationRequests = 0;
         const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+            if (ev->GetTypeRewrite() == TEvColumnShard::TEvValidateRowConditionRequest::EventType) {
                 ++validationRequests;
             }
+
             if (capture && ev->GetTypeRewrite() == NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult::EventType) {
                 UNIT_ASSERT_VALUES_EQUAL(ev->Get<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>()->GetWriteStatus(), NKikimrProto::OK);
                 delayed = ev.Release();
                 capture = false;
                 return TTestActorRuntime::EEventAction::DROP;
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         Y_DEFER { runtime.SetObserverFunc(previous); };
 
         auto write = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery("UPSERT INTO `/Root/t` (k, v) VALUES (1u, NULL);",
                 NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         });
+
         runtime.WaitFor("accepted write before portion metadata is persisted", [&] { return !!delayed || write.HasValue(); });
+
         UNIT_ASSERT(delayed);
         auto alter = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
         });
+
         runtime.WaitFor("validator retried while the accepted write is pending", [&] { return validationRequests >= 2 || alter.HasValue(); });
+
         UNIT_ASSERT(!alter.HasValue());
         runtime.Send(delayed.Release());
         const auto writeResult = runtime.WaitFuture(write);
@@ -586,18 +652,21 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         ui64 schemeShardId = 0;
         ui64 operationId = 0;
         const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
-                const auto& record = ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
-                schemeShardId = record.GetOwnerId();
-                operationId = record.GetId();
+            if (const auto request = GetValidationRequestIds(*ev, Arg<0>())) {
+                schemeShardId = request->SchemeShardId;
+                operationId = request->OperationId;
                 return TTestActorRuntime::EEventAction::DROP;
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         auto alter = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
         });
+
         runtime.WaitFor("validation started", [&] { return operationId != 0; });
+
         const auto edge = runtime.AllocateEdgeActor();
         runtime.SendToPipe(schemeShardId, edge,
             new NSchemeShard::TEvSetColumnConstraint::TEvCancelRequest(0, "/Root", operationId));
@@ -621,8 +690,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         bool validatorStopped = false;
         bool scannerStopped = false;
         const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
-                const auto& record = ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
+            if (ev->GetTypeRewrite() == TEvColumnShard::TEvValidateRowConditionRequest::EventType) {
+                const auto& record = ev->Get<TEvColumnShard::TEvValidateRowConditionRequest>()->Record;
                 schemeShardId = record.GetOwnerId();
                 operationId = record.GetId();
             } else if (ev->GetTypeRewrite() == TEvDataShard::TEvKqpScan::EventType) {
@@ -635,12 +704,16 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             } else if (ev->GetTypeRewrite() == TEvents::TEvPoison::EventType && ev->Recipient == scanner) {
                 scannerStopped = true;
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         auto alter = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
         });
+
         runtime.WaitFor("active validation scanner", [&] { return !!scanner || alter.HasValue(); });
+
         UNIT_ASSERT(scanner);
         const auto edge = runtime.AllocateEdgeActor();
         runtime.SendToPipe(schemeShardId, edge,
@@ -649,6 +722,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT(!runtime.WaitFuture(alter).IsSuccess());
         runtime.WaitFor("validation actors stopped", [&] { return validatorStopped && scannerStopped; });
+
         runtime.SetObserverFunc(previous);
         f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (2u, NULL);");
         f.Success("DROP TABLE `/Root/t`;", true);
@@ -661,21 +735,22 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         TVector<TAutoPtr<IEventHandle>> requests;
         bool capture = true;
         const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (capture && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+            if (capture && GetValidationRequestIds(*ev, Arg<0>())) {
                 requests.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         auto future = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx(),
                 NQuery::TExecuteQuerySettings().RetrySettings(NRetry::TRetryOperationSettings().MaxRetries(0))).GetValueSync();
         });
+
         runtime.WaitFor("validation requests", [&] { return !requests.empty(); });
-        const auto& record = requests.front()->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
-        const ui64 schemeShardId = record.GetOwnerId();
-        const ui64 shardId = record.GetTabletId();
-        const ui64 operationId = record.GetId();
+
+        const auto [schemeShardId, shardId, operationId] = GetValidationRequestIds(*requests.front(), Arg<0>()).value();
         f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (2u, 'two'u);");
         f.Failure("UPSERT INTO `/Root/t` (k, v) VALUES (3u, NULL);");
         f.Failure("UPSERT INTO `/Root/t` (k, w) VALUES (1u, 7u);");
@@ -685,6 +760,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::OVERLOADED, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "locked by tx");
         }
+
         const auto reboot = Arg<1>();
         if (reboot != EReboot::None) {
             // Recovery must finish even when admission is disabled.
@@ -692,14 +768,17 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             if (reboot == EReboot::SchemeShard || reboot == EReboot::Both) {
                 RebootTablet(runtime, schemeShardId, runtime.AllocateEdgeActor());
             }
+
             if (reboot == EReboot::TableShard || reboot == EReboot::Both) {
                 RebootTablet(runtime, shardId, runtime.AllocateEdgeActor());
             }
         }
+
         capture = false;
         for (auto& request : requests) {
             runtime.Send(request.Release());
         }
+
         const auto result = runtime.WaitFuture(future);
         if (reboot == EReboot::SchemeShard || reboot == EReboot::Both) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
@@ -707,6 +786,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         } else {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
+
         // SchemeShard recovery must complete the original operation even if its SQL connection was lost.
         const auto edge = runtime.AllocateEdgeActor();
         runtime.SendToPipe(schemeShardId, edge,
@@ -731,19 +811,23 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         bool holdValidation = true;
         ui32 validationRequests = 0;
         const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+            if (ev->GetTypeRewrite() == TEvColumnShard::TEvValidateRowConditionRequest::EventType) {
                 ++validationRequests;
                 if (holdValidation) {
                     delayed.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         Y_DEFER { runtime.SetObserverFunc(previous); };
+
         auto firstAlter = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
         });
+
         runtime.WaitFor("first validation after write barrier", [&] { return !delayed.empty(); });
 
         arrow::UInt64Builder keyBuilder;
@@ -769,6 +853,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             return f.Kikimr.GetTableClient().BulkUpsert("/Root/t",
                 NYdb::NTable::EDataFormat::ApacheArrow, data, schema).GetValueSync();
         });
+
         UNIT_ASSERT_C(!write.IsSuccess(), "Arrow NULL write under the guard unexpectedly succeeded");
         // This is the shard-side batch-builder diagnostic. It confirms that the
         // error happened after CreateWriteOperation, not in frontend cell checks.
@@ -779,6 +864,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         for (auto& ev : delayed) {
             runtime.Send(ev.Release());
         }
+
         delayed.clear();
         const auto firstResult = runtime.WaitFuture(firstAlter);
         UNIT_ASSERT_C(firstResult.IsSuccess(), firstResult.GetIssues().ToString());
@@ -791,11 +877,13 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                 "ALTER TABLE `/Root/t` ALTER COLUMN w SET NOT NULL;",
                 NQuery::TTxControl::NoTx()).GetValueSync();
         });
+
         // The buggy drain reschedules itself every 100 ms. Count those requests
         // instead of waiting for the SDK's multi-minute timeout.
         runtime.WaitFor("second ALTER completes without a leaked write", [&] {
             return secondAlter.HasValue() || validationRequests >= 20;
         });
+
         UNIT_ASSERT_C(secondAlter.HasValue(),
             "SET NOT NULL repeatedly drains an operation whose Arrow write already failed");
         const auto secondResult = runtime.WaitFuture(secondAlter);
@@ -810,7 +898,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         bool validating = false;
         bool undelivered = false;
         auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+            if (ev->GetTypeRewrite() == TEvColumnShard::TEvValidateRowConditionRequest::EventType) {
                 validating = true;
             } else if (validating && ev->GetTypeRewrite() == NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot::EventType) {
                 auto reply = IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown);
@@ -858,12 +946,14 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                 captureOldWrite = false;
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType &&
+
+            if (ev->GetTypeRewrite() == TEvColumnShard::TEvValidateRowConditionRequest::EventType &&
                 ev->GetRecipientRewrite() == oldWriteShard) {
-                const auto& record = ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
+                const auto& record = ev->Get<TEvColumnShard::TEvValidateRowConditionRequest>()->Record;
                 oldWriteTablet = record.GetTabletId();
                 operationId = record.GetId();
             }
+
             if (captureReadSets && ev->GetTypeRewrite() == TEvTxProcessing::TEvPlanStep::EventType) {
                 const auto& record = ev->Get<TEvTxProcessing::TEvPlanStep>()->Record;
                 if (record.GetTabletID() == oldWriteTablet) {
@@ -872,23 +962,27 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                     }
                 }
             }
+
             if (captureReadSets && ev->GetTypeRewrite() == TEvTxProcessing::TEvPlanStepAccepted::EventType) {
                 const auto& record = ev->Get<TEvTxProcessing::TEvPlanStepAccepted>()->Record;
                 if (record.GetTabletId() == oldWriteTablet) {
                     acceptedSteps.insert(record.GetStep());
                 }
             }
+
             if (captureReadSets && ev->GetTypeRewrite() == TEvTxProcessing::TEvReadSet::EventType) {
                 const auto& record = ev->Get<TEvTxProcessing::TEvReadSet>()->Record;
                 if (record.GetTabletSource() == oldWriteTablet || record.GetTabletDest() == oldWriteTablet) {
                     if (!blockerTxId) {
                         blockerTxId = record.GetTxId();
                     }
+
                     UNIT_ASSERT_VALUES_EQUAL(blockerTxId, record.GetTxId());
                     readSets.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
             }
+
             if (captureScan && operationId &&
                 ev->GetTypeRewrite() == TEvDataShard::TEvKqpScan::EventType && ev->GetRecipientRewrite() == oldWriteShard &&
                 ev->Get<TEvDataShard::TEvKqpScan>()->Record.GetTxId() == operationId) {
@@ -899,8 +993,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                 captureScan = false;
                 return TTestActorRuntime::EEventAction::DROP;
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         Y_DEFER { runtime.SetObserverFunc(previous); };
 
         // ProtoValues is sufficient here: this write is accepted before any guard.
@@ -913,12 +1009,15 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         auto bulk = f.Kikimr.RunInThreadPool([&] {
             return f.Kikimr.GetTableClient().BulkUpsert("/Root/t", std::move(rows)).GetValueSync();
         });
+
         runtime.WaitFor("pre-barrier BulkUpsert paused before persistence", [&] { return !!oldWriteResult; });
 
         auto alter = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
         });
+
         runtime.WaitFor("write barrier installed on the old BulkUpsert shard", [&] { return operationId != 0; });
+
         UNIT_ASSERT(!alter.HasValue());
 
         // This writer uses the guard schema, hence its operations must not be part
@@ -933,14 +1032,17 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                 SELECT item, 'filled'u, 7ul FROM AS_TABLE($rows);
             )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         });
+
         runtime.WaitFor("post-barrier distributed transaction is planned and waits for readsets", [&] {
             const auto it = plannedSteps.find(blockerTxId);
             if (!readSets.empty() && it != plannedSteps.end() && acceptedSteps.contains(it->second)) {
                 blockerPlanStep = it->second;
                 return true;
             }
+
             return blocker.HasValue();
         });
+
         UNIT_ASSERT_C(blockerPlanStep != 0 && !blocker.HasValue(),
             "The test did not establish a pending distributed plan on the old-write shard");
 
@@ -950,6 +1052,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         const auto bulkResult = runtime.WaitFuture(bulk);
         UNIT_ASSERT_C(bulkResult.IsSuccess(), bulkResult.GetIssues().ToString());
         runtime.WaitFor("validator fixes its post-drain snapshot", [&] { return !!validationScan; });
+
         UNIT_ASSERT(!blocker.HasValue());
 
         // Release the blocker before dispatching the scan. Its selected snapshot
@@ -959,6 +1062,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         for (auto& ev : readSets) {
             runtime.Send(ev.Release());
         }
+
         readSets.clear();
         const auto blockerResult = runtime.WaitFuture(blocker);
         UNIT_ASSERT_C(blockerResult.IsSuccess(), blockerResult.GetIssues().ToString());
@@ -996,11 +1100,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
 
         auto previousScheduled = runtime.SetScheduledEventFilter(
             [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&, TDuration, TInstant&) { return false; });
+
         runtime.SetScheduledEventFilter(
             [&, previousScheduled](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& ev,
                 TDuration delay, TInstant& deadline) {
-                if (!retryScheduled && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
-                    const auto& record = ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
+                if (!retryScheduled && ev->GetTypeRewrite() == TEvColumnShard::TEvValidateRowConditionRequest::EventType) {
+                    const auto& record = ev->Get<TEvColumnShard::TEvValidateRowConditionRequest>()->Record;
                     if (record.GetId() == operationId && record.GetSeqNoGeneration() == oldGeneration) {
                         // Observe the actual drain timer, then capture it when it is delivered.
                         // Keep ownership here: the scheduling code still accesses the handle.
@@ -1009,8 +1114,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                         return false;
                     }
                 }
+
                 return previousScheduled(r, ev, delay, deadline);
             });
+
         Y_DEFER { runtime.SetScheduledEventFilter(previousScheduled); };
 
         const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -1019,19 +1126,22 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                 delayedWrite = ev.Release();
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
-                const auto& record = ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
+
+            if (ev->GetTypeRewrite() == TEvColumnShard::TEvValidateRowConditionRequest::EventType) {
+                const auto& record = ev->Get<TEvColumnShard::TEvValidateRowConditionRequest>()->Record;
                 if (!operationId) {
                     operationId = record.GetId();
                     schemeShardId = record.GetOwnerId();
                     oldGeneration = record.GetSeqNoGeneration();
                 }
+
                 if (ev.Get() == scheduledRetry) {
                     columnShard = ev->GetRecipientRewrite();
                     scheduledRetry = nullptr;
                     delayedRetry = ev.Release();
                     return TTestActorRuntime::EEventAction::DROP;
                 }
+
                 if (captureRecoveredRequest && record.GetId() == operationId && record.GetSeqNoGeneration() > oldGeneration) {
                     captureRecoveredRequest = false;
                     recoveredRequest = ev.Release();
@@ -1047,47 +1157,56 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                 return TTestActorRuntime::EEventAction::DROP;
             } else if (ev->GetTypeRewrite() == TEvents::TEvPoisonPill::EventType && ev->Recipient == currentValidator && !currentResponseReceived) {
                 currentValidatorPoisoned = true;
-            } else if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionResponse::EventType &&
+            } else if (ev->GetTypeRewrite() == TEvColumnShard::TEvValidateRowConditionResponse::EventType &&
                 ev->Sender == currentValidator) {
                 currentResponseReceived = true;
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         Y_DEFER { runtime.SetObserverFunc(previous); };
 
         auto write = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one'u);",
                 NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         });
+
         runtime.WaitFor("accepted pre-barrier write", [&] { return !!delayedWrite; });
+
         auto alter = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx(),
                 NQuery::TExecuteQuerySettings().RetrySettings(NRetry::TRetryOperationSettings().MaxRetries(0))).GetValueSync();
         });
+
         runtime.WaitFor("old generation drain retry", [&] { return !!delayedRetry; });
+
         UNIT_ASSERT(!currentValidator);
 
         RebootTablet(runtime, schemeShardId, runtime.AllocateEdgeActor());
         runtime.WaitFor("recovered validation request", [&] { return !!recoveredRequest; });
+
         runtime.Send(delayedWrite.Release());
         const auto writeResult = runtime.WaitFuture(write);
         UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
 
         runtime.Send(recoveredRequest.Release());
         runtime.WaitFor("recovered validator scanner", [&] { return !!delayedAck; });
+
         runtime.Send(delayedRetry.Release());
 
         // An immediately rejected request is a mailbox barrier: process the old timer
         // before releasing V2's ACK, without sleeps or fabricating a successful result.
         const auto edge = runtime.AllocateEdgeActor();
-        runtime.Send(new IEventHandle(columnShard, edge, new TEvDataShard::TEvValidateRowConditionRequest));
-        auto barrier = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvValidateRowConditionResponse>(edge);
+        runtime.Send(new IEventHandle(columnShard, edge, new TEvColumnShard::TEvValidateRowConditionRequest));
+        auto barrier = runtime.GrabEdgeEventRethrow<TEvColumnShard::TEvValidateRowConditionResponse>(edge);
         UNIT_ASSERT_VALUES_EQUAL(barrier->Get()->Record.GetStatus(), NKikimrSetColumnConstraint::BAD_REQUEST);
 
         runtime.Send(delayedAck.Release());
         runtime.WaitFor("recovered validation response or stale replacement", [&] {
             return currentResponseReceived || currentValidatorPoisoned;
         });
+
         UNIT_ASSERT_C(!currentValidatorPoisoned, "The old SchemeShard drain timer replaced the recovered validator");
         UNIT_ASSERT(currentResponseReceived);
 
@@ -1125,8 +1244,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         bool initUndelivered = false;
         bool readFinished = false;
         const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
-                const auto& record = ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
+            if (ev->GetTypeRewrite() == TEvColumnShard::TEvValidateRowConditionRequest::EventType) {
+                const auto& record = ev->Get<TEvColumnShard::TEvValidateRowConditionRequest>()->Record;
                 schemeShardId = record.GetOwnerId();
                 operationId = record.GetId();
             } else if (ev->GetTypeRewrite() == TEvDataShard::TEvKqpScan::EventType) {
@@ -1146,22 +1265,29 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             } else if (ev->GetTypeRewrite() == NColumnShard::TEvPrivate::TEvReadFinished::EventType && ev->Sender == scanner) {
                 readFinished = true;
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         Y_DEFER { runtime.SetObserverFunc(previous); };
+
         auto alter = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
         });
+
         runtime.WaitFor("scanner init in flight", [&] { return !!delayedInit; });
+
         const auto edge = runtime.AllocateEdgeActor();
         runtime.SendToPipe(schemeShardId, edge,
             new NSchemeShard::TEvSetColumnConstraint::TEvCancelRequest(0, "/Root", operationId));
         const auto cancel = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSetColumnConstraint::TEvCancelResponse>(edge);
         UNIT_ASSERT_VALUES_EQUAL(cancel->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
         runtime.WaitFor("validator stopped before ScanInit", [&] { return validatorFinished; });
+
         // Preserve FlagTrackDelivery: the dead destination must produce Undelivered.
         runtime.Send(delayedInit.Release());
         runtime.WaitFor("scanner releases its read", [&] { return readFinished; });
+
         UNIT_ASSERT(initUndelivered);
         UNIT_ASSERT(!runtime.WaitFuture(alter).IsSuccess());
         runtime.SetObserverFunc(previous);
@@ -1207,34 +1333,41 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                 oldWriteResult = ev.Release();
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            if (!afterReboot && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+
+            if (!afterReboot && ev->GetTypeRewrite() == TEvColumnShard::TEvValidateRowConditionRequest::EventType) {
                 if (!firstValidation) {
-                    const auto& record = ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
+                    const auto& record = ev->Get<TEvColumnShard::TEvValidateRowConditionRequest>()->Record;
                     shardId = record.GetTabletId();
                     operationId = record.GetId();
                     firstValidation = ev.Release();
                 }
+
                 return TTestActorRuntime::EEventAction::DROP;
             }
+
             if (afterReboot && holdTimecast) {
                 if (ev->GetTypeRewrite() == TEvMediatorTimecast::TEvRegisterTabletResult::EventType &&
                     ev->Get<TEvMediatorTimecast::TEvRegisterTabletResult>()->TabletId == shardId) {
                     timecastResults.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
+
                 if (ev->GetTypeRewrite() == TEvMediatorTimecast::TEvNotifyPlanStep::EventType &&
                     ev->Get<TEvMediatorTimecast::TEvNotifyPlanStep>()->TabletId == shardId) {
                     timecastNotifications.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
+
                 if (!recoveredScan && ev->GetTypeRewrite() == TEvDataShard::TEvKqpScan::EventType &&
                     ev->Get<TEvDataShard::TEvKqpScan>()->Record.GetTxId() == operationId) {
                     recoveredScan = ev.Release();
                     return TTestActorRuntime::EEventAction::DROP;
                 }
             }
+
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
         Y_DEFER { runtime.SetObserverFunc(previous); };
 
         auto rows = TValueBuilder().BeginList().AddListItem().BeginStruct()
@@ -1245,11 +1378,15 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         auto bulk = f.Kikimr.RunInThreadPool([&] {
             return f.Kikimr.GetTableClient().BulkUpsert("/Root/t", std::move(rows)).GetValueSync();
         });
+
         runtime.WaitFor("pre-guard BulkUpsert accepted", [&] { return !!oldWriteResult; });
+
         auto alter = f.Kikimr.RunInThreadPool([&] {
             return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
         });
+
         runtime.WaitFor("guard installed before old BulkUpsert commits", [&] { return !!firstValidation; });
+
         const auto guardSnapshot = controller->GetTheOnlyShard()->GetLastPlannedSnapshot();
 
         const auto advanceTimecastPast = [&](ui64 step) {
@@ -1259,6 +1396,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                 return controller->GetTheOnlyShard()->GetOutdatedSnapshot().GetPlanStep() > step;
             }, TDuration::Seconds(30));
         };
+
         advanceTimecastPast(guardSnapshot.GetPlanStep());
         runtime.Send(oldWriteResult.Release());
         const auto bulkResult = runtime.WaitFuture(bulk);
@@ -1269,11 +1407,13 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
             return tables.begin()->second->GetPortions();
         };
+
         NOlap::TSnapshot committed = NOlap::TSnapshot::Zero();
         for (const auto& [id, portion] : portions()) {
             UNIT_ASSERT(!portion->IsAborted());
             committed = std::max(committed, portion->RecordSnapshotMax());
         }
+
         UNIT_ASSERT_C(committed.GetPlanStep() > guardSnapshot.GetPlanStep(), "BulkUpsert must commit after the guard");
 
         if (data != ERecoveredData::BulkCommit) {
@@ -1282,19 +1422,22 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                 const auto repair = f.Write(EWriteMode::BulkUpsert, 1, EWriteValue::Filled);
                 UNIT_ASSERT_C(repair.IsSuccess(), repair.GetIssues().ToString());
             }
+
             THashSet<ui64> originalPortionIds;
             for (const auto& [id, portion] : portions()) {
                 UNIT_ASSERT(!portion->HasRemoveSnapshot());
                 originalPortionIds.insert(id);
             }
+
             UNIT_ASSERT(originalPortionIds.size() >= 2);
 
-            const auto& request = firstValidation->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
+            const auto& request = firstValidation->Get<TEvColumnShard::TEvValidateRowConditionRequest>()->Record;
             const auto sender = runtime.AllocateEdgeActor();
             const auto wakeup = [&] {
                 runtime.Send(new IEventHandle(controller->GetTheOnlyShard()->SelfId(), sender,
                     new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true)));
             };
+
             const auto compactionsBefore = controller->GetCompactionFinishedCounter().Val();
             controller->EnableBackground(EBackground::Compaction);
             runtime.Send(new IEventHandle(controller->GetTheOnlyShard()->SelfId(), sender,
@@ -1308,14 +1451,17 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                     if (originalPortionIds.contains(id) && portion->HasRemoveSnapshot()) {
                         ++removed;
                     }
+
                     if (!portion->HasRemoveSnapshot() && portion->GetPortionType() == NOlap::EPortionType::Compacted) {
                         const auto& compacted = static_cast<const NOlap::TCompactedPortionInfo&>(*portion);
                         compactedAppeared = std::max(compactedAppeared, compacted.GetAppeared());
                     }
                 }
+
                 return removed == originalPortionIds.size() && compactedAppeared > committed &&
                     controller->GetCompactionFinishedCounter().Val() > compactionsBefore;
             }, TDuration::Seconds(30));
+
             controller->DisableBackground(EBackground::Compaction);
 
             // Wait until ordinary reads can see the replacement portion. Compaction can
@@ -1334,14 +1480,17 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
                             return false;
                         }
                     }
+
                     return controller->GetPortionsErasedCounter().Val() >= erasedBefore + static_cast<intptr_t>(originalPortionIds.size());
                 }, TDuration::Seconds(30));
+
                 controller->DisableBackground(EBackground::Cleanup);
                 controller->SetOverrideMaxReadStaleness(TDuration::Days(1));
             } else {
                 advanceTimecastPast(compactedAppeared.GetPlanStep());
             }
         }
+
         UNIT_ASSERT(controller->GetTheOnlyShard()->GetLastPlannedSnapshot() == guardSnapshot);
 
         // SchemeShard retries the original ALTER after the tablet-pipe reconnect.
@@ -1350,6 +1499,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         runtime.WaitFor("recovered scan chooses its snapshot before local timecast registration", [&] {
             return (recoveredScan && !timecastResults.empty()) || alter.HasValue();
         }, TDuration::Seconds(30));
+
         UNIT_ASSERT(recoveredScan && !timecastResults.empty());
         const auto& proto = recoveredScan->Get<TEvDataShard::TEvKqpScan>()->Record.GetSnapshot();
         const NOlap::TSnapshot selected(proto.GetStep(), proto.GetTxId());
@@ -1359,9 +1509,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         for (auto& ev : timecastResults) {
             runtime.Send(ev.Release());
         }
+
         for (auto& ev : timecastNotifications) {
             runtime.Send(ev.Release());
         }
+
         runtime.Send(recoveredScan.Release());
         const auto result = runtime.WaitFuture(alter);
         if (data == ERecoveredData::CleanedAfterRepair) {

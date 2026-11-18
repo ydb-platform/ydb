@@ -110,9 +110,11 @@ private:
         if (dsColumn.HasNotNull()) {
             olapColumn.SetNotNull(dsColumn.GetNotNull());
         }
+
         if (dsColumn.HasSetNotNullInProgress()) {
             olapColumn.SetSetNotNullInProgress(dsColumn.GetSetNotNullInProgress());
         }
+
         return TConclusionStatus::Success();
     }
 

@@ -444,7 +444,7 @@ message TTableDescription {
 
     // Local graph of the logical index owning this physical posting table.
     optional TLocalHnswIndexDescription LocalHnswIndex = 56;
-    
+
     // First snapshot compatible with the most recent nullable to NOT NULL transition.
     optional NKikimrProto.TRowVersion NotNullSince = 57;
 }

@@ -141,6 +141,7 @@ bool TOperationsManager::HasWriteOperationsBeforeSchema(const TInternalPathId pa
             return true;
         }
     }
+
     return false;
 }
 

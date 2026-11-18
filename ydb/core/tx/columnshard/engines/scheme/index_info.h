@@ -494,18 +494,21 @@ public:
         if (this == &requestSchema) {
             return TConclusionStatus::Success();
         }
+
         for (const auto columnId : RequiredWriteColumnIds) {
             const auto& column = GetColumnFeaturesVerified(columnId);
             const auto& previous = requestSchema.GetColumnFeaturesOptional(columnId);
             if (!previous || (previous->GetIsNullable() && !previous->GetIsSetNotNullInProgress())) {
                 return TConclusionStatus::Fail("Write schema does not enforce NOT NULL for column '" + column.GetColumnName() + "'");
             }
+
             // Validation requires unconditional values even if an older schema
             // had NOT NULL before a DROP/SET cycle.
             if (column.GetIsSetNotNullInProgress() && !previous->GetIsSetNotNullInProgress()) {
                 return TConclusionStatus::Fail("Write schema predates SET NOT NULL validation for column '" + column.GetColumnName() + "'");
             }
         }
+
         return TConclusionStatus::Success();
     }
 

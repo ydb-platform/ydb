@@ -142,6 +142,7 @@ struct Schema : NIceDb::Schema {
         struct IncrementalBackupConfig : Column<13, NScheme::NTypeIds::String> {};
         struct DetailedMetricsSettings : Column<15, NScheme::NTypeIds::String> {};
         struct MultiColumnStatistics : Column<16, NScheme::NTypeIds::String> {};
+
         struct NotNullSince : Column<17, NScheme::NTypeIds::String> {}; // NKikimrProto::TRowVersion
 
         using TKey = TableKey<TabId>;
@@ -185,6 +186,7 @@ struct Schema : NIceDb::Schema {
         struct IncrementalBackupConfig : Column<14, NScheme::NTypeIds::String> {};
         struct DetailedMetricsSettings : Column<16, NScheme::NTypeIds::String> {};
         struct MultiColumnStatistics :          Column<17, NScheme::NTypeIds::String> {};
+
         struct NotNullSince :                  Column<18, NScheme::NTypeIds::String> {}; // NKikimrProto::TRowVersion
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;

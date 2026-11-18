@@ -23,7 +23,7 @@ class TColumnConstraintValidator: public TActorBootstrapped<TColumnConstraintVal
     TActorId Scanner;
 
     void Finish(bool valid, NKikimrSetColumnConstraint::EValidateStatus status = NKikimrSetColumnConstraint::DONE, const TString& error = {}) {
-        auto response = std::make_unique<TEvDataShard::TEvValidateRowConditionResponse>();
+        auto response = std::make_unique<TEvColumnShard::TEvValidateRowConditionResponse>();
         auto& record = response->Record;
         record.SetId(OperationId);
         record.SetTabletId(TabletId);
@@ -34,6 +34,7 @@ class TColumnConstraintValidator: public TActorBootstrapped<TColumnConstraintVal
         } else if (!valid) {
             record.AddIssues()->set_message("Constraint violation: NULL value found.");
         }
+
         Send(ReplyTo, response.release(), 0, Cookie);
         PassAway();
     }
@@ -79,6 +80,7 @@ class TColumnConstraintValidator: public TActorBootstrapped<TColumnConstraintVal
                 }
             }
         }
+
         if (ev->Get()->Finished) {
             Scanner = {};
             Finish(true);
@@ -96,6 +98,7 @@ class TColumnConstraintValidator: public TActorBootstrapped<TColumnConstraintVal
         if (Scanner) {
             Send(Scanner, new TEvents::TEvPoison);
         }
+
         Send(Shard, new TEvPrivate::TEvColumnConstraintValidationFinished(OperationId));
         TActorBootstrapped::PassAway();
     }
@@ -136,23 +139,25 @@ public:
 
 }   // namespace
 
-void TColumnShard::Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev, const TActorContext& ctx) {
+void TColumnShard::Handle(TEvColumnShard::TEvValidateRowConditionRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& request = ev->Get()->Record;
     const auto pathId = TSchemeShardLocalPathId::FromRawValue(request.GetPathId());
     const auto internalPathId = TablesManager.ResolveInternalPathId(pathId, false);
     const auto fail = [&](const TString& error) {
-        auto response = std::make_unique<TEvDataShard::TEvValidateRowConditionResponse>();
+        auto response = std::make_unique<TEvColumnShard::TEvValidateRowConditionResponse>();
         response->Record.SetId(request.GetId());
         response->Record.SetTabletId(TabletID());
         response->Record.SetStatus(NKikimrSetColumnConstraint::BAD_REQUEST);
         response->Record.AddIssues()->set_message(error);
         ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
     };
+
     if (request.GetOwnerId() != CurrentSchemeShardId || request.GetTabletId() != TabletID() || !internalPathId ||
         !TablesManager.GetPrimaryIndex() || !request.NotNullColumnsSize() || request.GetDatabaseName().empty()) {
         fail("Invalid column constraint validation request");
         return;
     }
+
     const auto schema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
     auto scan = std::make_unique<TEvDataShard::TEvKqpScan>();
     for (const auto& name : request.GetNotNullColumns()) {
@@ -161,8 +166,10 @@ void TColumnShard::Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev
             fail("Column constraint write barrier is not installed");
             return;
         }
+
         scan->Record.AddColumnTags(schema->GetColumnId(name));
     }
+
     const auto seqNo = std::make_pair(request.GetSeqNoGeneration(), request.GetSeqNoRound());
     auto [it, inserted] = ColumnConstraintValidators.try_emplace(request.GetId(), TColumnConstraintValidation{ pathId, seqNo, {} });
     auto& validation = it->second;
@@ -170,13 +177,16 @@ void TColumnShard::Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev
         if (seqNo < validation.SeqNo || (seqNo == validation.SeqNo && validation.ScanStarted)) {
             return;
         }
+
         if (seqNo > validation.SeqNo) {
             if (validation.ActorId) {
                 ctx.Send(validation.ActorId, new TEvents::TEvPoisonPill);
             }
+
             validation = { pathId, seqNo, {} };
         }
     }
+
     // Fence retries before waiting: a local timer may outlive its SchemeShard sender.
     // Drain pre-barrier writes, including transactions restored after a restart.
     if (OperationsManager->HasWriteOperationsBeforeSchema(*internalPathId, schema->GetVersion())) {

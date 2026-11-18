@@ -13,6 +13,7 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
         const auto compatibility = newVersion > LastSchemaVersion ? latest.CheckCompatible(*indexInfo) : indexInfo->CheckCompatible(latest);
         AFL_VERIFY(compatibility.IsSuccess())("error", compatibility.GetErrorMessage());
     }
+
     if (SnapshotByVersion.empty() || newVersion > LastSchemaVersion) {
         PrimaryKey = indexInfo->GetPrimaryKey();
     }

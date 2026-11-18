@@ -34,9 +34,11 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
         errors.AddError("SET NOT NULL for column tables requires the validated SetColumnConstraint operation");
         return false;
     }
+
     if (columnSchema.HasSetNotNullInProgress()) {
         SetNotNullInProgress = columnSchema.GetSetNotNullInProgress();
     }
+
     if (!!columnSchema.GetStorageId()) {
         StorageId = columnSchema.GetStorageId();
     }
@@ -300,11 +302,13 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
                 << "Cannot drop NOT NULL from primary key column '" << Name << "'");
             return false;
         }
+
         if (NotNullFlag != *diffColumn.GetNotNull()) {
             NotNullFlag = *diffColumn.GetNotNull();
             FilterNullsOnRead = NotNullFlag;
         }
     }
+
     if (diffColumn.GetSetNotNullInProgress()) {
         SetNotNullInProgressFlag = *diffColumn.GetSetNotNullInProgress();
     }

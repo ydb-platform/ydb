@@ -907,6 +907,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 if (column.SetNotNullInProgress) {
                     SetNotNullInProgressColumns.insert(columnDesc.GetName());
                 }
+
                 nameToId[column.Name] = column.Id;
                 if (columnDesc.GetNotNull()) {
                     NotNullColumns.insert(columnDesc.GetName());

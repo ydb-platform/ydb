@@ -129,10 +129,12 @@ public:
             if (!AppData()->FeatureFlags.GetEnableColumnShardSetNotNull()) {
                 return Reply(Ydb::StatusIds::UNSUPPORTED, "SET NOT NULL for column tables is disabled");
             }
+
             const auto table = Self->ColumnTables.GetVerifiedPtr(tablePath.Base()->PathId);
             if (!table->IsStandalone()) {
                 return Reply(Ydb::StatusIds::UNSUPPORTED, "Cannot modify schema for a table in a column store");
             }
+
             for (const auto& name : sortedSetNotNullColumns) {
                 const auto& columns = table->Description.GetSchema().GetColumns();
                 if (std::none_of(columns.begin(), columns.end(), [&](const auto& column) { return column.GetName() == name; })) {

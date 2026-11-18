@@ -506,6 +506,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         sendError("unknown schema version", NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, 0, 0, "", operation.GetIsBulk());
         return;
     }
+
     if (const auto compatibility =
             TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema()->GetIndexInfo().CheckWriteCompatibility(schema->GetIndexInfo());
         compatibility.IsFail()) {

@@ -4,11 +4,6 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
-# The combined debug sections of this test executable exceed the DWARF32 relocation range.
-IF (OS_LINUX AND ARCH_X86_64 AND BUILD_TYPE == "RELWITHDEBINFO")
-    LDFLAGS(-Wl,--strip-debug)
-ENDIF()
-
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base

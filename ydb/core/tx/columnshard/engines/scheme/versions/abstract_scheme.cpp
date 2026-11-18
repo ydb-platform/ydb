@@ -106,6 +106,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
             if (!values || values->null_count()) {
                 return TConclusionStatus::Fail("SET NOT NULL is in progress for column '" + column.GetColumnName() + "'");
             }
+
             if (const auto exists = incomingBatch->GetColumnByName("$$EXISTS::" + column.GetColumnName())) {
                 if (exists->type_id() != arrow::Type::BOOL ||
                     static_cast<const arrow::BooleanArray&>(*exists).true_count() != incomingBatch->num_rows()) {
@@ -114,6 +115,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
             }
         }
     }
+
     std::vector<std::shared_ptr<arrow::Array>> pkColumns;
     pkColumns.resize(GetIndexInfo().GetReplaceKey()->num_fields());
     ui32 pkColumnsCount = 0;

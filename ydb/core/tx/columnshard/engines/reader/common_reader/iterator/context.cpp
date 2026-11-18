@@ -106,6 +106,7 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     } else {
         ProgramInputColumns = FFColumns;
     }
+
     const auto& readNotNullIds = readSchema->GetIndexInfo().GetReadNotNullColumnIds();
     ReadNotNullColumns = readNotNullIds.empty() ? EmptyColumns : std::make_shared<TColumnsSet>(readNotNullIds, readSchema);
     AllUsageColumns = std::make_shared<TColumnsSet>(*FFColumns + *PredicateColumns + *ReadNotNullColumns);

@@ -50,6 +50,7 @@ TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
         const auto& after = other.PrimaryKey->field(i);
         compatible = (before->nullable() || !after->nullable()) && before->name() == after->name() && before->type()->Equals(after->type());
     }
+
     if (!compatible) {
         return TConclusionStatus::Fail(
             TStringBuilder() << "PK mismatch: this=" << PrimaryKey->ToString() << " other=" << other.GetPrimaryKey()->ToString());
@@ -797,6 +798,7 @@ void TIndexInfo::BuildColumnProperties() {
             if (i->GetIsSetNotNullInProgress()) {
                 SetNotNullColumnIds.emplace_back(i->GetColumnId());
             }
+
             if (i->GetIsSetNotNullInProgress() || !i->GetIsNullable()) {
                 RequiredWriteColumnIds.emplace_back(i->GetColumnId());
             }

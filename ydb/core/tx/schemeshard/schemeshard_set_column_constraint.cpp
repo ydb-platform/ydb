@@ -325,12 +325,6 @@ void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev, co
     Execute(CreateTxCancelSetColumnConstraint(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx) {
-    const auto& record = ev->Get()->Record;
-    TIndexBuildId operationId = TIndexBuildId(record.GetId());
-    Execute(CreateTxReplyValidateRowCondition(operationId, ev), ctx);
-}
-
 void TSchemeShard::Handle(TEvSetColumnConstraint::TEvForgetRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxForgetSetColumnConstraint(ev), ctx);
 }

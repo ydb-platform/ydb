@@ -293,6 +293,7 @@ public:
             result->SetError(NKikimrScheme::StatusMultipleModifications, lockError);
             return result;
         }
+
         TEntityInitializationContext iContext(&context);
         std::shared_ptr<ISSEntity> originalEntity = ISSEntity::GetEntityVerified(context, path);
 

@@ -6286,6 +6286,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSetColumnConstraint::TEvForgetRequest, Handle);
         HFuncTraced(TEvSetColumnConstraint::TEvCancelRequest, Handle);
         HFuncTraced(TEvDataShard::TEvValidateRowConditionResponse, Handle);
+        HFuncTraced(TEvColumnShard::TEvValidateRowConditionResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCreateRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvGetRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCancelRequest, Handle);

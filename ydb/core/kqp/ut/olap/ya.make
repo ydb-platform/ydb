@@ -3,11 +3,6 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(150)
 
-# The combined debug sections of this test executable exceed the DWARF32 relocation range.
-IF (OS_LINUX AND ARCH_X86_64 AND BUILD_TYPE == "RELWITHDEBINFO")
-    LDFLAGS(-Wl,--strip-debug)
-ENDIF()
-
 REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

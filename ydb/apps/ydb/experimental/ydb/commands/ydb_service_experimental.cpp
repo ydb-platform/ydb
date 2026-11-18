@@ -7,11 +7,13 @@
 
 #include <memory>
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
+#include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_tablet.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -45,6 +47,55 @@ TCommandExperimental::TCommandExperimental()
     AddCommand(std::make_unique<TCommandDeleteSession>());
     AddCommand(std::make_unique<TCommandExperimentalTopic>());
     AddCommand(std::make_unique<TCommandUdf>());
+    AddCommand(std::make_unique<TCommandReassignTablets>());
+}
+
+TCommandReassignTablets::TCommandReassignTablets()
+    : TYdbCommand("reassign-tablets", {},
+        "Reassign tablet channels in the Hive serving the database specified with -d. "
+        "The database selects the Hive and does not restrict affected tablets to that database.")
+{}
+
+void TCommandReassignTablets::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.SetFreeArgsNum(0);
+    config.Opts->AddLongOption("storage-pool", "Filter channels by storage pool name. Specify this or a nonzero --group-id, or both.")
+        .RequiredArgument("NAME").StoreResult(&StoragePool);
+    config.Opts->AddLongOption("group-id", "Filter channels by their current storage group ID. If omitted or zero, select all groups in --storage-pool.")
+        .RequiredArgument("ID").StoreResult(&GroupId);
+    config.Opts->AddLongOption("max-in-flight", "Maximum number of tablets being reassigned concurrently.")
+        .RequiredArgument("N").DefaultValue(1).StoreResult(&MaxInFlight);
+    config.Opts->AddLongOption("percent", "Percentage of matching tablets to reassign, starting with the oldest channel assignments.")
+        .RequiredArgument("N").DefaultValue(100).StoreResult(&Percent);
+    config.Opts->AddLongOption("on-restart", "Defer channel reassignment until subsequent tablet restarts. "
+        "Progress counts tablets marked for reassignment; the operation can complete before those restarts.")
+        .NoArgument().StoreTrue(&OnRestart);
+    AddOutputFormats(config, {EDataFormat::Pretty, EDataFormat::ProtoJsonBase64});
+}
+
+void TCommandReassignTablets::Parse(TConfig& config) {
+    TYdbCommand::Parse(config);
+    ParseOutputFormats();
+    if (StoragePool.empty() && GroupId == 0) {
+        throw TMisuseException() << "Specify --storage-pool or a nonzero --group-id.";
+    }
+    if (MaxInFlight == 0) {
+        throw TMisuseException() << "--max-in-flight must be positive.";
+    }
+    if (Percent > 100) {
+        throw TMisuseException() << "--percent must be between 0 and 100.";
+    }
+}
+
+int TCommandReassignTablets::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    NTablet::TTabletClient client(driver);
+    auto settings = NTablet::TReassignTabletsSettings()
+        .StoragePool(StoragePool).Group(GroupId).MaxInFlight(MaxInFlight).Percent(Percent).Async(OnRestart);
+    auto operation = client.ReassignTablets(settings).GetValueSync();
+    ThrowOnError(operation);
+    PrintOperation(operation, OutputFormat);
+    return EXIT_SUCCESS;
 }
 
 TCommandStreamQuery::TCommandStreamQuery()

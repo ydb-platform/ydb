@@ -18,7 +18,6 @@ SRCS(
     oidc.cpp
     oidc_interactive.cpp
     parse_command_line.cpp
-    reassign_tablets.cpp
     run_ydb.cpp
 )
 
@@ -32,8 +31,6 @@ PEERDIR(
     ydb/core/security/certificate_check/test_utils
     ydb/public/api/client/yc_public/iam
     ydb/public/api/grpc/draft
-    ydb/public/api/protos
-    ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers
     ydb/public/sdk/cpp/tests/unit/client/oidc/helpers
 )

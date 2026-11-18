@@ -1,4 +1,4 @@
-#include "mock_env.h"
+#include <ydb/apps/ydb/ut/mock_env.h>
 
 #include <ydb/public/api/grpc/draft/ydb_tablet_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
@@ -135,7 +135,7 @@ public:
     }
 
     TString Reassign(TList<TString> options, TString* error = nullptr) {
-        TList<TString> command = {"admin", "cluster", "reassign-tablets"};
+        TList<TString> command = {"experimental", "reassign-tablets"};
         command.insert(command.end(), options.begin(), options.end());
         return Run(std::move(command), error);
     }
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(ReassignTabletsCli) {
     Y_UNIT_TEST_F(DatabaseIsRequiredToSelectHive, TReassignTabletsFixture) {
         ExpectFail();
         TString error;
-        RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "reassign-tablets", "--storage-pool", "test-pool"},
+        RunCli({"-e", GetEndpoint(), "-y", "experimental", "reassign-tablets", "--storage-pool", "test-pool"},
             {{"YDB_TOKEN", AdminToken}}, {}, &error);
         UNIT_ASSERT_STRING_CONTAINS(error, "Missing required option 'database'");
         UNIT_ASSERT_VALUES_EQUAL(Service<TTabletService>().Calls.load(), 0);

@@ -116,12 +116,13 @@ class HiveClient(object):
 
 
 class SwaggerClient(object):
-    def __init__(self, host, port, hive_id=DEFAULT_HIVE_ID):
+    def __init__(self, host, port, hive_id=DEFAULT_HIVE_ID, http_timeout=TIMEOUT):
         super(SwaggerClient, self).__init__()
         self.__host = host
         self.__port = port
         self.__timeout = 10 * 1000
         self.__hive_id = hive_id
+        self.__http_timeout = http_timeout
 
         self.__debug_enabled = logger.isEnabledFor(logging.DEBUG)
         self.__url = 'http://{server}:{port}/viewer'.format(
@@ -130,13 +131,13 @@ class SwaggerClient(object):
         )
 
     def __get(self, url, timeout):
-        u = urlopen(url, timeout=TIMEOUT)
+        u = urlopen(url, timeout=timeout)
         return json.load(u)
 
     def __http_get_and_parse_json(self, path, **kwargs):
         params = urlencode(kwargs)
         url = self.__url + path + "?" + params
-        response = self.__get(url, timeout=TIMEOUT)
+        response = self.__get(url, timeout=self.__http_timeout)
         return response
 
     def hive_info_by_tablet_id(self, tablet_id):

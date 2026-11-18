@@ -20,6 +20,7 @@ class TCheckState {
 private:
     struct TLexerResult {
         bool Success;
+        NSQLTranslation::TParsedTokenList Tokens;
         NSQLTranslation::TSQLHints Hints;
         TIssues Issues;
     };

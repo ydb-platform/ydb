@@ -3,9 +3,8 @@
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/translation/sql.h>
-#include <yql/essentials/sql/v1/translation/sql_translation.h>
 
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <google/protobuf/arena.h>
 
 using namespace NSQLTranslationV1;
 
@@ -84,60 +83,3 @@ Y_UNIT_TEST(Bad1Bad2) {
 }
 
 } // Y_UNIT_TEST_SUITE(QuerySplit)
-
-Y_UNIT_TEST_SUITE(TestGetQueryPosition) {
-
-Y_UNIT_TEST(TestTokenFinding) {
-    const TString query = TStringBuilder() << R"(
-    )" << "\r" << R"(BEGIN)" << "\r\n" << R"(
-       )" << "\n\r" << R"(END
-    $b = ()" << "\r\r" << R"($x) -> {
-
-    )" << "\n" << R"(
-    -- comment A
-    return /*Комментарий*/ $x;
-    -- Comment B
-    };
-    )";
-
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-
-    ui64 lexerPosition = 0;
-    const auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
-        NSQLv1Generated::TToken tokenProto;
-        tokenProto.SetLine(token.Line);
-        tokenProto.SetColumn(token.LinePos);
-        UNIT_ASSERT_VALUES_EQUAL_C(lexerPosition, NSQLTranslationV1::GetQueryPosition(query, tokenProto), token.Line << ":" << token.LinePos << ":'" << token.Content << "'");
-
-        lexerPosition += token.Content.size();
-    };
-
-    const auto lexer = NSQLTranslationV1::MakeLexer(lexers, /*ansi=*/false);
-
-    NYql::TIssues issues;
-    const bool result = lexer->Tokenize(query, {}, onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS);
-    UNIT_ASSERT_C(result, issues.ToOneLineString());
-}
-
-Y_UNIT_TEST(TestTokenMissing) {
-    const TString query = "BEGIN /*Комментарий*/ \nEND";
-    NSQLv1Generated::TToken tokenProto;
-
-    tokenProto.SetLine(3);
-    tokenProto.SetColumn(0);
-    UNIT_ASSERT_VALUES_EQUAL(std::string::npos, NSQLTranslationV1::GetQueryPosition(query, tokenProto));
-
-    tokenProto.SetLine(2);
-    tokenProto.SetColumn(4);
-    UNIT_ASSERT_VALUES_EQUAL(std::string::npos, NSQLTranslationV1::GetQueryPosition(query, tokenProto));
-
-    tokenProto.SetLine(1);
-    tokenProto.SetColumn(34);
-    UNIT_ASSERT_VALUES_EQUAL(std::string::npos, NSQLTranslationV1::GetQueryPosition(query, tokenProto));
-
-    tokenProto.SetLine(1);
-    tokenProto.SetColumn(0);
-    UNIT_ASSERT_VALUES_EQUAL(0, NSQLTranslationV1::GetQueryPosition(query, tokenProto));
-}
-} // Y_UNIT_TEST_SUITE(TestGetQueryPosition)

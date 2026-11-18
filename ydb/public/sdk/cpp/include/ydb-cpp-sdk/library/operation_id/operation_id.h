@@ -32,6 +32,7 @@ public:
         FULL_BACKUP = 14,
         ANALYZE = 15,
         SET_NOT_NULL = 16,
+        REASSIGN_TABLETS = 17,
     };
 
     struct TData {

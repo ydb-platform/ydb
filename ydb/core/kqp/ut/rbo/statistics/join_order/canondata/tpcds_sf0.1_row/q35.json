@@ -7,11 +7,11 @@
         "args":
           [
             {
-              "op_name":"LeftJoin (BlockHash)",
+              "op_name":"LeftSemiJoin (BlockHash)",
               "args":
                 [
                   {
-                    "op_name":"LeftSemiJoin (BlockHash)",
+                    "op_name":"LeftJoin (BlockHash)",
                     "args":
                       [
                         {
@@ -39,38 +39,38 @@
                             ]
                         },
                         {
-                          "op_name":"InnerJoin (BlockHash)",
+                          "op_name":"HashShuffle",
                           "args":
                             [
                               {
-                                "op_name":"TableFullScan",
-                                "table":"store_sales"
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"date_dim"
+                                "op_name":"InnerJoin (BlockHash)",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"web_sales"
+                                    },
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"date_dim"
+                                    }
+                                  ]
                               }
                             ]
                         }
                       ]
                   },
                   {
-                    "op_name":"HashShuffle",
+                    "op_name":"InnerJoin (BlockHash)",
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (BlockHash)",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"web_sales"
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"date_dim"
-                              }
-                            ]
+                          "op_name":"TableFullScan",
+                          "table":"store_sales"
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"date_dim"
                         }
                       ]
                   }

@@ -271,10 +271,11 @@ SUSPENDED pile yields `SUSPENDED_PILE_LOST`; public update cannot disconnect it,
 so restore its quorum or follow a separate server recovery procedure.
 
 When BSC is unavailable and outside connectivity stays binding, Auto can
-confirm failure of the BSC host (PROMOTED, otherwise PRIMARY) from fresh
-agreeing fallback RED static parts with complete VDisk reasons, provided
-the host has no own node-quorum claim. A separate storage-failure proof
-permits a live own quorum only when every current outside fallback reply names
+confirm failure of a known participating pile from fresh agreeing fallback RED
+static parts with complete VDisk reasons, provided the pile has no own
+node-quorum claim. For the BSC host (PROMOTED, otherwise PRIMARY), a separate
+storage-failure proof permits a live own quorum only when every current outside
+fallback reply names
 a RED static group whose complete unique reason graph contains only RED
 VDisks caused by an explicitly reported same-node, same-pile PDisk
 `DeviceIoError`. A hardware error mixed with transport loss or replication

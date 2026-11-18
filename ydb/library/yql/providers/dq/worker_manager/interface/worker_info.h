@@ -136,6 +136,7 @@ struct TWorkerInfo: public TThrRefBase {
     const TString Address;
     const TString StartTime;
     const ui32 Port;
+    const ui32 MonitoringPort;
     ui32 Epoch;
     THashMap<TString, TString> Attributes;
     THashSet<TString> Operations;

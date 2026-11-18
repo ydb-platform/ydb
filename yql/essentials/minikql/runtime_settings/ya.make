@@ -5,6 +5,7 @@ SRCS(
     runtime_settings_hash.cpp
     runtime_settings_serialization.cpp
     runtime_settings.cpp
+    runtime_settings_reflection.cpp
 )
 
 PEERDIR(

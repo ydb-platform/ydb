@@ -162,6 +162,7 @@ void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ct
     LOG_T("TPartition::HandleOnWrite TEvChangeOwner");
 
     WriteInitThrottledMs.Update(ev->Get()->WriteSessionQuotaWaitTime.MilliSeconds(), ctx.Now());
+    WriteInitSessions.Update(1, ctx.Now());
 
     bool res = OwnerPipes.insert(ev->Get()->PipeClient).second;
     PQ_ENSURE(res);
@@ -518,6 +519,14 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             }
 
             ReplyOk(ctx, response.GetCookie(), response.Span);
+        } else if (response.IsEmitHeartbeat()) {
+            const auto& version = response.GetEmitHeartbeat().EmittedVersion;
+            auto reply = MakeReplyOk(response.GetCookie(), false);
+            auto* result = reply->Response->MutablePartitionResponse()->MutableCmdEmitHeartbeatResult();
+            result->SetStep(version.Step);
+            result->SetTxId(version.TxId);
+            ctx.Send(TabletActorId, reply.Release());
+            response.Span.EndOk();
         } else {
             PQ_ENSURE(false)("reason", "Unexpected message")("topic", TopicName())("cookie", response.GetCookie())("index", response.Body.index());
         }
@@ -1006,6 +1015,12 @@ void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TAct
     EmplacePendingRequest(std::move(msg), NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.Partition.SplitMessageGroup"), ctx);
 }
 
+void TPartition::HandleOnIdle(TEvPQ::TEvEmitHeartbeat::TPtr& ev, const TActorContext& ctx)
+{
+    EmplacePendingRequest(TEmitHeartbeatMsg(*ev->Get()), NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.Partition.EmitHeartbeat"), ctx);
+    HandlePendingRequests(ctx);
+}
+
 void TPartition::StartProcessChangeOwnerRequests(const TActorContext& ctx)
 {
     ctx.Send(ctx.SelfID, new TEvPQ::TEvProcessChangeOwnerRequests());
@@ -1147,6 +1162,32 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
         body.AssignedOffset = parameters.CurOffset;
         parameters.SourceIdBatch.RegisterSourceId(body.SourceId, body.SeqNo, parameters.CurOffset, CurrentTimestamp, std::move(keyRange), true);
     }
+}
+
+TPartition::EProcessResult TPartition::PreProcessRequest(TEmitHeartbeatMsg& msg,
+                                                         TAffectedSourceIdsAndConsumers&)
+{
+    if (!CanWrite()) {
+        ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
+            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
+        return EProcessResult::ContinueDrop;
+    }
+    if (DiskIsFull) {
+        ScheduleReplyError(msg.Cookie, false,
+                           NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
+                           "Disk is full");
+        return EProcessResult::ContinueDrop;
+    }
+    return EProcessResult::Continue;
+}
+
+void TPartition::ExecRequest(TEmitHeartbeatMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
+    const auto& partitionedBlob = BlobEncoder.PartitionedBlob;
+    const bool partitionedBlobInProgress = partitionedBlob.IsInited() && !partitionedBlob.IsComplete();
+    if (msg.Heartbeat.Version > LastEmittedHeartbeat && !partitionedBlobInProgress) {
+        EmitHeartbeat(msg.Heartbeat, parameters, request);
+    }
+    msg.EmittedVersion = LastEmittedHeartbeat;
 }
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p,
@@ -1676,6 +1717,26 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     }
 
     if (lastBlobPart) {
+        // One multipart message may span several KV write cycles. For example,
+        // A was persisted in a previous cycle; B and C are still pending writes:
+        //
+        //   KV:          tmp_A -> payload_A
+        //   request:     CmdWrite(tmp_B, payload_B), CmdWrite(tmp_C, payload_C)
+        //   formedBlobs: [A: tmp_A -> data_A] [B: tmp_B -> data_B] [C: tmp_C -> data_C]
+        //
+        // RenameTmpCmdWrites changes the keys INSIDE the pending CmdWrite commands
+        // to data_B and data_C and returns curWrites = 2. It does not rename A in KV.
+        // The last curWrites entries of formedBlobs correspond to these pending
+        // writes; only the earlier entries need an actual CmdRename in KV.
+        // Thus RenameFormedBlobs uses i + curWrites < formedBlobs.size():
+        // for three blobs and curWrites = 2, only A (i = 0) needs CmdRename.
+        //
+        //   Resulting request (command order omitted):
+        //     CmdRename(tmp_A -> data_A)
+        //     CmdWrite(data_B, payload_B)
+        //     CmdWrite(data_C, payload_C)
+        //
+        // Parts still in PartitionedBlob.Blobs are handled below via NewHead.
         PQ_ENSURE(BlobEncoder.PartitionedBlob.IsComplete());
         ui32 curWrites = RenameTmpCmdWrites(request);
         PQ_ENSURE(curWrites <= BlobEncoder.PartitionedBlob.GetFormedBlobs().size());
@@ -1740,8 +1801,18 @@ std::pair<TKey, ui32> TPartition::GetNewFastWriteKeyImpl(bool headCleared, ui32 
     BlobEncoder.DataKeysHead[TotalLevels - 1].AddKey(key, BlobEncoder.NewHead.PackedSize);
     PQ_ENSURE(headSize + BlobEncoder.NewHead.PackedSize <= 3 * MaxSizeCheck);
 
+    // Fast write does not retain Head batches or DataKeysHead entries between
+    // write cycles: SyncHeadFastWrite moves persisted keys to DataKeysBody and
+    // clears the levels. Thus the only key here describes the entire NewHead.
+    // Compact reuses the shared level machinery and may promote this single key
+    // through size thresholds; it does not merge it with previously written blobs.
+    // The resulting key still covers exactly NewHead, so SerializeForKey writes
+    // only NewHead batches here (Head is empty).
+    // TODO: Simplify fast write by removing the DataKeysHead insertion and this
+    // Compact call; return {key, NewHead.PackedSize} directly, keeping the relevant
+    // invariant checks. There are no previous head keys to merge in this path.
     auto res = BlobEncoder.Compact(key, headCleared);
-    PQ_ENSURE(res.first.HasSuffix());//may compact some KV blobs from head, but new KV blob is from head too
+    PQ_ENSURE(res.first.HasSuffix());
     PQ_ENSURE(res.second >= BlobEncoder.NewHead.PackedSize); //at least new data must be writed
     PQ_ENSURE(res.second <= MaxBlobSize);
 
@@ -2015,39 +2086,44 @@ void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
     Parameters->HeadCleared = (BlobEncoder.Head.PackedSize == 0);
 }
 
+void TPartition::EmitHeartbeat(const THeartbeat& heartbeat, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request)
+{
+    LOG_I(
+        "Topic partition emit heartbeat",
+        {"topicName", TopicName()},
+        {"version", heartbeat.Version}
+    );
+
+    auto hbMsg = TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
+        .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletId)),
+        .SeqNo = 0, // we don't use SeqNo because we disable deduplication
+        .PartNo = 0,
+        .TotalParts = 1,
+        .TotalSize = static_cast<ui32>(heartbeat.Data.size()),
+        .CreateTimestamp = CurrentTimestamp.MilliSeconds(),
+        .ReceiveTimestamp = CurrentTimestamp.MilliSeconds(),
+        .DisableDeduplication = true,
+        .WriteTimestamp = CurrentTimestamp.MilliSeconds(),
+        .Data = heartbeat.Data,
+        .UncompressedSize = 0,
+        .PartitionKey = {},
+        .ExplicitHashKey = {},
+        .External = false,
+        .IgnoreQuotaDeadline = true,
+        .HeartbeatVersion = std::nullopt,
+    }, std::nullopt};
+
+    WriteInflightSize += heartbeat.Data.size();
+    ExecRequest(hbMsg, parameters, request);
+
+    LastEmittedHeartbeat = heartbeat.Version;
+}
+
 void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
 {
     if (const auto heartbeat = SourceIdBatch->CanEmitHeartbeat()) {
         if (heartbeat->Version > LastEmittedHeartbeat) {
-            LOG_I(
-                "Topic partition emit heartbeat",
-                {"topicName", TopicName()},
-                {"version", heartbeat->Version}
-            );
-
-            auto hbMsg = TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
-                .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletId)),
-                .SeqNo = 0, // we don't use SeqNo because we disable deduplication
-                .PartNo = 0,
-                .TotalParts = 1,
-                .TotalSize = static_cast<ui32>(heartbeat->Data.size()),
-                .CreateTimestamp = CurrentTimestamp.MilliSeconds(),
-                .ReceiveTimestamp = CurrentTimestamp.MilliSeconds(),
-                .DisableDeduplication = true,
-                .WriteTimestamp = CurrentTimestamp.MilliSeconds(),
-                .Data = heartbeat->Data,
-                .UncompressedSize = 0,
-                .PartitionKey = {},
-                .ExplicitHashKey = {},
-                .External = false,
-                .IgnoreQuotaDeadline = true,
-                .HeartbeatVersion = std::nullopt,
-            }, std::nullopt};
-
-            WriteInflightSize += heartbeat->Data.size();
-            ExecRequest(hbMsg, *Parameters, PersistRequest.Get());
-
-            LastEmittedHeartbeat = heartbeat->Version;
+            EmitHeartbeat(*heartbeat, *Parameters, PersistRequest.Get());
         }
     }
 

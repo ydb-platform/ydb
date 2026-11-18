@@ -207,6 +207,7 @@ struct TKikimrEvents : TEvents {
         ES_OPERATION_SERVICE = 4284,
         ES_WASM_COMPILE_CTL = 4285,
         ES_CDC_AGGREGATOR = 4286,
+        ES_REASSIGN_TABLETS = 4287,
     };
 };
 

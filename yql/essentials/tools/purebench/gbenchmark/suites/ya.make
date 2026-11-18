@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/string_utils/quote
+    library/cpp/testing/common
     yql/essentials/tools/purebench/lib
 )
 

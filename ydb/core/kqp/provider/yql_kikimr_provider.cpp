@@ -48,6 +48,7 @@ struct TKikimrData {
         DataSourceNames.insert(TKiReadTable::CallableName());
         DataSourceNames.insert(TKiReadTableScheme::CallableName());
         DataSourceNames.insert(TKiReadTableList::CallableName());
+        DataSourceNames.insert(TKiChecksumTable::CallableName());
 
         DataSinkNames.insert(TKiAlterDatabase::CallableName());
 
@@ -710,10 +711,26 @@ bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral) {
         maybeLiteral.Ptr()->Child(0)->IsCallable() && maybeLiteral.Ptr()->Child(0)->Content() == "Null";
 }
 
+bool IsYqlNullExprNode(const NNodes::TExprBase& literal) {
+    return literal.Maybe<TCoNull>().IsValid() || literal.Maybe<TCoNothing>().IsValid();
+}
+
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto)
 {
     if (auto maybeJust = maybeLiteral.Maybe<TCoJust>()) {
         maybeLiteral = maybeJust.Cast().Input();
+    }
+
+    if (maybeLiteral.Maybe<TCoNothing>()) {
+        YQL_ENSURE(valueType);
+
+        TString error;
+        if (!SetColumnType(&RemoveOptionality(*valueType), false, *proto.mutable_type(), error)) {
+            return error;
+        }
+
+        proto.mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+        return std::nullopt;
     }
 
     if (auto literal = maybeLiteral.Maybe<TCoDataCtor>()) {

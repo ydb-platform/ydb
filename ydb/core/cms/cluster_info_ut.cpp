@@ -1,4 +1,5 @@
 #include "cluster_info.h"
+#include "config.h"
 #include "ut_helpers.h"
 
 #include <ydb/core/base/statestorage.h>
@@ -238,6 +239,48 @@ void CheckScheduledLocks(const TLockableItem &item, Ts... locks)
 }
 
 Y_UNIT_TEST_SUITE(TClusterInfoTest) {
+
+    Y_UNIT_TEST(StateStorageRestartCooldown) {
+        NCms::TCmsConfig config;
+        UNIT_ASSERT_VALUES_EQUAL(config.StateStorageRestartCooldown, TDuration::Minutes(2));
+
+        TNodeInfoPtr node = MakeIntrusive<TNodeInfo>();
+        node->State = UP;
+        node->StartTime = TInstant::Seconds(1000);
+        TStateStorageRingInfo ring;
+        ring.AddNode(node);
+        auto stateAfter = [&](TDuration elapsed) {
+            return ring.CountState(node->StartTime + elapsed, TDuration::Seconds(1),
+                                   TDuration::Seconds(1), "request", config.StateStorageRestartCooldown);
+        };
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(stateAfter(TDuration::Seconds(2))),
+            static_cast<int>(TStateStorageRingInfo::Locked));
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(stateAfter(TDuration::Minutes(2))),
+            static_cast<int>(TStateStorageRingInfo::Locked));
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(stateAfter(TDuration::Minutes(2) + TDuration::MicroSeconds(1))),
+            static_cast<int>(TStateStorageRingInfo::Ok));
+
+        NKikimrCms::TCmsConfig proto;
+        proto.SetStateStorageRestartCooldown(1000000);
+        config.Deserialize(proto);
+        NKikimrCms::TCmsConfig serialized;
+        config.Serialize(serialized);
+        UNIT_ASSERT_VALUES_EQUAL(serialized.GetStateStorageRestartCooldown(), 1000000);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(stateAfter(TDuration::Seconds(1))),
+            static_cast<int>(TStateStorageRingInfo::Locked));
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(stateAfter(TDuration::Seconds(2))),
+            static_cast<int>(TStateStorageRingInfo::Ok));
+
+        node->State = DOWN;
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(stateAfter(TDuration::Seconds(2))),
+            static_cast<int>(TStateStorageRingInfo::Restart));
+    }
     Y_UNIT_TEST(DeviceId) {
         UNIT_ASSERT(!TPDiskInfo::IsDeviceName("pdisk"));
         UNIT_ASSERT(!TPDiskInfo::IsDeviceName("disk-1"));
@@ -521,14 +564,15 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         const auto retry = TDuration::Seconds(1);
         const auto duration = TDuration::Minutes(1);
         const TString requestId = "test-request";
+        const auto restartCooldown = NCms::TCmsConfig().StateStorageRestartCooldown;
         UNIT_ASSERT_VALUES_EQUAL(
-            static_cast<int>(ring0.CountState(now, retry, duration, requestId)),
+            static_cast<int>(ring0.CountState(now, retry, duration, requestId, restartCooldown)),
             static_cast<int>(TStateStorageRingInfo::Ok));
         UNIT_ASSERT_VALUES_EQUAL(
-            static_cast<int>(ring1.CountState(now, retry, duration, requestId)),
+            static_cast<int>(ring1.CountState(now, retry, duration, requestId, restartCooldown)),
             static_cast<int>(TStateStorageRingInfo::Restart));
         UNIT_ASSERT_VALUES_EQUAL(
-            static_cast<int>(ring2.CountState(now, retry, duration, requestId)),
+            static_cast<int>(ring2.CountState(now, retry, duration, requestId, restartCooldown)),
             static_cast<int>(TStateStorageRingInfo::Restart));
 
         UNIT_ASSERT(cluster->IsStateStorageReplicaNode(1));
@@ -539,9 +583,9 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT(!cluster->HasNode(42));
         UNIT_ASSERT(!cluster->HasNode(99));
 
-        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(1), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(2), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(3), 1);
+        UNIT_ASSERT((*cluster->FindStateStorageReplicaRings(1) == TClusterInfo::TStateStorageReplicaRings{{0, 0}}));
+        UNIT_ASSERT((*cluster->FindStateStorageReplicaRings(2) == TClusterInfo::TStateStorageReplicaRings{{0, 0}}));
+        UNIT_ASSERT((*cluster->FindStateStorageReplicaRings(3) == TClusterInfo::TStateStorageReplicaRings{{0, 1}}));
     }
 
     Y_UNIT_TEST(SysTabletNonActiveStateIgnored) {

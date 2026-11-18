@@ -118,7 +118,8 @@ void StartWritingPreparedBatch(
             } else {
                 auto insertionConclusion = context.GetActualSchema()->CheckColumnsDefault(defaultFields);
                 auto conclusion = context.GetActualSchema()->BuildDefaultBatch(context.GetActualSchema()->GetIndexInfo().ArrowSchema(), 1, true);
-                AFL_VERIFY(!conclusion.IsFail())("error", conclusion.GetErrorMessage());
+                YDB_LOG_VERIFY(!conclusion.IsFail(),
+                    {"error", conclusion.GetErrorMessage()});
                 auto batchDefault = conclusion.DetachResult();
                 NArrow::NMerger::TSortableBatchPosition pos(
                     batchDefault, 0, batchDefault->schema()->field_names(), batchDefault->schema()->field_names(), false);

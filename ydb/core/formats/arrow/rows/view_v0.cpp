@@ -265,7 +265,7 @@ public:
         }
         YDB_LOG_VERIFY(fieldIndex == ColumnIndex);
         if (!data) {
-            Result = std::make_shared<arrow::NullScalar>();
+            Result = arrow::MakeNullScalar(Schema->field(fieldIndex)->type());
             return true;
         }
         using ScalarType = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;

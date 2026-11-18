@@ -1,3 +1,7 @@
+* Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
+
+* Added support for tablet reassignment operation IDs.
+
 ## v3.27.0
 
 * Fixed static login credentials failing permanently when the initial Login operation returns a transient service error.

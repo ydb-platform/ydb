@@ -316,10 +316,12 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
 
         if (UseStepTxId(record)) {
             txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, TRowVersion(record.GetStep(), record.GetTxId()));
+            Self->UpdateHnswIndex(tableInfo.LocalTid, rop, KeyCells.GetCells(), Value, txc.DB, TRowVersion(record.GetStep(), record.GetTxId()));
         } else {
             TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(KeyCells.GetCells(), tableInfo.UniqueIndexKeySize);
             Self->SysLocksTable().BreakLocks(tableId, uniqueKey); // probably redundant, we expect target table to be locked until complete restore
             txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, *MvccVersion);
+            Self->UpdateHnswIndex(tableInfo.LocalTid, rop, KeyCells.GetCells(), Value, txc.DB, *MvccVersion);
         }
 
         Self->GetConflictsCache().GetTableCache(tableInfo.LocalTid).RemoveUncommittedWrites(KeyCells.GetCells(), txc.DB);

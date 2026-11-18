@@ -196,8 +196,15 @@ namespace NLongTxService {
                 Orbit = std::move(orbit);
             }
 
+            void SetOptionalArg(const TRowVersion& snapshot) {
+                Snapshot = snapshot;
+            }
+
             TString DatabaseName;
             TVector<NKikimr::TTableId> TableIds;
+            // Register this exact version within the local promotion window; locking must be enabled.
+            // Readers must still check that its history exists.
+            TMaybe<TRowVersion> Snapshot;
             NLWTrace::TOrbit Orbit;
         };
 

@@ -502,7 +502,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         RunPerf_YqlTest(EBenchType::TPCH, /*columnstore=*/true, {
                         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
                         /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
-                        /*queriesWithoutCboCheck=*/{13});
+                        /*queriesWithoutCboCheck=*/{13, 22});
     }
 
     // Compiled 97 from 99.

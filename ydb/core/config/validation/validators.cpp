@@ -188,7 +188,47 @@ EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, 
 }
 
 
+TString ValidateStateStorageConfigSelection(const NKikimrConfig::TStateStorageConfig& config) {
+    const auto validate = [](const auto& group, const TString& path) -> TString {
+        const ui32 rings = group.RingSize() ? group.RingSize() : group.NodeSize();
+        if (!group.GetNToSelect() || group.GetNToSelect() > rings) {
+            return TStringBuilder() << path << ".NToSelect# " << group.GetNToSelect()
+                << " must be in [1, " << rings << "] (number of configured rings)";
+        }
+        return {};
+    };
+    if (config.HasRing()) {
+        if (TString error = validate(config.GetRing(), "Ring")) {
+            return error;
+        }
+    }
+    for (ui32 i = 0; i < config.RingGroupsSize(); ++i) {
+        if (TString error = validate(config.GetRingGroups(i), TStringBuilder() << "RingGroups[" << i << ']')) {
+            return error;
+        }
+    }
+    return {};
+}
+
 EValidationResult ValidateStateStorageConfig(const NKikimrConfig::TAppConfig& proposed, std::vector<TString>& msg) {
+    const auto& domains = proposed.GetDomainsConfig();
+    for (const auto& config : domains.GetStateStorage()) {
+        if (TString error = ValidateStateStorageConfigSelection(config)) {
+            msg.push_back(TStringBuilder() << "StateStorage " << error);
+            return EValidationResult::Error;
+        }
+    }
+#define VALIDATE_SELECTION(NAME) \
+    if (domains.HasExplicit##NAME##Config()) { \
+        if (TString error = ValidateStateStorageConfigSelection(domains.GetExplicit##NAME##Config())) { \
+            msg.push_back(TStringBuilder() << #NAME << ' ' << error); \
+            return EValidationResult::Error; \
+        } \
+    }
+    VALIDATE_SELECTION(StateStorage)
+    VALIDATE_SELECTION(StateStorageBoard)
+    VALIDATE_SELECTION(SchemeBoard)
+#undef VALIDATE_SELECTION
     if (proposed.HasSelfManagementConfig()) {
         const auto& sm = proposed.GetSelfManagementConfig();
         if (sm.GetEnabled()) {
@@ -198,7 +238,6 @@ EValidationResult ValidateStateStorageConfig(const NKikimrConfig::TAppConfig& pr
     if (!proposed.HasDomainsConfig()) {
         return EValidationResult::Ok;
     }
-    const auto& domains = proposed.GetDomainsConfig();
     bool isExplicit = domains.HasExplicitStateStorageConfig() && domains.HasExplicitStateStorageBoardConfig() && domains.HasExplicitSchemeBoardConfig();
     if (!isExplicit) {
         if (domains.DomainSize() < 1) {

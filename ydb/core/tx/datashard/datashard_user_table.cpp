@@ -14,6 +14,26 @@ using NTabletFlatExecutor::TTransactionContext;
 
 namespace NDataShard {
 
+namespace {
+
+void ParseHnswSettings(TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr) {
+    table.HnswIndexes.clear();
+    for (const auto& index : descr.GetTableIndexes()) {
+        if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalHnsw || !index.HasHnswIndexDescription()) {
+            continue;
+        }
+        const auto& description = index.GetHnswIndexDescription();
+        if (description.HasSettings() && description.GetSettings().has_settings()
+                && description.HasEmbeddingColumnId()) {
+            table.HnswIndexes.emplace(TPathId(index.GetPathOwnerId(), index.GetLocalPathId()),
+                TUserTable::THnswIndexInfo{description.GetSettings().settings(),
+                    description.GetEmbeddingColumnId(), index.GetSchemaVersion()});
+        }
+    }
+}
+
+} // namespace
+
 TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid)
     : LocalTid(localTid)
     , ShadowTid(shadowTid)
@@ -81,6 +101,7 @@ void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
     GetSchema(schema);
 
     schema.MutableTableIndexes()->Add()->CopyFrom(indexDesc);
+    ParseHnswSettings(*this, schema);
     SetSchema(schema);
 }
 
@@ -124,6 +145,7 @@ void TUserTable::DropIndex(const TPathId& indexPathId) {
     for (auto it = indexes.begin(); it != indexes.end(); ++it) {
         if (indexPathId == TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
             indexes.erase(it);
+            ParseHnswSettings(*this, schema);
             SetSchema(schema);
             return;
         }
@@ -344,6 +366,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         : NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
+    ParseHnswSettings(*this, descr);
     if (descr.GetPartitionConfig().HasUniqueIndexKeySize()) {
         UniqueIndexKeySize = descr.GetPartitionConfig().GetUniqueIndexKeySize();
     }
@@ -408,8 +431,20 @@ void TUserTable::AlterSchema() {
         columnFamily->SetId(f.first);
         columnFamily->SetName(family.GetName());
         columnFamily->SetStorage(family.Storage);
-        columnFamily->SetColumnCodec(family.Codec == NTable::NPage::ECodec::Plain
-            ? NKikimrSchemeOp::ColumnCodecPlain : NKikimrSchemeOp::ColumnCodecLZ4);
+        switch (family.Codec) {
+            case NTable::NPage::ECodec::Plain:
+                columnFamily->SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
+                break;
+            case NTable::NPage::ECodec::LZ4:
+                columnFamily->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+                break;
+            case NTable::NPage::ECodec::ZSTD:
+                columnFamily->SetColumnCodec(NKikimrSchemeOp::ColumnCodecZSTD);
+                break;
+        }
+        if (family.ColumnCodecLevel.Defined()) {
+            columnFamily->SetColumnCodecLevel(*family.ColumnCodecLevel);
+        }
         columnFamily->SetColumnCache(family.ColumnCache);
         columnFamily->SetColumnCacheMode(family.ColumnCacheMode);
         columnFamily->MutableStorageConfig()->CopyFrom(family.StorageConfig);
@@ -495,7 +530,7 @@ void TUserTable::DoApplyCreate(
         const TUserFamily& family = fam.second;
 
         alter.AddFamily(tid, familyId, family.GetRoomId());
-        alter.SetFamilyCompression(tid, familyId, family.Codec);
+        alter.SetFamilyCompression(tid, familyId, family.Codec, family.GetCodecLevel());
         alter.SetFamilyCacheMode(tid, familyId, family.CacheMode);
         alter.SetFamilyCache(tid, familyId, family.Cache);
         alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
@@ -617,7 +652,7 @@ void TUserTable::ApplyAlter(
 
         for (ui32 tid : tids) {
             alter.AddFamily(tid, familyId, family.GetRoomId());
-            alter.SetFamilyCompression(tid, familyId, family.Codec);
+            alter.SetFamilyCompression(tid, familyId, family.Codec, family.GetCodecLevel());
             alter.SetFamilyCacheMode(tid, familyId, family.CacheMode);
             alter.SetFamilyCache(tid, familyId, family.Cache);
             alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
@@ -755,6 +790,27 @@ void TUserTable::ApplyAlter(
 
     schema.SetTableSchemaVersion(delta.GetTableSchemaVersion());
 
+    // Persist HNSW index descriptions with the table schema so restart and split
+    // recovery use the same graph settings. Other index types retain their
+    // existing add/drop handling.
+    for (const auto& index : delta.GetTableIndexes()) {
+        if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            continue;
+        }
+        auto& indexes = *schema.MutableTableIndexes();
+        auto it = FindIf(indexes, [&](const auto& existing) {
+            return existing.GetPathOwnerId() == index.GetPathOwnerId()
+                && existing.GetLocalPathId() == index.GetLocalPathId();
+        });
+        if (it != indexes.end()) {
+            it->CopyFrom(index);
+        } else {
+            indexes.Add()->CopyFrom(index);
+        }
+    }
+    // An omitted index preserves its metadata; an explicitly empty HNSW
+    // description disables the graph, including after a restart.
+    ParseHnswSettings(*this, schema);
     SetSchema(schema);
 }
 
@@ -805,7 +861,7 @@ void TUserTable::Fix_KIKIMR_17222(NTable::TDatabase& db, ui32 tid) const
         const TUserFamily& family = fam.second;
 
         db.Alter().AddFamily(tid, familyId, family.GetRoomId());
-        db.Alter().SetFamilyCompression(tid, familyId, family.Codec);
+        db.Alter().SetFamilyCompression(tid, familyId, family.Codec, family.GetCodecLevel());
         db.Alter().SetFamilyCacheMode(tid, familyId, family.CacheMode);
         db.Alter().SetFamilyCache(tid, familyId, family.Cache);
         db.Alter().SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());

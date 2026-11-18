@@ -82,9 +82,20 @@ SRCS(
     yql_window_frame_settings_pg.cpp
     yql_window_frame_settings_pg.h
     yql_sqlselect.cpp
+    yql_arrow_resolver.cpp
+    yql_arrow_resolver.h
+    yql_data_provider.cpp
+    yql_match_recognize.cpp
+    yql_match_recognize.h
+    yql_node_transform.cpp
+    yql_node_transform.h
+    yql_range_frame_collector_bounds.cpp
+    yql_range_frame_collector_bounds.h
+    yql_window_frame_setting_bound.cpp
 )
 
 PEERDIR(
+    yql/essentials/core/project_settings
     library/cpp/enumbitset
     library/cpp/random_provider
     library/cpp/threading/future
@@ -128,6 +139,7 @@ GENERATE_ENUM_SERIALIZATION(yql_cost_function.h)
 END()
 
 RECURSE(
+    project_settings
     cbo
     credentials
     dq_expr_nodes

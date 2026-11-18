@@ -6,6 +6,8 @@ option java_package = "ru.yandex.kikimr.proto";
 
 import "google/protobuf/any.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/scheme/protos/pathid.proto";
+
 
 import "ydb/core/protos/kqp_tablemetadata.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
@@ -316,6 +318,7 @@ message TKqpPhyVectorTopK {
     TKqpPhyValue TargetVector = 3;
     TKqpPhyValue Limit = 4;
     repeated uint32 DistinctColumns = 5;
+    NKikimrProto.TPathID HnswIndexId = 6;
 }
 
 message TKqpPhyCnStreamLookup {
@@ -366,6 +369,7 @@ message TKqpPhyCnVectorSearch {
     // Prefixed index: the transform input carries, per prefix group, the root
     // __ydb_parent id alongside the target vector.
     bool HasPrefix = 13;
+    NKikimrProto.TPathID HnswIndexId = 14;
 }
 
 message TKqpPhyCnSequencer {

@@ -14,6 +14,7 @@ struct TOperatorLocation {
     NJson::TJsonValue* Stage = nullptr;
     NJson::TJsonValue* Operator = nullptr;
     int OperatorIndex = 0;
+    const NJson::TJsonValue* RuntimeStats = nullptr;
 };
 
 struct TConnectionInfo {
@@ -24,13 +25,46 @@ struct TConnectionInfo {
 struct TPlanLookupIndex {
     THashMap<i64, TOperatorLocation> Operators;
     THashMap<TString, TConnectionInfo> Connections;
-    TVector<i64> OperatorOrder;
+    TVector<std::pair<i64, NJson::TJsonValue*>> OperatorOrder;
 };
 
 enum class EPlanIndexKind {
     Execution,
     Simplified,
 };
+
+THashMap<TString, const NJson::TJsonValue*> IndexRuntimeStats(const NJson::TJsonValue& stage) {
+    THashMap<TString, const NJson::TJsonValue*> result;
+    if (!stage.Has("Stats") || !stage["Stats"].Has("Operator")) {
+        return result;
+    }
+
+    for (const auto& stat : stage["Stats"]["Operator"].GetArraySafe()) {
+        if (!stat.IsMap() || !stat.Has("Type") || !stat["Type"].IsString()) {
+            continue;
+        }
+        const auto [it, inserted] = result.emplace(stat["Type"].GetStringSafe(), &stat);
+        if (!inserted) {
+            it->second = nullptr;
+        }
+    }
+
+    THashMap<TString, size_t> candidates;
+    for (const auto& op : stage["Operators"].GetArraySafe()) {
+        if (op.Has("RuntimeStatsType")) {
+            ++candidates[op["RuntimeStatsType"].GetStringSafe()];
+        }
+    }
+    // Runtime IDs currently identify counters within a type, not execution
+    // array positions. Several operators can share the same counter ("0"), so
+    // only a unique type match in this stage can be attributed to an operator.
+    for (auto& [type, stat] : result) {
+        if (candidates[type] != 1) {
+            stat = nullptr;
+        }
+    }
+    return result;
+}
 
 void BuildPlanLookupIndex(
     NJson::TJsonValue& planNode,
@@ -51,17 +85,25 @@ void BuildPlanLookupIndex(
     auto& planMap = planNode.GetMapSafe();
     if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
         auto& operatorArray = operators->second.GetArraySafe();
+        const auto runtimeStats = kind == EPlanIndexKind::Execution
+            ? IndexRuntimeStats(planNode) : THashMap<TString, const NJson::TJsonValue*>{};
         for (size_t i = 0; i < operatorArray.size(); ++i) {
             auto& item = operatorArray.at(i);
             auto& itemMap = item.GetMapSafe();
             if (auto itemId = itemMap.find("OperatorId"); itemId != itemMap.end()) {
                 const i64 id = itemId->second.GetIntegerSafe();
                 if (kind == EPlanIndexKind::Simplified) {
-                    index.OperatorOrder.push_back(id);
+                    index.OperatorOrder.emplace_back(id, &item);
+                }
+                const NJson::TJsonValue* stat = nullptr;
+                if (auto type = itemMap.find("RuntimeStatsType"); type != itemMap.end()) {
+                    if (auto it = runtimeStats.find(type->second.GetStringSafe()); it != runtimeStats.end()) {
+                        stat = it->second;
+                    }
                 }
                 index.Operators.try_emplace(
                     id,
-                    TOperatorLocation{&planNode, &item, static_cast<int>(i)}
+                    TOperatorLocation{&planNode, &item, static_cast<int>(i), stat}
                 );
             }
         }
@@ -131,7 +173,7 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
     execPlanIndex.Connections.reserve(simplifiedPlanIndex.OperatorOrder.size());
     BuildPlanLookupIndex(execPlan, execPlanIndex, EPlanIndexKind::Execution);
 
-    for (const auto opId : simplifiedPlanIndex.OperatorOrder) {
+    for (const auto& [opId, explainPlanOp] : simplifiedPlanIndex.OperatorOrder) {
         const auto execLocation = execPlanIndex.Operators.find(opId);
         const auto explainLocation = simplifiedPlanIndex.Operators.find(opId);
         Y_ENSURE(execLocation != execPlanIndex.Operators.end());
@@ -140,7 +182,6 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
         auto* execPlanStage = execLocation->second.Stage;
         auto* execPlanOp = execLocation->second.Operator;
         const int execOperatorIdx = execLocation->second.OperatorIndex;
-        auto* explainPlanOp = explainLocation->second.Operator;
 
         if(!execPlanStage->GetMapSafe().contains("Stats")) {
             continue;
@@ -148,15 +189,6 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
 
         const auto& stats = execPlanStage->GetMapSafe().at("Stats").GetMapSafe();
         const auto& opName = execPlanOp->GetMapSafe().at("Name").GetStringSafe();
-
-        TString opType;
-        if (opName.Contains("Join")) {
-            opType = "Join";
-        } else if (opName == "Filter") {
-            opType = "Filter";
-        } else if (opName == "Aggregate") {
-            opType = "Aggregation";
-        }
 
         bool operatorRows = false;
         bool operatorSize = false;
@@ -190,29 +222,21 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
                     break;
                 }
             }
-        } else if(stats.contains("Operator")) {
-            for (auto& opStat : stats.at("Operator").GetArraySafe()) {
-                if (opStat.IsMap()) {
-                    auto& opMap = opStat.GetMapSafe();
-                    if(opMap.contains("Type") && opMap.at("Type").GetStringSafe() == opType &&
-                            opMap.contains("Id") && opMap.at("Id").GetStringSafe() == std::to_string(execOperatorIdx)) {
-
-                        if (opMap.contains("Rows")) {
-                            explainPlanOp->InsertValue("A-Rows", opMap.at("Rows").GetMapSafe().at("Sum").GetDouble());
-                            operatorRows = true;
-                        }
-                        if (opMap.contains("Bytes")) {
-                            explainPlanOp->InsertValue("A-Size", opMap.at("Bytes").GetMapSafe().at("Sum").GetDouble());
-                            operatorSize = true;
-                        }
-                    }
-                    break;
-
-                }
+        } else if (const auto* opStat = execLocation->second.RuntimeStats) {
+            const auto& opMap = opStat->GetMapSafe();
+            if (opMap.contains("Rows")) {
+                explainPlanOp->InsertValue("A-Rows", opMap.at("Rows").GetMapSafe().at("Sum").GetDouble());
+                operatorRows = true;
+            }
+            if (opMap.contains("Bytes")) {
+                explainPlanOp->InsertValue("A-Size", opMap.at("Bytes").GetMapSafe().at("Sum").GetDouble());
+                operatorSize = true;
             }
         }
 
-        if (execOperatorIdx == 0 && !explainPlanOp->GetMapSafe().contains("A-Rows")) {
+        const bool useStageStats = execOperatorIdx == 0 ||
+            (execPlanOp->Has("UseStageStats") && (*execPlanOp)["UseStageStats"].GetBooleanSafe());
+        if (useStageStats) {
             // Find enclosing connection to process broadcast correctly
             const TString stageGuid = execPlanStage->GetMapSafe().at("StageGuid").GetStringSafe();
             const auto connection = execPlanIndex.Connections.find(stageGuid);
@@ -238,8 +262,9 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
             }
         }
 
-        if (execOperatorIdx == 0) {
-            // cpu usage available for stage only, so assign it to top level operator
+        if (execOperatorIdx == 0 && explainPlanOp == explainLocation->second.Operator) {
+            // Shared subplans can occur in several simplified branches. Every
+            // occurrence gets rows/bytes, but count stage CPU only once.
             if (stats.contains("CpuTimeUs")) {
                 double opCpuTime;
 
@@ -258,17 +283,19 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
     ComputeCpuTimes(simplifiedPlan);
 }
 
-void RemoveOperatorIds(NJson::TJsonValue& planNode) {
+void RemoveOperatorMetadata(NJson::TJsonValue& planNode) {
     auto& planMap = planNode.GetMapSafe();
     if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
         for (auto& op : operators->second.GetArraySafe()) {
             op.EraseValue("OperatorId");
+            op.EraseValue("RuntimeStatsType");
+            op.EraseValue("UseStageStats");
         }
     }
 
     if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
         for (auto& child : plans->second.GetArraySafe()) {
-            RemoveOperatorIds(child);
+            RemoveOperatorMetadata(child);
         }
     }
 }
@@ -284,10 +311,10 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
 
     queryPlan["meta"] = meta;
 
-    //OperatorId is needed while correlating ANALYZE stats, but has no meaning in a published plan.
-    RemoveOperatorIds(txPlan["SimplifiedPlan"]);
+    // Correlation metadata is internal to ANALYZE, not part of the published plan.
+    RemoveOperatorMetadata(txPlan["SimplifiedPlan"]);
     for (auto& plan : txPlan["Plans"].GetArraySafe()) {
-        RemoveOperatorIds(plan);
+        RemoveOperatorMetadata(plan);
     }
 
     queryPlan["SimplifiedPlan"] = txPlan.GetMapSafe().at("SimplifiedPlan");

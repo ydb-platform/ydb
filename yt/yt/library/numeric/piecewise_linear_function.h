@@ -82,7 +82,7 @@ private:
     TValue InterpolateAt(double x) const;
     TValue InterpolateNormalized(double t) const;
 
-    FRIEND_TEST(TPiecewiseLinearFunctionTest, TestInterpolationProperties);
+    FRIEND_TEST(TPiecewiseLinearFunctionTest, InterpolationProperties);
 };
 
 template <class TValue>

@@ -99,6 +99,7 @@ PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/nodewarden
+    ydb/core/blobstorage/syncer
     ydb/core/blob_depot
     ydb/core/engine/minikql
     ydb/core/protos

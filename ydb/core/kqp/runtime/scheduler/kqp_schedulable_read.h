@@ -18,7 +18,7 @@ struct TSchedulableRead : TSchedulableTask {
         void Refill();
     };
 
-    TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query, bool rejectZeroQuota,
+    explicit TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query,
         std::shared_ptr<TQuotaState> quota = std::make_shared<TQuotaState>());
 
     bool TryConsumeQuota(TDuration expectedQuota);
@@ -45,7 +45,6 @@ private:
     void RefreshQuota();
     void ReserveQuota(ui64 expectedQuotaMs);
 
-    const bool RejectZeroQuota;
     // Milliseconds precision - because THPTimer::STime to TDuration has the same precision
     const std::shared_ptr<TQuotaState> Quota;
     ui64 ReservedQuotaMs = 0;

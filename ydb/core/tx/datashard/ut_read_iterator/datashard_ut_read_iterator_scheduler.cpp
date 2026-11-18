@@ -339,8 +339,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
         UNIT_ASSERT_VALUES_EQUAL(rowsReceived, kRows);
     }
 
-    Y_UNIT_TEST(ShouldNumberFirstResultWhenPoolQuotaBecomesZeroBeforeAdmission) {
-        TSchedulerTestHelper helper(500u, /*withFollower=*/false, /*numShards=*/1, /*memoryEnabled=*/true);
+    Y_UNIT_TEST_TWIN(ShouldNumberFirstResultWhenPoolQuotaBecomesZeroBeforeAdmission, MemoryEnabled) {
+        TSchedulerTestHelper helper(500u, /*withFollower=*/false, /*numShards=*/1, MemoryEnabled);
         helper.Upsert(1, 100);
         auto& runtime = *helper.Server->GetRuntime();
         const auto shard = ResolveTablet(runtime, helper.TabletId());
@@ -365,8 +365,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetSeqNo(), 1);
     }
 
-    Y_UNIT_TEST(ShouldFailLiveReadWhenPoolQuotaBecomesZero) {
-        TSchedulerTestHelper helper(500u, /*withFollower=*/false, /*numShards=*/1, /*memoryEnabled=*/true);
+    Y_UNIT_TEST_TWIN(ShouldFailLiveReadWhenPoolQuotaBecomesZero, MemoryEnabled) {
+        TSchedulerTestHelper helper(500u, /*withFollower=*/false, /*numShards=*/1, MemoryEnabled);
         helper.UpsertMany(1, 3);
         auto request = helper.MakeRangeReadRequest(1, 1, 3);
         request->Record.SetMaxRows(1); // No continuation until we acknowledge the first row.

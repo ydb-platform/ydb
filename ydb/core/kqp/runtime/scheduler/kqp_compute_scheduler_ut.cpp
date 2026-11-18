@@ -317,13 +317,8 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT(!read->IsValid());
         UNIT_ASSERT(!read->TryConsumeQuota(slice));
         UNIT_ASSERT(!read->HasAvailableQuota());
-        const auto delay = read->EstimateQuotaDelay(slice);
-        if (MemoryEnabled) {
-            UNIT_ASSERT(!delay);
-        } else {
-            UNIT_ASSERT(delay);
-            UNIT_ASSERT_VALUES_EQUAL(*delay, TDuration::Minutes(1));
-        }
+        UNIT_ASSERT(!read->EstimateQuotaDelay(slice));
+        UNIT_ASSERT(!read->ConsumeQuotaForAdmittedRead(slice));
 
         pool.SetAttributes(enabled);
         scheduler->UpdateConfiguration(config.Clone());
@@ -2367,7 +2362,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             TSchedulableTask task(query);
             UNIT_ASSERT(task.TryIncreaseUsage());
             UNIT_ASSERT_VALUES_EQUAL(pool->CpuUsage.load(), 1);
-            TSchedulableRead read(readQuery, MemoryEnabled);
+            TSchedulableRead read(readQuery);
             UNIT_ASSERT_VALUES_EQUAL(read.TryConsumeQuota(TDuration::MilliSeconds(1)), !MemoryEnabled);
             UNIT_ASSERT_VALUES_EQUAL(pool->CpuUsage.load(), MemoryEnabled ? 1 : 2);
             if (!MemoryEnabled) {
@@ -2407,7 +2402,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
             auto query = scheduler.GetReadQuery("db", "pool");
             UNIT_ASSERT(!query->GetSnapshot());
-            TSchedulableRead read(query, MemoryEnabled);
+            TSchedulableRead read(query);
             for (ui32 attempt = 0; attempt < 2; ++attempt) {
                 UNIT_ASSERT(read.TryConsumeQuota(TDuration::MilliSeconds(1)));
                 read.ReturnQuota(0);

@@ -10,9 +10,8 @@
 
 namespace NKikimr::NKqp::NScheduler {
 
-TSchedulableRead::TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query, bool rejectZeroQuota, std::shared_ptr<TQuotaState> quota)
+TSchedulableRead::TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query, std::shared_ptr<TQuotaState> quota)
     : TSchedulableTask(query)
-    , RejectZeroQuota(rejectZeroQuota)
     , Quota(std::move(quota))
     // TODO: we add demand to virtual query per reading datashard, which is inconvenient.
     //       Because demand persists even if we don't have any pending read requests.
@@ -73,14 +72,12 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
 
 bool TSchedulableRead::ConsumeQuotaForAdmittedRead(TDuration expectedQuota) {
     RefreshQuota();
-    if (!Quota->MaxQuotaMs && RejectZeroQuota) {
+    if (!Quota->MaxQuotaMs) {
         return false;
     }
     Quota->Refill();
     IncreaseUsage();
-    // Even if another reader observed a zero limit after admission, this
-    // attempt must account actual time and release the acquired CPU slot.
-    ReserveQuota(Quota->MaxQuotaMs ? std::min(expectedQuota.MilliSeconds(), Quota->MaxQuotaMs) : expectedQuota.MilliSeconds());
+    ReserveQuota(std::min(expectedQuota.MilliSeconds(), Quota->MaxQuotaMs));
     return true;
 }
 
@@ -136,10 +133,7 @@ void TSchedulableRead::TQuotaState::Refill() {
 
 TMaybe<TDuration> TSchedulableRead::EstimateQuotaDelay(TDuration expectedQuota) const {
     if (!Quota->MaxQuotaMs) {
-        if (RejectZeroQuota) {
-            return Nothing();
-        }
-        return TDuration::Minutes(1);
+        return Nothing();
     }
     const auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), Quota->MaxQuotaMs);
 
@@ -184,7 +178,7 @@ TSchedulableReadPtr TSchedulableReadFactory::Get(const NHdrf::TDatabaseId& datab
         if (!cached.Quota) {
             cached.Quota = std::make_shared<TSchedulableRead::TQuotaState>();
         }
-        auto result = std::make_shared<TSchedulableRead>(query, Scheduler->IsMemoryEnabled(), cached.Quota);
+        auto result = std::make_shared<TSchedulableRead>(query, cached.Quota);
         cached.Read = result;
         return result;
     }

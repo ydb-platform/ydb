@@ -26,6 +26,48 @@ using namespace NWorkloadManager;
 
 Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
 
+    Y_UNIT_TEST(InvalidPolicyEventsDoNotPoisonLaterUpdates) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
+            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            NScheduler::TOptions{.MemoryEnabled = true});
+        runtime.GetAppData().KqpComputeScheduler = scheduler;
+        const auto memory = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NMemory::MakeMemoryControllerId(), memory);
+        runtime.RegisterService(NWorkloadManager::MakeServiceId(runtime.GetNodeId()), runtime.AllocateEdgeActor());
+        const auto service = runtime.Register(CreateKqpComputeSchedulerService(TDuration::Hours(1)));
+        runtime.GrabEdgeEvent<NMemory::TEvConsumerRegister>(memory);
+        const auto sender = runtime.AllocateEdgeActor();
+
+        const auto initial = scheduler->GetStaticTree();
+        auto* badDb = new NScheduler::TEvAddDatabase("invalid");
+        badDb->Weight = -1;
+        runtime.Send(new IEventHandle(service, sender, badDb));
+        auto* badPool = new NScheduler::TEvAddPool("db", "pool");
+        badPool->Weight = 0;
+        runtime.Send(new IEventHandle(service, sender, badPool));
+        UNIT_ASSERT(scheduler->GetStaticTree() == initial);
+
+        NResourcePool::TPoolSettings settings;
+        settings.TotalCpuLimitPercentPerNode = 50;
+        settings.TotalMemoryLimitPercentPerNode = 30;
+        runtime.Send(new IEventHandle(service, sender, new NScheduler::TEvAddPool("db", "pool", settings)));
+        const auto accepted = scheduler->GetStaticTree();
+        UNIT_ASSERT(!accepted->GetDatabase("invalid"));
+        const auto pool = scheduler->GetOrCreateMemoryPool("db", "pool");
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetConfiguredAttributes().GetReadLimit(), TDuration::MilliSeconds(500));
+
+        settings.TotalCpuLimitPercentPerNode = 101;
+        settings.TotalMemoryLimitPercentPerNode = 75;
+        runtime.Send(new IEventHandle(service, sender,
+            new NWorkloadManager::TEvUpdatePoolInfo("db", "pool", settings, std::nullopt)));
+        UNIT_ASSERT(scheduler->GetStaticTree() == accepted);
+        runtime.Send(new IEventHandle(service, memory, new NMemory::TEvConsumerLimit(1000_MB)));
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetConfiguredAttributes().GetMemoryLimit(), 300_MB);
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetConfiguredAttributes().GetReadLimit(), TDuration::MilliSeconds(500));
+    }
+
     Y_UNIT_TEST_TWIN(NewPoolSnapshotPrecedesQueryResponse, MemoryEnabled) {
         // The runtime pool may be new, or already created by memory accounting or reads.
         for (ui32 precreated : {0u, 1u, 2u}) {

@@ -31,8 +31,12 @@ using namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic;
 
 namespace {
 
+bool IsValidWeight(double weight) {
+    return std::isfinite(weight) && weight > 0.0;
+}
+
 void ValidateAttributes(const NHdrf::TStaticAttributes& attrs) {
-    Y_ENSURE(std::isfinite(attrs.GetWeight()) && attrs.GetWeight() > 0.0, "Weight should be finite and positive");
+    Y_ENSURE(IsValidWeight(attrs.GetWeight()), "Weight should be finite and positive");
     Y_ENSURE(attrs.GetReadLimit() <= TDuration::Seconds(1), "ReadLimit should not exceed one second");
     Y_ENSURE_EX(attrs.GetCpuGuarantee() <= attrs.GetCpuLimit(), TCpuGuaranteeError()
         << "CpuGuarantee exceeds CpuLimit");
@@ -150,9 +154,12 @@ public:
     }
 
     void Handle(TEvAddDatabase::TPtr& ev) {
-        NHdrf::TStaticAttributes const attrs {
-            .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
-        };
+        const auto weight = ev->Get()->Weight;
+        if (!IsValidWeight(weight)) {
+            YDB_LOG_ERROR("Rejected invalid database weight", {"database", ev->Get()->DatabaseId}, {"weight", weight});
+            return;
+        }
+        const NHdrf::TStaticAttributes attrs{.Weight = weight};
         Configuration->GetOrCreateDatabase(ev->Get()->DatabaseId).SetAttributes(attrs);
         PublishConfiguration();
 
@@ -168,12 +175,16 @@ public:
     void Handle(TEvAddPool::TPtr& ev) {
         const auto& databaseId = ev->Get()->DatabaseId;
         const auto& poolId = ev->Get()->PoolId;
-        NHdrf::TStaticAttributes attrs = {
-            .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
-        };
+        const auto weight = ev->Get()->Weight;
+        if (!IsValidWeight(weight) || poolId.empty()) {
+            YDB_LOG_ERROR("Rejected invalid pool registration", {"database", databaseId}, {"pool", poolId}, {"weight", weight});
+            return;
+        }
+        if (!CheckPoolPercentages(databaseId, poolId, ev->Get()->Params)) {
+            return;
+        }
 
-        Y_ASSERT(!poolId.empty());
-
+        NHdrf::TStaticAttributes attrs{.Weight = weight};
         SetCpuAttributes(ev->Get()->Params, attrs);
         SetMemoryAttributes({databaseId, poolId}, ev->Get()->Params, attrs);
 
@@ -199,6 +210,9 @@ public:
 
         if (ev->Get()->Config) {
             Y_ENSURE(poolIt != PoolSubscribtions.end());
+            if (!CheckPoolPercentages(databaseId, poolId, *ev->Get()->Config)) {
+                return;
+            }
             poolIt->second = false;
 
             // A full replacement: omitted attributes return to their defaults.
@@ -305,6 +319,19 @@ private:
         TVector<NActors::TExecutorThreadStats> threadsStats;
         NActors::GetActorSystemStats().GetPoolStats(poolId, poolStats, threadsStats);
         return Max<ui64>(poolStats.MaxThreadCount, 1);
+    }
+
+    // Check the raw settings before converting to integers or changing desired policy and subscriptions.
+    bool CheckPoolPercentages(const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& config) const {
+        const auto valid = [](double value) { return value == -1 || (value >= 0 && value <= 100); };
+        if (valid(config.TotalCpuLimitPercentPerNode) && valid(config.TotalCpuGuaranteePercentPerNode)
+            && valid(config.TotalMemoryLimitPercentPerNode)) {
+            return true;
+        }
+        YDB_LOG_ERROR("Rejected invalid pool percentages", {"database", databaseId}, {"pool", poolId},
+            {"cpuLimitPercent", config.TotalCpuLimitPercentPerNode}, {"cpuGuaranteePercent", config.TotalCpuGuaranteePercentPerNode},
+            {"memoryLimitPercent", config.TotalMemoryLimitPercentPerNode});
+        return false;
     }
 
     // All fields describe the new configuration; -1 leaves an attribute unset.
@@ -578,10 +605,17 @@ NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TDatabas
         return {};
     }
 
-    TWriteGuard lock(Mutex);
+    const NHdrf::TFullPoolId fullPoolId{databaseId, poolId};
+    {
+        TReadGuard lock(Mutex);
+        if (auto it = ReadQueries.find(fullPoolId); it != ReadQueries.end()) {
+            return it->second;
+        }
+    }
 
-    if (auto queryIt = ReadQueries.find(NHdrf::TFullPoolId{databaseId, poolId}); queryIt != ReadQueries.end()) {
-        return queryIt->second;
+    TWriteGuard lock(Mutex);
+    if (auto it = ReadQueries.find(fullPoolId); it != ReadQueries.end()) {
+        return it->second;
     }
 
     const auto tree = GetStaticTree();
@@ -594,7 +628,7 @@ NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TDatabas
     if (!pool) {
         pool = CreatePool(parent, poolId);
     }
-    return EnsureReadQuery(pool, {databaseId, poolId});
+    return EnsureReadQuery(pool, fullPoolId);
 }
 
 bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId, const bool isForceRemove) {

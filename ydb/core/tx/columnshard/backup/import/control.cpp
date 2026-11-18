@@ -7,14 +7,14 @@ namespace NKikimr::NOlap::NImport {
 
 NKikimr::TConclusionStatus TConfirmSessionControl::DoApply(const std::shared_ptr<NBackground::ISessionLogic>& session) const {
     auto exportSession = dynamic_pointer_cast<TSession>(session);
-    AFL_VERIFY(exportSession);
+    YDB_LOG_VERIFY(exportSession);
     exportSession->Confirm();
     return TConclusionStatus::Success();
 }
 
 NKikimr::TConclusionStatus TAbortSessionControl::DoApply(const std::shared_ptr<NBackground::ISessionLogic>& session) const {
     auto exportSession = dynamic_pointer_cast<TSession>(session);
-    AFL_VERIFY(exportSession);
+    YDB_LOG_VERIFY(exportSession);
     if (exportSession->IsFinished() || exportSession->IsReadyForRemoveOnFinished()) {
         YDB_LOG_WARN("",
             {"event", "abort_control_skipped_terminal_session"},

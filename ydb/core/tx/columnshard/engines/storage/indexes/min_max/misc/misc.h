@@ -9,13 +9,13 @@ namespace NKikimr::NOlap::NIndexes::NMinMax {
 inline const TString kMinMaxClassName = "MIN_MAX";
 
 TString IncorrectDataColumnsErrorMessage(const auto& dataColumns) {
-    AFL_VERIFY(!dataColumns.empty());
+    YDB_LOG_VERIFY(!dataColumns.empty());
     return TStringBuilder() << "Local min_max index does not require data columns (COVER in YQL), but got " << dataColumns.size()
                             << " columns: [" << JoinStrings(dataColumns.begin(), dataColumns.end(), ", ") << "]";
 }
 
 TString IncorrectIndexColumnsErrorMessage(const auto& indexColumns) {
-    AFL_VERIFY(indexColumns.size() != 1);
+    YDB_LOG_VERIFY(indexColumns.size() != 1);
 
     return TStringBuilder() << "Local min_max index can only be applied to exactly one column (one column in the ON (...) YQL statement), but "
                                "tried to apply it to "

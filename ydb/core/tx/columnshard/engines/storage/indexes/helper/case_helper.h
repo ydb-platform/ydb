@@ -62,7 +62,7 @@ public:
             return NArrow::NHash::TXX64::CalcForScalar(scalar, seed);
         }
 
-        AFL_VERIFY(scalar);
+        YDB_LOG_VERIFY(scalar);
         ui64 result = 0;
         NArrow::SwitchType(scalar->type->id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
@@ -89,7 +89,7 @@ public:
             return;
         }
 
-        AFL_VERIFY(array);
+        YDB_LOG_VERIFY(array);
         NArrow::SwitchType(array->type_id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
             using T = typename TWrap::T;
@@ -109,7 +109,7 @@ public:
                     action(NArrow::NHash::TXX64::CalcSimple(&value, sizeof(value), seed), idx);
                 } else {
                     static_assert(arrow::is_decimal_type<T>());
-                    AFL_VERIFY(false);
+                    YDB_LOG_VERIFY(false);
                 }
             }
 

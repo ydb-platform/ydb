@@ -15,7 +15,7 @@ class TUtilTest
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TUtilTest, TestMidpoint)
+TEST_F(TUtilTest, Midpoint)
 {
     struct TTestCase
     {
@@ -101,7 +101,7 @@ TEST_F(TUtilTest, TestMidpoint)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TUtilTest, TestSignedSaturationArithmeticOperations)
+TEST_F(TUtilTest, SignedSaturationArithmeticOperations)
 {
     struct TTestCase
     {
@@ -225,7 +225,7 @@ TEST_F(TUtilTest, TestSignedSaturationArithmeticOperations)
     }
 }
 
-TEST_F(TUtilTest, TestUnsignedSaturationArithmeticOperations)
+TEST_F(TUtilTest, UnsignedSaturationArithmeticOperations)
 {
     struct TTestCase
     {
@@ -325,7 +325,7 @@ TEST_F(TUtilTest, TestUnsignedSaturationArithmeticOperations)
     }
 }
 
-TEST_F(TUtilTest, TestSignedSaturationConversion)
+TEST_F(TUtilTest, SignedSaturationConversion)
 {
     struct TTestCase
     {

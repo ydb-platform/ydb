@@ -7931,6 +7931,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         void SetTracking(bool trackResourceBrokerUsage) {
+            // a restarted hive takes its config from AppData
+            Runtime.GetAppData(0).HiveConfig.SetTrackResourceBrokerUsage(trackResourceBrokerUsage);
             Runtime.RunCall([&] {
                 LiveHive->UpdateConfig([&](auto& config) { config.SetTrackResourceBrokerUsage(trackResourceBrokerUsage); });
                 return 0;
@@ -7967,6 +7969,25 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         test.Runtime.SimulateSleep(TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL(test.QueueUsageRequests, requests);
         UNIT_ASSERT_VALUES_EQUAL(test.GetUsage(), 0);
+
+        // a zero acked by hive, but lost on its restart before persisted (TTxProcessTabletMetrics):
+        // nothing repairs the stale value while connected, local resends the zeros on reconnect
+        {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            auto* tabletMetrics = metrics->Record.AddTabletMetrics();
+            tabletMetrics->SetTabletID(test.TabletId);
+            auto* named = tabletMetrics->MutableResourceUsage()->AddNamedResources();
+            named->SetName(test.Resource);
+            named->SetValue(3);
+            test.Runtime.SendToPipe(test.HiveTablet, test.Sender, metrics.Release());
+            TAutoPtr<IEventHandle> handle;
+            test.Runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
+        }
+        test.Runtime.SimulateSleep(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(test.GetUsage(), 3);
+        RebootTablet(test.Runtime, test.HiveTablet, test.Sender);
+        test.WaitFor("stale queue usage was not reset after hive restart", [&] { return test.GetUsage() == 0; });
+        UNIT_ASSERT_VALUES_EQUAL(test.QueueUsageRequests, requests);
 
         test.SetTracking(true);
         test.WaitFor("queue usage was not reported to hive again", [&] { return test.GetUsage() == 3 && test.HasMaximum(); });

@@ -329,15 +329,15 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     // The status and the tablet metrics are sent by the caller (TEvPing handler)
     void StopQueueUsageTracking(const TActorContext& ctx) {
         YDB_LOG_INFO_CTX(ctx, "TLocalNodeRegistrar: resource broker usage tracking disabled");
-        // Hive keeps reported values until they are changed: reset them
-        for (const auto& [tabletId, reported] : ReportedQueueUsage) {
-            for (const auto& [name, value] : reported) {
+        // Hive keeps reported values until they are changed: reset them. The names stay, for ResendQueueUsageZeros
+        for (auto& [tabletId, reported] : ReportedQueueUsage) {
+            for (auto& [name, value] : reported) {
                 if (value != TQueueUsageValue{}) {
-                    ReportQueueUsage(tabletId, name, TQueueUsageValue{});
+                    value = TQueueUsageValue{};
+                    ReportQueueUsage(tabletId, name, value);
                 }
             }
         }
-        ReportedQueueUsage.clear();
         QueueLimits.clear();
     }
 
@@ -649,7 +649,11 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             NTabletPipe::SendData(ctx, HivePipeClient, eventSyncTablets.Release());
 
             Connected = true;
-            LastQueueUsageResend = TInstant::Zero(); // resend all queue usage with the next update
+            if (HiveSettings.GetTrackResourceBrokerUsage()) {
+                LastQueueUsageResend = TInstant::Zero(); // resend all queue usage with the next update
+            } else {
+                ResendQueueUsageZeros(); // sent by ScheduleSendTabletMetrics below
+            }
             YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing: connected to hive");
             for (const auto& tabletEntries : RetainedCutHistory) {
                 for (const auto& e : tabletEntries.second) {
@@ -1076,6 +1080,18 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             uit->second.UpdatedAfterSend = true;
         }
         return true;
+    }
+
+    // While the tracking is disabled, the zeros it left are resent on every connect (instead of the periodic
+    // resend): Hive acks metrics before it persists named resources (TTxProcessTabletMetrics), so a zero acked
+    // just before a Hive restart may be lost, and nothing else would ever repair it.
+    void ResendQueueUsageZeros() {
+        std::erase_if(ReportedQueueUsage, [&](const auto& item) { return !OnlineTablets.contains(item.first); });
+        for (const auto& [tabletId, reported] : ReportedQueueUsage) {
+            for (const auto& [name, value] : reported) {
+                ReportQueueUsage(tabletId, name, value);
+            }
+        }
     }
 
     void Handle(NResourceBroker::TEvResourceBroker::TEvQueueUsageResponse::TPtr& ev, const TActorContext& ctx) {

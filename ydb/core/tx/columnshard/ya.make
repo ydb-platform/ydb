@@ -6,6 +6,7 @@ SRCS(
     blob_cache.cpp
     columnshard_find_empty_history_intervals.cpp
     columnshard.cpp
+    columnshard_move_data.cpp
     columnshard__init.cpp
     columnshard__locks.cpp
     columnshard__notify_tx_completion.cpp
@@ -65,6 +66,7 @@ PEERDIR(
     ydb/core/tx/columnshard/loading
     ydb/core/tx/columnshard/local_db_backup
     ydb/core/tx/columnshard/maintenance/cut_history
+    ydb/core/tx/columnshard/maintenance/move_data
     ydb/core/tx/columnshard/normalizer
     ydb/core/tx/columnshard/operations
     ydb/core/tx/columnshard/overload_manager

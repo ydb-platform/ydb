@@ -406,9 +406,51 @@ namespace NTabletFlatExecutor {
             }
         }
 
+        bool HasRepeatedPlainDocuments(bool added) const {
+            NFulltext::TMultiDeltaReader merger;
+            merger.Reset(false /* withFreq */, Conf->FulltextKeySigned);
+            size_t segments = 0;
+            for (const auto& key : FtTokenBuf) {
+                if (!key.IsMergeable(FtMinRowVersion)) {
+                    continue;
+                }
+                const auto& ver = key.Versions[0];
+                if (ver.Row.Op == NTable::ERowOp::Erase || ver.Segment.empty() || ver.Added != added) {
+                    continue;
+                }
+                // Count occurrences within one sign group, including the removed group.
+                merger.Add(true, TConstArrayRef<ui8>((const ui8*)ver.Segment.data(), ver.Segment.size()));
+                ++segments;
+            }
+            if (segments < 2) {
+                return false;
+            }
+
+            merger.Start();
+            ui64 docId = 0;
+            ui32 freq = 0;
+            while (merger.Read(docId, freq)) {
+                if (freq > 1) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         // Flush all buffered keys for the current token
         void FlushFulltextToken() {
             if (FtTokenBuf.empty()) {
+                return;
+            }
+
+            if (!Conf->Params->IsFinal && !Conf->FulltextWithRelevance &&
+                (HasRepeatedPlainDocuments(false) || HasRepeatedPlainDocuments(true))) {
+                // Plain segments cannot encode multiplicity. Collapsing repeated additions or
+                // removals would change their balance with segments outside this compaction.
+                for (const auto& key : FtTokenBuf) {
+                    ReplayKey(key);
+                }
+                FtTokenBuf.clear();
                 return;
             }
 

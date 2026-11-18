@@ -255,6 +255,9 @@ namespace {
     // Read all fulltext rows from compacted output
     TVector<TFtRow> ReadFulltextRows(const TPartEggs& eggs) {
         TVector<TFtRow> rows;
+        if (eggs.Parts.empty()) {
+            return rows;
+        }
 
         NTest::TWrapPart wrap(eggs);
         NTest::TTestEnv env;
@@ -289,6 +292,21 @@ namespace {
             ready = wrap.Next();
         }
         return rows;
+    }
+
+    i64 DocumentBalance(const TVector<TFtRow>& rows, ui64 docId, TStringBuf prefix = {}) {
+        i64 balance = 0;
+        for (const auto& row : rows) {
+            if (row.RowOp != ERowOp::Upsert || row.Prefix != prefix) {
+                continue;
+            }
+            for (ui64 id : row.DocIds) {
+                if (id == docId) {
+                    balance += row.Added ? 1 : -1;
+                }
+            }
+        }
+        return balance;
     }
 
 } // anonymous namespace
@@ -595,6 +613,88 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
         UNIT_ASSERT_VALUES_EQUAL(rows[0].MaxId, 200);
         UNIT_ASSERT_VALUES_EQUAL(rows[0].Added, true);
         UNIT_ASSERT(rows[0].DocIds == (TVector<ui64>{1, 100, 101, 200}));
+    }
+
+    Y_UNIT_TEST(NonFinalRepeatedDeletes) {
+        auto lay = MakeFulltextLayout();
+        auto segment = MakeSegment({51});
+        auto base = NTest::TPartCook(lay, { false, 4096 }, {}, TEpoch::FromIndex(1))
+            .Ver({100, 1}).AddN(TString("hello"), Max<ui64>(), 51_u64, true, segment)
+            .Finish();
+        auto deltas = NTest::TPartCook(lay, { false, 4096 }, {}, TEpoch::FromIndex(2))
+            .Ver({100, 1}).AddN(TString("hello"), 10_u64, 51_u64, false, segment)
+            .Ver({100, 1}).AddN(TString("hello"), 20_u64, 51_u64, true, segment)
+            .Ver({100, 1}).AddN(TString("hello"), 30_u64, 51_u64, false, segment)
+            .Finish();
+
+        // The base insert is outside this compaction. Both deletes must retain their weight.
+        auto partial = TFulltextCompaction(false).Do(deltas, {100, 1});
+        UNIT_ASSERT_VALUES_EQUAL(DocumentBalance(ReadFulltextRows(partial), 51), -1);
+
+        auto direct = TFulltextCompaction(true).Do(lay.RowScheme(), { &base, &deltas }, {100, 1});
+        UNIT_ASSERT(ReadFulltextRows(direct).empty());
+        auto staged = TFulltextCompaction(true).Do(lay.RowScheme(), { &base, &partial }, {100, 1});
+        UNIT_ASSERT_C(ReadFulltextRows(staged).empty(), "Partial compaction resurrected a deleted document");
+    }
+
+    Y_UNIT_TEST(NonFinalRepeatedAdds) {
+        auto lay = MakeFulltextLayout();
+        auto segment = MakeSegment({51});
+        auto outside = NTest::TPartCook(lay, { false, 4096 }, {}, TEpoch::FromIndex(1))
+            .Ver({100, 1}).AddN(TString("hello"), 20_u64, 51_u64, false, segment)
+            .Finish();
+        auto deltas = NTest::TPartCook(lay, { false, 4096 }, {}, TEpoch::FromIndex(2))
+            .Ver({100, 1}).AddN(TString("hello"), 10_u64, 51_u64, true, segment)
+            .Ver({100, 1}).AddN(TString("hello"), 30_u64, 51_u64, true, segment)
+            .Finish();
+
+        // The intervening delete is in another part; merging just the inserts must preserve both.
+        auto partial = TFulltextCompaction(false).Do(deltas, {100, 1});
+        UNIT_ASSERT_VALUES_EQUAL(DocumentBalance(ReadFulltextRows(partial), 51), 2);
+
+        auto direct = TFulltextCompaction(true).Do(lay.RowScheme(), { &outside, &deltas }, {100, 1});
+        auto directRows = ReadFulltextRows(direct);
+        UNIT_ASSERT_VALUES_EQUAL(directRows.size(), 1);
+        UNIT_ASSERT(directRows[0].DocIds == (TVector<ui64>{51}));
+        auto staged = TFulltextCompaction(true).Do(lay.RowScheme(), { &outside, &partial }, {100, 1});
+        auto stagedRows = ReadFulltextRows(staged);
+        UNIT_ASSERT_VALUES_EQUAL(stagedRows.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stagedRows[0].Added, true);
+        UNIT_ASSERT(stagedRows[0].DocIds == directRows[0].DocIds);
+    }
+
+    Y_UNIT_TEST(NonFinalPrefixedRepeatedDeltas) {
+        auto lay = MakePrefixedFulltextLayout();
+        auto segment = MakeSegment({51});
+        auto base = NTest::TPartCook(lay, { false, 4096 }, {}, TEpoch::FromIndex(1))
+            .Ver({100, 1}).AddN(TString("hello"), Max<ui64>(), 51_u64, true, segment, TString("user1"))
+            .Finish();
+        auto deltas = NTest::TPartCook(lay, { false, 4096 }, {}, TEpoch::FromIndex(2))
+            .Ver({100, 1}).AddN(TString("hello"), 10_u64, 51_u64, false, segment, TString("user1"))
+            .Ver({100, 1}).AddN(TString("hello"), 20_u64, 51_u64, true, segment, TString("user1"))
+            .Ver({100, 1}).AddN(TString("hello"), 30_u64, 51_u64, false, segment, TString("user1"))
+            .Ver({100, 1}).AddN(TString("hello"), 10_u64, 51_u64, true, segment, TString("user2"))
+            .Ver({100, 1}).AddN(TString("hello"), 20_u64, 52_u64, true, MakeSegment({52}), TString("user2"))
+            .Finish();
+
+        auto partial = TFulltextCompaction(false).Do(deltas, {100, 1});
+        auto partialRows = ReadFulltextRows(partial);
+        UNIT_ASSERT_VALUES_EQUAL(DocumentBalance(partialRows, 51, "user1"), -1);
+        UNIT_ASSERT_VALUES_EQUAL(DocumentBalance(partialRows, 51, "user2"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(DocumentBalance(partialRows, 52, "user2"), 1);
+        // The independent prefix still merges its disjoint additions normally.
+        UNIT_ASSERT_VALUES_EQUAL(partialRows.back().Prefix, "user2");
+        UNIT_ASSERT(partialRows.back().DocIds == (TVector<ui64>{51, 52}));
+
+        auto direct = TFulltextCompaction(true).Do(lay.RowScheme(), { &base, &deltas }, {100, 1});
+        auto staged = TFulltextCompaction(true).Do(lay.RowScheme(), { &base, &partial }, {100, 1});
+        for (const auto* result : { &direct, &staged }) {
+            auto rows = ReadFulltextRows(*result);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rows[0].Prefix, "user2");
+            UNIT_ASSERT_VALUES_EQUAL(rows[0].Added, true);
+            UNIT_ASSERT(rows[0].DocIds == (TVector<ui64>{51, 52}));
+        }
     }
 
     Y_UNIT_TEST(NonFinalMultipleParts) {

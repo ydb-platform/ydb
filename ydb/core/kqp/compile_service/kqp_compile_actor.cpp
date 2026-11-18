@@ -1,5 +1,5 @@
 #include "kqp_compile_service.h"
-#include "kqp_warmup_compile_actor.h"
+#include <ydb/core/kqp/common/warmup/warmup.h>
 
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>

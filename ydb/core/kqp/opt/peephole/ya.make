@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/common
+    ydb/core/kqp/common/simple
     ydb/core/kqp/opt/physical
     ydb/library/accessor
     ydb/library/naming_conventions

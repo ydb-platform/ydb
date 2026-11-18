@@ -1,13 +1,13 @@
-#include "kqp.h"
+#include "query.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/util/proto_duration.h>
 
 #include <ydb/library/aclib/user_context.h>
 
-namespace NKikimr::NKqp {
+namespace NKikimr::NKqp::NPrivateEvents {
 
-TEvKqp::TEvQueryRequest::TEvQueryRequest(
+TEvQueryRequest::TEvQueryRequest(
     NKikimrKqp::EQueryAction queryAction,
     NKikimrKqp::EQueryType queryType,
     TActorId requestActorId,
@@ -60,7 +60,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     UserCtx = builder.Build();
 }
 
-TEvKqp::TEvQueryRequest::TEvQueryRequest(TIntrusivePtr<NACLib::TUserContext> userCtx) : TEvQueryRequest()
+TEvQueryRequest::TEvQueryRequest(TIntrusivePtr<NACLib::TUserContext> userCtx) : TEvQueryRequest()
 {
     UserCtx = userCtx;
     if (userCtx != nullptr) {
@@ -71,7 +71,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(TIntrusivePtr<NACLib::TUserContext> use
     }
 }
 
-TIntrusivePtr<NACLib::TUserContext> TEvKqp::TEvQueryRequest::GetUserCtx()
+TIntrusivePtr<NACLib::TUserContext> TEvQueryRequest::GetUserCtx()
 {
     if (UserCtx != nullptr) {
         return UserCtx;
@@ -87,7 +87,7 @@ TIntrusivePtr<NACLib::TUserContext> TEvKqp::TEvQueryRequest::GetUserCtx()
     return UserCtx;
 }
 
-void TEvKqp::TEvQueryRequest::PrepareRemote() const {
+void TEvQueryRequest::PrepareRemote() const {
     if (RequestCtx) {
         if (RequestCtx->GetSerializedToken()) {
             Record.SetUserToken(RequestCtx->GetSerializedToken());

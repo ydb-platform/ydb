@@ -348,6 +348,7 @@ namespace {
         YDB_LOG_DEBUG("TDDiskActor::Bootstrap",
             {"marker", "BSDD09"},
             {"DDiskId", DDiskId});
+        PublishHealthAndSchedule();
         if (IsPersistentBufferActor) {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
@@ -367,6 +368,31 @@ namespace {
             }
             InitPDiskInterface();
         }
+    }
+
+    void TDDiskActor::PublishHealth() {
+        using TStatus = NKikimrWhiteboard::TDDiskStateInfo;
+        auto status = TStatus::Initializing;
+        TString reason;
+        // Preserve the failure reason while a broken actor drains during shutdown.
+        if (Broken) {
+            status = TStatus::Broken;
+            reason = BrokenReason;
+        } else if (Stopping) {
+            status = TStatus::Stopping;
+            reason = HealthStoppingReason;
+        } else if (IsPersistentBufferActor ? PersistentBufferReady : LogReplayComplete) {
+            status = TStatus::Ready;
+        }
+
+        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
+            new NNodeWhiteboard::TEvWhiteboard::TEvDDiskHealthUpdate(BaseInfo.PDiskId, BaseInfo.VDiskSlotId,
+                BaseInfo.InitOwnerRound, IsPersistentBufferActor, status, std::move(reason), HealthReportPeriod * 3));
+    }
+
+    void TDDiskActor::PublishHealthAndSchedule() {
+        PublishHealth();
+        Schedule(HealthReportPeriod, new TEvPrivate::TEvPublishHealth());
     }
 
     bool TDDiskActor::IsBroken() const {
@@ -396,6 +422,7 @@ namespace {
         BrokenReason = reason
             ? std::move(reason)
             : TString("DDisk is broken");
+        PublishHealth();
         CancelRetries();
 
         YDB_LOG_ERROR("TDDiskActor entered Broken state",
@@ -529,6 +556,7 @@ namespace {
             hFunc(NMon::TEvHttpInfo, Handle)
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
+            cFunc(TEvPrivate::EvPublishHealth, PublishHealthAndSchedule)
             cFunc(TEvents::TSystem::Poison, PassAway)
             cFunc(TEvPrivate::EvBeginStopping, HandleBeginStopping)
         )
@@ -586,6 +614,7 @@ namespace {
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
+            cFunc(TEvPrivate::EvPublishHealth, PublishHealthAndSchedule)
             cFunc(TEvents::TSystem::Poison, PassAway)
             cFunc(TEvPrivate::EvBeginStopping, HandleBeginStopping)
 
@@ -770,6 +799,7 @@ namespace {
             cFunc(TEvPrivate::EvFinishStopping, FinishStopping)
             cFunc(TEvPrivate::EvCompleteStop, CompleteStop)
             cFunc(TEvPrivate::EvStopIoTimeout, HandleStopIoTimeout)
+            cFunc(TEvPrivate::EvPublishHealth, PublishHealthAndSchedule)
             hFunc(TEvCollectTabletStats, Handle)
             hFunc(TEvGetTabletStats, Handle)
             hFunc(NMon::TEvHttpInfo, Handle)
@@ -796,6 +826,8 @@ namespace {
             return;
         }
         Stopping = true;
+        HealthStoppingReason = reason;
+        PublishHealth();
         MemoryMetric.Close();
         SpaceMetric.Close();
         OperationMetric.Close();
@@ -848,9 +880,10 @@ namespace {
         UringRouter.reset();
 #endif
         CountersBase->RemoveSubgroupChain(CountersChain);
+        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
+            new NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateDelete(BaseInfo.PDiskId, BaseInfo.VDiskSlotId,
+                BaseInfo.InitOwnerRound, IsPersistentBufferActor));
         if (IsPersistentBufferActor) {
-            Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
-                new NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateDelete(BaseInfo.PDiskId, BaseInfo.VDiskSlotId, BaseInfo.InitOwnerRound));
             if (ParentDDiskId) {
                 Send(ParentDDiskId, new TEvents::TEvGone());
             }

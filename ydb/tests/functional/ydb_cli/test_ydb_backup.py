@@ -1432,10 +1432,17 @@ class TestPermissionsBackupRestoreFolderWithTable(BasePermissionsBackupRestore):
             self.merge_permissions(folder_effective_permissions, table_permissions),
         )
 
-        # The folder still grants data access; isolate the archived table before backing it up.
+        # Temporarily isolate the table from the folder's data-access policy.
         self.execute_ydb_cli_command(["scheme", "permissions", "clear-inheritance", "folder/table"])
         self.assert_permissions(
             "/Root/folder/table", table_permissions, table_permissions, interrupted=True, check_listing=True,
+        )
+
+        # Return it to the shared policy before backing up the folder.
+        self.execute_ydb_cli_command(["scheme", "permissions", "set-inheritance", "folder/table"])
+        table_effective_permissions = self.merge_permissions(folder_effective_permissions, table_permissions)
+        self.assert_permissions(
+            "/Root/folder/table", table_permissions, table_effective_permissions, check_listing=True,
         )
 
         # Backup folder with table
@@ -1482,18 +1489,13 @@ class TestPermissionsBackupRestoreFolderWithTable(BasePermissionsBackupRestore):
         )
         self.assert_permissions("/Root/restored/folder", folder_permissions, folder_effective_permissions)
         self.assert_permissions(
-            "/Root/restored/folder/table", table_permissions, table_permissions, interrupted=True,
+            "/Root/restored/folder/table", table_permissions, table_effective_permissions,
         )
 
-        # Return the restored table to the shared folder policy and discard its local exception.
-        self.execute_ydb_cli_command(["scheme", "permissions", "set-inheritance", "restored/folder/table"])
-        self.assert_permissions(
-            "/Root/restored/folder/table", table_permissions,
-            self.merge_permissions(folder_effective_permissions, table_permissions),
-        )
+        # Discard the restored table's local exception without changing its source.
         self.execute_ydb_cli_command(["scheme", "permissions", "clear", "restored/folder/table"])
         self.assert_permissions("/Root/restored/folder/table", {}, folder_effective_permissions, check_listing=True)
-        self.assert_permissions("/Root/folder/table", table_permissions, table_permissions, interrupted=True)
+        self.assert_permissions("/Root/folder/table", table_permissions, table_effective_permissions)
 
 
 class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupInFiles):

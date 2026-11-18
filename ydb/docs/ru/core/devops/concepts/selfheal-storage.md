@@ -24,7 +24,7 @@ SelfHeal может переносить VDisk динамических груп
 
 Sentinel продолжает следить за фактическим состоянием PDisk, поэтому реальные неисправности обрабатываются независимо от статуса обслуживания. Когда CMS снимает запрос на вывод VDisk, Sentinel сбрасывает статус обслуживания в `NO_REQUEST`.
 
-Для проверки статусов во время переноса используйте [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md). Перед выполнением команды [установите утилиту](../../reference/ydb-dstool/install.md) и настройте [подключение и аутентификацию](../../reference/ydb-dstool/connect.md):
+Для проверки статусов во время переноса выполните команду [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
 
 ```bash
 ydb-dstool -e <bs_endpoint> pdisk list

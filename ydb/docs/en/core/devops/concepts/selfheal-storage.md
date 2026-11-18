@@ -24,7 +24,7 @@ Relocation within a group proceeds sequentially. Before each relocation, the oth
 
 Sentinel continues monitoring the actual PDisk state, so real faults are handled independently of the maintenance status. When CMS removes the VDisk eviction request, Sentinel resets the maintenance status to `NO_REQUEST`.
 
-To check the statuses during relocation, use [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md). Before running the command, [install the utility](../../reference/ydb-dstool/install.md) and configure [connection and authentication](../../reference/ydb-dstool/connect.md):
+To check the statuses during relocation, run the following [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md) command:
 
 ```bash
 ydb-dstool -e <bs_endpoint> pdisk list

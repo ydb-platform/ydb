@@ -14,6 +14,8 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
+#include <functional>
+
 namespace NKikimr {
 namespace NKqp {
 class TTestHelper {
@@ -99,5 +101,36 @@ public:
     void RebootTablets(const TString& tableName);
     void WaitTabletDeletionInHive(ui64 tabletId, TDuration duration);
 };
+
+TString BuildOlapJsonValueTopHostsQuery(bool useRbo);
+
+class TOlapJsonValueProjectionSuite {
+public:
+    virtual ~TOlapJsonValueProjectionSuite() = default;
+
+    void CheckTopHostsSemiJoin() const;
+    void CheckAggregationBranches(bool threeBranches, bool nestedJsonValue) const;
+    void CheckDifferentSharedPaths() const;
+    void CheckRawColumn() const;
+    void CheckWholeRowInSecondaryHandler() const;
+
+protected:
+    virtual TKikimrSettings CreateSettings() const = 0;
+    virtual TString CreateTopHostsQuery() const = 0;
+    virtual NYdb::NQuery::TExecuteQueryResult ExecuteQuery(TKikimrRunner& kikimr, NYdb::NQuery::TSession& session, const TString& query) const = 0;
+
+private:
+    void CheckQuery(const TString& query, void (*createRows)(TKikimrRunner&), bool expectPushdown, bool expectSingleRead,
+                    const std::function<void(const NYdb::TResultSet&)>& assertResult) const;
+};
+
+#define YDB_OLAP_JSON_VALUE_PROJECTION_TESTS(TImpl) \
+    Y_UNIT_TEST(ProjectionPushDownForTopHostsSemiJoin) { TImpl().CheckTopHostsSemiJoin(); } \
+    Y_UNIT_TEST(ProjectionPushDownForTwoAggregationBranches) { TImpl().CheckAggregationBranches(false, false); } \
+    Y_UNIT_TEST(ProjectionPushDownForThreeAggregationBranches) { TImpl().CheckAggregationBranches(true, false); } \
+    Y_UNIT_TEST(ProjectionPushDownForNestedAggregationBranches) { TImpl().CheckAggregationBranches(false, true); } \
+    Y_UNIT_TEST(ProjectionPushDownRejectsDifferentSharedPaths) { TImpl().CheckDifferentSharedPaths(); } \
+    Y_UNIT_TEST(ProjectionPushDownPreservesSharedRawColumn) { TImpl().CheckRawColumn(); }
+
 }
 }

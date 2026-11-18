@@ -2733,6 +2733,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    class TOldOlapJsonValueProjectionSuite final : public TOlapJsonValueProjectionSuite {
+    protected:
+        TKikimrSettings CreateSettings() const override {
+            auto settings = TKikimrSettings().SetWithSampleTables(false);
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+            return settings;
+        }
+
+        TString CreateTopHostsQuery() const override {
+            // Query is rewritten as a join.
+            // The legacy translator accepts aliases defined in GROUP BY.
+            return BuildOlapJsonValueTopHostsQuery(false);
+        }
+
+        NYdb::NQuery::TExecuteQueryResult ExecuteQuery(TKikimrRunner&, NYdb::NQuery::TSession& session, const TString& query) const override {
+            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        }
+    };
+
+    YDB_OLAP_JSON_VALUE_PROJECTION_TESTS(TOldOlapJsonValueProjectionSuite)
+
+    Y_UNIT_TEST(ProjectionPushDownPreservesWholeRowInSecondaryHandler) {
+        TOldOlapJsonValueProjectionSuite().CheckWholeRowInSecondaryHandler();
+    }
+
     // Unit tests for datetime pushdowns in query service
     Y_UNIT_TEST(PredicatePushdown_Datetime_QS) {
         auto settings = TKikimrSettings()

@@ -1,5 +1,9 @@
 #include "columnshard.h"
 
+#include <util/string/printf.h>
+
+#include <vector>
+
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
@@ -332,3 +336,272 @@ namespace NKqp {
 
 }
 }
+
+namespace NKikimr::NKqp {
+
+namespace {
+
+void CreateOlapJsonValueAggregationRows(TKikimrRunner& kikimr) {
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+    auto create = session.ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/docs` (id Uint64 NOT NULL, labels JsonDocument, PRIMARY KEY (id))
+            PARTITION BY HASH(id) WITH (STORE = COLUMN);
+    )").GetValueSync();
+    UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+    NYdb::TValueBuilder rows;
+    rows.BeginList();
+    for (const auto& [id, labels] : std::vector<std::pair<ui64, TString>>{
+             {1, R"({"host":"a1"})"}, {2, R"({"host":"a1"})"}, {3, R"({"host":"a2"})"}, {4, "{}"}}) {
+        rows.AddListItem()
+            .BeginStruct()
+            .AddMember("id")
+            .Uint64(id)
+            .AddMember("labels")
+            .JsonDocument(labels)
+            .EndStruct();
+    }
+    rows.EndList();
+    auto insert = db.BulkUpsert("/Root/docs", rows.Build()).GetValueSync();
+    UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+}
+
+void CreateOlapJsonValueTopHostsRows(TKikimrRunner& kikimr) {
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    auto create = session.ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/foo` (
+            timestamp Timestamp NOT NULL,
+            id Uint64 NOT NULL,
+            labels JsonDocument,
+            PRIMARY KEY (timestamp, id)
+        ) WITH (STORE = COLUMN);
+    )")
+                      .GetValueSync();
+    UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+    auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+    auto insert = querySession.ExecuteQuery(R"(
+        INSERT INTO `/Root/foo` (timestamp, id, labels) VALUES
+            (Timestamp("1970-01-01T00:00:03.000001Z"), 1, JsonDocument('{"host":"a1"}')),
+            (Timestamp("1970-01-01T00:00:03.000002Z"), 2, JsonDocument('{"host":"a1"}')),
+            (Timestamp("1970-01-01T00:00:03.000003Z"), 3, JsonDocument('{"host":"a2"}')),
+            (Timestamp("1970-01-01T00:00:03.000004Z"), 4, JsonDocument('{}'));
+    )", NYdb::NQuery::TTxControl::NoTx())
+                      .GetValueSync();
+    UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+}
+
+const TString OlapJsonValueQueryPrefix = R"(
+    PRAGMA YqlSelect = 'force';
+    PRAGMA YqlSelectAllowUnnamedGroupByExpr;
+    PRAGMA Kikimr.OptEnableOlapPushdownProjections = 'true';
+    $rows = SELECT id, labels FROM `/Root/docs`;
+    $by_host = SELECT JSON_VALUE(labels, '$.host') AS host, COUNT(*) AS cnt
+        FROM $rows GROUP BY JSON_VALUE(labels, '$.host');
+)";
+
+TString BuildOlapJsonValueAggregationQuery(bool threeBranches, bool nestedJsonValue) {
+    const char* hostExpr = nestedJsonValue ? "COALESCE(JSON_VALUE(labels, '$.host'), '')" : "JSON_VALUE(labels, '$.host')";
+    const TString prefix = OlapJsonValueQueryPrefix + Sprintf(R"(
+        $by_host_id = SELECT %s AS host, id, COUNT(*) AS cnt
+            FROM $rows GROUP BY %s, id;
+    )", hostExpr, hostExpr);
+    const TString suffix = threeBranches ? R"(
+        $by_host_id3 = SELECT JSON_VALUE(labels, '$.host') AS host, id / 3 AS bucket, COUNT(*) AS cnt
+            FROM $rows GROUP BY JSON_VALUE(labels, '$.host'), id / 3;
+        SELECT a.host, a.cnt, b.cnt, c.cnt FROM $by_host AS a
+            INNER JOIN $by_host_id AS b ON a.host = b.host
+            INNER JOIN $by_host_id3 AS c ON a.host = c.host
+            ORDER BY a.host, b.id, c.bucket;
+    )" : R"(
+        SELECT a.host, a.cnt, b.cnt FROM $by_host AS a
+            INNER JOIN $by_host_id AS b ON a.host = b.host
+            ORDER BY a.host, b.id;
+    )";
+    return prefix + suffix;
+}
+
+TString BuildOlapJsonValueDifferentPathsQuery() {
+    return OlapJsonValueQueryPrefix + R"(
+        $by_zone = SELECT JSON_VALUE(labels, '$.zone') AS zone, id, COUNT(*) AS cnt
+            FROM $rows GROUP BY JSON_VALUE(labels, '$.zone'), id;
+        SELECT a.host, b.zone FROM $by_host AS a
+            INNER JOIN $by_zone AS b ON a.host = b.zone;
+    )";
+}
+
+TString BuildOlapJsonValueRawColumnQuery() {
+    return OlapJsonValueQueryPrefix + R"(
+        $by_host_id = SELECT id, JSON_VALUE(labels, '$.host') AS host, labels AS raw_labels
+            FROM $rows;
+        SELECT b.id, b.raw_labels, a.host FROM $by_host AS a
+            INNER JOIN $by_host_id AS b ON a.host = b.host
+            ORDER BY b.id;
+    )";
+}
+
+TString BuildOlapJsonValueWholeRowInSecondaryHandlerQuery(bool pushdown) {
+    // Condense1 uses JSON_VALUE in $init and the whole row in $update
+    return Sprintf(R"(
+        PRAGMA Kikimr.OptEnableOlapPushdownProjections = '%s';
+        $init = ($row) -> (AsStruct(JSON_VALUE($row.labels, '$.host') AS host, '' AS raw));
+        $switch = ($row, $state) -> (false);
+        $update = ($row, $state) -> (AsStruct($state.host AS host, Pickle($row) AS raw));
+        $rows = SELECT labels FROM `/Root/docs`;
+        $condense = ($input) -> (YQL::Condense1($input, $init, $switch, $update));
+        $condensed = (PROCESS $rows USING $condense(TableRows()));
+        $by_host = SELECT JSON_VALUE(labels, '$.host') AS host FROM $rows;
+        SELECT c.raw, b.host FROM $condensed AS c CROSS JOIN $by_host AS b ORDER BY c.raw, b.host;
+    )", pushdown ? "true" : "false");
+}
+
+} // namespace
+
+TString BuildOlapJsonValueTopHostsQuery(bool useRbo) {
+    if (!useRbo) {
+        return R"(
+        $from = Timestamp("1970-01-01T00:00:03Z");
+        $to = Timestamp("1970-01-01T00:00:04Z");
+        SELECT min(`timestamp`) AS bucket, column, count(*) AS cnt
+        FROM `/Root/foo`
+        WHERE `timestamp` >= $from AND `timestamp` < $to
+            AND JSON_VALUE(labels, '$.host') IN (
+                SELECT column FROM (
+                    SELECT column, count(*) AS total
+                    FROM `/Root/foo`
+                    WHERE `timestamp` >= $from AND `timestamp` < $to
+                    GROUP BY JSON_VALUE(labels, '$.host') AS column
+                    ORDER BY total DESC
+                    LIMIT 10
+                )
+            )
+        GROUP BY CAST(`timestamp` AS Int64) / 300 / 1000000, JSON_VALUE(labels, '$.host') AS column
+        ORDER BY bucket, column;
+        )";
+    } else {
+        // RBO does not support `JSON_VALUE(labels, '$.host') IN (SELECT ...)` form
+        // so rewrite the query with named rows
+        return R"(
+        PRAGMA YqlSelectAllowUnnamedGroupByExpr;
+        $from = Timestamp("1970-01-01T00:00:03Z");
+        $to = Timestamp("1970-01-01T00:00:04Z");
+        $rows = SELECT `timestamp`, labels
+            FROM `/Root/foo`
+            WHERE `timestamp` >= $from AND `timestamp` < $to;
+        $top_rows = SELECT JSON_VALUE(labels, '$.host') AS column FROM $rows;
+        $top = SELECT column, count(*) AS total FROM $top_rows
+            GROUP BY column ORDER BY total DESC LIMIT 10;
+        $bucket_rows = SELECT `timestamp`, JSON_VALUE(labels, '$.host') AS column FROM $rows;
+        SELECT min(`timestamp`) AS bucket, column, count(*) AS cnt FROM $bucket_rows
+            WHERE column IN (SELECT column FROM $top)
+            GROUP BY CAST(`timestamp` AS Int64) / 300 / 1000000, column
+            ORDER BY bucket, column;
+        )";
+    }
+}
+
+namespace {
+
+void AssertOlapJsonValueRawColumnResult(const NYdb::TResultSet& result) {
+    NYdb::TResultSetParser parser(result);
+    for (const auto& [id, host] : std::vector<std::pair<ui64, TString>>{{1, "a1"}, {2, "a1"}, {3, "a2"}}) {
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), id);
+        UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(1).GetOptionalJsonDocument(),
+                                 Sprintf(R"({"host":"%s"})", host.c_str()));
+        UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(2).GetOptionalUtf8(), host);
+    }
+    UNIT_ASSERT(!parser.TryNextRow());
+}
+
+void AssertOlapJsonValueProjectionPushdown(const TString& ast) {
+    UNIT_ASSERT_C(ast.find("KqpOlapProjections") != TString::npos, ast);
+    UNIT_ASSERT_C(ast.find("KqpOlapJsonValue") != TString::npos, ast);
+    UNIT_ASSERT_C(ast.find("Json2.JsonDocumentSqlValueConvertToUtf8") == TString::npos, ast);
+}
+
+void AssertOlapJsonValueProjectionNotPushedDown(TStringBuf ast) {
+    UNIT_ASSERT_C(ast.find("KqpOlapProjections") == TStringBuf::npos, ast);
+    UNIT_ASSERT_C(ast.find("Json2.JsonDocumentSqlValueConvertToUtf8") != TStringBuf::npos, ast);
+}
+
+// This is a test precondition to ensure that setup is correct for Replicate tests.
+void AssertSingleRead(const TString& ast) {
+    constexpr TStringBuf read = "KqpBlockReadOlapTableRanges";
+    const auto first = ast.find(read);
+    UNIT_ASSERT_C(first != TString::npos, ast);
+    UNIT_ASSERT_C(ast.find(read, first + 1) == TString::npos, ast);
+}
+
+} // namespace
+
+void TOlapJsonValueProjectionSuite::CheckQuery(const TString& query, void (*createRows)(TKikimrRunner&), bool expectPushdown, bool expectSingleRead,
+                                               const std::function<void(const NYdb::TResultSet&)>& assertResult) const {
+    TKikimrRunner kikimr(CreateSettings());
+    createRows(kikimr);
+    auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+    auto execution = ExecuteQuery(kikimr, session, query);
+    UNIT_ASSERT_C(execution.IsSuccess(), execution.GetIssues().ToString());
+    assertResult(execution.GetResultSet(0));
+
+    auto explain =
+        session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain))
+            .GetValueSync();
+    UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+    const TString ast(*explain.GetStats()->GetAst());
+    if (expectSingleRead) {
+        AssertSingleRead(ast);
+    }
+    if (expectPushdown) {
+        AssertOlapJsonValueProjectionPushdown(ast);
+    } else {
+        AssertOlapJsonValueProjectionNotPushedDown(ast);
+    }
+}
+
+void TOlapJsonValueProjectionSuite::CheckTopHostsSemiJoin() const {
+    CheckQuery(CreateTopHostsQuery(), CreateOlapJsonValueTopHostsRows, true, false,
+               [](const NYdb::TResultSet& result) { CompareYson(FormatResultSetYson(result), R"([[3000001u;["a1"];2u];[3000003u;["a2"];1u]])"); });
+}
+
+void TOlapJsonValueProjectionSuite::CheckAggregationBranches(bool threeBranches, bool nestedJsonValue) const {
+    const TString expectedResult =
+        threeBranches ? R"([[["a1"];2u;1u;2u];[["a1"];2u;1u;2u];[["a2"];1u;1u;1u]])" : R"([[["a1"];2u;1u];[["a1"];2u;1u];[["a2"];1u;1u]])";
+    CheckQuery(BuildOlapJsonValueAggregationQuery(threeBranches, nestedJsonValue), CreateOlapJsonValueAggregationRows, true, true,
+               [&expectedResult](const NYdb::TResultSet& result) { CompareYson(FormatResultSetYson(result), expectedResult); });
+}
+
+void TOlapJsonValueProjectionSuite::CheckDifferentSharedPaths() const {
+    // A shared read currently pushes only one JSON_VALUE path.
+    CheckQuery(BuildOlapJsonValueDifferentPathsQuery(), CreateOlapJsonValueAggregationRows, false, true,
+               [](const NYdb::TResultSet& result) { CompareYson(FormatResultSetYson(result), "[]"); });
+}
+
+void TOlapJsonValueProjectionSuite::CheckRawColumn() const {
+    CheckQuery(BuildOlapJsonValueRawColumnQuery(), CreateOlapJsonValueAggregationRows, false, true, AssertOlapJsonValueRawColumnResult);
+}
+
+void TOlapJsonValueProjectionSuite::CheckWholeRowInSecondaryHandler() const {
+    TKikimrRunner kikimr(CreateSettings());
+    CreateOlapJsonValueAggregationRows(kikimr);
+    auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+    auto baseline = session.ExecuteQuery(BuildOlapJsonValueWholeRowInSecondaryHandlerQuery(false), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+    UNIT_ASSERT_C(baseline.IsSuccess(), baseline.GetIssues().ToString());
+    NYdb::TResultSetParser baselineParser(baseline.GetResultSet(0));
+    UNIT_ASSERT(baselineParser.TryNextRow());
+
+    const auto query = BuildOlapJsonValueWholeRowInSecondaryHandlerQuery(true);
+    auto execution = ExecuteQuery(kikimr, session, query);
+    UNIT_ASSERT_C(execution.IsSuccess(), execution.GetIssues().ToString());
+    auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                        NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain))
+                       .GetValueSync();
+    UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+    AssertOlapJsonValueProjectionNotPushedDown(*explain.GetStats()->GetAst());
+    CompareYson(FormatResultSetYson(execution.GetResultSet(0)), FormatResultSetYson(baseline.GetResultSet(0)));
+}
+
+} // namespace NKikimr::NKqp

@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_olap_filter.h>
 #include <ydb/core/kqp/opt/physical/predicate_collector.h>
+#include <ydb/core/kqp/opt/rbo/kqp_expression.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
@@ -56,6 +57,198 @@ bool IsSuitableToPushProjectionToColumnTables(IOperator* input) {
     const auto maybeRead = GetReadUnderMap(map->GetInput().Get());
     return ((maybeRead->Kind == EOperator::Source) && (CastOperator<TOpRead>(maybeRead)->GetTableStorageType() == NYql::EStorageType::ColumnStorage) &&
             map->GetTypeAnn());
+}
+
+TIntrusivePtr<TOpRead> BuildReadWithOlapProjections(const TOpRead& read,
+                                                    const TVector<std::pair<TString, TExprNode::TPtr>>& operations,
+                                                    TExprContext& ctx) {
+    TVector<TExprBase> projections;
+    for (const auto& [columnName, olapOperation] : operations) {
+        // clang-format off
+        projections.push_back(Build<TKqpOlapProjection>(ctx, olapOperation->Pos())
+            .OlapOperation(olapOperation)
+            .ColumnName().Build(columnName)
+        .Done());
+        // clang-format on
+    }
+
+    const auto olapProcess = read.OlapFilterLambda ? TCoLambda(read.OlapFilterLambda) :
+                                                   // clang-format off
+        Build<TCoLambda>(ctx, read.Pos)
+            .Args({"arg_0"})
+            .Body("arg_0")
+        .Done();
+    // clang-format on
+
+    // clang-format off
+    auto olapProjections = Build<TKqpOlapProjections>(ctx, olapProcess.Pos())
+        .Input(olapProcess.Body())
+        .Projections()
+            .Add(projections)
+        .Build()
+    .Done();
+    auto newLambda = Build<TCoLambda>(ctx, olapProcess.Pos())
+        .Args({"arg"})
+        .Body<TExprApplier>()
+            .Apply(olapProjections)
+            .With(olapProcess.Args().Arg(0), "arg")
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+
+    YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP projection: " << KqpExprToPrettyString(TExprBase(newLambda), ctx);
+    return MakeIntrusive<TOpRead>(read.Alias, read.GetColumns(), read.StorageType, read.TableCallable, newLambda,
+                                  read.Limit, read.RangeInfo, read.OriginalPredicate, read.SortDir, read.Props,
+                                  read.Pos, read.RequireSortedRead);
+}
+
+struct TReplicatePortJsonValue {
+    TOpMap* Map;
+    TInfoUnitId Output;
+    TInfoUnitId SourceColumn;
+    TInfoUnitId PortColumn;
+    TString Path;
+    TExprNode::TPtr Lambda;
+};
+
+struct TReplicateJsonValueBranchRewrite {
+    TOpMap* Map;
+    TInfoUnitId Output;
+    TExprNode::TPtr Lambda;
+    TExprNode::TPtr OlapOperation;
+};
+
+struct TReplicateJsonValueRewrite {
+    TInfoUnitId SourceColumn;
+    TExprNode::TPtr OlapOperation;
+    TVector<TReplicateJsonValueBranchRewrite> Branches;
+};
+
+std::optional<std::pair<TInfoUnitId, TInfoUnitId>> FindReplicateSourceAndPortColumns(TOpReplicate& port, TOpRead& read, TInfoUnitId memberId) {
+    for (const auto source : read.GetOutputIUs()) {
+        const auto portColumn = port.IsPrimary() ? source : port.GetRebindings().At(source);
+        if (memberId == portColumn) {
+            return std::pair{source, portColumn};
+        }
+    }
+    return std::nullopt;
+}
+
+bool UsesSourceOutsideJsonValue(const TExprNode::TPtr& node, const TExprNode& jsonValue,
+                                const TExprNode& rowArg, TStringBuf column) {
+    return !!FindNode(node,
+                      [&jsonValue, &rowArg](const TExprNode::TPtr& current) {
+            if (current.Get() == &jsonValue) {
+                return false;
+            }
+            const auto member = TMaybeNode<TCoMember>(current);
+            return !(member && member.Cast().Struct().Raw() == &rowArg);
+        },
+                      [&rowArg, column](const TExprNode::TPtr& current) {
+            if (const auto member = TMaybeNode<TCoMember>(current); member && member.Cast().Struct().Raw() == &rowArg) {
+                return member.Cast().Name().StringValue() == column;
+            }
+            return current.Get() == &rowArg;
+        });
+}
+
+std::optional<TReplicatePortJsonValue> FindReplicatePortJsonValue(TOpReplicate& port, TOpRead& read) {
+    if (port.Parents.size() != 1 || port.Parents.front().first->Kind != EOperator::Map) {
+        return std::nullopt;
+    }
+    auto* map = CastOperator<TOpMap>(port.Parents.front().first);
+    if (map->GetInput().Get() != &port) {
+        return std::nullopt;
+    }
+
+    std::optional<TReplicatePortJsonValue> result;
+    for (const auto& [id, element] : map->GetMapElements().Items()) {
+        const auto lambda = TCoLambda(element.GetExpression().Node);
+        const auto jsonValues = FindNodes(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) {
+            return TCoJsonValue::Match(node.Get());
+        });
+        if (jsonValues.empty()) {
+            continue;
+        }
+        if (result || jsonValues.size() != 1 || lambda.Args().Size() != 1) {
+            return std::nullopt;
+        }
+        const auto jsonValue = TCoJsonValue(jsonValues.front());
+        const auto member = jsonValue.Json().Maybe<TCoMember>();
+        if (!member || !CanBePushedAsOlapJsonValue(jsonValue, lambda.Args().Arg(0).Raw()) ||
+            member.Cast().Struct().Raw() != lambda.Args().Arg(0).Raw()) {
+            return std::nullopt;
+        }
+        const auto columns = FindReplicateSourceAndPortColumns(port, read, GetMemberId(member.Cast().Ref()));
+        if (!columns || GetLiveOut(map).Contains(columns->second) ||
+            UsesSourceOutsideJsonValue(lambda.Body().Ptr(), jsonValue.Ref(), lambda.Args().Arg(0).Ref(),
+                                       member.Cast().Name().StringValue())) {
+            return std::nullopt;
+        }
+        result.emplace(TReplicatePortJsonValue{map, id, columns->first, columns->second,
+            TString(jsonValue.JsonPath().Cast<TCoUtf8>().Literal().Value()), lambda.Ptr()});
+    }
+    return result;
+}
+
+std::optional<TReplicateJsonValueBranchRewrite> BuildReplicateJsonValueBranchRewrite(
+    const TReplicatePortJsonValue& portJsonValue, TRBOContext& ctx) {
+    const auto lambda = TCoLambda(portJsonValue.Lambda);
+    THashSet<TString> projectionMembers;
+    TVector<std::tuple<TString, TExprNode::TPtr, TExprNode::TPtr, TExprNode::TPtr>> candidates;
+    ui32 nextMemberId = 0;
+    if (!CollectOlapOperationForProjection(lambda.Body().Ptr(), lambda.Args().Arg(0).Ref(), {},
+                                           projectionMembers, candidates, nextMemberId, ctx.ExprCtx,
+                                           TPushdownOptions(false, false, false)) ||
+        candidates.size() != 1) {
+        return std::nullopt;
+    }
+    for (const auto& [otherId, otherElement] : portJsonValue.Map->GetMapElements().Items()) {
+        if (otherId != portJsonValue.Output && otherElement.GetExpression().GetRawInputIUs().Contains(portJsonValue.PortColumn)) {
+            return std::nullopt;
+        }
+    }
+    const auto replacement = std::get<2>(candidates.front());
+    const auto rewrittenBody = ctx.ExprCtx.ReplaceNode(lambda.Body().Ptr(), *std::get<1>(candidates.front()), replacement);
+    auto newLambda = Build<TCoLambda>(ctx.ExprCtx, lambda.Pos())
+                         .Args({"arg"})
+                         .Body<TExprApplier>()
+                         .Apply(TExprBase(rewrittenBody))
+                         .With(lambda.Args().Arg(0), "arg")
+                         .Build()
+                         .Done()
+                         .Ptr();
+    return TReplicateJsonValueBranchRewrite{ portJsonValue.Map, portJsonValue.Output, std::move(newLambda), std::get<3>(candidates.front()) };
+}
+
+std::optional<TReplicateJsonValueRewrite> BuildReplicateJsonValueRewrite(TReplicate& hub, TOpRead& read, TRBOContext& ctx) {
+    TVector<TReplicateJsonValueBranchRewrite> branches;
+    std::optional<TInfoUnitId> sourceColumn;
+    TString path;
+    TExprNode::TPtr olapOperation;
+
+    for (auto* port : hub.GetOutputs()) {
+        const auto portJsonValue = FindReplicatePortJsonValue(*port, read);
+        if (!portJsonValue || (sourceColumn && (*sourceColumn != portJsonValue->SourceColumn || path != portJsonValue->Path))) {
+            return std::nullopt;
+        }
+
+        auto branch = BuildReplicateJsonValueBranchRewrite(*portJsonValue, ctx);
+        if (!branch) {
+            return std::nullopt;
+        }
+        sourceColumn = portJsonValue->SourceColumn;
+        path = portJsonValue->Path;
+        if (port->IsPrimary()) {
+            olapOperation = branch->OlapOperation;
+        }
+        branches.push_back(std::move(*branch));
+    }
+
+    if (!sourceColumn || !olapOperation) {
+        return std::nullopt;
+    }
+    return TReplicateJsonValueRewrite{ *sourceColumn, std::move(olapOperation), std::move(branches) };
 }
 
 } // anonymous namespace
@@ -207,50 +400,7 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
         return input;
     }
 
-    TVector<TExprBase> projections;
-    for (const auto& [columnName, olapOperation] : olapOperationsForProjections) {
-        // clang-format off
-        auto olapProjection = Build<TKqpOlapProjection>(ctx.ExprCtx, olapOperation->Pos())
-            .OlapOperation(olapOperation)
-            .ColumnName().Build(columnName)
-        .Done();
-        // clang-format on
-        projections.push_back(olapProjection);
-    }
-
-    const auto olapProcess =
-        read->OlapFilterLambda ? TCoLambda(read->OlapFilterLambda) :
-            // clang-format off
-            Build<TCoLambda>(ctx.ExprCtx, read->Pos)
-                .Args({"arg_0"})
-                .Body("arg_0")
-            .Done();
-            // clang-format on
-
-    // clang-format off
-    auto olapProjections = Build<TKqpOlapProjections>(ctx.ExprCtx, olapProcess.Pos())
-        .Input(olapProcess.Body())
-        .Projections()
-            .Add(projections)
-        .Build()
-    .Done();
-    // clang-format on
-
-    // clang-format off
-    auto newLambda = Build<TCoLambda>(ctx.ExprCtx, olapProcess.Pos())
-        .Args({"arg"})
-        .Body<TExprApplier>()
-            .Apply(olapProjections)
-            .With(olapProcess.Args().Arg(0), "arg")
-        .Build()
-    .Done().Ptr();
-    // clang-format on
-
-    YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP projection: " << KqpExprToPrettyString(TExprBase(newLambda), ctx.ExprCtx);
-
-    TIntrusivePtr<IOperator> newInput =
-        MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), read->StorageType, read->TableCallable, newLambda, read->Limit,
-                               read->RangeInfo, read->OriginalPredicate, read->SortDir, read->Props, read->Pos, read->RequireSortedRead);
+    TIntrusivePtr<IOperator> newInput = BuildReadWithOlapProjections(*read, olapOperationsForProjections, ctx.ExprCtx);
     if (port) {
         // Every port reads the new read. The others do not read the columns it overwrites.
         port->GetReplicate().SetInput(std::move(newInput));
@@ -264,6 +414,37 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
         newInput = MakeIntrusive<TOpFilter>(newInput, filter->Pos, filter->Props, filter->GetFilterExpression(), filter->PartiallyPushedDown);
     }
     return MakeIntrusive<TOpMap>(newInput, map->Pos, newMapElements);
+}
+
+bool TPushOlapReplicateJsonValueRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Replicate && CastOperator<TOpReplicate>(input)->IsPrimary();
+}
+
+bool TPushOlapReplicateJsonValueRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx,
+                                                    TPlanProps& props) {
+    if (!QuickMatch(input) ||
+        !(ctx.KqpCtx.Config->HasOptEnableOlapPushdown() && ctx.KqpCtx.Config->GetEnableOlapPushdownProjections())) {
+        return false;
+    }
+
+    auto& hub = CastOperator<TOpReplicate>(input)->GetReplicate();
+    if (hub.GetOutputs().size() < 2 || hub.GetInput()->Kind != EOperator::Source) {
+        return false;
+    }
+    const auto read = CastOperator<TOpRead>(hub.GetInput());
+    if (read->GetTableStorageType() != NYql::EStorageType::ColumnStorage) {
+        return false;
+    }
+
+    auto rewrite = BuildReplicateJsonValueRewrite(hub, *read, ctx);
+    if (!rewrite) {
+        return false;
+    }
+    hub.SetInput(BuildReadWithOlapProjections(*read, { { ToString(rewrite->SourceColumn), rewrite->OlapOperation } }, ctx.ExprCtx));
+    for (auto& branch : rewrite->Branches) {
+        branch.Map->SetMapElementExpression(branch.Output, TExpression(std::move(branch.Lambda), &ctx.ExprCtx, &props));
+    }
+    return true;
 }
 
 } // namespace NKikimr::NKqp

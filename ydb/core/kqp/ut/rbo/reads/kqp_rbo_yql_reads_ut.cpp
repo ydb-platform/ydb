@@ -20,6 +20,7 @@
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
+#include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -924,29 +925,29 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 -- не выбирается никакой индекс, так как PK основной таблицы имеет самый длинный point prefix, sort is free
-                SELECT * 
+                SELECT *
                 FROM Table `/Root/Table`
                 WHERE Key = 0 and SubKey1 = 0 And SubKey2 = "0"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index212 (not PK or Index21), since Index212 has order SubKey2 and Key, thus re-sort is expected
-                SELECT * 
+                SELECT *
                 FROM Table `/Root/Table`
                 WHERE Key = 0 and SubKey2 = "1"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- должен использоваться Index12, sort is free
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE Key >= 0 and SubKey1 = 0 And SubKey2 = "0"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index12, sort is free
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE SubKey1 > 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
@@ -966,8 +967,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 -- используется Index12, thus re-sort is expected
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE SubKey1 = 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
@@ -1100,50 +1101,50 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 -- не выбирается никакой индекс, так как PK основной таблицы имеет самый длинный point prefix, sort is free
-                SELECT * 
+                SELECT *
                 FROM Table `/Root/Table`
                 WHERE Key = 0 and SubKey1 = 0 And SubKey2 = "0"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index212 (not PK or Index21), since Index212 has order SubKey2 and Key, thus re-sort is expected
-                SELECT * 
+                SELECT *
                 FROM Table `/Root/Table`
                 WHERE Key = 0 and SubKey2 = "1"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- должен использоваться Index12, sort is free
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE Key >= 0 and SubKey1 = 0 And SubKey2 = "0"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index12, sort is free
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE SubKey1 > 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index21 (not Index212), since Index21 is declared first, thus re-sort is expected
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE SubKey2 = "1"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index212, still re-order is expected
-                SELECT Value2 
-                FROM Table 
+                SELECT Value2
+                FROM Table
                 WHERE SubKey2 = "0"
                 ORDER BY Value2;
             )",
             R"(
                 -- используется Index12, thus re-sort is expected
-                SELECT * 
-                FROM Table 
+                SELECT *
+                FROM Table
                 WHERE SubKey1 = 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
@@ -1326,6 +1327,38 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(1).GetOptionalUtf8(), "value");
         UNIT_ASSERT(!parser.TryNextRow());
     }
+
+    class TRboOlapJsonValueProjectionSuite final : public TOlapJsonValueProjectionSuite {
+    protected:
+        TKikimrSettings CreateSettings() const override {
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+            appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+            appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+            appConfig.MutableTableServiceConfig()->SetEnableQueryServiceSpilling(true);
+            NKikimrKqp::TKqpSetting spilling;
+            spilling.SetName("_KqpEnableSpilling");
+            spilling.SetValue("true");
+            return TKikimrSettings(appConfig).SetKqpSettings({spilling}).SetWithSampleTables(false);
+        }
+
+        TString CreateTopHostsQuery() const override {
+            // RBO requires a column reference on the left of an IN subquery.
+            return BuildOlapJsonValueTopHostsQuery(true);
+        }
+
+        NYdb::NQuery::TExecuteQueryResult ExecuteQuery(TKikimrRunner& kikimr, NYdb::NQuery::TSession& session, const TString& query) const override {
+            const auto before = GetNewRBOCompileCounters(kikimr);
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto after = GetNewRBOCompileCounters(kikimr);
+            UNIT_ASSERT_VALUES_EQUAL(after.first, before.first + 1);
+            UNIT_ASSERT_VALUES_EQUAL(after.second, before.second);
+            return result;
+        }
+    };
+
+    YDB_OLAP_JSON_VALUE_PROJECTION_TESTS(TRboOlapJsonValueProjectionSuite)
 
     Y_UNIT_TEST(RowReadStageRunsFiltersAndMaps) {
         NKikimrConfig::TAppConfig appConfig;

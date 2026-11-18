@@ -179,7 +179,7 @@ public:
                     const OtlpGrpcClientOptions &options) noexcept;
 
   /**
-   * Reomve reference fro a guard object
+   * Remove reference from a guard object
    *
    * @param guard guard object to remove reference from
    * @return true if there is no more reference to this gRPC client

@@ -11,6 +11,8 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemonactor.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
+#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompactbroker.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_operation_broker.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker.h>
 #include <ydb/library/pdisk_io/file_params.h>
@@ -33,6 +35,8 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , EnableSyncLogChunkCompressionSSD(0, 0, 1)
     , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
     , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
+    , SyncLogMaxDiskAmount(0, 0, 1ull << 40)
+    , SyncLogMaxMemAmount(64ull << 20, 0, 1ull << 30)
     , DefaultHugeGarbagePerMille(300, 1, 1000)
     , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
     , MaxChunksToDefragInflight(10, 1, 1000)
@@ -40,6 +44,10 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , FreshCompMaxInFlightReads(10, 1, 1000)
     , HullCompMaxInFlightWrites(10, 1, 1000)
     , HullCompMaxInFlightReads(20, 1, 1000)
+    , HullCompFullCompPeriodSec(0, 0, 7 * 24 * 60 * 60)
+    , HullCompThrottlerBytesRate(0, 0, 10'000'000'000) // 10 GB/s
+    , GarbageThresholdToRunFullCompactionPerMille(0, 0, 300)
+    , DefragThrottlerBytesRate(0, 0, 10'000'000'000) // 10 GB/s
     , ThrottlingDryRun(1, 0, 1)
     , ThrottlingMinLevel0SstCount(100, 1, 100000)
     , ThrottlingMaxLevel0SstCount(250, 1, 100000)
@@ -51,9 +59,14 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ThrottlingMaxOccupancyPerMille(950, 1, 1000)
     , ThrottlingMinLogChunkCount(100, 1, 100000)
     , ThrottlingMaxLogChunkCount(130, 1, 100000)
+    , MaxInProgressStartupDataSyncCount(0, 0, 10000)
+    , MaxInProgressStartupDataSyncPerPDiskCount(0, 0, 10000)
+    , MaxInProgressLocalRecoveryCount(0, 0, 10000)
+    , MaxInProgressLocalRecoveryPerPDiskCount(0, 0, 10000)
     , MaxInProgressSyncCount(0, 0, 1000)
     , MaxCommonLogChunksHDD(200, 1, 1'000'000)
     , MaxCommonLogChunksSSD(200, 1, 1'000'000)
+    , MaxActiveCompactionsPerPDisk(0, 0, 1'000'000)
     , CostMetricsParametersByMedia({
         TCostMetricsParameters{200},
         TCostMetricsParameters{50},
@@ -134,6 +147,7 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
         hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
         hFunc(TEvPrivate::TEvSendDiskMetrics, Handle);
+        hFunc(TEvPrivate::TEvUpdateStats, Handle);
         hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
         hFunc(TEvPrivate::TEvRetrySaveConfig, Handle);
 
@@ -366,6 +380,8 @@ void TNodeWarden::Bootstrap() {
     DsProxyNodeMonActor = Register(CreateDsProxyNodeMon(DsProxyNodeMon));
     DsProxyPerPoolCounters = new TDsProxyPerPoolCounters(AppData()->Counters);
 
+    Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateStats);
+
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
@@ -383,6 +399,12 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(FreshCompMaxInFlightReads, "VDiskControls.FreshCompMaxInFlightReads");
         icb->RegisterSharedControl(HullCompMaxInFlightWrites, "VDiskControls.HullCompMaxInFlightWrites");
         icb->RegisterSharedControl(HullCompMaxInFlightReads, "VDiskControls.HullCompMaxInFlightReads");
+        icb->RegisterSharedControl(HullCompFullCompPeriodSec, "VDiskControls.HullCompFullCompPeriodSec");
+        icb->RegisterSharedControl(HullCompThrottlerBytesRate, "VDiskControls.HullCompThrottlerBytesRate");
+        icb->RegisterSharedControl(GarbageThresholdToRunFullCompactionPerMille, "VDiskControls.GarbageThresholdToRunFullCompactionPerMille");
+        icb->RegisterSharedControl(DefragThrottlerBytesRate, "VDiskControls.DefragThrottlerBytesRate");
+        icb->RegisterSharedControl(SyncLogMaxDiskAmount, "VDiskControls.SyncLogMaxDiskAmount");
+        icb->RegisterSharedControl(SyncLogMaxMemAmount, "VDiskControls.SyncLogMaxMemAmount");
 
         icb->RegisterSharedControl(ThrottlingDryRun, "VDiskControls.ThrottlingDryRun");
         icb->RegisterSharedControl(ThrottlingMinLevel0SstCount, "VDiskControls.ThrottlingMinLevel0SstCount");
@@ -398,8 +420,14 @@ void TNodeWarden::Bootstrap() {
 
         icb->RegisterSharedControl(MaxInProgressSyncCount, "VDiskControls.MaxInProgressSyncCount");
 
+        icb->RegisterSharedControl(MaxInProgressStartupDataSyncCount, "VDiskControls.MaxInProgressStartupDataSyncCount");
+        icb->RegisterSharedControl(MaxInProgressStartupDataSyncPerPDiskCount, "VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount");
+        icb->RegisterSharedControl(MaxInProgressLocalRecoveryCount, "VDiskControls.MaxInProgressLocalRecoveryCount");
+        icb->RegisterSharedControl(MaxInProgressLocalRecoveryPerPDiskCount, "VDiskControls.MaxInProgressLocalRecoveryPerPDiskCount");
+
         icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
         icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
+        icb->RegisterSharedControl(MaxActiveCompactionsPerPDisk, "PDiskControls.MaxActiveCompactionsPerPDisk");
 
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
                 "VDiskControls.BurstThresholdNsHDD");
@@ -455,11 +483,21 @@ void TNodeWarden::Bootstrap() {
     const ui64 maxBytes = replBrokerConfig.GetMaxInFlightReadBytes();
     actorSystem->RegisterLocalService(MakeBlobStorageReplBrokerID(), Register(CreateReplBrokerActor(maxBytes)));
 
+    actorSystem->RegisterLocalService(MakeBlobStorageLocalRecoveryBrokerID(), Register(
+        CreateVDiskOperationBrokerActor(MaxInProgressLocalRecoveryCount, MaxInProgressLocalRecoveryPerPDiskCount)));
+
+    actorSystem->RegisterLocalService(MakeBlobStorageStartupDataSyncBrokerID(), Register(
+        CreateVDiskOperationBrokerActor(MaxInProgressStartupDataSyncCount, MaxInProgressStartupDataSyncPerPDiskCount)));
+
     actorSystem->RegisterLocalService(MakeBlobStorageSyncBrokerID(), Register(
         CreateSyncBrokerActor(MaxInProgressSyncCount)));
 
     // create bridge syncer rate quoter
     SyncRateQuoter = std::make_shared<TReplQuoter>(Cfg->BlobStorageConfig.GetBridgeSyncRateBytesPerSecond());
+
+    // start compaction broker
+    actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(
+        CreateCompBrokerActor(MaxActiveCompactionsPerPDisk, AppData()->Counters)));
 
     // determine if we are running in 'mock' mode
     EnableProxyMock = Cfg->BlobStorageConfig.GetServiceSet().GetEnableProxyMock();
@@ -1183,6 +1221,11 @@ void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
         PersistConfig(std::move(msg->MainYaml), msg->MainYamlVersion, std::move(msg->StorageYaml), msg->StorageYamlVersion);
         ExpectedSaveConfigCookie++;
     }
+}
+
+void TNodeWarden::Handle(TEvPrivate::TEvUpdateStats::TPtr&) {
+    DsProxyPerPoolCounters->UpdateAll();
+    Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateStats());
 }
 
 void TNodeWarden::SendDiskMetrics(bool reportMetrics) {

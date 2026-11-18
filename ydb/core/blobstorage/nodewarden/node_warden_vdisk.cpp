@@ -40,7 +40,6 @@ namespace NKikimr::NStorage {
             case TVDiskRecord::EScrubState::QUANTUM_FINISHED: // quantum finished, no work is in progress
             case TVDiskRecord::EScrubState::QUANTUM_FINISHED_AND_WAITING_FOR_NEXT_ONE: // like QUERY_START_QUANTUM
                 break;
-
             case TVDiskRecord::EScrubState::IN_PROGRESS: { // scrub is in progress, report scrub stop to BS_CONTROLLER
                 const TVSlotId vslotId = vdisk.GetVSlotId();
                 SendToController(std::make_unique<TEvBlobStorage::TEvControllerScrubQuantumFinished>(vslotId.NodeId,
@@ -203,8 +202,12 @@ namespace NKikimr::NStorage {
         vdiskConfig->FreshCompMaxInFlightReads = FreshCompMaxInFlightReads;
         vdiskConfig->HullCompMaxInFlightWrites = HullCompMaxInFlightWrites;
         vdiskConfig->HullCompMaxInFlightReads = HullCompMaxInFlightReads;
-
+        vdiskConfig->HullCompFullCompPeriodSec = HullCompFullCompPeriodSec;
+        vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
+        vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
+        vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
         vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
+
         if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
             vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionHDD;
             vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightHDD;
@@ -224,6 +227,9 @@ namespace NKikimr::NStorage {
         vdiskConfig->ThrottlingMaxOccupancyPerMille = ThrottlingMaxOccupancyPerMille;
         vdiskConfig->ThrottlingMinLogChunkCount = ThrottlingMinLogChunkCount;
         vdiskConfig->ThrottlingMaxLogChunkCount = ThrottlingMaxLogChunkCount;
+        vdiskConfig->MaxActiveCompactionsPerPDisk = MaxActiveCompactionsPerPDisk;
+        vdiskConfig->SyncLogMaxDiskAmount = SyncLogMaxDiskAmount;
+        vdiskConfig->SyncLogMaxMemAmount = SyncLogMaxMemAmount;
 
         vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
 
@@ -231,8 +237,8 @@ namespace NKikimr::NStorage {
 
         vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
-        if (StorageConfig->HasBlobStorageConfig() && StorageConfig->GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
-            for (auto &type : StorageConfig->GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {
+        if (Cfg->BlobStorageConfig.HasVDiskPerformanceSettings()) {
+            for (auto &type : Cfg->BlobStorageConfig.GetVDiskPerformanceSettings().GetVDiskTypes()) {
                 if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
                     if (type.HasMinHugeBlobSizeInBytes()) {
                         vdiskConfig->MinHugeBlobInBytes = type.GetMinHugeBlobSizeInBytes();
@@ -258,6 +264,10 @@ namespace NKikimr::NStorage {
         vdiskConfig->GroupSizeInUnits = groupInfo->GroupSizeInUnits;
 
         vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
+
+        if (Cfg->VDiskConfigPreprocessor) {
+            Cfg->VDiskConfigPreprocessor(*vdiskConfig);
+        }
 
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
@@ -353,6 +363,16 @@ namespace NKikimr::NStorage {
         }
 
         record.Config.CopyFrom(vdisk);
+
+        // Sticky runtime marker: if this node ever had a local dynamic VDisk for the group, keep subscribing
+        // for its updates in RegisterNode even when proxy is not currently running. We don't need it after restart
+        // so this flag is purely local.
+        if (!vdisk.GetDoDestroy() && vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
+            const ui32 groupId = vdisk.GetVDiskID().GetGroupID();
+            if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic) {
+                Groups[groupId].MustSubscribe = true;
+            }
+        }
 
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
             if (record.UnderlyingPDiskDestroyed) {

@@ -92,6 +92,7 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
             }
 
             Self->PersistImportState(db, *importInfo);
+            Self->EraseEncryptionKey(db, *importInfo);
             SendNotificationsIfFinished(importInfo);
 
             if (importInfo->IsFinished()) {
@@ -189,6 +190,7 @@ struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
         importInfo->State = TImportInfo::EState::Cancelled;
         importInfo->EndTime = TAppData::TimeProvider->Now();
         Self->PersistImportState(db, *importInfo);
+        Self->EraseEncryptionKey(db, *importInfo);
 
         SendNotificationsIfFinished(importInfo);
 

@@ -71,8 +71,7 @@ static bool ParseKey(TVector<TCell>& cells,
     return true;
 }
 
-template <typename T>
-static bool TransformKey(T& to,
+static bool TransformKey(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& to,
         const NJson::TJsonValue::TArray& from, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
 {
     TVector<TCell> cells;
@@ -80,13 +79,20 @@ static bool TransformKey(T& to,
         return false;
     }
 
-    if constexpr (std::is_same_v<T, NKikimrTxDataShard::TEvApplyReplicationChanges::TChange>) {
-        to.SetKey(TSerializedCellVec::Serialize(cells));
-    } else if constexpr (std::is_same_v<T, TMaybe<TOwnedCellVec>>) {
-        to.ConstructInPlace(cells);
-    } else {
-        static_assert(false, "Unsupported type");
+    to.SetKey(TSerializedCellVec::Serialize(cells));
+
+    return true;
+}
+
+static bool TransformKey(TMaybe<TOwnedCellVec>& to,
+        const NJson::TJsonValue::TArray& from, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
+{
+    TVector<TCell> cells;
+    if (!ParseKey(cells, from, schema, pool, error)) {
+        return false;
     }
+
+    to.ConstructInPlace(cells);
 
     return true;
 }

@@ -60,9 +60,8 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
             0, 64 * 1024 * 1024);
     ForsetiMaxLogBatchNs = TControlWrapper((PDiskCategory.IsSolidState() ? 50'000ll : 500'000ll), 0, 100'000'000ll);
     ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
-    ForsetiOpPieceSizeSsd = TControlWrapper(64 * 1024, 1, Cfg->BufferPoolBufferSizeBytes);
-    ForsetiOpPieceSizeRot = TControlWrapper(512 * 1024, 1, Cfg->BufferPoolBufferSizeBytes);
-    ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ?  ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
+    ForsetiOpPieceSize = TControlWrapper(Cfg->IoPieceSizeBytes, 1, Cfg->BufferPoolBufferSizeBytes);
+    ForsetiOpPieceSizeCached = ForsetiOpPieceSize;
     UseNoopSchedulerSSD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
     UseNoopSchedulerHDD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
 
@@ -191,12 +190,12 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
                         Y_VERIFY_S(FormatSectorSize <= buffer->Size(), PCtx->PDiskLogPrefix);
                         memcpy(buffer->Data(), formatSector, FormatSectorSize);
                         ui64 targetOffset = i * FormatSectorSize;
-                        P_LOG(PRI_INFO, BPD46, "PWriteAsync for format restoration",
+                        P_LOG(PRI_NOTICE, BPD46, "PWriteSync for format restoration",
                                 (fromOffset, targetOffset), (toOffset, targetOffset + FormatSectorSize));
 
                         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer->Data(), FormatSectorSize);
-                        BlockDevice->PwriteAsync(buffer->Data(), FormatSectorSize, targetOffset, buffer,
-                                TReqId(TReqId::RestoreFormatOnRead, 0), {});
+                        BlockDevice->PwriteSync(buffer->Data(), FormatSectorSize, targetOffset, 
+                                TReqId(TReqId::RestoreFormatOnRead, 0), nullptr);
                     }
                 }
                 //BlockDevice->FlushAsync(nullptr);
@@ -505,12 +504,12 @@ bool TPDisk::ReleaseUnusedLogChunks(TCompletionEventSender *completion) {
                 << "Unexpected ownerId# " << ui32(state.OwnerId));
         state.CommitState = TChunkState::FREE;
         state.OwnerId = OwnerUnallocated;
-        Mon.LogChunks->Dec();
 
         auto curr = it;
         ++it;
         LogChunks.erase(curr);
     }
+    *Mon.LogChunks = LogChunks.size();
     if (it != LogChunks.end()) {
         if (gapStart) {
             if (!chunksToRelease.empty()) {
@@ -2151,10 +2150,8 @@ void TPDisk::ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight) {
     }
 }
 
-void TPDisk::SchedulerConfigure(const TConfigureScheduler &reqCfg) {
+void TPDisk::SchedulerConfigure(const TPDiskSchedulerConfig& cfg, ui32 ownerId) {
     // TODO(cthulhu): Check OwnerRound here
-    const TPDiskSchedulerConfig& cfg = reqCfg.SchedulerCfg;
-    ui32 ownerId = reqCfg.OwnerId;
     ui64 bytesTotalWeight = cfg.LogWeight + cfg.FreshWeight + cfg.CompWeight;
     ConfigureCbs(ownerId, GateLog, cfg.LogWeight * cfg.BytesSchedulerWeight);
     ConfigureCbs(ownerId, GateFresh, cfg.FreshWeight * cfg.BytesSchedulerWeight);
@@ -2737,9 +2734,11 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestAskForCutLog:
                 SendCutLog(static_cast<TAskForCutLog&>(*req));
                 break;
-            case ERequestType::RequestConfigureScheduler:
-                SchedulerConfigure(static_cast<TConfigureScheduler&>(*req));
+            case ERequestType::RequestConfigureScheduler: {
+                const auto& cfgReq = static_cast<TConfigureScheduler&>(*req);
+                SchedulerConfigure(cfgReq.SchedulerCfg, cfgReq.OwnerId);
                 break;
+            }
             case ERequestType::RequestWhiteboartReport:
                 WhiteboardReport(static_cast<TWhiteboardReport&>(*req));
                 break;
@@ -2896,8 +2895,7 @@ bool TPDisk::Initialize() {
             REGISTER_LOCAL_CONTROL(ForsetiMinLogCostNsControl);
             REGISTER_LOCAL_CONTROL(ForsetiMilliBatchSize);
             REGISTER_LOCAL_CONTROL(ForsetiMaxLogBatchNs);
-            REGISTER_LOCAL_CONTROL(ForsetiOpPieceSizeSsd);
-            REGISTER_LOCAL_CONTROL(ForsetiOpPieceSizeRot);
+            REGISTER_LOCAL_CONTROL(ForsetiOpPieceSize);
             icb->RegisterSharedControl(UseNoopSchedulerHDD, "PDiskControls.UseNoopSchedulerHDD");
             icb->RegisterSharedControl(UseNoopSchedulerSSD, "PDiskControls.UseNoopSchedulerSSD");
             icb->RegisterSharedControl(SemiStrictSpaceIsolation, "PDiskControls.SemiStrictSpaceIsolation");
@@ -3181,7 +3179,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 --state.OperationsInProgress;
                 --inFlight->ChunkReads;
             };
-            read->FinalCompletion = new TCompletionChunkRead(this, read, std::move(onDestroy), state.Nonce);
+            read->FinalCompletion = new TCompletionChunkRead(this, read, std::move(onDestroy), state.Nonce, PCtx->ActorSystem->GetRcBufAllocator());
 
             static_cast<TChunkRead*>(request)->SelfPointer = std::move(read);
 
@@ -3872,7 +3870,7 @@ void TPDisk::Update() {
         TGuard<TMutex> guard(StateMutex);
 
         ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
-        ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ? ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
+        ForsetiOpPieceSizeCached = ForsetiOpPieceSize;
         ForsetiOpPieceSizeCached = Min<i64>(ForsetiOpPieceSizeCached, Cfg->BufferPoolBufferSizeBytes);
         ForsetiOpPieceSizeCached = AlignDown<i64>(ForsetiOpPieceSizeCached, Format.SectorSize);
 
@@ -4151,8 +4149,7 @@ void TPDisk::AddCbsSet(ui32 ownerId) {
     AddCbs(ownerId, GateSyncLog, "SyncLog", 0ull);
     AddCbs(ownerId, GateLow, "LowRead", 0ull);
 
-    TConfigureScheduler conf(ownerId, 0);
-    SchedulerConfigure(conf);
+    SchedulerConfigure(Cfg->SchedulerCfg, ownerId);
 }
 
 TChunkIdx TPDisk::GetUnshreddedFreeChunk() {
@@ -4376,7 +4373,7 @@ void TPDisk::ProgressShredState() {
                 while (ShredLogPaddingInFlight < 2) {
                     TRcBuf data = TRcBuf::Uninitialized(2<<20);
                     memset(data.GetDataMut(), 0, data.Size());
-                    TEvLog evLog(OwnerUnallocated, 0, {}, data, {}, 0);
+                    TEvLog evLog(OwnerUnallocated, 0, {}, data, {}, 0, TWriteSource::ShredPadding);
                     double burstMs;
                     TLogWrite* request = ReqCreator.CreateLogWrite(evLog, PCtx->PDiskActor, burstMs, {});
                     request->Orbit = std::move(evLog.Orbit);

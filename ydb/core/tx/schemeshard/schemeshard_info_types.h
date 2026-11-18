@@ -45,6 +45,8 @@
 
 #include <ydb/services/lib/sharding/sharding.h>
 
+#include <library/cpp/regex/pcre/regexp.h>
+
 #include <google/protobuf/util/message_differencer.h>
 
 #include <util/generic/guid.h>
@@ -2401,6 +2403,18 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
         return space;
     }
 
+    static bool ValidateFileStoreConfigSpaceOverflow(ui64 blockSize, ui64 blockCount, TString& errStr) {
+        if (blockSize && blockCount > Max<ui64>() / blockSize) {
+            errStr = TStringBuilder()
+                << "FileStore size overflows ui64: blocks count " << blockCount
+                << " * block size " << blockSize
+                << " > " << Max<ui64>();
+            return false;
+        }
+
+        return true;
+    }
+
 private:
     TFileStoreSpace GetFileStoreSpace(const NKikimrFileStore::TConfig& config) const {
         const ui64 blockSize = config.GetBlockSize();
@@ -3012,6 +3026,8 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+    TMaybe<std::vector<TRegExMatch>> ExcludeRegexps;
+
     TString GetItemSrcPrefix(size_t i) const {
         if (i < Items.size() && Items[i].SrcPrefix) {
             return Items[i].SrcPrefix;
@@ -3025,6 +3041,10 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
         return {};
     }
+
+    bool CompileExcludeRegexps(TString& errorDescription);
+
+    bool IsExcludedFromImport(const TString& path) const;
 
     explicit TImportInfo(
             const ui64 id,
@@ -3055,6 +3075,16 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
         void AddError(const TString& err);
     };
+
+    // Erases encryption key and syncronize it with SettingsSerialized
+    // Returns true if settings changed
+    bool EraseEncryptionKey() {
+        if (Settings.encryption_settings().has_symmetric_key()) {
+            Settings.mutable_encryption_settings()->clear_symmetric_key();
+            return true;
+        }
+        return false;
+    }
 
     // Fills items from schema mapping:
     // - if user specified no items, fills all from schema mapping;

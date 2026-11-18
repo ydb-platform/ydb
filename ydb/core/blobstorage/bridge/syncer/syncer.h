@@ -3,7 +3,7 @@
 #include "defs.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/vdisk/repl/repl_quoter.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events_quoter.h>
 
 namespace NKikimr::NBridge {
 

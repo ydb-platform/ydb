@@ -8,6 +8,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 
+#include <functional>
 #include <util/folder/path.h>
 
 namespace NKikimr {
@@ -50,6 +51,8 @@ namespace NKikimr {
         bool UseActorSystemTimeInBSQueue = false;
         std::optional<ui32> ReplMaxQuantumBytes = std::nullopt;
         std::optional<ui32> ReplMaxDonorNotReadyCount = std::nullopt;
+
+        std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor;
 
         TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
             : PDiskServiceFactory(pDiskServiceFactory)

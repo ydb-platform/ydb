@@ -18,6 +18,8 @@
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
 
+#include <utility>
+
 namespace {
 
 ui32 PopFront(TDeque<ui32>& pendingItems) {
@@ -36,6 +38,41 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
+
+// Erases encryption key from settings, if settings type supports it
+// Returns true if settings changed
+template <class TSettings, class = decltype(std::declval<TSettings>().encryption_settings())> // Function for TSettings that have encryption_settings()
+bool EraseEncryptionKeyFromSettingsProto(TString* serializedSettings) {
+    TSettings settings;
+    if (!settings.ParseFromString(*serializedSettings)) {
+        return false;
+    }
+    if (settings.encryption_settings().has_symmetric_key()) {
+        settings.mutable_encryption_settings()->clear_symmetric_key();
+        return settings.SerializeToString(serializedSettings);
+    }
+    return false;
+}
+
+template <class TSettings>
+bool EraseEncryptionKeyFromSettingsProto(...) {
+    return false;
+}
+
+void TSchemeShard::EraseEncryptionKey(NIceDb::TNiceDb& db, TExportInfo& exportInfo) {
+    bool erased = false;
+    switch (exportInfo.Kind) {
+    case TExportInfo::EKind::YT:
+        erased = EraseEncryptionKeyFromSettingsProto<Ydb::Export::ExportToYtSettings>(&exportInfo.Settings);
+        break;
+    case TExportInfo::EKind::S3:
+        erased = EraseEncryptionKeyFromSettingsProto<Ydb::Export::ExportToS3Settings>(&exportInfo.Settings);
+        break;
+    }
+    if (erased) {
+        PersistExportMetadata(db, exportInfo);
+    }
+}
 
 struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
     TEvExport::TEvCreateExportRequest::TPtr Request;
@@ -802,6 +839,7 @@ private:
             }
 
             Self->PersistExportState(db, *exportInfo);
+            Self->EraseEncryptionKey(db, *exportInfo);
             SendNotificationsIfFinished(exportInfo);
             break;
 
@@ -841,6 +879,7 @@ private:
         exportInfo->EndTime = TAppData::TimeProvider->Now();
 
         Self->PersistExportState(db, *exportInfo);
+        Self->EraseEncryptionKey(db, *exportInfo);
         SendNotificationsIfFinished(exportInfo);
         AuditLogExportEnd(*exportInfo, Self);
     }
@@ -1009,6 +1048,7 @@ private:
                     }
 
                     Cancel(*exportInfo, itemIdx, "unhappy propose");
+                    Self->EraseEncryptionKey(db, *exportInfo);
                 } else {
                     if (!exportInfo->IsInProgress()) {
                         return;
@@ -1039,6 +1079,7 @@ private:
                     exportInfo->Issue = record.GetReason();
                     exportInfo->State = EState::Cancelled;
                     exportInfo->EndTime = TAppData::TimeProvider->Now();
+                    Self->EraseEncryptionKey(db, *exportInfo);
                 }
 
                 Self->PersistExportState(db, *exportInfo);
@@ -1147,6 +1188,7 @@ private:
             Cancel(*exportInfo, itemIdx, "unsuccessful scheme upload");
 
             Self->PersistExportState(db, *exportInfo);
+            Self->EraseEncryptionKey(db, *exportInfo);
             return SendNotificationsIfFinished(exportInfo);
         }
 
@@ -1207,6 +1249,7 @@ private:
             exportInfo->Issue = result.Error;
 
             Self->PersistExportState(db, *exportInfo);
+            Self->EraseEncryptionKey(db, *exportInfo);
             return SendNotificationsIfFinished(exportInfo);
         }
 
@@ -1284,6 +1327,7 @@ private:
                 exportInfo->State = EState::Cancelled;
                 exportInfo->EndTime = TAppData::TimeProvider->Now();
                 exportInfo->Issue = issues;
+                Self->EraseEncryptionKey(db, *exportInfo);
                 break;
             }
 
@@ -1352,6 +1396,7 @@ private:
                 if (const auto issue = GetIssues(ItemPathId(Self, *exportInfo, itemIdx), txId)) {
                     item.Issue = *issue;
                     Cancel(*exportInfo, itemIdx, "issues during backing up");
+                    Self->EraseEncryptionKey(db, *exportInfo);
                     itemHasIssues = true;
                 }
             }
@@ -1359,6 +1404,7 @@ private:
                 if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
                     exportInfo->State = EState::Done;
                     exportInfo->EndTime = TAppData::TimeProvider->Now();
+                    Self->EraseEncryptionKey(db, *exportInfo);
                 } else {
                     PrepareAutoDropping(Self, *exportInfo, db);
                 }

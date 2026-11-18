@@ -222,7 +222,7 @@ class TCompletionChunkRead : public TCompletionAction {
     const ui64 DoubleFreeCanary;
 public:
     TCompletionChunkRead(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, std::function<void()> onDestroy,
-            ui64 chunkNonce);
+            ui64 chunkNonce, IRcBufAllocator* alloc);
     void Exec(TActorSystem *actorSystem) override;
     ~TCompletionChunkRead();
     void ReplyError(TActorSystem *actorSystem, TString reason);
@@ -293,8 +293,8 @@ class TCumulativeCompletionHolder {
     TAtomic Releases;
     TAtomic CompletionActionPtr;
 public:
-    TCumulativeCompletionHolder()
-        : PartsPending(0)
+    TCumulativeCompletionHolder(TAtomicBase partsPending)
+        : PartsPending(partsPending)
         , Releases(0)
         , CompletionActionPtr((TAtomicBase)nullptr)
     {}
@@ -334,9 +334,7 @@ class TCompletionPart : public TCompletionAction {
 public:
     TCompletionPart(TCumulativeCompletionHolder *cumulativeCompletionHolder)
         : CumulativeCompletionHolder(cumulativeCompletionHolder)
-    {
-        cumulativeCompletionHolder->Ref();
-    }
+    {}
 
     void Exec(TActorSystem *actorSystem) override {
         CumulativeCompletionHolder->Exec(actorSystem);

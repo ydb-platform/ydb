@@ -33,6 +33,7 @@ namespace NKikimr {
                     cfg.HugeBlobStepsBetweenPowersOf2,
                     false,
                     cfg.HugeBlobsFreeChunkReservation,
+                    cfg.GarbageThresholdToRunFullCompactionPerMille,
                     logFunc);
 
             return std::make_shared<THugeBlobCtx>("",

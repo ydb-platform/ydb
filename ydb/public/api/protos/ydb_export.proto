@@ -44,6 +44,11 @@ message ExportToYtSettings {
     string description = 5 [(length).le = 128];
     uint32 number_of_retries = 6;
     bool use_type_v3 = 7;
+
+    // Patterns (PCRE) for paths excluded from export operation.
+    // - Patterns are matched against the object path relative to database root path.
+    // - Object is excluded from export operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 8;
 }
 
 message ExportToYtResult {
@@ -139,6 +144,11 @@ message ExportToS3Settings {
     // If encryption_settings field is not specified,
     // the resulting data will not be encrypted.
     EncryptionSettings encryption_settings = 15;
+
+    // Patterns (PCRE) for paths excluded from export operation.
+    // - Patterns are matched against the object path relative to the export's source_path.
+    // - Object is excluded from export operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 17;
 }
 
 message ExportToS3Result {

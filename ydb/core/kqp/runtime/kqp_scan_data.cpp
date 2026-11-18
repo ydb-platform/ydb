@@ -255,6 +255,28 @@ public:
 };
 
 template <>
+class TElementAccessor<arrow::FixedSizeBinaryArray, NYql::NDecimal::TInt128> {
+public:
+    using TArrayType = arrow::FixedSizeBinaryArray;
+    static void Validate(const arrow::FixedSizeBinaryArray& array) {
+        YQL_ENSURE(
+            array.byte_width() == static_cast<i32>(sizeof(NYql::NDecimal::TInt128)),
+            "Wrong Decimal byte width in FixedSizeBinaryArray: " << array.byte_width());
+    }
+
+    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::FixedSizeBinaryArray& array, const ui32 rowIndex) {
+        auto data = array.GetView(rowIndex);
+        YQL_ENSURE(data.size() == sizeof(NYql::NDecimal::TInt128), "Wrong data size");
+        NYql::NDecimal::TInt128 val;
+        std::memcpy(reinterpret_cast<char*>(&val), data.data(), data.size());
+        return NUdf::TUnboxedValuePod(val);
+    }
+    static TFixedWidthStatAccumulator BuildStatAccumulator(const NScheme::TTypeInfo& typeInfo) {
+        return TFixedWidthStatAccumulator(typeInfo);
+    }
+};
+
+template <>
 class TElementAccessor<arrow::BinaryArray, NUdf::TStringRef> {
 public:
     using TArrayType = arrow::BinaryArray;
@@ -428,7 +450,15 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
         }
         case NTypeIds::Decimal:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Decimal128Array, NYql::NDecimal::TInt128>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            switch (columnPtr->type()->id()) {
+                case arrow::Type::DECIMAL:
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Decimal128Array, NYql::NDecimal::TInt128>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                case arrow::Type::FIXED_SIZE_BINARY:
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FixedSizeBinaryArray, NYql::NDecimal::TInt128>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                default:
+                    YQL_ENSURE(false, "Unsupported Arrow type for Decimal column: " << columnPtr->type()->ToString());
+                    return {};
+            }
         }
         case NTypeIds::PairUi64Ui64:
         case NTypeIds::ActorId:

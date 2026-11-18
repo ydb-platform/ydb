@@ -1,5 +1,7 @@
 #include "agent_impl.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 
@@ -8,7 +10,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::InitS3(const TString& name) {
         if (S3BackendSettings) {
             auto& settings = S3BackendSettings->GetSettings();
-            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(settings);
+            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings);
             S3WrapperId = Register(NWrappers::CreateS3Wrapper(externalStorageConfig->ConstructStorageOperator()));
             S3BasePath = TStringBuilder() << settings.GetObjectKeyPattern() << '/' << name;
         }

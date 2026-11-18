@@ -8,6 +8,11 @@ namespace NKikimr::NBsController {
 
     class TGroupGeometryInfo;
 
+    struct TSelfHealSettings {
+        bool PreferLessOccupiedRack = false;
+        bool WithAttentionToReplication = false;
+    };
+
     struct TEvControllerUpdateSelfHealInfo : TEventLocal<TEvControllerUpdateSelfHealInfo, TEvBlobStorage::EvControllerUpdateSelfHealInfo> {
         struct TGroupContent {
             struct TVDiskInfo {
@@ -48,5 +53,7 @@ namespace NKikimr::NBsController {
             : VDiskStatusUpdate(std::move(updates))
         {}
     };
+
+    TSelfHealSettings ParseSelfHealSettings(const std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> storageConfig);
 
 } // NKikimr::NBsController

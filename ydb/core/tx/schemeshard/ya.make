@@ -25,6 +25,7 @@ RECURSE_FOR_TESTS(
     ut_extsubdomain
     ut_extsubdomain_reboots
     ut_failure_injection
+    ut_filestore
     ut_filestore_reboots
     ut_incremental_restore
     ut_incremental_restore_reboots
@@ -331,9 +332,11 @@ PEERDIR(
     library/cpp/html/pcdata
     library/cpp/json
     library/cpp/protobuf/json
+    library/cpp/regex/pcre
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/base
+    ydb/core/backup/regexp
     ydb/core/blob_depot
     ydb/core/blobstorage/base
     ydb/core/blockstore/core

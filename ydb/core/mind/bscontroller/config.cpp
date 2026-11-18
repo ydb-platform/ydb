@@ -445,9 +445,16 @@ namespace NKikimr::NBsController {
                         auto& topology = *group->Topology;
                         // fill in vector of failed disks (that are not fully operational)
                         TBlobStorageGroupInfo::TGroupVDisks failed(&topology);
+                        bool alreadySeenReplicatingWithPhantomsOnly = false;
                         for (const TVSlotInfo *slot : group->VDisksInGroup) {
-                            if (!slot->IsReady) {
+                            bool replicatingWithPhantomsOnly = slot->IsReplicatingWithPhantomsOnly();
+                            // Allow exactly one VDisk that is REPLICATING with only phantoms remaining to be treated as nearly ready
+                            bool allowedOneReplicatingWithPhantomsOnly = replicatingWithPhantomsOnly && !alreadySeenReplicatingWithPhantomsOnly;
+                            if (!slot->IsReady && !allowedOneReplicatingWithPhantomsOnly) {
                                 failed |= {&topology, slot->GetShortVDiskId()};
+                            }
+                            if (replicatingWithPhantomsOnly) {
+                                alreadySeenReplicatingWithPhantomsOnly = true;
                             }
                         }
                         // check the failure model
@@ -603,6 +610,19 @@ namespace NKikimr::NBsController {
                     overlay->second->PutInVSlotReadyTimestampQ(now);
                 } else {
                     Y_DEBUG_ABORT_UNLESS(overlay->second->IsReady || overlay->second->IsInVSlotReadyTimestampQ());
+                }
+
+                // Keep node->group subscription in commit path: dynamic groups may appear
+                // after initial RegisterNode, and cleanup for the same index is done below.
+                if (overlay->second && !overlay->second->IsBeingDeleted()) {
+                    const TGroupId groupId = overlay->second->GroupId;
+                    if (NKikimr::IsDynamicGroup(groupId)) {
+                        const TNodeId nodeId = overlay->second->VSlotId.NodeId;
+                        auto& node = GetNode(nodeId);
+                        if (node.GroupsRequested.insert(groupId).second) {
+                            GroupToNode.emplace(groupId, nodeId);
+                        }
+                    }
                 }
             }
 

@@ -14,6 +14,7 @@ namespace NActors {
         std::shared_ptr<IInterconnectMetrics> Metrics;
         const ui32 MaxSerializedEventSize;
         const TSessionParams Params;
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
 
         struct THeapItem {
             TEventOutputChannel *Channel;
@@ -29,11 +30,12 @@ namespace NActors {
     public:
         TChannelScheduler(ui32 peerNodeId, const TChannelsConfig& predefinedChannels,
                 std::shared_ptr<IInterconnectMetrics> metrics, ui32 maxSerializedEventSize,
-                TSessionParams params)
+                TSessionParams params, std::shared_ptr<NInterconnect::NRdma::IMemPool> rdmaMemPool)
             : PeerNodeId(peerNodeId)
             , Metrics(std::move(metrics))
             , MaxSerializedEventSize(maxSerializedEventSize)
             , Params(std::move(params))
+            , RdmaMemPool(std::move(rdmaMemPool))
         {
             for (const auto& item : predefinedChannels) {
                 GetOutputChannel(item.first);
@@ -71,7 +73,7 @@ namespace NActors {
                 auto& res = ChannelArray[channel];
                 if (Y_UNLIKELY(!res)) {
                     res.emplace(channel, PeerNodeId, MaxSerializedEventSize, Metrics,
-                        Params);
+                        Params, RdmaMemPool);
                 }
                 return *res;
             } else {
@@ -79,7 +81,7 @@ namespace NActors {
                 if (Y_UNLIKELY(it == ChannelMap.end())) {
                     it = ChannelMap.emplace(std::piecewise_construct, std::forward_as_tuple(channel),
                         std::forward_as_tuple(channel, PeerNodeId, MaxSerializedEventSize,
-                        Metrics, Params)).first;
+                        Metrics, Params, RdmaMemPool)).first;
                 }
                 return it->second;
             }

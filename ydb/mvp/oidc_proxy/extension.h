@@ -30,7 +30,7 @@ struct TExtensionsSteps : public TQueue<std::unique_ptr<IExtension>> {
 };
 
 struct TExtensionContext : public TThrRefBase {
-    TActorId Sender;
+    NActors::TActorId Sender;
     TExtensionsSteps Steps;
     TProxiedResponseParams Params;
 

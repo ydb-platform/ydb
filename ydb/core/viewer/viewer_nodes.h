@@ -249,24 +249,21 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         TString GetDataCenter() const {
-            if (NodeInfo.Location.GetDataCenterId()) {
-                return NodeInfo.Location.GetDataCenterId();
-            }
             return SystemState.GetLocation().GetDataCenter();
         }
 
         TString GetRack() const {
-            if (NodeInfo.Location.GetRackId()) {
-                return NodeInfo.Location.GetRackId();
-            }
             return SystemState.GetLocation().GetRack();
         }
 
         TString GetPileName() const {
-            if (NodeInfo.Location.GetBridgePileName()) {
-                return NodeInfo.Location.GetBridgePileName().value_or("");
-            }
             return SystemState.GetLocation().GetBridgePileName();
+        }
+
+        void MergeInterconnectLocation() {
+            NActorsInterconnect::TNodeLocation location;
+            NodeInfo.Location.Serialize(&location, false);
+            SystemState.MutableLocation()->MergeFrom(location);
         }
 
         void Cleanup() {
@@ -1188,6 +1185,15 @@ public:
         return nullptr;
     }
 
+    void SetNodeDisconnected(TNodeId nodeId) {
+        if (TNode* node = FindNode(nodeId)) {
+            node->DisconnectNode();
+            if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
+                node->RemapDisks();
+            }
+        }
+    }
+
     bool PreFilterDone() const {
         return (!PDisksResponse || PDisksProcessed) && !FilterDatabase && FilterPeerRole != EPeerRole::Static && FilterPeerRole != EPeerRole::Other;
     }
@@ -1802,6 +1808,8 @@ public:
                     for (const auto& ni : NodesInfoResponse->Get()->Nodes) {
                         TNode& node = NodeData.emplace_back();
                         node.NodeInfo = ni;
+                        node.MergeInterconnectLocation();
+
                         if (ni.Host && !node.SystemState.GetHost()) {
                             node.SystemState.SetHost(ni.Host);
                         }
@@ -2448,16 +2456,10 @@ public:
                         hasMemoryDetailed |= systemInfo.HasMemoryStats();
                     }
                     for (auto nodeId : nodesWithoutData) {
-                        TNode* node = FindNode(nodeId);
-                        if (node) {
-                            node->DisconnectNode();
-                        }
+                        SetNodeDisconnected(nodeId);
                     }
                 } else {
-                    TNode* node = FindNode(responseNodeId);
-                    if (node) {
-                        node->DisconnectNode();
-                    }
+                    SetNodeDisconnected(responseNodeId);
                 }
             }
             for (const auto& [nodeId, response] : SystemStateResponse) {
@@ -2479,10 +2481,7 @@ public:
                         hasMemoryDetailed |= systemState.GetSystemStateInfo(0).HasMemoryStats();
                     }
                 } else {
-                    TNode* node = FindNode(nodeId);
-                    if (node) {
-                        node->DisconnectNode();
-                    }
+                    SetNodeDisconnected(nodeId);
                 }
             }
             if (!removeNodes.empty()) {
@@ -2930,13 +2929,7 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         TNodeId nodeId = ev->Get()->NodeId;
-        TNode* node = FindNode(nodeId);
-        if (node) {
-            node->DisconnectNode();
-            if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
-                node->RemapDisks();
-            }
-        }
+        SetNodeDisconnected(nodeId);
         TString error("NodeDisconnected");
         {
             auto itSystemStateResponse = SystemStateResponse.find(nodeId);

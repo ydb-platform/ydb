@@ -50,4 +50,5 @@ def do(args):
     response = perform_request(request)
     common.print_request_result(args, request, response)
     if not is_successful_response(response):
+        common.dump_group_mapper_error(response, args)
         sys.exit(1)

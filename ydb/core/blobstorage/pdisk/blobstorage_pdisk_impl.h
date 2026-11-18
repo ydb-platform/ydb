@@ -106,8 +106,7 @@ public:
     TControlWrapper ForsetiMinLogCostNsControl;
     TControlWrapper ForsetiMilliBatchSize;
     TControlWrapper ForsetiMaxLogBatchNs;
-    TControlWrapper ForsetiOpPieceSizeSsd;
-    TControlWrapper ForsetiOpPieceSizeRot;
+    TControlWrapper ForsetiOpPieceSize;
     TControlWrapper UseNoopSchedulerSSD;
     TControlWrapper UseNoopSchedulerHDD;
     TControlWrapper SemiStrictSpaceIsolation;
@@ -381,7 +380,7 @@ public:
 
     // Scheduler weight configuration
     void ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight);
-    void SchedulerConfigure(const TConfigureScheduler &conf);
+    void SchedulerConfigure(const TPDiskSchedulerConfig& cfg, ui32 ownerId);
     void SendCutLog(TAskForCutLog &reqest);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Free space check

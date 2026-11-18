@@ -145,6 +145,8 @@ const char *TypeName(TTypeId typeId) {
         case NTypeIds::Utf8:            return "Utf8";
         case NTypeIds::Yson:            return "Yson";
         case NTypeIds::Json:            return "Json";
+        case NTypeIds::Decimal:         return "Decimal";
+        case NTypeIds::Pg:              return "Pg";
         case NTypeIds::JsonDocument:    return "JsonDocument";
         case NTypeIds::DyNumber:        return "DyNumber";
         case NTypeIds::Uuid:            return "Uuid";

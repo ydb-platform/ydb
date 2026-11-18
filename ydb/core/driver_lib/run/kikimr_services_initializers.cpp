@@ -230,14 +230,17 @@
 #include <ydb/library/actors/helpers/selfping_actor.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect_metrics_aggregator.h>
 #include <ydb/library/actors/interconnect/interconnect_mon.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/handshake_broker.h>
 #include <ydb/library/actors/interconnect/load.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
+#include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/slide_limiter/service/service.h>
@@ -265,12 +268,21 @@
 namespace NKikimr::NKikimrServicesInitializers {
 
 struct TAwsApiGuard {
-    TAwsApiGuard() {
-        InitAwsAPI();
+    const TAwsClientConfig Config;
+
+    TAwsApiGuard(const NKikimrConfig::TAwsClientConfig& config)
+        : Config{
+            .LogConfig{
+                .LogLevel = config.GetLogConfig().GetLogLevel(),
+                .FilenamePrefix = config.GetLogConfig().GetFilenamePrefix(),
+            },
+        }
+    {
+        InitAwsAPI(Config);
     }
 
     ~TAwsApiGuard() {
-        ShutdownAwsAPI();
+        ShutdownAwsAPI(Config);
     }
 };
 
@@ -388,6 +400,12 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         case NKikimrConfig::TInterconnectConfig::PER_DATA_CENTER:
             result.MergePerDataCenterCounters = true;
             break;
+        case NKikimrConfig::TInterconnectConfig::PER_HOST:
+            result.MergePerHostCounters = true;
+            break;
+        case NKikimrConfig::TInterconnectConfig::PER_SCOPE_CLASS:
+            result.MergePerScopeClassCounters = true;
+            break;
         case NKikimrConfig::TInterconnectConfig::NO_MERGE:
             break;
     }
@@ -476,6 +494,31 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     }
 
     result.EnableExternalDataChannel = config.GetEnableExternalDataChannel();
+    result.EnableKernelLiveness = false;
+    if (config.GetUseKernelKeepAlive()) {
+        result.EnableKernelLiveness = true;
+
+        result.KernelUserTimeout = result.DeadPeer != TDuration::Zero()
+            ? result.DeadPeer
+            : NActors::DEFAULT_DEADPEER_TIMEOUT;
+        // Keep kernel liveness approximately aligned to KernelUserTimeout while keeping the setup simple.
+        // Target budget on idle links is:
+        //   KernelKeepAliveIdle + KernelKeepAliveInterval * KernelKeepAliveProbes ~= KernelUserTimeout.
+        // Interval is derived from timeout and probes are fixed for predictable behavior.
+        result.KernelKeepAliveInterval = Max(result.KernelUserTimeout / 10, TDuration::Seconds(1));
+        constexpr ui32 keepAliveProbes = 5;
+        result.KernelKeepAliveProbes = keepAliveProbes;
+
+        const ui64 userTimeoutMs = result.KernelUserTimeout.MilliSeconds();
+        const ui64 keepAliveIntervalMs = result.KernelKeepAliveInterval.MilliSeconds();
+        const ui64 keepAliveWindowMs = keepAliveIntervalMs * keepAliveProbes;
+        // Use the remaining budget as keepalive idle. If interval*probes already consumes timeout,
+        // clamp idle to 1s to keep socket options valid and avoid disabling kernel mode.
+        const ui64 keepAliveIdleMs = userTimeoutMs > keepAliveWindowMs
+            ? userTimeoutMs - keepAliveWindowMs
+            : TDuration::Seconds(1).MilliSeconds();
+        result.KernelKeepAliveIdle = Max(TDuration::MilliSeconds(keepAliveIdleMs), TDuration::Seconds(1));
+    }
 
     if (config.HasValidateIncomingPeerViaDirectLookup()) {
         result.ValidateIncomingPeerViaDirectLookup = config.GetValidateIncomingPeerViaDirectLookup();
@@ -503,6 +546,16 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         case NKikimrConfig::TInterconnectConfig::IC_SO_MSG_ZEROCOPY:
             result.SocketSendOptimization = ESocketSendOptimization::IC_MSG_ZEROCOPY;
             break;
+    }
+
+    if (config.HasRdmaChecksum()) {
+        result.RdmaChecksum = config.GetRdmaChecksum();
+    }
+    if (config.HasRdmaPayloadCopySizeThreshold()) {
+        result.RdmaPayloadCopySizeThreshold = config.GetRdmaPayloadCopySizeThreshold();
+    }
+    if (config.HasMaxRdmaRetryBackoffLevel()) {
+        result.MaxRdmaRetryBackoffLevel = config.GetMaxRdmaRetryBackoffLevel();
     }
 
     return result;
@@ -554,6 +607,15 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         resolverOptions.MonCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "dns_resolver");
         resolverOptions.ForceTcp = nsConfig.GetForceTcp();
         resolverOptions.KeepSocket = nsConfig.GetKeepSocket();
+        switch (nsConfig.GetDnsResolverType()) {
+            case NKikimrConfig::TStaticNameserviceConfig::ARES:
+                resolverOptions.Type = NDnsResolver::EDnsResolverType::Ares;
+                break;
+            case NKikimrConfig::TStaticNameserviceConfig::LIBC:
+                resolverOptions.Type = NDnsResolver::EDnsResolverType::Libc;
+                break;
+        }
+        resolverOptions.AddTrailingDot = nsConfig.GetAddTrailingDot();
         IActor *resolver = NDnsResolver::CreateOnDemandDnsResolver(resolverOptions);
 
         setup->LocalServices.emplace_back(
@@ -608,14 +670,42 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             }
 
             // create poller actor (whether platform supports it)
-            setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, systemPoolId));
+            setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(
+                CreatePollerActor(schedulerConfig.MonCounters), TMailboxType::ReadAsFilled, systemPoolId));
 
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 
             TIntrusivePtr<TInterconnectProxyCommon> icCommon;
             icCommon.Reset(new TInterconnectProxyCommon);
+
+            NMonitoring::TDynamicCounterPtr interconectCounters = GetServiceCounters(counters, "interconnect");
+
+            if (icConfig.GetUseRdma()) {
+                NInterconnect::NRdma::ECqMode rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT;
+                if (icConfig.HasRdmaCqMode()) {
+                    switch (icConfig.GetRdmaCqMode()) {
+                        case NKikimrConfig::TInterconnectConfig::CQ_EVENT:
+                            rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT;
+                            break;
+                        case NKikimrConfig::TInterconnectConfig::CQ_POLLING:
+                            rdmaCqMode = NInterconnect::NRdma::ECqMode::POLLING;
+                            break;
+                    }
+                }
+                setup->LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
+                    TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(-1, icConfig.GetRdmaMaxWr(), rdmaCqMode, interconectCounters.Get()),
+                        TMailboxType::ReadAsFilled, interconnectPoolId));
+
+                // Interconnect uses rdma mem pool directly
+                const auto counters = GetServiceCounters(appData->Counters, "utils");
+                NInterconnect::NRdma::TMemPoolSettings memPoolSettings;
+                memPoolSettings.SizeLimitMb = icConfig.GetRdmaMemPoolSizeLimitMb();
+                icCommon->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(counters.Get(), memPoolSettings);
+                // Clients via wrapper to handle allocation fail
+                setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(icCommon->RdmaMemPool);
+            }
             icCommon->NameserviceId = nameserviceId;
-            icCommon->MonCounters = GetServiceCounters(counters, "interconnect");
+            icCommon->MonCounters = interconectCounters;
             icCommon->ChannelsConfig = channels;
             icCommon->Settings = settings;
             icCommon->DestructorId = GetDestructActorID();
@@ -711,6 +801,13 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 };
                 setup->LocalServices.emplace_back(NInterconnect::MakeInterconnectMonActorId(NodeId), TActorSetupCmd(
                     NInterconnect::CreateInterconnectMonActor(icCommon), TMailboxType::ReadAsFilled, systemPoolId));
+            }
+
+            if (settings.MergePerHostCounters || settings.MergePerScopeClassCounters) {
+                icCommon->MetricsAggregatorId = NActors::NInterconnectMetricsAggregator::MakeInterconnectMetricsAggregatorId(NodeId);
+                setup->LocalServices.emplace_back(icCommon->MetricsAggregatorId, TActorSetupCmd(
+                    NActors::NInterconnectMetricsAggregator::CreateInterconnectMetricsAggregatorActor(icCommon),
+                    TMailboxType::ReadAsFilled, interconnectPoolId));
             }
 
             if (nsConfig.HasClusterUUID()) {
@@ -3102,8 +3199,7 @@ TAwsApiInitializer::TAwsApiInitializer(IGlobalObjectStorage& globalObjects)
 
 void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     Y_UNUSED(setup);
-    Y_UNUSED(appData);
-    GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
+    GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>(appData->AwsClientConfig));
 }
 
 TOverloadManagerInitializer::TOverloadManagerInitializer(const TKikimrRunConfig& runConfig)

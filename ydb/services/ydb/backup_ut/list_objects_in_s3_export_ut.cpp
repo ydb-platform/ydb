@@ -51,6 +51,38 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
             {"dir1/Table1", "dir1/Table1"},
             {"dir1/dir2/Table2", "dir1/dir2/Table2"},
         }, "Prefix");
+
+        // Exclude regexps
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
+            listSettings
+                .AppendExcludeRegexp(".*");
+
+            // Filter out everything => empty list
+            ValidateListObjectInS3Export({}, listSettings);
+        }
+
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
+            listSettings
+                .AppendExcludeRegexp("Table1");
+
+            ValidateListObjectInS3Export({
+                {"Table0", "Table0"},
+                {"dir1/dir2/Table2", "dir1/dir2/Table2"},
+            }, listSettings);
+        }
+
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
+            listSettings
+                .AppendItem(NImport::TListObjectsInS3ExportSettings::TItem{.Path = "dir1"})
+                .AppendExcludeRegexp("Table1");
+
+            ValidateListObjectInS3Export({
+                {"dir1/dir2/Table2", "dir1/dir2/Table2"},
+            }, listSettings);
+        }
     }
 
     Y_UNIT_TEST(ExportWithoutSchemaMapping) {
@@ -74,6 +106,38 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
             {"t1", "t1"},
             {"d2/t2", "d2/t2"},
         }, "Prefix/d1");
+
+        // Exclude regexps
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
+            listSettings
+                .AppendExcludeRegexp("(d(1|2)/)?(d(1|2)/)?t");
+
+            // Filter out everything => empty list
+            ValidateListObjectInS3Export({}, listSettings);
+        }
+
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
+            listSettings
+                .AppendExcludeRegexp("t1");
+
+            ValidateListObjectInS3Export({
+                {"t0", "t0"},
+                {"d1/d2/t2", "d1/d2/t2"},
+            }, listSettings);
+        }
+
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
+            listSettings
+                .AppendItem(NImport::TListObjectsInS3ExportSettings::TItem{.Path = "d1"})
+                .AppendExcludeRegexp("t1");
+
+            ValidateListObjectInS3Export({
+                {"d1/d2/t2", "d1/d2/t2"},
+            }, listSettings);
+        }
     }
 
     Y_UNIT_TEST(ExportWithEncryption) {
@@ -97,6 +161,41 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
             "dir1/Table1",
             "dir1/dir2/Table2",
         }, listSettings);
+
+        // Exclude regexps
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
+            listSettings
+                .SymmetricKey("Cool random key!")
+                .AppendExcludeRegexp(".*");
+
+            // Filter out everything => empty list
+            ValidateListObjectInS3Export({}, listSettings);
+        }
+
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
+            listSettings
+                .SymmetricKey("Cool random key!")
+                .AppendExcludeRegexp("Table1");
+
+            ValidateListObjectPathsInS3Export({
+                "Table0",
+                "dir1/dir2/Table2",
+            }, listSettings);
+        }
+
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
+            listSettings
+                .SymmetricKey("Cool random key!")
+                .AppendItem(NImport::TListObjectsInS3ExportSettings::TItem{.Path = "dir1"})
+                .AppendExcludeRegexp("Table1");
+
+            ValidateListObjectPathsInS3Export(TSet<TString>({
+                "dir1/dir2/Table2",
+            }), listSettings);
+        }
     }
 
     Y_UNIT_TEST(ExportWithWrongEncryptionKey) {
@@ -213,6 +312,14 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
             // Wrong page token
             NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
             auto res = YdbImportClient().ListObjectsInS3Export(listSettings, 42, "incorrect page token").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, "Status: " << res.GetStatus() << ". Issues: " << res.GetIssues().ToString());
+        }
+
+        {
+            // Invalid exclude regexp
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
+            listSettings.AppendExcludeRegexp("invalid regexp)");
+            auto res = YdbImportClient().ListObjectsInS3Export(listSettings).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, "Status: " << res.GetStatus() << ". Issues: " << res.GetIssues().ToString());
         }
     }

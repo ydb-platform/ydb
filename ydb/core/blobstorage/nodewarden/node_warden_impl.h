@@ -169,6 +169,7 @@ namespace NKikimr::NStorage {
         struct TEvPrivate {
             enum EEv {
                 EvSendDiskMetrics = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvUpdateStats,
                 EvUpdateNodeDrives,
                 EvReadCache,
                 EvGetGroup,
@@ -179,6 +180,7 @@ namespace NKikimr::NStorage {
             };
 
             struct TEvSendDiskMetrics : TEventLocal<TEvSendDiskMetrics, EvSendDiskMetrics> {};
+            struct TEvUpdateStats : TEventLocal<TEvUpdateStats, EvUpdateStats> {};
             struct TEvUpdateNodeDrives : TEventLocal<TEvUpdateNodeDrives, EvUpdateNodeDrives> {};
 
             struct TEvDereferencePDisk : TEventLocal<TEvDereferencePDisk, EvDereferencePDisk> {
@@ -210,6 +212,8 @@ namespace NKikimr::NStorage {
         TControlWrapper EnableSyncLogChunkCompressionSSD;
         TControlWrapper MaxSyncLogChunksInFlightHDD;
         TControlWrapper MaxSyncLogChunksInFlightSSD;
+        TControlWrapper SyncLogMaxDiskAmount;
+        TControlWrapper SyncLogMaxMemAmount;
         TControlWrapper DefaultHugeGarbagePerMille;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille;
         TControlWrapper MaxChunksToDefragInflight;
@@ -217,6 +221,10 @@ namespace NKikimr::NStorage {
         TControlWrapper FreshCompMaxInFlightReads;
         TControlWrapper HullCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightReads;
+        TControlWrapper HullCompFullCompPeriodSec;
+        TControlWrapper HullCompThrottlerBytesRate;
+        TControlWrapper GarbageThresholdToRunFullCompactionPerMille;
+        TControlWrapper DefragThrottlerBytesRate;
 
         TControlWrapper ThrottlingDryRun;
         TControlWrapper ThrottlingMinLevel0SstCount;
@@ -230,10 +238,15 @@ namespace NKikimr::NStorage {
         TControlWrapper ThrottlingMinLogChunkCount;
         TControlWrapper ThrottlingMaxLogChunkCount;
 
+        TControlWrapper MaxInProgressStartupDataSyncCount;
+        TControlWrapper MaxInProgressStartupDataSyncPerPDiskCount;
+        TControlWrapper MaxInProgressLocalRecoveryCount;
+        TControlWrapper MaxInProgressLocalRecoveryPerPDiskCount;
         TControlWrapper MaxInProgressSyncCount;
 
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
+        TControlWrapper MaxActiveCompactionsPerPDisk;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
@@ -537,6 +550,7 @@ namespace NKikimr::NStorage {
             std::optional<NKikimrBlobStorage::TGroupInfo> Group; // group info as a protobuf
             NKikimrBlobStorage::TGroupInfo EncryptionParams; // latest encryption parameters; set only when encryption enabled; overlay in respect to Group
             TActorId ProxyId; // actor id of running DS proxy or agent
+            bool MustSubscribe = false; // keep RegisterNode subscription for this group even when proxy is not running
             bool AgentProxy = false; // was the group started as an BlobDepot agent proxy?
             bool GetGroupRequestPending = false; // if true, then we are waiting for GetGroup response for this group
             bool ProposeRequestPending = false; // if true, then we have sent ProposeKey request and waiting for the group
@@ -619,6 +633,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&);
         void Handle(TEvPrivate::TEvUpdateNodeDrives ::TPtr&);
         void Handle(TEvPrivate::TEvRetrySaveConfig::TPtr&);
+        void Handle(TEvPrivate::TEvUpdateStats::TPtr&);
 
         void Handle(NMon::TEvHttpInfo::TPtr&);
         void RenderJsonGroupInfo(IOutputStream& out, const std::set<ui32>& groupIds);

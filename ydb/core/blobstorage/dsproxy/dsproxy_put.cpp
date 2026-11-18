@@ -241,7 +241,11 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         ++StatusResultMsgsReceived;
 
         auto& record = ev->Get()->Record;
-        const ui32 orderNumber = ev->Cookie;
+        const ui64 cookie = ev->Cookie;
+        Y_ABORT_UNLESS(cookie < IncarnationRecords.size(),
+            "unexpected TEvVStatusResult cookie# %" PRIu64 " IncarnationRecords.size# %zu",
+            cookie, IncarnationRecords.size());
+        const ui32 orderNumber = static_cast<ui32>(cookie);
         auto& incarnationRecord = IncarnationRecords[orderNumber];
         Y_ABORT_UNLESS(incarnationRecord.IncarnationGuid);
         Y_ABORT_UNLESS(incarnationRecord.ExpirationTimestamp != TMonotonic::Max());
@@ -251,7 +255,6 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         if (record.HasIncarnationGuid()) {
             HandleIncarnation(issue, orderNumber, record.GetIncarnationGuid());
         } else if (record.GetStatus() != NKikimrProto::OK) { // we can't obtain status from the vdisk; assume it has not been written
-            Y_ABORT_UNLESS(orderNumber < IncarnationRecords.size());
             IncarnationRecords[orderNumber] = {};
             PutImpl.InvalidatePartStates(orderNumber);
             ++*Mon->NodeMon->IncarnationChanges;
@@ -278,7 +281,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(record.HasVDiskID());
         TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vdiskId);
-        const ui32 vdisk = Info->GetOrderNumber(shortId);
+        const ui32 vdisk = PutImpl.GetOrderNumber(shortId);
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         const size_t blobIdx = PutImpl.GetBlobIdx(blobId);
 
@@ -294,7 +297,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
         if (record.HasIncarnationGuid()) {
             // TODO: correct timestamp
-            HandleIncarnation(TActivationContext::Monotonic(), Info->GetOrderNumber(shortId), record.GetIncarnationGuid());
+            HandleIncarnation(TActivationContext::Monotonic(), vdisk, record.GetIncarnationGuid());
         }
 
         LWTRACK(DSProxyVDiskRequestDuration, Orbit, TEvBlobStorage::EvVPut, blobId.BlobSize(), blobId.TabletID(),
@@ -344,7 +347,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vdiskId);
-        const ui32 vdisk = Info->GetOrderNumber(shortId);
+        const ui32 vdisk = PutImpl.GetOrderNumber(shortId);
         const NKikimrProto::EReplyStatus status = record.GetStatus();
 
         if (TimeStatsEnabled && record.GetMsgQoS().HasExecTimeStats()) {
@@ -474,8 +477,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                     (History, PutImpl.PrintHistory()));
         }
 
-        if (ResponsesSent == PutImpl.Blobs.size()) {
-            STLOG(PutImpl.WasNotOkResponses() && PopAllowToken(HandleClass) ? PRI_NOTICE : PRI_DEBUG,
+        if (ResponsesSent == PutImpl.Blobs.size() && IS_LOG_PRIORITY_ENABLED(PutImpl.ResultPriority, LogCtx.LogComponent) && PopAllowToken(HandleClass)) {
+            STLOG(PutImpl.ResultPriority,
                     BS_PROXY_PUT, BPP72, "Query history",
                     (GroupId, Info->GroupID),
                     (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
@@ -561,8 +564,16 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             ev->Bunch.emplace_back(new IEventHandle(
                 TActorId() /*recipient*/,
                 item.Recipient,
-                put = new TEvBlobStorage::TEvPut(item.BlobId, std::move(item.Buffer), item.Deadline, HandleClass, Tactic,
-                    item.IssueKeepFlag, item.IgnoreBlock),
+                put = new TEvBlobStorage::TEvPut({
+                    .BlobId = item.BlobId,
+                    .Buffer = std::move(item.Buffer),
+                    .Deadline = item.Deadline,
+                    .HandleClass = HandleClass,
+                    .Tactic = Tactic,
+                    .WriteSource = item.WriteSource,
+                    .IssueKeepFlag = item.IssueKeepFlag,
+                    .IgnoreBlock = item.IgnoreBlock,
+                }),
                 0 /*flags*/,
                 item.Cookie,
                 nullptr /*forwardOnNondelivery*/,
@@ -706,6 +717,7 @@ public:
     bool EncodeQuantum() {
         const ui64 endTime = GetCycleCountFast() + DurationToCycles(MaxQuantumDuration);
         bool firstIteration = true;
+        IRcBufAllocator* const allocator = TlsActivationContext->ActorSystem()->GetRcBufAllocator();
         while (Min(BlobsEncrypted, BlobsSplit) < PutImpl.Blobs.size()) {
             if (!firstIteration && endTime <= GetCycleCountFast()) {
                 return false;
@@ -724,7 +736,8 @@ public:
             } else { // BlobsSplit < BlobsEncrypted -- then we split it
                 auto& blob = PutImpl.Blobs[BlobsSplit];
                 const auto crcMode = static_cast<TErasureType::ECrcMode>(blob.BlobId.CrcMode());
-                if (ErasureSplit(crcMode, Info->Type, blob.Buffer, PartSets[BlobsSplit], &ErasureSplitContext)) {
+                if (ErasureSplit(crcMode, Info->Type, blob.Buffer, PartSets[BlobsSplit],
+                        &ErasureSplitContext, allocator)) {
                     ++BlobsSplit;
                     ErasureSplitContext = TErasureSplitContext::Init(MaxBytesToSplitAtOnce);
                 }

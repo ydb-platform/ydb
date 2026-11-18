@@ -443,7 +443,7 @@ namespace NKikimr {
             TLsnSeg seg(item.Lsn, item.Lsn);
             ctx.Send(Keeper.State.Settings.PDiskActorId, new NPDisk::TEvLog(Keeper.State.PDiskParams->Owner,
                     Keeper.State.PDiskParams->OwnerRound, TLogSignature::SignatureIncrHugeChunks, commit, data,
-                    seg, Keeper.RegisterYardCallback(MakeCallback(std::move(callback)))));
+                    seg, Keeper.RegisterYardCallback(MakeCallback(std::move(callback))), TWriteSource::HugeKeeperProcessChunkQueue));
 
             if (item.Entrypoint) {
                 ProcessedChunksWithoutEntrypoint = 0;
@@ -661,7 +661,7 @@ namespace NKikimr {
             TLsnSeg seg(item.Lsn, item.Lsn);
             ctx.Send(Keeper.State.Settings.PDiskActorId, new NPDisk::TEvLog(Keeper.State.PDiskParams->Owner,
                     Keeper.State.PDiskParams->OwnerRound, TLogSignature::SignatureIncrHugeDeletes, commit, data,
-                    seg, Keeper.RegisterYardCallback(MakeCallback(std::move(callback)))));
+                    seg, Keeper.RegisterYardCallback(MakeCallback(std::move(callback))), TWriteSource::HugeKeeperProcessDeleteChunkQueueItem));
         }
 
         void TLogger::ApplyLogDeleteItem(TDeleteQueueItem& item, NKikimrProto::EReplyStatus status, IEventBase *msg,

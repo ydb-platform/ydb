@@ -66,7 +66,8 @@ namespace NKikimr {
                     void *cookie = nullptr;
                     auto write = std::make_unique<NPDisk::TEvChunkWrite>(Worker->PDiskCtx->Dsk->Owner,
                         Worker->PDiskCtx->Dsk->OwnerRound, preallocatedLocation.ChunkIdx, preallocatedLocation.Offset,
-                        partsPtr, cookie, true, NPriWrite::HullComp, false);
+                        partsPtr, cookie, true, NPriWrite::HullComp, TWriteSource::HullCompactWorkerWrite,
+                        false);
                     Worker->PendingWrites.push_back(std::move(write));
                 }
             }
@@ -603,7 +604,8 @@ namespace NKikimr {
 
                 NGcOpt::TKeepFlagStat keepFlagStat;
                 if (IsFresh) {
-                    keepFlagStat.Needed = true;
+                    // we need this record only if it does contain DoNotKeep flag and there is Keep flag somewhere else
+                    keepFlagStat.Needed = subsDoNotKeep != 0 && subsKeep < wholeKeep;
                 } else {
                     keepFlagStat = {subsKeep, subsDoNotKeep, wholeKeep, wholeDoNotKeep};
                 }

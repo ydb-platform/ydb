@@ -1,6 +1,7 @@
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include "env.h"
 
@@ -254,8 +255,10 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
         const TGroupGeometryInfo Geom;
     };
 
-    Y_UNIT_TEST(SelfHealBlock4Plus2) {
-        TTestSelfHeal(1, 32, 1, 2, 64, "block-4-2", TBlobStorageGroupType::Erasure4Plus2Block).RunTestCorrectMoves();
+    Y_UNIT_TEST_TWIN(SelfHealBlock4Plus2, block82) {
+        const auto erasure = block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block;
+        const ui32 racks = TBlobStorageGroupType(erasure).BlobSubgroupSize() * 4;
+        TTestSelfHeal(1, racks, 1, 2, 64, TBlobStorageGroupType::ErasureSpeciesName(erasure), erasure).RunTestCorrectMoves();
     }
 
     Y_UNIT_TEST(SelfHealMirror3dc) {

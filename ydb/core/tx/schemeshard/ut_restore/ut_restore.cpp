@@ -14073,6 +14073,98 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         ExportImportComplexIndex(IsFs, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, Prefixed);
     }
 
+    Y_UNIT_TEST(VectorIndexBuildFinishesDuringEncryptedExport) {
+        TTempDir backupDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix" Type: "Uint32" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/Table", 0, 0, 200);
+
+        const ui64 buildId = ++txId;
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> applyBuild(runtime, [&](const auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.HasApplyIndexBuild() && tx.GetApplyIndexBuild().GetBuildIndexId() == buildId) {
+                    return true;
+                }
+            }
+            return false;
+        });
+        Ydb::Table::TableIndex index;
+        index.set_name("vector_idx");
+        index.add_index_columns("embedding");
+        auto* kmeans = index.mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+        using TVectorSettings = Ydb::Table::VectorIndexSettings;
+        kmeans->mutable_settings()->set_metric(TVectorSettings::DISTANCE_COSINE);
+        kmeans->set_clusters(4);
+        kmeans->set_levels(2);
+        TestBuildIndex(runtime, buildId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", index);
+        runtime.WaitFor("vector index ready to publish detected settings", [&] { return !applyBuild.empty(); });
+
+        const auto describeIndex = [&] (const TString& table) {
+            return DescribePrivatePath(runtime, table + "/vector_idx");
+        };
+        TestDescribeResult(describeIndex("/MyRoot/Table"), {
+            NLs::KMeansTreeDescription(TVectorSettings::DISTANCE_COSINE, TVectorSettings::VECTOR_TYPE_UNSPECIFIED, 0, 4, 2),
+        });
+        const TString storageSettings = Sprintf(R"(
+            base_path: "%s"
+            encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key { key: "0123456789012345" }
+            }
+        )", backupDir.Name().c_str());
+        const ui64 exportId = ++txId;
+        using TMetadataUploaded = NSchemeShard::TEvPrivate::TEvExportUploadMetadataResult;
+        TBlockEvents<TMetadataUploaded> metadataUploaded(runtime, [&](const auto& ev) {
+            const auto* result = dynamic_cast<TMetadataUploaded*>(ev->GetBase());
+            return result && result->ExportId == exportId;
+        });
+        TestExport(runtime, exportId, "/MyRoot", Sprintf(R"(
+            ExportToFsSettings {
+                %s
+                include_index_data: true
+                items { source_path: "/MyRoot/Table" destination_path: "backup" }
+            }
+        )", storageSettings.c_str()));
+        runtime.WaitFor("export metadata frozen before table copy", [&] { return !metadataUploaded.empty(); });
+        applyBuild.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildId);
+        const auto readySettings = NLs::KMeansTreeDescription(
+            TVectorSettings::DISTANCE_COSINE, TVectorSettings::VECTOR_TYPE_UINT8, 4, 4, 2);
+        TestDescribeResult(describeIndex("/MyRoot/Table"), {NLs::IndexState(EIndexStateReady), readySettings});
+        metadataUploaded.Stop().Unblock();
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        ui32 indexBuilds = 0;
+        auto observer = runtime.AddObserver<TEvIndexBuilder::TEvCreateRequest>([&](auto&) { ++indexBuilds; });
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromFsSettings {
+                %s
+                index_population_mode: INDEX_POPULATION_MODE_IMPORT
+                items { source_path: "backup" destination_path: "/MyRoot/Restored" }
+            }
+        )", storageSettings.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(indexBuilds, 0);
+        TestDescribeResult(describeIndex("/MyRoot/Restored"), {NLs::IndexState(EIndexStateReady), readySettings});
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Restored/vector_idx/indexImplPostingTable"), 200);
+    }
+
     Y_UNIT_TEST_QUAD(FulltextIndex, Compact, Relevance) {
         const auto type = Compact
             ? (Relevance ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance : NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact)

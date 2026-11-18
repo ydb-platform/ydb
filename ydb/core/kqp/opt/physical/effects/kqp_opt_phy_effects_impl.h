@@ -112,7 +112,10 @@ NYql::NNodes::TExprBase BuildVectorIndexPostingRows(const NYql::TKikimrTableDesc
     bool withData,
     NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
-TVector<TStringBuf> BuildVectorIndexPostingColumns(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc);
+TVector<TStringBuf> BuildVectorIndexPostingColumns(
+    const NYql::TKikimrTableDescription& table,
+    const NYql::TKikimrTableDescription& postingTable,
+    const NYql::TIndexDescription* indexDesc);
 
 NYql::NNodes::TExprBase BuildVectorIndexPrefixRows(const NYql::TKikimrTableDescription& table, const NYql::TKikimrTableDescription& prefixTable,
     bool withData, const NYql::TIndexDescription* indexDesc, const NYql::NNodes::TExprBase& inputRows,

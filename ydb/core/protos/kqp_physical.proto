@@ -319,6 +319,7 @@ message TKqpPhyVectorTopK {
     TKqpPhyValue Limit = 4;
     repeated uint32 DistinctColumns = 5;
     NKikimrProto.TPathID HnswIndexId = 6;
+    optional uint32 HnswEfSearch = 7;
 }
 
 message TKqpPhyCnStreamLookup {
@@ -351,6 +352,8 @@ message TKqpPhyCnVectorResolve {
     optional uint32 RootClusterColumnIndex = 10;
     optional uint32 OverlapClusters = 11;
     optional double OverlapRatio = 12;
+    // Inline unprefixed HNSW indexes can accept rows before any centroids exist.
+    bool HnswAllowEmptyRouting = 13;
 }
 
 message TKqpPhyCnVectorSearch {
@@ -370,6 +373,9 @@ message TKqpPhyCnVectorSearch {
     // __ydb_parent id alongside the target vector.
     bool HasPrefix = 13;
     NKikimrProto.TPathID HnswIndexId = 14;
+    // Unprefixed hnsw searches every partition-local graph.
+    bool FullRangeHnsw = 15;
+    optional uint32 HnswEfSearch = 16;
 }
 
 message TKqpPhyCnSequencer {

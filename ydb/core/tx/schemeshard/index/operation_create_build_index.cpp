@@ -76,10 +76,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
                     "HNSW index support is disabled (EnableHnswIndex)")};
             }
-            if (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
-                return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
-                    "HNSW index implementation is not available yet (SQL support)")};
-            }
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:

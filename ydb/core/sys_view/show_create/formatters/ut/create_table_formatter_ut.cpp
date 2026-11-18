@@ -190,6 +190,33 @@ Y_UNIT_TEST_SUITE(CreateTableFormatter) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(HnswIndex, Separate) {
+        auto table = MakeTableDescription();
+        auto& index = AddIndex(table, EIndexTypeGlobalHnsw);
+        index.AddDataColumnNames("cover");
+        auto* routing = index.MutableHnswIndexDescription()->MutableSettings();
+        routing->set_levels(1);
+        routing->set_clusters(1);
+        auto* vector = routing->mutable_settings();
+        vector->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
+        vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        vector->set_vector_dimension(200);
+        vector->set_min_rows(0);
+        vector->set_m(24);
+        vector->set_ef_construction(64);
+        vector->set_delta_rows(100);
+        const TString declaration = "INDEX `idx` GLOBAL USING hnsw ON (`value`) COVER (`cover`) "
+            "WITH (similarity = inner_product, vector_type = 'float', vector_dimension = 200, "
+            "clusters = 1, levels = 1, min_rows = 0, M = 24, ef_construction = 64, delta_rows = 100)";
+        const TString columns = "`key` Uint64, `value` String, `cover` Uint32";
+        const TString expected = Separate
+            ? TStringBuilder() << "CREATE TABLE `table` (" << columns << ", PRIMARY KEY (`key`));"
+                << "ALTER TABLE `table` ADD " << declaration << ";"
+            : TStringBuilder() << "CREATE TABLE `table` (" << columns << ", " << declaration << ", PRIMARY KEY (`key`));";
+        TCreateTableFormatter formatter(Separate);
+        AssertQueryEqual(formatter.Format("table", "/Root/table", table, false, {}, {}), expected);
+    }
+
     Y_UNIT_TEST_TWIN(Int4VectorIndex, Signed) {
         auto table = MakeTableDescription();
         auto& index = AddIndex(table, EIndexTypeGlobalVectorKmeansTree);

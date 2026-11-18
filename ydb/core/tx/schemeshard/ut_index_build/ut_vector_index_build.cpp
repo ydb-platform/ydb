@@ -103,7 +103,7 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
-    Y_UNIT_TEST_TWIN(HnswCreationRejectedUntilSqlSupport, Enabled) {
+    Y_UNIT_TEST_TWIN(HnswCreationRespectsFeatureFlag, Enabled) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableHnswIndex(Enabled);
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         ui64 txId = 100;
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
-                Name: "DisabledHnswInline"
+                Name: "HnswInline"
                 Columns { Name: "id" Type: "Uint64" }
                 Columns { Name: "embedding" Type: "String" }
                 KeyColumnNames: ["id"]
@@ -123,8 +123,13 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                     clusters: 2 levels: 1
                 } }
             }
-        )", {{NKikimrScheme::StatusPreconditionFailed}});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DisabledHnswInline"), {NLs::PathNotExist});
+        )", {{Enabled ? NKikimrScheme::StatusAccepted : NKikimrScheme::StatusPreconditionFailed}});
+        if (Enabled) {
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/HnswInline"), {NLs::PathExist, NLs::IndexesCount(1)});
+        } else {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/HnswInline"), {NLs::PathNotExist});
+        }
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "HnswApiTable"
             Columns { Name: "id" Type: "Uint64" }
@@ -145,18 +150,26 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender,
             CreateBuildIndexRequest(++txId, "/MyRoot", "/MyRoot/HnswApiTable", index));
         const auto response = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.DebugString(),
-            Enabled ? "not available yet" : "EnableHnswIndex");
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/HnswApiTable"), {NLs::IndexesCount(0)});
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(),
+            Enabled ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::BAD_REQUEST, response->Get()->Record.DebugString());
+        if (Enabled) {
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/HnswApiTable"), {NLs::IndexesCount(1)});
+            const auto build = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
+            UNIT_ASSERT_VALUES_EQUAL_C(build.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+                build.DebugString());
+        } else {
+            UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.DebugString(), "EnableHnswIndex");
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/HnswApiTable"), {NLs::IndexesCount(0)});
+        }
     }
 
     Y_UNIT_TEST_TWIN(HnswPostingMetadataIsPresentDuringCreation, Pending) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-        // Public HNSW creation stays rejected until SQL support lands. Start
-        // from a supported vector-index schema to test the internal serializer.
+        // Start from KMeans metadata to exercise both current and pending HNSW
+        // descriptions independently of the public creation path.
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
                 Name: "PostingMetadata"

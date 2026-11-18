@@ -78,6 +78,7 @@ struct TReadIteratorVectorTop {
     TString Target;
     std::unique_ptr<NKMeans::IClusters> KMeans;
     std::vector<ui32> DistinctColumns;
+    ui32 HnswEfSearch = 15;
 
     // Set when a ready in-memory HNSW index is available for this table/column;
     // if set, TReader::IterateRange uses it instead of the brute-force scan below.
@@ -1399,7 +1400,7 @@ private:
         size_t requested = Min(available, static_cast<size_t>(topK.Limit));
         constexpr size_t MaxSearchAttempts = 2;
         for (size_t attempt = 0; attempt < MaxSearchAttempts; ++attempt) {
-            auto candidates = topK.HnswIndex->Search(topK.Target, requested, State.ReadVersion);
+            auto candidates = topK.HnswIndex->Search(topK.Target, requested, State.ReadVersion, topK.HnswEfSearch);
             if (!candidates.Covered || positions.empty()) {
                 return candidates;
             }
@@ -2934,11 +2935,15 @@ public:
                 }
                 topState->DistinctColumns.push_back(colIdx);
             }
+            if (topK.GetHnswEfSearch() == 0 || topK.GetHnswEfSearch() > NKMeans::MaxHnswEfSearch) {
+                error = "HNSWEfSearch must be in 1..1000";
+            }
             if (error != "") {
                 SetStatusError(Result->Record, Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
                     << error << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
                 return;
             }
+            topState->HnswEfSearch = topK.GetHnswEfSearch();
             topState->Column = topK.GetColumn();
             topState->Limit = topK.GetLimit();
             topState->Target = topK.GetTargetVector();

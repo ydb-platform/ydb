@@ -1053,6 +1053,7 @@ message TReadVectorTopK {
     repeated uint32 DistinctColumns = 5;
     // Logical HNSW index identity on the local table. Omitted by legacy callers.
     optional NKikimrProto.TPathID HnswIndexId = 6;
+    optional uint32 HnswEfSearch = 7 [default = 15];
 }
 
 message TKqpStreamLookupSettings {

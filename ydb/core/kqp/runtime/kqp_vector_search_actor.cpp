@@ -261,9 +261,22 @@ namespace NKikimr {
                 }
 
                 TString error;
-                RankClusters = NKikimr::NKMeans::CreateClustersAutoDetect(Settings.GetIndexSettings(), TargetVector, 0, error);
+                // Ranking needs vector geometry, while the posting read still
+                // needs the original HNSW construction settings.
+                auto distanceSettings = Settings.GetIndexSettings();
+                distanceSettings.clear_m();
+                distanceSettings.clear_ef_construction();
+                distanceSettings.clear_min_rows();
+                distanceSettings.clear_delta_rows();
+                RankClusters = NKikimr::NKMeans::CreateClustersAutoDetect(distanceSettings, TargetVector, 0, error);
                 if (!RankClusters) {
                     RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                    return;
+                }
+
+                if (Settings.GetFullRangeHnsw()) {
+                    YQL_ENSURE(!HasPrefix, "Full-range HNSW cannot discard a prefix filter");
+                    StartPosting();
                     return;
                 }
 
@@ -471,7 +484,7 @@ namespace NKikimr {
                 toRead.insert(toRead.end(), DirectPostingParents.begin(), DirectPostingParents.end());
                 PendingMainKeys.clear();
                 Phase = EPhase::Posting;
-                if (toRead.empty()) {
+                if (toRead.empty() && !Settings.GetFullRangeHnsw()) {
                     // No leaf clusters to scan: empty result (covered and non-covered alike).
                     FinalizeResults();
                 } else {
@@ -659,6 +672,7 @@ namespace NKikimr {
                         && src->GetTable().GetTableId().SerializeAsString() == Settings.GetPostingTable().GetTableId().SerializeAsString()) {
                     *topK->MutableHnswIndexId() = Settings.GetHnswIndexId();
                 }
+                topK->SetHnswEfSearch(Settings.GetHnswEfSearch());
                 return topK;
             }
 
@@ -695,7 +709,16 @@ namespace NKikimr {
             void StartPostingRead(TVector<TClusterId>& parents) {
                 TIntrusivePtr<NActors::TProtoArenaHolder> arena;
                 auto* src = MakeSourceSettings(arena, Settings.GetPostingTable(), Settings.GetUseFollowers());
-                AddParentRanges(src, parents);
+                if (Settings.GetFullRangeHnsw()) {
+                    // Let the read actor resolve the whole posting table and fan out
+                    // across its current partitions, including after automatic splits.
+                    // A complete NULL lower key denotes -infinity. An empty
+                    // key is +infinity in the legacy partition-border comparator.
+                    const TVector<TCell> from(Settings.MainTableKeyColumnsSize() + 1);
+                    TSerializedTableRange(from, true, {}, false).Serialize(*src->MutableFullRange());
+                } else {
+                    AddParentRanges(src, parents);
+                }
 
                 // Posting key is (__ydb_parent, <main PK columns>).
                 AddUint64KeyColumnType(src);
@@ -718,8 +741,10 @@ namespace NKikimr {
                     // clusters; dedup by PK inside the pushed-down top-K so duplicates don't
                     // crowd out distinct nearest rows (the actor still dedups across shards).
                     auto* topK = SetVectorTopK(src, Settings.GetVectorColumnIndex(), TopK);
-                    for (ui32 pos : CoveredPkPositions) {
-                        topK->AddDistinctColumns(pos);
+                    if (!Settings.GetFullRangeHnsw() || OverlapClusters > 1) {
+                        for (ui32 pos : CoveredPkPositions) {
+                            topK->AddDistinctColumns(pos);
+                        }
                     }
                 } else {
                     // Read the PK columns (using posting table column ids) to feed the

@@ -180,6 +180,21 @@ private:
             return;
         }
         if (EmptyIndex) {
+            if (Settings.GetHnswAllowEmptyRouting()) {
+                Y_ENSURE(!IsPrefixed && RootClusters);
+                // Full-range HNSW reads do not require a centroid hierarchy.
+                // Use one stable leaf until REBUILD creates a new hierarchy and
+                // posting table together; updates and deletes resolve to the same leaf.
+                PrevClusters.clear();
+                PrevClusters.resize(PendingRows.size());
+                for (size_t i = 0; i < PendingRows.size(); ++i) {
+                    const auto embedding = PendingRows[i].GetElement(Settings.GetVectorColumnIndex());
+                    if ((embedding.IsString() || embedding.IsEmbedded())
+                            && RootClusters->IsExpectedFormat(embedding.AsStringRef())) {
+                        PrevClusters[i].emplace_back(NTableIndex::NKMeans::SetPostingParentFlag(1), 0.0);
+                    }
+                }
+            }
             LevelsFinished = true;
         }
         while (!LevelsFinished) {
@@ -411,7 +426,14 @@ private:
 
     void ParseFetchedClusters() {
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(Settings.GetIndexSettings(), 0, error);
+        // Routing uses only vector geometry. Preserve the full index settings
+        // separately for HNSW graph selection and construction.
+        auto distanceSettings = Settings.GetIndexSettings();
+        distanceSettings.clear_m();
+        distanceSettings.clear_ef_construction();
+        distanceSettings.clear_min_rows();
+        distanceSettings.clear_delta_rows();
+        auto clusters = NKikimr::NKMeans::CreateClusters(distanceSettings, 0, error);
         if (!clusters) {
             // Index settings are invalid for some reason
             RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -419,8 +441,12 @@ private:
         }
         if (!FetchedClusters.size()) {
             if (!ReadingChildClustersOf) {
-                // Index is empty
+                // Index is empty. Retain the format validator for HNSW's
+                // implicit leaf without changing KMeans empty-index behavior.
                 EmptyIndex = true;
+                if (Settings.GetHnswAllowEmptyRouting()) {
+                    RootClusters = std::move(clusters);
+                }
             } else {
                 // The cluster has no children in the level table, i.e. its subtree is empty.
                 // It's possible when the cluster didn't get any rows during the index build,
@@ -463,7 +489,7 @@ private:
     i64 ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) {
         auto guard = BindAllocator();
 
-        if (EmptyIndex) {
+        if (EmptyIndex && !Settings.GetHnswAllowEmptyRouting()) {
             PendingRows.clear();
             return 0;
         }

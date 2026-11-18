@@ -920,7 +920,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    using TTableSchemeSnapshotRec = std::tuple<TPathId, TString, TString, TString>;
+    using TTableSchemeSnapshotRec = std::tuple<TPathId, TString, TString>;
     using TTableSchemeSnapshotRows = TDeque<TTableSchemeSnapshotRec>;
 
     bool LoadTableSchemeSnapshots(NIceDb::TNiceDb& db, TTableSchemeSnapshotRows& snapshots) const {
@@ -936,7 +936,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             snapshots.emplace_back(
                 pathId,
-                rowSet.GetValue<Schema::TableSchemeSnapshots::TableName>(),
                 rowSet.GetValue<Schema::TableSchemeSnapshots::TableDescription>(),
                 rowSet.GetValueOrDefault<Schema::TableSchemeSnapshots::ChangefeedUnderlyingTopics>(""));
 
@@ -4652,18 +4651,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for TableSchemeSnapshots"
-                << ", read records: " << snapshots.size()
-                << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX(ctx, "TTxInit for TableSchemeSnapshots",
+                {"read_records", snapshots.size()},
+                {"schemeshard", Self->TabletID()},
+            );
 
-            for (auto& [pathId, tableName, tableDesc, changefeedUnderlyingTopics] : snapshots) {
+            for (auto& [pathId, tableDesc, changefeedUnderlyingTopics] : snapshots) {
                 bool restored = false;
                 auto fillTableSchemeSnapshot = [&](auto& tableInfo) {
                     if (tableInfo->BackupSettings.HasTable()) {
                         return;
                     }
 
-                    tableInfo->BackupSettings.SetTableName(tableName);
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*tableInfo->BackupSettings.MutableTable(), tableDesc));
 
                     tableInfo->BackupSettings.ClearChangefeedUnderlyingTopics();
@@ -4691,14 +4690,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     // Old binaries ignore this additive table and may remove the private copy
                     // while leaving its snapshot behind
                     Self->RemoveTableSchemeSnapshot(db, pathId);
-                    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Removed obsolete table scheme snapshot"
-                        << ", pathId: " << pathId);
+                    YDB_LOG_WARN_CTX(ctx, "Removed obsolete table scheme snapshot",
+                        {"pathId", pathId},
+                    );
                     continue;
                 }
 
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, (restored ? "Loaded table scheme snapshot" : "Retained table scheme snapshot")
-                    << ", pathId: " << pathId
-                    << ", tablename: " << tableName);
+                YDB_LOG_DEBUG_CTX(ctx, (restored ? "Loaded table scheme snapshot" : "Retained table scheme snapshot"),
+                    {"pathId", pathId},
+                );
             }
         }
 

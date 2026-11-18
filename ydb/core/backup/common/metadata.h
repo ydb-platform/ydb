@@ -44,6 +44,7 @@ struct TChangefeedMetadata {
 struct TIndexMetadata {
     TString ExportPrefix;
     TString ImplTablePrefix;
+    TMaybe<TEncryptionIV> IV;
 };
 
 struct TRateLimiterResourceMetadata {

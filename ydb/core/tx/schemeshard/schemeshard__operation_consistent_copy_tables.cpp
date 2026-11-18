@@ -1,6 +1,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_info_types.h"
+#include "schemeshard_table_scheme_snapshot.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -292,6 +293,7 @@ bool CreateConsistentCopyTables(
             );
         }
 
+        const auto indexesForBackup = GetIndexesForBackup(context.SS, srcPath.Base()->PathId);
         for (const auto& child: srcPath.Base()->GetChildren()) {
             const auto& name = child.first;
             const auto& pathId = child.second;
@@ -329,8 +331,8 @@ bool CreateConsistentCopyTables(
 
             Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
             TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
-            if (indexInfo->State != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
-                YDB_LOG_TRACE_CTX(context.Ctx, "CreateConsistentCopyTables: Skipping a non-ready index",
+            if (!indexesForBackup.contains(pathId)) {
+                YDB_LOG_TRACE_CTX(context.Ctx, "CreateConsistentCopyTables: Skipping an unfinished or temporary index",
                     {"name", name},
                     {"state", indexInfo->State},
                 );

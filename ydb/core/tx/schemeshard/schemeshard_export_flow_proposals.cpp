@@ -111,6 +111,34 @@ static const NKikimrSchemeOp::TBackupTask* FindTableSchemeSnapshot(TSchemeShard*
     return nullptr;
 }
 
+static bool MakeLegacyTableSchemeSnapshot(TSchemeShard* ss, const TPath& sourcePath,
+        const TPath& copiedPath, bool includeIndexData, NKikimrSchemeOp::TBackupTask& snapshot, TString& error) {
+    if (!MakeTableSchemeSnapshot(ss, TlsActivationContext->AsActorContext(),
+            sourcePath.Base()->PathId, snapshot, error)) {
+        return false;
+    }
+    if (includeIndexData && copiedPath.IsResolved() && !copiedPath.IsDeleted() && copiedPath->IsTable()) {
+        NKikimrSchemeOp::TPathDescription copiedDescription;
+        if (!GetDescription(ss, copiedPath.Base()->PathId, copiedDescription, error)) {
+            return false;
+        }
+        // An old copy may contain a Ready replacement whose build was already
+        // forgotten. Its intended public name cannot be recovered safely.
+        for (const auto& index : copiedDescription.GetTable().GetTableIndexes()) {
+            if (GetRebuildIndexBuildId(index.GetName())) {
+                error = TStringBuilder() << "Legacy consistent copy contains a temporary rebuild index: "
+                    << index.GetName();
+                return false;
+            }
+        }
+        // A live index may have finished, disappeared, or been replaced since the
+        // legacy copy was made. Its definition must match the copied implementation.
+        snapshot.MutableTable()->MutableTable()->MutableTableIndexes()
+            ->CopyFrom(copiedDescription.GetTable().GetTableIndexes());
+    }
+    return true;
+}
+
 TString ComputeIndexItemSuffix(
     const NKikimrSchemeOp::TBackupTask* snapshot,
     const NKikimrSchemeOp::TPathDescription& sourceDescription,
@@ -189,7 +217,11 @@ static TString ComputeIndexItemSuffix(
         const auto parentPath = TPath::Init(parentItem.SourcePathId, ss);
         if (parentPath.IsResolved() && !parentPath.IsDeleted()) {
             TString error;
-            GetDescription(ss, parentPath.Base()->PathId, sourceDescription, error);
+            NKikimrSchemeOp::TBackupTask legacySnapshot;
+            if (MakeLegacyTableSchemeSnapshot(ss, parentPath, copiedParentPath,
+                    exportInfo.IncludeIndexData, legacySnapshot, error)) {
+                sourceDescription.CopyFrom(legacySnapshot.GetTable());
+            }
         }
     }
     return ComputeIndexItemSuffix(snapshot, sourceDescription, item.SourcePathName, encrypted,
@@ -299,7 +331,7 @@ static bool FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescriptio
 }
 
 static bool FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task,
-        const TPath& sourcePath, const TPath& exportItemPath, bool allowMissingSource, TString& error) {
+        const TPath& sourcePath, const TPath& exportItemPath, bool allowMissingSource, bool includeIndexData, TString& error) {
     error.clear();
     const auto* snapshot = FindTableSchemeSnapshot(ss, exportItemPath);
     NKikimrSchemeOp::TBackupTask legacySnapshot;
@@ -318,8 +350,7 @@ static bool FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask&
                 {"exportItemPath", exportItemPath.PathString()},
             );
         }
-        if (!MakeTableSchemeSnapshot(ss, TlsActivationContext->AsActorContext(),
-                sourcePath.Base()->PathId, legacySnapshot, error)) {
+        if (!MakeLegacyTableSchemeSnapshot(ss, sourcePath, exportItemPath, includeIndexData, legacySnapshot, error)) {
             return false;
         }
         snapshot = &legacySnapshot;
@@ -364,8 +395,25 @@ void FillEncryptionSettings(
     if (exportSettings.has_encryption_settings()) {
         auto& encryptionSettings = *task.MutableEncryptionSettings();
         encryptionSettings.SetEncryptionAlgorithm(exportInfo.ExportMetadata.GetEncryptionAlgorithm());
-        Y_ABORT_UNLESS(itemIdx < exportInfo.ExportMetadata.SchemaMappingSize());
-        encryptionSettings.SetIV(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
+        const auto& item = exportInfo.Items.at(itemIdx);
+        if (item.ParentIdx == Max<ui32>()) {
+            Y_ABORT_UNLESS(itemIdx < exportInfo.ExportMetadata.SchemaMappingSize());
+            encryptionSettings.SetIV(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
+            for (ui32 childIdx = 0; childIdx < exportInfo.Items.size(); ++childIdx) {
+                const auto& child = exportInfo.Items[childIdx];
+                if (child.ParentIdx == itemIdx) {
+                    (*encryptionSettings.MutableIndexIVs())[child.SourcePathName] = NBackup::TEncryptionIV::Combine(
+                        NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetIV()),
+                        NBackup::EBackupFileType::Metadata, childIdx + 1, 0).GetBinaryString();
+                }
+            }
+        } else {
+            // Roots and implementation tables share one item-number namespace.
+            // Reusing a parent's IV would reuse nonces for scheme and data files.
+            encryptionSettings.SetIV(NBackup::TEncryptionIV::Combine(
+                NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetIV()),
+                NBackup::EBackupFileType::Metadata, itemIdx + 1, 0).GetBinaryString());
+        }
         *encryptionSettings.MutableSymmetricKey() = exportSettings.encryption_settings().symmetric_key();
     }
 }
@@ -395,7 +443,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         task.SetTableName(ToString(itemIdx));
 
         if (!FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss),
-                exportPath.Child(ToString(itemIdx)), exportInfo.Kind == TExportInfo::EKind::YT, error)) {
+                exportPath.Child(ToString(itemIdx)), exportInfo.Kind == TExportInfo::EKind::YT, exportInfo.IncludeIndexData, error)) {
             return nullptr;
         }
     } else {
@@ -415,7 +463,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         task.SetTableName(childName);
 
         if (!FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss),
-                parentPath.Child(childName), exportInfo.Kind == TExportInfo::EKind::YT, error)) {
+                parentPath.Child(childName), exportInfo.Kind == TExportInfo::EKind::YT, false, error)) {
             return nullptr;
         }
     }

@@ -121,6 +121,9 @@ TString TMetadata::Serialize() const {
             NJson::TJsonMap indexMap;
             indexMap["export_prefix"] = index.ExportPrefix;
             indexMap["impl_table_prefix"] = index.ImplTablePrefix;
+            if (index.IV) {
+                indexMap["iv"] = index.IV->GetHexString();
+            }
             indexes.AppendValue(std::move(indexMap));
         }
     }
@@ -185,9 +188,15 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
         result.Indexes.emplace();
         const NJson::TJsonValue& indexes = json["indexes"];
         for (const NJson::TJsonValue& index : indexes.GetArray()) {
+            TMaybe<TEncryptionIV> iv;
+            if (index.Has("iv")) {
+                iv = TEncryptionIV::FromHexString(index["iv"].GetStringSafe());
+                Y_ENSURE(iv->Size() == TEncryptionIV::SIZE, "Invalid index encryption IV size");
+            }
             result.AddIndex({
                 .ExportPrefix = index["export_prefix"].GetString(),
                 .ImplTablePrefix = index["impl_table_prefix"].GetString(),
+                .IV = std::move(iv),
             });
         }
     }

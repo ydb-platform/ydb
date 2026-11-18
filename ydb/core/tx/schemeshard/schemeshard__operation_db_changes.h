@@ -221,7 +221,7 @@ public:
         TestShardSets.emplace_back(pathId);
     }
 
-    void CreateTableSchemeSnapshot(const TPathId& pathId) {
+    void PersistTableSchemeSnapshot(const TPathId& pathId) {
         TableSchemeSnapshots.push_back(pathId);
     }
 

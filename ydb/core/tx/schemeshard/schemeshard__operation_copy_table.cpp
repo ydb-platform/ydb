@@ -856,7 +856,7 @@ public:
 
         context.SS->Tables.Set(newTable->PathId, tableInfo);
         if (captureTableSchemeSnapshot) {
-            context.DbChanges.CreateTableSchemeSnapshot(newTable->PathId);
+            context.DbChanges.PersistTableSchemeSnapshot(newTable->PathId);
         }
 
         if (parent.Base()->HasActiveChanges()) {
@@ -1009,6 +1009,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
 
     // Process indexes: always create index structure, but skip impl table copies if OmitIndexes is set
     // (impl tables are handled separately by CreateConsistentCopyTables for incremental backups with CDC)
+    const auto indexesForBackup = GetIndexesForBackup(context.SS, srcPath.Base()->PathId);
     for (auto& child: srcPath.Base()->GetChildren()) {
         auto name = child.first;
         auto pathId = child.second;
@@ -1030,7 +1031,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
 
         TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
 
-        if (indexInfo->State != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
+        if (!indexesForBackup.contains(pathId)) {
             continue;
         }
 

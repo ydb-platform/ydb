@@ -2751,15 +2751,13 @@ struct Schema : NIceDb::Schema {
     struct TableSchemeSnapshots : Table<141> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct TableName : Column<3, NScheme::NTypeIds::Utf8> {};
-        struct TableDescription : Column<4, NScheme::NTypeIds::String> {};
-        struct ChangefeedUnderlyingTopics : Column<5, NScheme::NTypeIds::String> {};
+        struct TableDescription : Column<3, NScheme::NTypeIds::String> {};
+        struct ChangefeedUnderlyingTopics : Column<4, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
             OwnerPathId,
             LocalPathId,
-            TableName,
             TableDescription,
             ChangefeedUnderlyingTopics
         >;

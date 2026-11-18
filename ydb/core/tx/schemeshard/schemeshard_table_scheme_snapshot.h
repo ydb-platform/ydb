@@ -4,6 +4,10 @@
 
 namespace NKikimr::NSchemeShard {
 
+TMaybe<TIndexBuildId> GetRebuildIndexBuildId(TStringBuf indexName);
+
+THashSet<TPathId> GetIndexesForBackup(const TSchemeShard* self, const TPathId& tablePathId);
+
 bool MakeTableSchemeSnapshot(
     TSchemeShard* self,
     const TActorContext& ctx,

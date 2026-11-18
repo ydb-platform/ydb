@@ -9,8 +9,11 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
+#include <util/generic/algorithm.h>
 #include <util/stream/format.h>
+#include <util/string/cast.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SCHEMESHARD_DESCRIBE
 
@@ -1527,6 +1530,38 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     return DescribePath(self, ctx, path, options);
 }
 
+TMaybe<TIndexBuildId> GetRebuildIndexBuildId(TStringBuf indexName) {
+    ui64 buildId;
+    // Keep the canonical format written by TIndexBuilder::TTxCreate.
+    if (indexName.SkipPrefix("__ydb_rebuild_") && TryFromString(indexName, buildId) && indexName == ToString(buildId)) {
+        return TIndexBuildId(buildId);
+    }
+    return Nothing();
+}
+
+THashSet<TPathId> GetIndexesForBackup(const TSchemeShard* self, const TPathId& tablePathId) {
+    const auto& children = self->PathsById.at(tablePathId)->GetChildren();
+    THashSet<TPathId> indexes;
+    for (const auto& [name, pathId] : children) {
+        const auto& path = self->PathsById.at(pathId);
+        if (!path->IsTableIndex() || path->Dropped() || !path->IsCreateFinished()
+            || self->Indexes.at(pathId)->State != NKikimrSchemeOp::EIndexStateReady) {
+            continue;
+        }
+        if (const auto buildId = GetRebuildIndexBuildId(name)) {
+            const auto build = self->IndexBuilds.find(*buildId);
+            // The replacement becomes Ready before MoveIndex replaces the live index.
+            if (build != self->IndexBuilds.end() && !build->second->IsFinished()
+                && build->second->TablePathId == tablePathId && build->second->RebuildIndexName == name) {
+                continue;
+            }
+        }
+        indexes.insert(pathId);
+    }
+
+    return indexes;
+}
+
 bool MakeTableSchemeSnapshot(
     TSchemeShard* self,
     const TActorContext& ctx,
@@ -1574,9 +1609,12 @@ bool MakeTableSchemeSnapshot(
         return false;
     }
 
-    snapshot.SetTableName(sourcePath.LeafName());
-
     if (sourceDescription.HasTable()) {
+        const auto indexesForBackup = GetIndexesForBackup(self, sourcePathId);
+        EraseIf(*sourceDescription.MutableTable()->MutableTableIndexes(), [&](const auto& index) {
+            return !indexesForBackup.contains(TPathId(index.GetPathOwnerId(), index.GetLocalPathId()));
+        });
+
         for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
             const int topicCount = snapshot.GetChangefeedUnderlyingTopics().size();
             NKikimrSchemeOp::TPathDescription cdcDescription;

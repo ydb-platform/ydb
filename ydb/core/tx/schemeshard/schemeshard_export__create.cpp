@@ -940,6 +940,61 @@ private:
         return itemPath.Base()->PathId;
     }
 
+    void RefreshIndexItems(TExportInfo& exportInfo, NIceDb::TNiceDb& db) {
+        if (!exportInfo.IncludeIndexData) {
+            return;
+        }
+
+        // Builds can finish between export creation and the consistent copy.
+        // Materialize exactly the indexes present in that copy.
+        for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
+            if (exportInfo.Items[itemIdx].ParentIdx != Max<ui32>()) {
+                db.Table<Schema::ExportItems>().Key(exportInfo.Id, itemIdx).Delete();
+            }
+        }
+        EraseIf(exportInfo.Items, [](const auto& item) { return item.ParentIdx != Max<ui32>(); });
+
+        TVector<TExportInfo::TItem> indexItems;
+        for (ui32 parentIdx : xrange(exportInfo.Items.size())) {
+            if (exportInfo.Items[parentIdx].SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
+                continue;
+            }
+
+            const auto parentPath = TPath::Resolve(ExportItemPathName(Self, exportInfo, parentIdx), Self);
+            if (!parentPath.IsResolved() || parentPath.IsDeleted()) {
+                continue;
+            }
+
+            for (const auto& [indexName, indexPathId] : parentPath.Base()->GetChildren()) {
+                const auto indexPath = parentPath.Child(indexName);
+                if (indexPath.IsDeleted() || !indexPath.IsTableIndex() || indexPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync)) {
+                    continue;
+                }
+
+                for (const auto& [implName, implPathId] : indexPath.Base()->GetChildren()) {
+                    const auto implPath = indexPath.Child(implName);
+                    if (implPath.IsDeleted() || !implPath->IsTable()) {
+                        continue;
+                    }
+
+                    TPathId sourcePathId = implPathId;
+                    const auto& description = Self->Tables.at(implPathId)->BackupSettings.GetTable();
+                    if (description.HasSelf() && description.GetSelf().GetSchemeshardId() && description.GetSelf().GetPathId()) {
+                        sourcePathId = TPathId(description.GetSelf().GetSchemeshardId(), description.GetSelf().GetPathId());
+                    }
+
+                    indexItems.emplace_back(TStringBuilder() << indexName << '/' << implName, sourcePathId, NKikimrSchemeOp::EPathTypeTableIndex, parentIdx);
+                }
+            }
+        }
+
+        for (auto& item : indexItems) {
+            exportInfo.Items.push_back(std::move(item));
+        }
+
+        Self->PersistCreateExport(db, exportInfo);
+    }
+
     TTxId GetActiveCopyingTxId(const TExportInfo& exportInfo) {
         if (exportInfo.Items.size() < 1) {
             return InvalidTxId;
@@ -1413,6 +1468,9 @@ private:
                     if (exportInfo->State == EState::CopyTables && isMultipleMods) {
                         bool sourcePathMissing = false;
                         for (const auto& item : exportInfo->Items) {
+                            if (!IsPathTypeTable(item)) {
+                                continue;
+                            }
                             if (!Self->PathsById.contains(item.SourcePathId)) {
                                 exportInfo->DependencyTxIds.clear();
                                 sourcePathMissing = true;
@@ -1730,6 +1788,7 @@ private:
 
             exportInfo->State = EState::Transferring;
             exportInfo->WaitTxId = InvalidTxId;
+            RefreshIndexItems(*exportInfo, db);
             TDeque<ui32> tables;
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                 auto& item = exportInfo->Items[itemIdx];

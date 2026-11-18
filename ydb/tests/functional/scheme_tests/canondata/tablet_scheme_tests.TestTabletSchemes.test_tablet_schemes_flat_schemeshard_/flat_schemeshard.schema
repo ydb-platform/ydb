@@ -10749,16 +10749,11 @@
             },
             {
                 "ColumnId": 3,
-                "ColumnName": "TableName",
-                "ColumnType": "Utf8"
-            },
-            {
-                "ColumnId": 4,
                 "ColumnName": "TableDescription",
                 "ColumnType": "String"
             },
             {
-                "ColumnId": 5,
+                "ColumnId": 4,
                 "ColumnName": "ChangefeedUnderlyingTopics",
                 "ColumnType": "String"
             }
@@ -10770,8 +10765,7 @@
                     1,
                     2,
                     3,
-                    4,
-                    5
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

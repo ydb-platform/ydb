@@ -351,6 +351,7 @@ public:
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const auto& opDescr = Transaction.GetCreateColumnTable();
+        const bool captureTableSchemeSnapshot = Transaction.GetCaptureTableSchemeSnapshot();
 
         const TString& parentPath = Transaction.GetWorkingDir();
         const TString& srcPathStr = opDescr.GetCopyFromTable();
@@ -506,7 +507,7 @@ public:
         }
 
         NKikimrSchemeOp::TBackupTask tableSchemeSnapshot;
-        if (Transaction.GetCaptureTableSchemeSnapshot() && !MakeTableSchemeSnapshot(
+        if (captureTableSchemeSnapshot && !MakeTableSchemeSnapshot(
                 context.SS, context.Ctx, srcPath.Base()->PathId, tableSchemeSnapshot, errStr))
         {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
@@ -561,13 +562,13 @@ public:
             tableInfo->AlterVersion += 1;
             tableInfo->IsReadOnly = true;
             tableInfo->Stats = {};
-            if (Transaction.GetCaptureTableSchemeSnapshot()) {
+            if (captureTableSchemeSnapshot) {
                 tableInfo->BackupSettings.Swap(&tableSchemeSnapshot);
             }
             context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
         }
-        if (Transaction.GetCaptureTableSchemeSnapshot()) {
-            context.DbChanges.CreateTableSchemeSnapshot(dstPath.Base()->PathId);
+        if (captureTableSchemeSnapshot) {
+            context.DbChanges.PersistTableSchemeSnapshot(dstPath.Base()->PathId);
         }
         context.SS->AcquireOwnDbRef(dstPath.Base()->PathId, "copy table info");
 

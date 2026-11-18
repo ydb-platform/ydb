@@ -282,6 +282,11 @@ void TSchemeShard::PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo& 
         NIceDb::TUpdate<Schema::ImportItems::SrcPath>(item.SrcPath),
         NIceDb::TUpdate<Schema::ImportItems::ParentIndex>(item.ParentIdx)
     );
+    if (item.ExportItemIV) {
+        db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
+            NIceDb::TUpdate<Schema::ImportItems::EncryptionIV>(item.ExportItemIV->GetBinaryString())
+        );
+    }
 }
 
 void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemsSizeBefore) {

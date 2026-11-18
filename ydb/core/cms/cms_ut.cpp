@@ -3196,9 +3196,10 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TCmsTestEnv env(opts);
         const auto nodeId = env.GetNodeId(0);
 
-        // Same lifecycle as VDisksEviction, through the Walle HTTP API.
+        // ok
         CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
             MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
+        // forbid another eviction request for same host
         const auto duplicate = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
             MakeWalleDrainDataJson(nodeId, "true", "redeploy", "duplicate"));
         UNIT_ASSERT_C(duplicate.StartsWith("HTTP/1.1 400"), duplicate);
@@ -3210,8 +3211,10 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         env.RestartCms();
         env.CheckWalleCheckTask("eviction", TStatus::DISALLOW_TEMP, nodeId);
+        // "move" vdisks
         SetVDisksMoved(env, opts, nodeId, true);
 
+        // prepared
         CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction"),
             "ok", nodeId);
         // A retained eviction request with no pending actions is already approved.
@@ -3223,9 +3226,10 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 204"), response);
         env.CheckWalleListTasks(0);
 
-        // An empty host can be approved immediately after the previous task is completed.
+        // allow immediately
         CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
             MakeWalleDrainDataJson(nodeId)), "ok", nodeId);
+        // check markers after restart
         env.RestartCms();
         env.CheckWalleCheckTask("eviction", TStatus::ALLOW, nodeId);
         const auto duplicateAfterRestart = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
@@ -3234,10 +3238,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckWalleListTasks(1);
         env.CheckWalleRemoveTask("eviction");
 
-        // A pending task can be cancelled, allowing another eviction request.
+        // restore vdisks
         SetVDisksMoved(env, opts, nodeId, false);
+        // prepare
         CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
             MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
+        // reject until prepared
         env.CheckWalleRemoveTask("eviction");
         CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
             MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);

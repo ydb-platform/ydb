@@ -70,14 +70,15 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
     return true;
 }
 
-void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool onLoad) {
+void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool passToOptimizer) {
     if (portionAfter) {
         PortionInfoGuard.OnNewPortion(portionAfter);
         if (!portionAfter->HasRemoveSnapshot()) {
             PortionsIndex.AddPortion(portionAfter);
-            // on load, the optimizer gets all portions at once in AddLoadedPortionsToOptimizer
-            if (!onLoad) {
+            if (passToOptimizer) {
                 OptimizerPlanner->StartModificationGuard().AddPortion(portionAfter);
+            }
+            if (ActualizationIndex->IsStarted()) {
                 NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
                 ActualizationIndex->AddPortion(portionAfter, context);
             }
@@ -192,11 +193,18 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
                 PortionIntervalTree::TPortionIntervalTree::TOwnedRange(PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(portion),
                     true, PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(portion), true), portion);
         }
+        // the granule tracks only committed portions
+        OnAfterChangePortion(portion, /*passToOptimizer=*/false);
     }
 }
 
-std::vector<std::shared_ptr<TPortionInfo>> TGranuleMeta::AddLoadedPortions(const std::vector<std::shared_ptr<TPortionInfo>>& portions) {
+void TGranuleMeta::AddPortionsToOptimizer(const std::vector<std::shared_ptr<TPortionInfo>>& activePortions) {
+    OptimizerPlanner->AddLoadedPortions(activePortions);
+}
+
+std::vector<std::shared_ptr<TPortionInfo>> TGranuleMeta::AddPortionsLoadedInBatch(const std::vector<std::shared_ptr<TPortionInfo>>& portions) {
     std::vector<std::shared_ptr<TPortionInfo>> loaded;
+    std::vector<std::shared_ptr<TPortionInfo>> active;
     for (const auto& portion : portions) {
         if (!portion->IsCommitted()) {
             // uncommitted portions are all in memory: loaded by TTxInit or added by their write
@@ -211,20 +219,22 @@ std::vector<std::shared_ptr<TPortionInfo>> TGranuleMeta::AddLoadedPortions(const
         }
         UpsertPortionOnLoad(portion);
         loaded.emplace_back(portion);
-    }
-    NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
-    std::vector<std::shared_ptr<TPortionInfo>> toOptimizer;
-    for (const auto& portion : loaded) {
-        OnAfterChangePortion(portion, true);
         if (!portion->HasRemoveSnapshot()) {
-            toOptimizer.emplace_back(portion);
-            if (ActualizationIndex->IsStarted()) {
-                ActualizationIndex->AddPortion(portion, context);
-            }
+            active.emplace_back(portion);
         }
     }
-    OptimizerPlanner->AddLoadedPortions(toOptimizer);
+    AddPortionsToOptimizer(active);
     return loaded;
+}
+
+std::vector<std::shared_ptr<TPortionInfo>> TGranuleMeta::GetActivePortions() const {
+    std::vector<std::shared_ptr<TPortionInfo>> result;
+    for (const auto& [_, portion] : Portions) {
+        if (!portion->HasRemoveSnapshot()) {
+            result.emplace_back(portion);
+        }
+    }
+    return result;
 }
 
 void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {
@@ -258,14 +268,7 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, storages, pkSchema, OptimizerPlanner->GetRuntimeSettings());
     OptimizerPlanner = constructor->BuildPlanner(context).DetachResult();
     YDB_LOG_VERIFY(!!OptimizerPlanner);
-    std::vector<std::shared_ptr<TPortionInfo>> portions;
-    for (auto&& i : Portions) {
-        if (i.second->HasRemoveSnapshot()) {
-            continue;
-        }
-        portions.emplace_back(i.second);
-    }
-    OptimizerPlanner->AddLoadedPortions(portions);
+    AddPortionsToOptimizer(GetActivePortions());
 }
 
 /*
@@ -290,10 +293,9 @@ void TGranuleMeta::ResetMetadataManager(const std::shared_ptr<NDataAccessorContr
 */
 
 std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
-    const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex) {
-    auto portionsLoader = std::make_shared<NLoading::TGranuleOnlyPortionsReader>("portions", &vIndex, this, dsGroupSelector);
-    auto metadataLoader = MetadataMemoryManager->BuildLoader(vIndex, this, dsGroupSelector);
-    auto commonFinish = std::make_shared<NLoading::TGranuleFinishCommonLoading>("granule_finished_common", this);
+    const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, TColumnEngineForLogs& engine) {
+    auto portionsLoader = std::make_shared<NLoading::TGranuleOnlyPortionsReader>("portions", this, &engine, dsGroupSelector);
+    auto metadataLoader = MetadataMemoryManager->BuildLoader(engine.GetVersionedIndex(), this, dsGroupSelector);
     auto optimizerLoader = std::make_shared<NLoading::TGranuleOptimizerLoading>("optimizer", this);
 
     auto result = std::make_shared<TTxCompositeReader>("granule");
@@ -302,13 +304,13 @@ std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
     if (metadataLoader) {
         result->AddChildren(metadataLoader);
     }
-    result->AddChildren(commonFinish);
     result->AddChildren(optimizerLoader);
     return result;
 }
 
-bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex) {
+bool TGranuleMeta::TestingLoad(IDbWrapper& db, TColumnEngineForLogs& engine) {
     TInGranuleConstructors constructors;
+    const TVersionedIndex& versionedIndex = engine.GetVersionedIndex();
     {
         if (!db.LoadPortions([&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
                 const TIndexInfo& indexInfo = portion->GetSchema(versionedIndex)->GetIndexInfo();
@@ -341,7 +343,7 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
     for (auto&& [portionId, constructor] : constructors) {
         auto accessor = constructor.Build(false);
         DataAccessorsManager->AddPortion(accessor);
-        UpsertPortionOnLoad(accessor->MutablePortionInfoPtr());
+        engine.AddPortionLoadedOnStart(*this, accessor->MutablePortionInfoPtr());
     }
     return true;
 }

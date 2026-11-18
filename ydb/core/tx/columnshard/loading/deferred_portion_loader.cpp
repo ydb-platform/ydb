@@ -65,10 +65,11 @@ bool TDeferredPortionLoader::ReadBatch(
         return false;
     }
     NOlap::TDbWrapper wrapper(txc.DB, &dsGroupSelector);
+    const NOlap::TVersionedIndex& versionedIndex = engine.GetVersionedIndex();
     for (const ui64 portionId : portionIds) {
         AFL_VERIFY(wrapper.LoadPortionVerified(NOlap::TPortionAddress(batch.PathId, portionId),
             [&](std::unique_ptr<NOlap::TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-                const NOlap::TIndexInfo& indexInfo = portion->GetSchema(engine.GetVersionedIndex())->GetIndexInfo();
+                const NOlap::TIndexInfo& indexInfo = portion->GetSchema(versionedIndex)->GetIndexInfo();
                 AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, dsGroupSelector));
                 batch.Portions.emplace_back(portion->Build());
             }));
@@ -83,7 +84,7 @@ bool TDeferredPortionLoader::OnBatchLoaded(TBatch&& batch) {
     ++BatchesLoaded;
     TablesToLoad.pop_front();
     auto& engine = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
-    engine.AddLoadedPortions(batch.PathId, batch.Portions);
+    engine.AddPortionsLoadedInBatch(batch.PathId, batch.Portions);
     const auto granule = engine.GetGranulePtrVerified(batch.PathId);
     if (!batch.LastKey) {
         NextBatchBelow.erase(batch.PathId);

@@ -162,11 +162,15 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/protobuf_printer
     ydb/library/yaml_config
+<<<<<<< HEAD
     ydb/library/cloud_permissions
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/types
     yql/essentials/public/issue
     ydb/library/services
+=======
+    ydb/library/yaml_json
+>>>>>>> 011a9eca94b (Route config replacements with YAML aliases to distconf (#59858))
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/public/lib/fq

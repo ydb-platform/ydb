@@ -346,6 +346,8 @@ private:
         ptr->MaxInFlightReadsStreamLookup = settings.GetMaxInFlightReadsStreamLookup();
         ptr->MaxBytesPerFetchStreamLookup = settings.GetMaxBytesPerFetchStreamLookup();
         ptr->MaxInFlightLocksStreamLookup = settings.GetMaxInFlightLocksStreamLookup();
+        ptr->MaxReadRequestEntriesStreamLookup = settings.GetMaxReadRequestEntriesStreamLookup();
+        ptr->MaxReadRequestBytesStreamLookup = settings.GetMaxReadRequestBytesStreamLookup();
         SetReadIteratorBackoffSettings(ptr);
     }
 

@@ -8,6 +8,7 @@ REQUIREMENTS(cpu:4)
 SRCS(
     kqp_scan_data_ut.cpp
     kqp_scan_fetcher_ut.cpp
+    kqp_stream_lookup_worker_ut.cpp
     kqp_write_actor_ut.cpp
     kqp_write_table_ut.cpp
     scheduler/kqp_compute_scheduler_service_ut.cpp

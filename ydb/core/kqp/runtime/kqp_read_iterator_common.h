@@ -23,6 +23,8 @@ struct TIteratorReadBackoffSettings : TAtomicRefCount<TIteratorReadBackoffSettin
     ui64 MaxInFlightReadsStreamLookup = 50;
     ui64 MaxBytesPerFetchStreamLookup = 256_MB;
     ui64 MaxInFlightLocksStreamLookup = 50;
+    ui64 MaxReadRequestEntriesStreamLookup = 4096;
+    ui64 MaxReadRequestBytesStreamLookup = 1_MB;
 };
 
 struct TEvReadSettings : public TAtomicRefCount<TEvReadSettings> {
@@ -64,6 +66,8 @@ ui64 MaxTotalBytesQuotaStreamLookup();
 ui64 MaxInFlightReadsStreamLookup();
 ui64 MaxBytesPerFetchStreamLookup();
 ui64 MaxInFlightLocksStreamLookup();
+ui64 MaxReadRequestEntriesStreamLookup();
+ui64 MaxReadRequestBytesStreamLookup();
 
 void SetDefaultIteratorQuotaSettings(ui32 rows, ui32 bytes);
 THolder<NKikimr::TEvDataShard::TEvRead> GetDefaultReadSettings();

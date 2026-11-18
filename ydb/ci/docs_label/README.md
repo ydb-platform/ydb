@@ -41,7 +41,8 @@ this cutover is complete.** The repository workflow remains active until then.
 The reaction uses quota `kikimr` and user `iuriisintiaev`. Its queue allows one
 running and one waiting launch; missed ticks are coalesced (`FIRE_ONE`).
 The block has a ten-minute execution timeout, 512 MB RAM, network
-`KIKIMRDEVNETS`, disabled cache, and `force_restart` result reuse policy.
+`KIKIMRDEVNETS`, `job-use-dns64=true` for GitHub connectivity, disabled cache,
+and `force_restart` result reuse policy.
 
 ## Local checks
 

@@ -493,12 +493,18 @@ bool TSnapshotManager::CleanupRowVersions(NTable::TDatabase& db, const TRowVersi
         policy.ForEachRetainedSnapshot(tableId, from, to, [&](const TRowVersion& version) {
             retainedSnapshots.push_back(version);
         });
+        const size_t registryCount = retainedSnapshots.size();
         const auto persistentEnd = Snapshots.lower_bound(TSnapshotKey(tableId.PathId, to.Step, to.TxId));
         for (auto it = Snapshots.lower_bound(TSnapshotKey(tableId.PathId, from.Step, from.TxId));
             it != persistentEnd; ++it)
         {
             retainedSnapshots.emplace_back(it->first.Step, it->first.TxId);
         }
+        // Registry and persistent points are already sorted.
+        std::inplace_merge(retainedSnapshots.begin(), retainedSnapshots.begin() + registryCount,
+            retainedSnapshots.end());
+        const size_t sortedCount = retainedSnapshots.size();
+
         // Keep acquired points until their iterators drain, even if disabled.
         for (const auto& [readId, state] : Self->ReadIterators) {
             if (state.SnapshotAcquired && !state.IsFinished && state.PathId == tableId.PathId
@@ -507,7 +513,10 @@ bool TSnapshotManager::CleanupRowVersions(NTable::TDatabase& db, const TRowVersi
                 retainedSnapshots.push_back(state.ReadVersion);
             }
         }
-        std::sort(retainedSnapshots.begin(), retainedSnapshots.end());
+        // Iterator points are unordered; sort only their suffix before merging.
+        std::sort(retainedSnapshots.begin() + sortedCount, retainedSnapshots.end());
+        std::inplace_merge(retainedSnapshots.begin(), retainedSnapshots.begin() + sortedCount,
+            retainedSnapshots.end());
         retainedSnapshots.erase(
             std::unique(retainedSnapshots.begin(), retainedSnapshots.end()), retainedSnapshots.end());
 

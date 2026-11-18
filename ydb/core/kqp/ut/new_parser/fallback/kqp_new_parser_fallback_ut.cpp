@@ -305,7 +305,6 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             config->SetEnableFallbackToYqlOptimizer(false);
             config->SetEnableFallbackOnMultipleStatements(false);
             config->SetEnableIndexStreamWrite(true);
-            config->SetEnableAstCache(false);
             config->SetCompileQueryCacheSize(0);
             TCapturedLog logs(true);
             auto settings = TKikimrSettings(app).SetWithSampleTables(false).SetLogCapture(logs);
@@ -421,7 +420,6 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             config->SetEnableNewRBOPhysicalStagePeephole(false);
             config->SetEnableFallbackToYqlOptimizer(false);
             config->SetEnableIndexStreamWrite(true);
-            config->SetEnableAstCache(false);
             config->SetCompileQueryCacheSize(0);
             TCapturedLog logs(true);
             auto settings = TKikimrSettings(app).SetWithSampleTables(false).SetLogCapture(logs);
@@ -559,7 +557,6 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             NKikimrConfig::TAppConfig appConfig;
             auto* config = appConfig.MutableTableServiceConfig();
             config->SetEnableNewYqlParser(enable);
-            config->SetEnableAstCache(enable);
             config->SetEnableNewRBO(true);
             config->SetEnableNewRBOPhysicalStagePeephole(PhysicalStagePeephole);
             config->SetEnableFallbackToYqlOptimizer(false);
@@ -671,7 +668,6 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
         auto* config = appConfig.MutableTableServiceConfig();
         config->SetEnableNewYqlParser(true);
         config->SetEnableNewRBO(true);
-        config->SetEnableAstCache(true);
         config->SetEnableFallbackToYqlOptimizer(false);
         config->SetEnableFallbackOnMultipleStatements(false);
         TCapturedLog logs(true);

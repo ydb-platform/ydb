@@ -174,7 +174,6 @@ void Measure(EBenchType type, TStringBuf benchmark, ui32 id, const TPipeline& pi
     config->SetDefaultCostBasedOptimizationLevel(0);
     config->SetDefaultLangVer(NYql::GetMaxLangVersion());
     config->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-    config->SetEnableAstCache(false);
     config->SetCompileQueryCacheSize(0);
 
     TCapturedLog logs(true);

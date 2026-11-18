@@ -40,7 +40,6 @@ TKikimrSettings Settings(bool native, ui32 defaultLevel, TCapturedLog& logs, boo
     config->SetEnableFallbackToYqlOptimizer(allowFallback);
     config->SetEnableFallbackOnMultipleStatements(false);
     config->SetDefaultCostBasedOptimizationLevel(defaultLevel);
-    config->SetEnableAstCache(false);
     config->SetCompileQueryCacheSize(0);
     auto settings = TKikimrSettings(app).SetWithSampleTables(false).SetLogCapture(logs);
     settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_INFO);

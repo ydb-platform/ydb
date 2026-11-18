@@ -3,6 +3,7 @@
 
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -855,6 +856,75 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionWrite) {
             "key = 1, value = 3\nkey = 2, value = 20\n");
         UNIT_ASSERT_VALUES_EQUAL(
             FormatIntReadResult(test.ReadSnapshot(test.ShardA, test.TableA, snapshot).get()), "1, 1\n");
+    }
+
+    Y_UNIT_TEST_TWIN(RemovedSnapshotWriteSeqNumDuplicateIsReplayed, MixedBatch) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardUncommittedWriteSeqNum(true);
+        ExecSQL(test.Server, test.Sender, "UPSERT INTO `/Root/table-a` (key, value) VALUES (2, 20);");
+        const auto snapshot = test.WriteVersion(1);
+
+        const ui64 lockTxId = 1234567890001;
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
+        const auto makeRequest = [&]() {
+            auto request = MakeSnapshotUpdate(test.TableA, snapshot, lockTxId, runtime.GetNodeId(0), 3);
+            auto* seqNum = request->Record.MutableOperations(0)->MutableWriteSeqNum();
+            seqNum->SetWriterIndex(0);
+            seqNum->SetWriteSeqNum(1);
+            return request;
+        };
+        const auto written = Write(runtime, test.Sender, test.ShardA, makeRequest());
+        UNIT_ASSERT_VALUES_EQUAL(written.GetTxLocks().size(), 1u);
+        const auto lock = written.GetTxLocks(0);
+        UNIT_ASSERT_C(lock.GetCounter() < TSysTables::TLocksTable::TLock::ErrorMin, lock.ShortDebugString());
+        UNIT_ASSERT(lock.GetHasWrites());
+        UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(written.GetTxStats().TableAccessStatsSize(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(written.GetTxStats().GetTableAccessStats(0).GetUpdateRow().GetRows(), 1u);
+
+        // Advance cleanup without changing either the locked key or the fresh
+        // operation's key, so a conflict cannot mask stale-snapshot admission.
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        ExecSQL(test.Server, test.Sender, "UPSERT INTO `/Root/table-a` (key, value) VALUES (3, 30);");
+        runtime.SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry();
+        test.RunCleanup();
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardA));
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+
+        if constexpr (MixedBatch) {
+            auto request = makeRequest();
+            auto fresh = MakeWriteRequestOneKeyValue(std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE,
+                test.TableA, TShardedTableOptions::DefaultColumns(), 2, 200);
+            auto* operation = request->Record.AddOperations();
+            *operation = fresh->Record.GetOperations(0);
+            operation->SetPayloadIndex(request->AddPayload(TRope(fresh->GetPayload(operation->GetPayloadIndex()))));
+            operation->MutableWriteSeqNum()->SetWriterIndex(0);
+            operation->MutableWriteSeqNum()->SetWriteSeqNum(2);
+            const auto rejected = Write(runtime, test.Sender, test.ShardA, std::move(request),
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT(!rejected.GetIssues().empty());
+            UNIT_ASSERT_C(rejected.GetIssues(0).message().Contains("snapshot"), rejected.ShortDebugString());
+            UNIT_ASSERT(rejected.GetTxLocks().empty());
+        }
+
+        // An exact redelivery needs no history. A rejected fresh tail must also
+        // leave the old chain position and its stored successful result intact.
+        const auto replayed = Write(runtime, test.Sender, test.ShardA, makeRequest());
+        UNIT_ASSERT_VALUES_EQUAL(replayed.GetTxLocks().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(replayed.GetTxLocks(0).DebugString(), lock.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replayed.GetTxStats().TableAccessStatsSize(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(replayed.GetTxStats().GetTableAccessStats(0).DebugString(),
+            written.GetTxStats().GetTableAccessStats(0).DebugString());
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+
+        CommitLock(runtime, test.Sender, test.ShardA, lock);
+        const TVector<ui64> shards{test.ShardA};
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, test.TableA),
+            "key = 1, value = 3\nkey = 2, value = 20\nkey = 3, value = 30\n");
     }
 
     Y_UNIT_TEST_TWIN(RemovedSnapshotWriteIsRejected, Reregister) {

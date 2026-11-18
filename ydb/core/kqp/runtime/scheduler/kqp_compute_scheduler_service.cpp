@@ -304,7 +304,7 @@ private:
         NActors::TExecutorPoolStats poolStats;
         TVector<NActors::TExecutorThreadStats> threadsStats;
         NActors::GetActorSystemStats().GetPoolStats(poolId, poolStats, threadsStats);
-        return Max<ui64>(poolStats.PotentialMaxThreadCount, 1);
+        return Max<ui64>(poolStats.MaxThreadCount, 1);
     }
 
     // All fields describe the new configuration; -1 leaves an attribute unset.

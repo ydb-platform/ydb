@@ -234,7 +234,7 @@ void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo& ex
     }
     if (exportInfo.CancelRequestTime) {
         db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
-            NIceDb::TUpdate<Schema::Exports::CancelRequestTime>(exportInfo.CancelRequestTime->MicroSeconds())
+            NIceDb::TUpdate<Schema::Exports::CancelRequestTime>(exportInfo.CancelRequestTime->Seconds())
         );
     }
 }

@@ -5109,7 +5109,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         exportInfo->CancelRequestedBy = rowset.GetValue<Schema::Exports::CancelRequestedBy>();
                     }
                     if (rowset.HaveValue<Schema::Exports::CancelRequestTime>()) {
-                        exportInfo->CancelRequestTime = TInstant::MicroSeconds(rowset.GetValue<Schema::Exports::CancelRequestTime>());
+                        exportInfo->CancelRequestTime = TInstant::Seconds(rowset.GetValue<Schema::Exports::CancelRequestTime>());
                     }
                     exportInfo->EnableChecksums = rowset.GetValueOrDefault<Schema::Exports::EnableChecksums>(false);
                     exportInfo->EnablePermissions = rowset.GetValueOrDefault<Schema::Exports::EnablePermissions>(false);

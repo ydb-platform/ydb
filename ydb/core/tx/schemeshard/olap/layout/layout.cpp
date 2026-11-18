@@ -22,13 +22,13 @@ TColumnTablesLayout TColumnTablesLayout::BuildTrivial(const std::vector<ui64>& t
 TColumnTablesLayout::TColumnTablesLayout(std::vector<TTablesGroup>&& groups)
     : Groups(std::move(groups))
 {
-    AFL_VERIFY(std::is_sorted(Groups.begin(), Groups.end()));
+    YDB_LOG_VERIFY(std::is_sorted(Groups.begin(), Groups.end()));
 }
 
 bool TColumnTablesLayout::TTablesGroup::TryMerge(const TTablesGroup& item) {
     if (GetTableIds() == item.GetTableIds()) {
         for (auto&& i : item.ShardIds) {
-            AFL_VERIFY(ShardIds.emplace(i).second);
+            YDB_LOG_VERIFY(ShardIds.emplace(i).second);
         }
         return true;
     } else {
@@ -37,7 +37,7 @@ bool TColumnTablesLayout::TTablesGroup::TryMerge(const TTablesGroup& item) {
 }
 
 const TColumnTablesLayout::TTableIdsGroup& TColumnTablesLayout::TTablesGroup::GetTableIds() const {
-    AFL_VERIFY(TableIds);
+    YDB_LOG_VERIFY(TableIds);
     return *TableIds;
 }
 
@@ -45,7 +45,7 @@ TColumnTablesLayout::TTablesGroup::TTablesGroup(const TTableIdsGroup* tableIds, 
     : TableIds(tableIds)
     , ShardIds(std::move(shardIds))
 {
-    AFL_VERIFY(TableIds);
+    YDB_LOG_VERIFY(TableIds);
 }
 
 }

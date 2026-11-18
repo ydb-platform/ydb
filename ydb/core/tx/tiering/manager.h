@@ -67,7 +67,7 @@ public:
         }
 
         const NTiers::TTierConfig& GetConfigVerified() const {
-            AFL_VERIFY(HasConfig());
+            YDB_LOG_VERIFY(HasConfig());
             return Config;
         }
 
@@ -85,7 +85,7 @@ public:
         }
 
         TTierGuard(const NTiers::TExternalStorageId& storageId, TTiersManager* owner) : StorageId(storageId), Owner(owner) {
-            AFL_VERIFY(owner);
+            YDB_LOG_VERIFY(owner);
             Owner->RegisterTierManager(StorageId, std::nullopt);
         }
 

@@ -196,7 +196,7 @@ Every table has a primary column group named `default` containing all columns no
 For a column group, attributes that affect data storage and caching are set:
 
 * the type of storage devices used (SSD or HDD, with availability depending on the {{ ydb-short-name }} cluster configuration)
-* Data compression mode (no compression or [LZ4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)) algorithm compression);
+* Data compression mode: no compression, [LZ4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)), or [Zstandard](https://en.wikipedia.org/wiki/Zstd);
 * caching mode.
 
 For table data compression, see [{#T}](../../compression.md).

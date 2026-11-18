@@ -13,7 +13,6 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_ut 
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerTests.FetchThrottledAtMinMessages
 ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql py3test.sole chunk
 ydb/library/yql/providers/generic/connector/tests/join py3test.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.ReadRuleGeneration
 ydb/services/metadata/secret/ut Secret.Simple
@@ -24,6 +23,8 @@ ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSession
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut unittest.sole chunk
 ydb/tests/compatibility/common test_followers.py.TestFollowersCompatibility.test_followers_compatability[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/common test_node_broker_delta_protocol.py.TestNodeBrokerDeltaProtocolMixedCluster.test[mixed_prestable-27-1-1_and_stable-26-4-1]
+ydb/tests/compatibility/common test_snapshot_isolation.py.TestSnapshotIsolation.test_column_tables[rolling_stable-26-4-1_to_prestable-27-1-1]
+ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_stable-26-4-1-lax]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_stable-26-4-1-strict]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-4-1_to_prestable-27-1-1-lax]
@@ -42,7 +43,6 @@ ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping_with_row_dispatcher
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/yds py3test.[*/*] chunk
-ydb/tests/fq/yds test_delete_read_rules_after_abort_by_system.py.TestDeleteReadRulesAfterAbortBySystem.test_delete_read_rules_after_abort_by_system
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filters_optional_field
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
@@ -82,5 +82,5 @@ ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeature
 ydb/tests/stress/reconfig_state_storage_workload/tests/large py3test.[test_board_workload.py] chunk
 ydb/tests/stress/reconfig_state_storage_workload/tests/large py3test.[test_scheme_board_workload.py] chunk
 ydb/tests/stress/reconfig_state_storage_workload/tests/large py3test.[test_state_storage_workload.py] chunk
-ydb/tests/stress/statistics_workload/tests test_workload.py.TestStatisticsWorkload.test
+ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_read[scale_aware_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[old_sdk]

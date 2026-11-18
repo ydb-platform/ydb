@@ -57,7 +57,7 @@ public:
 
     ui32 GetExactKeyIndexVerified(const std::string_view keyName) const {
         const auto idx = GetExactKeyIndexOptional(keyName);
-        AFL_VERIFY(idx.has_value());
+        YDB_LOG_VERIFY(idx.has_value());
         return *idx;
     }
 
@@ -88,8 +88,8 @@ public:
     template <class TColumnPredicate>
     TConclusion<std::optional<TResolvedPath>> ResolvePath(const TParsedJsonPath& jsonPath, const TColumnPredicate& isColumnAvailable) const {
         const auto& [pathItems, pathTypes, startPositions] = jsonPath.Items;
-        AFL_VERIFY(pathItems.size() == pathTypes.size());
-        AFL_VERIFY(pathItems.size() == startPositions.size());
+        YDB_LOG_VERIFY(pathItems.size() == pathTypes.size());
+        YDB_LOG_VERIFY(pathItems.size() == startPositions.size());
 
         TString columnName;
         columnName.reserve(EstimateSubcolumnNameSize(jsonPath.Source, pathItems.size()));
@@ -254,7 +254,7 @@ public:
     }
 
     std::shared_ptr<arrow::Field> GetField(const ui32 index) const {
-        AFL_VERIFY(index < DataNames->length());
+        YDB_LOG_VERIFY(index < DataNames->length());
         auto name = DataNames->GetView(index);
         return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), GetArrowTypeForValueType(GetValueType(index)));
     }

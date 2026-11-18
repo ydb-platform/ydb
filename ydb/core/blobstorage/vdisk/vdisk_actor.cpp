@@ -1,4 +1,5 @@
 #include "vdisk_actor.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_skeletonfront.h>
 
@@ -9,6 +10,8 @@ namespace NKikimr {
                         const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters) {
         // some global checks, it's better to VERIFY now than later
         IngressGlobalCheck(info.Get());
+
+        cfg->BlobHeaderMode = GetEffectiveBlobHeaderMode(cfg->BlobHeaderMode, info->Type.TotalPartCount());
 
         // create front actor
         return CreateVDiskSkeletonFront(cfg, info, counters);

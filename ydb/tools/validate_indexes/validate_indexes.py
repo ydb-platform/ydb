@@ -112,6 +112,34 @@ def _query(table, indexes, columns):
     )
 
 
+def _read_differences(driver, table, indexes, columns):
+    # Python datetime cannot represent the full range of YDB temporal types.
+    settings = (ydb.QueryClientSettings()
+                .with_native_date_in_result_sets(False)
+                .with_native_datetime_in_result_sets(False)
+                .with_native_timestamp_in_result_sets(False)
+                .with_native_interval_in_result_sets(False))
+    with ydb.QuerySessionPool(driver, query_client_settings=settings) as pool:
+        with pool.checkout() as session:
+            # Async implementation tables only support StaleRO. Keep them out
+            # of the one shared snapshot used for every synchronous index.
+            for asynchronous, mode in ((False, ydb.QuerySnapshotReadOnly()), (True, ydb.QueryStaleReadOnly())):
+                positions = [position for position, (_, _, is_async) in enumerate(indexes) if is_async == asynchronous]
+                if not positions:
+                    continue
+                selected = [indexes[position] for position in positions]
+                stream = session.transaction(mode).execute(_query(table, selected, columns), commit_tx=True)
+                try:
+                    for result_set in stream:
+                        if result_set.truncated:
+                            raise ydb.TruncatedResponseError("Validation result was truncated by the server")
+                        for row in result_set.rows:
+                            yield positions[row["index_id"]], row
+                finally:
+                    # Never resume an interrupted query on a different snapshot.
+                    stream.cancel()
+
+
 def _validate(driver, session, path):
     table = Table(driver, session, path)
     indexes = []
@@ -136,42 +164,31 @@ def _validate(driver, session, path):
         return True
     columns = sorted({name for _, index, _ in indexes for name in index.columns})
     mismatches = [0] * len(indexes)
-    # One scan snapshot covers every sync comparison. Async updates can arrive
-    # with older MVCC versions, so even matching async observations are inconclusive.
-    # Consume the entire stream before declaring success; do not retry partial scans.
-    stream = driver.table_client.scan_query(_query(table, indexes, columns))
-    try:
-        for part in stream:
-            if part.result_set.truncated:
-                raise ydb.TruncatedResponseError("Validation result was truncated by the server")
-            for result in part.result_set.rows:
-                position = result["index_id"]
-                name, index, asynchronous = indexes[position]
-                row, comparison_bytes = {}, {}
-                for number, column in enumerate(columns):
-                    value = result[f"c{number}"]
-                    fmt = FLOAT_FORMATS.get(table.column_type(column).type_id)
-                    if fmt and value is not None:
-                        comparison_bytes[column] = value.hex()
-                        value = struct.unpack(fmt, value)[0]
-                        if not math.isfinite(value):
-                            value = repr(value)
-                    row[column] = value
-                details = {
-                    "index": name,
-                    "pk": table.key(row),
-                    "index_key": index.key(row),
-                    "reason": "missing index row" if result["balance"] > 0 else "extra index row",
-                    "row": {column: row[column] for column in index.columns},
-                }
-                if asynchronous:
-                    details["status"] = "inconclusive"
-                if comparison_bytes:
-                    details["comparison_bytes"] = comparison_bytes
-                print(json.dumps(details, ensure_ascii=True, default=repr))
-                mismatches[position] += 1
-    finally:
-        stream.cancel()
+    for position, result in _read_differences(driver, table, indexes, columns):
+        name, index, asynchronous = indexes[position]
+        row, comparison_bytes = {}, {}
+        for number, column in enumerate(columns):
+            value = result[f"c{number}"]
+            fmt = FLOAT_FORMATS.get(table.column_type(column).type_id)
+            if fmt and value is not None:
+                comparison_bytes[column] = value.hex()
+                value = struct.unpack(fmt, value)[0]
+                if not math.isfinite(value):
+                    value = repr(value)
+            row[column] = value
+        details = {
+            "index": name,
+            "pk": table.key(row),
+            "index_key": index.key(row),
+            "reason": "missing index row" if result["balance"] > 0 else "extra index row",
+            "row": {column: row[column] for column in index.columns},
+        }
+        if asynchronous:
+            details["status"] = "inconclusive"
+        if comparison_bytes:
+            details["comparison_bytes"] = comparison_bytes
+        print(json.dumps(details, ensure_ascii=True, default=repr))
+        mismatches[position] += 1
     # Describes cannot prove the absence of transient DDL. External exclusion
     # is mandatory; these checks additionally reject observed schema changes.
     for source in described:

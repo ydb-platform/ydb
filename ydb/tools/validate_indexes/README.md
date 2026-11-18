@@ -58,11 +58,12 @@ The output lists the exact discovered supported index set and its types as
 this listed set, with skipped indexes excluded. No supported indexes means
 there is nothing to validate, not a claim about skipped index contents.
 
-After discovery, one SELECT compares all checked indexes through the streaming
-scan query API. All reads of the main table and all checked sync/unique indexes
-share one data snapshot. The verdict describes their contents at that snapshot,
-under the schema-stability precondition above. It does not describe a later
-state or prove schema stability from data reads.
+After discovery, one SELECT compares all checked sync/unique indexes through
+the streaming QueryService `ExecuteQuery` API in a Snapshot Read-Only transaction.
+All reads of the main table and all checked sync/unique indexes share one data
+snapshot. The verdict describes their contents at that snapshot, under the
+schema-stability precondition above. It does not describe a later state or prove
+schema stability from data reads. TableService is used only for schema discovery.
 
 The SELECT combines each main-table projection and its physical `indexImplTable`
 with `UNION ALL`, assigning them +1 and -1 respectively. It groups by the index
@@ -77,11 +78,13 @@ semantics, including matching Decimal NaNs. JSON and YSON covering values are
 compared as stored bytes; specialized indexes are skipped.
 PostgreSQL values are compared and reported in their text representation.
 
-Async indexes are included in the same scan, but normal replication may lag,
-and late changes can be applied with an older MVCC version. A shared scan
-version does not make those reads repeatable. Their result is always
-`inconclusive`, even when observed values match. Async differences are
-observations, not confirmed corruption.
+Async implementation tables require Stale Read-Only isolation in QueryService,
+so all checked async indexes are compared in a separate streaming SELECT in
+that mode. They are never included in or used to weaken the synchronous snapshot
+transaction. Normal replication may lag, and late changes can be applied with
+an older MVCC version. Async reads are not repeatable and do not share the
+synchronous snapshot. Their result is always `inconclusive`, even when observed
+values match. Async differences are observations, not confirmed corruption.
 
 Only differences are streamed to the client. Client memory usage is bounded by
 a stream batch; the server scans and groups all indexed data. Indexes that are
@@ -95,6 +98,9 @@ missing expected row and an extra actual row. Each index gets a summary.
 For floating-point differences, `row` retains readable values and signed zero;
 non-finite values are strings (`nan`, `inf`, `-inf`). `comparison_bytes` records
 the exact little-endian bytes as hex, preserving NaN distinctions in diagnostics.
+Temporal values retain their raw numeric units: days for Date/Date32, seconds
+for Datetime/Datetime64 and microseconds for Timestamp/Timestamp64 and intervals.
+This preserves the full YDB range, including dates outside Python's year 1–9999.
 Consistency summaries are emitted only after the complete scan and final
 schema checks succeed. Any output preceding an error is partial and cannot
 be used as a successful whole-table verdict.

@@ -77,6 +77,17 @@ class TestValidateIndexes(unittest.TestCase):
         )
         return result.returncode, result.stdout, result.stderr
 
+    def _run_until_async_difference(self, reason):
+        # StaleRO can still see the fixture before the administrative write.
+        deadline = time.monotonic() + 10
+        while True:
+            code, output, error = self._run()
+            self.assertEqual(code, 3, output + error)
+            if reason in output:
+                return code, output, error
+            self.assertLess(time.monotonic(), deadline, output + error)
+            time.sleep(0.1)
+
     def _corrupt(self, path, operation):
         # Administrative writes bypass index maintenance, only on this fixture's tablets.
         request = msgbus_pb2.TSchemeDescribe(Path=path)
@@ -186,10 +197,10 @@ class TestValidateIndexes(unittest.TestCase):
 
     def test_schema_recreate_index_same_name(self):
         self._create()
-        original_scan = self.driver.table_client.scan_query
+        original_execute = ydb.QueryTxContext.execute
         incarnations = []
 
-        def recreate_index(query, *args, **kwargs):
+        def recreate_index(tx, query, *args, **kwargs):
             with self.pool.checkout() as session:
                 incarnations.append(validator._describe(self.driver, session, self.index).self.created_at)
             self.pool.retry_operation_sync(lambda session: session.execute_scheme(f"""
@@ -199,11 +210,11 @@ class TestValidateIndexes(unittest.TestCase):
             with self.pool.checkout() as session:
                 incarnations.append(validator._describe(self.driver, session, self.index).self.created_at)
             self.assertNotEqual(incarnations[0], incarnations[1], "Fixture must recreate the implementation table")
-            return original_scan(query, *args, **kwargs)
+            return original_execute(tx, query, *args, **kwargs)
 
         output = io.StringIO()
         with self.pool.checkout() as session:
-            with mock.patch.object(self.driver.table_client, "scan_query", recreate_index):
+            with mock.patch.object(ydb.QueryTxContext, "execute", recreate_index):
                 with contextlib.redirect_stdout(output), self.assertRaisesRegex(ValueError, "[Ss]chema changed"):
                     validator.validate(self.driver, session, self.table, ddl_excluded=True)
         self.assertEqual(len(incarnations), 2)
@@ -212,10 +223,10 @@ class TestValidateIndexes(unittest.TestCase):
 
     def test_schema_recreate_table_same_name(self):
         self._create()
-        original_scan = self.driver.table_client.scan_query
+        original_execute = ydb.QueryTxContext.execute
         recreated = []
 
-        def recreate_table(query, *args, **kwargs):
+        def recreate_table(tx, query, *args, **kwargs):
             self.pool.retry_operation_sync(lambda session: session.execute_scheme(f"""
                 DROP TABLE `{self.table}`;
                 CREATE TABLE `{self.table}` (
@@ -224,11 +235,11 @@ class TestValidateIndexes(unittest.TestCase):
                 );
             """))
             recreated.append(True)
-            return original_scan(query, *args, **kwargs)
+            return original_execute(tx, query, *args, **kwargs)
 
         output = io.StringIO()
         with self.pool.checkout() as session:
-            with mock.patch.object(self.driver.table_client, "scan_query", recreate_table):
+            with mock.patch.object(ydb.QueryTxContext, "execute", recreate_table):
                 with contextlib.redirect_stdout(output), self.assertRaisesRegex(ValueError, "[Ss]chema changed"):
                     validator.validate(self.driver, session, self.table, ddl_excluded=True)
         self.assertTrue(recreated)
@@ -385,7 +396,10 @@ class TestValidateIndexes(unittest.TestCase):
                     self.assertLess(time.monotonic(), deadline)
                     time.sleep(0.1)
                 self._erase_index()
-                code, output, error = self._run()
+                if kind == "ASYNC":
+                    code, output, error = self._run_until_async_difference("missing index row")
+                else:
+                    code, output, error = self._run()
                 self.assertEqual(code, 3 if kind == "ASYNC" else 1, output + error)
                 self.assertIn("missing", output)
                 self.assertIn('"id": 1', output)
@@ -400,7 +414,10 @@ class TestValidateIndexes(unittest.TestCase):
                     self.assertLess(time.monotonic(), deadline)
                     time.sleep(0.1)
                 self._erase_main()
-                code, output, error = self._run()
+                if kind == "ASYNC":
+                    code, output, error = self._run_until_async_difference("extra index row")
+                else:
+                    code, output, error = self._run()
                 self.assertEqual(code, 3 if kind == "ASYNC" else 1, output + error)
                 self.assertIn("extra", output)
                 self.assertIn('"id": 1', output)
@@ -471,6 +488,30 @@ class TestValidateIndexes(unittest.TestCase):
         code, output, error = self._run()
         self.assertEqual(code, 0, output + error)
         self.assertIn("by_time: consistent", output)
+
+    def test_extended_temporal_diagnostics(self):
+        for kind, value in (("Date32", -719529), ("Datetime64", 253402300800),
+                            ("Timestamp64", -62135596800000001)):
+            with self.subTest(kind=kind):
+                self.table = f"/Root/extended_time_{uuid.uuid4().hex}"
+                self.index = self.table + "/by_value/indexImplTable"
+                self.pool.retry_operation_sync(lambda session: session.execute_scheme(f"""
+                    CREATE TABLE `{self.table}` (
+                        id Uint64, value Uint64, happened {kind}, PRIMARY KEY (id),
+                        INDEX by_value GLOBAL ON (value) COVER (happened)
+                    );
+                """))
+                self._execute(f"UPSERT INTO `{self.table}` (id, value, happened) VALUES (1u, 2u, CAST({value} AS {kind}));")
+                code, output, error = self._run()
+                self.assertEqual(code, 0, output + error)
+                self._corrupt(self.index, """(EraseRow '__user__indexImplTable
+                    '('('value (Uint64 '2)) '('id (Uint64 '1))))""")
+                code, output, error = self._run()
+                self.assertEqual(code, 1, output + error)
+                differences = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+                self.assertEqual(len(differences), 1, output + error)
+                self.assertEqual(differences[0]["pk"], {"id": 1})
+                self.assertEqual(differences[0]["row"]["happened"], value)
 
     def test_missing_table_is_error(self):
         code, output, error = self._run("/Root/no_such_table")
@@ -669,7 +710,7 @@ class TestValidateIndexes(unittest.TestCase):
         query_writes = []
         with self._writer() as writes:
             def record_query_start(driver, request, stub, method, *args, **kwargs):
-                if method == "StreamExecuteScanQuery":
+                if method == "ExecuteQuery":
                     query_writes.append(len(writes))
                 return original_call(driver, request, stub, method, *args, **kwargs)
 
@@ -719,13 +760,36 @@ class TestValidateIndexes(unittest.TestCase):
         self.assertIn("by_async: inconclusive", output)
 
     def test_all_indexes_use_one_read_request(self):
+        self._hot_table()
+        original_call = ydb.Driver.__call__
+        reads = []
+
+        def record_reads(driver, request, stub, method, *args, **kwargs):
+            if method in {"ExecuteDataQuery", "StreamReadTable", "StreamExecuteScanQuery", "ExecuteQuery"}:
+                reads.append((stub, method, request))
+            return original_call(driver, request, stub, method, *args, **kwargs)
+
+        output = io.StringIO()
+        with self.pool.checkout() as session, mock.patch.object(ydb.Driver, "__call__", record_reads):
+            with contextlib.redirect_stdout(output):
+                self.assertTrue(validator.validate(self.driver, session, self.table, ddl_excluded=True))
+        self.assertIn("by_value: consistent", output.getvalue())
+        self.assertIn("by_payload: consistent", output.getvalue())
+        self.assertEqual(len(reads), 1, "All synchronous indexes must share one query")
+        stub, method, request = reads[0]
+        self.assertIs(stub, validator._apis.QueryService.Stub)
+        self.assertEqual(method, "ExecuteQuery")
+        self.assertEqual(request.tx_control.begin_tx.WhichOneof("tx_mode"), "snapshot_read_only")
+        self.assertTrue(request.tx_control.commit_tx)
+
+    def test_async_uses_separate_stale_query(self):
         self._hot_table(asynchronous=True)
         original_call = ydb.Driver.__call__
         reads = []
 
         def record_reads(driver, request, stub, method, *args, **kwargs):
             if method in {"ExecuteDataQuery", "StreamReadTable", "StreamExecuteScanQuery", "ExecuteQuery"}:
-                reads.append(request)
+                reads.append((stub, method, request))
             return original_call(driver, request, stub, method, *args, **kwargs)
 
         output = io.StringIO()
@@ -735,11 +799,18 @@ class TestValidateIndexes(unittest.TestCase):
         self.assertIn("by_value: consistent", output.getvalue())
         self.assertIn("by_payload: consistent", output.getvalue())
         self.assertIn("by_async: inconclusive", output.getvalue())
-        self.assertEqual(len(reads), 1, "Validation must use one server-side query for all indexes")
+        self.assertEqual(len(reads), 2)
+        for (stub, method, request), mode in zip(reads, ("snapshot_read_only", "stale_read_only")):
+            self.assertIs(stub, validator._apis.QueryService.Stub)
+            self.assertEqual(method, "ExecuteQuery")
+            self.assertEqual(request.tx_control.begin_tx.WhichOneof("tx_mode"), mode)
+            self.assertTrue(request.tx_control.commit_tx)
+        self.assertNotIn("by_async/indexImplTable", reads[0][2].query_content.text)
+        self.assertIn("by_async/indexImplTable", reads[1][2].query_content.text)
 
     def test_failed_stream_is_not_restarted(self):
         self._create()
-        original_next = ydb._utilities.SyncResponseIterator.__next__
+        original_next = ydb.query.base.SyncResponseContextIterator.__next__
         responses = []
 
         def fail_after_response(stream):
@@ -751,7 +822,7 @@ class TestValidateIndexes(unittest.TestCase):
 
         output = io.StringIO()
         with self.pool.checkout() as session:
-            with mock.patch.object(ydb._utilities.SyncResponseIterator, "__next__", fail_after_response):
+            with mock.patch.object(ydb.query.base.SyncResponseContextIterator, "__next__", fail_after_response):
                 with contextlib.redirect_stdout(output), self.assertRaises(ydb.Unavailable):
                     validator.validate(self.driver, session, self.table, ddl_excluded=True)
         self.assertTrue(responses, "A real server response must precede the injected interruption")
@@ -759,16 +830,16 @@ class TestValidateIndexes(unittest.TestCase):
 
     def test_truncated_stream_is_error(self):
         self._create()
-        original_next = ydb._utilities.SyncResponseIterator.__next__
+        original_next = ydb.query.base.SyncResponseContextIterator.__next__
 
         def truncate_response(stream):
             response = original_next(stream)
-            response.result_set.truncated = True
+            response.truncated = True
             return response
 
         output = io.StringIO()
         with self.pool.checkout() as session:
-            with mock.patch.object(ydb._utilities.SyncResponseIterator, "__next__", truncate_response):
+            with mock.patch.object(ydb.query.base.SyncResponseContextIterator, "__next__", truncate_response):
                 with contextlib.redirect_stdout(output), self.assertRaises(ydb.TruncatedResponseError):
                     validator.validate(self.driver, session, self.table, ddl_excluded=True)
         self.assertNotIn("consistent", output.getvalue())
@@ -802,18 +873,35 @@ class TestValidateIndexes(unittest.TestCase):
 
     def test_all_extra_rows_are_reported(self):
         self._create(rows=False)
-        values = ",".join(f"('a', {key}u, 'first', 'payload')" for key in range(1050))
-        self._execute(f"UPSERT INTO `{self.table}` (tenant, id, value, payload) VALUES {values};")
+        count = 4096
+        payload = "x" * 2048
+        for start in range(0, count, 128):
+            values = ",".join(f"('a', {key}u, 'first', '{payload}')" for key in range(start, start + 128))
+            self._execute(f"UPSERT INTO `{self.table}` (tenant, id, value, payload) VALUES {values};")
         name = self.table.rsplit("/", 1)[1]
         self._corrupt(self.table, " ".join(
             f"(EraseRow '__user__{name} '('('tenant (Utf8 'a)) '('id (Uint64 '{key}))))"
-            for key in range(1050)
+            for key in range(count)
         ))
-        code, output, error = self._run()
-        self.assertEqual(code, 1, output + error)
-        differences = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
-        self.assertEqual({row["pk"]["id"] for row in differences}, set(range(1050)), output + error)
+        original_next = ydb.query.base.SyncResponseContextIterator.__next__
+        part_sizes = []
+
+        def record_part(stream):
+            result = original_next(stream)
+            part_sizes.append(len(result.rows))
+            return result
+
+        output = io.StringIO()
+        with self.pool.checkout() as session:
+            with mock.patch.object(ydb.query.base.SyncResponseContextIterator, "__next__", record_part):
+                with contextlib.redirect_stdout(output):
+                    self.assertFalse(validator.validate(self.driver, session, self.table, ddl_excluded=True))
+        differences = [json.loads(line) for line in output.getvalue().splitlines() if line.startswith("{")]
+        self.assertEqual({row["pk"]["id"] for row in differences}, set(range(count)))
         self.assertTrue(all("extra" in row["reason"] for row in differences))
+        self.assertTrue(all(row["row"]["payload"] == payload for row in differences))
+        self.assertGreater(len(part_sizes), 1, "The result must span multiple real QueryService stream parts")
+        self.assertEqual(sum(part_sizes), count)
 
     def test_nullable_composite_keys(self):
         self._create(rows=False)

@@ -40,9 +40,8 @@ bool StoreConsumerSettingsEntry(
         }
     }
     auto name = to_lower(id.Name);
-    if (name == "important" || name == "replicate_offsets") {
-        auto& setting = name == "important" ? settings.Important : settings.ReplicateOffsets;
-        if (setting) {
+    if (name == "important") {
+        if (settings.Important) {
             ctx.Context().Error(id.Pos) << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
@@ -54,7 +53,7 @@ bool StoreConsumerSettingsEntry(
             ctx.Context().Error(valueExprNode->GetPos()) << to_upper(id.Name) << " value should be boolean";
             return false;
         }
-        setting = valueExprNode;
+        settings.Important = valueExprNode;
     } else if (name == "availability_period") {
         if (settings.AvailabilityPeriod) {
             ctx.Context().Error(id.Pos) << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";

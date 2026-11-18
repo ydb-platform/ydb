@@ -39,6 +39,7 @@ public:
         ETargetKind GetKind() const override;
         const TString& GetSrcPath() const override;
         const TString& GetDstPath() const override;
+        bool GetSrcIsImpl() const override;
 
     private:
         const ETargetKind Kind;

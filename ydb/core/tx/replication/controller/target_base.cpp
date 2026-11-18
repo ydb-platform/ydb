@@ -51,6 +51,10 @@ const TString& TTargetBase::TConfigBase::GetDstPath() const {
     return DstPath;
 }
 
+bool TTargetBase::TConfigBase::GetSrcIsImpl() const {
+    return false;
+}
+
 TTargetBase::TTargetBase(
         TReplication* replication,
         ETargetKind kind,

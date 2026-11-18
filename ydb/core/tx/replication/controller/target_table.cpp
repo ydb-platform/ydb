@@ -16,26 +16,27 @@ TString TTargetTable::BuildStreamPath() const {
 
 TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const IConfig::TPtr& config)
     : TTargetWithStream(replication, ETargetKind::IndexTable, id, config)
+    , SrcIsImpl(config->GetSrcIsImpl())
 {
 }
 
 TString TTargetIndexTable::GetSrcIndexPath() const {
     const auto srcParts = SplitPath(GetSrcPath());
     const auto dstParts = SplitPath(GetDstPath());
-    if (srcParts.empty() || dstParts.empty() || srcParts.back() == dstParts.back()) {
-        // src is the index itself (not ideal, but this is the only way without migration)
+    if (SrcIsImpl) {
         return CanonizePath(TString(ExtractParent(GetSrcPath())));
     }
+    // src is the index itself, dst is the impl table
     return CanonizePath(GetSrcPath());
 }
 
 TString TTargetIndexTable::BuildStreamPath() const {
     const auto srcParts = SplitPath(GetSrcPath());
     const auto dstParts = SplitPath(GetDstPath());
-    if (srcParts.empty() || dstParts.empty() || srcParts.back() == dstParts.back()) {
-        // src is the index itself
+    if (SrcIsImpl) {
         return CanonizePath(ChildPath(srcParts, {GetStreamName()}));
     }
+    // src is the index itself, dst is the impl table
     return CanonizePath(ChildPath(srcParts, {dstParts.back(), GetStreamName()}));
 }
 

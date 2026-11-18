@@ -3357,11 +3357,6 @@
                 "ColumnId": 21,
                 "ColumnName": "IncludeIndexData",
                 "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 22,
-                "ColumnName": "IndexItemsFromCopy",
-                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -3388,8 +3383,7 @@
                     18,
                     19,
                     20,
-                    21,
-                    22
+                    21
                 ],
                 "RoomID": 0,
                 "Codec": 0,

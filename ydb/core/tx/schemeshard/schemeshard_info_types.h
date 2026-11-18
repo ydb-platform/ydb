@@ -3857,8 +3857,6 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         TPathId SourcePathId;
         NKikimrSchemeOp::EPathType SourcePathType;
         ui32 ParentIdx; // used by indexes
-        // Copied index items follow their parent's IndexExportPrefixes order.
-        ui32 FirstIndexItem = Max<ui32>();
 
         EState State = EState::Waiting;
         ESubState SubState = ESubState::AllocateTxId;
@@ -3917,7 +3915,6 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     bool EnableChecksums = false;
     bool EnablePermissions = false;
     bool IncludeIndexData = false;
-    bool IndexItemsFromCopy = false; // Upload the schema mapping after the consistent copy.
 
     NKikimrSchemeOp::TExportMetadata ExportMetadata;
     TActorId ExportMetadataUploader;

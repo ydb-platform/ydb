@@ -5149,7 +5149,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     exportInfo->EnableChecksums = rowset.GetValueOrDefault<Schema::Exports::EnableChecksums>(false);
                     exportInfo->EnablePermissions = rowset.GetValueOrDefault<Schema::Exports::EnablePermissions>(false);
                     exportInfo->IncludeIndexData = rowset.GetValueOrDefault<Schema::Exports::IncludeIndexData>(false);
-                    exportInfo->IndexItemsFromCopy = rowset.GetValueOrDefault<Schema::Exports::IndexItemsFromCopy>(false);
 
                     if (rowset.HaveValue<Schema::Exports::ExportMetadata>()) {
                         exportInfo->ExportMetadata = rowset.GetValue<Schema::Exports::ExportMetadata>();
@@ -5197,10 +5196,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.SourcePathId.LocalPathId = rowset.GetValue<Schema::ExportItems::SourcePathId>();
                     item.SourcePathType = rowset.GetValue<Schema::ExportItems::SourcePathType>();
                     item.ParentIdx = rowset.GetValueOrDefault<Schema::ExportItems::ParentIndex>(Max<ui32>());
-                    if (exportInfo->IndexItemsFromCopy && item.ParentIdx != Max<ui32>()) {
-                        auto& first = exportInfo->Items.at(item.ParentIdx).FirstIndexItem;
-                        first = Min(first, itemIdx);
-                    }
 
                     item.State = static_cast<TExportInfo::EState>(rowset.GetValue<Schema::ExportItems::State>());
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ExportItems::BackupTxId>(InvalidTxId);

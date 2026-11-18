@@ -1722,7 +1722,6 @@ public:
     void AddExport(const TExportInfo::TPtr& exportInfo);
 
     static void PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
-    static void PersistNewExportItems(NIceDb::TNiceDb& db, const TExportInfo& exportInfo, ui32 firstItem);
     void PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
     static void PersistExportPathId(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
     static void PersistExportState(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);

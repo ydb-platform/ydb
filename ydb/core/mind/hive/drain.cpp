@@ -300,6 +300,79 @@ THiveDrain* THive::StartHiveDrain(TDrainTarget target, TDrainSettings settings) 
             {"target", target});
         return nullptr;
     }
+<<<<<<< HEAD
+=======
+    auto* balancer = new THiveDrain(this, target, std::move(settings), std::move(nodes));
+    SubActors.emplace_back(balancer);
+    RegisterWithSameMailbox(balancer);
+    return balancer;
+}
+
+void THive::StartPileDrain(TBridgePileInfo& pile) {
+    if (!pile.Drain || pile.DrainActor || IsPrimaryPile(pile.Id)) {
+        return;
+    }
+    // a default filter allows the piles where any tablet may run: the primary pile, or all the synchronized ones
+    // when BridgeTabletPlacement allows that
+    const TNodeFilter filter(*this);
+    if (std::none_of(Nodes.begin(), Nodes.end(), [&](const auto& item) {
+        const auto& node = item.second;
+        return node.IsAlive() && !node.Down && node.BridgePileId != pile.Id && filter.IsAllowedPile(node.BridgePileId);
+    })) {
+        return;
+    }
+    pile.DrainActor = StartHiveDrain(pile.Id, TDrainSettings{.DownPolicy = NKikimrHive::DRAIN_POLICY_NO_DOWN, .Forward = false});
+}
+
+bool THive::HasTabletsToDrain(TBridgePileId pileId) const {
+    if (!BridgeInfo || IsPrimaryPile(pileId)) {
+        return false;
+    }
+    for (const auto& [nodeId, node] : Nodes) {
+        if (node.BridgePileId != pileId) {
+            continue;
+        }
+        for (const auto& [state, tablets] : node.Tablets) {
+            for (const auto* tablet : tablets) {
+                if (tablet->CanBeAlive() &&
+                    !(tablet->IsLeader() && tablet->AsLeader().IsLockedToActor()) &&
+                    !tablet->GetNodeFilter().IsAllowedPile(pileId)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+void THive::ProcessPileDrains() {
+    if (ProcessPileDrainsScheduled || !BridgeInfo) {
+        return;
+    }
+    ProcessPileDrainsScheduled = true;
+    Send(SelfId(), new TEvPrivate::TEvProcessPileDrains());
+}
+
+void THive::Handle(TEvPrivate::TEvProcessPileDrains::TPtr&) {
+    ProcessPileDrainsScheduled = false;
+    if (!BridgeInfo || std::none_of(BridgePiles.begin(), BridgePiles.end(), [](const auto& item) { return item.second.Drain; })) {
+        return;
+    }
+    for (auto& [pileId, pile] : BridgePiles) {
+        if (!pile.Drain) {
+            continue;
+        }
+        if (pile.DrainActor) {
+            pile.DrainRetry = true;
+            continue;
+        }
+        if (!HasTabletsToDrain(pileId)) {
+            Execute(CreateSwitchDrainOff(pileId, NKikimrProto::OK, 0));
+        } else {
+            StartPileDrain(pile);
+        }
+    }
+>>>>>>> b9ba65f528e (add setting in hive_config to have tablets in non-primary piles (#59308))
 }
 
 void THive::Handle(TEvHive::TEvRequestDrainInfo::TPtr& ev) {

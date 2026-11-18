@@ -268,7 +268,7 @@ std::shared_ptr<arrow::ChunkedArray> ReallocateArray(const std::shared_ptr<arrow
     auto f = std::make_shared<arrow::Field>("1", original->type());
     auto table = arrow::Table::Make(std::make_shared<arrow::Schema>(arrow::FieldVector({ f })), { original }, original->length());
     table = ReallocateBatch(table, pool);
-    AFL_VERIFY(table->num_columns() == 1);
+    YDB_LOG_VERIFY(table->num_columns() == 1);
     return table->column(0);
 }
 
@@ -281,7 +281,7 @@ std::shared_ptr<arrow::Array> ReallocateArray(
         return arr;
     }
     auto cArray = NArrow::ReallocateArray(std::make_shared<arrow::ChunkedArray>(arr), pool);
-    AFL_VERIFY(cArray->num_chunks() == 1);
+    YDB_LOG_VERIFY(cArray->num_chunks() == 1);
     return cArray->chunk(0);
 }
 

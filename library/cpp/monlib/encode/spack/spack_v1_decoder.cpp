@@ -67,9 +67,13 @@ namespace NMonitoring {
                 TVector<char> valuesBuf;
 
                 if (Header_.Version == SV1_03 || Header_.Version == SV1_04) {
-                    auto namesResult = ReadLengthDelimitedStringPool(Header_.LabelNamesSize);
+                    ui64 labelSizeTotal = (ui64(Header_.LabelNamesSize) + Header_.LabelValuesSize)
+                        * (sizeof(std::pair<ui32, ui32>) + sizeof(TStringBuf));
+                    DECODE_ENSURE(labelSizeTotal <= LABEL_SIZE_LIMIT, "label pool limit exceeded by segment metadata");
+
+                    auto namesResult = ReadLengthDelimitedStringPool(Header_.LabelNamesSize, labelSizeTotal);
                     namesBuf = std::move(namesResult.first);
-                    auto valuesResult = ReadLengthDelimitedStringPool(Header_.LabelValuesSize);
+                    auto valuesResult = ReadLengthDelimitedStringPool(Header_.LabelValuesSize, labelSizeTotal);
                     valuesBuf = std::move(valuesResult.first);
 
                     TStringPool labelNames(namesBuf.data(), namesResult.second);
@@ -306,13 +310,15 @@ namespace NMonitoring {
                 return ReadVarUInt32(In_);
             }
 
-            std::pair<TVector<char>, TVector<std::pair<ui32, ui32>>> ReadLengthDelimitedStringPool(ui32 count) {
+            std::pair<TVector<char>, TVector<std::pair<ui32, ui32>>> ReadLengthDelimitedStringPool(ui32 count, ui64& labelSizeTotal) {
                 TVector<char> storage;
                 TVector<std::pair<ui32, ui32>> segments;
                 segments.reserve(count);
 
                 for (ui32 i = 0; i < count; i++) {
                     ui32 len = ReadVarint();
+                    DECODE_ENSURE(len <= LABEL_SIZE_LIMIT - labelSizeTotal, "label pool limit exceeded by string #" << i);
+                    labelSizeTotal += len;
                     ui32 offset = static_cast<ui32>(storage.size());
                     storage.resize(offset + len);
                     if (len > 0) {

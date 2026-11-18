@@ -2,6 +2,7 @@
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/bscontroller/indir.h>
 #include <ydb/core/mind/bscontroller/impl.h>
@@ -661,6 +662,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
         const std::array<TFailRealm::EState, 3> initial{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED};
         ui32 probes = 0;
+        ui32 repairs = 0;
+        std::unique_ptr<IEventHandle> pendingRepair;
         TTestActorRuntimeBase::TEventFilter previousFilter;
         previousFilter = env.Runtime->SetEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == TEvBlobStorage::EvVStatus) {
@@ -676,12 +679,43 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                     return true;
                 }
             }
+            if (event->GetTypeRewrite() == NGroupSyncer::TEvRunMirror3dcRepair::EventType) {
+                const auto& request = event->Get<NGroupSyncer::TEvRunMirror3dcRepair>()->Record;
+                if (request.GetGroupId() == groupId) {
+                    UNIT_ASSERT(!request.GetCancel());
+                    UNIT_ASSERT(!pendingRepair);
+                    ++repairs;
+                    pendingRepair.reset(event.Release());
+                    return true;
+                }
+            }
             return previousFilter(runtime, event);
         });
+        auto completeRepair = [&](EMirror3dcGroupState expectedState) {
+            for (ui32 attempt = 0; attempt < 10 && !pendingRepair; ++attempt) {
+                env.Runtime->SimulateSleep(TDuration::Seconds(6));
+            }
+            UNIT_ASSERT(pendingRepair);
+            const NKikimrBlobStorage::TGroupInfo pending = env.ReadGroups().at(groupId);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(pending.GetMirror3dcState()), ui32(expectedState));
+            const auto& request = pendingRepair->Get<NGroupSyncer::TEvRunMirror3dcRepair>()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(request.GetGeneration(), pending.GetGroupGeneration());
+            env.Runtime->SimulateSleep(TDuration::Seconds(12));
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), pending.SerializeAsString());
+            std::unique_ptr<NGroupSyncer::TEvRunMirror3dcRepairResult> result =
+                std::make_unique<NGroupSyncer::TEvRunMirror3dcRepairResult>();
+            result->Record.SetGroupId(groupId);
+            result->Record.SetGeneration(request.GetGeneration());
+            result->Record.SetStatus(NKikimrProto::OK);
+            env.Runtime->Send(new IEventHandle(pendingRepair->Sender, pendingRepair->Recipient,
+                result.release(), 0, pendingRepair->Cookie), 0, true);
+            pendingRepair.reset();
+        };
         auto start = env.SetGroupStates(groupId, initial, NKikimrBlobStorage::TGroupState::DC_FAILURE);
         start.MutableCommand(0)->MutableDefineGroupState()->MutableGroups(0)->SetGroupState(
             NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING);
         UNIT_ASSERT(env.Invoke(start).GetSuccess());
+        completeRepair(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING);
         NKikimrBlobStorage::TGroupInfo promoted;
         for (ui32 attempt = 0; attempt < 10; ++attempt) {
             env.Runtime->SimulateSleep(TDuration::Seconds(6));
@@ -703,6 +737,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             definition->AddFailRealmStates(realm.GetState());
         }
         UNIT_ASSERT(env.Invoke(enable).GetSuccess());
+        completeRepair(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING);
         for (ui32 attempt = 0; attempt < 10; ++attempt) {
             env.Runtime->SimulateSleep(TDuration::Seconds(6));
             promoted = env.ReadGroups().at(groupId);
@@ -716,6 +751,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(ui32(promoted.GetRings(2).GetState()), ui32(TFailRealm::EXCLUDED));
         UNIT_ASSERT_VALUES_EQUAL(promoted.GetGroupGeneration(), initialGeneration + 3);
         UNIT_ASSERT_VALUES_EQUAL(probes, 12);
+        UNIT_ASSERT_VALUES_EQUAL(repairs, 2);
         // A delayed proposal for the previous generation must not overwrite the new state.
         NKikimrBlobStorage::TConfigRequest stale = env.SetGroupStates(groupId, initial, NKikimrBlobStorage::TGroupState::DC_FAILURE);
         stale.MutableCommand(0)->MutableDefineGroupState()->MutableGroups(0)->SetExpectedGroupGeneration(initialGeneration);

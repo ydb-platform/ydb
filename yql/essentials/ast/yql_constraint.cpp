@@ -2237,7 +2237,9 @@ const TConstraintWithFieldsNode* TStreamingConstraintNode::DoRenameFields(TExprC
     TPathType canonical;
     if (paths.contains(*EventTime_)) {
         canonical = *EventTime_;
-    } else if (canonicalPaths.size() == 1U) {
+    } else if (!canonicalPaths.empty()) {
+        // Multiple destinations of the canonical event-time path are proven
+        // aliases of the same value. Preserve all of them and select a representative.
         canonical = canonicalPaths.front();
     } else if (paths.size() == 1U) {
         canonical = paths.front();

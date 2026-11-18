@@ -3,6 +3,7 @@
 #include "antlr_token.h"
 #include "select_yql.h"
 #include "sql_expression.h"
+#include "sql_flatten.h"
 #include "sql_group_by.h"
 #include "sql_select_window.h"
 #include "sql_select.h"
@@ -573,6 +574,13 @@ private:
     }
 
     TSourceResult Build(const TRule_select_core& rule, TYqlSelectArgs&& select) {
+        auto sourceAliases = YqlSelectSourceAliases_ ? *YqlSelectSourceAliases_ : THashSet<TString>{};
+        auto* outerAliases = std::exchange(YqlSelectSourceAliases_, &sourceAliases);
+        const bool outerIsJoin = std::exchange(YqlSelectIsJoin_, false);
+        Y_DEFER {
+            YqlSelectSourceAliases_ = outerAliases;
+            YqlSelectIsJoin_ = outerIsJoin;
+        };
         TYqlSetItemArgs setItem;
 
         if (rule.HasBlock1()) {
@@ -863,6 +871,7 @@ private:
     }
 
     TSQLResult<TYqlJoin> Build(const TRule_join_source& rule) {
+        YqlSelectIsJoin_ = !rule.GetBlock3().empty();
         if (rule.HasBlock1()) {
             Token(rule.GetBlock1().GetToken1());
             return Unsupported("ANY");
@@ -1075,20 +1084,52 @@ private:
     }
 
     TSQLResult<TYqlSource> Build(const TRule_flatten_source& rule) {
-        if (rule.HasBlock2()) {
-            const auto& block = rule.GetBlock2();
-            Token(block.GetToken1());
-            switch (block.GetBlock2().GetAltCase()) {
-                case TRule_flatten_source_TBlock2_TBlock2::kAlt1:
-                    return Unsupported("FLATTEN (OPTIONAL|LIST|DICT)? BY flatten_by_arg");
-                case TRule_flatten_source_TBlock2_TBlock2::kAlt2:
-                    return Unsupported("FLATTEN COLUMNS");
-                case TRule_flatten_source_TBlock2_TBlock2::ALT_NOT_SET:
-                    YQL_ENSURE(false, "Unreachable");
-            }
+        auto source = Build(rule.GetRule_named_single_source1());
+        if (!source) {
+            return source;
         }
 
-        return Build(rule.GetRule_named_single_source1());
+        if (!rule.HasBlock2()) {
+            return source;
+        }
+
+        return ApplyFlatten(rule.GetBlock2(), std::move(*source));
+    }
+
+    TSQLResult<TYqlSource> ApplyFlatten(const TRule_flatten_source::TBlock2& block, TYqlSource source) {
+        const TStringBuf sourceAlias = source.Alias
+                                           .Transform([](const TYqlSourceAlias& alias) { return TStringBuf(alias.Name); })
+                                           .GetOrElse(TStringBuf());
+        // FLATTEN expressions see only their own source, even inside a JOIN.
+        THashSet<TString> sourceAliases;
+        if (sourceAlias) {
+            sourceAliases.insert(TString(sourceAlias));
+        }
+        auto* outerAliases = std::exchange(YqlSelectSourceAliases_, &sourceAliases);
+        const bool outerIsJoin = std::exchange(YqlSelectIsJoin_, false);
+        Y_DEFER {
+            YqlSelectSourceAliases_ = outerAliases;
+            YqlSelectIsJoin_ = outerIsJoin;
+        };
+        Token(block.GetToken1());
+        const TPosition position = Ctx_.Pos();
+        switch (block.GetBlock2().GetAltCase()) {
+            case TRule_flatten_source_TBlock2_TBlock2::kAlt1: {
+                const auto& alt = block.GetBlock2().GetAlt1();
+                TSqlFlatten flatten(*this);
+                auto args = flatten.ParseArgs(sourceAlias, alt.GetRule_flatten_by_arg3());
+                if (!args) {
+                    return std::unexpected(args.error());
+                }
+                source.Flatten = BuildYqlFlattenBy(position, flatten.ParseMode(alt), std::move(*args));
+                return source;
+            }
+            case TRule_flatten_source_TBlock2_TBlock2::kAlt2:
+                source.Flatten = BuildYqlFlattenColumns(position);
+                return source;
+            case TRule_flatten_source_TBlock2_TBlock2::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
     }
 
     TSQLResult<TYqlSource> Build(const TRule_named_single_source& rule) {
@@ -1123,6 +1164,10 @@ private:
             return Unsupported("sample_clause | tablesample_clause");
         }
 
+        if (YqlSelectSourceAliases_ && source->Alias) {
+            YqlSelectSourceAliases_->insert(source->Alias->Name);
+        }
+
         return source;
     }
 
@@ -1143,6 +1188,7 @@ private:
             case NSQLv1Generated::TRule_single_source::kAltSingleSource2: {
                 TYqlSelect that(*this);
                 that.CurrentCTE_ = Nothing();
+                that.YqlSelectSourceAliases_ = nullptr;
                 return that.Build(rule.GetAlt_single_source2().GetRule_select_stmt2())
                     .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             }

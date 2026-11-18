@@ -35,9 +35,14 @@ class BridgeClient(object):
         self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
         self._stub = grpc_server.BridgeServiceStub(self._channel)
         self._auth_token = None
+        self._database = None
 
     def set_auth_token(self, token):
         self._auth_token = token
+
+    def set_database(self, database):
+        # dynamic nodes serve the requests of their databases (as the CLI does with -d)
+        self._database = database
 
     def _get_invoke_callee(self, method):
         return getattr(self._stub, method)
@@ -62,6 +67,8 @@ class BridgeClient(object):
                 metadata = []
                 if self._auth_token:
                     metadata.append(('x-ydb-auth-ticket', self._auth_token))
+                if self._database:
+                    metadata.append(('x-ydb-database', self._database))
 
                 response = callee(request, metadata=metadata, timeout=self._timeout)
 
@@ -136,6 +143,25 @@ class BridgeClient(object):
         request = bridge_api.RemovePileRequest()
         request.pile_name = pile_name
         return self.invoke(request, 'RemovePile')
+
+    def rollback(self, skip_bsc_validation=False):
+        request = bridge_api.RollbackRequest()
+        request.skip_bsc_validation = skip_bsc_validation
+        return self.invoke(request, 'Rollback')
+
+    def get_rollback_status(self):
+        request = bridge_api.GetRollbackStatusRequest()
+        return self.invoke(request, 'GetRollbackStatus')
+
+    def get_rollback_status_result(self):
+        response = self.get_rollback_status()
+        if response.operation.status != StatusIds.SUCCESS:
+            logger.error("Failed to get rollback status: %s", response.operation.status)
+            return None
+
+        result = bridge_api.GetRollbackStatusResult()
+        response.operation.result.Unpack(result)
+        return result
 
     @property
     def per_pile_state(self):

@@ -168,11 +168,11 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
     }
 
     TWorkersPool& workersPool = Manager->MutableWorkersPool(ev.GetWorkersPoolId());
-    workersPool.GetCounters()->PackExecuteHistogram->Collect(
+    workersPool.GetCounters()->PackExecuteHistogram.Collect(
         (ev.GetResults().back().GetFinish() - ev.GetResults().front().GetStart()).MicroSeconds());
-    workersPool.GetCounters()->PackSizeHistogram->Collect(ev.GetResults().size());
-    workersPool.GetCounters()->SendBackHistogram->Collect(backSendDuration.MicroSeconds());
-    workersPool.GetCounters()->SendFwdHistogram->Collect(ev.GetForwardSendDuration().MicroSeconds());
+    workersPool.GetCounters()->PackSizeHistogram.Collect(ev.GetResults().size());
+    workersPool.GetCounters()->SendBackHistogram.Collect(backSendDuration.MicroSeconds());
+    workersPool.GetCounters()->SendFwdHistogram.Collect(ev.GetForwardSendDuration().MicroSeconds());
 
     workersPool.GetCounters()->SendBackDuration->Add(backSendDuration.MicroSeconds());
     workersPool.GetCounters()->SendFwdDuration->Add(ev.GetForwardSendDuration().MicroSeconds());
@@ -240,7 +240,7 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     const TDuration d = TMonotonic::Now() - event.GetConstructInstant();
     LWPROBE(NewTask, ConveyorName, ToString(event.GetCategory()), event.GetInternalProcessId(), d);
     Counters.ReceiveTaskDuration->Add(d.MicroSeconds());
-    Counters.ReceiveTaskHistogram->Collect(d.MicroSeconds());
+    Counters.ReceiveTaskHistogram.Collect(d.MicroSeconds());
     auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
     cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask());
     TryApplyUpdate();

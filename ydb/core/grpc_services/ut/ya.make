@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/grpc_services)
 
-FORK_SUBTESTS()
-
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ENDIF()
@@ -21,6 +19,7 @@ PEERDIR(
     ydb/core/formats/arrow
     ydb/core/scheme
     ydb/core/testlib/default
+    ydb/core/tx/scheme_board
 )
 
 END()

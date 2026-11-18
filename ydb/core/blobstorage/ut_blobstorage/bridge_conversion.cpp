@@ -6,6 +6,8 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
+#include <algorithm>
+
 using namespace NBridgeTest;
 
 Y_UNIT_TEST_SUITE(BridgeConversion) {
@@ -434,6 +436,97 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
     }
 
+    // the group is deleted while its DS proxy, started without configuration, has the request queued: the bridge proxy
+    // forwards the view of the inline pile to it and stops right after that, before the DS proxy sends the request on;
+    // the request must be answered then (by node warden, as the group is gone), not sent to the bridge proxy stopped
+    Y_UNIT_TEST(QueuedRequestOfDeletedInlinePileAnswered) {
+        TEnvironmentSetup env(MakeUnbridgedSettingsWithSpareNode());
+        TDataChecker checker(env);
+        ConvertCluster(env, checker);
+        CreateAnotherPool(env, 2);
+        env.Sim(TDuration::Seconds(30));
+        std::optional<ui32> groupId;
+        {
+            const auto baseConfig = env.FetchBaseConfig(); // groups are referenced by pointers
+            const auto poolGroups = GetPoolGroups(baseConfig, 2);
+            UNIT_ASSERT_VALUES_EQUAL(poolGroups.size(), 1);
+            groupId.emplace(poolGroups.front()->GetGroupId());
+        }
+        const ui32 nodeId = PickNodeWithoutGroupVDisks(env, *groupId);
+
+        // the info of the group doesn't get to the node until the request is queued; then the view of the inline pile
+        // the bridge proxy sends to its DS proxy, and the poison it sends when stopping are held
+        bool holdInfo = true;
+        std::vector<std::unique_ptr<IEventHandle>> heldInfo;
+        std::optional<TActorId> innerProxyId;
+        std::optional<TActorId> bridgeProxyId;
+        std::vector<std::unique_ptr<IEventHandle>> heldConfigure;
+        std::vector<std::unique_ptr<IEventHandle>> heldPoison;
+        env.Runtime->FilterFunction = [&](ui32 eventNodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (holdInfo && IsGroupInfoForNode(*ev, *groupId, nodeId)) {
+                heldInfo.push_back(std::move(ev));
+                return false;
+            } else if (ev->GetTypeRewrite() == TEvents::TSystem::Poison && innerProxyId &&
+                    ev->GetRecipientRewrite() == *innerProxyId) {
+                heldPoison.push_back(std::move(ev)); // it carries no event object
+                return false;
+            } else if (eventNodeId != nodeId || !ev->HasEvent()) {
+                return true;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvConfigureProxy) {
+                const auto& info = ev->Get<TEvBlobStorage::TEvConfigureProxy>()->Info;
+                if (innerProxyId ? ev->GetRecipientRewrite() == *innerProxyId : info && info->IsInlinePileView() &&
+                        info->GroupID == TGroupId::FromValue(*groupId)) {
+                    innerProxyId.emplace(ev->GetRecipientRewrite());
+                    bridgeProxyId.emplace(ev->Sender);
+                    heldConfigure.push_back(std::move(ev)); // the DS proxy stays unconfigured, with the request queued
+                    return false;
+                }
+            }
+            return true;
+        };
+        auto resend = [&](std::vector<std::unique_ptr<IEventHandle>>& held) {
+            for (auto& ev : std::exchange(held, {})) {
+                ResendEvent(env, nodeId, std::move(ev));
+            }
+        };
+
+        const TLogoBlobID id(100500, 1, 1, 0, 6, 0);
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        const TInstant sent = env.Runtime->GetClock();
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, *groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead));
+        });
+        WaitUntil(env, [&] { return !heldInfo.empty(); }, "group info", TDuration::MilliSeconds(10), 300);
+        holdInfo = false;
+        resend(heldInfo);
+        WaitUntil(env, [&] { return !heldConfigure.empty(); }, "view of the inline pile", TDuration::MilliSeconds(10),
+            300);
+
+        // the pool goes away along with its group, the bridge proxy stops
+        const auto pool = ReadStoragePool(env, 2);
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand()->MutableDeleteStoragePool();
+        cmd->SetBoxId(pool.GetBoxId());
+        cmd->SetStoragePoolId(pool.GetStoragePoolId());
+        cmd->SetItemConfigGeneration(pool.GetItemConfigGeneration());
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        WaitUntil(env, [&] { return !env.Runtime->GetActor(*bridgeProxyId) && !heldPoison.empty(); },
+            "stopped bridge proxy", TDuration::MilliSeconds(10), 300);
+
+        // the DS proxy gets the view before the poison, as the bridge proxy has sent them; it hasn't answered the request
+        // by timeout of waiting for configuration yet (ProxyConfigurationTimeout)
+        UNIT_ASSERT_C(env.Runtime->GetClock() - sent < TDuration::Seconds(10), env.Runtime->GetClock() - sent);
+        env.Runtime->FilterFunction = {};
+        resend(heldConfigure);
+        resend(heldPoison);
+        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Seconds(5));
+        UNIT_ASSERT_C(result, "request to the deleted group is not answered");
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ToString());
+    }
+
     // requests to the service of the converted group which the bridge proxy has to handle in a special way
     Y_UNIT_TEST(RequestsToInlinePile) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
@@ -764,8 +857,9 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         }
 
         // data is served through the bridge proxy now, old data is still readable
+        std::vector<ui32> allGroups = groups; // new groups included
         auto checkGroups = [&](ui32 nodeId) {
-            for (ui32 groupId : groups) {
+            for (ui32 groupId : allGroups) {
                 const ui32 prev = numInnerPuts;
                 checker.Write(groupId, nodeId);
                 UNIT_ASSERT_VALUES_EQUAL(numInnerPuts, prev + 1);
@@ -787,26 +881,40 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         }
         checkGroups(1);
 
-        // new groups are bridged ones, both in new and existing pools
+        // new groups are bridged ones, both in new and existing pools; they are born inline piles, like the converted
+        // groups are, so their ids are the ones of their physical groups
         CreateAnotherPool(env, 3);
         SetNumGroups(env, 2, 2);
         env.Sim(TDuration::Seconds(30));
         const auto newBaseConfig = env.FetchBaseConfig();
-        for (const auto& [storagePoolId, numGroups] : {std::make_pair(2, 3), std::make_pair(3, 2)}) {
-            // existing pool contains inline pile and new proxy group with its pile group
+        for (const auto& [storagePoolId, numGroups] : {std::make_pair(2, 2), std::make_pair(3, 1)}) {
             const auto poolGroups = GetPoolGroups(newBaseConfig, storagePoolId);
             UNIT_ASSERT_VALUES_EQUAL(poolGroups.size(), numGroups);
-            ui32 newGroupId = 0;
+            std::optional<ui32> newGroupId;
             for (const auto *group : poolGroups) {
-                if (group->GetIsProxyGroup()) {
+                if (std::ranges::find(groups, group->GetGroupId()) == groups.end()) {
                     UNIT_ASSERT(!newGroupId);
                     newGroupId = group->GetGroupId();
                 }
             }
             UNIT_ASSERT(newGroupId);
-            checker.Write(newGroupId);
+            const auto info = CheckInlinePileGroup(env, *newGroupId);
+            UNIT_ASSERT_VALUES_EQUAL_C(info.GetGroupGeneration(), 1, info.ShortDebugString());
+            UNIT_ASSERT_EQUAL_C(info.GetBridgeGroupState().GetPile(0).GetStage(), NKikimrBridge::TGroupState::SYNCED,
+                info.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(info.GetBridgeGroupState().GetClusterStateGeneration(),
+                QueryStorageConfig(env).GetClusterState().GetGeneration(), info.ShortDebugString());
+            allGroups.push_back(*newGroupId);
         }
-        checker.CheckAll();
+        for (ui32 nodeId : env.Runtime->GetNodes()) {
+            checkGroups(nodeId); // new groups are served through the bridge proxy too
+        }
+
+        // self-heal of new group keeps its own pile generation in line with the group's one
+        ReassignOneDisk(env, allGroups.back());
+        env.Sim(TDuration::Minutes(1));
+        CheckInlinePileGroup(env, allGroups.back());
+        checkGroups(1);
 
         // the cluster must restart correctly in its new state
         for (ui32 nodeId : env.Runtime->GetNodes()) {
@@ -905,18 +1013,23 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         }
         env.Sim(TDuration::Seconds(30));
         const auto baseConfig = env.FetchBaseConfig(); // groups are referenced by pointers
-        for (const auto& [storagePoolId, numGroups] : {std::make_pair(3, 2), std::make_pair(4, 1)}) {
+        std::vector<ui32> allGroups{groups[0], groups[1], staticGroupId};
+        for (const auto& [storagePoolId, bridged] : {std::make_pair(3, true), std::make_pair(4, false)}) {
             const auto poolGroups = GetPoolGroups(baseConfig, storagePoolId);
-            UNIT_ASSERT_VALUES_EQUAL(poolGroups.size(), numGroups); // bridged one has proxy and part in the pile
-            for (const auto *group : poolGroups) {
-                if (group->GetIsProxyGroup() || numGroups == 1) {
-                    checker.Write(group->GetGroupId());
-                }
+            UNIT_ASSERT_VALUES_EQUAL(poolGroups.size(), 1); // bridged one is the inline pile, without separate parts
+            const ui32 groupId = poolGroups.front()->GetGroupId();
+            if (bridged) {
+                CheckInlinePileGroup(env, groupId);
+            } else {
+                const auto info = GetGroupInfo(env, groupId);
+                UNIT_ASSERT_C(!info.HasBridgeGroupState() && !info.HasBridgeProxyGroupId(), info.ShortDebugString());
             }
+            checker.Write(groupId);
+            allGroups.push_back(groupId);
         }
 
         auto checkAll = [&](ui32 nodeId) {
-            for (ui32 groupId : {groups[0], groups[1], staticGroupId}) {
+            for (ui32 groupId : allGroups) {
                 checker.Write(groupId, nodeId);
             }
             checker.CheckAll(nodeId);

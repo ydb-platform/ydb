@@ -37,12 +37,14 @@ TAsyncStatus TOperationClient::Forget(const TOperation::TOperationId& id) {
 
 // Instantiations
 template NThreading::TFuture<NSchemeShard::TBackgroundProcessesResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NSchemeShard::TBackgroundProcessesResponse> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NSchemeShard::TBackgroundProcessesResponse>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NSchemeShard::TBackgroundProcessesResponse>("ss/backgrounds", pageSize, pageToken);
 }
 
 template NThreading::TFuture<NExport::TExportToYtResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NExport::TExportToYtResponse> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NExport::TExportToYtResponse>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     // TODO: export -> export/yt
@@ -50,54 +52,63 @@ NThreading::TFuture<TOperationsList<NExport::TExportToYtResponse>> TOperationCli
 }
 
 template NThreading::TFuture<NExport::TExportToS3Response> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NExport::TExportToS3Response> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NExport::TExportToS3Response>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NExport::TExportToS3Response>("export/s3", pageSize, pageToken);
 }
 
 template NThreading::TFuture<NImport::TImportFromS3Response> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NImport::TImportFromS3Response> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NImport::TImportFromS3Response>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NImport::TImportFromS3Response>("import/s3", pageSize, pageToken);
 }
 
 template NThreading::TFuture<NExport::TExportToFsResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NExport::TExportToFsResponse> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NExport::TExportToFsResponse>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NExport::TExportToFsResponse>("export/fs", pageSize, pageToken);
 }
 
 template NThreading::TFuture<NImport::TImportFromFsResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NImport::TImportFromFsResponse> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NImport::TImportFromFsResponse>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NImport::TImportFromFsResponse>("import/fs", pageSize, pageToken);
 }
 
 template NThreading::TFuture<NTable::TBuildIndexOperation> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NTable::TBuildIndexOperation> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NTable::TBuildIndexOperation>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NTable::TBuildIndexOperation>("buildindex", pageSize, pageToken);
 }
 
 template NThreading::TFuture<NQuery::TScriptExecutionOperation> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NQuery::TScriptExecutionOperation> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NQuery::TScriptExecutionOperation>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NQuery::TScriptExecutionOperation>("scriptexec", pageSize, pageToken);
 }
 
 template NThreading::TFuture<NTable::TCompactionOperation> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NTable::TCompactionOperation> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NTable::TCompactionOperation>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NTable::TCompactionOperation>("compaction", pageSize, pageToken);
 }
 
 template NThreading::TFuture<NTable::TAnalyzeOperation> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NTable::TAnalyzeOperation> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NTable::TAnalyzeOperation>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NTable::TAnalyzeOperation>("analyze", pageSize, pageToken);
 }
 
 template NThreading::TFuture<NTable::TSetNotNullOperation> TOperationClient::Get(const TOperation::TOperationId& id);
+template NThreading::TFuture<NTable::TSetNotNullOperation> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 template <>
 NThreading::TFuture<TOperationsList<NTable::TSetNotNullOperation>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NTable::TSetNotNullOperation>("setnotnull", pageSize, pageToken);

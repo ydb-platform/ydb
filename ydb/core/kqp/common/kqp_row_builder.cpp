@@ -32,7 +32,7 @@ TRowBuilder& TRowBuilder::AddCell(const size_t index, const NScheme::TTypeInfo& 
                 ythrow yexception() << "BinaryTypeModFromTextTypeMod error: " << *typeModResult.Error;
             }
 
-            AFL_ENSURE(typeModResult.Typmod != -1);
+            YDB_LOG_ENSURE(typeModResult.Typmod != -1);
 
             TMaybe<TString> err;
             CellsInfo[index].PgBinaryValue = NYql::NCommon::PgValueCoerce(value, NPg::PgTypeIdFromTypeDesc(typeDesc), typeModResult.Typmod, &err);

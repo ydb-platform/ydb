@@ -1,4 +1,7 @@
 #include "mkql_alloc.h"
+#include "mkql_udf_service.h"
+
+#include <yql/essentials/public/udf/udf_registrator.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -11,6 +14,27 @@
 namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
+Y_UNIT_TEST(UdfServiceSymbolsFollowAllocator) {
+    const auto hostSymbols = GetUdfServiceSymbols();
+    const auto* previous = YqlUdfExchangeThreadSymbols(&hostSymbols);
+    Y_DEFER {
+        YqlUdfExchangeThreadSymbols(previous);
+    };
+#ifdef MKQL_DISABLE_UDF_SERVICE_DISPATCH
+    const auto* expected = &hostSymbols;
+#else
+    const auto* expected = &GetUdfServiceSymbols();
+#endif
+    {
+        TScopedAlloc alloc(__LOCATION__);
+        UNIT_ASSERT_VALUES_EQUAL(YqlUdfGetSymbols(), expected);
+        alloc.Acquire();
+        alloc.Release();
+        UNIT_ASSERT_VALUES_EQUAL(YqlUdfGetSymbols(), expected);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(YqlUdfGetSymbols(), &hostSymbols);
+}
+
 Y_UNIT_TEST(TestPagedArena) {
     TAlignedPagePool pagePool(__LOCATION__);
 

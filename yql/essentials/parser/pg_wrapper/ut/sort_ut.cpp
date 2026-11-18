@@ -1,3 +1,5 @@
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_test_registrar.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_test_setup.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -7,8 +9,6 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
-
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 
 #include <random>
 #include <ctime>

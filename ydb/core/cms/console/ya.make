@@ -92,9 +92,8 @@ PEERDIR(
     ydb/library/actors/interconnect
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/core/blobstorage
     ydb/core/blobstorage/base
-    ydb/core/blobstorage/groupinfo
+    ydb/core/cms/console/events
     ydb/core/cms/console/validators
     ydb/core/config/init
     ydb/core/control/lib
@@ -119,6 +118,7 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE(
+    events
     util
     validators
 )

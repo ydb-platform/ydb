@@ -139,6 +139,10 @@ namespace NKikimr::NBsController {
                 // bridged group is decommitted as a whole through its bridge proxy group, single piles are not
                 throw TExError() << "can't decommit a pile of bridged group, decommit its bridge proxy group instead"
                     << TErrorParams::GroupId(groupId);
+            } else if (group->BridgeGroupInfo && Self.IsBeingRolledBack()) {
+                // the group has to stay the inline pile with all its data until it is made ordinary one
+                throw TExError() << "bridged group can't be decommitted while the cluster is being rolled back"
+                    << TErrorParams::GroupId(groupId);
             }
 
             group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::PENDING;
@@ -922,7 +926,9 @@ namespace NKikimr::NBsController {
                 {"marker", "BSCVG15"},
                 {"groupId", group->ID.GetRawId()});
             Self->Execute(std::make_unique<TTxUpdateGroup>(this, [](TGroupInfo& group, TConfigState&) {
-                if (group.VDisksInGroup) {
+                // a group with data stays without its BlobDepot: an ordinary one keeps it on its VDisks, and a bridge
+                // proxy group, which has none, on its parts
+                if (group.VDisksInGroup || group.BridgeGroupInfo) {
                     group.VirtualGroupName = {};
                     group.VirtualGroupState = {};
                     group.HiveId = {};
@@ -1124,14 +1130,7 @@ namespace NKikimr::NBsController {
                     if (group->BridgeGroupInfo) {
                         // bridged group is decommitted as a whole: release piles along with their VDisks (except for
                         // the inline one, which is the group itself) and turn this group into an ordinary virtual one
-                        std::vector<TGroupId> pileGroupIds;
-                        NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
-                                const NKikimrBridge::TGroupState::TPile& pile) {
-                            const auto pileGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-                            if (pileGroupId != group->ID) {
-                                pileGroupIds.push_back(pileGroupId);
-                            }
-                        });
+                        const std::vector<TGroupId> pileGroupIds = TConfigState::GetBridgeParts(*group);
                         group->BridgeGroupInfo.reset();
                         group->BridgePileId = TBridgePileId();
                         group->BridgeProxyGroupId.reset();

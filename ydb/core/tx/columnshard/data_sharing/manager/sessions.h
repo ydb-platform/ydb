@@ -13,25 +13,16 @@ private:
     THashMap<TString, std::shared_ptr<TSourceSession>> SourceSessions;
     THashMap<TString, std::shared_ptr<TDestinationSession>> DestSessions;
     TAtomicCounter SharingSessions;
-    bool AdmissionSeen = false;
 
 public:
     TSessionsManager() = default;
-
-    void OnSharingAdmission() {
-        AdmissionSeen = true;
-    }
-
-    bool CanCutHistory() const {
-        return !AdmissionSeen && SourceSessions.empty() && DestSessions.empty();
-    }
 
     void StartSharingSession() {
         SharingSessions.Inc();
     }
 
     void FinishSharingSession() {
-        AFL_VERIFY(SharingSessions.Dec() >= 0);
+        YDB_LOG_VERIFY(SharingSessions.Dec() >= 0);
     }
 
     bool IsSharingInProgress() const {

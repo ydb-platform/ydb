@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yql/essentials/core/project_settings/yql_project_settings.h>
+
 #include <yql/essentials/sql/settings/flags/flags.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
@@ -21,6 +23,10 @@ class IAutoParamBuilderFactory;
 } // namespace NYql
 
 namespace NSQLTranslation {
+
+// Provider pragmas have a provider or cluster prefix. SQL pragmas have no prefix,
+// except for the case-insensitive "yson." prefix.
+bool IsTranslatorLevelPragma(TStringBuf name);
 
 constexpr const size_t SQL_MAX_PARSER_ERRORS = 100;
 constexpr const size_t SQL_MAX_PARSE_TREE_DEPTH = 4096;
@@ -155,6 +161,7 @@ struct TTranslationSettings {
     TVector<TString> ExtraSystemColumnPrefixes;
 
     bool StrictConfigValidation = false;
+    NYql::TProjectSettings ProjectSettings;
 };
 
 struct TParsedSettings {

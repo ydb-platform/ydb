@@ -488,6 +488,7 @@ namespace NLongTxService {
         void Handle(TEvLongTxService::TEvAttachColumnShardWrites::TPtr& ev);
         void Handle(TEvLongTxService::TEvAttachColumnShardWritesResult::TPtr& ev);
         void Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr& ev);
+        void RegisterRequestedSnapshot(TEvLongTxService::TEvAcquireReadSnapshot::TPtr& ev, const TString& databaseName);
         void Handle(TEvPrivate::TEvAcquireSnapshotFlush::TPtr& ev);
         void Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& ev);
         void Handle(TEvLongTxService::TEvRegisterLock::TPtr& ev);

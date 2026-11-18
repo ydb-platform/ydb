@@ -1,5 +1,6 @@
 RECURSE(
     build_info
+    config
     connection_string
     cms
     coordination
@@ -9,6 +10,7 @@ RECURSE(
     endpoints
     iam
     iam_private
+    login
     oauth2_token_exchange
     oidc
     observability
@@ -18,6 +20,7 @@ RECURSE(
     row_ranges
     retry
     retry_range
+    scheme
     table
     value
 )

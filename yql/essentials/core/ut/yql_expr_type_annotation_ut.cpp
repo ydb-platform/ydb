@@ -262,7 +262,7 @@ struct TLazyBindFixture {
         const auto ast = ParseAst(TStringBuilder() << "((return " << expression << "))");
         UNIT_ASSERT_C(ast.IsOk(), ast.Issues.ToString());
         UNIT_ASSERT_C(CompileExpr(*ast.Root, Expression, Context, nullptr, nullptr), Context.IssueManager.GetIssues().ToString());
-        return InstantAnnotateTypes(Expression, Context, false, Types);
+        return InstantAnnotateTypes(Expression, Context, /*wholeProgram=*/false, Types);
     }
 };
 

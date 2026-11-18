@@ -56,20 +56,20 @@ protected:
 
     std::shared_ptr<TColumnTableInfo> GetTargetTableInfoVerified() const {
         auto result = GetTargetTableInfo();
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return result;
     }
 
     template <class T>
     const T& GetTargetEntityAsVerified() const {
         auto resultPtr = dynamic_pointer_cast<T>(GetTargetEntityVerified());
-        AFL_VERIFY(!!resultPtr);
+        YDB_LOG_VERIFY(!!resultPtr);
         return *resultPtr;
     }
 
     std::shared_ptr<ISSEntity> GetTargetEntityVerified() const {
         auto result = GetTargetSSEntity();
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return result;
     }
 

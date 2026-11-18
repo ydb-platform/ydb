@@ -125,4 +125,26 @@ Y_UNIT_TEST_SUITE(TLoadedKeyRangesCovers) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TLoadedKeyRangesCoversFrom) {
+    Y_UNIT_TEST(EverythingLoaded) {
+        UNIT_ASSERT(TLoadedKeyRanges::BuildEverything().CoversFrom(MakeKey(50, "a")));
+    }
+
+    Y_UNIT_TEST(NothingLoaded) {
+        UNIT_ASSERT(!TLoadedKeyRanges::BuildNothing().CoversFrom(MakeKey(150, "a")));
+    }
+
+    Y_UNIT_TEST(KeyAboveBound) {
+        UNIT_ASSERT(MakeLoadedFrom100M().CoversFrom(MakeKey(100, "n")));
+    }
+
+    Y_UNIT_TEST(KeyEqualToBound) {
+        UNIT_ASSERT(MakeLoadedFrom100M().CoversFrom(MakeKey(100, "m")));
+    }
+
+    Y_UNIT_TEST(KeyBelowBound) {
+        UNIT_ASSERT(!MakeLoadedFrom100M().CoversFrom(MakeKey(100, "a")));
+    }
+}
+
 }   // namespace NKikimr

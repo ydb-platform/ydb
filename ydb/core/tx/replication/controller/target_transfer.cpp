@@ -269,7 +269,7 @@ void TTargetTransfer::Shutdown(const TActorContext& ctx) {
     TTargetWithStream::Shutdown(ctx);
 }
 
-TString TTargetTransfer::GetStreamPath() const {
+TString TTargetTransfer::BuildStreamPath() const {
     return CanonizePath(GetSrcPath());
 }
 

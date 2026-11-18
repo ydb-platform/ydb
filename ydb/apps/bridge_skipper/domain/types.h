@@ -82,14 +82,21 @@ struct TConnectivity {
 
 enum class EPileVerdict { Healthy, Failed, Lost, Replicating, Unknown };
 
+// Failure sources have separate confirmation windows. Storage is the narrow
+// fallback proof based on reported PDisk DeviceIoError, independent of quorum.
+enum class EFailureEvidence { Ordinary, Fallback, Storage };
+
 struct TPileVerdict {
     EPileVerdict Verdict = EPileVerdict::Unknown;
     std::vector<TString> Reasons;
     // A fresh fallback-mode reply attributes a group part (RED, or GREY "no data") to
-    // the pile. Never Down evidence; it vetoes promotion on connectivity alone.
+    // the pile. This aggregate is a candidate veto, not sufficient Down evidence.
     bool FallbackRed = false;
     bool SelfQuorum = false;
     TMonotonic NewestEvidenceSentAt;
+    // A complete fresh fallback reply from this pile; not proof of disk health.
+    bool OwnFallback = false;
+    EFailureEvidence FailureEvidence = EFailureEvidence::Ordinary;
 };
 
 enum class EBlockerReason {

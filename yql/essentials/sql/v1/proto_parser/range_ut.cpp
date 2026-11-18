@@ -29,8 +29,8 @@ TTokenIndexRange GetTokenIndexRangeReflecting(const google::protobuf::Message& n
                       end->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_UINT32,
                   descriptor->full_name());
     return {
-        reflection->GetUInt32(node, start),
-        reflection->GetUInt32(node, end),
+        .Start = reflection->GetUInt32(node, start),
+        .End = reflection->GetUInt32(node, end),
     };
 }
 
@@ -135,10 +135,10 @@ void PrintRule(const google::protobuf::Message& rule, const NSQLTranslation::TPa
 
 const google::protobuf::Message* ParseTree(const TString& query, google::protobuf::Arena& arena) {
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(false, false, Nothing());
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(/*isAmbiguityError=*/false, /*isAmbiguityDebugging=*/false, Nothing());
     NYql::TIssues issues;
     const auto* tree = NSQLTranslationV1::SqlAST(
-        parsers, query, "", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, false, &arena);
+        parsers, query, "", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, /*ansiLexer=*/false, &arena);
     UNIT_ASSERT_C(tree, issues.ToOneLineString());
     return tree;
 }
@@ -146,7 +146,7 @@ const google::protobuf::Message* ParseTree(const TString& query, google::protobu
 TString PrintTree(const TString& query) {
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    auto lexer = NSQLTranslationV1::MakeLexer(lexers, false);
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, /*ansi=*/false);
 
     NYql::TIssues issues;
     NSQLTranslation::TParsedTokenList tokens;
@@ -179,7 +179,7 @@ TString PrintTree(const TString& query) {
 Y_UNIT_TEST_SUITE(ProtoParserRangeTests) {
 
 Y_UNIT_TEST(EmptyRangeAtTokenZero) {
-    const TTokenIndexRange range{0, std::numeric_limits<ui32>::max()};
+    const TTokenIndexRange range{.Start = 0, .End = std::numeric_limits<ui32>::max()};
     UNIT_ASSERT(range.IsEmpty());
 }
 

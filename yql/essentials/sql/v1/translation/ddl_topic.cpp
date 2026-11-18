@@ -76,11 +76,11 @@ TNullable<TNodePtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescri
 
     if (alter) {
         if (desc.Settings.Type) {
-            ctx.Error() << "type alter is not supported";
+            ctx.Error(desc.Settings.Type->GetPos()) << "type alter is not supported";
             return {nullptr};
         }
         if (desc.Settings.KeepMessagesOrder) {
-            ctx.Error() << "keep_messages_order alter is not supported";
+            ctx.Error(desc.Settings.KeepMessagesOrder->GetPos()) << "keep_messages_order alter is not supported";
             return {nullptr};
         }
     }

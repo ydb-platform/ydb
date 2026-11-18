@@ -1,4 +1,14 @@
-/* syntax version 1 */
+$rows = [
+    <|ftztimestamp64: Just(TzTimestamp64("-144169-01-01T01:02:03.456789,GMT"))|>,
+    <|ftztimestamp64: Just(TzTimestamp64("-1-01-01T23:58:57.654321,GMT"))|>,
+    <|ftztimestamp64: Just(TzTimestamp64("1-01-01T09:09:09.000009,GMT"))|>,
+    <|ftztimestamp64: Just(TzTimestamp64("1969-12-31T23:58:57.654321,GMT"))|>,
+    <|ftztimestamp64: Just(TzTimestamp64("1970-01-01T09:09:09.000009,GMT"))|>,
+    <|ftztimestamp64: Just(TzTimestamp64("2025-02-04T09:09:09.000009,GMT"))|>,
+    <|ftztimestamp64: Just(TzTimestamp64("2106-01-01T09:09:09.000009,GMT"))|>,
+    <|ftztimestamp64: Just(TzTimestamp64("148107-12-31T23:58:57.654321,GMT"))|>,
+];
+
 $check = ($arg) -> {
     return <|
         soyear:    DateTime::StartOfYear($arg),
@@ -16,13 +26,11 @@ $check = ($arg) -> {
 };
 
 $typeDispatcher = ($row) -> {
-    $tm = $row.tm;
+    $tm = $row.ftztimestamp64;
     return <|
         explicit: $check(DateTime::Split($tm)),
         implicit: $check($tm),
     |>;
 };
 
-$input = SELECT CAST(ftztimestamp64 as TzTimestamp64) as tm FROM Input;
-
-PROCESS $input USING $typeDispatcher(TableRow());
+PROCESS AS_TABLE($rows) USING $typeDispatcher(TableRow());

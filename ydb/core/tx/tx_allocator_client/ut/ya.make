@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/tx_allocator_client)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(

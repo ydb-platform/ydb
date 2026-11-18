@@ -22,7 +22,7 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& info, const TAddExternalContext& context) {
-        AFL_VERIFY(info);
+        YDB_LOG_VERIFY(info);
         if (info->HasRemoveSnapshot()) {
             return;
         }

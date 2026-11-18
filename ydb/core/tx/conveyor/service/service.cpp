@@ -1,5 +1,5 @@
 #include "service.h"
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/tx/conveyor/tracing/probes.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 

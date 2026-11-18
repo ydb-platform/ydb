@@ -167,7 +167,9 @@ TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TS
     if (!RemainingPath.empty()) {
         NYql::TIssues issues;
         RemainingPathPtr = NYql::NJsonPath::ParseJsonPath(RemainingPath, issues, 5);
-        AFL_VERIFY(issues.Empty())("RemainingPath", RemainingPath)("issues", issues.ToString());
+        YDB_LOG_VERIFY(issues.Empty(),
+            {"remainingPath", RemainingPath},
+            {"issues", issues});
     }
 }
 
@@ -187,7 +189,7 @@ void TJsonPathAccessor::VisitValues(const TValuesVisitor& visitor) const {
     }
 
     ChunkedArrayAccessor->VisitValues([&](std::shared_ptr<arrow::Array> arr) {
-        AFL_VERIFY(arr);
+        YDB_LOG_VERIFY(arr);
         for (int64_t i = 0; i < arr->length(); ++i) {
             if (arr->IsNull(i)) {
                 visitor(std::nullopt);

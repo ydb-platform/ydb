@@ -209,9 +209,10 @@ void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSessio
     }
     if (auto s = session->LockShared()) {
         s->Start();
-        s->AddPartitionSession(std::move(partitionSession));
+        if (s->AddPartitionSession(std::move(partitionSession))) {
+            Locations.emplace(partitionSessionId, location);
+        }
     }
-    Locations.emplace(partitionSessionId, location);
 }
 
 // Delete partition session from the node (TDirectReadSession), and if there are no more
@@ -387,17 +388,17 @@ bool TDirectReadSession::Closed() const {
     }
 }
 
-void TDirectReadSession::AddPartitionSession(TDirectReadPartitionSession&& session) {
-    TDeferredActions<false> deferred;
+bool TDirectReadSession::AddPartitionSession(TDirectReadPartitionSession&& session) {
     with_lock (Lock) {
-        Y_ABORT_UNLESS(State < EState::CLOSING);
-
+        if (State >= EState::CLOSING) {
+            return false;
+        }
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "AddPartitionSession " << session.PartitionSessionId);
         auto [it, inserted] = PartitionSessions.emplace(session.PartitionSessionId, std::move(session));
         // TODO(qyryq) Abort? Ignore new? Replace old? Anything else?
         Y_ABORT_UNLESS(inserted);
-
         SendStartRequestImpl(it->second);
+        return true;
     }
 }
 
@@ -487,13 +488,16 @@ void TDirectReadSession::DeletePartitionSessionImpl(TPartitionSessionId partitio
     }
 }
 
-void TDirectReadSession::AbortImpl(TPlainStatus&& status) {
+void TDirectReadSession::AbortImpl(TPlainStatus&& status, TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Abort");
     if (State < EState::CLOSING) {
         State = EState::CLOSED;
-        ControlCallbacks->AbortSession(std::move(status));
+        // Terminal handlers may close this reader and cancel its callback context.
+        deferred.DeferCallback([callbacks = ControlCallbacks, status = std::move(status)]() mutable {
+            callbacks->AbortSession(std::move(status));
+        });
     }
 }
 
@@ -598,7 +602,7 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
 
         if (!Reconnect(errorStatus)) {
             with_lock (Lock) {
-                AbortImpl(std::move(errorStatus));
+                AbortImpl(std::move(errorStatus), deferred);
             }
         }
     }
@@ -670,7 +674,7 @@ void TDirectReadSession::DelayStartRequestImpl(TDirectReadPartitionSession& part
 
     TMaybe<TDuration> delay = partitionSession.RetryState->GetNextRetryDelay(status.Status);
     if (!delay.Defined()) {
-        AbortImpl(std::move(status));
+        AbortImpl(std::move(status), deferred);
         return;
     }
 
@@ -865,9 +869,9 @@ void TDirectReadSession::OnConnectTimeout(
 void TDirectReadSession::OnConnect(
     TPlainStatus&& status,
     IDirectReadProcessor::TPtr&& connection,
-    const NYdbGrpc::IQueueClientContextPtr& connectContext
+    const NYdbGrpc::IQueueClientContextPtr& connectContext,
+    TDeferredActions<false>& deferred
 ) {
-    TDeferredActions<false> deferred;
     with_lock (Lock) {
         if (ConnectContext != connectContext) {
             return;
@@ -899,7 +903,7 @@ void TDirectReadSession::OnConnect(
                     status.Status,
                     MakeIssueWithSubIssues(
                         TStringBuilder() << "Failed to establish connection to server \"" << status.Endpoint << "\". Attempts done: " << ConnectionAttemptsDone,
-                        status.Issues)));
+                        status.Issues)), deferred);
             }
         }
     }
@@ -967,7 +971,7 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
             if (!nextDelay) {
                 return false;
             }
-            delay = *nextDelay;
+            delay = std::max(*nextDelay, TDuration::MicroSeconds(1)); // Keep reconnect callbacks asynchronous.
             connectDelayContext = ClientContext->CreateContext();
             if (!connectDelayContext) {
                 return false;
@@ -991,8 +995,9 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
         connectCallback =
             [cbContext = this->SelfContext, connectContext]
             (TPlainStatus&& st, IDirectReadProcessor::TPtr&& connection) {
+                TDeferredActions<false> deferred;
                 if (auto self = cbContext->LockShared()) {
-                    self->OnConnect(std::move(st), std::move(connection), connectContext);
+                    self->OnConnect(std::move(st), std::move(connection), connectContext, deferred);
                 }
             };
 

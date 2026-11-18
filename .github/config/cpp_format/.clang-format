@@ -95,6 +95,10 @@ WhitespaceSensitiveMacros:
   - YDB_LOG_CREATE_CONTEXT_COMP
   - YDB_LOG_UPDATE_CONTEXT
   - YDB_LOG_REMOVE_CONTEXT
+  - YDB_LOG_VERIFY
+  - YDB_LOG_ENSURE
+  - YDB_LOG_VERIFY_DEBUG
+
 IncludeCategories:
   - Regex:           '^"[0-9,a-z,A-Z,_]*\.h"'
     Priority:        0

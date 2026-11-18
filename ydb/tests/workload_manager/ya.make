@@ -8,9 +8,8 @@ TEST_SRCS(
     test_resource_pool.py
 )
 
-FORK_TESTS()
-FORK_TEST_FILES()
 FORK_SUBTESTS()
+SPLIT_FACTOR(5)
 
 REQUIREMENTS(ram:16 cpu:1)
 

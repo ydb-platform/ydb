@@ -165,6 +165,13 @@ message TStoragePoolPileOverride {
     TPDiskFilters PDiskFilters = 7;
 }
 
+// Rules BSC follows for its groups. They are adopted from StorageConfig in a BSC transaction, which checks them against
+// the existing groups; rules that do not fit stay unadopted, and BSC keeps following the previous ones.
+message TStoragePoolPileOverrides {
+    repeated TStoragePoolPileOverride Rule = 1;
+    optional uint64 StorageConfigGeneration = 2; // StorageConfig the rules were adopted from; always set
+}
+
 message TDefineStoragePool {
     message TExistingGroups {
         repeated uint32 GroupId = 1;

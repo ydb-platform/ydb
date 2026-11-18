@@ -6,6 +6,8 @@ SRCS(
     yql_issue_manager.cpp
     yql_issue_utils.cpp
     yql_warning.cpp
+    yql_issue_id.cpp
+    yql_issue_message_impl.cpp
 )
 
 PEERDIR(

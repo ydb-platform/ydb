@@ -27,6 +27,7 @@
 #include <library/cpp/testing/hook/hook.h>
 #include <util/random/random.h>
 
+#include <algorithm>
 #include <iterator>
 
 namespace NKikimr {
@@ -266,6 +267,8 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        // S3 replies arrive on real HTTP threads while actor timers use simulated time.
+        runtime.SetFastSimulatedTime(false);
         const ui64 tableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> schema = {
             NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
@@ -863,6 +866,120 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         runtime.SimulateSleep(TDuration::Seconds(2));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+    }
+
+    Y_UNIT_TEST(CancelDuringInFlightCursorSaveDoesNotAbort) {
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket("test", s3Client);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        std::vector<ui64> writeIds;
+        ui64 writeId = 1;
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 5 }, schema), schema, true, &writeIds));
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+
+        const NOlap::TSnapshot backupSnapshot(planStep.Val(), txId);
+        const auto txBody = MakeBackupTxBody(tableId, backupSnapshot);
+        const ui64 backupTxId = ++txId;
+
+        TActorId exportActor;
+        auto initObserver = runtime.AddObserver<NKqp::TEvKqpCompute::TEvScanInitActor>([&](auto& ev) {
+            if (!exportActor) {
+                exportActor = ev->Recipient;
+            }
+        });
+        NActors::TBlockEvents<NOlap::NBackground::TEvLocalTransactionCompleted> blocked(runtime, [&](const auto& ev) {
+            return exportActor && ev->Recipient == exportActor;
+        });
+        // Hold the pill from the first FinishActor so the second completion is
+        // handled while that actor is still alive.
+        NActors::TBlockEvents<TEvents::TEvPoisonPill> blockedPoison(runtime, [&](const auto& ev) {
+            return exportActor && ev->Recipient == exportActor;
+        });
+
+        const auto txIdOf = [](const auto& ev) {
+            return ev->Get()->GetInternalTxId();
+        };
+        const auto dump = [&]() {
+            TStringBuilder out;
+            for (const auto& ev : blocked) {
+                out << txIdOf(ev) << " ";
+            }
+            return TString(out);
+        };
+        std::vector<ui64> known;
+        const auto isKnown = [&](ui64 id) {
+            return std::find(known.begin(), known.end(), id) != known.end();
+        };
+        const auto waitNew = [&](const char* title) {
+            ui64 found = 0;
+            TestWaitCondition(runtime, title, [&]() {
+                for (const auto& ev : blocked) {
+                    if (!isKnown(txIdOf(ev))) {
+                        found = txIdOf(ev);
+                        return true;
+                    }
+                }
+                return false;
+            }, TDuration::Seconds(30));
+            known.push_back(found);
+            return found;
+        };
+        const auto deliver = [&](ui64 id) {
+            auto it = std::find_if(blocked.begin(), blocked.end(), [&](const auto& ev) {
+                return txIdOf(ev) == id;
+            });
+            UNIT_ASSERT_C(it != blocked.end(), "missing completion " << id << " queue=[" << dump() << "]");
+            std::iter_swap(blocked.begin(), it);
+            blocked.Unblock(1);
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        };
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+            new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, txBody.SerializeAsString()));
+
+        const ui64 progressId = waitNew("cursor save completion");
+        UNIT_ASSERT_VALUES_EQUAL_C(blocked.size(), 1, dump());
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorCounter(runtime, "Value/Export/SaveCursor/Inflight")->Val(), 1);
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCancelBackup(backupTxId, tableId));
+
+        const ui64 stateId = waitNew("cancel state save completion");
+        deliver(stateId);
+        const ui64 finish1 = waitNew("first propose-finish completion");
+        deliver(progressId);
+        const ui64 state2 = waitNew("second state save completion");
+        deliver(state2);
+        const ui64 finish2 = waitNew("second propose-finish completion");
+        UNIT_ASSERT_VALUES_EQUAL_C(blocked.size(), 2, dump());
+
+        deliver(finish1);
+        UNIT_ASSERT_VALUES_EQUAL(blockedPoison.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 1);
+
+        deliver(finish2);
+        UNIT_ASSERT_C(blocked.empty(), dump());
+        UNIT_ASSERT_VALUES_EQUAL(blockedPoison.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 1);
+
+        blockedPoison.Stop().Unblock();
+        TestWaitCondition(runtime, "export actor stopped after cancel", [&]() {
+            return GetExportActorsAliveCounter(runtime) == 0;
+        });
+        Y_UNUSED(csControllerGuard);
+        Y_UNUSED(initObserver);
     }
 
     Y_UNIT_TEST(PlanAfterDuplicateProposeDoesNotCrash) {

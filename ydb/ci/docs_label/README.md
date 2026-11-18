@@ -2,7 +2,7 @@
 
 [Reaction](https://reactor.yandex-team.ru/browse?selected=116513772)
 ([queue](https://reactor.yandex-team.ru/browse?selected=116513649)),
-[Nirvana graph](https://nirvana.yandex-team.ru/flow/64171971-f396-48e6-9c11-c663523f4b14/5337a0ed-df61-48b2-8a39-d5712f863014/graph).
+[Nirvana graph](https://nirvana.yandex-team.ru/flow/64171971-f396-48e6-9c11-c663523f4b14/81f0d206-6567-49eb-beaf-dcb1c212f314/graph).
 
 This replaces `.github/workflows/docs_label.yaml`. Every five minutes
 (`0 0/5 * * * ?`), the reaction reconciles the `documentation` label on all

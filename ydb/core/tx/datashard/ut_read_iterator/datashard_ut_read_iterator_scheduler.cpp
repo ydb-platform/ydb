@@ -339,6 +339,32 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
         UNIT_ASSERT_VALUES_EQUAL(rowsReceived, kRows);
     }
 
+    Y_UNIT_TEST(ShouldNumberFirstResultWhenPoolQuotaBecomesZeroBeforeAdmission) {
+        TSchedulerTestHelper helper(500u, /*withFollower=*/false, /*numShards=*/1, /*memoryEnabled=*/true);
+        helper.Upsert(1, 100);
+        auto& runtime = *helper.Server->GetRuntime();
+        const auto shard = ResolveTablet(runtime, helper.TabletId());
+        constexpr ui64 readId = 42;
+        auto request = helper.MakeRangeReadRequest(readId, 1, 1);
+
+        // Deliver the read synchronously: the shard has created the iterator, but its
+        // low-priority admission transaction won't run until we dispatch again.
+        runtime.Send(shard, helper.Sender, request.release(), 0, /*viaActorSystem=*/false);
+        auto scheduler = runtime.GetAppData().KqpComputeScheduler;
+        auto config = scheduler->GetStaticTree()->Clone();
+        auto& pool = config->GetOrCreateDatabase(TEST_DATABASE_ID).GetOrCreatePool(TEST_POOL_ID);
+        pool.ReadLimit = TDuration::Zero();
+        pool.CpuLimit = 0;
+        scheduler->UpdateConfiguration(std::move(config));
+
+        auto error = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(helper.Sender, TDuration::Seconds(5));
+        UNIT_ASSERT(error);
+        const auto& record = error->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetReadId(), readId);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetSeqNo(), 1);
+    }
+
     Y_UNIT_TEST(ShouldFailLiveReadWhenPoolQuotaBecomesZero) {
         TSchedulerTestHelper helper(500u, /*withFollower=*/false, /*numShards=*/1, /*memoryEnabled=*/true);
         helper.UpsertMany(1, 3);

@@ -3590,6 +3590,7 @@ public:
                     const auto delay = read->EstimateQuotaDelay(MaxTimePerIteration);
                     if (!delay) {
                         ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, ZeroReadQuotaError(record), ctx.SelfID.NodeId(), state);
+                        Reply->Record.SetSeqNo(state.SeqNo + 1);
                         return true;
                     }
                     state.ReadContinuePending = true;

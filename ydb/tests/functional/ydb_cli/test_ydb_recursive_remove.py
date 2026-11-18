@@ -119,9 +119,9 @@ class TestRootPathSafety:
         "path", ["/", "//"],
         ids=["root", "slashes"],
     )
-    def test_rmdir_root_aliases(self, ydb_cluster, ydb_root, ydb_database, ydb_client_session, path):
+    def test_rmdir_root_aliases(self, ydb_cluster, ydb_root, ydb_client_session, path):
         node = ydb_cluster.nodes[1]
-        with ydb_client_session(ydb_database).checkout() as session:
+        with ydb_client_session(ydb_root).checkout() as session:
             create_table(session, "sentinel")
             session.transaction().execute(
                 'UPSERT INTO sentinel (key, value) VALUES (1, "retained");', commit_tx=True,
@@ -133,6 +133,8 @@ class TestRootPathSafety:
             rows = session.transaction().execute("SELECT key, value FROM sentinel;", commit_tx=True)[0].rows
             assert [(row.key, row.value) for row in rows] == [(1, "retained")]
             assert removal.exit_code != 0
+            assert "Cannot remove the cluster root" in removal.std_err.decode("utf-8")
+            session.execute_scheme("DROP TABLE sentinel;")
 
     @pytest.mark.parametrize("command", [["clean"], ["init", "--clear"]], ids=["clean", "init_clear"])
     @pytest.mark.parametrize(

@@ -312,7 +312,7 @@ namespace NKikimr {
             , RestToReadIndex(0)
             , RestToReadOutbound(0)
             , Chunks()
-            , LinearIndex(TMemoryConsumer(vctx->SstIndex))
+            , LinearIndex(TMemoryConsumer(SstIndexConsumer<TKey>(*vctx)))
         {
             const TDiskPart& entry = LevelSegment->GetEntryPoint();
             Y_DEBUG_ABORT_UNLESS(!entry.Empty());

@@ -35,7 +35,7 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::ReadOutAndResilverIndex(TLevelSegmentPtr sst) {
-        TTrackableVector<TLevelSegment::TRec> linearIndex(TMemoryConsumer(VCtx->SstIndex));
+        TTrackableVector<TLevelSegment::TRec> linearIndex(TMemoryConsumer(VCtx->SstIndexLogoBlobs));
         sst->SaveLinearIndex(&linearIndex);
 
         TDiskPart prevPart;

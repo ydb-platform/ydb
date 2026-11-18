@@ -101,7 +101,7 @@ struct TInput {
 
     TSstPtr AddSst(ui32 level, ui32 firstStep, ui32 lastStep, ui32 id, bool huge = false, std::function<TIngress(ui32)> ingress = {}) {
         auto sst = MakeIntrusive<TSst>(Ctx.GetVCtx());
-        TTrackableVector<typename TSst::TRec> index(TMemoryConsumer(Ctx.GetVCtx()->SstIndex));
+        TTrackableVector<typename TSst::TRec> index(TMemoryConsumer(SstIndexConsumer<TKey>(*Ctx.GetVCtx())));
         const ui32 count = lastStep - firstStep + 1;
         index.reserve(count);
         for (ui32 step = firstStep; step <= lastStep; ++step) {

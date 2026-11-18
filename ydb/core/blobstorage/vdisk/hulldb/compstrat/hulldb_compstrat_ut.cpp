@@ -86,7 +86,7 @@ namespace NKikimr {
                 sst->AllChunks.resize(chunks, 1);
                 TMemRecLogoBlob memRec;
                 memRec.SetNoBlob();
-                TTrackableVector<TLogoBlobsSst::TRec> index(TMemoryConsumer(Contexts.GetVCtx()->SstIndex));
+                TTrackableVector<TLogoBlobsSst::TRec> index(TMemoryConsumer(Contexts.GetVCtx()->SstIndexLogoBlobs));
                 index.emplace_back(TKeyLogoBlob(TLogoBlobID(sst->AssignedSstId, 1, 1, 0, 1, 0)), memRec);
                 sst->LoadLinearIndex(index);
                 auto &slice = *Ds->LogoBlobs->CurSlice;
@@ -373,7 +373,7 @@ namespace NKikimr {
                     ui32 inplacedSize, NHullComp::TSstRatioPtr ratio)
             {
                 auto sst = MakeIntrusive<TLogoBlobsSst>(Ctx.GetVCtx());
-                TTrackableVector<TLogoBlobsSst::TRec> index(TMemoryConsumer(Ctx.GetVCtx()->SstIndex));
+                TTrackableVector<TLogoBlobsSst::TRec> index(TMemoryConsumer(Ctx.GetVCtx()->SstIndexLogoBlobs));
                 for (ui32 step = firstStep; step <= lastStep; ++step) {
                     TLogoBlobID id(tabletId, 1, step, 0, 1, 0, 1);
                     TMemRecLogoBlob memRec;
@@ -943,7 +943,7 @@ namespace NKikimr {
             }
             const ui32 append = 4096;
             auto sst = MakeBareSst(hull, 100);
-            TTrackableVector<TBlocksSst::TRec> index(TMemoryConsumer(hull.Ctx.GetVCtx()->SstIndex));
+            TTrackableVector<TBlocksSst::TRec> index(TMemoryConsumer(hull.Ctx.GetVCtx()->SstIndexLogoBlobs));
             index.emplace_back(TKeyBlock(1), TMemRecBlock(1));
             sst->LoadedIndex = std::move(index);
             sst->AssignedSstId = 42;

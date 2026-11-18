@@ -138,8 +138,11 @@ TConclusion<TExecutionResult> TAllocateMemoryStep::DoExecuteInplace(IDataSource&
         ui32 sizeLocal = source.GetColumnsVolume(i.GetColumns().GetColumnIds(), i.GetMemType());
         if (source.GetStageData().GetUseFilter() && i.GetMemType() != EMemType::Blob && source.GetContext()->GetReadMetadata()->HasLimit() &&
             (HasAppData() && !AppDataVerified().ColumnShardConfig.GetUseSlicesFilter())) {
-            const ui32 filtered =
-                source.GetStageData().GetFilteredCount(source.GetRecordsCount(), source.GetContext()->GetReadMetadata()->GetLimitRobust());
+            // LIMIT counts surviving rows. Checking historical NULLs can require
+            // decoding every remaining candidate, even for LIMIT 1.
+            const ui32 limit = source.GetContext()->GetReadNotNullColumns()->IsEmpty() ? source.GetContext()->GetReadMetadata()->GetLimitRobust()
+                                                                                       : source.GetRecordsCount();
+            const ui32 filtered = source.GetStageData().GetFilteredCount(source.GetRecordsCount(), limit);
             if (filtered < source.GetRecordsCount()) {
                 sizeLocal = sizeLocal * 1.0 * filtered / source.GetRecordsCount();
             }

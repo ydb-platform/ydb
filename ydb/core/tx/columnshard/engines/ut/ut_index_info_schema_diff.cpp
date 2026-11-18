@@ -274,9 +274,9 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         UNIT_ASSERT(applied->CheckWriteCompatibility(*nullable).IsFail());
 
         TVersionedIndex versions;
-        versions.AddIndex(TSnapshot(1, 1), cache->UpsertIndexInfo(std::move(*nullable)));
-        versions.AddIndex(TSnapshot(2, 1), cache->UpsertIndexInfo(std::move(*validating)));
-        versions.AddIndex(TSnapshot(3, 1), cache->UpsertIndexInfo(std::move(*applied)));
+        versions.AddIndex(TSnapshot(1, 1), cache->GetOrInsertIndexInfo(std::move(*nullable)));
+        versions.AddIndex(TSnapshot(2, 1), cache->GetOrInsertIndexInfo(std::move(*validating)));
+        versions.AddIndex(TSnapshot(3, 1), cache->GetOrInsertIndexInfo(std::move(*applied)));
         UNIT_ASSERT(!versions.GetPrimaryKey()->field(0)->nullable());
 
         auto reloadCache = std::make_shared<TSchemaObjectsCache>();
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         for (const auto& proto : { appliedProto, nullableProto, validatingProto }) {
             auto index = TIndexInfo::BuildFromProto(1, proto, storages, reloadCache);
             UNIT_ASSERT(index);
-            restored.AddIndex(TSnapshot(proto.GetVersion(), 1), reloadCache->UpsertIndexInfo(std::move(*index)));
+            restored.AddIndex(TSnapshot(proto.GetVersion(), 1), reloadCache->GetOrInsertIndexInfo(std::move(*index)));
             UNIT_ASSERT(!restored.GetPrimaryKey()->field(0)->nullable());
         }
     }
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         auto cache = std::make_shared<TSchemaObjectsCache>();
         auto index = TIndexInfo::BuildFromProto(1, proto, TTestStoragesManager::GetInstance(), cache);
         UNIT_ASSERT(index);
-        TSnapshotSchema schema(cache->UpsertIndexInfo(std::move(*index)), TSnapshot(1, 1));
+        TSnapshotSchema schema(cache->GetOrInsertIndexInfo(std::move(*index)), TSnapshot(1, 1));
 
         arrow::TimestampBuilder keys(arrow::timestamp(arrow::TimeUnit::MICRO), arrow::default_memory_pool());
         arrow::StringBuilder values;
@@ -398,7 +398,7 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         proto.MutableColumns(1)->SetNotNull(true);
         auto applied = TIndexInfo::BuildFromProto(1, proto, TTestStoragesManager::GetInstance(), cache);
         UNIT_ASSERT(applied);
-        TSnapshotSchema appliedSchema(cache->UpsertIndexInfo(std::move(*applied)), TSnapshot(2, 1));
+        TSnapshotSchema appliedSchema(cache->GetOrInsertIndexInfo(std::move(*applied)), TSnapshot(2, 1));
         UNIT_ASSERT(appliedSchema.PrepareForModification(sliced, NEvWrite::EModificationType::Upsert).IsSuccess());
         UNIT_ASSERT(appliedSchema.PrepareForModification(nullBatch, NEvWrite::EModificationType::Upsert).IsFail());
     }

@@ -8,6 +8,7 @@
 
 namespace NKikimr::NArrow {
 
+#ifndef NDEBUG
 namespace {
 
 // SET NOT NULL changes the field metadata of existing keys. The row encoding
@@ -29,6 +30,7 @@ bool HaveSameKeyFields(const arrow::Schema& lhs, const arrow::Schema& rhs) {
 }
 
 } // namespace
+#endif
 
 std::partial_ordering TSimpleRowRef::operator<=>(const TSimpleRowRef& item) const {
     AFL_VERIFY_DEBUG(HaveSameKeyFields(Schema, item.Schema));

@@ -285,6 +285,42 @@ Y_UNIT_TEST_SUITE_F(YdbWorkloadScheme, TSchemeWorkloadFixture) {
         UNIT_ASSERT_VALUES_EQUAL(listing.GetChildren().size(), 1);
     }
 
+    Y_UNIT_TEST(ActualPartitionCountMismatchFailsBeforeMutation) {
+        WriteConfig("tables: {count: 3, initial_count: 1, partitions: 2, alter_batch_size: 3}");
+        Init();
+        auto driver = Driver();
+        NYdb::NTable::TTableClient tables(driver);
+        auto session = tables.GetSession().GetValueSync().GetSession();
+        const auto path = std::string(FullPath("table_1"));
+        auto description = NYdb::NTable::TTableBuilder()
+            .AddNonNullableColumn("id", NYdb::EPrimitiveType::Uint64)
+            .SetPrimaryKeyColumn("id")
+            .SetUniformPartitions(1)
+            .SetPartitioningSettings(NYdb::NTable::TPartitioningSettingsBuilder()
+                .SetPartitioningBySize(false).SetPartitioningByLoad(false)
+                .SetMinPartitionsCount(2).SetMaxPartitionsCount(2).Build())
+            .Build();
+        const auto created = session.CreateTable(path, std::move(description)).GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto before = session.DescribeTable(path, NYdb::NTable::TDescribeTableSettings().WithKeyShardBoundary(true)).GetValueSync();
+        UNIT_ASSERT_C(before.IsSuccess(), before.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(before.GetTableDescription().GetKeyRanges().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(before.GetTableDescription().GetPartitioningSettings().GetMinPartitionsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(before.GetTableDescription().GetPartitioningSettings().GetMaxPartitionsCount(), 2);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Run(), yexception,
+            "Partition count does not match config at " + FullPath("table_1") + ": expected 2, actual 1");
+        CheckTable(session, 0, false);
+        const auto after = session.DescribeTable(path, NYdb::NTable::TDescribeTableSettings().WithKeyShardBoundary(true)).GetValueSync();
+        UNIT_ASSERT_C(after.IsSuccess(), after.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetTableDescription().GetColumns().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(after.GetTableDescription().GetKeyRanges().size(), 1);
+        NYdb::NScheme::TSchemeClient scheme(driver);
+        const auto listing = scheme.ListDirectory(std::string(Database() + "/" + Path)).GetValueSync();
+        UNIT_ASSERT_C(listing.IsSuccess(), listing.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(listing.GetChildren().size(), 2);
+    }
+
     Y_UNIT_TEST(IndexKeyColumnFailsBeforeMutation) {
         CheckIndexedColumnRejected({"extra_0"});
     }

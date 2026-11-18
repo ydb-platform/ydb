@@ -34,43 +34,43 @@ bool CheckBatch(const std::unordered_set<std::string>& names, const std::string&
 class TSdkClient final : public IClient {
 public:
     TSdkClient(const TDriver& driver, const TString& database, ui32 concurrency)
-        : Database(database)
-        , Scheme(driver)
-        , Tables(driver, NTable::TClientSettings().SessionPoolSettings(NTable::TSessionPoolSettings().MaxActiveSessions(concurrency)))
-        , Topics(driver)
+        : Database_(database)
+        , Scheme_(driver)
+        , Tables_(driver, NTable::TClientSettings().SessionPoolSettings(NTable::TSessionPoolSettings().MaxActiveSessions(concurrency)))
+        , Topics_(driver)
     {
-        while (!Database.empty() && Database.back() == '/') {
-            Database.pop_back();
+        while (!Database_.empty() && Database_.back() == '/') {
+            Database_.pop_back();
         }
     }
 
     void PrepareDirectory(const TString& path) override {
-        std::string fullPath = Database;
+        std::string fullPath = Database_;
         for (const auto& part : StringSplitter(path).Split('/')) {
             fullPath += "/" + std::string(part.Token());
-            const auto result = Scheme.DescribePath(fullPath, NScheme::TDescribePathSettings().ClientTimeout(RequestTimeout)).GetValueSync();
+            const auto result = Scheme_.DescribePath(fullPath, NScheme::TDescribePathSettings().ClientTimeout(RequestTimeout)).GetValueSync();
             if (result.IsSuccess()) {
                 Y_ENSURE(result.GetEntry().Type == NScheme::ESchemeEntryType::Directory, "Expected directory at " << fullPath);
             } else {
                 if (result.GetStatus() != EStatus::SCHEME_ERROR) {
                     Check(result, "DescribePath", fullPath);
                 }
-                Check(Scheme.MakeDirectory(fullPath, NScheme::TMakeDirectorySettings().ClientTimeout(RequestTimeout)).GetValueSync(), "MakeDirectory", fullPath);
+                Check(Scheme_.MakeDirectory(fullPath, NScheme::TMakeDirectorySettings().ClientTimeout(RequestTimeout)).GetValueSync(), "MakeDirectory", fullPath);
             }
         }
         // SCHEME_ERROR from DescribePath can also mean a scheme failure. Determine absence
         // from a successful directory listing, and propagate every error when inspecting existing objects.
-        const auto listing = Scheme.ListDirectory(fullPath, NScheme::TListDirectorySettings().ClientTimeout(RequestTimeout)).GetValueSync();
+        const auto listing = Scheme_.ListDirectory(fullPath, NScheme::TListDirectorySettings().ClientTimeout(RequestTimeout)).GetValueSync();
         Check(listing, "ListDirectory", fullPath);
-        Entries.clear();
+        Entries_.clear();
         for (const auto& entry : listing.GetChildren()) {
-            Entries.emplace(entry.Name, entry.Type);
+            Entries_.emplace(entry.Name, entry.Type);
         }
     }
 
     void Create(const TObject& object) override {
         const auto path = FullPath(object);
-        const auto existing = Scheme.DescribePath(path, NScheme::TDescribePathSettings().ClientTimeout(RequestTimeout)).GetValueSync();
+        const auto existing = Scheme_.DescribePath(path, NScheme::TDescribePathSettings().ClientTimeout(RequestTimeout)).GetValueSync();
         Y_ENSURE(!existing.IsSuccess(), "Object already exists: " << path);
         if (existing.GetStatus() != EStatus::SCHEME_ERROR) {
             Check(existing, "DescribePath", path);
@@ -89,25 +89,29 @@ public:
             auto settings = NTopic::TCreateTopicSettings()
                 .PartitioningSettings(object.Partitions, object.Partitions)
                 .ClientTimeout(RequestTimeout);
-            Check(Topics.CreateTopic(path, settings).GetValueSync(), "CreateTopic", path);
+            Check(Topics_.CreateTopic(path, settings).GetValueSync(), "CreateTopic", path);
         }
     }
 
     EObjectState Inspect(const TObject& object) override {
         const auto path = FullPath(object);
-        const auto entry = Entries.find(path.substr(path.rfind('/') + 1));
-        if (entry == Entries.end()) {
+        const auto entry = Entries_.find(path.substr(path.rfind('/') + 1));
+        if (entry == Entries_.end()) {
             return EObjectState::Missing;
         }
         const auto expectedType = object.Type == EObjectType::Table ? NScheme::ESchemeEntryType::Table : NScheme::ESchemeEntryType::Topic;
         Y_ENSURE(entry->second == expectedType, "Unexpected object type at " << path);
         std::unordered_set<std::string> names;
         if (object.Type == EObjectType::Table) {
-            const auto result = Session().DescribeTable(path, NTable::TDescribeTableSettings().ClientTimeout(RequestTimeout)).GetValueSync();
+            const auto result = Session().DescribeTable(path, NTable::TDescribeTableSettings()
+                .WithKeyShardBoundary(true).ClientTimeout(RequestTimeout)).GetValueSync();
             Check(result, "DescribeTable", path);
             const auto& description = result.GetTableDescription();
             Y_ENSURE(description.GetPrimaryKeyColumns() == std::vector<std::string>{"id"}, "Unexpected primary key at " << path);
             Y_ENSURE(description.GetIndexDescriptions().empty(), "Table indexes are not supported at " << path);
+            Y_ENSURE(description.GetKeyRanges().size() == object.Partitions,
+                "Partition count does not match config at " << path << ": expected " << object.Partitions
+                << ", actual " << description.GetKeyRanges().size());
             const auto& partitions = description.GetPartitioningSettings();
             Y_ENSURE(partitions.GetMinPartitionsCount() == object.Partitions
                 && partitions.GetMaxPartitionsCount() == object.Partitions
@@ -125,7 +129,7 @@ public:
             }
             return CheckBatch(names, "extra_", object) ? EObjectState::WithBatch : EObjectState::WithoutBatch;
         }
-        const auto result = Topics.DescribeTopic(path, NTopic::TDescribeTopicSettings().ClientTimeout(RequestTimeout)).GetValueSync();
+        const auto result = Topics_.DescribeTopic(path, NTopic::TDescribeTopicSettings().ClientTimeout(RequestTimeout)).GetValueSync();
         Check(result, "DescribeTopic", path);
         const auto& description = result.GetTopicDescription();
         // A disabled strategy may not preserve min/max settings in DescribeTopic.
@@ -162,26 +166,27 @@ public:
                     settings.AppendDropConsumers(name);
                 }
             }
-            Check(Topics.AlterTopic(path, settings).GetValueSync(), add ? "AddConsumers" : "DropConsumers", path);
+            Check(Topics_.AlterTopic(path, settings).GetValueSync(), add ? "AddConsumers" : "DropConsumers", path);
         }
     }
 
 private:
     std::string FullPath(const TObject& object) const {
-        return Database + "/" + std::string(object.Path);
+        return Database_ + "/" + std::string(object.Path);
     }
 
     NTable::TSession Session() {
-        auto result = Tables.GetSession(NTable::TCreateSessionSettings().ClientTimeout(RequestTimeout)).GetValueSync();
-        Check(result, "GetSession", Database);
+        auto result = Tables_.GetSession(NTable::TCreateSessionSettings().ClientTimeout(RequestTimeout)).GetValueSync();
+        Check(result, "GetSession", Database_);
         return result.GetSession();
     }
 
-    std::string Database;
-    NScheme::TSchemeClient Scheme;
-    NTable::TTableClient Tables;
-    NTopic::TTopicClient Topics;
-    std::unordered_map<std::string, NScheme::ESchemeEntryType> Entries;
+private:
+    std::string Database_;
+    NScheme::TSchemeClient Scheme_;
+    NTable::TTableClient Tables_;
+    NTopic::TTopicClient Topics_;
+    std::unordered_map<std::string, NScheme::ESchemeEntryType> Entries_;
 };
 
 } // namespace

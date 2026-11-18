@@ -40,10 +40,11 @@ private:
     void Execute(ui64 concurrency, ui64 objects, const std::function<void(ui32, ui32, const TCancelled&)>& worker);
     void Count(EOperation operation);
 
-    const TConfig& Config;
-    IClient& Client;
-    TCancelled Cancelled;
-    std::array<std::atomic<ui64>, OperationCount> Counters{};
+private:
+    const TConfig& Config_;
+    IClient& Client_;
+    TCancelled Cancelled_;
+    std::array<std::atomic<ui64>, OperationCount> Counters_{};
 };
 
 } // namespace NYdbWorkload::NScheme

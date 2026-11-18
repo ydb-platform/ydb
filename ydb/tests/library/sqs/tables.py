@@ -20,7 +20,7 @@ def get_table_path(root, table_name, queue_type=None, common_table=True):
     return '{}/{}'.format(get_prefix_path(root, queue_type, common_table), table_name)
 
 
-def _create_table(root, session, table_name, columns, keys_count, common_table=True, queue_type=None):
+def _create_table(root, session, table_name, columns, keys_count, common_table=True, queue_type=None, partitions_count=1):
     table_path = get_table_path(root, table_name, queue_type, common_table)
     keys = [name for name, _ in columns[:keys_count]]
     columns = [ydb.Column(name, ydb.OptionalType(column_type)) for name, column_type in columns]
@@ -30,11 +30,11 @@ def _create_table(root, session, table_name, columns, keys_count, common_table=T
     description.with_columns(*columns)
     if queue_type and common_table:
         partitions = ydb.PartitioningSettings()
-        partitions.with_min_partitions_count(10)
+        partitions.with_min_partitions_count(partitions_count)
         partitions.with_partitioning_by_size(ydb.FeatureFlag.ENABLED)
         partitions.with_partitioning_by_load(ydb.FeatureFlag.ENABLED)
 
-        description.with_uniform_partitions(10)
+        description.with_uniform_partitions(partitions_count)
         description.with_partitioning_settings(partitions)
 
         ydb.retry_operation_sync(lambda: session.create_table(
@@ -243,7 +243,7 @@ def create_message_data_table(root, session, common_table=True):
     _create_table(root, session, 'MessageData', columns, len(queue_keys) + 2, common_table, queue_type)
 
 
-def create_message_table(root, session, queue_type, common_table=True):
+def create_message_table(root, session, queue_type, common_table=True, partitions_count=1):
     queue_keys = get_table_keys_for_queue(common_table, with_shard=(queue_type == QueueType.STD))
     columns = queue_keys + [
         ('Offset', ydb.PrimitiveType.Uint64),
@@ -263,7 +263,7 @@ def create_message_table(root, session, queue_type, common_table=True):
             ('FirstReceiveTimestamp', ydb.PrimitiveType.Uint64),
             ('SentTimestamp', ydb.PrimitiveType.Uint64),
         ]
-    _create_table(root, session, 'Messages', columns, len(queue_keys) + 1, common_table, queue_type)
+    _create_table(root, session, 'Messages', columns, len(queue_keys) + 1, common_table, queue_type, partitions_count)
 
 
 def create_sent_timestamp_idx_table(root, session, queue_type, common_table=True):
@@ -331,7 +331,8 @@ def create_reads_table(root, session, common_table=True):
     _create_table(root, session, 'Reads', columns, len(queue_keys) + 1, common_table, queue_type)
 
 
-def create_all_tables(root, session):
+def create_all_tables(root, session, message_table_partitions=None):
+    message_table_partitions = message_table_partitions or {}
     create_atomic_counter(root, session)
     create_queues_table(root, session)
     create_events_table(root, session)                                 # TODO: Fix creating this table in all cases: it should be created only when SearchEvents are Enabled
@@ -340,7 +341,7 @@ def create_all_tables(root, session):
 
     for queue_type in [QueueType.STD, QueueType.FIFO]:
         create_sent_timestamp_idx_table(root, session, queue_type)
-        create_message_table(root, session, queue_type)
+        create_message_table(root, session, queue_type, partitions_count=message_table_partitions.get(queue_type, 1))
         create_state_table(root, session, queue_type)
         create_attibutes_table(root, session, queue_type)
 

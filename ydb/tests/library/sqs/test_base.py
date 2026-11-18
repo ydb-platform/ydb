@@ -186,6 +186,7 @@ class KikimrSqsTestBase(object):
     sqs_root = '/Root/SQS'
     use_in_memory_pdisks = True
     tables_format_per_user = {}
+    message_table_partitions = None
 
     @classmethod
     def setup_class(cls):
@@ -380,7 +381,7 @@ class KikimrSqsTestBase(object):
             driver.wait()
             with ydb.SessionPool(driver, size=1) as pool:
                 with pool.checkout() as session:
-                    create_all_sqs_tables(cls.sqs_root, session)
+                    create_all_sqs_tables(cls.sqs_root, session, message_table_partitions=cls.message_table_partitions)
 
                     if is_cloud_events_enabled:
                         create_cloud_events_table(cls.sqs_root, session)

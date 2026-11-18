@@ -238,6 +238,16 @@ namespace NActors {
     void TLoggerActor::HandleLogEvent(NLog::TEvLog::TPtr& ev, const NActors::TActorContext& ctx) {
         i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds();
         WriteMessageStat(*ev->Get());
+
+        const auto& eventData = *ev->Get();
+        OutputRecordToSinks(eventData.Stamp,
+            eventData.Level.ToPrio(),
+            eventData.Component,
+            eventData.FileName,
+            eventData.LineNumber,
+            eventData.Line,
+            eventData.StructuredMessage);
+
         if (Settings->AllowDrop) {
             if (PassedCount > 10 && delayMillisec > (i64)Settings->TimeThresholdMs || !LogBuffer.IsEmpty() || LogBuffer.CheckLogIgnoring()) {
                 if (LogBuffer.IsEmpty() && !LogBuffer.CheckLogIgnoring()) {
@@ -591,8 +601,6 @@ namespace NActors {
         bool json,
         const TMaybe<NActors::NStructuredLog::TStructuredMessage>& structuredMessage) noexcept
     try {
-        OutputRecordToSinks(time, priority, component, fileName, lineNumber, formatted, structuredMessage);
-
         const auto logPrio = ::ELogPriority(ui16(priority));
 
         TLogRecord::TMetaFlags metaFlags;

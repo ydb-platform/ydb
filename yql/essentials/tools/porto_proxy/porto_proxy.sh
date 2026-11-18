@@ -49,5 +49,8 @@ PROPS+=("command=$COMMAND")
 
 # Prevent portoctl info messages from polluting command output
 # by redirecting them to stderr
-exec portoctl exec -T "${LAYER_ARGS[@]}" "$CONTAINER_NAME" \
+#
+# self/ name prefix is required for subcontainers if Porto is
+# running with enable_porto=child-only
+exec portoctl exec -T "${LAYER_ARGS[@]}" "self/$CONTAINER_NAME" \
     "${PROPS[@]}" "stdout_path=/dev/fd/3" 3>&1 1>&2

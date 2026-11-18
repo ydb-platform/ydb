@@ -44,7 +44,7 @@ skipper on `:8080`, control UI on `:21999`). Mock and acceptance passes are not 
   once, change needs restart), `http.listen` (default `127.0.0.1:8080`), `http.trusted_authorities`,
   `timing.*_seconds`, `health_endpoints_per_pile` (default 2, no upper bound), `logging.level`.
 - Timing defaults (`config.h:48-61`): `state_poll_interval` 1, `read_timeout` 1 (GetClusterState op =
-  client deadline), `round_interval` 1, `selfcheck_operation_timeout` 4 (client deadline op+2),
+  client deadline), `round_interval` 1, `selfcheck_operation_timeout` 2 (client deadline op+2),
   `evidence_ttl` 8, `confirm` 2, `bsc_warmup` 30, `mutation_operation_timeout` 25 (client op+2).
 - Validation invariants (`config.cpp:158-166`): `state_poll + read_timeout < evidence_ttl`;
   `selfcheck_op + 2 + round_interval < evidence_ttl`; `bsc_warmup >= 20`. Nothing ties `confirm` or
@@ -106,14 +106,17 @@ skipper on `:8080`, control UI on `:21999`). Mock and acceptance passes are not 
   PRIMARY and at most one PROMOTED (`types.cpp:46-61`).
 - `EPileVerdict {Healthy, Failed, Lost, Replicating, Unknown}`, default Unknown; Down = Failed or Lost;
   Replicating is never Down. Precedence in `EvaluatePiles` (`health.cpp:366-389`): participation
-  unknown → Unknown; Failed (every fresh BSC-mode reply attributes a RED part); Lost (settled outside
+  unknown → Unknown; Failed (qualified BSC or decisive fallback proof); Lost (settled outside
   reports all show config quorum without node quorum, no inside self-quorum); Replicating; Healthy
   (continuous clean BSC window ≥ `bsc_warmup`); else Unknown.
 - `EPart {RedPart, ReplicatingPart, FallbackRed, Incomplete}`; merge rank Red > Incomplete >
   Replicating. Fallback marker is the exact RED `STORAGE` issue "System tablet BSC didn't provide
   information". In fallback replies group parts become `FallbackRed` (RED) or `Incomplete` (GREY);
-  both set the pile's `FallbackRed` flag, which only vetoes a no-BSC candidate and is displayed. A
-  fallback reply never makes a pile Failed or Healthy.
+  both set the pile's `FallbackRed` candidate-veto flag; the flag alone is not failure proof.
+  With no fresh BSC reply, a known participating pile can be Failed when every current outside
+  fallback reply has a complete attributed RED static-group part, without truncation or an own
+  node-quorum claim. The separate explicit DeviceIoError proof can override own quorum only for
+  the BSC-host pile. Fallback never proves Healthy.
 - Participation (`health.cpp:185-205,296-313`): PRIMARY/PROMOTED/SYNCHRONIZED always;
   NOT_SYNCHRONIZED when any valid report shows `in_config_quorum` (a binding report counts only
   positively) or a fresh BSC part names it; unknown participation keeps the pile in `Participating`
@@ -122,7 +125,8 @@ skipper on `:8080`, control UI on `:21999`). Mock and acceptance passes are not 
   clean windows.
 - `TConfirmations`: all Down piles must confirm; the span is over evidence send times ≥ `confirm`;
   entries clear on a role change or on a pile-state change across generations (unchanged states keep
-  their confirmation across a no-op generation bump; the plan always carries the new generation).
+  ordinary BSC/Lost confirmation across a no-op generation bump; fallback confirmation resets
+  on every generation or failure-source change; the plan always carries the new generation).
 - Decision kinds `{Stable, Unknown, Confirming, Blocked, Ready}`. Blockers (`types.h:95-104`):
   `NO_VIEW`, `VIEW_CONFLICT`, `STALE_HISTORY` (generation < HWM), `PENDING_MUTATION`, `NO_CANDIDATE`,
   `SUSPENDED_PILE_LOST` (checked first), `NO_MUTATION_ENDPOINT`, `STATE_WRITE_FAILED`. Runtime-only

@@ -66,7 +66,7 @@ public:
     }
 
     void SetRequestedLimit(const ui64 value) {
-        AFL_VERIFY(!RequestedLimit);
+        YDB_LOG_VERIFY(!RequestedLimit);
         if (value == 0 || value >= Max<i64>()) {
             return;
         }
@@ -120,12 +120,12 @@ public:
     }
 
     const TVersionedIndex& GetIndexVersions() const {
-        AFL_VERIFY(IndexVersionsPointer);
+        YDB_LOG_VERIFY(IndexVersionsPointer);
         return *IndexVersionsPointer;
     }
 
     const std::shared_ptr<const TVersionedIndex>& GetIndexVersionsPtr() const {
-        AFL_VERIFY(IndexVersionsPointer);
+        YDB_LOG_VERIFY(IndexVersionsPointer);
         return IndexVersionsPointer;
     }
 
@@ -134,7 +134,7 @@ public:
     }
 
     void SetPKRangesFilter(const std::shared_ptr<TPKRangesFilter>& value) {
-        AFL_VERIFY(value);
+        YDB_LOG_VERIFY(value);
         Y_ABORT_UNLESS(!PKRangesFilter);
         PKRangesFilter = value;
         if (ResultIndexSchema) {
@@ -160,7 +160,7 @@ public:
     }
 
     ISnapshotSchema::TPtr GetResultSchema() const {
-        AFL_VERIFY(ResultIndexSchema);
+        YDB_LOG_VERIFY(ResultIndexSchema);
         return ResultIndexSchema;
     }
 
@@ -175,7 +175,7 @@ public:
     }
 
     const TIndexInfo& GetIndexInfo(const std::optional<TSnapshot>& version = {}) const {
-        AFL_VERIFY(ResultIndexSchema);
+        YDB_LOG_VERIFY(ResultIndexSchema);
         if (version && version < RequestSnapshot) {
             return GetIndexVersions().GetSchemaVerified(*version)->GetIndexInfo();
         }
@@ -183,7 +183,7 @@ public:
     }
 
     void InitShardingInfo(const std::shared_ptr<ITableMetadataAccessor>& metadataAccessor) {
-        AFL_VERIFY(!RequestShardingInfo);
+        YDB_LOG_VERIFY(!RequestShardingInfo);
         RequestShardingInfo = metadataAccessor->GetShardingInfo(IndexVersionsPointer, RequestSnapshot);
     }
 
@@ -198,8 +198,9 @@ public:
         , TabletId(tabletId)
         , ResultIndexSchema(schema)
     {
-        AFL_VERIFY(!ScanCursor || !ScanCursor->GetTabletId() || (*ScanCursor->GetTabletId() == TabletId))("cursor", ScanCursor->GetTabletId())(
-                                                                "tablet_id", TabletId);
+        YDB_LOG_VERIFY(!ScanCursor || !ScanCursor->GetTabletId() || (*ScanCursor->GetTabletId() == TabletId),
+            {"cursor", ScanCursor->GetTabletId()},
+            {"tabletId", TabletId});
     }
 
     virtual ~TReadMetadataBase() = default;
@@ -210,7 +211,7 @@ public:
     }
 
     std::set<ui32> GetProcessingColumnIds() const {
-        AFL_VERIFY(ResultIndexSchema);
+        YDB_LOG_VERIFY(ResultIndexSchema);
         std::set<ui32> result(GetProgram().GetProcessingColumns().begin(), GetProgram().GetProcessingColumns().end());
         return result;
     }
@@ -243,7 +244,7 @@ public:
     }
 
     std::shared_ptr<arrow::Schema> GetReplaceKey() const {
-        AFL_VERIFY(ResultIndexSchema);
+        YDB_LOG_VERIFY(ResultIndexSchema);
         return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
     }
 

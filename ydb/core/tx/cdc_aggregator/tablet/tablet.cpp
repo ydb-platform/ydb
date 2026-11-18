@@ -36,7 +36,9 @@ STFUNC(TCdcAggregator::StateInit) {
 }
 
 STFUNC(TCdcAggregator::StateWork) {
+    YDB_LOG_CREATE_CONTEXT({"tabletId", TabletID()});
     switch (ev->GetTypeRewrite()) {
+        HFunc(TEvCdcAggregator::TEvConfigureTracking, Handle);
         HFunc(TEvCdcAggregator::TEvWriteHeartbeats, Handle);
         HFunc(TEvCdcAggregator::TEvPartitioningChanged, Handle);
         HFunc(TEvCdcAggregator::TEvDescribeTracking, Handle);
@@ -45,7 +47,6 @@ STFUNC(TCdcAggregator::StateWork) {
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
             YDB_LOG_WARN("Unexpected event",
-                {"tabletId", TabletID()},
                 {"eventType", ev->GetTypeRewrite()});
         }
     }
@@ -56,34 +57,15 @@ void TCdcAggregator::SwitchToWork(const TActorContext& ctx) {
     Become(&TThis::StateWork);
 }
 
-void TCdcAggregator::Handle(TEvCdcAggregator::TEvWriteHeartbeats::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_TRACE("Handle",
-        {"tabletId", TabletID()},
-        {"ev", ev->Get()->ToString()});
-
-    auto result = MakeHolder<TEvCdcAggregator::TEvWriteHeartbeatsResult>();
-    result->Record.SetStatus(NKikimrCdcAggregator::TEvWriteHeartbeatsResult::NOT_READY);
-    result->Record.SetOrigin(TabletID());
-    ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
-}
-
-void TCdcAggregator::Handle(TEvCdcAggregator::TEvPartitioningChanged::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_TRACE("Handle",
-        {"tabletId", TabletID()},
-        {"ev", ev->Get()->ToString()});
-
-    auto result = MakeHolder<TEvCdcAggregator::TEvPartitioningChangedAck>();
-    result->Record.SetStatus(NKikimrCdcAggregator::TEvPartitioningChangedAck::NOT_READY);
-    result->Record.SetOrigin(TabletID());
-    ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
-}
-
 void TCdcAggregator::Handle(TEvCdcAggregator::TEvDescribeTracking::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE("Handle",
-        {"tabletId", TabletID()},
         {"ev", ev->Get()->ToString()});
 
-    ctx.Send(ev->Sender, new TEvCdcAggregator::TEvDescribeTrackingResult(), 0, ev->Cookie);
+    auto result = MakeHolder<TEvCdcAggregator::TEvDescribeTrackingResult>();
+    if (CdcAggregatorStream) {
+        result->Record = CdcAggregatorStreamProtoConverter.SerializeDescribeTrackingResult(*CdcAggregatorStream);
+    }
+    ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
 }
 
 IActor* CreateCdcAggregator(const TActorId& tablet, TTabletStorageInfo* info) {

@@ -1,4 +1,6 @@
 #include <ydb/apps/bridge_skipper/runtime/diagnostics.h>
+#include <ydb/apps/bridge_skipper/runtime/ydb_clients.h>
+#include <library/cpp/logger/record.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/cast.h>
@@ -6,8 +8,68 @@
 #include <iterator>
 
 namespace NBridgeSkipper {
+namespace {
+
+class TRecordingBackend final : public TLogBackend {
+public:
+    TString Text;
+    ELogPriority Priority = TLOG_INFO;
+    TLogRecord::TMetaFlags MetaFlags;
+    unsigned Reopens = 0;
+
+    void WriteData(const TLogRecord& record) override {
+        Text = TString(record.Data, record.Len);
+        Priority = record.Priority;
+        MetaFlags = record.MetaFlags;
+    }
+
+    void ReopenLog() override {
+        ++Reopens;
+    }
+};
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TDiagnostics) {
+    Y_UNIT_TEST(CaptureBackendRedactsInFlightCredentialsInBothStoreAndOutput) {
+        TString loaded = "startup-secret";
+        auto tokens = std::make_shared<TTokenSource>(TString("unused"), loaded,
+            [&](const auto&) { return TMaybe<TString>(loaded); });
+        const TRedactor redactor(tokens);
+        const auto pending = redactor.ForRequest();
+        loaded = "in-flight-secret";
+        tokens->Reload();
+        UNIT_ASSERT_VALUES_EQUAL(tokens->GetAuthInfo(), "in-flight-secret");
+        loaded = "current-secret";
+        tokens->Reload();
+        auto store = std::make_shared<TDiagnosticStore>("capture", "debug");
+        auto* output = new TRecordingBackend;
+        const auto backend = CreateCaptureBackend(store, tokens, TAutoPtr<TLogBackend>(output));
+        const TString record = R"({"priority":"WARNING","microseconds":1234567,"message":"in-flight-secret current-secret"})" "\n";
+        const TString expected = R"({"priority":"WARNING","microseconds":1234567,"message":"[REDACTED] [REDACTED]"})" "\n";
+        const TLogRecord::TMetaFlags flags{{"category", "credentials"}};
+        // Raw bytes bypass the RPC decoder, exercising the shared-source view.
+        backend->WriteData(TLogRecord(TLOG_WARNING, record.data(), record.size(), flags));
+        const auto logs = store->ReadLogs();
+        UNIT_ASSERT_VALUES_EQUAL(logs["rows"].GetArray().size(), 1);
+        const auto& row = logs["rows"][0];
+        UNIT_ASSERT_VALUES_EQUAL(row["message"].GetString(), expected);
+        UNIT_ASSERT_VALUES_EQUAL(row["level"].GetString(), "warn");
+        UNIT_ASSERT_VALUES_EQUAL(row["at"].GetString(), TInstant::MicroSeconds(1234567).ToString());
+        UNIT_ASSERT_VALUES_EQUAL(output->Text, expected);
+        UNIT_ASSERT_VALUES_EQUAL(output->Priority, TLOG_WARNING);
+        UNIT_ASSERT(output->MetaFlags == flags);
+
+        // Redact the complete record before truncating the retained diagnostic.
+        const TString longRecord = TString(4090, 'x') + "in-flight-secret " + TString(40, 'y');
+        const TString longExpected = TString(4090, 'x') + "[REDACTED] " + TString(40, 'y');
+        backend->WriteData(TLogRecord(TLOG_INFO, longRecord.data(), longRecord.size()));
+        UNIT_ASSERT_VALUES_EQUAL(output->Text, longExpected);
+        UNIT_ASSERT_VALUES_EQUAL(store->ReadLogs()["rows"][1]["message"].GetString(), longExpected.substr(0, 4096));
+        backend->ReopenLog();
+        UNIT_ASSERT_VALUES_EQUAL(output->Reopens, 1);
+    }
+
     Y_UNIT_TEST(RetentionAndCursorsReportEvictionAndBootGaps) {
         TDiagnosticStore store("boot");
         for (ui64 n = 1; n <= 1005; ++n) {

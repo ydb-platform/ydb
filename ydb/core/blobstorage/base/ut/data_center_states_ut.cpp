@@ -43,11 +43,16 @@ TEST(DataCenterStates, ParseValidateAndRoundTrip) {
     command.MutableDataCenter()->RemoveLast();
     command.MutableDataCenter(0)->ClearState();
     EXPECT_FALSE(ParseDataCenterStates(command.GetDataCenter()).has_value());
-    command.MutableDataCenter(0)->SetState(static_cast<TDataCenterState::EState>(77));
-    EXPECT_FALSE(ParseDataCenterStates(command.GetDataCenter()).has_value());
     command.MutableDataCenter(0)->SetState(TDataCenterState::INCLUDED);
     command.MutableDataCenter(0)->SetName("");
     EXPECT_FALSE(ParseDataCenterStates(command.GetDataCenter()).has_value());
+}
+
+TEST(DataCenterStates, RejectsUnknownStateOnWire) {
+    // DataCenter { Name: "dc" State: 77 }
+    NKikimrBlobStorage::TDataCenterStates snapshot;
+    ASSERT_TRUE(snapshot.ParseFromString(TString("\x0a\x06\x0a\x02" "dc" "\x10\x4d", 8)));
+    EXPECT_FALSE(ParseDataCenterStates(snapshot).has_value());
 }
 
 TEST(DataCenterStates, ReadsPreviouslyStoredBscCommand) {

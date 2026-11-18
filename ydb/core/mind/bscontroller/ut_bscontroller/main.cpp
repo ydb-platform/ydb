@@ -1,4 +1,5 @@
 #include <ydb/core/base/tablet.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
@@ -1734,12 +1735,25 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 domains.insert(slot.GetFailDomainIdx());
             }
             UNIT_ASSERT_VALUES_EQUAL(domains.size(), subgroupSize);
+            auto checkMapping = [&] {
+                const auto pool = GetServiceCounters(env.Runtime->GetAppData(0).Counters, "storage_pool_stat")
+                    ->FindSubgroup("storagePoolId", "1:1")->FindSubgroup("storagePool", "pool");
+                UNIT_ASSERT(pool);
+                const auto group = pool->FindSubgroup("group", ToString(before.GetGroup(0).GetGroupId()));
+                UNIT_ASSERT(group);
+                UNIT_ASSERT_VALUES_EQUAL(group->ReadSnapshot().size(), 1);
+                const auto species = group->FindSubgroup("erasureSpecies", erasure);
+                UNIT_ASSERT(species);
+                UNIT_ASSERT_VALUES_EQUAL(species->FindCounter("GroupErasureSpecies")->Val(), 1);
+            };
+            checkMapping();
             RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
             const auto after = FetchBaseConfig(&env);
             UNIT_ASSERT_VALUES_EQUAL(after.GroupSize(), 1);
             UNIT_ASSERT_VALUES_EQUAL(after.GetGroup(0).GetErasureSpecies(), erasure);
             UNIT_ASSERT_VALUES_EQUAL(after.GetGroup(0).GetGroupGeneration(), before.GetGroup(0).GetGroupGeneration());
             UNIT_ASSERT_VALUES_EQUAL(after.GetGroup(0).VSlotIdSize(), subgroupSize);
+            checkMapping();
             request.Clear();
             env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, {}, request,
                 block82 ? "block-4-2" : "block-8-2", 1);

@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from ydb.apps.dstool.lib import grouptool, dstool_cmd_vdisk_wipe as wipe
 import threading
 
 import pytest
@@ -504,3 +505,54 @@ def test_workload_reports_config_file_errors_as_invalid_parameters(tmp_path):
 
     with pytest.raises(common.InvalidParameterError, match='failed to read workload configuration'):
         workload_run.do(SimpleNamespace(dry_run=False, config_file=str(missing)))
+
+
+@pytest.mark.parametrize('erasure, domains', [('block-4-2', 8), ('block-8-2', 12)])
+@pytest.mark.parametrize('failed', range(4))
+def test_block_fail_model(erasure, domains, failed):
+    content = {(0, domain, 0): domain < domains - failed for domain in range(domains)}
+    assert grouptool.check_fail_model(content, erasure) == (failed <= 2)
+    # Multiple records within one failure domain must not consume more failures.
+    content.update({(0, domains - 1, disk): False for disk in range(1, 4)})
+    assert grouptool.check_fail_model(content, erasure) == (max(1, failed) <= 2)
+    pool = SimpleNamespace(ErasureSpecies=erasure, Geometry=common.kikimr_bsconfig.TGroupGeometry())
+    assert grouptool.GroupMapper({}, pool).get_geometry() == (1, domains, 1)
+
+
+def test_unknown_fail_model_and_geometry_are_rejected():
+    with pytest.raises(common.QueryError, match='unexpected erasure type unknown'):
+        grouptool.check_fail_model({}, 'unknown')
+    pool = SimpleNamespace(ErasureSpecies='unknown', Geometry=common.kikimr_bsconfig.TGroupGeometry())
+    with pytest.raises(common.QueryError, match='unexpected erasure type unknown'):
+        grouptool.GroupMapper({}, pool)
+
+
+@pytest.mark.parametrize('erasure, domains', [('block-4-2', 8), ('block-8-2', 12)])
+@pytest.mark.parametrize('failed', range(3))
+def test_wipe_respects_block_fail_model_and_dry_run(monkeypatch, erasure, domains, failed):
+    base = common.kikimr_bsconfig.TBaseConfig()
+    group = base.Group.add(GroupId=0x80000001, GroupGeneration=1, BoxId=1, StoragePoolId=1)
+    for domain in range(domains):
+        base.Node.add(NodeId=domain + 1).HostKey.Fqdn = 'node-%d' % domain
+        slot = base.VSlot.add(GroupId=group.GroupId, GroupGeneration=1, FailDomainIdx=domain,
+                              Status='ERROR' if domain < failed else 'READY')
+        slot.VSlotId.NodeId = domain + 1
+        slot.VSlotId.PDiskId = 1
+        slot.VSlotId.VSlotId = 1
+        group.VSlotId.add().CopyFrom(slot.VSlotId)
+    pool = common.kikimr_bsconfig.TDefineStoragePool(BoxId=1, StoragePoolId=1, ErasureSpecies=erasure)
+    monkeypatch.setattr(common, 'fetch_base_config_and_storage_pools',
+                        lambda: dict(BaseConfig=base, StoragePools=[pool]))
+    statuses = []
+    monkeypatch.setattr(common, 'print_status', lambda *args, **kwargs: statuses.append(kwargs))
+    monkeypatch.setattr(common, 'print_result', lambda *args, **kwargs: None)
+    monkeypatch.setattr(wipe, 'perform_request', lambda request: pytest.fail('dry-run must not wipe'))
+    args = SimpleNamespace(vdisk_ids=['[80000001:1:0:%d:0]' % (domains - 1)],
+                           force=False, run=False, quiet=True, verbose=False, format='json')
+    with pytest.raises(SystemExit) as error:
+        wipe.do(args)
+    assert error.value.code == 1
+    assert bool(statuses) == (failed == 2)
+    if statuses:
+        assert statuses[0]['success'] is False
+        assert 'failure model' in statuses[0]['error_reason']

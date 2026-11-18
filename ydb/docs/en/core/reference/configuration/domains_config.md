@@ -46,7 +46,10 @@ The following [fault tolerance modes](../../concepts/topology.md) are available:
 |---------------|-------------------------------------------------------------------|
 | `none`        | There is no redundancy. Applies for testing.                      |
 | `block-4-2`   | Redundancy factor of 1.5, applies to single data center clusters. |
+| `block-8-2`   | Redundancy factor of 1.25, requires at least 12 failure domains in one data center. |
 | `mirror-3-dc` | Redundancy factor of 3, applies to multi-data center clusters.    |
+
+Before enabling `block-8-2`, run a supporting {{ ydb-short-name }} version on every storage, controller and database node. It can be used for the initial static group and for dynamic pools alongside `block-4-2`; changing the erasure of an existing static group and downgrading to an unsupported version are not supported.
 
 ### Syntax
 
@@ -56,7 +59,7 @@ The following [fault tolerance modes](../../concepts/topology.md) are available:
     pool_config:
       box_id: 1
       encryption_mode: <optional, specify 1 to encrypt data on the disk>
-      erasure_species: <fault tolerance mode name - none, block-4-2, or mirror-3-dc>
+      erasure_species: <fault tolerance mode name - none, block-4-2, block-8-2, or mirror-3-dc>
       kind: <storage pool name - specify the same value as above>
       pdisk_filter:
       - property:
@@ -87,7 +90,7 @@ The following guidelines can be used to select State Storage nodes:
 | Cluster type | Min number of<br/>nodes | Selection guidelines |
 |---------|-----------------------|-----------------|
 | Without fault tolerance | 1 | Select one random node. |
-| Within a single availability zone | 5 | Select five nodes in different block-4-2 storage pool failure domains to ensure that a majority of 3 working nodes (out of 5) remain when two domains fail. |
+| Within a single availability zone | 5 | Select five nodes in different `block-4-2` or `block-8-2` storage pool failure domains to ensure that a majority of 3 working nodes (out of 5) remain when two domains fail. |
 | Geo-distributed | 9 | Select three nodes in different failure domains within each of the three mirror-3-dc storage pool availability zones to ensure that a majority of 5 working nodes (out of 9) remain when the availability zone + failure domain fail. |
 
 When deploying State Storage on clusters that use multiple storage pools with a possible combination of fault tolerance modes, consider increasing the number of nodes and spreading them across different storage pools because unavailability of State Storage results in unavailability of the entire cluster.

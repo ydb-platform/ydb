@@ -25,6 +25,7 @@
 #include "viewer_cluster.h"
 #include "viewer_bridge_storage.h"
 #include "viewer_groups.h"
+#include "viewer_counters.h"
 #include "viewer_healthcheck.h"
 #include "viewer_nodelist.h"
 
@@ -369,6 +370,68 @@ Y_UNIT_TEST_SUITE(Viewer) {
         void Output(IMonHttpRequest&) override {
         }
     };
+
+    Y_UNIT_TEST_TWIN(WideGroupCounterHistograms, block82) {
+        const ui32 width = block82 ? 12 : 8;
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134)).SetNodeCount(1).SetUseRealThreads(false)
+            .SetDomainName("Root").SetUseSectorMap(true).InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        auto groups = runtime.AddObserver<TEvWhiteboard::TEvBSGroupStateResponse>([&](auto& event) {
+            if (!dynamic_cast<TJsonCounters*>(runtime.FindActor(event->GetRecipientRewrite()))) {
+                return;
+            }
+            auto& record = event->Get()->Record;
+            record.Clear();
+            for (ui32 group = 1; group <= 3; ++group) {
+                auto* info = record.AddBSGroupStateInfo();
+                info->SetGroupID(group);
+                info->SetGroupGeneration(1);
+                info->SetErasureSpecies(block82 ? "block-8-2" : "block-4-2");
+                for (ui32 disk = 0; disk < width; ++disk) {
+                    info->AddVDiskIds()->SetDomain(disk);
+                }
+            }
+        });
+        auto disks = runtime.AddObserver<TEvWhiteboard::TEvVDiskStateResponse>([&](auto& event) {
+            if (!dynamic_cast<TJsonCounters*>(runtime.FindActor(event->GetRecipientRewrite()))) {
+                return;
+            }
+            auto& record = event->Get()->Record;
+            record.Clear();
+            for (ui32 group = 2; group <= 3; ++group) {
+                for (ui32 disk = 0; disk < width; ++disk) {
+                    auto* info = record.AddVDiskStateInfo();
+                    info->MutableVDiskId()->SetGroupID(group);
+                    info->MutableVDiskId()->SetGroupGeneration(1);
+                    info->MutableVDiskId()->SetDomain(disk);
+                    info->SetVDiskState(group == 2 ? NKikimrWhiteboard::OK : NKikimrWhiteboard::PDiskError);
+                    info->SetReplicated(true);
+                }
+            }
+        });
+        const auto sender = runtime.AllocateEdgeActor();
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/counters", nullptr);
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NMon::TEvHttpInfo(monReq)));
+        TAutoPtr<IEventHandle> handle;
+        auto* response = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        const size_t body = response->Answer.find("\r\n\r\n");
+        UNIT_ASSERT(body != TString::npos);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(response->Answer.substr(body + 4), &json, true);
+        TSet<TString> found;
+        for (const auto& sensor : json["sensors"].GetArray()) {
+            const auto& labels = sensor["labels"];
+            if (labels["subsystem"].GetString() == "BSGroups" && labels["bin"].GetString() == ToString(width)) {
+                UNIT_ASSERT_VALUES_EQUAL(sensor["value"].GetIntegerRobust(), 1);
+                found.insert(labels["sensor"].GetString());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(found.size(), 3);
+    }
 
     Y_UNIT_TEST(TraceVerbositySetupWithoutActorContext) {
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();

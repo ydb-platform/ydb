@@ -1,5 +1,5 @@
 #include "kqp_opt_impl.h"
-#include "kqp_opt_column_expressions.h"
+#include "kqp_opt_generated_columns.h"
 
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
 #include <ydb/core/kqp/common/simple/user_request_context.h>
@@ -471,7 +471,7 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
 
     std::tie(input, inputCols) = ExtendInputRowsWithAbsentNullColumns(write, input, inputCols.value(), table, write.Pos(), ctx, kqpCtx);
     auto generatedRewrite = ExtendInputRowsWithStoredGeneratedColumns(write, input, inputCols.value(), table, pos, ctx,
-        generatedLookup, &autoIncrement);
+        generatedLookup);
 
     auto baseInput = Build<TKqpWriteConstraint>(ctx, pos)
         .Input(generatedRewrite.Input)

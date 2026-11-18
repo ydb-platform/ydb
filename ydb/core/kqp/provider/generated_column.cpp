@@ -1,4 +1,4 @@
-#include "column_expression.h"
+#include "generated_column.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>

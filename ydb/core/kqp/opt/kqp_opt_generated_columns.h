@@ -66,8 +66,7 @@ NYql::NNodes::TExprBase BuildGeneratedDependencyRow(const TVector<const NYql::TK
 // the table via a stream lookup
 TBuildWriteInputResult ExtendInputRowsWithStoredGeneratedColumns(const NYql::NNodes::TKiWriteTable& write,
     const NYql::NNodes::TExprBase& input, const NYql::NNodes::TCoAtomList& inputColumns,
-    const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos, NYql::TExprContext& ctx, bool generatedLookup,
-    const NYql::NNodes::TCoAtomList* insertOnlyColumns = nullptr);
+    const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos, NYql::TExprContext& ctx, bool generatedLookup);
 
 // Appends DEFAULT-expression column values to every row of the input stream by applying each
 // compiled lambda to an empty struct: a DEFAULT expression has no dependencies to read

@@ -674,7 +674,9 @@ class TestPqRowDispatcher(TestYdsBase):
         ],
         ids=itemgetter(0),
     )
-    def test_filters_optional_field(self, ydb_topics: Callable[[str, ...], YdbTopics], testcase: List[Tuple[str, str, str]]):
+    def test_filters_optional_field(
+        self, ydb_topics: Callable[[str, ...], YdbTopics], testcase: List[Tuple[str, str, str]]
+    ):
         _, filter, expected_predicate = testcase
         io = ydb_topics("test_filters_optional_field", shared=True)
         create_input_consumer(io)

@@ -1,24 +1,0 @@
-.. Searching for a P project file *.pproj locally in the current folder
-.. Found P project file: /home/ydynnikov/w/ydb-dev-02/ydb/core/blobstorage/models/sync_guid_recovery_p/Recovery.pproj
-.. Checking /tmp/sync-guid-rebuild/final-model-pex/PEx/target/SyncGuidRecovery-jar-with-dependencies.jar
-WARNING: sun.reflect.Reflection.getCallerClass is not supported. This will impact performance.
-.. Test case :: tcFreshGroup
-... Checker is using 'dfs' strategy with 1 threads (seed:1)
---------------------
-   Time     Memory    Tasks (run/fin/pen)    Schedules   Timelines     States   
- 00:00:09   0.4 GB         1 / 0 / 0           90,629       139        54,924    00:00:19   0.8 GB         1 / 0 / 0          193,256       157       113,628    00:00:29   1.2 GB         1 / 0 / 0          289,931       211       169,722    00:00:39   1.6 GB         1 / 0 / 0          383,108       235       223,824    00:00:50   2.0 GB         1 / 0 / 0          477,582       267       277,379    00:01:00   2.4 GB         1 / 0 / 0          574,030       291       333,398    00:01:10   2.8 GB         1 / 0 / 0          663,746       306       384,655    00:01:20   3.2 GB         1 / 0 / 0          765,016       355       442,094    00:01:30   3.6 GB         1 / 0 / 0          866,866       387       500,997    00:01:40   4.1 GB         1 / 0 / 0          973,625       409       561,691    00:01:50   4.5 GB         1 / 0 / 0         1,078,061      413       620,704    00:02:00   5.0 GB         1 / 0 / 0         1,184,062      418       682,006    00:02:10   5.4 GB         1 / 0 / 0         1,289,481      432       742,650    00:02:20   5.9 GB         1 / 0 / 0         1,389,438      489       799,294    00:02:30   6.2 GB         1 / 0 / 0         1,515,959      516       851,908    00:02:40   6.5 GB         1 / 0 / 0         1,647,137      518       899,947    00:02:50   6.9 GB         1 / 0 / 0         1,769,361      518       945,106    00:03:00   7.2 GB         1 / 0 / 0         1,890,637      530       989,130    00:03:10   7.5 GB         1 / 0 / 0         2,011,022      530      1,033,581   00:03:20   7.8 GB         1 / 0 / 0         2,127,013      531      1,075,700   00:03:26   8.0 GB         1 / 0 / 0         2,187,842      534      1,097,966  
-
---------------------
-... Checking statistics:
-..... Found 0 bugs.
-... Search statistics:
-..... Explored 1,097,966 distinct states over 534 timelines
-..... Explored 2,187,842 distinct schedules
-..... Finished 0 search tasks (0 pending)
-..... Number of steps explored: 22 (min), 52 (avg), 65 (max).
-... Elapsed 206 seconds and used 8.2 GB
-.. [0;30;47m Result: partially correct with 132 choices remaining [m
-. Done
-... Checker ran out of memory.
-~~ [PTool]: Thanks for using P! ~~
-... Checker run terminated.

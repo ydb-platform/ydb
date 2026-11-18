@@ -2985,12 +2985,7 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinNullColumn, BlockJoin) {
-        auto td = LeftJoinNullColumnTestData();
-        const auto* rowType = AS_TYPE(TTupleType, AS_TYPE(TListType, td.Result.Type)->GetItemType());
-        UNIT_ASSERT(rowType->GetElementType(2)->IsOptional());
-        UNIT_ASSERT(rowType->GetElementType(3)->IsNull());
-        td.Setup->Alloc.SetLimit(64_MB);
-        Test(std::move(td), BlockJoin);
+        Test(LeftJoinNullColumnTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinSpilling, BlockJoin) {

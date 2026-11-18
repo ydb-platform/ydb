@@ -2870,6 +2870,14 @@ void TSchemeShard::PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPath
 void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
+    db.Table<Schema::DatabaseFreezes>().Key(pathId.LocalPathId).Delete();
+    DatabaseFreezeStates.erase(pathId);
+    DatabaseFreezeProgress.erase(pathId);
+    if (const auto worker = DatabaseFreezeWorkers.find(pathId); worker != DatabaseFreezeWorkers.end()) {
+        Send(worker->second, new TEvents::TEvPoisonPill);
+        DatabaseFreezeWorkers.erase(worker);
+    }
+
     auto it = SubDomains.find(pathId);
     if (it != SubDomains.end()) {
         TSubDomainInfo::TPtr subDomain = it->second;
@@ -5966,6 +5974,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableInitialUniqueIndex = appData->FeatureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = appData->FeatureFlags.GetEnableAddUniqueIndex();
     EnableOnlineAddUniqueIndex = appData->FeatureFlags.GetEnableOnlineAddUniqueIndex();
+    EnableHnswIndex = appData->FeatureFlags.GetEnableHnswIndex();
     EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
     EnableCompactFulltextIndex = appData->FeatureFlags.GetEnableCompactFulltextIndex();
     EnableJsonIndex = appData->FeatureFlags.GetEnableJsonIndex();
@@ -6037,7 +6046,11 @@ void TSchemeShard::DefaultSignalTabletActive(const TActorContext &ctx) {
 }
 
 void TSchemeShard::Cleanup(const TActorContext &ctx) {
-    Y_UNUSED(ctx);
+    for (const auto& [_, worker] : DatabaseFreezeWorkers) {
+        ctx.Send(worker, new TEvents::TEvPoisonPill);
+    }
+    DatabaseFreezeWorkers.clear();
+    DatabaseFreezeProgress.clear();
 }
 
 void TSchemeShard::Enqueue(STFUNC_SIG) {
@@ -6199,6 +6212,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvProcessingRequest, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvUpdateTenantSchemeShard, Handle);
+        HFuncTraced(TEvSchemeShard::TEvDatabaseFreeze, Handle);
+        HFuncTraced(TEvSchemeShard::TEvDatabaseFreezeResult, Handle);
 
         HFuncTraced(NSchemeBoard::NSchemeshardEvents::TEvUpdateAck, Handle);
 
@@ -6988,7 +7003,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvInitRootShard::TPtr& ev, const TAct
 
 void TSchemeShard::Handle(NKikimr::NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx) {
     auto txRemove = BackgroundSessionsManager->TxRemove(ev->Get()->GetClassName(), ev->Get()->GetIdentifier());
-    AFL_VERIFY(!!txRemove);
+    YDB_LOG_VERIFY(!!txRemove);
     Execute(txRemove.release(), ctx);
 }
 
@@ -8407,6 +8422,49 @@ void TSchemeShard::FillSeqNo(NKikimrTxColumnShard::TSchemaTxBody& tx, TMessageSe
     tx.MutableSeqNo()->SetRound(seqNo.Round);
 }
 
+namespace {
+
+// The owning index is the source of truth for posting-table settings and the
+// embedding column. Use the assigned table column id, including during creation.
+void FillHnswPostingTableDescription(const TSchemeShard& ss, TPathId tableId,
+        bool pendingIndex, NKikimrSchemeOp::TTableDescription* tableDescr) {
+    const auto& path = ss.PathsById.at(tableId);
+    if (path->Name != NTableIndex::NKMeans::PostingTable) {
+        return;
+    }
+    const auto indexIt = ss.Indexes.find(path->ParentPathId);
+    if (indexIt == ss.Indexes.end()) {
+        return;
+    }
+    // This metadata is derived from the owning index. In particular, a copied
+    // posting table must not retain a graph identity from the source table.
+    tableDescr->ClearLocalHnswIndex();
+    const auto index = pendingIndex && indexIt->second->AlterData
+        ? indexIt->second->AlterData : indexIt->second;
+    if (index->Type != NKikimrSchemeOp::EIndexTypeGlobalHnsw || index->IndexKeys.empty()) {
+        return;
+    }
+    const auto* hnsw = std::get_if<NKikimrSchemeOp::THnswIndexDescription>(
+        &index->SpecializedIndexDescription);
+    if (!hnsw) {
+        return;
+    }
+    const auto& table = ss.Tables.at(tableId);
+    for (const auto& [columnId, column] : table->Columns) {
+        if (column.Name != index->IndexKeys.back() || column.IsDropped()) {
+            continue;
+        }
+        auto* description = tableDescr->MutableLocalHnswIndex();
+        path->ParentPathId.ToProto(description->MutableIndexId());
+        description->SetSchemaVersion(index->AlterVersion);
+        *description->MutableHnswIndexDescription() = *hnsw;
+        description->MutableHnswIndexDescription()->SetEmbeddingColumnId(columnId);
+        break;
+    }
+}
+
+} // namespace
+
 TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, TMessageSeqNo seqNo) const {
     Y_VERIFY_S(Tables.contains(pathId), "Unknown table " << pathId);
     Y_VERIFY_S(PathsById.contains(pathId), "Unknown path " << pathId);
@@ -8493,6 +8551,9 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
     } else if (tableInfo->HasDetailedMetricsSettings()) {
         proto->MutableDetailedMetricsSettings()->MutableConfigured()->CopyFrom(tableInfo->GetDetailedMetricsSettings());
     }
+
+    // Refresh derived metadata when index settings have been resolved or changed.
+    FillHnswPostingTableDescription(*this, pathId, true, proto);
 
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
@@ -8584,6 +8645,8 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
         tinfo->TableDescription.SetPath(PathToString(pinfo));
     }
     tableDescr->CopyFrom(tinfo->TableDescription);
+
+    FillHnswPostingTableDescription(*this, tableId, newTable, tableDescr);
 
     if (rangeBegin.empty()) {
         // First partition starts with <NULL, NULL, ..., NULL> key
@@ -9062,6 +9125,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
     EnableInitialUniqueIndex = featureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = featureFlags.GetEnableAddUniqueIndex();
+    EnableHnswIndex = featureFlags.GetEnableHnswIndex();
     EnableFulltextIndex = featureFlags.GetEnableFulltextIndex();
     EnableCompactFulltextIndex = featureFlags.GetEnableCompactFulltextIndex();
     EnableJsonIndex = featureFlags.GetEnableJsonIndex();

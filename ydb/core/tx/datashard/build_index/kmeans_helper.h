@@ -31,6 +31,11 @@ void AddRowToData(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell>
 void AddRowToDataWithForeign(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> sourcePk,
     TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isForeign, double distance, bool isPostingLevel);
 
+google::protobuf::RepeatedPtrField<TProtoStringType> MakeUploadDataColumns(const TUserTable& table,
+    const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
+    NKikimrSchemeOp::EIndexType indexType,
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& pkColumns = {});
+
 TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
     const google::protobuf::RepeatedPtrField<TProtoStringType>& data, bool forBuild, NTable::TPos& embeddingPos,
     NTable::TPos& dataPos, NTable::TPos* isForeignPos = nullptr);

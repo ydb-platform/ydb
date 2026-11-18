@@ -203,14 +203,14 @@ void TOlapColumnBase::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescrip
     auto arrowType = NArrow::TStatusValidator::GetValid(NArrow::GetArrowType(Type));
     if (columnSchema.HasDefaultValue()) {
         DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue()).Validate();
-        AFL_VERIFY(DefaultValue.IsCompatibleType(arrowType));
+        YDB_LOG_VERIFY(DefaultValue.IsCompatibleType(arrowType));
     }
     if (columnSchema.HasColumnFamilyId()) {
         // TODO: do something?
     }
     if (columnSchema.HasSerializer()) {
         NArrow::NSerialization::TSerializerContainer serializer;
-        AFL_VERIFY(serializer.DeserializeFromProto(columnSchema.GetSerializer()));
+        YDB_LOG_VERIFY(serializer.DeserializeFromProto(columnSchema.GetSerializer()));
         Serializer = serializer;
     } else if (columnSchema.HasCompression()) {
         NArrow::NSerialization::TSerializerContainer serializer;
@@ -219,7 +219,7 @@ void TOlapColumnBase::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescrip
     }
     if (columnSchema.HasDataAccessorConstructor()) {
         NArrow::NAccessor::TConstructorContainer container;
-        AFL_VERIFY(container.DeserializeFromProto(columnSchema.GetDataAccessorConstructor()));
+        YDB_LOG_VERIFY(container.DeserializeFromProto(columnSchema.GetDataAccessorConstructor()));
         AccessorConstructor = container;
     }
     if (columnSchema.HasNotNull()) {

@@ -22,6 +22,24 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(CalcProgressPercent) {
+    Y_UNIT_TEST(VectorIndex_UnknownLevels) {
+        for (auto kind : {TIndexBuildInfo::EBuildKind::BuildVectorIndex,
+                          TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex}) {
+            TIndexBuildInfo info;
+            info.BuildKind = kind;
+            info.IsBroken = true;
+            info.KMeans.Level = 1;
+            UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 0.f, 1e-6f);
+            // Cancellation clears IsBroken before the malformed description is repaired.
+            info.IsBroken = false;
+            info.CancelRequested = true;
+            UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 0.f, 1e-6f);
+            info.KMeans.Level = 0;
+            info.KMeans.Levels = 3;
+            UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 0.f, 1e-6f);
+        }
+    }
+
     // Non-vector index: progress is based purely on done/total shards.
     // Formula: 100 * done / total, or 0 if no shards.
 

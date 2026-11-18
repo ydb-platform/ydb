@@ -934,6 +934,10 @@ public:
     void Bootstrap() override {
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Actor bootstrapped",
             {"marker", "BPPA01"});
+        if (Info->IsMirror3dcReadOnly()) {
+            ErrorReason = "Mirror-3-dc group is read-only";
+            return ReplyAndDie(NKikimrProto::ERROR);
+        }
         Schedule(TDuration::MicroSeconds(60'000'000), new TEvents::TEvWakeup(NeverTag));
 
         TLogoBlobID truePatchedBlobId = PatchedId;

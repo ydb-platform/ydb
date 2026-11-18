@@ -189,9 +189,15 @@ public:
             DSP_LOG_INFO_S("DSPC05", "DoNotKeep# " << item);
         }
 
+        if (Info->IsMirror3dcReadOnly()) {
+            ErrorReason = "Mirror-3-dc group is read-only";
+            return ReplyAndDie(NKikimrProto::ERROR);
+        }
+
         for (const auto& vdisk : Info->GetVDisks()) {
             const auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-            if (Info->IsFailRealmExcluded(vd.FailRealm)) {
+            if (!Info->IsWriteTargetRealm(vd.FailRealm)) {
+                QuorumTracker.ExcludeDisk(vd);
                 continue;
             }
             SendCollectGarbageRequest(vd);

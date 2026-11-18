@@ -1,6 +1,7 @@
 #include "dsproxy.h"
 #include "dsproxy_mon.h"
 #include "dsproxy_quorum_tracker.h"
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
@@ -283,7 +284,7 @@ public:
         VDiskWorkers.reserve(numDisks);
         for (ui32 i = 0; i < numDisks; ++i) {
             TVDiskID vdiskId = Info->GetVDiskId(i);
-            bool active = !Info->IsFailRealmExcluded(vdiskId.FailRealm);
+            bool active = Info->IsFailRealmReadable(vdiskId.FailRealm);
             VDiskWorkers.emplace_back(vdiskId, tabletId, minGeneration, forceBlockedGeneration, active);
             NumReadyWorkers += !active;
         }
@@ -346,8 +347,10 @@ private:
                 failedGroupDisks += TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), worker.GetVDiskId());
             }
         }
-        const auto& checker = Info->GetQuorumChecker();
-        return ProbeSurvivingBlobs || checker.CheckFailModelForGroup(failedGroupDisks);
+        if (ProbeSurvivingBlobs) {
+            return true;
+        }
+        return TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*Info, failedGroupDisks);
     }
 
     bool ProcessDiscovery() {
@@ -397,7 +400,7 @@ private:
                 NKikimrProto::EReplyStatus status;
                 TIngress ingress;
                 if (!worker.PopBlob(maxId, &status, &ingress)) {
-                    status = NKikimrProto::NODATA; // this disk haven't synced this blob yet, so mark it as NODATA
+                    status = worker.IsErroneous() ? NKikimrProto::ERROR : NKikimrProto::NODATA;
                 }
                 perDiskStatus.push_back(status);
                 mergedIngress.Merge(ingress);
@@ -419,26 +422,35 @@ private:
                 continue;
             }
 
-            // check for failure model; if number of reported errors exceeds failure model, return error in discovery
             TBlobStorageGroupInfo::TSubgroupVDisks failedSubgroupDisks(&Info->GetTopology());
-            if (!CheckSubgroupFailModel(perDiskStatus.data(), perDiskStatus.size(), failedSubgroupDisks)) {
-                return false;
-            }
-
-            // TODO(alexvru): get rid of ingress here
+            CollectFailedDisks(perDiskStatus.data(), perDiskStatus.size(), failedSubgroupDisks);
             auto layout = TSubgroupPartLayout::CreateFromIngress(mergedIngress, Info->Type);
-            const auto& checker = Info->GetQuorumChecker();
-            auto state = checker.GetBlobState(layout, failedSubgroupDisks);
-            if (state & (TBlobStorageGroupInfo::EBSF_FULL | TBlobStorageGroupInfo::EBSF_RECOVERABLE)) {
-                const bool mustExist = state & TBlobStorageGroupInfo::EBSF_FULL;
-                StateQ.push(TDiscoveryState{maxId, mustExist});
+            if (Info->GetTopology().GetTotalFailRealmsNum() == 3) {
+                auto checker = TMirror3dcWriteQuorumChecker::TryCreate(*Info, maxId.Hash());
+                if (!checker || !checker->CheckFailModelForSubgroup(failedSubgroupDisks)) {
+                    return false;
+                }
+                const TBlobStorageGroupInfo::TSubgroupVDisks none(&Info->GetTopology());
+                bool mustExist = checker->CheckEnsuredLayout(layout, none);
+                if (mustExist || checker->CheckEnsuredLayout(layout, failedSubgroupDisks)) {
+                    StateQ.push(TDiscoveryState{maxId, mustExist});
+                }
+            } else {
+                const auto& checker = Info->GetQuorumChecker();
+                if (!checker.CheckFailModelForSubgroup(failedSubgroupDisks)) {
+                    return false;
+                }
+                auto state = checker.GetBlobState(layout, failedSubgroupDisks);
+                if (state & (TBlobStorageGroupInfo::EBSF_FULL | TBlobStorageGroupInfo::EBSF_RECOVERABLE)) {
+                    StateQ.push(TDiscoveryState{maxId, bool(state & TBlobStorageGroupInfo::EBSF_FULL)});
+                }
             }
         }
 
         return true;
     }
 
-    bool CheckSubgroupFailModel(NKikimrProto::EReplyStatus *perDiskStatus, ui32 count,
+    void CollectFailedDisks(const NKikimrProto::EReplyStatus *perDiskStatus, ui32 count,
             TBlobStorageGroupInfo::TSubgroupVDisks& failedSubgroupDisks) {
         for (ui32 i = 0; i < count; ++i) {
             switch (NKikimrProto::EReplyStatus status = perDiskStatus[i]) {
@@ -447,6 +459,9 @@ private:
                     break;
 
                 case NKikimrProto::ERROR:
+                case NKikimrProto::NOT_YET:
+                case NKikimrProto::CORRUPTED:
+                case NKikimrProto::VDISK_ERROR_STATE:
                     failedSubgroupDisks += TBlobStorageGroupInfo::TSubgroupVDisks(&Info->GetTopology(), i);
                     break;
 
@@ -454,9 +469,6 @@ private:
                     Y_ABORT("unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
             }
         }
-
-        const auto& checker = Info->GetQuorumChecker();
-        return checker.CheckFailModelForSubgroup(failedSubgroupDisks);
     }
 };
 
@@ -746,13 +758,14 @@ public:
             status = NKikimrProto::OK; // assume OK for quorum tracker
         }
 
+        Y_ABORT_UNLESS(GetBlockRepliesRemaining);
+        --GetBlockRepliesRemaining;
         if (Worker->RequiresDataProbe()) {
             // E=0 cannot provide an ensured-layout quorum. Collect every active disk instead.
             if (status != NKikimrProto::OK) {
                 return ReplyAndDie(NKikimrProto::ERROR);
             }
-            Y_ABORT_UNLESS(GetBlockRepliesRemaining);
-            if (!--GetBlockRepliesRemaining) {
+            if (!GetBlockRepliesRemaining) {
                 GetBlockFinished = true;
                 TryToSatisfyRequest();
             }
@@ -761,14 +774,19 @@ public:
 
         switch (NKikimrProto::EReplyStatus quorumStatus = GetBlockTracker.ProcessReply(vdisk, status)) {
             case NKikimrProto::OK:
-                GetBlockFinished = true;
-                TryToSatisfyRequest();
+                if (!GetBlockRepliesRemaining) {
+                    GetBlockFinished = true;
+                    TryToSatisfyRequest();
+                }
                 break;
 
             case NKikimrProto::ERROR:
                 return ReplyAndDie(NKikimrProto::ERROR);
 
             case NKikimrProto::UNKNOWN:
+                if (!GetBlockRepliesRemaining) {
+                    return ReplyAndDie(NKikimrProto::ERROR);
+                }
                 break;
 
             default:

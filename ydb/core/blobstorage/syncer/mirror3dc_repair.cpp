@@ -117,6 +117,10 @@ class TMirror3dcRepairSyncer : public TActorBootstrapped<TMirror3dcRepairSyncer>
                     return;
                 }
             }
+            // Before P can become X, every Included realm must hold a copy of each live blob.
+            if (HasMirror3dcPendingRealm(Info->GetMirror3dcState().State) && blob.HasData && !checker->HasCopyInEachIncludedRealm(layout)) {
+                return Finish(NKikimrProto::ERROR);
+            }
             Blobs.pop_front();
         }
         ReadPage();

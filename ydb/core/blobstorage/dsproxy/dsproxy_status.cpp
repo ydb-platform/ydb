@@ -35,13 +35,16 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor {
         if (record.HasStatusFlags()) {
             StatusFlags.Merge(record.GetStatusFlags());
         }
-        if (record.HasApproximateFreeSpaceShare()) {
+        if (Info->IsWriteTargetRealm(vdisk.FailRealm) && record.HasApproximateFreeSpaceShare()) {
             const float value = record.GetApproximateFreeSpaceShare();
             ApproximateFreeSpaceShare = Min(ApproximateFreeSpaceShare.value_or(value), value);
         }
         ++Responses;
 
-        switch (QuorumTracker.ProcessReply(vdisk, status)) {
+        bool needsReplicatedDisk = Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+            && (!record.GetJoinedGroup() || !record.GetReplicated());
+        auto quorumStatus = needsReplicatedDisk && status == NKikimrProto::OK ? NKikimrProto::ERROR : status;
+        switch (QuorumTracker.ProcessReply(vdisk, quorumStatus)) {
             case NKikimrProto::OK:
                 if (Responses == Requests) {
                     ReplyAndDie(NKikimrProto::OK);
@@ -53,6 +56,9 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor {
                 break;
 
             default:
+                if (Responses == Requests) {
+                    ReplyAndDie(NKikimrProto::ERROR);
+                }
                 break;
         }
     }
@@ -117,7 +123,7 @@ public:
         Become(&TBlobStorageGroupStatusRequest::StateWait);
 
         if (Requests == 0) {
-            ReplyAndDie(NKikimrProto::OK);
+            ReplyAndDie(NKikimrProto::ERROR);
         }
     }
 

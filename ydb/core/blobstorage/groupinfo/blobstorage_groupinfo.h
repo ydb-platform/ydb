@@ -368,7 +368,7 @@ public:
     const TTopology &GetTopology() const { return *Topology; }
     const TDynamicInfo &GetDynamicInfo() const { return Dynamic; }
     TDynamicInfo::EFailRealmState GetFailRealmState(ui32 failRealmIdx) const {
-        if (Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
+        if (Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc || GetTopology().GetTotalFailRealmsNum() != 3) {
             return NKikimrBlobStorage::TDataCenterState::INCLUDED;
         }
         return Dynamic.Mirror3dcState.FailRealmStates.at(failRealmIdx);
@@ -378,6 +378,25 @@ public:
     }
     bool IsFailRealmIncluded(ui32 failRealmIdx) const {
         return IsIncluded(GetFailRealmState(failRealmIdx));
+    }
+    bool IsFailRealmReadable(ui32 failRealmIdx) const {
+        return IsReadable(GetFailRealmState(failRealmIdx));
+    }
+    bool IsWriteTargetRealm(ui32 failRealmIdx) const {
+        if (IsMirror3dcReadOnly()) {
+            return false;
+        }
+        EMirror3dcFailRealmState role = GetFailRealmState(failRealmIdx);
+        if (!IsRecovering(role)) {
+            return IsIncluded(role);
+        }
+        // A single-realm write always fits in Included. Other recovery layouts need R.
+        auto layouts = GetMirror3dcGroupLayouts(GetMirror3dcState().State);
+        return layouts && layouts->Write != EMirror3dcLayout::LAYOUT_2;
+    }
+    bool IsMirror3dcReadOnly() const {
+        return Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+            && GetMirror3dcState().State == NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER;
     }
     bool IsFailRealmExcluded(ui32 failRealmIdx) const {
         return IsExcluded(GetFailRealmState(failRealmIdx));

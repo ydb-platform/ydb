@@ -1862,6 +1862,7 @@ private:
     void UpdateSystemViews();
 
     struct TValidateConfigUpdatesParameters {
+        bool RecoveryConfirmed = false;
         bool SuppressFailModelChecking = false;
         bool SuppressDegradedGroupsChecking = false;
         bool SuppressDisintegratedGroupsChecking = false;

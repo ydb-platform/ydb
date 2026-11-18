@@ -29,16 +29,20 @@ class TBlobStorageGroupGetBlockRequest : public TBlobStorageGroupRequestActor {
             << " From# " << vdisk.ToString()
             << " NodeId# " << Info->GetActorId(vdisk).NodeId());
 
-        if (record.HasGeneration()) {
+        if (status == NKikimrProto::OK && record.HasGeneration()) {
             Generation = Max<ui32>(Generation, record.GetGeneration());
         }
         if (status == NKikimrProto::NODATA) {
             status = NKikimrProto::OK;  // assume OK for quorum tracker
         }
 
+        Y_ABORT_UNLESS(Requests);
+        --Requests;
         switch (QuorumTracker.ProcessReply(vdisk, status)) {
             case NKikimrProto::OK:
-                ReplyAndDie(NKikimrProto::OK);
+                if (!Requests || Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
+                    ReplyAndDie(NKikimrProto::OK);
+                }
                 break;
 
             case NKikimrProto::ERROR:
@@ -46,6 +50,9 @@ class TBlobStorageGroupGetBlockRequest : public TBlobStorageGroupRequestActor {
                 break;
 
             default:
+                if (!Requests) {
+                    ReplyAndDie(NKikimrProto::ERROR);
+                }
                 break;
         }
     }
@@ -108,7 +115,7 @@ public:
         Become(&TBlobStorageGroupGetBlockRequest::StateWait);
 
         if (Requests == 0) {
-            ReplyAndDie(NKikimrProto::OK);
+            ReplyAndDie(NKikimrProto::ERROR);
         }
     }
 

@@ -46,19 +46,21 @@ void TestQuorumResponse(TBlobStorageGroupType::EErasureSpecies erasure) {
         const TVDiskID vdisk = VDiskIDFromVDiskID(req->Get()->Record.GetVDiskID());
 
         auto response = testState.CreateEventResultPtr(req, NKikimrProto::OK, tabletId);
+        response->Get()->Record.SetGeneration(responsesNeeded);
         runtime.Send(response.Release(), 0);
 
         NKikimrProto::EReplyStatus status = tracker.ProcessReply(vdisk, NKikimrProto::OK);
 
-        if (status == NKikimrProto::OK) {
+        const bool mirror3dc = erasure == TBlobStorageGroupType::ErasureMirror3dc;
+        if (status == NKikimrProto::OK && (!mirror3dc || responsesNeeded == requests.size())) {
             TAutoPtr<IEventHandle> resultHandle;
             auto result = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetBlockResult>(resultHandle);
             UNIT_ASSERT(result);
             UNIT_ASSERT_VALUES_EQUAL(result->Status, NKikimrProto::OK);
             UNIT_ASSERT_VALUES_EQUAL(result->TabletId, tabletId);
 
-            UNIT_ASSERT_C(responsesNeeded < requests.size(),
-                "Expected to respond after " << responsesNeeded << " responses, but got " << requests.size() << " disks");
+            UNIT_ASSERT_VALUES_EQUAL(result->BlockedGeneration, responsesNeeded);
+            UNIT_ASSERT_VALUES_EQUAL(responsesNeeded == requests.size(), mirror3dc);
             return;
         }
     }
@@ -164,7 +166,7 @@ void TestMaxAllowedFailures(TBlobStorageGroupType::EErasureSpecies erasure) {
 
         NKikimrProto::EReplyStatus status = tracker.ProcessReply(vdisk, diskStatus);
 
-        if (status == NKikimrProto::OK) {
+        if (status == NKikimrProto::OK && (!isMirror3dc || i + 1 == requests.size())) {
             TAutoPtr<IEventHandle> resultHandle;
             auto result = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetBlockResult>(resultHandle);
             UNIT_ASSERT(result);
@@ -217,9 +219,9 @@ void CheckMirror3dcRealms(const TMirror3dcGroupState& realms,
 } // namespace
 
 Y_UNIT_TEST_SUITE(TDSProxyGetBlockQuorumTest) {
-    Y_UNIT_TEST(Mirror3dcSkipsFailedRealmsAndIgnoresRecoveryErrors) {
-        CheckMirror3dcRealms({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, false, NKikimrProto::OK);
-        CheckMirror3dcRealms({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2, {TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, true, NKikimrProto::OK);
+    Y_UNIT_TEST(Mirror3dcGetBlockRequiresStartupQuorum) {
+        CheckMirror3dcRealms({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, false, NKikimrProto::OK);
+        CheckMirror3dcRealms({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2, {TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, true, NKikimrProto::ERROR);
         CheckMirror3dcRealms({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}}, true, NKikimrProto::ERROR);
     }
 

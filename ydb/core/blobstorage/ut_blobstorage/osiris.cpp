@@ -472,7 +472,7 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
     };
     if (scenario == EMirror3dcDisconnectionScenario::SwitchToRestoredRealm) {
         // I/I/X: explicitly seed exactly two copies in each available realm.
-        setStates({NKikimrBlobStorage::TGroupState::DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}});
+        setStates({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}});
         TBlobStorageGroupInfo::TOrderNums subgroup;
         originalInfo->GetTopology().PickSubgroup(blobId.Hash(), subgroup);
         TString encryptedData = data;
@@ -503,7 +503,7 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
         // I/I/R -> I/I/I: bring back the previously empty realm and collect metadata.
         const ui32 startupDoneBefore = startupSyncDone[2];
         const ui32 requestsBefore = fullSyncRequests[2];
-        setStates({NKikimrBlobStorage::TGroupState::DC_RECOVERY, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}});
+        setStates({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}});
         for (ui32 attempt = 0; attempt < 1200 && startupSyncDone[2] < startupDoneBefore + 3; ++attempt) {
             env.Sim(TDuration::MilliSeconds(100));
         }
@@ -584,7 +584,8 @@ Y_UNIT_TEST_SUITE(Osiris) {
         using TDefinition = NKikimrBlobStorage::TDefineGroupState::TGroupDefinition;
         TDefinition* definition = request.AddCommand()->MutableDefineGroupState()->AddGroups();
         definition->SetGroupId(groupId);
-        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE);
+        request.SetIgnoreGroupFailModelChecks(true);
+        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
         definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::INCLUDED);
         definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::INCLUDED);
         definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::EXCLUDED);

@@ -1328,8 +1328,9 @@ namespace NKikimr::NBsController {
         }
     }
 
-    std::expected<void, TString> TBlobStorageController::TConfigState::ApplyDataCenterStates(bool suppressFailModelChecking, bool suppressDegradedGroupsChecking) {
+    std::expected<void, TString> TBlobStorageController::TConfigState::ApplyDataCenterStates(const TValidateConfigUpdatesParameters& parameters) {
         using TFailRealm = NKikimrBlobStorage::TDataCenterState;
+        bool enablePendingRealm = AppData()->FeatureFlags.GetEnableMirror3dcPendingRealm();
         TFailRealmStates normal{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::INCLUDED};
         TVector<TGroupId> groups;
         if (DataCenterStates.Changed()) {
@@ -1402,9 +1403,9 @@ namespace NKikimr::NBsController {
                 }
                 if (changedRealmCount == 1) {
                     ui32 realm = changedRealm;
-                    if (!excludedRealms[realm] || current.Realms[realm] != TFailRealm::EXCLUDED) {
+                    if (!excludedRealms[realm] || !IsDown(current.Realms[realm])) {
                         std::optional<TMirror3dcGroupConfiguration> next = excludedRealms[realm]
-                            ? TakeDownFailRealm(current, realm)
+                            ? TakeDownFailRealm(current, realm, enablePendingRealm)
                             : ReturnFailRealm(current, realm);
                         if (!next) {
                             return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
@@ -1424,15 +1425,18 @@ namespace NKikimr::NBsController {
                     HostRecords->GetLocation(slot->VSlotId.NodeId).Serialize(&location, false);
                     auto it = DataCenterStates.Get().find(location.GetDataCenter());
                     if (it != DataCenterStates.Get().end() && it->second == TFailRealm::EXCLUDED
-                            && current.Realms[slot->RingIdx] != TFailRealm::EXCLUDED) {
+                            && !IsDown(current.Realms[slot->RingIdx])) {
                         return std::unexpected<TString>("Group cannot include a DC excluded by distconf");
                     }
                 }
             }
+            if (!enablePendingRealm && HasMirror3dcPendingRealm(current.State) && !HasMirror3dcPendingRealm(previous.State)) {
+                return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " requires EnableMirror3dcPendingRealm");
+            }
             if (previous.State != current.State) {
                 switch (current.State) {
-                    case NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER:
-                        if (!suppressFailModelChecking) {
+                    case NKikimrBlobStorage::TGroupState::LEGACY_DC_SOLO_DISASTER:
+                        if (!parameters.SuppressFailModelChecking) {
                             return std::unexpected<TString>(TStringBuilder() << "group# " << groupId
                                 << ": transition to DC_SOLO_DISASTER requires suppressing fail model checks");
                         }
@@ -1441,7 +1445,7 @@ namespace NKikimr::NBsController {
                     case NKikimrBlobStorage::TGroupState::DC_SOLO_INV2:
                     case NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING: {
                         bool wasSolo = std::count(previous.Realms.begin(), previous.Realms.end(), TFailRealm::INCLUDED) == 1;
-                        if (!wasSolo && !suppressDegradedGroupsChecking) {
+                        if (!wasSolo && !parameters.SuppressDegradedGroupsChecking) {
                             return std::unexpected<TString>(TStringBuilder() << "group# " << groupId
                                 << ": transition to a DC_SOLO state requires ignoring degraded group checks");
                         }
@@ -1451,11 +1455,16 @@ namespace NKikimr::NBsController {
                         break;
                 }
             }
-            if (!suppressFailModelChecking) {
+            if (!parameters.SuppressFailModelChecking) {
                 if (!IsValidMirror3dcGroupConfiguration(current)) {
                     return std::unexpected<TString>(TStringBuilder() << "unsupported mirror-3-dc state for group# " << groupId);
                 }
-                if (!isNew && !IsAllowedMirror3dcGroupTransition(previous, current)) {
+                bool requiresConfirmation = enablePendingRealm || HasMirror3dcPendingRealm(previous.State);
+                if (requiresConfirmation && !isNew && !parameters.RecoveryConfirmed && RecoveringComplete(previous) == current) {
+                    return std::unexpected<TString>(TStringBuilder() << "group# " << groupId
+                        << ": group state transition requires recovery confirmation");
+                }
+                if (!isNew && !IsAllowedMirror3dcGroupTransition(previous, current, enablePendingRealm)) {
                     return std::unexpected<TString>(TStringBuilder() << "group# " << groupId
                         << ": invalid mirror-3-dc group state transition");
                 }

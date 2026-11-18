@@ -435,7 +435,7 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
-            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking, parameters.SuppressDegradedGroupsChecking); !result) {
+            if (auto result = state.ApplyDataCenterStates(parameters); !result) {
                 *errorDescription = result.error();
                 return false;
             }

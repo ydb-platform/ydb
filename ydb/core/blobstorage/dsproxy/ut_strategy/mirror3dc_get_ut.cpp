@@ -159,24 +159,34 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
         }
     }
 
-    Y_UNIT_TEST(RestoreUsesDataFromRecoveringRealm) {
-        TTest t({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}); // W = 2+2 in I/R.
+    Y_UNIT_TEST(RestoreIgnoresDataInRecoveringRealm) {
+        TTest t({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}});
         for (ui32 disk = 0; disk < 9; ++disk) {
             if (t.Realm(disk) == 0) {
                 t.Reply(disk, TBlobState::ESituation::Absent);
+            } else if (t.Realm(disk) == 1) {
+                t.Data(disk);
             }
         }
-        t.ReadFoundData();
-        UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::IN_PROGRESS);
-        std::array<ui32, 3> writes{};
-        for (const auto& request : t.Blackboard.GroupDiskRequests.PutsPending) {
-            ++writes[t.Info->GetVDiskId(request.OrderNumber).FailRealm];
-        }
-        UNIT_ASSERT_VALUES_EQUAL(writes[0], 2);
-        UNIT_ASSERT_VALUES_EQUAL(writes[1], 1);
-        UNIT_ASSERT_VALUES_EQUAL(writes[2], 0);
-        t.ConfirmPuts();
         UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::DONE);
+        UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == TBlobState::ESituation::Absent);
+        UNIT_ASSERT(t.Blackboard.GroupDiskRequests.PutsPending.empty());
+    }
+
+    Y_UNIT_TEST(ReadOnlyRestoreRequiresExistingRedundancy) {
+        for (bool full : {false, true}) {
+            TTest t({NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::PENDING, TDataCenterState::PENDING}});
+            for (ui32 disk = 0; disk < 9; ++disk) {
+                if (disk < (full ? 3u : 1u)) {
+                    t.Data(disk);
+                } else {
+                    t.Reply(disk, TBlobState::ESituation::Absent);
+                }
+            }
+            auto outcome = t.RunRestore();
+            UNIT_ASSERT(outcome == (full ? EStrategyOutcome::DONE : EStrategyOutcome::ERROR));
+            UNIT_ASSERT(t.Blackboard.GroupDiskRequests.PutsPending.empty());
+        }
     }
 
     Y_UNIT_TEST(RestoreRetriesFailedWriteAndAcceleratesPendingWrite) {
@@ -261,7 +271,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                     UNIT_ASSERT_VALUES_EQUAL(request.Size, 8);
                 }
                 for (ui32 disk = 0; disk < 9; ++disk) {
-                    UNIT_ASSERT_VALUES_EQUAL(bool(mask & (1u << disk)), states.FailRealmStates[t.Realm(disk)] != TDataCenterState::EXCLUDED);
+                    UNIT_ASSERT_VALUES_EQUAL(bool(mask & (1u << disk)), IsReadable(states.FailRealmStates[t.Realm(disk)]));
                 }
                 UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::IN_PROGRESS);
                 UNIT_ASSERT(t.Blackboard.GroupDiskRequests.GetsPending.empty());
@@ -316,12 +326,12 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
         UNIT_ASSERT_VALUES_EQUAL(t.Realm(t.RequestedDisk()), 0);
     }
 
-    Y_UNIT_TEST(ReadsRequestedRangeFromNormalOrRecoveringRealm) {
-        for (const TMirror3dcGroupState states : {TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}}) {
+    Y_UNIT_TEST(ReadsRequestedRangeFromIncludedOrPendingRealm) {
+        for (const TMirror3dcGroupState states : {TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::PENDING, TDataCenterState::PENDING}}}) {
             for (ui32 cookie = 0; cookie < 3; ++cookie) {
                 TTest t(states, cookie, 2, 3);
-                if (states.FailRealmStates[1] == TDataCenterState::RECOVERING) {
-                    // Force fallback to R; its positive reply can supply the requested data.
+                if (states.FailRealmStates[1] == TDataCenterState::PENDING) {
+                    // Force fallback to P; its positive reply can supply the requested data.
                     for (ui32 disk = 0; disk < 9; ++disk) {
                         if (t.Realm(disk) == 0) {
                             t.Reply(disk, TBlobState::ESituation::Absent);
@@ -406,14 +416,14 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
         }
     }
 
-    Y_UNIT_TEST(RecoveryErrorsFailConservativePhantomCheck) {
+    Y_UNIT_TEST(RecoveryRepliesDoNotAffectPhantomCheck) {
         for (const auto recoveryReply : {TBlobState::ESituation::Error, TBlobState::ESituation::Lost}) {
             TTest t({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}});
             for (ui32 disk = 0; disk < 9; ++disk) {
                 t.Reply(disk, t.Realm(disk) == 2 ? recoveryReply : TBlobState::ESituation::Absent);
             }
             UNIT_ASSERT(t.Run(true) == EStrategyOutcome::DONE);
-            UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == (recoveryReply == TBlobState::ESituation::Error ? TBlobState::ESituation::Error : TBlobState::ESituation::Absent));
+            UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == TBlobState::ESituation::Absent);
             UNIT_ASSERT(t.Blackboard[t.Id].LooksLikePhantom == true);
         }
     }
@@ -428,7 +438,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
             {{NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, 1, false}, // E = 1+1 fits; W = 1+1+1 OR 2+2 does not.
             {{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, 1, false}, // E = 1 fits; W = 2 does not.
             {{NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, 1, true}, // One error cannot hide E = 2.
-            {{NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, 0, false}, // E = 0 cannot prove absence even with no errors.
+            {{NKikimrBlobStorage::TGroupState::LEGACY_DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, 0, false}, // E = 0 cannot prove absence even with no errors.
         };
         for (const auto& test : cases) {
             for (ui32 cookie = 0; cookie < 3; ++cookie) {
@@ -510,18 +520,17 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
         }
     }
 
-    Y_UNIT_TEST(BasicReadReturnsKnownDataDespiteEnsuredFailureModel) {
+    Y_UNIT_TEST(BasicReadRejectsKnownFailuresOutsideModel) {
         TTest t({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}); // E = 1; one error violates the model even with a found copy.
         UNIT_ASSERT(t.Run() == EStrategyOutcome::IN_PROGRESS);
         const auto request = t.Blackboard.GroupDiskRequests.GetsPending.front();
         const ui32 found = t.RequestedDisk();
         t.Blackboard.AddResponseData(request.Id, request.OrderNumber, 0, TRope(TString("testdata")));
         t.Reply((found + 3) % 9, TBlobState::ESituation::Error);
-        UNIT_ASSERT(t.Run() == EStrategyOutcome::DONE);
-        UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == TBlobState::ESituation::Present);
+        UNIT_ASSERT(t.Run() == EStrategyOutcome::ERROR);
     }
 
-    Y_UNIT_TEST(NormalKnownDataMatchesLegacyWithEveryOtherDiskFailureMask) {
+    Y_UNIT_TEST(NormalKnownDataRequiresSupportedFailures) {
         for (ui32 mask = 0; mask < 256; ++mask) {
             for (bool phantom : {false, true}) {
                 TTest current({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
@@ -532,6 +541,13 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                     for (ui32 disk = 1; disk < 9; ++disk) {
                         test->Reply(disk, mask & (1u << (disk - 1)) ? TBlobState::ESituation::Error : TBlobState::ESituation::Absent);
                     }
+                }
+                auto checker = TMirror3dcWriteQuorumChecker::TryCreate(*current.Info, current.Id.Hash());
+                UNIT_ASSERT(checker);
+                auto failed = TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(&current.Info->GetTopology(), mask << 1);
+                if (!phantom && !checker->CheckFailModelForSubgroup(failed)) {
+                    UNIT_ASSERT(current.Run() == EStrategyOutcome::ERROR);
+                    continue;
                 }
                 UNIT_ASSERT(current.Run(phantom) == EStrategyOutcome::DONE);
                 UNIT_ASSERT(legacy.Run(phantom, true) == EStrategyOutcome::DONE);
@@ -615,24 +631,24 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                 UNIT_ASSERT(checker);
                 TBlobStorageGroupInfo::TSubgroupVDisks failed(&t.Info->GetTopology());
                 for (ui32 disk = 0; disk < 9; ++disk) {
-                    if (mask & (1u << disk)) {
+                    if ((mask & (1u << disk)) && IsReadable(states.FailRealmStates[t.Realm(disk)])) {
                         failed += TBlobStorageGroupInfo::TSubgroupVDisks(&t.Info->GetTopology(), disk);
                     }
                 }
-                const auto expected = checker->GetBlobState({}, failed);
+                bool withinModel = checker->CheckFailModelForSubgroup(failed);
                 ui32 requested = 0;
                 for (ui32 step = 0; ; ++step) {
                     UNIT_ASSERT(step <= 9);
                     const auto outcome = t.Run();
                     if (outcome != EStrategyOutcome::IN_PROGRESS) {
-                        UNIT_ASSERT_VALUES_EQUAL(outcome == EStrategyOutcome::ERROR, expected == TBlobStorageGroupInfo::EBS_DISINTEGRATED);
+                        UNIT_ASSERT_VALUES_EQUAL(outcome == EStrategyOutcome::ERROR, !withinModel);
                         if (outcome == EStrategyOutcome::DONE) {
                             UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == TBlobState::ESituation::Absent);
                         }
                         break;
                     }
                     const ui32 disk = t.RequestedDisk();
-                    UNIT_ASSERT(states.FailRealmStates[t.Realm(disk)] != TDataCenterState::EXCLUDED);
+                    UNIT_ASSERT(IsReadable(states.FailRealmStates[t.Realm(disk)]));
                     UNIT_ASSERT(!(requested & (1u << disk)));
                     requested |= 1u << disk;
                     t.Reply(disk, mask & (1u << disk) ? TBlobState::ESituation::Error : TBlobState::ESituation::Absent);
@@ -909,7 +925,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                 TTest t(states, cookie);
                 bool found = false;
                 for (ui32 disk = 0; disk < 9; ++disk) {
-                    if (!found && states.FailRealmStates[t.Realm(disk)] != TDataCenterState::EXCLUDED) {
+                    if (!found && IsReadable(states.FailRealmStates[t.Realm(disk)])) {
                         t.Data(disk);
                         found = true;
                     } else {

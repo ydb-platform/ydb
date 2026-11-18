@@ -413,29 +413,44 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         auto *dc = command.AddDataCenter();
         dc->SetName("dc-3");
         dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
-        UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&config, command));
+        auto legacy = config;
+        UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&legacy, command, /*enablePendingRealm=*/ false));
+        const auto& legacyGroup = legacy.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+        UNIT_ASSERT(legacyGroup.GetMirror3dcState() == NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE);
+        UNIT_ASSERT(legacyGroup.GetRings(2).GetState() == NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&config, command, /*enablePendingRealm=*/ true));
         UNIT_ASSERT(config.HasDataCenterStates());
         const auto& serviceSet = config.GetBlobStorageConfig().GetServiceSet();
         const auto& group = serviceSet.GetGroups(0);
         UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), 2);
         UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetMirror3dcState()), ui32(NKikimrBlobStorage::TGroupState::DC_FAILURE));
-        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetState()), ui32(NKikimrBlobStorage::TDataCenterState::EXCLUDED));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetState()), ui32(NKikimrBlobStorage::TDataCenterState::PENDING));
         for (const auto& disk : serviceSet.GetVDisks()) {
             UNIT_ASSERT_VALUES_EQUAL(disk.GetVDiskID().GetGroupGeneration(), 2);
         }
-        UNIT_ASSERT(!NStorage::ApplyStaticDataCenterStates(&config, command));
+        UNIT_ASSERT(!NStorage::ApplyStaticDataCenterStates(&config, command, /*enablePendingRealm=*/ true));
+        auto disaster = config;
+        auto secondExclusion = command;
+        auto *second = secondExclusion.AddDataCenter();
+        second->SetName("dc-2");
+        second->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&disaster, secondExclusion, /*enablePendingRealm=*/ true));
+        const auto& disasterGroup = disaster.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+        UNIT_ASSERT(disasterGroup.GetMirror3dcState() == NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER);
+        UNIT_ASSERT(disasterGroup.GetRings(1).GetState() == NKikimrBlobStorage::TDataCenterState::PENDING);
+        UNIT_ASSERT(disasterGroup.GetRings(2).GetState() == NKikimrBlobStorage::TDataCenterState::PENDING);
         auto conflicting = config;
         conflicting.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0)->MutableRings(2)->SetState(
             NKikimrBlobStorage::TDataCenterState::RECOVERING);
         conflicting.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0)->SetMirror3dcState(
-            NKikimrBlobStorage::TGroupState::DC_RECOVERY);
+            NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1);
         UNIT_ASSERT(NStorage::ValidateConfig(conflicting));
         dc->SetState(NKikimrBlobStorage::TDataCenterState::INCLUDED);
-        UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&config, command));
+        UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&config, command, /*enablePendingRealm=*/ true));
         UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetMirror3dcState()), ui32(NKikimrBlobStorage::TGroupState::DC_RECOVERY));
-        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetState()), ui32(NKikimrBlobStorage::TDataCenterState::RECOVERING));
-        UNIT_ASSERT(!NStorage::ApplyStaticDataCenterStates(&config, command));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetMirror3dcState()), ui32(NKikimrBlobStorage::TGroupState::NORMAL));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetState()), ui32(NKikimrBlobStorage::TDataCenterState::INCLUDED));
+        UNIT_ASSERT(!NStorage::ApplyStaticDataCenterStates(&config, command, /*enablePendingRealm=*/ true));
     }
 
     Y_UNIT_TEST(StaticDataCenterUpdateRejectsMultipleRealmChanges) {
@@ -448,7 +463,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
             dc->SetName(name);
             dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
         }
-        UNIT_ASSERT_EXCEPTION(NStorage::ApplyStaticDataCenterStates(&config, command), yexception);
+        UNIT_ASSERT_EXCEPTION(NStorage::ApplyStaticDataCenterStates(&config, command, /*enablePendingRealm=*/ true), yexception);
     }
 
     Y_UNIT_TEST(InitialConfigBootstrapUsesNodeMajority) {
@@ -4419,6 +4434,11 @@ selector_config: []
         fixture.UseMirror3dcGroup();
         fixture.Start();
         auto& runtime = fixture.Runtime;
+        for (TActorId keeper : fixture.Keepers) {
+            UNIT_ASSERT(runtime.WrapInActorContext(keeper, [](IActor*) {
+                AppData()->FeatureFlags.SetEnableMirror3dcPendingRealm(true);
+            }));
+        }
         TActorId tablet = runtime.Register(new TIgnoreActor, 1);
         runtime.RegisterService(MakeTabletResolverID(), runtime.Register(new TIgnoreActor, 1));
         TActorId client = runtime.AllocateEdgeActor(1);
@@ -4479,7 +4499,7 @@ selector_config: []
         response.reset();
         TString previousSnapshot = snapshot.SerializeAsString();
         request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        request->Record.MutableApplyDataCenterStates(); // return the DC through RECOVERING
+        request->Record.MutableApplyDataCenterStates(); // return the pending DC
         runtime.Send(new IEventHandle(fixture.Root(), client, request.release()), 1);
         UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 3; }));
         UNIT_ASSERT_VALUES_EQUAL(snapshot.SerializeAsString(), previousSnapshot); // first acknowledge the prior snapshot
@@ -4494,6 +4514,31 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(ui32(response->GetStatus()), ui32(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK));
         UNIT_ASSERT(response->HasAppliedDataCenterStates());
         UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().DataCenterSize(), 0);
+    }
+
+    Y_UNIT_TEST(UpdateConfigCannotPublishPendingRealmBeforeRollout) {
+        TCommitConfirmationFixture fixture;
+        fixture.UseMirror3dcGroup();
+        fixture.Start();
+        const TActorId root = fixture.Root();
+        const TActorId client = fixture.Runtime.AllocateEdgeActor(root.NodeId());
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        fixture.Runtime.FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(node, *ev);
+            return !CaptureInvokeResult(*ev, client, response);
+        };
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *config = request->Record.MutableUpdateConfig()->MutableConfig();
+        config->CopyFrom(fixture.Config);
+        auto *group = config->MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0);
+        group->SetMirror3dcState(NKikimrBlobStorage::TGroupState::DC_FAILURE);
+        group->MutableRings(2)->SetState(NKikimrBlobStorage::TDataCenterState::PENDING);
+        fixture.Runtime.Send(new IEventHandle(root, client, request.release()), root.NodeId());
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return response.has_value(); }));
+        UNIT_ASSERT_C(response->GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR, response->DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(response->GetErrorReason(), "EnableMirror3dcPendingRealm");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(root.NodeId()).GetCommittedStorageConfig().GetGeneration(),
+            fixture.Config.GetGeneration());
     }
 
     Y_UNIT_TEST(StateStorageSelectionRejectedBeforePropose) {

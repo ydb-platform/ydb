@@ -30,6 +30,19 @@ namespace NKikimr {
             {"marker", "VDS28"},
             {"selfId", SelfId()},
             {"msg", ev->Get()->ToString()});
+        if (Info->GroupGeneration != ev->Get()->NewInfo->GroupGeneration) {
+            // A new generation can change the set of peers allowed to supply this blob.
+            for (auto& [deadline, context] : InFlight) {
+                for (auto& item : context->Result->Items) {
+                    item.Status = NKikimrProto::RACE;
+                }
+                context->SendResult(SelfId());
+            }
+            InFlight.clear();
+            Queries.clear();
+            GetsInFlight.clear();
+            VGetResultMap.clear();
+        }
         for (const auto& [vdiskId, queue] : Queues) {
             Send(queue.QueueActorId, ev->Get()->Clone());
         }

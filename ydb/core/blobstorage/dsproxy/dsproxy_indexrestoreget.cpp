@@ -313,7 +313,7 @@ public:
 
         for (const auto& vdisk : Info->GetVDisks()) {
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-            if (Info->IsFailRealmExcluded(vd.FailRealm)) {
+            if (!Info->IsFailRealmReadable(vd.FailRealm)) {
                 continue;
             }
             std::unique_ptr<TEvBlobStorage::TEvVGet> vget;

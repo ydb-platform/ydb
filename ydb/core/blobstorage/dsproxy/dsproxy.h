@@ -231,6 +231,15 @@ public:
         , DoSendDeathNote(params.Common.DoSendDeathNote)
         , EnableStorageRetroTraceCollectionSlowRequests(params.Common.EnableStorageRetroTraceCollectionSlowRequests)
     {
+        using TEvent = std::remove_pointer_t<decltype(params.Common.Event)>;
+        if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet>) {
+            if (const auto& block = params.Common.Event->ForceBlockTabletData) {
+                SetReadBlock(block->Id, block->Generation, params.Common.Event->Deadline);
+            }
+        } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvRange> || std::is_same_v<TEvent, TEvBlobStorage::TEvDiscover>) {
+            const auto& request = *params.Common.Event;
+            SetReadBlock(request.TabletId, request.ForceBlockedGeneration, request.Deadline);
+        }
         if (NWilson::TSpan* parentWilsonSpan = ParentSpan.GetWilsonSpanPtr()) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
             Span = NWilson::TSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(parentTraceId.GetVerbosity(),
@@ -339,6 +348,19 @@ protected:
     THashMap<ui32, TActorId> NodeSubscriptions;
 
 private:
+    struct TReadBlock {
+        ui64 TabletId;
+        ui32 Generation;
+        TInstant Deadline;
+    };
+    std::unique_ptr<TReadBlock> ReadBlock;
+    void SetReadBlock(ui64 tabletId, ui32 generation, TInstant deadline);
+    STFUNC(StateWaitForReadBlock);
+    void HandleReadBlock(TEvBlobStorage::TEvGetBlockResult::TPtr& ev);
+    void HandleReadBlock(TEvBlobStorage::TEvBlockResult::TPtr& ev);
+    bool CheckReadBlockResult(const TEvBlobStorage::TEvResultCommon& result);
+    void RestartAfterRace();
+
     const TActorId Source;
     const ui64 Cookie;
     TMessageRelevanceOwner RelevanceOwner;

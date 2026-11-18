@@ -382,12 +382,15 @@ public:
         // issue queries to all VDisks
         for (const auto& vdisk : Info->GetVDisks()) {
             const auto id = Info->GetVDiskId(vdisk.OrderNumber);
-            if (Info->IsFailRealmExcluded(id.FailRealm)) {
+            if (!Info->IsFailRealmReadable(id.FailRealm)) {
                 continue;
             }
             SendQueryToVDisk(id, From, To);
         }
 
+        if (!NumVGetsPending) {
+            return ReplyAndDie(NKikimrProto::ERROR);
+        }
         Become(&TBlobStorageGroupRangeRequest::StateWait);
     }
 

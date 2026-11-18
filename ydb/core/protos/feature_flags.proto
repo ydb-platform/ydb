@@ -496,4 +496,6 @@ message TFeatureFlags {
     // write quota.
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
     optional bool EnableColumnShardStats = 395 [default = false];
+    // Enable after all DSProxy, VDisk and storage controller nodes understand the Pending realm role.
+    optional bool EnableMirror3dcPendingRealm = 396 [default = false];
 }

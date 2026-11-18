@@ -1,4 +1,5 @@
 #include "group_state.h"
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/syncer/syncer.h>
@@ -18,6 +19,12 @@ std::optional<TMirror3dcGroupConfiguration> GetConfiguration(const TGroupReplica
     }
     return std::nullopt;
 }
+
+// W expands from 2 in Included to 2+2 in Included and Recovering on this edge.
+bool WaitForRecoveringVDiskStartup(EMirror3dcGroupState state) {
+    using TGroupState = NKikimrBlobStorage::TGroupState;
+    return state == TGroupState::DC_SOLO_RECOVERY_INV1_PENDING || state == TGroupState::DC_SOLO_RECOVERY_INV2_PENDING;
+}
 } // namespace
 
 class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
@@ -33,7 +40,11 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         ui64 RepairCookie = 0;
         ui32 RepairNode = 0;
         ui32 NextRepairDisk = 0;
-        bool RepairSucceeded = false;
+        bool ReadyToPromote = false;
+
+        bool RequiresStartupConfirmation(ui32 realm) const {
+            return WaitForRecoveringVDiskStartup(*Info.GroupState) && IsRecovering(Info.States[realm]);
+        }
     };
     struct TQuery {
         ui32 GroupId;
@@ -130,6 +141,9 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             if (info.IsFailRealmExcluded(disk.FailRealm)) {
                 continue;
             }
+            if (group.RequiresStartupConfirmation(disk.FailRealm) && !group.ConfigApplied[index]) {
+                return false;
+            }
             if (group.ConfigApplied[index]) {
                 applied |= TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), TVDiskIdShort(disk));
             } else {
@@ -143,7 +157,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     }
 
     void StartRepair(ui32 groupId, TGroup* group) {
-        Y_ABORT_UNLESS(!group->RepairCookie && !group->ProposalCookie && !group->RepairSucceeded);
+        Y_ABORT_UNLESS(!group->RepairCookie && !group->ProposalCookie && !group->ReadyToPromote);
         ui32 diskIndex = group->NextRepairDisk;
         while (!group->ConfigApplied[diskIndex]) {
             diskIndex = (diskIndex + 1) % group->ConfigApplied.size();
@@ -164,7 +178,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     }
 
     void CheckCompletion(ui32 groupId, TGroup* group) {
-        if (group->ProposalCookie || !group->RepairSucceeded) {
+        if (group->ProposalCookie || !group->ReadyToPromote) {
             return;
         }
         std::optional<TMirror3dcGroupConfiguration> config = GetConfiguration(group->Info);
@@ -193,6 +207,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             EraseQueries(groupId);
             group->Pending = 0;
             ConfigConfirmationGroups.erase(groupId);
+            group->ReadyToPromote = WaitForRecoveringVDiskStartup(*group->Info.GroupState);
             RepairGroups.insert(groupId);
         }
     }
@@ -200,7 +215,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     void RunRepairs() {
         for (ui32 groupId : RepairGroups) {
             TGroup& group = Groups.at(groupId);
-            if (group.RepairSucceeded) {
+            if (group.ReadyToPromote) {
                 CheckCompletion(groupId, &group);
             } else if (!group.RepairCookie && !group.ProposalCookie && RunningRepairs.size() < MaxRunningRepairs) {
                 StartRepair(groupId, &group);
@@ -268,8 +283,17 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         TGroup& group = Groups.at(query.GroupId);
         const NKikimrBlobStorage::TEvVStatusResult& record = ev->Get()->Record;
         TVDiskID reported = record.HasVDiskID() ? VDiskIDFromVDiskID(record.GetVDiskID()) : TVDiskID();
-        group.ConfigApplied[query.Disk] = record.HasVDiskID() && reported == group.Info.VDisks[query.Disk].Id
+        const TVDiskID& expected = group.Info.VDisks[query.Disk].Id;
+        group.ConfigApplied[query.Disk] = record.HasVDiskID() && reported == expected
             && record.GetStatus() == NKikimrProto::OK;
+        EMirror3dcFailRealmState role = group.Info.States[expected.FailRealm];
+        const bool useStartupQuorum = AppData()->FeatureFlags.GetEnableMirror3dcPendingRealm()
+            || HasMirror3dcPendingRealm(*group.Info.GroupState);
+        if (useStartupQuorum || group.RequiresStartupConfirmation(expected.FailRealm)) {
+            bool ready = record.GetJoinedGroup() && record.GetReplicated();
+            group.ConfigApplied[query.Disk] = group.ConfigApplied[query.Disk] && ready
+                && (!record.GetIsReadOnly() || IsPending(role));
+        }
         if (!--group.Pending) {
             ConfirmConfig(query.GroupId, &group);
             RunRepairs();
@@ -289,7 +313,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
                 || result.GetGeneration() != group.Info.Generation) {
             return;
         }
-        group.RepairSucceeded = result.GetStatus() == NKikimrProto::OK;
+        group.ReadyToPromote = result.GetStatus() == NKikimrProto::OK;
         ClearRepair(&group, false);
         CheckCompletion(groupId, &group);
     }

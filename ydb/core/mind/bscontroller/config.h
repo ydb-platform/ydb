@@ -162,7 +162,7 @@ namespace NKikimr {
             // without touching group generation.
             THashSet<TBoxStoragePoolId> HeapAllocatorNumLeadingDisksChanged;
 
-            std::expected<void, TString> ApplyDataCenterStates(bool suppressFailModelChecking, bool suppressDegradedGroupsChecking);
+            std::expected<void, TString> ApplyDataCenterStates(const TValidateConfigUpdatesParameters& parameters);
 
             bool PushStaticGroupsToSelfHeal = false;
 

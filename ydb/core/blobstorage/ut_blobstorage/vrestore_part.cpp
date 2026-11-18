@@ -23,17 +23,16 @@ namespace {
             TIngress Ingress;
         };
 
-        TEnvironmentSetup Env{{
-            .NodeCount = 9,
-            .VDiskReplPausedAtStart = true,
-            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
-        }};
+        TEnvironmentSetup Env;
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         const TString Data = TString(1024, 'x');
         const TLogoBlobID FullId{1, 1, 1, 0, ui32(Data.size()), 0};
         std::array<TVDiskResponse, 9> VDiskResponses;
 
-        TFixture() {
+        explicit TFixture(TFeatureFlags flags = {})
+            : Env({.NodeCount = 9, .VDiskReplPausedAtStart = true, .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+                .FeatureFlags = std::move(flags)})
+        {
             Env.Runtime->FilterFunction = [this](ui32, std::unique_ptr<IEventHandle>& ev) {
                 if (ev->GetTypeRewrite() == TEvBlobStorage::EvProxyQueueState) {
                     const auto* recipient = Env.Runtime->GetActor(ev->GetRecipientRewrite());
@@ -181,6 +180,61 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
         fixture.CheckWritten(2, 3);
         UNIT_ASSERT(!fixture.Read(5, 3));
         UNIT_ASSERT(!fixture.Read(8, 3));
+    }
+
+    Y_UNIT_TEST(SoloDisasterRepairsConfirmedBlobFromPendingRealms) {
+        using R = NKikimrBlobStorage::TDataCenterState;
+        TFeatureFlags flags;
+        flags.SetEnableMirror3dcPendingRealm(true);
+        TFixture f(std::move(flags));
+        // A legal NORMAL write placed both pairs outside the future Included realm.
+        for (ui32 disk : {0u, 1u, 3u, 4u}) {
+            f.PutLocalPart(disk, disk % 3 + 1);
+        }
+        const ui32 included = f.VDisk(2).FailRealm;
+        const ui32 groupId = f.Info->GroupID.GetRawId();
+        const TActorId edge = f.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        ui32 pendingReads = 0;
+        f.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NGroupSyncer::TEvRunMirror3dcRepair::EventType && event->Sender != edge) {
+                return false; // run one scan explicitly below
+            }
+            if (event->GetTypeRewrite() == TEvBlobStorage::EvVGet) {
+                const auto *sender = f.Env.Runtime->GetActor(event->Sender);
+                if (sender && sender->GetActivityType() == NKikimrServices::TActivity::BS_BLOB_RECOVERY_ACTOR) {
+                    const auto& record = event->Get<TEvBlobStorage::TEvVGet>()->Record;
+                    pendingReads += record.GetVDiskID().GetRing() != included;
+                }
+            }
+            return true;
+        };
+        NKikimrBlobStorage::TConfigRequest config;
+        config.SetIgnoreGroupFailModelChecks(true);
+        auto *definition = config.AddCommand()->MutableDefineGroupState()->AddGroups();
+        definition->SetGroupId(groupId);
+        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER);
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            definition->AddFailRealmStates(realm == included ? R::INCLUDED : R::PENDING);
+        }
+        auto response = f.Env.Invoke(config);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        f.Env.Sim(TDuration::Seconds(5));
+        f.Info = f.Env.GetGroupInfo(groupId);
+        UNIT_ASSERT_VALUES_EQUAL(f.RestorePart(6, 1).GetStatus(), NKikimrProto::ERROR);
+        UNIT_ASSERT(!f.Read(6, 1));
+        UNIT_ASSERT(!f.Read(2, 3));
+        auto request = std::make_unique<NGroupSyncer::TEvRunMirror3dcRepair>();
+        request->Record.SetGroupId(groupId);
+        request->Record.SetGeneration(f.Info->GroupGeneration);
+        f.Env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), edge, request.release()), 1);
+        auto result = f.Env.WaitForEdgeActorEvent<NGroupSyncer::TEvRunMirror3dcRepairResult>(
+            edge, false, f.Env.Runtime->GetClock() + TDuration::Minutes(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT(pendingReads);
+        f.CheckWritten(2, 3);
+        UNIT_ASSERT(!f.Read(5, 3));
+        UNIT_ASSERT(!f.Read(8, 3));
     }
 
     Y_UNIT_TEST(Mirror3dcRepairSyncerPropagatesKeep) {

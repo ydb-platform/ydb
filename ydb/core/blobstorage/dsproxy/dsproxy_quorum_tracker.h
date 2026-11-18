@@ -34,6 +34,11 @@ namespace NKikimr {
             , NumStatusRemain(2 * Info->GetTotalVDisksNum())
         {}
 
+        // Metadata writes require a startup quorum formed entirely from their recipients.
+        void ExcludeDisk(const TVDiskID& disk) {
+            ErroneousDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), disk);
+        }
+
         void Output(IOutputStream &out) {
             out << "{Erroneous# ";
             ErroneousDisks.Output(out);

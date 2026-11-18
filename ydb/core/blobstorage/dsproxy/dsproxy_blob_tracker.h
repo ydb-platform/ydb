@@ -101,7 +101,8 @@ namespace NKikimr {
 
         TBlobStorageGroupInfo::EBlobState GetBlobState(const TBlobStorageGroupInfo *info, bool *lostByIngress,
                 const TBlobStorageGroupInfo::TGroupVDisks* failedGroupDisks = nullptr) const {
-            const bool mirror3dc = info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc;
+            const bool mirror3dc = info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+                && info->GetTopology().GetTotalFailRealmsNum() == 3;
             const auto checker = mirror3dc ? TMirror3dcWriteQuorumChecker::TryCreate(*info, FullId.Hash())
                 : std::nullopt;
             auto faultyDisks = FaultyDisks;

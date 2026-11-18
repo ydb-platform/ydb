@@ -166,9 +166,15 @@ public:
             << " Deadline# " << Deadline
             << " RestartCounter# " << RestartCounter);
 
+        if (Info->IsMirror3dcReadOnly()) {
+            ErrorReason = "Mirror-3-dc group is read-only";
+            return ReplyAndDie(NKikimrProto::ERROR);
+        }
+
         for (const auto& vdisk : Info->GetVDisks()) {
             const auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-            if (Info->IsFailRealmExcluded(vd.FailRealm)) {
+            if (!Info->IsWriteTargetRealm(vd.FailRealm)) {
+                QuorumTracker.ExcludeDisk(vd);
                 continue;
             }
             SendBlockRequest(vd);

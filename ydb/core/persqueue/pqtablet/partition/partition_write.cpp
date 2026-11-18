@@ -620,6 +620,12 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
+    if (!AppData(ctx)->FeatureFlags.GetEnablePQWriteQuotaAccountingFix()) {
+        // Legacy behavior (pre-LOGBROKER-10680): zero the consumed sizes of the in-flight
+        // quota request, undercounting the consumed write quota in kesus.
+        BlobQuotaSize = 0;
+        MessagesQuotaSize = 0;
+    }
     WriteNewSizeFromSupportivePartitions = 0;
     WriteNewMessagesFromSupportivePartitions = 0;
     UpdateWriteBufferIsFullState(now);

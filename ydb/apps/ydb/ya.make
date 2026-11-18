@@ -36,6 +36,7 @@ END()
 
 IF (OS_LINUX AND USE_SSE4 != "no")
     RECURSE_FOR_TESTS(
+        experimental/ydb
         ut
     )
 ENDIF()

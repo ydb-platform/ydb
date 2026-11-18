@@ -76,7 +76,9 @@ TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto) {
 }
 
 // returns list of broken locks
-TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks, ui64 tabletId)
+TVector<NKikimrDataEvents::TLock> ValidateLocks(
+    const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks,
+    ui64 tabletId, bool requireReadOnlyLocks)
 {
     TVector<NKikimrDataEvents::TLock> brokenLocks;
 
@@ -87,6 +89,17 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
     for (auto& lockProto : txLocks.GetLocks()) {
         if (lockProto.GetDataShard() != tabletId) {
             continue;
+        }
+
+        if (requireReadOnlyLocks) {
+            const auto lock = sysLocks.GetRawLock(lockProto.GetLockId());
+            if (lock && lock->IsWriteLock()) {
+                YDB_LOG_TRACE("ValidateLocks: read-only lock has writes",
+                    {"lockId", lockProto.GetLockId()},
+                    {"shardId", tabletId});
+                brokenLocks.emplace_back(lockProto);
+                continue;
+            }
         }
 
         auto lockKey = MakeLockKey(lockProto);
@@ -149,12 +162,16 @@ void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLock
 }
 
 
-std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets) {
+std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(
+    ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
+    bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets,
+    bool requireReadOnlyLocks)
+{
     if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
         return {true, {}};
     }
 
-    auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
+    auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin, requireReadOnlyLocks);
 
     if (!brokenLocks.empty()) {
         return {false, std::move(brokenLocks)};
@@ -199,7 +216,12 @@ bool KqpLocksIsArbiter(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLoc
     return KqpLocksHasArbiter(kqpLocks) && kqpLocks->GetArbiterShard() == tabletId;
 }
 
-std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets, TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets) {
+std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(
+    ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
+    bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets,
+    TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets,
+    bool requireReadOnlyLocks)
+{
     if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
         return {true, {}};
     }
@@ -220,7 +242,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
     bool sendLocks = SendLocks(*kqpLocks, origin);
     if (sendLocks) {
         // Note: it is possible to have no locks
-        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
+        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin, requireReadOnlyLocks);
 
         if (!brokenLocks.empty()) {
             return {false, std::move(brokenLocks)};
@@ -342,7 +364,9 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
     return {true, {}};
 }
 
-void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, TSysLocks& sysLocks, ui64 tabletId)
+void KqpFillOutReadSets(
+    TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks,
+    bool useGenericReadSets, TSysLocks& sysLocks, ui64 tabletId, bool requireReadOnlyLocks)
 {
     TMap<std::pair<ui64, ui64>, NKikimrTxDataShard::TKqpReadset> readsetData;
 
@@ -350,7 +374,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
     TMap<std::pair<ui64, ui64>, NKikimrTx::TReadSetData> genericData;
 
     if (SendLocks(kqpLocks, tabletId) && !kqpLocks.GetReceivingShards().empty()) {
-        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, tabletId);
+        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, tabletId, requireReadOnlyLocks);
 
         NKikimrTxDataShard::TKqpValidateLocksResult validateLocksResult;
         validateLocksResult.SetSuccess(brokenLocks.empty());

@@ -41,6 +41,8 @@ struct TPartition {
     // Return true if children's partitions can't be balance separately.
     bool NeedReleaseChildren() const;
     bool BalanceToOtherPipe() const;
+    // Return true if the reading finished without delivering any data, so the reader of a child may commit the partition.
+    bool IsSkipped() const;
 
     // Called when reading from a partition is started.
     // Return true if the reading of the partition has been finished before.

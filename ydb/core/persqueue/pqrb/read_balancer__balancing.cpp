@@ -6,6 +6,7 @@
 
 #include <library/cpp/containers/absl/btree_set.h>
 
+#include <util/generic/mapfindptr.h>
 #include <util/system/yassert.h>
 
 #include <algorithm>
@@ -50,6 +51,10 @@ bool TPartition::NeedReleaseChildren() const {
 
 bool TPartition::BalanceToOtherPipe() const {
     return !Commited && ReadingFinished && !ScaleAwareSDK;
+}
+
+bool TPartition::IsSkipped() const {
+    return !Commited && ReadingFinished && StartedReadingFromEndOffset;
 }
 
 bool TPartition::StartReading() {
@@ -786,6 +791,15 @@ std::unique_ptr<TEvPersQueue::TEvLockPartition> TPartitionFamily::MakeEvLockPart
     auto* partitionInfo = GetPartitionInfo(partitionId);
     if (partitionInfo) {
         r.SetTabletId(partitionInfo->TabletId);
+    }
+
+    if (const TPartitionGraph::Node* node = Consumer.GetPartitionGraph().GetPartition(partitionId)) {
+        for (const TPartitionGraph::Node* parent : node->AllParents) {
+            const TPartition* partition = MapFindPtr(Consumer.Partitions, parent->Id);
+            if (partition && partition->IsSkipped()) {
+                r.AddSkippedParentPartitions(parent->Id);
+            }
+        }
     }
 
     return res;

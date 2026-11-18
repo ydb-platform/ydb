@@ -101,6 +101,8 @@ message TLockPartition {
     optional string ClientId = 7;
     optional NActorsProto.TActorId PipeClient = 8;
     optional string Path = 9;
+    // Ancestors whose reading finished without delivering any data, but whose offset is not committed.
+    repeated uint32 SkippedParentPartitions = 10;
 }
 
 message TReleasePartition {

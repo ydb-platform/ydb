@@ -16,6 +16,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
 
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
 
@@ -78,7 +79,7 @@ public:
                      const ui64 tabletID, const TTopicCounters& counters,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
                      EProtocol protocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-                     const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes, bool canReadBatches);
+                     const absl::flat_hash_set<ui32>& notCommitedToFinishParents, const absl::flat_hash_set<ui32>& skippedParents, ui64 partitionMaxInFlightBytes, bool canReadBatches);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -122,7 +123,7 @@ private:
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
 
-            HFunc(TEvPQProxy::TEvParentCommitedToFinish, Handle);
+            HFunc(TEvPQProxy::TEvAncestorState, Handle);
 
         default:
             break;
@@ -151,7 +152,7 @@ private:
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQProxy::TEvAncestorState::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
 
     void HandlePoison(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
@@ -294,9 +295,11 @@ private:
     EProtocol Protocol;
 
     bool FirstRead;
+    bool DataDelivered = false;
     bool ReadingFinishedSent;
 
-    std::unordered_set<ui64> NotCommitedToFinishParents;
+    absl::flat_hash_set<ui32> NotCommitedToFinishParents;
+    absl::flat_hash_set<ui32> SkippedParents; // finished without delivering any data to the consumer
 
     inline bool IsPartitionDataReady() const;
     inline bool IsNeedMorePartitionData() const;

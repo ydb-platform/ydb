@@ -34,7 +34,7 @@ TPartitionActor::TPartitionActor(
         const ui64 tabletID, const TTopicCounters& counters,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
         bool directRead, EProtocol protocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-        const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes, bool canReadBatches
+        const absl::flat_hash_set<ui32>& notCommitedToFinishParents, const absl::flat_hash_set<ui32>& skippedParents, ui64 partitionMaxInFlightBytes, bool canReadBatches
 )
     : TBase(NKikimrServices::PQ_READ_PROXY)
     , ParentId(parentId)
@@ -85,6 +85,7 @@ TPartitionActor::TPartitionActor(
     , FirstRead(true)
     , ReadingFinishedSent(false)
     , NotCommitedToFinishParents(notCommitedToFinishParents)
+    , SkippedParents(skippedParents)
 {
 }
 
@@ -202,7 +203,9 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
     if (!ClientHasAnyCommits && parents.size() != 0) {
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
         for (auto& parent: parents) {
-            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
+            const bool skipped = SkippedParents.contains(parent->Id);
+            // A skipped parent may be held by another read session, so its commit is not bound to this one.
+            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = !skipped, .ReadSessionId = skipped ? TString() : Session};
             commits.push_back(commit);
         }
         TDistributedCommitHelper::TCommitInfo commit {.PartitionId = Partition.Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};
@@ -694,8 +697,24 @@ template bool FillBatchedData<Topic::StreamReadMessage::ReadResponse>(
         const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
         const NPersQueue::TTopicConverterPtr& topic);
 
-void TPartitionActor::Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, const TActorContext& ctx) {
-    NotCommitedToFinishParents.erase(ev->Get()->ParentPartitionId);
+void TPartitionActor::Handle(TEvPQProxy::TEvAncestorState::TPtr& ev, const TActorContext& ctx) {
+    const ui32 ancestorPartitionId = static_cast<ui32>(ev->Get()->AncestorPartitionId);
+    switch (ev->Get()->State) {
+        case TEvPQProxy::EAncestorState::Locked:
+            // A commit already sent to KQP used the previous ancestor set. Adding a wait now would block later pipe commits.
+            if (!ClientHasAnyCommits && Kqps.empty() && !SkippedParents.contains(ancestorPartitionId)) {
+                NotCommitedToFinishParents.insert(ancestorPartitionId);
+            }
+            break;
+        case TEvPQProxy::EAncestorState::Skipped:
+            SkippedParents.insert(ancestorPartitionId);
+            NotCommitedToFinishParents.erase(ancestorPartitionId);
+            break;
+        case TEvPQProxy::EAncestorState::CommittedToFinish:
+        case TEvPQProxy::EAncestorState::Released:
+            NotCommitedToFinishParents.erase(ancestorPartitionId);
+            break;
+    }
     MakeCommit(ctx);
 }
 
@@ -922,7 +941,9 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
 
     EndOffset = res.GetEndOffset();
     SizeLag = res.GetSizeLag();
-    WTime = res.GetWriteTimestampMS();
+    if (res.HasWriteTimestampMS()) {
+        WTime = res.GetWriteTimestampMS();
+    }
 
     if (res.GetReadOffset() > 0)
         ReadOffset = res.GetReadOffset();
@@ -956,6 +977,8 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
     PARTITION_ENSURE(!RequestInfly);
 
     const auto& dr = DirectReadResults[DirectReadId];
+    // The tablet sets WriteTimestampMS only for a non-empty read.
+    DataDelivered |= dr.HasWriteTimestampMS();
 
     auto readResponse = MakeHolder<TEvPQProxy::TEvDirectReadResponse>(
         Partition.AssignId,
@@ -1056,6 +1079,7 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
 
     if (hasData) {
         ++ReadIdToResponse;
+        DataDelivered = true;
     }
 
     LOG_D("After read state EndOffset ReadOffset ReadGuid has messages",
@@ -1764,7 +1788,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
             childPartitionIds.reserve(record.GetChildPartitionIds().size());
             childPartitionIds.insert(childPartitionIds.end(), record.GetChildPartitionIds().begin(), record.GetChildPartitionIds().end());
 
-            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead,
+            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, !DataDelivered,
                      std::move(adjacentPartitionIds), std::move(childPartitionIds), EndOffset));
         } else if (FirstRead) {
             ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition.Partition));

@@ -216,8 +216,9 @@ TString ColumnExpressionSubjectCapitalized(const TKikimrColumnMetadata& col) {
 }
 
 IGraphTransformer::TStatus CoerceColumnLambdaToColumnType(TExprNode::TPtr& lambda, const TTypeAnnotationNode* rowType,
-    const TTypeAnnotationNode& columnType, const TString& subject, TExprContext& ctx, TTypeAnnotationContext& typeCtx)
+    const TTypeAnnotationNode& columnType, const TKikimrColumnMetadata& column, TExprContext& ctx, TTypeAnnotationContext& typeCtx)
 {
+    const TString subject = ColumnExpressionSubject(column);
     if (!rowType) {
         return IGraphTransformer::TStatus::Ok;
     }
@@ -233,17 +234,19 @@ IGraphTransformer::TStatus CoerceColumnLambdaToColumnType(TExprNode::TPtr& lambd
         return IGraphTransformer::TStatus::Error;
     }
 
-    // Compare the full annotations, optionality included: a non-optional value written into an
-    // optional column has to be wrapped, or the write sink sees a row whose member type disagrees
-    // with the schema
-    if (IsSameAnnotation(columnType, *probe->GetTypeAnn())) {
+    // DEFAULT values are inserted directly into the write row and must match its optionality.
+    // Keep the existing GENERATED coercion, whose consumers handle the optional wrapper.
+    const bool generated = column.DefaultExpression->IsGenerated();
+    if (IsSameAnnotation(generated ? RemoveOptionality(columnType) : columnType,
+            generated ? RemoveOptionality(*probe->GetTypeAnn()) : *probe->GetTypeAnn())) {
         return IGraphTransformer::TStatus::Ok;
     }
 
     TExprNode::TPtr converted = probe->TailPtr();
     if (TryConvertTo(converted, columnType, ctx, typeCtx) == IGraphTransformer::TStatus::Error) {
         ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
-            << "The expression of " << subject << " is not convertible to the column type"));
+            << ColumnExpressionSubjectCapitalized(column) << (generated ? " expression" : "")
+            << " is not convertible to the column type"));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -274,7 +277,7 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription
 
         if (const auto* columnType = table.GetColumnType(name)) {
             if (auto status = CoerceColumnLambdaToColumnType(lambda, table.SchemeNode, *columnType,
-                    ColumnExpressionSubject(col), ctx, typeCtx);
+                    col, ctx, typeCtx);
                 status != IGraphTransformer::TStatus::Ok)
             {
                 return status;
@@ -317,7 +320,7 @@ IGraphTransformer::TStatus CompileDefaultExpressionLambdas(const TKikimrTableDes
             }
 
             if (auto status = CoerceColumnLambdaToColumnType(lambda, emptyRowType, *columnType,
-                    ColumnExpressionSubject(col), ctx, typeCtx);
+                    col, ctx, typeCtx);
                 status != IGraphTransformer::TStatus::Ok)
             {
                 return status;
@@ -697,8 +700,7 @@ namespace {
         return true;
     }
 
-    // The '('defaultSource '('"<context>" '"<exprText>")) sibling of a `default` constraint, or
-    // nullptr when the producer did not capture the source text
+    // Find the SQL text captured alongside a default constraint.
     const TExprNode* FindDefaultSourceConstraint(const TExprList& columnTuple) {
         if (columnTuple.Size() <= 2) {
             return nullptr;
@@ -737,10 +739,12 @@ namespace {
         });
     }
 
-    IGraphTransformer::TStatus ValidateColumnExprType(const TString& subject, const TString& capitalizedSubject,
+    IGraphTransformer::TStatus ValidateColumnExprType(const TKikimrColumnMetadata& column,
         const TTypeAnnotationNode& columnType, const TExprNode& lambda, TExprContext& ctx,
         const TTypeAnnotationContext& typeCtx)
     {
+        const bool generated = column.DefaultExpression->IsGenerated();
+        const TString subject = ColumnExpressionSubjectCapitalized(column);
         const TTypeAnnotationNode* exprType = lambda.GetTypeAnn();
         YQL_ENSURE(exprType);
 
@@ -748,8 +752,8 @@ namespace {
         const auto& exprUnwrapped = RemoveOptionality(*exprType);
 
         const auto typeMismatch = [&]() {
-            return TStringBuilder() << "The expression of " << subject << " has a type mismatch, expected: " << columnUnwrapped
-                                    << ", actual: " << exprUnwrapped;
+            return TStringBuilder() << subject << (generated ? " expression" : "")
+                                    << " type mismatch, expected: " << columnUnwrapped << ", actual: " << exprUnwrapped;
         };
 
         if (columnUnwrapped.GetKind() != exprUnwrapped.GetKind()) {
@@ -768,9 +772,11 @@ namespace {
 
         if (columnType.GetKind() != ETypeAnnotationKind::Pg && !columnType.IsOptionalOrNull() && exprType->IsOptionalOrNull()) {
             ctx.AddError(TIssue(ctx.GetPosition(lambda.Pos()),
-                TStringBuilder() << capitalizedSubject << " is declared NOT NULL, but its expression can evaluate"
-                                 << " to NULL (type " << *exprType << "). Make the expression non-nullable,"
-                                 << " for example with COALESCE, or declare the column nullable"));
+                TStringBuilder() << (generated ? "Generated column " : "Column ") << column.Name
+                                 << " is declared NOT NULL, but its " << (generated ? "" : "DEFAULT ")
+                                 << "expression can evaluate to NULL (type " << *exprType
+                                 << "). Make the expression non-nullable, for example with COALESCE,"
+                                 << " or declare the column nullable"));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -800,7 +806,7 @@ namespace {
             return IGraphTransformer::TStatus::Ok;
         }
 
-        if (!sessionCtx.Config().GetEnableIndexStreamWrite()) {
+        if (!generatedColumns.empty() && !sessionCtx.Config().GetEnableIndexStreamWrite()) {
             ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), "Generated columns require EnableIndexStreamWrite"));
             return IGraphTransformer::TStatus::Error;
         }
@@ -919,7 +925,6 @@ namespace {
             }
 
             const TString subject = ColumnExpressionSubject(columnMeta);
-            const TString capitalizedSubject = ColumnExpressionSubjectCapitalized(columnMeta);
 
             if (!lambda->GetTypeAnn()) {
                 ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
@@ -928,7 +933,7 @@ namespace {
             }
 
             const auto* columnAnnType = columnTuple.Item(1).Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-            if (auto status = ValidateColumnExprType(subject, capitalizedSubject, *columnAnnType, *lambda, ctx, typeCtx);
+            if (auto status = ValidateColumnExprType(columnMeta, *columnAnnType, *lambda, ctx, typeCtx);
                 status != IGraphTransformer::TStatus::Ok)
             {
                 return status;
@@ -966,11 +971,13 @@ namespace {
             YQL_ENSURE(defaultType && constraint.Value().IsValid());
             TExprBase constrValue = constraint.Value().Cast();
 
-            // CREATE TABLE stores captured DEFAULT sources as expressions when the feature is
-            // enabled. With the feature disabled, literal defaults keep the legacy proto path
+            // Literal defaults keep the existing path. With the feature disabled, other
+            // constant expressions are evaluated during CREATE TABLE as before
             const TExprNode* defaultSource = FindDefaultSourceConstraint(columnTuple);
             const bool useDefaultFromExpression = defaultSource && !isAlter
-                && (enableDefaultFromExpression || !IsLiteralDefaultValue(constrValue));
+                && !IsYqlNullExprNode(constrValue) && !IsPgNullExprNode(constrValue)
+                && (enableDefaultFromExpression ? !IsLiteralDefaultValue(constrValue)
+                    : !NDq::IsConstantExpr(constrValue.Ptr()));
             const bool preserveSourceExpression = useDefaultFromExpression
                 || (defaultSource && isAlter && !NDq::IsConstantExpr(constrValue.Ptr()));
 
@@ -1007,7 +1014,7 @@ namespace {
                     columnMeta.DefaultFromLiteral.Clear();
                     return true;
                 }
-                if (defaultSource && !IsLiteralDefaultValue(constrValue)) {
+                if (enableDefaultFromExpression && defaultSource && !IsLiteralDefaultValue(constrValue)) {
                     ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                         "Column addition with a DEFAULT expression is not supported"));
                     return false;
@@ -2646,22 +2653,14 @@ private:
 
                         const bool columnNotNull = column && (column->NotNull || column->SetNotNullInProgress);
 
+                        // ALTER cannot persist expression defaults. Keep nonconstant expressions
+                        // unevaluated so coercion cannot turn them into supported literals.
                         if (auto status = ValidateDefaultColumn(columnType, defaultType, defaultExpr, nameNode.Pos(), name, table, ctx, Types, [&](TExprNode::TPtr expr) {
                             alterColumnList.Ptr()->ChildRef(1) = std::move(expr);
                             ctx.Step.Repeat(TExprStep::ExprEval);
-                        }, columnNotNull, false))
+                        }, columnNotNull, !NDq::IsConstantExpr(defaultExpr.Ptr())))
                         {
                             return *status;
-                        }
-
-                        if (columnNotNull && !IsLiteralDefaultValue(TExprBase(alterColumnList.Item(1)))
-                            && defaultType->IsOptionalOrNull() && defaultType->GetKind() != ETypeAnnotationKind::Pg)
-                        {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                << " Column: \"" << name << "\" is declared NOT NULL, but the DEFAULT expression"
-                                << " can evaluate to NULL (type " << *defaultType << ")"));
-                            return TStatus::Error;
                         }
                     } else if (alterColumnAction == "dropDefault") {
                         auto* column = table->Metadata->Columns.FindPtr(name);

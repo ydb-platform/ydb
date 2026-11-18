@@ -239,6 +239,7 @@ namespace NActors {
         i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds();
         WriteMessageStat(*ev->Get());
 
+        // Anyway, process record by sinks
         const auto& eventData = *ev->Get();
         OutputRecordToSinks(eventData.Stamp,
             eventData.Level.ToPrio(),
@@ -727,6 +728,16 @@ namespace NActors {
     void TLoggerActor::HandleLogEventDrop(const NLog::TEvLog::TPtr& ev) {
         WriteMessageStat(*ev->Get());
         Metrics->IncDroppedMsgs();
+
+        // Anyway, process record by sinks
+        const auto& eventData = *ev->Get();
+        OutputRecordToSinks(eventData.Stamp,
+            eventData.Level.ToPrio(),
+            eventData.Component,
+            eventData.FileName,
+            eventData.LineNumber,
+            eventData.Line,
+            eventData.StructuredMessage);
     }
 
     void TLoggerActor::HandleWakeup() {

@@ -605,7 +605,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         using TDisks = TBlobStorageGroupInfo::TSubgroupVDisks;
         UNIT_ASSERT(!checker->CheckEnsuredLayout(parts, TDisks(&info.GetTopology(), 1)));
         UNIT_ASSERT(checker->CheckEnsuredLayout(parts, TDisks(&info.GetTopology(), 4)));
-        UNIT_ASSERT(checker->CheckEnsuredLayout(parts, TDisks(&info.GetTopology(), 0)));
+        UNIT_ASSERT(checker->CheckEnsuredLayout(parts, TDisks(&info.GetTopology(), 0u)));
     }
 
     Y_UNIT_TEST(EmptyNormalBlobMatchesLegacyForEveryFailureMask) {

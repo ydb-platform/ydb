@@ -1,5 +1,6 @@
 #include "dsproxy.h"
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 
 namespace NKikimr {

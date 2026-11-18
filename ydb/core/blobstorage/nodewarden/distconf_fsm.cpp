@@ -4,6 +4,7 @@
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/config/validation/validators.h>
 #include <ydb/library/actors/interconnect/interconnect.h>

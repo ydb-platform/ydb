@@ -1,5 +1,6 @@
 #include "distconf_invoke.h"
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 

@@ -195,6 +195,36 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
     }
 }
 
+std::vector<std::shared_ptr<TPortionInfo>> TGranuleMeta::AddLoadedPortions(const std::vector<std::shared_ptr<TPortionInfo>>& portions) {
+    std::vector<std::shared_ptr<TPortionInfo>> loaded;
+    for (const auto& portion : portions) {
+        if (!portion->IsCommitted()) {
+            // uncommitted portions are all in memory: loaded by TTxInit or added by their write
+            AFL_VERIFY(InsertedPortionsById.contains(portion->GetPortionId()))("portion_id", portion->GetPortionId());
+            continue;
+        }
+        // compaction output below the loaded keys is already in memory
+        if (Portions.contains(portion->GetPortionId())) {
+            continue;
+        }
+        UpsertPortionOnLoad(portion);
+        loaded.emplace_back(portion);
+    }
+    NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+    std::vector<std::shared_ptr<TPortionInfo>> toOptimizer;
+    for (const auto& portion : loaded) {
+        OnAfterChangePortion(portion, true);
+        if (!portion->HasRemoveSnapshot()) {
+            toOptimizer.emplace_back(portion);
+            if (ActualizationIndex->IsStarted()) {
+                ActualizationIndex->AddPortion(portion, context);
+            }
+        }
+    }
+    OptimizerPlanner->AddLoadedPortions(toOptimizer);
+    return loaded;
+}
+
 void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {
     if (context.GetActualInstant() < NextActualizations) {
         YDB_LOG_DEBUG("",

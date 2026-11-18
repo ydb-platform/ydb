@@ -50,7 +50,7 @@ bool TEngineUncommittedPortionsReader::DoPrecharge(NTabletFlatExecutor::TTransac
 }
 
 bool TEngineLoadingFinish::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
-    Self->FinishLoading();
+    Self->FinishLoading(PortionsLoaded);
     return true;
 }
 

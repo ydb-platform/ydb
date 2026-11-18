@@ -50,6 +50,7 @@ void TStartupTimeline::OnTxInitFinished() {
 void TStartupTimeline::OnSwitchedToWork(const ui64 portionsCount) {
     YDB_LOG_VERIFY(ExecutorActivatedInstant);
     const TMonotonic now = TMonotonic::Now();
+    SwitchedToWorkInstant = now;
     Counters.OnSwitchToWork(now - *ExecutorActivatedInstant, now - CreateInstant);
     const TDuration switchToWork = now - TxInitFinishInstant;
     TraceStageFinished("switch_to_work", switchToWork);
@@ -66,6 +67,16 @@ void TStartupTimeline::OnSwitchedToWork(const ui64 portionsCount) {
         {"tx_init_us", (TxInitFinishInstant - TxInitCreateInstant).MicroSeconds()},
         {"switch_to_work_us", switchToWork.MicroSeconds()},
         {"portions", portionsCount});
+}
+
+void TStartupTimeline::OnAllPortionsLoaded(const ui64 portionsCount, const ui32 batches) {
+    const TMonotonic now = TMonotonic::Now();
+    YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        {"event", "all_portions_loaded"},
+        {"duration_us", (now - CreateInstant).MicroSeconds()},
+        {"after_switch_to_work_us", (now - SwitchedToWorkInstant).MicroSeconds()},
+        {"portions", portionsCount},
+        {"batches", batches});
 }
 
 }   // namespace NKikimr::NColumnShard

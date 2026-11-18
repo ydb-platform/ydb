@@ -121,6 +121,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , ScanGate(Counters.GetTabletCounters(), TablesManager)
+    , DeferredPortionLoader(TablesManager)
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
     , SysLocks(this)
@@ -543,6 +544,8 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
     SharingSessionsManager->Start(*this);
 
+    // only for tests: the loading chains batch after batch by itself, this resumes it after the test brake
+    ContinueDeferredPortionLoading(ActorContext());
     SetupCompaction({});
     SetupCleanupSchemas();
     auto snapshotHolders = GetSnapshotHolders();

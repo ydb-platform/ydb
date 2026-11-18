@@ -138,11 +138,10 @@ static void FillColumns(
                 Y_ABORT_UNLESS(colDescr->MutableDefaultFromLiteral()->ParseFromString(
                     cinfo.DefaultValue));
                 break;
-            case ETableColumnDefaultKind::FromExpression: {
-                auto* defaultExpression = colDescr->MutableDefaultFromExpression();
-                Y_ABORT_UNLESS(defaultExpression->ParseFromString(cinfo.DefaultValue));
+            case ETableColumnDefaultKind::FromExpression:
+                Y_ABORT_UNLESS(colDescr->MutableDefaultFromExpression()->ParseFromString(
+                    cinfo.DefaultValue));
                 break;
-            }
         }
     }
 }

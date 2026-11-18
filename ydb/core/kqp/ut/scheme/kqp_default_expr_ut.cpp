@@ -481,23 +481,45 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;[5u]]]");
     }
 
-    Y_UNIT_TEST(DeterministicSourceStoredAsExpression) {
-        TTestFixture fixture;
+    Y_UNIT_TEST_TWIN(ConstantDefaultPreservesMetadata, Enabled) {
+        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
         fixture.Exec(DefaultExprDDL("v Int32 DEFAULT (1 + 2) * 3"));
-
-        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), "(1 + 2) * 3");
+        const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromLiteral().value().int32_value(), 9);
 
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;[9]]]");
     }
 
-    Y_UNIT_TEST(FeatureFlagDisabledPreservesConstantFolding) {
-        TTestFixture fixture(/* featureFlagEnabled */ false);
+    Y_UNIT_TEST_TWIN(CoercedConstantDefaultPreservesMetadata, Enabled) {
+        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
         fixture.Exec(DefaultExprDDL("v Int64 DEFAULT CAST(7 AS Int64) + 2l"));
         const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
         UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromLiteral().value().int64_value(), 9);
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;[9]]]");
+    }
+
+    Y_UNIT_TEST_TWIN(LegacyDefaultConstructorsPreserveLiteralMetadata, Enabled) {
+        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                negative Int32 DEFAULT -5,
+                text Utf8 DEFAULT CAST("hello" AS Utf8),
+                amount Decimal(22,9) DEFAULT Decimal("1.11", 22, 9),
+                json Json DEFAULT Json('{"k":1}'),
+                PRIMARY KEY (k)
+            );
+        )");
+        for (const auto* name : {"negative", "text", "amount", "json"}) {
+            const auto column = fixture.ColumnDesc("/Root/TestTable", name);
+            UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.DebugString());
+        }
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Check("SELECT k, negative, text FROM TestTable;", R"([[1;[-5];["hello"]]])");
     }
 
     Y_UNIT_TEST_TWIN(NullDefault, Enabled) {
@@ -935,12 +957,14 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 id Int32 NOT NULL,
-                a Int32 NOT NULL DEFAULT (1 + 2) * 3,
-                b Int32,
-                g Int32 NOT NULL GENERATED ALWAYS AS (a + COALESCE(b, 0)) STORED,
+                a Uint64 NOT NULL DEFAULT RandomNumber(1) * 0ul + 9ul,
+                b Uint64,
+                g Uint64 NOT NULL GENERATED ALWAYS AS (a + COALESCE(b, 0ul)) STORED,
                 PRIMARY KEY (id)
             );
         )");
+
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "a"), "RandomNumber(1) * 0ul + 9ul");
 
         // A new row uses the materialized DEFAULT dependency: a = 9, g = 9 + 2
         fixture.Exec("UPSERT INTO TestTable (id, b) VALUES (1, 2);");
@@ -950,7 +974,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec("UPSERT INTO TestTable (id, b) VALUES (2, 3);");
 
         fixture.Check("SELECT id, a, b, g FROM TestTable ORDER BY id;",
-            "[[1;9;[2];11];[2;4;[3];7]]");
+            "[[1;9u;[2u];11u];[2;4u;[3u];7u]]");
     }
 
     Y_UNIT_TEST(EagerDefaultFailureOnExistingUpsert) {

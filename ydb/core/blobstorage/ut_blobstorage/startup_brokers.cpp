@@ -713,6 +713,7 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
             ui32 groupId = env.GetGroups().front();
             NKikimrBlobStorage::TConfigRequest config;
             config.SetIgnoreGroupFailModelChecks(true);
+            config.SetIgnoreDegradedGroupsChecks(true);
             auto* definition = config.AddCommand()->MutableDefineGroupState()->AddGroups();
             definition->SetGroupId(groupId);
             definition->SetGroupState(state);

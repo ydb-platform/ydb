@@ -8,6 +8,7 @@ import random
 import string
 import re
 from html import unescape
+from typing import Callable, List, Dict
 from urllib.parse import parse_qs, urlsplit
 
 import requests
@@ -18,17 +19,18 @@ from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
 
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, delete_stream
+from test_base import YdbTopics
 
 COMPUTE_NODE_COUNT = 3
 ROW_DISPATCHER_CONSUMER = 'row_dispatcher_consumer'
 CONSUMER_PRAGMA = f'PRAGMA pq.Consumer="{ROW_DISPATCHER_CONSUMER}";\n'
 
 
-def create_input_consumer(io):
+def create_input_consumer(io: YdbTopics):
     io.kikimr.external_ydb_client.query(f'ALTER TOPIC `{io.input_topic}` ADD CONSUMER `{ROW_DISPATCHER_CONSUMER}`;')
 
 
-def query_state(io, query):
+def query_state(io: YdbTopics, query: str):
     rows = io.kikimr.ydb_client.query(f'''
         SELECT Status, Run, RetryCount, Issues
         FROM `.sys/streaming_queries` WHERE Path = '{query}';
@@ -37,7 +39,7 @@ def query_state(io, query):
     return rows[0]
 
 
-def query_issues(io, query):
+def query_issues(io: YdbTopics, query: str):
     def messages(value):
         if isinstance(value, dict):
             if 'message' in value:
@@ -51,7 +53,7 @@ def query_issues(io, query):
     return '\n'.join(messages(json.loads(query_state(io, query)['Issues'])))
 
 
-def assert_row_dispatcher_predicate(io, query, expected=''):
+def assert_row_dispatcher_predicate(io: YdbTopics, query: str, expected: str = ''):
     rows = io.kikimr.ydb_client.query(f"""
         SELECT Plan FROM `.sys/streaming_queries` WHERE Path = '{query}';
     """)[0].rows
@@ -72,7 +74,7 @@ def assert_row_dispatcher_predicate(io, query, expected=''):
     assert any(predicate and expected in predicate for predicate in actual), (expected, actual, plan)
 
 
-def wait_ydb_row_dispatcher_sensor(io, labels, expected, exact_match=True):
+def wait_ydb_row_dispatcher_sensor(io: YdbTopics, labels: Dict[str, str], expected: int, exact_match: bool = True):
     counts = {}
 
     def matches():
@@ -91,7 +93,7 @@ def wait_ydb_row_dispatcher_sensor(io, labels, expected, exact_match=True):
     assert wait_for(matches, timeout_seconds=60, step_seconds=0.5), (labels, counts, expected)
 
 
-def read_compute_ingress_stats(io):
+def read_compute_ingress_stats(io: YdbTopics):
     # These four values exist in DQ but are not exported by KQP's six streaming
     # query counters or its JSON plan serializer. The compute actor's diagnostic
     # page exposes the actual source statistics, without parsing server logs.
@@ -118,7 +120,7 @@ def read_compute_ingress_stats(io):
 
 class TestPqRowDispatcher(TestYdsBase):
 
-    def run_and_check(self, io, sql, input, output, expected_predicate):
+    def run_and_check(self, io: YdbTopics, sql: str, input: List[str], output: List[str], expected_predicate: str):
         query_id = io.start(sql)
         io.wait_actor_count('FQ_ROW_DISPATCHER_SESSION', 1)
         io.write(input)
@@ -127,7 +129,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.stop(query_id)
         io.wait_actor_count('FQ_ROW_DISPATCHER_SESSION', 0)
 
-    def test_read_raw_format_with_row_dispatcher(self, ydb_topics):
+    def test_read_raw_format_with_row_dispatcher(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_read_raw_format_with_row_dispatcher", shared=True)
         create_input_consumer(io)
 
@@ -154,7 +156,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 1)
         io.stop(query_id)
 
-    def test_simple_not_null(self, ydb_topics):
+    def test_simple_not_null(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_simple_not_null", shared=True)
         create_input_consumer(io)
 
@@ -184,7 +186,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.wait_read_session_closed(io.input_topic, ROW_DISPATCHER_CONSUMER)
 
     @pytest.mark.skip(reason="YDB bug: MATCH_RECOGNIZE metadata crashes compute with Value is not a dict")
-    def test_metadatafields(self, ydb_topics):
+    def test_metadatafields(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics('test_metadatafields', shared=True)
         create_input_consumer(io)
 
@@ -215,7 +217,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert len(io.read(1, topic_path=io.output_topic)) == 1
         io.stop(query_id)
 
-    def test_simple_optional(self, ydb_topics):
+    def test_simple_optional(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_simple_optional", shared=True)
         create_input_consumer(io)
 
@@ -239,7 +241,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
         io.wait_read_session_closed(io.input_topic, ROW_DISPATCHER_CONSUMER)
 
-    def test_scheme_error(self, ydb_topics):
+    def test_scheme_error(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics('test_scheme_error', shared=True)
         create_input_consumer(io)
         sql = CONSUMER_PRAGMA + Rf'''
@@ -272,7 +274,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.stop(query_id)
         io.wait_actor_count('FQ_ROW_DISPATCHER_SESSION', 0)
 
-    def test_nested_types(self, ydb_topics):
+    def test_nested_types(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_nested_types", shared=True)
         create_input_consumer(io)
 
@@ -305,7 +307,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert_row_dispatcher_predicate(io, query_id, '')
         io.stop(query_id)
 
-    def test_nested_structured_types(self, ydb_topics):
+    def test_nested_structured_types(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_nested_structured_types", shared=True)
         create_input_consumer(io)
 
@@ -350,7 +352,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert_row_dispatcher_predicate(io, query_id, 'second_key')
         io.stop(query_id)
 
-    def test_nested_types_without_predicate(self, ydb_topics):
+    def test_nested_types_without_predicate(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics('test_nested_types_without_predicate', shared=True)
         create_input_consumer(io)
 
@@ -377,7 +379,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.wait_actor_count("DQ_PQ_READ_ACTOR", 1)
         io.stop(query_id)
 
-    def test_filters_non_optional_field(self, ydb_topics):
+    def test_filters_non_optional_field(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_filters_non_optional_field", shared=True)
         create_input_consumer(io)
 
@@ -463,7 +465,7 @@ class TestPqRowDispatcher(TestYdsBase):
             '((CAST(`time` AS Timestamp?) - Interval("-PT0.000001S")) > Timestamp("1970-01-01T00:00:00.000102Z"))',
         )
 
-    def test_filters_optional_field(self, ydb_topics):
+    def test_filters_optional_field(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_filters_optional_field", shared=True)
         create_input_consumer(io)
 
@@ -574,7 +576,7 @@ class TestPqRowDispatcher(TestYdsBase):
             '((IF((CAST(`data` AS Utf8?) IS NOT NULL), CAST(CAST(`data` AS Utf8?) AS String), NULL) REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)',
         )  # YQ-5727
 
-    def test_filter_missing_fields(self, ydb_topics):
+    def test_filter_missing_fields(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_filter_missing_fields", shared=True)
         create_input_consumer(io)
 
@@ -602,7 +604,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert_row_dispatcher_predicate(io, query_id, '')
         io.stop(query_id)
 
-    def test_filter_use_unsupported_predicate(self, ydb_topics):
+    def test_filter_use_unsupported_predicate(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics('test_filter_use_unsupported_predicate', shared=True)
         create_input_consumer(io)
 
@@ -624,7 +626,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.wait_actor_count("DQ_PQ_READ_ACTOR", 1)
         io.stop(query_id)
 
-    def test_filter_with_mr(self, ydb_topics):
+    def test_filter_with_mr(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_filter_with_mr", shared=True)
         create_input_consumer(io)
 
@@ -672,7 +674,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert_row_dispatcher_predicate(io, query_id, '(`event_class` =')
         io.stop(query_id)
 
-    def test_start_new_query(self, ydb_topics):
+    def test_start_new_query(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics('test_start_new_query', shared=True)
         create_input_consumer(io)
         external = io.kikimr.external_ydb_client
@@ -740,7 +742,7 @@ class TestPqRowDispatcher(TestYdsBase):
             for topic in extra_topics:
                 external.query(f'DROP TOPIC IF EXISTS `{topic}`;')
 
-    def test_stop_start(self, ydb_topics):
+    def test_stop_start(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_stop_start", shared=True, partitions=10)
         create_input_consumer(io)
 
@@ -772,7 +774,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.stop(query_id)
         io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
 
-    def test_stop_start2(self, ydb_topics):
+    def test_stop_start2(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_stop_start", shared=True)
         create_input_consumer(io)
         sql1 = CONSUMER_PRAGMA + Rf'''INSERT INTO {io.output}
@@ -808,7 +810,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.stop(query_id2)
         io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
 
-    def test_stop_start_with_filter(self, ydb_topics):
+    def test_stop_start_with_filter(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_stop_start_with_filter", shared=True)
         create_input_consumer(io)
 
@@ -854,7 +856,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
 
     @pytest.mark.parametrize('ydb_cluster', [{'compute_nodes': 3}], indirect=True)
-    def test_restart_compute_node(self, ydb_topics):
+    def test_restart_compute_node(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics('test_restart_compute_node', shared=True, partitions=4)
         create_input_consumer(io)
         node_ids = sorted(io.kikimr.cluster.slots)
@@ -926,7 +928,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.stop(query_id)
         io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
 
-    def test_3_sessions(self, ydb_topics):
+    def test_3_sessions(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics('test_3_sessions', shared=True)
         create_input_consumer(io)
         output_topic1 = io.output_topic
@@ -1000,7 +1002,7 @@ class TestPqRowDispatcher(TestYdsBase):
             for topic in extra_topics:
                 external.query(f'DROP TOPIC IF EXISTS `{topic}`;')
 
-    def test_many_partitions(self, ydb_topics):
+    def test_many_partitions(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics('test_many_partitions', shared=True, partitions=4)
         create_input_consumer(io)
 
@@ -1030,7 +1032,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.stop(query_id)
         io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
 
-    def test_2_connection(self, ydb_topics):
+    def test_2_connection(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics('test_2_connection', shared=True, partitions=2)
         second_source = io.name + '_second'
         client = io.kikimr.ydb_client
@@ -1067,7 +1069,7 @@ class TestPqRowDispatcher(TestYdsBase):
             client.query(f'DROP EXTERNAL DATA SOURCE IF EXISTS `{second_source}`;')
 
     @pytest.mark.parametrize('ydb_cluster', [{'compute_nodes': COMPUTE_NODE_COUNT}], indirect=True)
-    def test_sensors(self, ydb_topics):
+    def test_sensors(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics('test_sensors', shared=True)
         create_input_consumer(io)
         query = io.start(CONSUMER_PRAGMA + f'''
@@ -1106,7 +1108,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.wait_actor_count('FQ_ROW_DISPATCHER_SESSION', 0)
         wait_ydb_row_dispatcher_sensor(io, {'sensor': 'ClientsCount'}, 0)
 
-    def test_group_by_hop_restart_query(self, ydb_topics):
+    def test_group_by_hop_restart_query(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_group_by_hop_restart", shared=True)
         create_input_consumer(io)
 
@@ -1159,7 +1161,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.stop(query_id)
         io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
 
-    def test_group_by_hop_restart_node(self, ydb_topics):
+    def test_group_by_hop_restart_node(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics('test_group_by_hop_restart_node', shared=True)
         create_input_consumer(io)
 
@@ -1225,7 +1227,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.stop(query_id)
         io.wait_actor_count("FQ_ROW_DISPATCHER_SESSION", 0)
 
-    def test_huge_messages(self, ydb_topics):
+    def test_huge_messages(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_huge", shared=True)
         create_input_consumer(io)
 
@@ -1274,7 +1276,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert received == expected
 
     @pytest.mark.parametrize("use_binding", [False, True], ids=["with_option", "bindings"])
-    def test_json_errors(self, ydb_topics, use_binding):
+    def test_json_errors(self, ydb_topics: Callable[[str, ...], YdbTopics], use_binding: bool):
         io = ydb_topics(f'test_json_errors_{use_binding}', shared=True)
         create_input_consumer(io)
         # Both former binding and inline cases now specify the schema in SQL.
@@ -1324,7 +1326,7 @@ class TestPqRowDispatcher(TestYdsBase):
         )
         io.stop(query_id)
 
-    def test_delete_topic(self, ydb_topics):
+    def test_delete_topic(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_delete_topic", shared=True)
         create_input_consumer(io)
 
@@ -1373,7 +1375,7 @@ class TestPqRowDispatcher(TestYdsBase):
         'ydb_cluster', [{'compute_nodes': COMPUTE_NODE_COUNT, 'rebalancing_timeout_ms': '5000'}], indirect=True
     )
     @pytest.mark.parametrize('single_node', [False, True])
-    def test_redistribute_partition_after_timeout(self, ydb_topics, single_node):
+    def test_redistribute_partition_after_timeout(self, ydb_topics: Callable[[str, ...], YdbTopics], single_node: bool):
         partitions_count = 10
         io = ydb_topics('redistribute', partitions=partitions_count, shared=True)
         create_input_consumer(io)
@@ -1425,7 +1427,7 @@ class TestPqRowDispatcher(TestYdsBase):
         io.stop(query)
         io.wait_actor_count('FQ_ROW_DISPATCHER_SESSION', 0)
 
-    def test_big_text_query_size(self, ydb_topics):
+    def test_big_text_query_size(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics('test_big_text_query_size', shared=True)
         create_input_consumer(io)
 

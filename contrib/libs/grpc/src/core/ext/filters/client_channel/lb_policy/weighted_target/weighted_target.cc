@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "y_absl/base/thread_annotations.h"
+#include "y_absl/meta/type_traits.h"
 #include "y_absl/random/random.h"
 #include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
@@ -57,11 +58,11 @@
 #include "src/core/lib/json/json.h"
 #include "src/core/lib/json/json_args.h"
 #include "src/core/lib/json/json_object_loader.h"
+#include "src/core/lib/load_balancing/delegating_helper.h"
 #include "src/core/lib/load_balancing/lb_policy.h"
 #include "src/core/lib/load_balancing/lb_policy_factory.h"
 #include "src/core/lib/load_balancing/lb_policy_registry.h"
-#include "src/core/lib/load_balancing/subchannel_interface.h"
-#include "src/core/lib/resolver/server_address.h"
+#include "src/core/lib/resolver/endpoint_addresses.h"
 #include "src/core/lib/transport/connectivity_state.h"
 
 // IWYU pragma: no_include <type_traits>
@@ -158,7 +159,7 @@ class WeightedTargetLb : public LoadBalancingPolicy {
     void Orphan() override;
 
     y_absl::Status UpdateLocked(const WeightedTargetLbConfig::ChildConfig& config,
-                              y_absl::StatusOr<ServerAddressList> addresses,
+                              y_absl::StatusOr<EndpointAddressesList> addresses,
                               const TString& resolution_note,
                               const ChannelArgs& args);
     void ResetBackoffLocked();
@@ -171,25 +172,23 @@ class WeightedTargetLb : public LoadBalancingPolicy {
     RefCountedPtr<SubchannelPicker> picker() const { return picker_; }
 
    private:
-    class Helper : public ChannelControlHelper {
+    class Helper : public DelegatingChannelControlHelper {
      public:
       explicit Helper(RefCountedPtr<WeightedChild> weighted_child)
           : weighted_child_(std::move(weighted_child)) {}
 
       ~Helper() override { weighted_child_.reset(DEBUG_LOCATION, "Helper"); }
 
-      RefCountedPtr<SubchannelInterface> CreateSubchannel(
-          ServerAddress address, const ChannelArgs& args) override;
       void UpdateState(grpc_connectivity_state state,
                        const y_absl::Status& status,
                        RefCountedPtr<SubchannelPicker> picker) override;
-      void RequestReresolution() override;
-      y_absl::string_view GetAuthority() override;
-      grpc_event_engine::experimental::EventEngine* GetEventEngine() override;
-      void AddTraceEvent(TraceSeverity severity,
-                         y_absl::string_view message) override;
 
      private:
+      ChannelControlHelper* parent_helper() const override {
+        return weighted_child_->weighted_target_policy_
+            ->channel_control_helper();
+      }
+
       RefCountedPtr<WeightedChild> weighted_child_;
     };
 
@@ -340,9 +339,14 @@ y_absl::Status WeightedTargetLb::UpdateLocked(UpdateArgs args) {
       target = MakeOrphanable<WeightedChild>(
           Ref(DEBUG_LOCATION, "WeightedChild"), name);
     }
-    y_absl::StatusOr<ServerAddressList> addresses;
+    y_absl::StatusOr<EndpointAddressesList> addresses;
     if (address_map.ok()) {
-      addresses = std::move((*address_map)[name]);
+      auto it = address_map->find(name);
+      if (it == address_map->end()) {
+        addresses.emplace();
+      } else {
+        addresses = std::move(it->second);
+      }
     } else {
       addresses = address_map.status();
     }
@@ -520,7 +524,9 @@ void WeightedTargetLb::WeightedChild::DelayedRemovalTimer::OnTimerLocked() {
 WeightedTargetLb::WeightedChild::WeightedChild(
     RefCountedPtr<WeightedTargetLb> weighted_target_policy,
     const TString& name)
-    : weighted_target_policy_(std::move(weighted_target_policy)), name_(name) {
+    : weighted_target_policy_(std::move(weighted_target_policy)),
+      name_(name),
+      picker_(MakeRefCounted<QueuePicker>(nullptr)) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_weighted_target_trace)) {
     gpr_log(GPR_INFO, "[weighted_target_lb %p] created WeightedChild %p for %s",
             weighted_target_policy_.get(), this, name_.c_str());
@@ -584,7 +590,7 @@ WeightedTargetLb::WeightedChild::CreateChildPolicyLocked(
 
 y_absl::Status WeightedTargetLb::WeightedChild::UpdateLocked(
     const WeightedTargetLbConfig::ChildConfig& config,
-    y_absl::StatusOr<ServerAddressList> addresses,
+    y_absl::StatusOr<EndpointAddressesList> addresses,
     const TString& resolution_note, const ChannelArgs& args) {
   if (weighted_target_policy_->shutting_down_) return y_absl::OkStatus();
   // Update child weight.
@@ -673,44 +679,12 @@ void WeightedTargetLb::WeightedChild::DeactivateLocked() {
 // WeightedTargetLb::WeightedChild::Helper
 //
 
-RefCountedPtr<SubchannelInterface>
-WeightedTargetLb::WeightedChild::Helper::CreateSubchannel(
-    ServerAddress address, const ChannelArgs& args) {
-  if (weighted_child_->weighted_target_policy_->shutting_down_) return nullptr;
-  return weighted_child_->weighted_target_policy_->channel_control_helper()
-      ->CreateSubchannel(std::move(address), args);
-}
-
 void WeightedTargetLb::WeightedChild::Helper::UpdateState(
     grpc_connectivity_state state, const y_absl::Status& status,
     RefCountedPtr<SubchannelPicker> picker) {
   if (weighted_child_->weighted_target_policy_->shutting_down_) return;
   weighted_child_->OnConnectivityStateUpdateLocked(state, status,
                                                    std::move(picker));
-}
-
-void WeightedTargetLb::WeightedChild::Helper::RequestReresolution() {
-  if (weighted_child_->weighted_target_policy_->shutting_down_) return;
-  weighted_child_->weighted_target_policy_->channel_control_helper()
-      ->RequestReresolution();
-}
-
-y_absl::string_view WeightedTargetLb::WeightedChild::Helper::GetAuthority() {
-  return weighted_child_->weighted_target_policy_->channel_control_helper()
-      ->GetAuthority();
-}
-
-grpc_event_engine::experimental::EventEngine*
-WeightedTargetLb::WeightedChild::Helper::GetEventEngine() {
-  return weighted_child_->weighted_target_policy_->channel_control_helper()
-      ->GetEventEngine();
-}
-
-void WeightedTargetLb::WeightedChild::Helper::AddTraceEvent(
-    TraceSeverity severity, y_absl::string_view message) {
-  if (weighted_child_->weighted_target_policy_->shutting_down_) return;
-  weighted_child_->weighted_target_policy_->channel_control_helper()
-      ->AddTraceEvent(severity, message);
 }
 
 //
@@ -731,8 +705,8 @@ const JsonLoaderInterface* WeightedTargetLbConfig::ChildConfig::JsonLoader(
 void WeightedTargetLbConfig::ChildConfig::JsonPostLoad(
     const Json& json, const JsonArgs&, ValidationErrors* errors) {
   ValidationErrors::ScopedField field(errors, ".childPolicy");
-  auto it = json.object_value().find("childPolicy");
-  if (it == json.object_value().end()) {
+  auto it = json.object().find("childPolicy");
+  if (it == json.object().end()) {
     errors->AddError("field not present");
     return;
   }
@@ -765,15 +739,7 @@ class WeightedTargetLbFactory : public LoadBalancingPolicyFactory {
 
   y_absl::StatusOr<RefCountedPtr<LoadBalancingPolicy::Config>>
   ParseLoadBalancingConfig(const Json& json) const override {
-    if (json.type() == Json::Type::JSON_NULL) {
-      // weighted_target was mentioned as a policy in the deprecated
-      // loadBalancingPolicy field or in the client API.
-      return y_absl::InvalidArgumentError(
-          "field:loadBalancingPolicy error:weighted_target policy requires "
-          "configuration.  Please use loadBalancingConfig field of service "
-          "config instead.");
-    }
-    return LoadRefCountedFromJson<WeightedTargetLbConfig>(
+    return LoadFromJson<RefCountedPtr<WeightedTargetLbConfig>>(
         json, JsonArgs(), "errors validating weighted_target LB policy config");
   }
 };

@@ -111,6 +111,12 @@ public:
     void RecordEnd(const gpr_timespec& /*latency*/) override
     { }
 
+    void RecordAnnotation(const Annotation& /*annotation*/) override
+    { }
+
+    std::shared_ptr<grpc_core::TcpTracerInterface> StartNewTcpTrace() override
+    { return {}; }
+
 private:
     AtomicError Error_;
 };

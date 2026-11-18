@@ -23,7 +23,6 @@
 
 #include "y_absl/types/optional.h"
 
-#include <grpc/grpc.h>
 #include <grpc/support/time.h>
 
 #include "src/core/lib/gprpp/sync.h"

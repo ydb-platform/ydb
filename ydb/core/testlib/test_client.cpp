@@ -613,6 +613,13 @@ namespace Tests {
 #undef MERGE_APP_CFG_FROM
 #undef MERGE_CFG_FROM_APP_CFG
 
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            const auto& featureFlags = appData.FeatureFlags;
+            auto schedulerAppConfig = *Settings->AppConfig;
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableResourcePoolsScheduler(featureFlags.GetEnableResourcePoolsScheduler());
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(featureFlags.GetEnableComputeSchedulerMemory());
+            appData.KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, schedulerAppConfig);
+
             auto& securityConfig = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig();
             appData.EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
             appData.EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
@@ -1542,13 +1549,6 @@ namespace Tests {
                     ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
                 }
             }
-
-            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            const auto& featureFlags = Runtime->GetAppData(nodeIdx).FeatureFlags;
-            auto schedulerAppConfig = *Settings->AppConfig;
-            schedulerAppConfig.MutableFeatureFlags()->SetEnableResourcePoolsScheduler(featureFlags.GetEnableResourcePoolsScheduler());
-            schedulerAppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(featureFlags.GetEnableComputeSchedulerMemory());
-            Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, schedulerAppConfig);
 
             if (!Settings->AppConfig->GetTableServiceConfig().HasEnableCompileCacheWarmup()) {
                 Settings->AppConfig->MutableTableServiceConfig()->SetEnableCompileCacheWarmup(false);

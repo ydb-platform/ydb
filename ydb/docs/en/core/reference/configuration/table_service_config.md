@@ -8,6 +8,12 @@ The `resource_manager` subsection specifies resource management parameters for t
 
 ### Vector index level table cache
 
+{% note warning "Experimental feature" %}
+
+This feature is under development. On a database node the cache is disabled while [`kqp_level_cache_max_size_bytes`](#resource-manager) is `0`; set a non-zero limit under `table_service_config` → `resource_manager` to enable it. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the cache increases memory use on database nodes and may affect cluster stability. Do not enable it in production clusters without testing. [Learn more](feature_flags.md#experimental).
+
+{% endnote %}
+
 The vector index level table (`indexImplLevelTable`) [`vector_kmeans_tree`](../../dev/vector-indexes-kmeans-tree-type.md#index-structure) stores centroids that {{ ydb-short-name }} accesses at each step of descending the cluster tree during vector search. To avoid re-reading these centroids from the distributed storage on every query, {{ ydb-short-name }} can cache them in memory on each database node.
 
 The cache is created separately on each node, uses LRU eviction, and gradually grows its size up to the specified limit.

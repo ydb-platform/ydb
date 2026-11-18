@@ -465,7 +465,77 @@ class TestPqRowDispatcher(TestYdsBase):
             '((CAST(`time` AS Timestamp?) - Interval("-PT0.000001S")) > Timestamp("1970-01-01T00:00:00.000102Z"))',
         )
 
-    def test_filters_optional_field(self, ydb_topics: Callable[[str, ...], YdbTopics]):
+    @pytest.mark.parametrize(
+        'testcase',
+        [
+            ('data = "hello2"', '(`data` = "hello2")'),
+            ('flag', '`flag`'),
+            ('time * (field2 - field1) != 0', '((`time` * (`field2` - `field1`)) <> 0)'),
+            ('(field1 % field2) / 5 = 1', '(((`field1` % `field2`) / 5) = 1)'),
+            (' event IS NOT DISTINCT FROM "event2"', '(`event` IS NOT DISTINCT FROM "event2")'),
+            (' event IS DISTINCT FROM "event1"', '(`event` IS DISTINCT FROM "event1")'),
+            (' field1 IS DISTINCT FROM field2', '(`field1` IS DISTINCT FROM `field2`)'),
+            (
+                'time == 102 OR (field2 IS NOT DISTINCT FROM 1005 AND Random(field1) < 10.0)',
+                '((`time` = 102) OR (`field2` IS NOT DISTINCT FROM 1005))',
+            ),
+            ('event IN ("event2")', '(`event` IN ("event2"))'),
+            ('event IN ("1", "2", "3", "4", "5", "6", "7", "event2")', '(`event` IN ("1"'),
+            (
+                ' event IS DISTINCT FROM data AND event IN ("1", "2", "3", "4", "5", "6", "7", "event2")',
+                '((`event` IS DISTINCT FROM `data`) AND COALESCE((`event` IN ("1"',
+            ),
+            (
+                ' IF(event == "event2", event IS DISTINCT FROM data, FALSE)',
+                'IF(COALESCE((`event` = "event2"), FALSE), (`event` IS DISTINCT FROM `data`), FALSE)',
+            ),
+            (' COALESCE(event = "event2", TRUE)', 'COALESCE((`event` = "event2"), TRUE)'),
+            (
+                ' COALESCE(event = "event2", data = "hello2", TRUE)',
+                'COALESCE((`event` = "event2"), (`data` = "hello2"), TRUE)',
+            ),
+            (" event ?? '' REGEXP @@e.*e.*t2@@", '(COALESCE(`event`, "") REGEXP "e.*e.*t2")'),
+            (" event ?? '' NOT REGEXP @@e.*e.*t1@@", '(NOT (COALESCE(`event`, "") REGEXP "e.*e.*t1"))'),
+            (
+                " event ?? '' REGEXP data ?? '' OR time = 102",
+                '((COALESCE(`event`, "") REGEXP COALESCE(`data`, "")) OR (`time` = 102))',
+            ),
+            (
+                ' nested REGEXP ".*abc.*"',
+                '(IF((`nested` IS NOT NULL), CAST(`nested` AS String), NULL) REGEXP ".*abc.*")',
+            ),
+            (' CAST(nested AS String) REGEXP ".*abc.*"', '(CAST(`nested` AS String?) REGEXP ".*abc.*")'),
+            ('event LIKE "event2%"', 'StartsWith(`event`, "event2")'),
+            ('event LIKE "%event2"', 'EndsWith(`event`, "event2")'),
+            ('event LIKE "%event2%"', 'String::Contains(`event`, "event2")'),
+            (' (data = "hello2") IS NOT DISTINCT FROM true', '((`data` = "hello2") IS NOT DISTINCT FROM TRUE)'),
+            (
+                ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true',
+                '((`data` REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)',
+            ),
+            (
+                ' (data in ("hello2", "hello3")) IS NOT DISTINCT FROM true',
+                '((`data` IN ("hello2", "hello3")) IS NOT DISTINCT FROM TRUE)',
+            ),
+            (
+                ' COALESCE(event, data) IS DISTINCT FROM "event1"',
+                '(COALESCE(`event`, `data`) IS DISTINCT FROM "event1")',
+            ),
+            (
+                ' UNWRAP(coalesce(event, data)) IS distinct FROM "event1"',
+                '(Unwrap(COALESCE(`event`, `data`)) IS DISTINCT FROM "event1")',
+            ),
+            (
+                ' tobytes(coalesce(cast(event as Utf8), cast(data as utf8))) IS distinct FROM "event1"',
+                '(CAST(COALESCE(CAST(`event` AS Utf8?), CAST(`data` AS Utf8?)) AS String) IS DISTINCT FROM "event1")',
+            ),
+            (
+                ' (CAST(data AS Utf8) REGEXP ".*hello2.*") IS NOT DISTINCT FROM true',
+                '((IF((CAST(`data` AS Utf8?) IS NOT NULL), CAST(CAST(`data` AS Utf8?) AS String), NULL) REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)',
+            ),
+        ],
+    )
+    def test_filters_optional_field(self, ydb_topics: Callable[[str, ...], YdbTopics], testcase):
         io = ydb_topics("test_filters_optional_field", shared=True)
         create_input_consumer(io)
 
@@ -482,99 +552,8 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 102, "data": "hello2", "event": "event2", "flag": true, "field1": 5, "field2": 1005, "nested": ["abc", "key"]}',
         ]
         expected = ['102']
-        filter = 'data = "hello2"'
-        self.run_and_check(io, sql + filter, data, expected, '(`data` = "hello2")')
-        filter = 'flag'
-        self.run_and_check(io, sql + filter, data, expected, '`flag`')
-        filter = 'time * (field2 - field1) != 0'
-        self.run_and_check(io, sql + filter, data, expected, '((`time` * (`field2` - `field1`)) <> 0)')
-        filter = '(field1 % field2) / 5 = 1'
-        self.run_and_check(io, sql + filter, data, expected, '(((`field1` % `field2`) / 5) = 1)')
-        filter = ' event IS NOT DISTINCT FROM "event2"'
-        self.run_and_check(io, sql + filter, data, expected, '(`event` IS NOT DISTINCT FROM "event2")')
-        filter = ' event IS DISTINCT FROM "event1"'
-        self.run_and_check(io, sql + filter, data, expected, '(`event` IS DISTINCT FROM "event1")')
-        filter = ' field1 IS DISTINCT FROM field2'
-        self.run_and_check(io, sql + filter, data, expected, '(`field1` IS DISTINCT FROM `field2`)')
-        filter = 'time == 102 OR (field2 IS NOT DISTINCT FROM 1005 AND Random(field1) < 10.0)'
-        self.run_and_check(io, sql + filter, data, expected, '((`time` = 102) OR (`field2` IS NOT DISTINCT FROM 1005))')
-        filter = 'event IN ("event2")'
-        self.run_and_check(io, sql + filter, data, expected, '(`event` IN ("event2"))')
-        filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(io, sql + filter, data, expected, '(`event` IN ("1"')
-        filter = ' event IS DISTINCT FROM data AND event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(
-            io, sql + filter, data, expected, '((`event` IS DISTINCT FROM `data`) AND COALESCE((`event` IN ("1"'
-        )
-        filter = ' IF(event == "event2", event IS DISTINCT FROM data, FALSE)'
-        self.run_and_check(
-            io,
-            sql + filter,
-            data,
-            expected,
-            'IF(COALESCE((`event` = "event2"), FALSE), (`event` IS DISTINCT FROM `data`), FALSE)',
-        )
-        filter = ' COALESCE(event = "event2", TRUE)'
-        self.run_and_check(io, sql + filter, data, expected, 'COALESCE((`event` = "event2"), TRUE)')
-        filter = ' COALESCE(event = "event2", data = "hello2", TRUE)'
-        self.run_and_check(
-            io, sql + filter, data, expected, 'COALESCE((`event` = "event2"), (`data` = "hello2"), TRUE)'
-        )
-        filter = " event ?? '' REGEXP @@e.*e.*t2@@"
-        self.run_and_check(io, sql + filter, data, expected, '(COALESCE(`event`, "") REGEXP "e.*e.*t2")')
-        filter = " event ?? '' NOT REGEXP @@e.*e.*t1@@"
-        self.run_and_check(io, sql + filter, data, expected, '(NOT (COALESCE(`event`, "") REGEXP "e.*e.*t1"))')
-        filter = " event ?? '' REGEXP data ?? '' OR time = 102"
-        self.run_and_check(
-            io, sql + filter, data, expected, '((COALESCE(`event`, "") REGEXP COALESCE(`data`, "")) OR (`time` = 102))'
-        )
-        filter = ' nested REGEXP ".*abc.*"'
-        self.run_and_check(
-            io,
-            sql + filter,
-            data,
-            expected,
-            '(IF((`nested` IS NOT NULL), CAST(`nested` AS String), NULL) REGEXP ".*abc.*")',
-        )
-        filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
-        self.run_and_check(io, sql + filter, data, expected, '(CAST(`nested` AS String?) REGEXP ".*abc.*")')
-        filter = 'event LIKE "event2%"'
-        self.run_and_check(io, sql + filter, data, expected, 'StartsWith(`event`, "event2")')
-        filter = 'event LIKE "%event2"'
-        self.run_and_check(io, sql + filter, data, expected, 'EndsWith(`event`, "event2")')
-        filter = 'event LIKE "%event2%"'
-        self.run_and_check(io, sql + filter, data, expected, 'String::Contains(`event`, "event2")')
-        filter = ' (data = "hello2") IS NOT DISTINCT FROM true'
-        self.run_and_check(io, sql + filter, data, expected, '((`data` = "hello2") IS NOT DISTINCT FROM TRUE)')
-        filter = ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
-        self.run_and_check(io, sql + filter, data, expected, '((`data` REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)')
-        filter = ' (data in ("hello2", "hello3")) IS NOT DISTINCT FROM true'
-        self.run_and_check(
-            io, sql + filter, data, expected, '((`data` IN ("hello2", "hello3")) IS NOT DISTINCT FROM TRUE)'
-        )
-        # YQ-5708
-        filter = ' COALESCE(event, data) IS DISTINCT FROM "event1"'
-        self.run_and_check(io, sql + filter, data, expected, '(COALESCE(`event`, `data`) IS DISTINCT FROM "event1")')
-        filter = ' UNWRAP(coalesce(event, data)) IS distinct FROM "event1"'
-        self.run_and_check(
-            io, sql + filter, data, expected, '(Unwrap(COALESCE(`event`, `data`)) IS DISTINCT FROM "event1")'
-        )
-        filter = ' tobytes(coalesce(cast(event as Utf8), cast(data as utf8))) IS distinct FROM "event1"'
-        self.run_and_check(
-            io,
-            sql + filter,
-            data,
-            expected,
-            '(CAST(COALESCE(CAST(`event` AS Utf8?), CAST(`data` AS Utf8?)) AS String) IS DISTINCT FROM "event1")',
-        )
-        filter = ' (CAST(data AS Utf8) REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
-        self.run_and_check(
-            io,
-            sql + filter,
-            data,
-            expected,
-            '((IF((CAST(`data` AS Utf8?) IS NOT NULL), CAST(CAST(`data` AS Utf8?) AS String), NULL) REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)',
-        )  # YQ-5727
+        filter, expected_predicate = testcase
+        self.run_and_check(io, sql + filter, data, expected, expected_predicate)
 
     def test_filter_missing_fields(self, ydb_topics: Callable[[str, ...], YdbTopics]):
         io = ydb_topics("test_filter_missing_fields", shared=True)

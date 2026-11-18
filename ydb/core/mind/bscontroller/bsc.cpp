@@ -751,7 +751,8 @@ void TBlobStorageController::ReconcileDataCenterStates() {
     Send(SelfId(), request.release());
     if (!DataCenterRetryScheduled) {
         DataCenterRetryScheduled = true;
-        Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvReconcileDataCenterStates, 0, SelfId(), {}, nullptr, 0));
+        TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvReconcileDataCenterStates,
+            0, SelfId(), {}, nullptr, 0));
     }
 }
 

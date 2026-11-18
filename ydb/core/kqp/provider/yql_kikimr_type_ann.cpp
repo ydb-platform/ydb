@@ -971,15 +971,10 @@ namespace {
             YQL_ENSURE(defaultType && constraint.Value().IsValid());
             TExprBase constrValue = constraint.Value().Cast();
 
-            // Literal defaults keep the existing path. With the feature disabled, other
-            // constant expressions are evaluated during CREATE TABLE as before
+            // Preserve the existing constant folding before checking for a literal.
+            // Nonconstant expressions must stay unevaluated, including during coercion.
             const TExprNode* defaultSource = FindDefaultSourceConstraint(columnTuple);
-            const bool useDefaultFromExpression = defaultSource && !isAlter
-                && !IsYqlNullExprNode(constrValue) && !IsPgNullExprNode(constrValue)
-                && (enableDefaultFromExpression ? !IsLiteralDefaultValue(constrValue)
-                    : !NDq::IsConstantExpr(constrValue.Ptr()));
-            const bool preserveSourceExpression = useDefaultFromExpression
-                || (defaultSource && isAlter && !NDq::IsConstantExpr(constrValue.Ptr()));
+            const bool preserveSourceExpression = defaultSource && !NDq::IsConstantExpr(constrValue.Ptr());
 
             if (auto status = ValidateDefaultColumn(type, defaultType, constraint.Value().Cast(), constraint.Pos(),
                 columnName, nullptr, ctx, typeCtx, [&](TExprNode::TPtr expr) {
@@ -1002,19 +997,15 @@ namespace {
                 return false;
             }
 
-            if (useDefaultFromExpression) {
-                columnMeta.DefaultExpression = TDefaultExpressionColumnInfo{};
-                columnMeta.DefaultExpression->ExprText = TString(defaultSource->Child(1)->Content());
-                columnMeta.DefaultExpression->Stored = true;
-                columnMeta.DefaultExpression->Writable = true;
-                columnMeta.SetDefaultFromExpression();
-            } else {
-                if (IsYqlNullExprNode(constrValue)) {
-                    columnMeta.DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL;
-                    columnMeta.DefaultFromLiteral.Clear();
-                    return true;
-                }
-                if (enableDefaultFromExpression && defaultSource && !IsLiteralDefaultValue(constrValue)) {
+            if (IsYqlNullExprNode(constrValue)) {
+                columnMeta.DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL;
+                columnMeta.DefaultFromLiteral.Clear();
+                return true;
+            }
+
+            const bool isLiteral = IsLiteralDefaultValue(constrValue);
+            if (isLiteral || !defaultSource || isAlter) {
+                if (enableDefaultFromExpression && defaultSource && !isLiteral) {
                     ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                         "Column addition with a DEFAULT expression is not supported"));
                     return false;
@@ -1025,6 +1016,12 @@ namespace {
                     ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), err.value()));
                     return false;
                 }
+            } else {
+                columnMeta.DefaultExpression = TDefaultExpressionColumnInfo{};
+                columnMeta.DefaultExpression->ExprText = TString(defaultSource->Child(1)->Content());
+                columnMeta.DefaultExpression->Stored = true;
+                columnMeta.DefaultExpression->Writable = true;
+                columnMeta.SetDefaultFromExpression();
             }
 
         } else if (constraint.Name().Value() == "serial") {

@@ -143,6 +143,23 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 50);
         elector.SetNewState(std::vector<TEndpointRecord>{{"Two", 2}});
         UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 0);
+        elector.PessimizeEndpoint("Two");
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 100);
+    }
+
+    Y_UNIT_TEST(PessimizationRounding) {
+        TEndpointElectorSafe elector;
+        elector.SetNewState(std::vector<TEndpointRecord>{{"One", 0}, {"Two", 0}, {"Three", 0}});
+
+        elector.PessimizeEndpoint("One");
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 33);
+        elector.PessimizeEndpoint("Two");
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 66);
+        elector.PessimizeEndpoint("Two");
+        elector.PessimizeEndpoint("Unknown");
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 66);
+        elector.PessimizeEndpoint("Three");
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 100);
     }
 
     Y_UNIT_TEST(PessimizeNode) {

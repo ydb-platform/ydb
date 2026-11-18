@@ -1,10 +1,5 @@
-<<<<<<< HEAD
-=======
 * Fixed node-startup config fetches omitting their seed-node marker when no requestor hosts are supplied.
 
-* Added optional `ClientTimeout` and `Deadline` settings to `TOperationClient::Get()` without cancelling the server operation or changing defaults.
-
->>>>>>> eb24e03bf75 (Change fetch for seed-nodes permissions (#59838))
 * Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
 
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.

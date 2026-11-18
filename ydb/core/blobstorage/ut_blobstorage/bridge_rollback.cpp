@@ -48,6 +48,17 @@ namespace {
         }
     }
 
+    // A stopped pile can contain the distconf root. Wait for its replacement before issuing another config command.
+    void WaitForDistconf(TEnvironmentSetup& env) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        env.Sim(TDuration::Seconds(30));
+        TResult res;
+        WaitUntil(env, [&] {
+            res = InvokeDistconf(env, [](auto& record) { record.MutableQueryConfig(); });
+            return res.GetStatus() == TResult::OK && res.HasScepter();
+        }, "distconf root elected", [&] { return res.ShortDebugString(); });
+    }
+
     struct TRollbackStatus {
         bool HasClusterState = false;
         std::set<ui32> BridgeConfigNodeIds;
@@ -402,7 +413,7 @@ namespace {
                     for (ui32 nodeId : nodeIds) {
                         Env.StopNode(nodeId);
                     }
-                    WaitForDistconf();
+                    WaitForDistconf(Env);
                     WriteAndCheck(); // the primary pile serves alone
                     for (ui32 nodeId : nodeIds) {
                         Env.StartNode(nodeId);
@@ -421,16 +432,6 @@ namespace {
             }
             UNIT_ASSERT_VALUES_EQUAL(GetPileStates(Config()), "pile_1:SYNCHRONIZED pile_2:SYNCHRONIZED");
             UNIT_ASSERT_VALUES_EQUAL(GetPrimaryPileIndex(), 0);
-        }
-
-        // the root of distconf may have been running on one of the nodes stopped, wait for the next one to settle
-        void WaitForDistconf() {
-            Env.Sim(TDuration::Seconds(30));
-            TResult res;
-            WaitUntil(Env, [&] {
-                res = InvokeDistconf(Env, [](auto& record) { record.MutableQueryConfig(); });
-                return res.GetStatus() == TResult::OK;
-            }, "distconf answering", [&] { return res.ShortDebugString(); });
         }
 
         void Rejoin() {
@@ -462,7 +463,7 @@ namespace {
             for (ui32 nodeId : GetPileNodeIds(1)) {
                 Env.StopNode(nodeId);
             }
-            WaitForDistconf();
+            WaitForDistconf(Env);
             Env.ConfiguredNodeCount = OriginalNodes;
             const auto res = DropPileFromConfig(Env, "pile_2");
             UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
@@ -841,6 +842,7 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         for (ui32 nodeId = 10; nodeId <= 17; ++nodeId) {
             env.StopNode(nodeId);
         }
+        WaitForDistconf(env);
         env.ConfiguredNodeCount = 9;
         res = DropPileFromConfig(env, "pile_2");
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());

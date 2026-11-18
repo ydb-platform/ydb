@@ -214,6 +214,10 @@ struct TPartitionWriterOpts {
 
     bool CheckState = false;
     bool AutoRegister = false;
+    // Register the source id explicitly on first use: explicit ids are immune
+    // to the tablet's source-id eviction, so the dedup state survives sender
+    // restarts even without a bootstrap-provided registration.
+    bool ExplicitRegistration = false;
     bool UseDeduplication = true;
     bool TrackProducerId = true;
 
@@ -242,6 +246,7 @@ struct TPartitionWriterOpts {
 
     TPartitionWriterOpts& WithCheckState(bool value) { CheckState = value; return *this; }
     TPartitionWriterOpts& WithAutoRegister(bool value) { AutoRegister = value; return *this; }
+    TPartitionWriterOpts& WithExplicitRegistration(bool value) { ExplicitRegistration = value; return *this; }
     TPartitionWriterOpts& WithDeduplication(bool value) { UseDeduplication = value; return *this; }
     TPartitionWriterOpts& WithSourceId(const TString& value) { SourceId = value; return *this; }
     TPartitionWriterOpts& WithExpectedGeneration(ui32 value) { ExpectedGeneration = value; return *this; }

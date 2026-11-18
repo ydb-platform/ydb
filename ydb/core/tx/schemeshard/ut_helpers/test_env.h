@@ -50,6 +50,9 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, AllowUpdateChannelsBindingOfSolomonPartitions, std::nullopt);
         OPTION(std::optional<bool>, EnableNotNullColumns, std::nullopt);
         OPTION(std::optional<bool>, EnableProtoSourceIdInfo, std::nullopt);
+        // nullopt leaves the flag at its default (off): the schemeshard
+        // suites then test the no-skip mode, which is the production default.
+        OPTION(std::optional<bool>, CdcStreamBootstrapSkip, std::nullopt);
         OPTION(std::optional<bool>, EnablePqBilling, std::nullopt);
         OPTION(std::optional<bool>, EnableBackgroundCompaction, std::nullopt);
         OPTION(std::optional<bool>, EnableBorrowedSplitCompaction, std::nullopt);

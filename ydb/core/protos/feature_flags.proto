@@ -495,4 +495,11 @@ message TFeatureFlags {
     // the legacy zeroing behaviour that undercounted the consumed
     // write quota.
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
+    // When enabled, schemeshard stops building the source-id registration
+    // bootstrap for cdc streams that emit neither heartbeats (virtual/resolved
+    // timestamps) nor schema changes — such streams' change senders register
+    // their source ids explicitly on first use instead. Heartbeat/schema-change
+    // streams keep the bootstrap in every mode. Enable after the fleet
+    // upgrade; toggling later is safe.
+    optional bool EnableCdcStreamBootstrapSkip = 395 [default = false];
 }

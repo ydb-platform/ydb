@@ -84,6 +84,10 @@ public:
         bool HasModifications() const;
         void FillRequest(TEvKeyValue::TEvRequest* request);
 
+        const TSourceIdMap& GetStagedRegistrations() const {
+            return SourceIdWriter.GetSourceIdsToWrite();
+        }
+
         template <typename... Args>
         void RegisterSourceId(const TString& sourceId, Args&&... args) {
             SourceIdWriter.RegisterSourceId(sourceId, std::forward<Args>(args)...);

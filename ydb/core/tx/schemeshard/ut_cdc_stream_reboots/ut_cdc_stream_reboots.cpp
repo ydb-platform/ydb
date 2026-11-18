@@ -966,7 +966,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RacySplitTableAndCreateStream, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(RacySplitTableAndCreateStream, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/, BootstrapSkip) {
+        t.GetTestEnvOptions().CdcStreamBootstrapSkip(BootstrapSkip);
         RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -1001,6 +1002,14 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
 
             {
                 TInactiveZone inactive(activeZone);
+                // With the bootstrap skipped the registrations appear only
+                // after the first records are delivered (the senders
+                // self-register explicitly on first use); without the skip
+                // the bootstrap covers both shards at creation. Without
+                // writes in the skip mode CheckRegistrations would wait for
+                // REGISTERED ids forever.
+                UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(ui64(1))}, {TCell::Make(ui64(1))});
+                UploadRow(runtime, "/MyRoot/Table", 1, {1}, {2}, {TCell::Make(ui64(Max<ui64>()))}, {TCell::Make(ui64(Max<ui64>()))});
                 CheckRegistrations(runtime, {"/MyRoot/Table", 2}, {"/MyRoot/Table/Stream/streamImpl", 1});
             }
         });

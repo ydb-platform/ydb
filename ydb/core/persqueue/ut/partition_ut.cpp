@@ -5023,6 +5023,75 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_IgnoreQuotaDeadline, TPartitionFixture)
     TestWriteSubDomainOutOfSpace_DeadlineWork(true);
 }
 
+// The explicit registration queued behind an in-flight write must persist
+// the committed SeqNo: the upgrade executes after the write commits, and
+// taking the stale queue-time capture would regress the persisted dedup
+// watermark - after a tablet restart a retry of the already committed write
+// would be accepted again.
+Y_UNIT_TEST_F(RegistrationBehindWritePersistsCommittedSeqNo, TPartitionFixture)
+{
+    CreatePartition({
+                    .Partition=TPartitionId{1},
+                    .Begin=0, .End=0,
+                    //
+                    // partition configuration
+                    //
+                    .Config={.Version=1, .Consumers={{.Consumer="client-1", .Offset=3}}}
+                    },
+                    //
+                    // tablet configuration
+                    //
+                    {.Version=2, .Consumers={{.Consumer="client-1"}}});
+
+    TMaybe<ui64> kvCookie;
+    ui64 cookie = 1;
+    TString ownerCookie;
+    CmdChangeOwner(cookie, "owner1", TDuration::Seconds(1), ownerCookie);
+
+    // seqNo=5 commits - "SourceId" gets registered implicitly.
+    SendWrite(++cookie, 0, ownerCookie, 100, "data5", false, /*seqNo=*/5);
+    WaitKeyValueRequest(kvCookie);
+    SendDiskStatusResponse(&kvCookie);
+    {
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+
+    // seqNo=6 in flight: its persist request is grabbed and left unanswered -
+    // the write is uncommitted and "SourceId" is in TxAffectedSourcesIds.
+    SendWrite(++cookie, 1, ownerCookie, 200, "data6", false, /*seqNo=*/6);
+    WaitKeyValueRequest(kvCookie);
+
+    // The registration arrives with the sender's queue-time capture (SeqNo=5)
+    // and is queued behind the in-flight write.
+    SendEvent(new TEvPQ::TEvRegisterMessageGroup(++cookie, "SourceId", TMaybe<NKikimrPQ::TPartitionKeyRange>(), /*seqNo=*/5, /*afterSplit=*/false));
+
+    // The write commits: the in-memory watermark advances to 6 and the queued
+    // upgrade executes - the persisted explicit record must carry the
+    // committed SeqNo, not the captured one.
+    SendDiskStatusResponse(&kvCookie);
+    {
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+
+    auto kvRequest = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(2));
+    UNIT_ASSERT_C(kvRequest != nullptr, "the upgrade's persist request never arrived");
+
+    bool foundUpgrade = false;
+    for (const auto& cmd : kvRequest->Record.GetCmdWrite()) {
+        if (TString::npos == cmd.GetKey().find("SourceId")) {
+            continue;
+        }
+        NKikimrPQ::TMessageGroupInfo proto;
+        UNIT_ASSERT_C(proto.ParseFromString(cmd.GetValue()), "unparsable explicit source-id record");
+        // The committed watermark (6), not the captured one (5).
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetSeqNo(), 6u);
+        foundUpgrade = true;
+    }
+    UNIT_ASSERT_C(foundUpgrade, "no explicit source-id record in the persist request");
+}
+
 Y_UNIT_TEST_F(GetPartitionWriteInfoSuccess, TPartitionFixture) {
     Ctx->Runtime->SetLogPriority( NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
     Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);

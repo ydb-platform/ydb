@@ -163,6 +163,8 @@ struct TAccelerationParams {
     ui32 MaxNumOfSlowDisks = DefaultMaxNumOfSlowDisks;
 };
 
+struct TBlobStorageGroupMultiGetParameters;
+
 class TBlobStorageGroupRequestActor : public TActor<TBlobStorageGroupRequestActor> {
 public:
     template<typename TEv>
@@ -232,7 +234,8 @@ public:
         , EnableStorageRetroTraceCollectionSlowRequests(params.Common.EnableStorageRetroTraceCollectionSlowRequests)
     {
         using TEvent = std::remove_pointer_t<decltype(params.Common.Event)>;
-        if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet>) {
+        // MultiGet forwards the force-block requirement to its child Get requests.
+        if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet> && !std::is_same_v<TGroupRequestParameters, TBlobStorageGroupMultiGetParameters>) {
             if (const auto& block = params.Common.Event->ForceBlockTabletData) {
                 SetReadBlock(block->Id, block->Generation, params.Common.Event->Deadline);
             }
@@ -356,9 +359,7 @@ private:
     std::unique_ptr<TReadBlock> ReadBlock;
     void SetReadBlock(ui64 tabletId, ui32 generation, TInstant deadline);
     STFUNC(StateWaitForReadBlock);
-    void HandleReadBlock(TEvBlobStorage::TEvGetBlockResult::TPtr& ev);
-    void HandleReadBlock(TEvBlobStorage::TEvBlockResult::TPtr& ev);
-    bool CheckReadBlockResult(const TEvBlobStorage::TEvResultCommon& result);
+    void FinishReadBlock(const TEvBlobStorage::TEvResultCommon& result);
     void RestartAfterRace();
 
     const TActorId Source;

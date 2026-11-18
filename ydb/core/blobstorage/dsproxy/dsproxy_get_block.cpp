@@ -11,6 +11,7 @@ namespace NKikimr {
 
 class TBlobStorageGroupGetBlockRequest : public TBlobStorageGroupRequestActor {
     const ui64 TabletId;
+    const ui32 RequiredBlockedGeneration;
     ui64 Generation = 0;
     const TInstant Deadline;
     ui64 Requests = 0;
@@ -29,18 +30,17 @@ class TBlobStorageGroupGetBlockRequest : public TBlobStorageGroupRequestActor {
             << " From# " << vdisk.ToString()
             << " NodeId# " << Info->GetActorId(vdisk).NodeId());
 
-        if (status == NKikimrProto::OK && record.HasGeneration()) {
-            Generation = Max<ui32>(Generation, record.GetGeneration());
-        }
-        if (status == NKikimrProto::NODATA) {
-            status = NKikimrProto::OK;  // assume OK for quorum tracker
+        if (status == NKikimrProto::OK || status == NKikimrProto::NODATA) {
+            ui32 blocked = status == NKikimrProto::OK ? record.GetGeneration() : 0;
+            Generation = Max<ui32>(Generation, blocked);
+            status = blocked >= RequiredBlockedGeneration ? NKikimrProto::OK : NKikimrProto::ERROR;
         }
 
         Y_ABORT_UNLESS(Requests);
         --Requests;
         switch (QuorumTracker.ProcessReply(vdisk, status)) {
             case NKikimrProto::OK:
-                if (!Requests || Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
+                if (RequiredBlockedGeneration || !Requests || Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
                     ReplyAndDie(NKikimrProto::OK);
                 }
                 break;
@@ -79,6 +79,7 @@ class TBlobStorageGroupGetBlockRequest : public TBlobStorageGroupRequestActor {
         ++*Mon->NodeMon->RestartGetBlock;
         auto ev = std::make_unique<TEvBlobStorage::TEvGetBlock>(TabletId, Deadline);
         ev->RestartCounter = counter;
+        ev->RequiredBlockedGeneration = RequiredBlockedGeneration;
         return ev;
     }
 public:
@@ -93,6 +94,7 @@ public:
     TBlobStorageGroupGetBlockRequest(TBlobStorageGroupGetBlockParameters& params)
         : TBlobStorageGroupRequestActor(params)
         , TabletId(params.Common.Event->TabletId)
+        , RequiredBlockedGeneration(params.Common.Event->RequiredBlockedGeneration)
         , Deadline(params.Common.Event->Deadline)
         , QuorumTracker(Info.Get())
     {}

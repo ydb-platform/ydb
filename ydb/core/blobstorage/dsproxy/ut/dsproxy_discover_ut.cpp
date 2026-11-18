@@ -558,7 +558,7 @@ Y_UNIT_TEST(Mirror3dcSkipsNewerCandidateBelowEnsuredLayout) {
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Id, blobId1);
 }
 
-void CheckMirror3dcForcedBlock(bool readOnly, ui32 priorGeneration) {
+void CheckMirror3dcForcedBlock(bool readOnly, bool quorumHasBlock) {
     using DC = NKikimrBlobStorage::TDataCenterState;
     using G = NKikimrBlobStorage::TGroupState;
     TTestBasicRuntime runtime;
@@ -570,7 +570,6 @@ void CheckMirror3dcForcedBlock(bool readOnly, ui32 priorGeneration) {
     TTestState state(runtime, env.Info);
     const ui64 tablet = 123456;
     const ui32 required = 8;
-    ui32 getBlockRequests = 0;
     ui32 blockRequests = 0;
     ui32 indexRequests = 0;
     bool blockConfirmed = false;
@@ -583,21 +582,31 @@ void CheckMirror3dcForcedBlock(bool readOnly, ui32 priorGeneration) {
     });
     auto request = std::make_unique<TEvBlobStorage::TEvDiscover>(tablet, 1, false, false, TInstant::Max(), required, true);
     runtime.Send(new IEventHandle(env.RealProxyActorId, state.EdgeActor, request.release()), 0);
+    if (readOnly) {
+        TVector<TEvBlobStorage::TEvVGetBlock::TPtr> queries;
+        for (unsigned i = 0; i < 9; ++i) {
+            queries.push_back(state.GrabEventPtr<TEvBlobStorage::TEvVGetBlock>());
+        }
+        for (auto& query : queries) {
+            TVDiskID disk = VDiskIDFromVDiskID(query->Get()->Record.GetVDiskID());
+            // One Pending disk can have a partial block. Three Included and two Pending disks form a quorum.
+            bool hasBlock = quorumHasBlock ? disk.FailRealm == 0 || (disk.FailRealm == 2 && disk.FailDomain < 2)
+                : disk.FailRealm == 2 && disk.FailDomain == 0;
+            if (quorumHasBlock && !hasBlock) {
+                continue;
+            }
+            auto reply = state.CreateEventResultPtr(query, NKikimrProto::OK, tablet);
+            reply->Get()->Record.SetGeneration(hasBlock ? required : required - 1);
+            runtime.Send(reply.Release());
+        }
+    }
     for (;;) {
         TAutoPtr<IEventHandle> handle;
         auto [getBlock, block, get, result] = runtime.GrabEdgeEventsRethrow<TEvBlobStorage::TEvVGetBlock,
             TEvBlobStorage::TEvVBlock, TEvBlobStorage::TEvVGet, TEvBlobStorage::TEvDiscoverResult>(handle);
-        if (getBlock) {
-            TEvBlobStorage::TEvVGetBlock::TPtr query(static_cast<TEventHandle<TEvBlobStorage::TEvVGetBlock>*>(handle.Release()));
-            ++getBlockRequests;
-            auto reply = state.CreateEventResultPtr(query, NKikimrProto::OK, tablet);
-            // The latest block can be known only to a Pending disk.
-            ui32 realm = VDiskIDFromVDiskID(getBlock->Record.GetVDiskID()).FailRealm;
-            reply->Get()->Record.SetGeneration(realm == 2 ? priorGeneration : 1);
-            runtime.Send(reply.Release());
-        } else if (block) {
-            UNIT_ASSERT(!readOnly && priorGeneration < required);
-            UNIT_ASSERT_VALUES_EQUAL(getBlockRequests, 9);
+        UNIT_ASSERT(!getBlock);
+        if (block) {
+            UNIT_ASSERT(!readOnly);
             TVDiskID disk = VDiskIDFromVDiskID(block->Record.GetVDiskID());
             UNIT_ASSERT_VALUES_UNEQUAL(disk.FailRealm, 2);
             UNIT_ASSERT_VALUES_EQUAL(block->Record.GetGeneration(), required);
@@ -609,8 +618,7 @@ void CheckMirror3dcForcedBlock(bool readOnly, ui32 priorGeneration) {
             reply->Record.MutableMsgQoS()->MutableMsgId()->CopyFrom(block->Record.GetMsgQoS().GetMsgId());
             runtime.Send(new IEventHandle(handle->Sender, handle->Recipient, reply.release(), 0, handle->Cookie), 0);
         } else if (get) {
-            UNIT_ASSERT_VALUES_EQUAL(getBlockRequests, 9);
-            UNIT_ASSERT(priorGeneration >= required || blockConfirmed);
+            UNIT_ASSERT((readOnly && quorumHasBlock) || blockConfirmed);
             UNIT_ASSERT(get->Record.HasRangeQuery());
             UNIT_ASSERT(!get->Record.HasForceBlockTabletData());
             ++indexRequests;
@@ -620,11 +628,10 @@ void CheckMirror3dcForcedBlock(bool readOnly, ui32 priorGeneration) {
             runtime.Send(reply.Release());
         } else {
             UNIT_ASSERT(result);
-            bool denied = readOnly && priorGeneration < required;
+            bool denied = readOnly && !quorumHasBlock;
             UNIT_ASSERT_VALUES_EQUAL(result->Status, denied ? NKikimrProto::ERROR : NKikimrProto::NODATA);
-            UNIT_ASSERT_VALUES_EQUAL(getBlockRequests, 9);
             UNIT_ASSERT_VALUES_EQUAL(indexRequests, denied ? 0 : 9);
-            UNIT_ASSERT_VALUES_EQUAL(blockRequests, !readOnly && priorGeneration < required ? 6 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(blockRequests, readOnly ? 0 : 6);
             break;
         }
     }
@@ -632,9 +639,9 @@ void CheckMirror3dcForcedBlock(bool readOnly, ui32 priorGeneration) {
 }
 
 Y_UNIT_TEST(Mirror3dcForceBlockedGeneration) {
-    CheckMirror3dcForcedBlock(true, 7);
-    CheckMirror3dcForcedBlock(true, 8);
-    CheckMirror3dcForcedBlock(false, 7);
+    CheckMirror3dcForcedBlock(/*readOnly=*/true, /*quorumHasBlock=*/false);
+    CheckMirror3dcForcedBlock(/*readOnly=*/true, /*quorumHasBlock=*/true);
+    CheckMirror3dcForcedBlock(/*readOnly=*/false, /*quorumHasBlock=*/false);
 }
 
 Y_UNIT_TEST(Mirror3dcPendingRealmCompletesEnsuredCandidate) {

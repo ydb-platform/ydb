@@ -809,9 +809,19 @@ namespace NKikimr {
             return;
         }
         if (ReadBlock) {
-            auto request = std::make_unique<TEvBlobStorage::TEvGetBlock>(ReadBlock->TabletId, ReadBlock->Deadline);
-            request->ForceGroupGeneration = Info->GroupGeneration;
-            Send(ProxyActorId, request.release(), 0, 0, Span.GetTraceId());
+            if (Info->IsMirror3dcReadOnly()) {
+                auto request = std::make_unique<TEvBlobStorage::TEvGetBlock>(ReadBlock->TabletId, ReadBlock->Deadline);
+                request->RequiredBlockedGeneration = ReadBlock->Generation;
+                request->ForceGroupGeneration = Info->GroupGeneration;
+                Send(ProxyActorId, request.release(), 0, 0, Span.GetTraceId());
+            } else {
+                auto request = std::make_unique<TEvBlobStorage::TEvBlock>(ReadBlock->TabletId, ReadBlock->Generation,
+                    ReadBlock->Deadline, TWriteSource::SkeletonForceBlock);
+                request->IsIdempotent = true;
+                request->ForceGroupGeneration = Info->GroupGeneration;
+                request->DataKind = DataKind;
+                Send(ProxyActorId, request.release(), 0, 0, Span.GetTraceId());
+            }
             Become(&TThis::StateWaitForReadBlock);
             return;
         }
@@ -830,50 +840,25 @@ namespace NKikimr {
             return;
         }
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvBlobStorage::TEvGetBlockResult, HandleReadBlock);
-            hFunc(TEvBlobStorage::TEvBlockResult, HandleReadBlock);
+            case TEvBlobStorage::EvGetBlockResult:
+                return FinishReadBlock(*ev->Get<TEvBlobStorage::TEvGetBlockResult>());
+            case TEvBlobStorage::EvBlockResult:
+                return FinishReadBlock(*ev->Get<TEvBlobStorage::TEvBlockResult>());
         }
     }
 
-    bool TBlobStorageGroupRequestActor::CheckReadBlockResult(const TEvBlobStorage::TEvResultCommon& result) {
+    void TBlobStorageGroupRequestActor::FinishReadBlock(const TEvBlobStorage::TEvResultCommon& result) {
         if (result.Status == NKikimrProto::OK) {
-            return true;
+            return Bootstrap();
         }
         if (result.Status == NKikimrProto::RACE) {
             AccountRacingGeneration(result.RacingGeneration);
             if (!ForceGroupGeneration) {
-                RestartAfterRace();
-                return false;
+                return RestartAfterRace();
             }
         }
         ErrorReason = result.ErrorReason;
         ReplyAndDie(result.Status);
-        return false;
-    }
-
-    void TBlobStorageGroupRequestActor::HandleReadBlock(TEvBlobStorage::TEvGetBlockResult::TPtr& ev) {
-        if (!CheckReadBlockResult(*ev->Get())) {
-            return;
-        }
-        if (ev->Get()->BlockedGeneration >= ReadBlock->Generation) {
-            Bootstrap();
-        } else if (Info->IsMirror3dcReadOnly()) {
-            ErrorReason = "Cannot advance the tablet block in a read-only mirror-3-dc group";
-            ReplyAndDie(NKikimrProto::ERROR);
-        } else {
-            auto request = std::make_unique<TEvBlobStorage::TEvBlock>(ReadBlock->TabletId, ReadBlock->Generation,
-                ReadBlock->Deadline, TWriteSource::SkeletonForceBlock);
-            request->IsIdempotent = true;
-            request->ForceGroupGeneration = Info->GroupGeneration;
-            request->DataKind = DataKind;
-            Send(ProxyActorId, request.release(), 0, 0, Span.GetTraceId());
-        }
-    }
-
-    void TBlobStorageGroupRequestActor::HandleReadBlock(TEvBlobStorage::TEvBlockResult::TPtr& ev) {
-        if (CheckReadBlockResult(*ev->Get())) {
-            Bootstrap();
-        }
     }
 
     TActorId TBlobStorageGroupRequestActor::GetVDiskActorId(const TVDiskIdShort &shortId) const {

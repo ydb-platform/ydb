@@ -146,6 +146,9 @@ namespace NKikimr::NBsController {
                             return false;
                         }
                         break;
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKindName:
+                        // ReadStoragePool returns the resolved Kind alongside the name.
+                        break;
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
                         return false;
                 }

@@ -7,6 +7,7 @@ import "ydb/core/protos/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
+import "ydb/core/protos/blobstorage_pdisk_kind.proto";
 import "ydb/core/protos/blobstorage_vdisk_config.proto";
 import "ydb/core/protos/bootstrap.proto";
 import "ydb/core/protos/config.proto";
@@ -82,6 +83,7 @@ message TExtendedHostConfigDrive {
     optional string DiskScope = 11 [(NMarkers.CopyTo) = "THostConfigDrive"];
     optional uint64 ExpectedSlotSize = 12;
     optional uint32 MaxSlots = 13;
+    optional string KindName = 14 [(NMarkers.CopyTo) = "THostConfigDrive"];
 }
 
 message THosts {
@@ -171,6 +173,7 @@ message TEphemeralInputFields {
     optional TDomainsConfig.TSecurityConfig SecurityConfig = 10;
     repeated TDomainsConfig.TStoragePoolType StoragePoolTypes = 11;
     optional string DomainName = 12 [default = "Root"];
+    repeated NKikimrBlobStorage.TDefinePDiskKind PDiskKinds = 13;
 
     enum FailDomainKind {
         Rack = 0;

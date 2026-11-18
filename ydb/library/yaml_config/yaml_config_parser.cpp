@@ -686,11 +686,11 @@ namespace NKikimr::NYaml {
                             << " and slot_size_in_units"
                             << " for drive with path '" << drive.GetPath() << "'";
                     }
-                    if (hasExpectedSlotSize && !hasMaxSlots) {
+                    if (hasExpectedSlotSize && !hasMaxSlots && drive.GetKindName().empty()) {
                         ythrow yexception() << "expected_slot_size requires max_slots"
                             << " for drive with path '" << drive.GetPath() << "'";
                     }
-                    if (hasMaxSlots && !hasExpectedSlotSize) {
+                    if (hasMaxSlots && !hasExpectedSlotSize && drive.GetKindName().empty()) {
                         ythrow yexception() << "max_slots requires expected_slot_size"
                             << " for drive with path '" << drive.GetPath() << "'";
                     }
@@ -1265,8 +1265,22 @@ endDiskTypeCheck:   ;
         }
     }
 
+    static void MergePDiskKinds(NKikimrConfig::TBlobStorageConfig* bsConfig,
+            const NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        if (ephemeralConfig.PDiskKindsSize()) {
+            bsConfig->MutablePDiskKinds()->CopyFrom(ephemeralConfig.GetPDiskKinds());
+        }
+        // Init bypasses generation checks, so a duplicate would silently let the last definition win.
+        THashSet<TString> names;
+        for (const auto& kind : bsConfig->GetPDiskKinds()) {
+            Y_ENSURE_BT(!kind.GetName().empty(), "PDisk kind name must not be empty");
+            Y_ENSURE_BT(names.insert(kind.GetName()).second, "Duplicate PDisk kind Name# " << kind.GetName());
+        }
+    }
+
     void PrepareBlobStorageConfig(NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
         auto* bsConfig = config.MutableBlobStorageConfig();
+        MergePDiskKinds(bsConfig, ephemeralConfig);
 
         if (!bsConfig->HasServiceSet()) {
             bsConfig->MutableServiceSet()->AddAvailabilityDomains(1);
@@ -1674,6 +1688,14 @@ endDiskTypeCheck:   ;
 
         const auto itemConfigGeneration = ephemeralConfig.HasStorageConfigGeneration() ?
             ephemeralConfig.GetStorageConfigGeneration() : 0;
+
+        auto* bsConfig = config.MutableBlobStorageConfig();
+        MergePDiskKinds(bsConfig, ephemeralConfig);
+        for (const auto& kind : bsConfig->GetPDiskKinds()) {
+            auto* cmd = result.AddCommand()->MutableDefinePDiskKind();
+            cmd->CopyFrom(kind);
+            cmd->SetItemConfigGeneration(Max<ui64>());
+        }
 
         for(const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
             auto *hostConfigProto = result.AddCommand()->MutableDefineHostConfig();

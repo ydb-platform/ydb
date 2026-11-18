@@ -363,6 +363,8 @@ message PDiskFilter {
     optional uint64 kind = 4;
     // Exact match on supplied string fields; omitted fields are unconstrained.
     Ydb.Discovery.NodeLocation location = 5;
+    // Catalog name corresponding to kind; retained for configuration round trips.
+    optional string kind_name = 6;
 }
 
 enum EncryptionMode {

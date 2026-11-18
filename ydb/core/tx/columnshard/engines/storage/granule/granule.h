@@ -27,6 +27,7 @@ class TGranulesStorage;
 class TGranulesStat;
 class TColumnChunkLoadContext;
 class TVersionedIndex;
+class TColumnEngineForLogs;
 
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
@@ -152,7 +153,7 @@ private:
     TLoadedKeyRanges LoadedKeyRanges = TLoadedKeyRanges::BuildNothing();
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
-    void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool onLoad = false);
+    void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool passToOptimizer = true);
     void OnAdditiveSummaryChange() const;
 
     TConclusion<std::shared_ptr<TPortionInfo>> GetInnerPortion(const TPortionInfo::TConstPtr& portion) const {
@@ -181,8 +182,8 @@ public:
         return *OptimizerPlanner;
     }
 
-    std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
-    bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
+    std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, TColumnEngineForLogs& engine);
+    bool TestingLoad(IDbWrapper& db, TColumnEngineForLogs& engine);
 
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
         return DataAccessorsManager;
@@ -320,15 +321,6 @@ public:
         return result;
     }
 
-    void OnAfterPortionsLoad() {
-        for (auto&& i : Portions) {
-            OnAfterChangePortion(i.second, true);
-        }
-        if (ActualizationIndex->IsStarted()) {
-            RefreshScheme();
-        }
-    }
-
     void PrefetchPortionsMetadata() {
         if (!MetadataMemoryManager->NeedPrefetch() || Portions.empty()) {
             return;
@@ -339,16 +331,6 @@ public:
         }
         request->RegisterSubscriber(std::make_shared<TFakeDataAccessorsSubscriber>());
         DataAccessorsManager->AskData(request);
-    }
-
-    void AddLoadedPortionsToOptimizer() {
-        std::vector<std::shared_ptr<TPortionInfo>> portions;
-        for (auto&& [_, portion] : Portions) {
-            if (!portion->HasRemoveSnapshot()) {
-                portions.emplace_back(portion);
-            }
-        }
-        OptimizerPlanner->AddLoadedPortions(portions);
     }
 
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;
@@ -388,8 +370,11 @@ public:
     }
 
     void UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion);
+    void AddPortionsToOptimizer(const std::vector<std::shared_ptr<TPortionInfo>>& activePortions);
     // One batch of deferred loading, in the order of the index; returns the committed portions it added
-    std::vector<std::shared_ptr<TPortionInfo>> AddLoadedPortions(const std::vector<std::shared_ptr<TPortionInfo>>& portions);
+    std::vector<std::shared_ptr<TPortionInfo>> AddPortionsLoadedInBatch(const std::vector<std::shared_ptr<TPortionInfo>>& portions);
+    // the portions without a remove snapshot
+    std::vector<std::shared_ptr<TPortionInfo>> GetActivePortions() const;
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;

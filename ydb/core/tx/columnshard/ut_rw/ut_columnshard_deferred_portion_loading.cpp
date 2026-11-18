@@ -27,6 +27,7 @@ struct TShardOptions {
     bool InMemMetadata = false;
     TString CompactionPreset = "tiling++";
     TString TilingJson;
+    bool DeferredLoading = true;
 };
 
 // Every table gets three committed portions, one per write: rows 0..99, 200..299, 400..499; batches of one portion each after a reboot,
@@ -45,7 +46,7 @@ public:
         Controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         TTester::Setup(Runtime);
         Runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset(shardOptions.CompactionPreset);
-        Runtime.GetAppData().ColumnShardConfig.MutableDeferredPortionLoadingSettings()->SetEnabled(true);
+        Runtime.GetAppData().ColumnShardConfig.MutableDeferredPortionLoadingSettings()->SetEnabled(shardOptions.DeferredLoading);
         Runtime.GetAppData().ColumnShardConfig.MutableDeferredPortionLoadingSettings()->SetPortionsPerBatch(1);
         Sender = Runtime.AllocateEdgeActor();
         CreateTestBootstrapper(Runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -318,6 +319,14 @@ Y_UNIT_TEST_SUITE(TColumnShardDeferredPortionLoading) {
         UNIT_ASSERT(reader->WaitScannerAnswer());
         UNIT_ASSERT_VALUES_EQUAL(shard.ReadRows(*reader), 300);
         UNIT_ASSERT_VALUES_EQUAL(shard.Controller->GetPortionBatchesLoaded(), 0);
+    }
+
+    // TTxInit counts the portions it loads, as the batches do
+    Y_UNIT_TEST(FullLoadAtStartCountsPortions) {
+        TShardWithPortions shard({ .DeferredLoading = false });
+        shard.Reboot();
+        UNIT_ASSERT_VALUES_EQUAL(shard.GetSimpleCounter("ColumnShard/Index/InsertedPortions"), 3);
+        UNIT_ASSERT_VALUES_EQUAL(shard.GetSimpleCounter("ColumnShard/Index/InsertedRows"), 300);
     }
 
     Y_UNIT_TEST(ScanWaitingForLoadedPortionsIsCounted) {

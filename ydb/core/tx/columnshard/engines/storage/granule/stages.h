@@ -5,7 +5,8 @@
 
 namespace NKikimr::NOlap {
 class TGranuleMeta;
-}
+class TColumnEngineForLogs;
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NLoading {
 
@@ -64,43 +65,22 @@ private:
 
     const std::shared_ptr<IBlobGroupSelector> DsGroupSelector;
     TGranuleMeta* Self = nullptr;
-    const TVersionedIndex* VersionedIndex;
+    TColumnEngineForLogs* Engine = nullptr;
 
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
 
 public:
-    TGranuleOnlyPortionsReader(const TString& name, const TVersionedIndex* versionedIndex, TGranuleMeta* self,
-        const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector)
+    TGranuleOnlyPortionsReader(
+        const TString& name, TGranuleMeta* self, TColumnEngineForLogs* engine, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector)
         : TBase(name)
         , DsGroupSelector(dsGroupSelector)
         , Self(self)
-        , VersionedIndex(versionedIndex)
+        , Engine(engine)
     {
         YDB_LOG_VERIFY(!!DsGroupSelector);
-        YDB_LOG_VERIFY(VersionedIndex);
         YDB_LOG_VERIFY(Self);
-    }
-};
-
-class TGranuleFinishCommonLoading: public ITxReader {
-private:
-    using TBase = ITxReader;
-    TGranuleMeta* Self = nullptr;
-    bool Started = false;
-
-    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
-        return true;
-    }
-
-    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override;
-
-public:
-    TGranuleFinishCommonLoading(const TString& name, TGranuleMeta* self)
-        : TBase(name)
-        , Self(self)
-    {
-        YDB_LOG_VERIFY(Self);
+        YDB_LOG_VERIFY(Engine);
     }
 };
 

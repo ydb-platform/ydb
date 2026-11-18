@@ -153,8 +153,9 @@ public:
     virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector,
         std::vector<TPortionAddress>&& uncommittedPortions, const bool loadPortions) override;
     bool FinishLoading(const bool portionsLoaded = true);
-    // a batch of TDeferredPortionLoader, added as TTxInit adds its portions
-    void AddLoadedPortions(const TInternalPathId pathId, const std::vector<TPortionInfo::TPtr>& portions);
+    void AddPortionLoadedOnStart(TGranuleMeta& granule, const TPortionInfo::TPtr& portion);
+    // a batch of TDeferredPortionLoader: skips the portions already in memory
+    void AddPortionsLoadedInBatch(const TInternalPathId pathId, const std::vector<TPortionInfo::TPtr>& portions);
 
     void PrefetchPortionsMetadata();
     bool StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction);
@@ -289,6 +290,14 @@ private:
 
 private:
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
+
+    template <class TPortionPtr>
+    void RegisterPortion(const TPortionPtr& portion) {
+        Counters->AddPortion(*portion);
+        if (portion->HasRemoveSnapshot()) {
+            AddCleanupPortion(portion);
+        }
+    }
 };
 
 }   // namespace NKikimr::NOlap

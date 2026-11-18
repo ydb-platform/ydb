@@ -100,6 +100,15 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
                 return Error(record.GetStatus(), record.GetReason());
             }
             break;
+        case NKikimrScheme::StatusNameConflict:
+            if (Kind == TReplication::ETargetKind::Topic) {
+                // A collected destination id also produces a name conflict.
+                DropError = record.GetReason();
+                Send(PipeCache, new TEvPipeCache::TEvForward(
+                    new TEvSchemeShard::TEvDescribeScheme(DstPathId), SchemeShardId, true));
+                return Become(&TThis::StateCheckDst);
+            }
+            return Error(record.GetStatus(), record.GetReason());
         case NKikimrScheme::StatusResourceExhausted:
             return Retry();
         case NKikimrScheme::StatusSuccess:
@@ -110,6 +119,24 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         default:
             return Error(record.GetStatus(), record.GetReason());
         }
+    }
+
+    STATEFN(StateCheckDst) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateCheckDst"});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
+            return Success();
+        }
+
+        return Error(NKikimrScheme::StatusNameConflict, DropError);
     }
 
     void SubscribeTx(ui64 txId) {
@@ -242,6 +269,7 @@ private:
     ui64 TxId = 0;
     ui64 WaitingTxId = 0;
     TActorId PipeCache;
+    TString DropError;
 
 }; // TDstRemover
 

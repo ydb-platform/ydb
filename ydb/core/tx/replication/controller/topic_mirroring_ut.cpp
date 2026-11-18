@@ -1,13 +1,18 @@
 #include "private_events.h"
 #include "dst_alterer.h"
+#include "dst_remover.h"
 #include "stream_remover.h"
 #include "topic_mirror.h"
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/printf.h>
@@ -28,7 +33,8 @@ class TTopicMirroringFixture {
 
     struct TSourceEnv: TEnv<> {
         TSourceEnv(): TEnv<>(Flags()) {
-            UNIT_ASSERT_VALUES_EQUAL(CreateTopic("/Root", *MakeTopicDescription({.Name = "topic"})), NMsgBusProxy::MSTATUS_OK);
+            UNIT_ASSERT_VALUES_EQUAL(MkDir("/Root", "src"), NMsgBusProxy::MSTATUS_OK);
+            UNIT_ASSERT_VALUES_EQUAL(CreateTopic("/Root/src", *MakeTopicDescription({.Name = "topic"})), NMsgBusProxy::MSTATUS_OK);
         }
     };
 
@@ -49,7 +55,7 @@ public:
                 }
             });
         const auto endpoint = sourceHost + Source.GetEndpoint().substr(Source.GetEndpoint().rfind(':'));
-        Exec(Sprintf(R"(CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/topic` AS `/Root/topic`
+        Exec(Sprintf(R"(CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/src/topic` AS `/Root/topic`
             WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin",
                 CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", endpoint.c_str()));
         if (stopBeforeCreateResult) {
@@ -96,6 +102,22 @@ public:
             .GetPathDescription().GetReplicationDescription().GetState().HasDone(); });
     }
 
+    void CheckDropByMissingId() {
+        namespace TEvSchemeShard = NSchemeShard::TEvSchemeShard;
+        const TPathId missing(SchemeShard, 100500);
+        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(200600, SchemeShard);
+        auto& tx = *request->Record.AddTransaction();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
+        tx.MutableDrop()->SetId(missing.LocalPathId);
+        const auto drop = Destination.Send<TEvSchemeShard::TEvModifySchemeTransactionResult>(SchemeShard, std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL(drop->Get()->Record.GetStatus(), NKikimrScheme::StatusNameConflict);
+
+        Destination.GetRuntime().Register(CreateDstRemover(Destination.GetSender(), SchemeShard, {}, 1, 1,
+            TReplication::ETargetKind::Topic, missing, Destination.GetPathId("/Root/replication")));
+        const auto cleanup = Destination.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDropDstResult>(Destination.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(cleanup->Get()->Status, NKikimrScheme::StatusSuccess);
+    }
+
     void CheckMissingDestination() {
         Exec("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'PAUSED');");
         WaitMirror(false);
@@ -110,13 +132,28 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, state == TReplication::EState::Ready
                 ? NKikimrScheme::StatusPathDoesNotExist : NKikimrScheme::StatusSuccess);
         }
+
+        UNIT_ASSERT_VALUES_EQUAL(Destination.CreateTopic("/Root", *MakeTopicDescription({.Name = "topic"})), NMsgBusProxy::MSTATUS_OK);
+        const auto replacement = Destination.GetPathId("/Root/topic");
+        Exec("DROP ASYNC REPLICATION `/Root/replication` CASCADE;");
+        UNIT_ASSERT_VALUES_EQUAL(Destination.GetPathId("/Root/topic"), replacement);
+        UNIT_ASSERT_VALUES_EQUAL(Destination.GetDescription("/Root/replication").GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
+    }
+
+    void DropSourceTopic() {
+        NYdb::NTopic::TTopicClient client(Source.GetDriver());
+        const auto dropped = client.DropTopic("/Root/src/topic").GetValueSync();
+        UNIT_ASSERT_C(dropped.IsSuccess(), dropped.GetIssues().ToString());
+    }
+
+    void RemoveSourceDirectory() {
+        NYdb::NScheme::TSchemeClient scheme(Source.GetDriver());
+        const auto removed = scheme.RemoveDirectory("/Root/src").GetValueSync();
+        UNIT_ASSERT_C(removed.IsSuccess(), removed.GetIssues().ToString());
     }
 
     void CheckDropWithMissingSource() {
-        NYdb::NTopic::TTopicClient client(Source.GetDriver());
-        const auto dropped = client.DropTopic("/Root/topic").GetValueSync();
-        UNIT_ASSERT_C(dropped.IsSuccess(), dropped.GetIssues().ToString());
-
         Exec("DROP ASYNC REPLICATION `/Root/replication`;");
         UNIT_ASSERT_VALUES_EQUAL(Destination.GetDescription("/Root/replication").GetSchemeStatus(),
             NKikimrScheme::StatusPathDoesNotExist);
@@ -126,7 +163,7 @@ public:
     void WriteAndWait(const TString& payload, ui64 endOffset) {
         NYdb::NTopic::TTopicClient sourceClient(Source.GetDriver()), destinationClient(Destination.GetDriver());
         auto writer = sourceClient.CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
-            .Path("/Root/topic").ProducerId("producer").MessageGroupId("producer").Codec(NYdb::NTopic::ECodec::RAW));
+            .Path("/Root/src/topic").ProducerId("producer").MessageGroupId("producer").Codec(NYdb::NTopic::ECodec::RAW));
         UNIT_ASSERT(writer->Write(payload));
         UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
         Wait([&] {
@@ -225,9 +262,26 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
         UNIT_ASSERT(!test.Config().GetPartitionConfig().HasMirrorFrom());
     }
 
-    Y_UNIT_TEST(DropSucceedsAfterSourceTopicWasDeleted) {
+    Y_UNIT_TEST_TWIN(DropSucceedsAfterSourceDirectoryWasDeleted, ReplaceParentWithTopic) {
         TTopicMirroringFixture test;
+        test.DropSourceTopic();
+        test.RemoveSourceDirectory();
+        if (ReplaceParentWithTopic) {
+            UNIT_ASSERT_VALUES_EQUAL(test.Source.CreateTopic("/Root", *MakeTopicDescription({.Name = "src"})), NMsgBusProxy::MSTATUS_OK);
+        }
         test.CheckDropWithMissingSource();
+    }
+
+    Y_UNIT_TEST(DropSucceedsAfterDirectoryReplacesSourceTopic) {
+        TTopicMirroringFixture test;
+        test.DropSourceTopic();
+        UNIT_ASSERT_VALUES_EQUAL(test.Source.MkDir("/Root/src", "topic"), NMsgBusProxy::MSTATUS_OK);
+        test.CheckDropWithMissingSource();
+    }
+
+    Y_UNIT_TEST(TopicCleanupConfirmsMissingIdAfterNameConflict) {
+        TTopicMirroringFixture test;
+        test.CheckDropByMissingId();
     }
 
     Y_UNIT_TEST(MissingDestinationCannotResume) {

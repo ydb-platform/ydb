@@ -96,9 +96,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
             // Keep cleanup pending: the important consumer still retains source data.
             if (Kind == TReplication::ETargetKind::Topic) {
                 if (result.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
-                    Send(YdbProxy, new TEvYdbProxy::TEvListDirectoryRequest(
-                        TString(ExtractParent(SrcPath)), {}), 0, ProxyGeneration);
-                    return;
+                    return CheckParentDirectory(SrcPath);
                 }
                 return Schedule(RetryInterval, new TEvents::TEvWakeup(ProxyGeneration));
             }
@@ -110,6 +108,35 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         Reply(std::move(result));
     }
 
+    void CheckParentDirectory(TString childPath) {
+        const TString parent(ExtractParent(childPath));
+        if (parent.empty()) {
+            return Schedule(RetryInterval, new TEvents::TEvWakeup(ProxyGeneration));
+        }
+
+        ChildPath = std::move(childPath);
+        Send(YdbProxy, new TEvYdbProxy::TEvListDirectoryRequest(parent, {}), 0, ProxyGeneration);
+    }
+
+    bool SourceTopicIsGone(const NYdb::NScheme::TListDirectoryResult& result) const {
+        using EType = NYdb::NScheme::ESchemeEntryType;
+        const auto parentType = result.GetEntry().Type;
+        if (!EqualToOneOf(parentType, EType::Directory, EType::SubDomain)) {
+            // An ordinary source topic cannot be nested under a table or another topic.
+            return EqualToOneOf(parentType, EType::Table, EType::Topic, EType::PqGroup);
+        }
+
+        // Directory listings include children regardless of their ACLs.
+        const auto name = ExtractBase(ChildPath);
+        const auto& children = result.GetChildren();
+        const auto child = FindIf(children, [&](const auto& entry) {
+            return TStringBuf(entry.Name) == name;
+        });
+        return child == children.end()
+            || (ChildPath == SrcPath
+                && !EqualToOneOf(child->Type, EType::Topic, EType::PqGroup, EType::Unknown));
+    }
+
     void Handle(TEvYdbProxy::TEvListDirectoryResponse::TPtr& ev) {
         if (ev->Cookie != ProxyGeneration) {
             return;
@@ -117,16 +144,11 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
 
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            const auto& children = result.GetChildren();
-            const auto child = FindIf(children, [&](const auto& entry) {
-                return TStringBuf(entry.Name) == ExtractBase(SrcPath);
-            });
-            // A successful directory listing includes children regardless of their ACLs.
-            if (EqualToOneOf(result.GetEntry().Type, NYdb::NScheme::ESchemeEntryType::Directory,
-                NYdb::NScheme::ESchemeEntryType::SubDomain) && child == children.end())
-            {
+            if (SourceTopicIsGone(result)) {
                 return Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}));
             }
+        } else if (EqualToOneOf(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, NYdb::EStatus::NOT_FOUND)) {
+            return CheckParentDirectory(TString(ExtractParent(ChildPath)));
         } else {
             YDB_LOG_ERROR("Cannot confirm source topic absence",
                 {"status", result.GetStatus()},
@@ -216,6 +238,7 @@ private:
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
     const TString StreamName;
+    TString ChildPath;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     static constexpr auto RetryInterval = TDuration::Seconds(10);

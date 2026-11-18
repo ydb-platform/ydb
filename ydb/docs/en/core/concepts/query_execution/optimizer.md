@@ -70,14 +70,6 @@ Statistics help the optimizer estimate how many rows a query needs to read and h
 
 {{ ydb-short-name }} automatically updates basic table statistics: the row count and size in bytes.
 
-{% if feature_flags.enable_column_statistics == false %}
-{% note warning "Experimental feature" %}
-
-This feature is under development and is disabled by default by the [`enable_column_statistics`](../../reference/configuration/feature_flags.md) flag. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the flag may cause errors, cluster instability, or make it impossible to change the YDB version. Do not enable this flag in production clusters. [Learn more](../../reference/configuration/feature_flags.md#experimental).
-
-{% endnote %}
-{% endif %}
-
 For more accurate estimates, collect column statistics: which values occur in each column and how often. For example, the optimizer can use them to estimate how many rows match a `WHERE` condition.
 
 You can collect column statistics manually with [ANALYZE](../../yql/reference/syntax/analyze.md) or, for column tables, [configure background collection](../../reference/configuration/statistics_config.md#enable-background-column-stats-collection).

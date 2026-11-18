@@ -8,7 +8,7 @@ import random
 import string
 import re
 from html import unescape
-from typing import Callable, List, Dict
+from typing import Callable, List, Dict, Tuple
 from urllib.parse import parse_qs, urlsplit
 
 import requests
@@ -379,7 +379,61 @@ class TestPqRowDispatcher(TestYdsBase):
         io.wait_actor_count("DQ_PQ_READ_ACTOR", 1)
         io.stop(query_id)
 
-    def test_filters_non_optional_field(self, ydb_topics: Callable[[str, ...], YdbTopics]):
+    @pytest.mark.parametrize(
+        'testcase',
+        [
+            ("time > 101;", '(`time` > 101)'),
+            ('data = "hello2"', '(`data` = "hello2")'),
+            (' event IS NOT DISTINCT FROM "event2"', '(`event` IS NOT DISTINCT FROM "event2")'),
+            (' event IS DISTINCT FROM "event1"', '(`event` IS DISTINCT FROM "event1")'),
+            ('event IN ("event2")', '(`event` IN ("event2"))'),
+            ('event NOT IN ("event1", "event3")', '(NOT (`event` IN ("event1", "event3")))'),
+            ('event IN ("1", "2", "3", "4", "5", "6", "7", "event2")', '(`event` IN ("1"'),
+            (
+                ' event IS DISTINCT FROM data AND event IN ("1", "2", "3", "4", "5", "6", "7", "event2")',
+                '((`event` IS DISTINCT FROM `data`) AND (`event` IN ("1"',
+            ),
+            (
+                ' IF(event = "event2", event IS DISTINCT FROM data, FALSE)',
+                'IF((`event` = "event2"), (`event` IS DISTINCT FROM `data`), FALSE)',
+            ),
+            (' nested REGEXP ".*abc.*"', '(CAST(`nested` AS String) REGEXP ".*abc.*")'),
+            (' CAST(nested AS String) REGEXP ".*abc.*"', '(CAST(`nested` AS String) REGEXP ".*abc.*")'),
+            ('event LIKE "event2%"', 'StartsWith(`event`, "event2")'),
+            ('event LIKE "%event2"', 'EndsWith(`event`, "event2")'),
+            ('event LIKE "%event2%"', 'String::Contains(`event`, "event2")'),
+            (' (data = "hello2") IS NOT DISTINCT FROM true', '((`data` = "hello2") IS NOT DISTINCT FROM TRUE)'),
+            (
+                ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true',
+                '((`data` REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)',
+            ),
+            (
+                ' (CAST(data AS Utf8) REGEXP ".*hello2.*") IS NOT DISTINCT FROM true',
+                '((IF((CAST(`data` AS Utf8?) IS NOT NULL), CAST(CAST(`data` AS Utf8?) AS String), NULL) REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)',
+            ),
+            (' CAST(`time` AS Date) > Date("1970-04-12")', '(CAST(`time` AS Date?) > Date("1970-04-12"))'),
+            (
+                ' CAST(`time` AS Timestamp) > Timestamp("1970-01-01T00:00:00.000101Z")',
+                '(CAST(`time` AS Timestamp?) > Timestamp("1970-01-01T00:00:00.000101Z"))',
+            ),
+            (
+                ' MIN_OF(`time`, `time` + 5) >= 102 AND MAX_OF(`time`, `time` - 5) < 103',
+                '((MIN_OF(`time`, (`time` + 5)) >= 102) AND (MAX_OF(`time`, (`time` - 5)) < 103))',
+            ),
+            (' `time` IN (102, 103, 104)', '(`time` IN (102, 103, 104))'),
+            (
+                ' CAST(`time` AS Interval) > Interval("PT0.000101S")',
+                '(CAST(`time` AS Interval?) > Interval("PT0.000101S"))',
+            ),
+            (
+                ' CAST(`time` AS Timestamp) - Interval("-PT0.000001S") > Timestamp("1970-01-01T00:00:00.000102Z")',
+                '((CAST(`time` AS Timestamp?) - Interval("-PT0.000001S")) > Timestamp("1970-01-01T00:00:00.000102Z"))',
+            ),
+        ],
+    )
+    def test_filters_non_optional_field(
+        self, ydb_topics: Callable[[str, ...], YdbTopics], testcase: List[Tuple[str, str]]
+    ):
         io = ydb_topics("test_filters_non_optional_field", shared=True)
         create_input_consumer(io)
 
@@ -396,74 +450,8 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 102, "data": "hello2", "event": "event2", "nested": ["abc", "key"]}',
         ]
         expected = ['102']
-        filter = "time > 101;"
-        self.run_and_check(io, sql + filter, data, expected, '(`time` > 101)')
-        filter = 'data = "hello2"'
-        self.run_and_check(io, sql + filter, data, expected, '(`data` = "hello2")')
-        filter = ' event IS NOT DISTINCT FROM "event2"'
-        self.run_and_check(io, sql + filter, data, expected, '(`event` IS NOT DISTINCT FROM "event2")')
-        filter = ' event IS DISTINCT FROM "event1"'
-        self.run_and_check(io, sql + filter, data, expected, '(`event` IS DISTINCT FROM "event1")')
-        filter = 'event IN ("event2")'
-        self.run_and_check(io, sql + filter, data, expected, '(`event` IN ("event2"))')
-        filter = 'event NOT IN ("event1", "event3")'
-        self.run_and_check(io, sql + filter, data, expected, '(NOT (`event` IN ("event1", "event3")))')
-        filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(io, sql + filter, data, expected, '(`event` IN ("1"')
-        filter = ' event IS DISTINCT FROM data AND event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(io, sql + filter, data, expected, '((`event` IS DISTINCT FROM `data`) AND (`event` IN ("1"')
-        filter = ' IF(event = "event2", event IS DISTINCT FROM data, FALSE)'
-        self.run_and_check(
-            io, sql + filter, data, expected, 'IF((`event` = "event2"), (`event` IS DISTINCT FROM `data`), FALSE)'
-        )
-        filter = ' nested REGEXP ".*abc.*"'
-        self.run_and_check(io, sql + filter, data, expected, '(CAST(`nested` AS String) REGEXP ".*abc.*")')
-        filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
-        self.run_and_check(io, sql + filter, data, expected, '(CAST(`nested` AS String) REGEXP ".*abc.*")')
-        filter = 'event LIKE "event2%"'
-        self.run_and_check(io, sql + filter, data, expected, 'StartsWith(`event`, "event2")')
-        filter = 'event LIKE "%event2"'
-        self.run_and_check(io, sql + filter, data, expected, 'EndsWith(`event`, "event2")')
-        filter = 'event LIKE "%event2%"'
-        self.run_and_check(io, sql + filter, data, expected, 'String::Contains(`event`, "event2")')
-        filter = ' (data = "hello2") IS NOT DISTINCT FROM true'
-        self.run_and_check(io, sql + filter, data, expected, '((`data` = "hello2") IS NOT DISTINCT FROM TRUE)')
-        filter = ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
-        self.run_and_check(io, sql + filter, data, expected, '((`data` REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)')
-        filter = ' (CAST(data AS Utf8) REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
-        self.run_and_check(
-            io,
-            sql + filter,
-            data,
-            expected,
-            '((IF((CAST(`data` AS Utf8?) IS NOT NULL), CAST(CAST(`data` AS Utf8?) AS String), NULL) REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)',
-        )  # YQ-5727
-        filter = ' CAST(`time` AS Date) > Date("1970-04-12")'
-        self.run_and_check(io, sql + filter, data, expected, '(CAST(`time` AS Date?) > Date("1970-04-12"))')
-        filter = ' CAST(`time` AS Timestamp) > Timestamp("1970-01-01T00:00:00.000101Z")'
-        self.run_and_check(
-            io, sql + filter, data, expected, '(CAST(`time` AS Timestamp?) > Timestamp("1970-01-01T00:00:00.000101Z"))'
-        )  # YQ-5738
-        filter = ' MIN_OF(`time`, `time` + 5) >= 102 AND MAX_OF(`time`, `time` - 5) < 103'
-        self.run_and_check(
-            io,
-            sql + filter,
-            data,
-            expected,
-            '((MIN_OF(`time`, (`time` + 5)) >= 102) AND (MAX_OF(`time`, (`time` - 5)) < 103))',
-        )
-        filter = ' `time` IN (102, 103, 104)'
-        self.run_and_check(io, sql + filter, data, expected, '(`time` IN (102, 103, 104))')
-        filter = ' CAST(`time` AS Interval) > Interval("PT0.000101S")'
-        self.run_and_check(io, sql + filter, data, expected, '(CAST(`time` AS Interval?) > Interval("PT0.000101S"))')
-        filter = ' CAST(`time` AS Timestamp) - Interval("-PT0.000001S") > Timestamp("1970-01-01T00:00:00.000102Z")'
-        self.run_and_check(
-            io,
-            sql + filter,
-            data,
-            expected,
-            '((CAST(`time` AS Timestamp?) - Interval("-PT0.000001S")) > Timestamp("1970-01-01T00:00:00.000102Z"))',
-        )
+        filter, expected_predicate = testcase
+        self.run_and_check(io, sql + filter, data, expected, expected_predicate)
 
     @pytest.mark.parametrize(
         'testcase',
@@ -535,7 +523,7 @@ class TestPqRowDispatcher(TestYdsBase):
             ),
         ],
     )
-    def test_filters_optional_field(self, ydb_topics: Callable[[str, ...], YdbTopics], testcase):
+    def test_filters_optional_field(self, ydb_topics: Callable[[str, ...], YdbTopics], testcase: List[Tuple[str, str]]):
         io = ydb_topics("test_filters_optional_field", shared=True)
         create_input_consumer(io)
 

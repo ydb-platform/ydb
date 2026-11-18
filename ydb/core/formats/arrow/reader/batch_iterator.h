@@ -89,10 +89,10 @@ public:
         YDB_LOG_VERIFY(batch);
         YDB_LOG_VERIFY(KeyColumns.IsSameSortingSchema(keySchema),
             {"batch", KeyColumns.DebugJson()},
-            {"schema", keySchema});
+            {"schema", keySchema.ToString()});
         YDB_LOG_VERIFY(KeyColumns.IsSameDataSchema(dataSchema),
             {"batch", KeyColumns.DebugJson()},
-            {"schema", dataSchema});
+            {"schema", dataSchema.ToString()});
         Y_ABORT_UNLESS(KeyColumns.InitPosition(GetPosition(order.GetStart())));
         Y_ABORT_UNLESS(VersionColumns.InitPosition(GetPosition(order.GetStart())));
         if (Filter) {

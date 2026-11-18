@@ -28,4 +28,8 @@ message TMemoryControllerConfig {
 
     optional float CompactionLimitPercent = 130 [default = 10];
     optional uint64 CompactionLimitBytes = 131;
+
+    // Includes both pending requests and active index-build scans.
+    optional float IndexBuildLimitPercent = 140 [default = 3];
+    optional uint64 IndexBuildLimitBytes = 141;
 }

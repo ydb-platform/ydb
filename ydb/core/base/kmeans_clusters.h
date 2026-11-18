@@ -64,7 +64,13 @@ public:
     virtual TString GetEmptyRow() const = 0;
 };
 
-std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error);
+enum class EClustersMode {
+    Accumulate,
+    AssignOnly,
+};
+
+std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error,
+    EClustersMode mode = EClustersMode::Accumulate);
 
 // Auto-detect vector type and dimension from target vector when settings have dimension=0
 std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSettings settings, const TStringBuf& targetVector, ui32 maxRounds, TString& error);

@@ -42,7 +42,7 @@ using namespace NKMeans;
  *   - Contains up to K sampled rows (serialized), with associated probabilities
  */
 
-class TSampleKScan final: public TActor<TSampleKScan>, public IActorExceptionHandler, public NTable::IScan {
+class TSampleKScan final: public TActor<TSampleKScan>, public IActorExceptionHandler, public TVectorIndexScan {
 protected:
     const TTags ScanTags;
     const TVector<NScheme::TTypeInfo> KeyTypes;
@@ -50,6 +50,8 @@ protected:
     const TSerializedTableRange TableRange;
     const TSerializedTableRange RequestedRange;
     const ui64 K;
+    ui64 SampleRowBytesLimit;
+    const bool HasSettings;
     bool SkipForeign = false;
     bool SkipEmptyColumns = false;
     NTable::TPos IsForeignPos = 0;
@@ -78,7 +80,7 @@ public:
         return NKikimrServices::TActivity::SAMPLE_K_SCAN_ACTOR;
     }
 
-    TSampleKScan(ui64 tabletId, const TUserTable& table, NKikimrTxDataShard::TEvSampleKRequest& request,
+    TSampleKScan(ui64 tabletId, const TUserTable& table, const NKikimrTxDataShard::TEvSampleKRequest& request,
                  const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
                  const TSerializedTableRange& range, std::unique_ptr<IClusters>&& clusters)
         : TActor(&TThis::StateWork)
@@ -87,6 +89,9 @@ public:
         , TableRange(table.Range)
         , RequestedRange(range)
         , K(request.GetK())
+        , SampleRowBytesLimit(Max<ui64>(request.GetRequiredRowBytes(), (request.HasSettings() ? ui64(request.GetSettings().vector_dimension()) * 4
+            : 0) + 256 + ui64(request.ColumnsSize()) * 32))
+        , HasSettings(request.HasSettings())
         , SkipEmptyColumns(request.GetSkipEmptyColumns())
         , TabletId(tabletId)
         , BuildId(request.GetId())
@@ -119,6 +124,13 @@ public:
 
         if (scanRange.To) {
             Lead.Until(scanRange.To, scanRange.InclusiveTo);
+        }
+    }
+
+    void SetRowBytesLimit(ui64 limit) final {
+        TVectorIndexScan::SetRowBytesLimit(limit);
+        if (!HasSettings) {
+            SampleRowBytesLimit = Max(SampleRowBytesLimit, limit + 256 + ui64(ScanTags.size()) * 32);
         }
     }
 
@@ -160,6 +172,15 @@ public:
             return EScan::Feed;
         }
 
+        if (GetRowBytesLimit()) {
+            ui64 bytes = 2 + ui64(row.Size()) * 4;
+            for (const auto& cell : *row) {
+                bytes += cell.Size();
+            }
+            if (!CheckRowBytes(Response->Record, bytes, SampleRowBytesLimit)) {
+                return EScan::Final;
+            }
+        }
         if (SkipForeign) {
             bool foreign = row.Get(IsForeignPos).AsValue<bool>();
             if (foreign) {
@@ -211,7 +232,9 @@ public:
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
-        if (status == EStatus::Exception) {
+        if (record.GetRequiredRowBytes()) {
+            record.SetStatus(NKikimrIndexBuilder::ABORTED);
+        } else if (status == EStatus::Exception) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         } else if (status != NTable::EStatus::Done) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
@@ -225,6 +248,8 @@ public:
             Issues.AddIssue(NYql::TIssue(InvalidEmbeddingError)
                 .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_ERROR));
         }
+        record.SetUploadStatus(record.GetStatus() == NKikimrIndexBuilder::BUILD_ERROR
+            ? Ydb::StatusIds::INTERNAL_ERROR : Ydb::StatusIds::SUCCESS);
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
@@ -235,6 +260,10 @@ public:
             YDB_LOG_ERROR("Scan failed",
                 {"debug", Debug()},
                 {"responseRecord", ToShortDebugString(Response->Record)});
+        }
+        if (GetResourceReservation()) {
+            Response->MemoryReservation = RetainResourceReservation(
+                Response->Record.SpaceUsedLong() + Response->Record.ByteSizeLong() + 4_KB);
         }
         Send(ResponseActorId, Response.Release());
 
@@ -310,6 +339,7 @@ void TDataShard::Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorC
 }
 
 void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx) {
+    const auto sender = ev->Sender;
     auto& request = ev->Get()->Record;
     const ui64 id = request.GetId();
     auto rowVersion = request.HasSnapshotStep() || request.HasSnapshotTxId()
@@ -419,13 +449,19 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
             return;
         }
 
-        // 4. Creating scan
-        TAutoPtr<NTable::IScan> scan = new TSampleKScan(TabletID(), userTable,
-            request, ev->Sender, std::move(response), requestedRange, std::move(clusters));
-
-        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+        clusters.reset();
+        StartDeferredBuildIndexScan<TEvDataShard::TEvSampleKRequest, TEvDataShard::TEvSampleKResponse>(
+            this, ev, std::move(response), rowVersion, userTable.LocalTid,
+            [tabletId = TabletID()](const TUserTable& table, const auto& req, TActorId sender, auto reply) -> TAutoPtr<NTable::IScan> {
+                TString error;
+                auto clusters = req.HasSettings() ? NKikimr::NKMeans::CreateClusters(req.GetSettings(), 0, error) : nullptr;
+                Y_ENSURE(!req.HasSettings() || clusters, error);
+                TSerializedTableRange range;
+                range.Load(req.GetKeyRange());
+                return new TSampleKScan(tabletId, table, req, sender, std::move(reply), range, std::move(clusters));
+            });
     } catch (const std::exception& exc) {
-        FailScan<TEvDataShard::TEvSampleKResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TSampleKScan");
+        FailScan<TEvDataShard::TEvSampleKResponse>(id, TabletID(), sender, seqNo, exc, "TSampleKScan");
     }
 }
 

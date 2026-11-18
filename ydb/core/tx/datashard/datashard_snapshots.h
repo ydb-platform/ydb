@@ -260,6 +260,8 @@ private:
     TSnapshotExpireQueue ExpireQueue;
 
     THashMap<TSnapshotKey, size_t> References;
+    // Existing readers may release using a key from before a table move.
+    THashMap<TSnapshotKey, TSnapshotKey> ReferenceAliases;
 
     TMonotonic LastAdvanceWatermark{};
     bool SnapshotRegistryWarningLogged = false;

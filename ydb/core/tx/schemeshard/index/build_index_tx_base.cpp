@@ -7,6 +7,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/metering/metering.h>
+#include <util/generic/hash_set.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
@@ -34,6 +35,12 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
             buildInfo.EndTime = TAppData::TimeProvider->Now();
         }
         buildInfo.State = state;
+        if (state != TIndexBuildInfo::EState::Filling) {
+            for (auto& [_, shard] : buildInfo.Shards) {
+                shard.RequestReservation.reset();
+            }
+            buildInfo.AdmissionRetryScheduledAt = {};
+        }
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistBuildIndexState(db, buildInfo);
@@ -74,7 +81,18 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyOnComplete(const TActorContext& 
     ApplySchedule(ctx);
 }
 
+void TSchemeShard::TIndexBuilder::TTxBase::ScheduleProgress(TIndexBuildInfo& build, TInstant deadline) {
+    if (!build.AdmissionRetryScheduledAt || deadline < build.AdmissionRetryScheduledAt) {
+        build.AdmissionRetryScheduledAt = deadline;
+        ToScheduleProgress.emplace_back(build.Id, deadline);
+    }
+}
+
 void TSchemeShard::TIndexBuilder::TTxBase::ApplySchedule(const TActorContext& ctx) {
+    for (const auto& [id, deadline] : ToScheduleProgress) {
+        ctx.Schedule(Max(TDuration::MilliSeconds(1), deadline - ctx.Now()),
+            new TEvPrivate::TEvIndexBuildRetry(ui64(id), deadline));
+    }
     for (const auto& rec: ToScheduleBilling) {
         ctx.Schedule(
             std::get<1>(rec),
@@ -246,12 +264,23 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         index.SetUserSID(*indexInfo.UserSID);
     }
 
+    THashSet<TStringBuf> reportedAdmissionIssues;
     for (const auto& item: indexInfo.Shards) {
         const TShardIdx& shardIdx = item.first;
         const TIndexBuildShardStatus& status = item.second;
 
-        if (status.Status != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
-            if (status.UploadStatus != Ydb::StatusIds::SUCCESS) {
+        if (indexInfo.IsBuildVectorIndex() && indexInfo.State == TIndexBuildInfo::EState::Filling &&
+            status.Status == NKikimrIndexBuilder::ABORTED && status.DebugMessage &&
+            (status.UploadStatus == Ydb::StatusIds::SUCCESS || status.UploadStatus == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)) {
+            // The persisted upload status survives restarts. Hintless legacy
+            // aborts are also retried; known upload failures remain errors.
+            if (reportedAdmissionIssues.emplace(status.DebugMessage).second) {
+                AddIssue(index.MutableIssues(), TStringBuilder() << "Retrying index scan on shard " << shardIdx
+                    << ": " << status.DebugMessage, NYql::TSeverityIds::S_WARNING);
+            }
+        } else if (status.Status != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
+            if (status.UploadStatus != Ydb::StatusIds::SUCCESS ||
+                status.Status == NKikimrIndexBuilder::BUILD_ERROR || status.Status == NKikimrIndexBuilder::BAD_REQUEST) {
                 if (status.DebugMessage) {
                     AddIssue(index.MutableIssues(), status.ToString(shardIdx));
                 }

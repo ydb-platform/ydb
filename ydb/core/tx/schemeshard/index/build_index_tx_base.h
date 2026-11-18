@@ -27,6 +27,7 @@ private:
     TDeque<TChangeSetColumnConstraintStateRec> SetColumnConstraintStateChanges;
     using TBillingEventSchedule = std::tuple<TIndexBuildId, TDuration>;
     TDeque<TBillingEventSchedule> ToScheduleBilling;
+    TDeque<std::pair<TIndexBuildId, TInstant>> ToScheduleProgress;
     using TToBill = std::tuple<TIndexBuildId, TInstant, TInstant>;
     TDeque<TToBill> ToBill;
 
@@ -44,6 +45,7 @@ protected:
     void ChangeState(TIndexBuildId id, TIndexBuildInfo::EState state);
     void ChangeState(TIndexBuildId id, TSetColumnConstraintOperationInfo::EOperationState state);
     void Progress(TIndexBuildId id);
+    void ScheduleProgress(TIndexBuildInfo& build, TInstant deadline);
     void Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo& indexInfo);
     void Fill(NKikimrIndexBuilder::TIndexBuildSettings& settings, const TIndexBuildInfo& indexInfo);
     void AddIssue(::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage>* issues,

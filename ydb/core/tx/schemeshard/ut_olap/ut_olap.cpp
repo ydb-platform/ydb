@@ -622,7 +622,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
             KeyColumnNames: "timestamp"
             Columns )" << column;
-        const TExpectedResult rejected(NKikimrScheme::StatusSchemeError, "column table defaults are disabled");
+        const TExpectedResult rejected(NKikimrScheme::StatusSchemeError, "Default values for column tables are disabled");
 
         auto tryAll = [&](const TString& suffix, const TVector<TExpectedResult>& expected) {
             TestCreateColumnTable(runtime, ++txId, "/MyRoot",
@@ -648,6 +648,19 @@ Y_UNIT_TEST_SUITE(TOlap) {
         runtime.GetAppData().FeatureFlags.SetEnableCsDefaultValues(false);
         runtime.GetAppData().FeatureFlags.SetEnableSparsedColumns(true);
         tryAll("Sparsed", {NKikimrScheme::StatusAccepted});
+    }
+
+    Y_UNIT_TEST(SetAndDropDefaultRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableCsDefaultValues(true));
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AlterColumns { Name: "data" DefaultScalar { Scalar { String: "a" } } DropDefault: true } }
+        )", {{NKikimrScheme::StatusSchemeError, "Cannot set and drop default value of column 'data' in one request"}});
     }
 
     Y_UNIT_TEST_FLAG(PgTypesRejected, EnableTablePgTypes) {

@@ -461,7 +461,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         UNIT_ASSERT_C(!bulk.IsSuccess(), bulk.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(bulk.GetIssues().ToString(), "Missing default columns");
         ExpectSchemeError(db, "ALTER TABLE `/Root/CsFlagOff` ALTER COLUMN Value SET DEFAULT 6;",
-            "Default values are not supported in column tables");
+            "Default values for column tables are disabled");
         ExecScheme(db, "ALTER TABLE `/Root/CsFlagOff` ADD COLUMN Extra Uint32;");
         ExecDml(db, "INSERT INTO `/Root/CsFlagOff` (Key) VALUES (3);");
         CompareYson(R"([[1u;[5u];#];[3u;[5u];#]])",
@@ -486,6 +486,40 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         const auto yson = FormatResultSetYson(result.GetResultSet(0));
         UNIT_ASSERT_STRING_CONTAINS(yson, "DEFAULT 'aba'");
         UNIT_ASSERT_STRING_CONTAINS(yson, "JsonDocument(");
+    }
+
+    Y_UNIT_TEST(ShowCreateDsJsonDocumentDefault) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/DsJson` (
+                Key Uint64 NOT NULL,
+                Doc JsonDocument DEFAULT CAST('{"hello": 1}' AS JsonDocument),
+                PRIMARY KEY (Key)
+            );
+        )");
+        auto result = db.GetSession().GetValueSync().GetSession().ExecuteQuery(
+            "SHOW CREATE TABLE `/Root/DsJson`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(FormatResultSetYson(result.GetResultSet(0)), "DEFAULT JsonDocument(");
+    }
+
+    Y_UNIT_TEST(InfDefaults) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        const char* columns = R"(
+            Key Uint64 NOT NULL,
+            D Double DEFAULT Double('inf'),
+            F Float DEFAULT Float('-inf'),
+            PRIMARY KEY (Key)
+        )";
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/DsInf` (" << columns << ");");
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/CsInf` (" << columns << ") WITH (STORE = COLUMN);");
+        for (const char* table : {"DsInf", "CsInf"}) {
+            ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/" << table << "` (Key) VALUES (1);");
+            CompareYson(R"([[1u;[%inf];[%-inf]]])",
+                SelectYson(db, TStringBuilder() << "SELECT Key, D, F FROM `/Root/" << table << "`;"));
+        }
     }
 
     Y_UNIT_TEST(NanDefaultSurvivesSetDefault) {
@@ -774,6 +808,36 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         UNIT_ASSERT(TRestartTabletsCommand().Execute(kikimr).IsSuccess());
         CompareYson(R"([[1u;[5u]];[4u;[7u]]])",
             SelectYson(db, "SELECT Key, Value FROM `/Root/DefSparsePlain` ORDER BY Key;"));
+    }
+
+    Y_UNIT_TEST(LargeHistoricalFillIsChunked) {
+        auto cs = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/BigFill` (
+                Key Uint32 NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(Key)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )");
+        ExecDml(db, R"(
+            INSERT INTO `/Root/BigFill` (Key)
+            SELECT Key FROM AS_TABLE(ListMap(ListFromRange(0u, 3000u), ($x) -> (AsStruct($x AS Key))));
+        )");
+        const TString big(1024, 'b');
+        ExecScheme(db, TStringBuilder() << "ALTER TABLE `/Root/BigFill` ADD COLUMN Value Utf8 DEFAULT '" << big << "';");
+        ExecScheme(db, "ALTER TABLE `/Root/BigFill` ALTER COLUMN Value SET DEFAULT 'x';");
+        ExecDml(db, "INSERT INTO `/Root/BigFill` (Key) VALUES (3000u);");
+        const TString check = TStringBuilder() << "SELECT COUNT_IF(Value = '" << big << "'), COUNT_IF(Value = 'x'), COUNT(*) FROM `/Root/BigFill`;";
+        UNIT_ASSERT(cs->WaitCompactions(TDuration::Seconds(20)));
+        CompareYson(R"([[3000u;1u;3001u]])", SelectYson(db, check));
+        ExecScheme(db,
+            "ALTER OBJECT `/Root/BigFill` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        cs->WaitActualization(TDuration::Seconds(30), true);
+        UNIT_ASSERT(TRestartTabletsCommand().Execute(kikimr).IsSuccess());
+        CompareYson(R"([[3000u;1u;3001u]])", SelectYson(db, check));
     }
 
     Y_UNIT_TEST(DictionaryCompactionKeepsFill) {
@@ -1245,13 +1309,13 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/DsNoDef` (" << columns << ");");
         ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/CsNoDef` (" << columns << ") WITH (STORE = COLUMN);");
         for (const char* side : {"Ds", "Cs"}) {
-            for (ui32 repeat = 0; repeat != 2; ++repeat) {
+            for (ui32 repeat = 0; repeat < 2; ++repeat) {
                 ExecScheme(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "NoDef` ALTER COLUMN Value DROP DEFAULT;");
                 ExecScheme(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "NoDef` ALTER COLUMN Value SET DEFAULT NULL;");
             }
             ExecScheme(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "NoDef` ALTER COLUMN Value SET DEFAULT 5;");
             ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/" << side << "NoDef` (Key) VALUES (1);");
-            for (ui32 repeat = 0; repeat != 2; ++repeat) {
+            for (ui32 repeat = 0; repeat < 2; ++repeat) {
                 ExecScheme(db, TStringBuilder() << "ALTER TABLE `/Root/" << side << "NoDef` ALTER COLUMN Value DROP DEFAULT;");
             }
             ExecDml(db, TStringBuilder() << "INSERT INTO `/Root/" << side << "NoDef` (Key) VALUES (2);");

@@ -23,7 +23,6 @@ public:
         , Filter(filter)
         , Schema(schema)
     {
-        AFL_VERIFY(Schema);
     }
 };
 

@@ -2107,7 +2107,7 @@ public:
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
                                         if (!NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                                             ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                                "Default values are not supported in column tables"));
+                                                "Default values for column tables are disabled"));
                                             return SyncError();
                                         }
                                         auto err = FillLiteralProto(constraint.Value().Cast(), actualType, *add_column->MutableDefaultFromLiteral());
@@ -2369,7 +2369,7 @@ public:
                         } else if (alterColumnAction == "setDefaultValue") {
                             if (table.Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
-                                    "Default values are not supported in column tables"));
+                                    "Default values for column tables are disabled"));
                                 return SyncError();
                             }
                             if (table.Metadata->Kind == EKikimrTableKind::Olap) {
@@ -2407,7 +2407,7 @@ public:
                         } else if (alterColumnAction == "dropDefault") {
                             if (table.Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
-                                    "Default values are not supported in column tables"));
+                                    "Default values for column tables are disabled"));
                                 return SyncError();
                             }
 

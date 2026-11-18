@@ -56,7 +56,7 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
         if ((it == portionData.GetRecordsVerified().end() || i < it->GetColumnId())) {
             if (restoreAbsent || IIndexInfo::IsSpecialColumn(i)) {
                 columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i),
-                    ISnapshotSchema::GetAbsentColumnFill(dataSchema, resultSchema, i), true);
+                    ISnapshotSchema::GetAbsentColumnFill(dataSchema, resultSchema, i));
                 portionInfo.FillDefaultColumn(columns.back(), defaultSnapshot);
             }
         }
@@ -67,7 +67,7 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
             continue;
         }
         columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i),
-            ISnapshotSchema::GetAbsentColumnFill(dataSchema, resultSchema, i), true);
+            ISnapshotSchema::GetAbsentColumnFill(dataSchema, resultSchema, i));
         while (it != portionData.GetRecordsVerified().end() && it->GetColumnId() == i) {
             auto itBlobs = blobsData.find(it->GetAddress());
             YDB_LOG_VERIFY(itBlobs != blobsData.end(),

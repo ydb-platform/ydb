@@ -2449,7 +2449,7 @@ private:
                     } else if (alterColumnAction == "setDefaultValue") {
                         if (table->Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
-                                "Default values are not supported in column tables"));
+                                "Default values for column tables are disabled"));
                             return TStatus::Error;
                         }
 
@@ -2489,7 +2489,7 @@ private:
                         auto* column = table->Metadata->Columns.FindPtr(name);
                         if (table->Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
-                                "Default values are not supported in column tables"));
+                                "Default values for column tables are disabled"));
                             return TStatus::Error;
                         }
 

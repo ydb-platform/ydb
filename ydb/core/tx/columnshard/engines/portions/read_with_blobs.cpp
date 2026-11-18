@@ -2,7 +2,6 @@
 #include "read_with_blobs.h"
 #include "write_with_blobs.h"
 
-#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
@@ -10,7 +9,6 @@
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
@@ -131,15 +129,16 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
                 const auto& features = to->GetIndexInfo().GetColumnFeaturesVerified(i);
                 auto loader = to->GetColumnLoaderVerified(i);
                 const ui32 rows = source.PortionInfo.GetPortionInfo().GetRecordsCount();
-                auto array = NArrow::TThreadSimpleArraysCache::Get(features.GetArrowField()->type(), fromFill, rows);
-                auto trivial = std::make_shared<NArrow::NAccessor::TTrivialArray>(array);
-                const auto loadContext = loader->BuildAccessorContext(rows);
-                auto constructed = loader->GetAccessorConstructor()->Construct(trivial, loadContext);
-                YDB_LOG_VERIFY(constructed.IsSuccess(),
-                    {"reason", constructed.GetErrorMessage()});
-                auto blobAndMeta = loader->GetAccessorConstructor()->SerializeToBlobAndMeta(*constructed, loadContext);
-                newChunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
-                    std::move(blobAndMeta.Blob), *constructed, TChunkAddress(i, 0), features, std::move(blobAndMeta.Meta)));
+                ui16 chunkIdx = 0;
+                for (auto&& chunk : ISnapshotSchema::BuildAbsentColumnChunks(features.GetArrowField()->type(), fromFill, rows)) {
+                    const auto loadContext = loader->BuildAccessorContext(chunk->GetRecordsCount());
+                    auto constructed = loader->GetAccessorConstructor()->Construct(chunk, loadContext);
+                    YDB_LOG_VERIFY(constructed.IsSuccess(),
+                        {"reason", constructed.GetErrorMessage()});
+                    auto blobAndMeta = loader->GetAccessorConstructor()->SerializeToBlobAndMeta(*constructed, loadContext);
+                    newChunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
+                        std::move(blobAndMeta.Blob), *constructed, TChunkAddress(i, chunkIdx++), features, std::move(blobAndMeta.Meta)));
+                }
                 YDB_LOG_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
             }
         }

@@ -1720,7 +1720,7 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
         if (column.has_from_literal() && !column.from_literal().value().has_null_flag_value()) {
             if (!AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                 status = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Default values are not supported in column tables";
+                error = TStringBuilder() << "Default values for column tables are disabled";
                 return false;
             }
             NOlap::TColumnDefaultScalarValue scalar;
@@ -1913,7 +1913,7 @@ static bool FillAlterColumnDescription(const NKikimrKqp::TKqpColumnMetadataProto
         case TColumn::DEFAULT_KIND_LITERAL: {
             if (!AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                 status = Ydb::StatusIds::BAD_REQUEST;
-                error = "Default values are not supported in column tables";
+                error = "Default values for column tables are disabled";
                 return false;
             }
             NOlap::TColumnDefaultScalarValue scalar;
@@ -1934,7 +1934,7 @@ static bool FillAlterColumnDescription(const NKikimrKqp::TKqpColumnMetadataProto
             if constexpr (std::is_same_v<TColumnDesc, NKikimrSchemeOp::TOlapColumnDiff>) {
                 if (!AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                     status = Ydb::StatusIds::BAD_REQUEST;
-                    error = "Default values are not supported in column tables";
+                    error = "Default values for column tables are disabled";
                     return false;
                 }
                 description->SetDropDefault(true);

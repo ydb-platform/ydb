@@ -39,6 +39,10 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
     if (columnSchema.HasDefaultValue()) {
         DefaultValue = columnSchema.GetDefaultValue();
     }
+    if (columnSchema.HasDefaultScalar() && columnSchema.GetDropDefault()) {
+        errors.AddError("Cannot set and drop default value of column '" + Name + "' in one request");
+        return false;
+    }
     if (columnSchema.HasDefaultScalar()) {
         NOlap::TColumnDefaultScalarValue scalar;
         auto conclusion = scalar.DeserializeFromProto(columnSchema.GetDefaultScalar());
@@ -173,7 +177,7 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
     }
     if (columnSchema.HasDefaultValue()) {
         if (!AppData()->FeatureFlags.GetEnableCsDefaultValues() && !AppData()->FeatureFlags.GetEnableSparsedColumns()) {
-            errors.AddError("column table defaults are disabled");
+            errors.AddError("Default values for column tables are disabled");
             return false;
         }
         auto conclusion = DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue());
@@ -305,7 +309,7 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         return false;
     }
     if (sqlDefaultChange && !AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
-        errors.AddError("column table defaults are disabled");
+        errors.AddError("Default values for column tables are disabled");
         return false;
     }
     if (diffColumn.GetDefaultScalar() && !CreatedDefaultValue) {

@@ -1,6 +1,7 @@
 #include "abstract_scheme.h"
 
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/protos/config.pb.h>
@@ -284,6 +285,39 @@ std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetAbsentColumnFill(
         return nullptr;
     }
     return created->GetValue();
+}
+
+std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> ISnapshotSchema::BuildAbsentColumnChunks(
+    const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount) {
+    static constexpr ui64 MaxChunkBytes = 1 << 20;
+    ui64 valueBytes = 8;
+    if (fill && fill->is_valid) {
+        if (const auto* binary = dynamic_cast<const arrow::BaseBinaryScalar*>(fill.get()); binary && binary->value) {
+            valueBytes = binary->value->size() + sizeof(ui32);
+        } else if (const auto* fixed = dynamic_cast<const arrow::FixedWidthType*>(type.get())) {
+            valueBytes = std::max<ui64>(1, fixed->bit_width() / 8);
+        }
+    }
+    const ui32 chunkRecords = std::max<ui64>(1, std::min<ui64>(recordsCount, MaxChunkBytes / std::max<ui64>(1, valueBytes)));
+    std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> result;
+    if (!recordsCount) {
+        return result;
+    }
+    const auto full = NArrow::TThreadSimpleArraysCache::Get(type, fill, chunkRecords);
+    for (ui32 pos = 0; pos < recordsCount; pos += chunkRecords) {
+        const ui32 count = std::min(chunkRecords, recordsCount - pos);
+        result.emplace_back(std::make_shared<NArrow::NAccessor::TTrivialArray>(count == chunkRecords ? full : full->Slice(0, count)));
+    }
+    return result;
+}
+
+std::shared_ptr<NArrow::NAccessor::IChunkedArray> ISnapshotSchema::BuildAbsentColumnArray(
+    const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount) {
+    auto chunks = BuildAbsentColumnChunks(type, fill, recordsCount);
+    if (chunks.size() == 1) {
+        return chunks.front();
+    }
+    return std::make_shared<NArrow::NAccessor::TCompositeChunkedArray>(std::move(chunks), recordsCount, type);
 }
 
 bool ISnapshotSchema::IsSpecialColumnId(const ui32 columnId) const {

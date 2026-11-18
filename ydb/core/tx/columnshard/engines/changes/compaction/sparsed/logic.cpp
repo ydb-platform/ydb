@@ -6,7 +6,6 @@
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
@@ -27,8 +26,7 @@ void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor
                 const auto& containers = mergingContext.GetInputContainers();
                 const ui32 rows = idx < containers.size() && containers[idx] ? containers[idx]->num_rows() : 0;
                 if (rows) {
-                    auto array = NArrow::TThreadSimpleArraysCache::Get(Context.GetResultField()->type(), fill, rows);
-                    p = std::make_shared<NArrow::NAccessor::TTrivialArray>(array);
+                    p = ISnapshotSchema::BuildAbsentColumnArray(Context.GetResultField()->type(), fill, rows);
                 }
             }
         }
@@ -59,8 +57,10 @@ void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor
                 }
                 if (current->GetType() == EType::SerializedChunkedArray) {
                     current = current->GetArraySlow(0, current).GetArray();
+                    self(self, current);
+                    return;
                 }
-                if (current && current->GetType() == EType::SparsedArray) {
+                if (current->GetType() == EType::SparsedArray) {
                     const auto sparsed = std::static_pointer_cast<NArrow::NAccessor::TSparsedArray>(current);
                     const auto outputDefault =
                         Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()).GetDefaultValue().GetValue();

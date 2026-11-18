@@ -560,7 +560,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
 
         if (columnIt->second.IsDefaultFromLiteral() && !AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
             code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Default values are not supported in column tables";
+            error = TStringBuilder() << "Default values for column tables are disabled";
             return false;
         }
 

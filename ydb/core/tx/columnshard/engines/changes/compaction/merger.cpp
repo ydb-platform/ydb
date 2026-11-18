@@ -5,12 +5,10 @@
 #include "sparsed/logic.h"
 
 #include <ydb/core/formats/arrow/accessor/common/const.h>
-#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/library/formats/arrow/splitter/stats.h>
@@ -369,21 +367,22 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             if (columnData[batchIdx]) {
                 continue;
             }
+            const TString& mergerClass = commonContext.GetLoader()->GetAccessorConstructor().GetClassName();
+            if (mergerClass == NArrow::NAccessor::TGlobalConst::PlainDataAccessorName ||
+                mergerClass == NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName) {
+                continue;
+            }
             const auto fill = ISnapshotSchema::GetAbsentColumnFill(*PortionSchemas[batchIdx], *resultFiltered, columnId);
             const auto resultFill = ISnapshotSchema::GetAbsentColumnFill(*resultFiltered, *resultFiltered, columnId);
-            const TString& mergerClass = commonContext.GetLoader()->GetAccessorConstructor().GetClassName();
-            const bool mergerFillsEmptyInput = mergerClass == NArrow::NAccessor::TGlobalConst::PlainDataAccessorName ||
-                                               mergerClass == NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
-            if (NArrow::ScalarEqualsNullable(fill, resultFill) && (mergerFillsEmptyInput || !fill)) {
+            if (NArrow::ScalarEqualsNullable(fill, resultFill) && !fill) {
                 continue;
             }
             const ui32 rows = Batches[batchIdx]->num_rows();
             if (!rows) {
                 continue;
             }
-            auto array =
-                NArrow::TThreadSimpleArraysCache::Get(resultFiltered->GetIndexInfo().GetColumnFieldVerified(columnId)->type(), fill, rows);
-            columnData[batchIdx] = std::make_shared<NArrow::NAccessor::TTrivialArray>(array);
+            columnData[batchIdx] =
+                ISnapshotSchema::BuildAbsentColumnArray(resultFiltered->GetIndexInfo().GetColumnFieldVerified(columnId)->type(), fill, rows);
         }
         merger->Start(std::move(columnData), mergingContext);
 

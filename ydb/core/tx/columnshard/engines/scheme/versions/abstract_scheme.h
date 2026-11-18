@@ -59,6 +59,10 @@ public:
     std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const ui32 columnId) const;
     static std::shared_ptr<arrow::Scalar> GetAbsentColumnFill(
         const ISnapshotSchema& portionSchema, const ISnapshotSchema& resultSchema, const ui32 columnId);
+    static std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> BuildAbsentColumnChunks(
+        const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount);
+    static std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildAbsentColumnArray(
+        const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount);
 
     TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(
         const NArrow::TSchemaLiteView& schema, const ui32 rowsCount, const bool force) const;

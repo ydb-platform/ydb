@@ -556,6 +556,9 @@ TConclusion<Ydb::TypedValue> TColumnDefaultScalarValue::SerializeToTypedValue(co
             break;
         }
         case arrow::Type::TIMESTAMP:
+            if (static_cast<const arrow::TimestampType&>(*Value->type).unit() != arrow::TimeUnit::MICRO) {
+                return TConclusionStatus::Fail("Default value is not supported for type " + Value->type->ToString() + " in column tables");
+            }
             outType->set_type_id(Ydb::Type::TIMESTAMP);
             value->set_uint64_value(static_cast<const arrow::TimestampScalar&>(*Value).value);
             break;

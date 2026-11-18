@@ -530,3 +530,46 @@ static_erasure: none
             )
 
         self.assertEqual(probes, [])
+
+
+def test_block82_sample_config(tmp_path):
+    import argparse
+    import yaml
+    from ydb.tools import ydbd_slice
+
+    parser = argparse.ArgumentParser()
+    ydbd_slice.add_sample_config_mode(parser.add_subparsers())
+    output = tmp_path / "cluster.yaml"
+    args = parser.parse_args(["sample-config", "--cluster-type", "block-8-2-12-nodes",
+                              "--output-file", str(output)])
+    args.handler(args)
+    config = yaml.safe_load(output.read_text())
+    assert config['static_erasure'] == 'block-8-2'
+    assert len(config['hosts']) == 12
+    assert len({host['location']['rack'] for host in config['hosts']}) == 12
+    group = config['blob_storage_config']['service_set']['groups'][0]
+    assert group['erasure_species'] == 'block-8-2'
+    assert [domain['vdisk_locations'][0]['node_id'] for domain in group['rings'][0]['fail_domains']] == list(range(1, 13))
+    assert config['domains'][0]['storage_pool_kinds'][0]['erasure'] == 'block-8-2'
+
+
+def test_block_erasure_kube_manifests(tmp_path):
+    import yaml
+    from ydb.tools.ydbd_slice.kube import generate
+
+    for erasure, count in [('block-4-2', 8), ('block-8-2', 12)]:
+        with mock.patch.object(generate, 'generate_dynconfigs'), mock.patch.object(generate, 'generate_legacy_configs'):
+            generate.generate_block_erasure(
+                str(tmp_path), 'user', 'ns', 'claim', 'flavor', 'storage', 'database',
+                erasure=erasure, node_count=count, ydb_image='ydb:test')
+        claim = yaml.safe_load((tmp_path / 'nodeclaim-claim.yaml').read_text())
+        storage = yaml.safe_load((tmp_path / 'storage-storage.yaml').read_text())
+        database = yaml.safe_load((tmp_path / 'database-database.yaml').read_text())
+        assert claim['spec']['nodes'][0]['flavor']['amount'] == count
+        assert storage['spec']['nodes'] == count
+        assert storage['spec']['erasure'] == erasure
+        assert storage['spec']['image']['name'] == database['spec']['image']['name'] == 'ydb:test'
+        config = yaml.safe_load(storage['spec']['configuration'])
+        assert config['static_erasure'] == erasure
+        assert config['domains_config']['domain'][0]['storage_pool_types'][0]['pool_config']['erasure_species'] == erasure
+        assert all(channel['erasure_species'] == erasure for channel in config['channel_profile_config']['profile'][0]['channel'])

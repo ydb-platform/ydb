@@ -2,6 +2,7 @@
 #include "yaml_config_parser_impl.h"
 #include "yaml_config_helpers.h"
 #include "core_constants.h"
+#include <util/generic/algorithm.h>
 
 #include <ydb/library/pdisk_io/device_type.h>
 #include <library/cpp/json/json_reader.h>
@@ -323,6 +324,9 @@ namespace NKikimr::NYaml {
     ui32 ErasureStrToNum(const TString& info) {
         ui32 result = 0;
         if (TryFromString(info, result)) {
+            Y_ENSURE_BT(AnyOf(TErasureType::ErasureNames, [result](const auto& item) {
+                return ui32(item.first) == result;
+            }), "unknown erasure " << info);
             return result;
         }
         TErasureType::EErasureSpecies species;

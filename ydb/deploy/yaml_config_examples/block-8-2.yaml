@@ -1,0 +1,48 @@
+# Requires at least 12 independent racks; add spare racks for replacement.
+metadata: {kind: MainConfig, cluster: "", version: 0}
+config:
+  yaml_config_enabled: true
+  erasure: block-8-2
+  fail_domain_type: rack
+  self_management_config: {enabled: true}
+  default_disk_type: SSD
+  host_configs:
+  - host_config_id: 1
+    drive: [{path: /dev/disk/by-partlabel/ydb_disk_ssd_01, type: SSD}]
+  hosts:
+  - host: ydb-node-1.local
+    host_config_id: 1
+    location: {data_center: zone-a, rack: "1", body: 1}
+  - host: ydb-node-2.local
+    host_config_id: 1
+    location: {data_center: zone-a, rack: "2", body: 2}
+  - host: ydb-node-3.local
+    host_config_id: 1
+    location: {data_center: zone-a, rack: "3", body: 3}
+  - host: ydb-node-4.local
+    host_config_id: 1
+    location: {data_center: zone-a, rack: "4", body: 4}
+  - host: ydb-node-5.local
+    host_config_id: 1
+    location: {data_center: zone-a, rack: "5", body: 5}
+  - host: ydb-node-6.local
+    host_config_id: 1
+    location: {data_center: zone-a, rack: "6", body: 6}
+  - host: ydb-node-7.local
+    host_config_id: 1
+    location: {data_center: zone-a, rack: "7", body: 7}
+  - host: ydb-node-8.local
+    host_config_id: 1
+    location: {data_center: zone-a, rack: "8", body: 8}
+  - host: ydb-node-9.local
+    host_config_id: 1
+    location: {data_center: zone-a, rack: "9", body: 9}
+  - host: ydb-node-10.local
+    host_config_id: 1
+    location: {data_center: zone-a, rack: "10", body: 10}
+  - host: ydb-node-11.local
+    host_config_id: 1
+    location: {data_center: zone-a, rack: "11", body: 11}
+  - host: ydb-node-12.local
+    host_config_id: 1
+    location: {data_center: zone-a, rack: "12", body: 12}

@@ -7,6 +7,8 @@ import logging
 import argparse
 import subprocess
 import warnings
+import copy
+import yaml
 from pathlib import Path
 
 
@@ -615,6 +617,7 @@ def cluster_type_args():
     args = argparse.ArgumentParser(add_help=False)
     available_erasure_types = [
         "block-4-2-8-nodes",
+        "block-8-2-12-nodes",
         "block-4-2-4-nodes",
         "block-4-2-2-nodes",
         "mirror-3-dc-3-nodes",
@@ -964,7 +967,7 @@ def add_sample_config_mode(modes):
     def _run(args):
         cluster_type = args.cluster_type
         template_path = ""
-        if cluster_type == "block-4-2-8-nodes":
+        if cluster_type in ("block-4-2-8-nodes", "block-8-2-12-nodes"):
             template_path = "/ydbd_slice/baremetal/templates/block-4-2-8-nodes.yaml"
         elif cluster_type == "block-4-2-4-nodes":
             template_path = "/ydbd_slice/baremetal/templates/block-4-2-4-nodes.yaml"
@@ -981,6 +984,24 @@ def add_sample_config_mode(modes):
                 f"Unknown cluster type '{cluster_type}'. ")
 
         f = rs.find(template_path).decode()
+        if cluster_type == "block-8-2-12-nodes":
+            config = yaml.safe_load(f)
+            config['static_erasure'] = 'block-8-2'
+            group = config['blob_storage_config']['service_set']['groups'][0]
+            group['erasure_species'] = 'block-8-2'
+            domains = group['rings'][0]['fail_domains']
+            for node_id in range(9, 13):
+                host = copy.deepcopy(config['hosts'][-1])
+                host['host'] = f'CHANGE_ME_HOST_{node_id}'
+                host['location'].update(body=node_id, rack=str(node_id))
+                config['hosts'].append(host)
+                domain = copy.deepcopy(domains[-1])
+                domain['vdisk_locations'][0].update(node_id=node_id, pdisk_guid=node_id)
+                domains.append(domain)
+            for domain in config['domains']:
+                for pool in domain['storage_pool_kinds']:
+                    pool['erasure'] = 'block-8-2'
+            f = yaml.safe_dump(config, sort_keys=False)
         if args.output_file is not None and args.output_file != "":
             with open(args.output_file, "w+") as f1:
                 f1.write(f)
@@ -1166,7 +1187,7 @@ def add_kube_generate_mode(modes):
     mode.add_argument(
         '-t', '--template',
         help='Slice manifest templates for quick start.',
-        choices=('8-node-block-4-2',),
+        choices=('8-node-block-4-2', '12-node-block-8-2'),
         default='8-node-block-4-2',
     )
     mode.add_argument(

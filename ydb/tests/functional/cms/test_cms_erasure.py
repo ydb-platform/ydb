@@ -22,7 +22,7 @@ class AbstractLocalClusterTest(object):
 
     @classmethod
     def setup_class(cls):
-        nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
+        nodes_count = max(9 if cls.erasure == Erasure.MIRROR_3_DC else 1, cls.erasure.min_fail_domains)
         configurator = KikimrConfigGenerator(cls.erasure,
                                              nodes=nodes_count,
                                              )
@@ -72,4 +72,14 @@ class TestDegradedGroupMirror3dcMax(AbstractTestCmsDegradedGroups):
 
 class TestDegradedGroupMirror3dcKeep(AbstractTestCmsDegradedGroups):
     erasure = Erasure.MIRROR_3_DC
+    mode = EAvailabilityMode.MODE_KEEP_AVAILABLE
+
+
+class TestDegradedGroupBlock82Max(AbstractTestCmsDegradedGroups):
+    erasure = Erasure.BLOCK_8_2
+    mode = EAvailabilityMode.MODE_MAX_AVAILABILITY
+
+
+class TestDegradedGroupBlock82Keep(AbstractTestCmsDegradedGroups):
+    erasure = Erasure.BLOCK_8_2
     mode = EAvailabilityMode.MODE_KEEP_AVAILABLE

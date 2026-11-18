@@ -43,7 +43,7 @@ public:
         , Limit(limit)
         , KeyColumnId(keyColumnId)
     {
-        AFL_VERIFY(Limit);
+        YDB_LOG_VERIFY(Limit);
     }
 };
 

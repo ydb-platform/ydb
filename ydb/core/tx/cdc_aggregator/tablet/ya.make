@@ -9,11 +9,13 @@ SRCS(
     tx_init.cpp
     tx_init_schema.cpp
     tx_partitioning_changed.cpp
+    tx_write_heartbeats.cpp
 )
 
 PEERDIR(
     ydb/core/base
     ydb/core/engine/minikql
+    ydb/core/persqueue/common
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tablet

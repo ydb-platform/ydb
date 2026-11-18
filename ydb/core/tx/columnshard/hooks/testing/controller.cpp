@@ -23,7 +23,7 @@ bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& chan
 void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/, const NOlap::IBlobsGCAction& action) {
     TGuard<TMutex> g(Mutex);
     for (auto d = action.GetBlobsToRemove().GetDirect().GetIterator(); d.IsValid(); ++d) {
-        AFL_VERIFY(RemovedBlobIds[action.GetStorageId()][d.GetBlobId()].emplace(d.GetTabletId()).second);
+        YDB_LOG_VERIFY(RemovedBlobIds[action.GetStorageId()][d.GetBlobId()].emplace(d.GetTabletId()).second);
     }
 }
 
@@ -49,7 +49,7 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
         for (auto&& b : i.second) {
             auto itB = it->second.find(b);
             if (itB != it->second.end()) {
-                AFL_VERIFY(!itB->second.contains((NOlap::TTabletId)shard.TabletID()));
+                YDB_LOG_VERIFY(!itB->second.contains((NOlap::TTabletId)shard.TabletID()));
             }
         }
     }
@@ -86,7 +86,7 @@ TController::TCheckContext TController::CheckInvariants() const {
 
 void TController::DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& shard) {
     TGuard<TMutex> g(Mutex);
-    AFL_VERIFY(ShardActuals.emplace(shard.TabletID(), &shard).second);
+    YDB_LOG_VERIFY(ShardActuals.emplace(shard.TabletID(), &shard).second);
 }
 
 void TController::DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& shard) {
@@ -166,10 +166,10 @@ const ::NKikimr::NColumnShard::TColumnShard* GetShardVerified(
     const THashMap<ui64, const ::NKikimr::NColumnShard::TColumnShard*>& shardActuals, const ui64 tabletId) {
     if (tabletId) {
         auto it = shardActuals.find(tabletId);
-        AFL_VERIFY(it != shardActuals.end());
+        YDB_LOG_VERIFY(it != shardActuals.end());
         return it->second;
     }
-    AFL_VERIFY(shardActuals.size() == 1);
+    YDB_LOG_VERIFY(shardActuals.size() == 1);
     return shardActuals.begin()->second;
 }
 }   // namespace
@@ -177,10 +177,10 @@ const ::NKikimr::NColumnShard::TColumnShard* GetShardVerified(
 ui64 TController::GetNodePortionsCountLimitVerified(const ui64 tabletId) const {
     TGuard<TMutex> g(Mutex);
     const auto* shard = GetShardVerified(ShardActuals, tabletId);
-    AFL_VERIFY(shard->HasIndex());
+    YDB_LOG_VERIFY(shard->HasIndex());
     const auto& engine = shard->GetIndexAs<NOlap::TColumnEngineForLogs>();
     const auto& tables = engine.GetTables();
-    AFL_VERIFY(!tables.empty());
+    YDB_LOG_VERIFY(!tables.empty());
     return tables.begin()->second->GetOptimizerPlanner().GetNodePortionsCountLimit();
 }
 

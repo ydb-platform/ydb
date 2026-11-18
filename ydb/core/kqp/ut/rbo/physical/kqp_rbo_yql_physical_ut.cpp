@@ -620,7 +620,6 @@ TPreparedQueryHolder::TConstPtr CompilePreparedQuery(TKikimrRunner& kikimr, cons
             TMaybe<TKqpQueryId>(std::move(queryId)),
             /*keepInCache*/ false,
             /*isQueryActionPrepare*/ false,
-            /*perStatementResult*/ false,
             /*deadline*/ TInstant::Max(),
             /*dbCounters*/ nullptr,
             std::make_shared<TGUCSettings>(),

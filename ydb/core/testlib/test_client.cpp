@@ -1814,7 +1814,7 @@ namespace Tests {
                 auto& privateApiConfig = *protoConfig.MutablePrivateApi();
                 privateApiConfig.SetEnabled(true);
                 privateApiConfig.SetTaskServiceEndpoint(endpoint);
-                privateApiConfig.SetTaskServiceDatabase("Root");
+                privateApiConfig.SetTaskServiceDatabase("/Root");
             }
 
             {

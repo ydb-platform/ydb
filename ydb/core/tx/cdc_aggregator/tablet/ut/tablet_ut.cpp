@@ -110,9 +110,13 @@ public:
         return ConfigureTracking(MakeConfigureTracking(sourceDataShardIds, partitionCount));
     }
 
-    TWriteResult WriteHeartbeats(const TVector<std::pair<ui64, ui64>>& heartbeats) {
-        SendRequest(MakeWriteHeartbeats(heartbeats));
+    TWriteResult WriteHeartbeats(THolder<TEvCdcAggregator::TEvWriteHeartbeats> request) {
+        SendRequest(std::move(request));
         return GrabResult<TEvCdcAggregator::TEvWriteHeartbeatsResult>()->Get()->Record;
+    }
+
+    TWriteResult WriteHeartbeats(const TVector<std::pair<ui64, ui64>>& heartbeats) {
+        return WriteHeartbeats(MakeWriteHeartbeats(heartbeats));
     }
 
     TPartitioningAck PartitioningChanged(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds, ui64 operationId = 77) {
@@ -181,9 +185,6 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         const auto configureResult = env.ConfigureTracking({2, 1});
         UNIT_ASSERT_C(configureResult.GetStatus() == TConfigureResult::SUCCESS, configureResult.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({1, 2}));
-
-        const auto writeResult = env.WriteHeartbeats({{1, 100}});
-        UNIT_ASSERT_C(writeResult.GetStatus() == TWriteResult::NOT_READY, writeResult.ShortDebugString());
     }
 
     Y_UNIT_TEST(ReturnsConflictWhenConfigDiffers) {
@@ -443,6 +444,279 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
 
         env.RebootTablet();
         UNIT_ASSERT_VALUES_EQUAL(env.DescribeSources(), TVector<ui64>({2, 5}));
+    }
+
+    Y_UNIT_TEST(ShouldReturnWrittenVersionWhenSourceIsKnown) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+
+        // when
+        const auto writeResult = env.WriteHeartbeats({{1, 100}});
+
+        // then
+        UNIT_ASSERT_C(writeResult.GetStatus() == TWriteResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.ResultsSize(), 1);
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetResults(0).GetWrittenVersion().GetStep(), 100);
+    }
+
+    Y_UNIT_TEST(ShouldReturnUnknownSourceWhenSourceIsNotTracked) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+
+        // when
+        const auto writeResult = env.WriteHeartbeats({{3, 100}});
+
+        // then
+        UNIT_ASSERT_C(writeResult.GetStatus() == TWriteResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.ResultsSize(), 1);
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::UNKNOWN_SOURCE, writeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldReturnBadRequestWhenHeartbeatIsMissing) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        auto request = MakeWriteHeartbeats({{1, 100}});
+        request->Record.MutableHeartbeats(0)->ClearHeartbeat();
+
+        // when
+        const auto writeResult = env.WriteHeartbeats(std::move(request));
+
+        // then
+        UNIT_ASSERT_C(writeResult.GetStatus() == TWriteResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.ResultsSize(), 1);
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::BAD_REQUEST, writeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldReturnBadRequestWhenHeartbeatStepIsZero) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+
+        // when
+        const auto writeResult = env.WriteHeartbeats({{1, 0}});
+
+        // then
+        UNIT_ASSERT_C(writeResult.GetStatus() == TWriteResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.ResultsSize(), 1);
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::BAD_REQUEST, writeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldReturnBadRequestWhenHeartbeatDataIsEmpty) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        auto request = MakeWriteHeartbeats({{1, 100}});
+        request->Record.MutableHeartbeats(0)->MutableHeartbeat()->ClearData();
+
+        // when
+        const auto writeResult = env.WriteHeartbeats(std::move(request));
+
+        // then
+        UNIT_ASSERT_C(writeResult.GetStatus() == TWriteResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.ResultsSize(), 1);
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::BAD_REQUEST, writeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldKeepLastHeartbeatWhenOlderHeartbeatArrives) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 200}});
+
+        // when
+        const auto writeResult = env.WriteHeartbeats({{1, 100}});
+
+        // then
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetResults(0).GetWrittenVersion().GetStep(), 200);
+        UNIT_ASSERT_VALUES_EQUAL(env.DescribeTracking().GetSources(0).GetLastHeartbeat().GetStep(), 200);
+    }
+
+    Y_UNIT_TEST(ShouldKeepNewestHeartbeatWhenBatchRepeatsSource) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+
+        // when
+        const auto writeResult = env.WriteHeartbeats({{1, 300}, {1, 200}});
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL_C(writeResult.ResultsSize(), 1, writeResult.ShortDebugString());
+        UNIT_ASSERT_C(writeResult.GetResults(0).GetStatus() == TWriteResult::THeartbeatResult::SUCCESS, writeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetResults(0).GetWrittenVersion().GetStep(), 300);
+        UNIT_ASSERT_VALUES_EQUAL(env.DescribeTracking().GetSources(0).GetLastHeartbeat().GetStep(), 300);
+    }
+
+    Y_UNIT_TEST(ShouldNotSetCurrentHeartbeatWhenSomeSourceHasNotReported) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+
+        // when
+        env.WriteHeartbeats({{1, 100}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_C(!describeResult.HasCurrentHeartbeat(), describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldSetCurrentHeartbeatToMinimumWhenAllSourcesReported) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 200}});
+
+        // when
+        env.WriteHeartbeats({{2, 100}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 100, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldNotAdvanceCurrentHeartbeatWhenSplitChildHasNotReported) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 100}, {2, 200}});
+        env.PartitioningChanged(1, {3, 4});
+
+        // when
+        env.WriteHeartbeats({{3, 300}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 100, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldKeepCurrentHeartbeatWhenOtherSourceHasSameVersion) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 100}, {2, 100}});
+
+        // when
+        env.WriteHeartbeats({{1, 200}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 100, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldKeepMergedChildHeartbeatWhenSecondParentLeaves) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2, 3});
+        env.WriteHeartbeats({{1, 100}, {2, 200}, {3, 300}});
+        env.PartitioningChanged(1, {4});
+        env.WriteHeartbeats({{4, 400}});
+
+        // when
+        env.PartitioningChanged(2, {4});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.SourcesSize(), 2, describeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetSources(1).GetDataShardId(), 4, describeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetSources(1).GetLastHeartbeat().GetStep(), 400, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldAdvanceCurrentHeartbeatWhenSourceReportsAfterMerge) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2, 3});
+        env.WriteHeartbeats({{1, 100}, {2, 200}, {3, 300}});
+        env.PartitioningChanged(1, {4});
+        env.WriteHeartbeats({{4, 400}});
+        env.PartitioningChanged(2, {4});
+
+        // when
+        env.WriteHeartbeats({{3, 500}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 400, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldNotMoveCurrentHeartbeatBackWhenChildReportsOlderVersion) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1});
+        env.WriteHeartbeats({{1, 200}});
+        env.PartitioningChanged(1, {2});
+
+        // when
+        env.WriteHeartbeats({{2, 150}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldAdvanceCurrentHeartbeatWhenSourceReportsAfterRestart) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 100}, {2, 200}});
+        env.RebootTablet();
+
+        // when
+        env.WriteHeartbeats({{1, 300}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldAdvanceCurrentHeartbeatWhenSplitParentHeldMinimum) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 100}, {2, 200}});
+        env.PartitioningChanged(1, {3});
+
+        // when
+        env.WriteHeartbeats({{3, 300}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldAdvanceCurrentHeartbeatWhenSourceReportsAfterSplitAndRestart) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 100}, {2, 200}});
+        env.PartitioningChanged(1, {3});
+        env.RebootTablet();
+
+        // when
+        env.WriteHeartbeats({{3, 300}});
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldKeepHeartbeatsWhenTabletRestarted) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 100}, {2, 200}});
+
+        // when
+        env.RebootTablet();
+
+        // then
+        const auto describeResult = env.DescribeTracking();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 100, describeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetSources(0).GetLastHeartbeat().GetStep(), 100, describeResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetSources(1).GetLastHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
     }
 }
 

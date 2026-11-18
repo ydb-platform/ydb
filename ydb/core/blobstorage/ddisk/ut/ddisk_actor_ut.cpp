@@ -2094,8 +2094,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         ctx.WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
         for (const auto& component : statuses) {
             UNIT_ASSERT(!component.empty());
-            UNIT_ASSERT_VALUES_EQUAL(component.front(), TStatus::Initializing);
-            UNIT_ASSERT_VALUES_EQUAL(component.back(), TStatus::Ready);
+            UNIT_ASSERT(component.front() == TStatus::Initializing);
+            UNIT_ASSERT(component.back() == TStatus::Ready);
         }
 
         const auto buffer = ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.PBServiceId);
@@ -2103,8 +2103,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             NDDisk::TDDiskActorTestPeer::EnterBroken(*static_cast<NDDisk::TDDiskActor*>(actor), "buffer broken");
         }));
         AdvanceDDiskTestTime(ctx, TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(statuses[0].back(), TStatus::Ready);
-        UNIT_ASSERT_VALUES_EQUAL(statuses[1].back(), TStatus::Broken);
+        UNIT_ASSERT(statuses[0].back() == TStatus::Ready);
+        UNIT_ASSERT(statuses[1].back() == TStatus::Broken);
         UNIT_ASSERT_VALUES_EQUAL(brokenReason, "buffer broken");
     }
 

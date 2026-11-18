@@ -888,7 +888,7 @@ Y_UNIT_TEST_SUITE(TWriteLogSink) {
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message1 (passed with backend exception)",
             {"value", "1"});
 
-        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message2 (droppped)",
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message2 (dropped)",
             {"value", "2"});
 
         env.Runtime.SimulateSleep(TDuration::Seconds(10));
@@ -900,7 +900,7 @@ Y_UNIT_TEST_SUITE(TWriteLogSink) {
 
         // Check sink messages
         UNIT_ASSERT_VALUES_EQUAL(calls[0].TextMessage, "Test message1 (passed with backend exception)");
-        UNIT_ASSERT_VALUES_EQUAL(calls[1].TextMessage, "Test message2 (droppped)");
+        UNIT_ASSERT_VALUES_EQUAL(calls[1].TextMessage, "Test message2 (dropped)");
         UNIT_ASSERT_VALUES_EQUAL(calls[2].TextMessage, "Test message3 (passed)");
 
         // Check backend messages

@@ -556,29 +556,30 @@ namespace NActors {
         ui64 lineNumber,
         const TString& formatted,
         const TMaybe<NStructuredLog::TStructuredMessage>& structuredMessage) noexcept
-    {
-        auto sinks = Settings->Sinks.atomic_load();
-        if (!sinks || sinks->empty()) {
-            return;
-        }
-
-        NStructuredLog::TLogMessage message {
-            .Time = time,
-            .Priority = priority,
-            .Component = component,
-            .NodeId = Settings->NodeId,
-            .FileName = fileName,
-            .LineNumber = lineNumber,
-            .TextMessage = formatted,
-            .StructuredMessage = structuredMessage.GetOrElse({})};
-
-        for (auto& sink : *sinks) {
-            try {
-                sink.second->Write(message);
-            } catch (...) {
+        try {
+            auto sinks = Settings->Sinks.atomic_load();
+            if (!sinks || sinks->empty()) {
+                return;
             }
+
+            NStructuredLog::TLogMessage message {
+                .Time = time,
+                .Priority = priority,
+                .Component = component,
+                .NodeId = Settings->NodeId,
+                .FileName = fileName,
+                .LineNumber = lineNumber,
+                .TextMessage = formatted,
+                .StructuredMessage = structuredMessage.GetOrElse({})};
+
+            for (auto& sink : *sinks) {
+                try {
+                    sink.second->Write(message);
+                } catch (...) {
+                }
+            }
+        }  catch (...) {
         }
-    }
 
     bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
         return OutputRecord(

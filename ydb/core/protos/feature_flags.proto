@@ -457,4 +457,8 @@ message TFeatureFlags {
     // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
     optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
+    // (LOGBROKER-10680). Default false is
+    // the legacy zeroing behaviour that undercounted the consumed
+    // write quota.
+    optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
 }

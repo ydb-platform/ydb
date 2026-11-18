@@ -52,10 +52,10 @@ struct TTimingConfig {
     TDuration StatePollInterval = TDuration::Seconds(1);
     TDuration ReadTimeout = TDuration::Seconds(1);
     TDuration RoundInterval = TDuration::Seconds(1);
-    TDuration SelfCheckOperationTimeout = TDuration::Seconds(4);
+    TDuration SelfCheckOperationTimeout = TDuration::Seconds(2);
     // Not configurable: the SelfCheck and update client deadlines are their
     // operation timeouts + 2 s. GetClusterState uses ReadTimeout for both.
-    TDuration SelfCheckClientTimeout = TDuration::Seconds(6);
+    TDuration SelfCheckClientTimeout = TDuration::Seconds(4);
     TDuration EvidenceTtl = TDuration::Seconds(8);
     TDuration Confirm = TDuration::Seconds(2);
     TDuration BscWarmup = TDuration::Seconds(30);

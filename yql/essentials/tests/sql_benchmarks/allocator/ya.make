@@ -18,6 +18,6 @@ DATA(
     arcadia/yql/essentials/tests/sql_benchmarks/allocator/suites
 )
 
-SIZE(MEDIUM)
+INCLUDE(${ARCADIA_ROOT}/yql/essentials/tests/sql_benchmarks/common.inc)
 
 END()

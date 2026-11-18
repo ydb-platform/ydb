@@ -17,6 +17,7 @@ PEERDIR(
     library/cpp/time_provider
     ydb/core/base
     ydb/core/scheme
+    ydb/core/scheme/mkql
     ydb/core/tablet
     ydb/library/mkql_proto
     ydb/library/mkql_proto/protos

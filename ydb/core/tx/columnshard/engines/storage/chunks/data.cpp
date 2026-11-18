@@ -6,14 +6,14 @@
 namespace NKikimr::NOlap::NChunks {
 
 void TPortionIndexChunk::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const {
-    AFL_VERIFY(!bRange.IsValid());
+    YDB_LOG_VERIFY(!bRange.IsValid());
     portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdxVerified(), RecordsCount, RawBytes, bRange));
 }
 
 std::shared_ptr<IPortionDataChunk> TPortionIndexChunk::DoCopyWithAnotherBlob(TString&& data, const ui32 /*rawBytes*/,
     const std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData>& additionalData, const TSimpleColumnInfo& /*columnInfo*/) const {
     // Index chunks have no accessor metadata; reject any that isn't empty rather than drop it silently.
-    AFL_VERIFY(!additionalData || !additionalData->SerializeToProto());
+    YDB_LOG_VERIFY(!additionalData || !additionalData->SerializeToProto());
     return std::make_shared<TPortionIndexChunk>(GetChunkAddressVerified(), RecordsCount, RawBytes, std::move(data));
 }
 

@@ -1,5 +1,7 @@
 #include "topic_parser.h"
 
+#include "counters.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/library/actors/core/log.h>
@@ -119,6 +121,9 @@ TDiscoveryConverterPtr TDiscoveryConverter::ForFstClass(const TString& topic, co
     res->Database = database;
     res->OriginalTopic = topic;
     res->BuildFstClassNames(enableRelativePaths);
+    if (res->IsValid()) {
+        CountTopicPathWithDatabasePrefix(database, topic, res->PrimaryPath);
+    }
     return TDiscoveryConverterPtr(res);
 }
 
@@ -149,6 +154,9 @@ TDiscoveryConverterPtr TDiscoveryConverter::ForFederation(
     dbBuf.ChopSuffix("/");
 
     res->BuildForFederation(dbBuf, topicBuf);
+    if (res->IsValid()) {
+        CountTopicPathWithDatabasePrefix(database, topic, res->PrimaryPath);
+    }
     return NPersQueue::TDiscoveryConverterPtr(res);
 }
 

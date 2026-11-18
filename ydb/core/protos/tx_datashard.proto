@@ -1863,6 +1863,8 @@ message TEvLocalKMeansRequest {
     optional bool OverlapOutForeign = 26;
 
     optional NKikimrTx.TKeyRange KeyRange = 27;
+
+    optional NKikimrSchemeOp.EIndexType IndexType = 28 [default = EIndexTypeGlobalVectorKmeansTree];
 }
 
 message TEvLocalKMeansResponse {
@@ -1921,6 +1923,8 @@ message TEvReshuffleKMeansRequest {
     optional bool OverlapOutForeign = 20;
 
     optional NKikimrTx.TKeyRange KeyRange = 21;
+
+    optional NKikimrSchemeOp.EIndexType IndexType = 22 [default = EIndexTypeGlobalVectorKmeansTree];
 }
 
 message TEvReshuffleKMeansResponse {
@@ -2049,6 +2053,8 @@ message TEvPrefixKMeansRequest {
 
     optional bool Adaptive = 25;
     optional uint32 Levels = 26;
+
+    optional NKikimrSchemeOp.EIndexType IndexType = 27 [default = EIndexTypeGlobalVectorKmeansTree];
 }
 
 message TEvPrefixKMeansResponse {

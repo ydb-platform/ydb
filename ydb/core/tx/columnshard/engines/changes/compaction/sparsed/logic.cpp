@@ -43,10 +43,11 @@ TColumnPortionResult TSparsedMerger::DoExecute(const TChunkMergeContext& chunkCo
     std::make_heap(heap.begin(), heap.end(), heapComparator);
     while (heap.size()) {
         std::pop_heap(heap.begin(), heap.end(), heapComparator);
-        AFL_VERIFY(heap.back()->IsValid());
-        AFL_VERIFY(heap.back()->GetGlobalResultIndexVerified() < chunkContext.GetRemapper().GetRecordsCount())(
-                                                                   "cursor", heap.back()->DebugString())("context", chunkContext.DebugString());
-        AFL_VERIFY(heap.back()->AddIndexTo(*writer));
+        YDB_LOG_VERIFY(heap.back()->IsValid());
+        YDB_LOG_VERIFY(heap.back()->GetGlobalResultIndexVerified() < chunkContext.GetRemapper().GetRecordsCount(),
+            {"cursor", heap.back()->DebugString()},
+            {"context", chunkContext.DebugString()});
+        YDB_LOG_VERIFY(heap.back()->AddIndexTo(*writer));
         if (!heap.back()->Next()) {
             YDB_LOG_TRACE("",
                 {"event", "stopped_source"},
@@ -104,7 +105,7 @@ bool TSparsedMerger::TSparsedChunkCursor::AddIndexTo(TWriter& writer) {
 
 bool TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<ui32> sourceLowerBound) {
     if (ScanIndex < GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length()) {
-        AFL_VERIFY(MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex))));
+        YDB_LOG_VERIFY(MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex))));
         if (GetGlobalResultIndexImpl().value_or(0) >= 0) {
             if (!sourceLowerBound || *sourceLowerBound <= GetGlobalPosition()) {
                 return true;
@@ -124,7 +125,7 @@ bool TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<
                 {"cursorIdx", CursorIdx},
                 {"recordIdx", GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex)},
                 {"lb", sourceLowerBound});
-            AFL_VERIFY(MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex))));
+            YDB_LOG_VERIFY(MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex))));
             if (GetGlobalResultIndexImpl().value_or(0) >= 0) {
                 if (!sourceLowerBound || *sourceLowerBound <= GetGlobalPosition()) {
                     return true;
@@ -133,7 +134,7 @@ bool TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<
             ++ScanIndex;
         }
     }
-    AFL_VERIFY(ScanIndex == GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length());
+    YDB_LOG_VERIFY(ScanIndex == GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length());
     while (TBase::IsValid() && ScanIndex == GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length()) {
         Y_UNUSED(TBase::MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetRecordsCount())));
         ScanIndex = 0;
@@ -146,8 +147,8 @@ bool TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<
 }
 
 std::optional<i64> TSparsedMerger::TSparsedChunkCursor::GetGlobalResultIndexImpl() const {
-    AFL_VERIFY(TBase::IsValid());
-    AFL_VERIFY(RemapToGlobalResult);
+    YDB_LOG_VERIFY(TBase::IsValid());
+    YDB_LOG_VERIFY(RemapToGlobalResult);
     std::optional<i64> result = RemapToGlobalResult->RemapSourceIndex(GetGlobalPosition());
     if (!result) {
         return result;
@@ -155,7 +156,9 @@ std::optional<i64> TSparsedMerger::TSparsedChunkCursor::GetGlobalResultIndexImpl
     if (*result < 0) {
         return result;
     }
-    AFL_VERIFY(*GlobalResultOffset <= *result)("result", result)("offset", GlobalResultOffset);
+    YDB_LOG_VERIFY(*GlobalResultOffset <= *result,
+        {"result", result},
+        {"offset", GlobalResultOffset});
     return *result - *GlobalResultOffset;
 }
 
@@ -175,12 +178,12 @@ bool TSparsedMerger::TSparsedChunkCursor::InitGlobalRemapping(
             {"idx", GetCursorIdx()});
         return false;
     }
-    AFL_VERIFY(IsValid());
+    YDB_LOG_VERIFY(IsValid());
     GlobalResultOffset = globalResultOffset;
     RemapToGlobalResult = &remapToGlobalResult;
     {
         Y_UNUSED(MoveToSignificant(RemapToGlobalResult->GetMinSourceIndex()));
-        AFL_VERIFY(RemapToGlobalResult->GetMinSourceIndex() <= GetGlobalPosition());
+        YDB_LOG_VERIFY(RemapToGlobalResult->GetMinSourceIndex() <= GetGlobalPosition());
         if (!IsValid()) {
             return false;
         }

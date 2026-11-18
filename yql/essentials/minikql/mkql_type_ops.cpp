@@ -985,6 +985,10 @@ public:
             return false;
         }
         auto isLeap = NDateTime::IsLeapYear(year);
+
+        if (Y_UNLIKELY(month < 1 || month > 12)) {
+            return false;
+        }
         auto monthLength = NDateTime::GetMonthLength(month, isLeap);
 
         if (Y_UNLIKELY(day < 1 || day > monthLength)) {

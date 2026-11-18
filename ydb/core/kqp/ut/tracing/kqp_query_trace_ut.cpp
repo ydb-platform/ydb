@@ -739,11 +739,10 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         AssertDescendant(snapshot, "Execute plan", "Compile query");
     }
 
-    Y_UNIT_TEST_TWIN(ParseFailureTrace, AstCache) {
+    Y_UNIT_TEST(ParseFailureTrace) {
         NKikimrConfig::TAppConfig config;
         config.MutableTableServiceConfig()->SetEnableNewRBO(true);
         config.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
-        config.MutableTableServiceConfig()->SetEnableAstCache(AstCache);
         auto [runtime, server, sender] = CreateServer(1, config);
         auto* uploader = RegisterUploader(runtime);
         ExecSQL(runtime, sender, "SELECT FROM;", 15, Ydb::StatusIds::GENERIC_ERROR);
@@ -934,7 +933,6 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         auto settings = ExternalTracingSettings();
         settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
         NKqp::TKikimrRunner kikimr(settings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         RegisterUploader(runtime);

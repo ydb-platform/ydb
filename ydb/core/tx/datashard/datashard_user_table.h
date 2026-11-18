@@ -374,6 +374,7 @@ struct TUserTable : public TThrRefBase {
         using EMode = NKikimrSchemeOp::ECdcStreamMode;
         using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
         using EState = NKikimrSchemeOp::ECdcStreamState;
+        using EHeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatMode;
         using ECompression = NKikimrSchemeOp::ECdcStreamCompression;
 
         TString Name;
@@ -386,6 +387,8 @@ struct TUserTable : public TThrRefBase {
         TMaybe<TString> AwsRegion;
         bool UserSIDs = false;
         bool TraceIds = false;
+        EHeartbeatMode HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect;
+        ui64 AggregatorTabletId = 0;
         ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionNone;
         i32 CompressionLevel = 0;
 
@@ -401,6 +404,8 @@ struct TUserTable : public TThrRefBase {
             , SchemaChanges(streamDesc.GetSchemaChanges())
             , UserSIDs(streamDesc.GetUserSIDs())
             , TraceIds(streamDesc.GetTraceIds())
+            , HeartbeatMode(streamDesc.GetHeartbeatMode())
+            , AggregatorTabletId(streamDesc.GetAggregatorTabletId())
             , Compression(streamDesc.GetCompression())
             , CompressionLevel(streamDesc.HasCompressionLevel() ? streamDesc.GetCompressionLevel() : 0)
         {
@@ -612,6 +617,8 @@ struct TUserTable : public TThrRefBase {
     NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetDetailedMetricsLevel() const {
         return DetailedMetricsLevel;
     }
+
+    void UpdateLocalHnswIndex(const NKikimrSchemeOp::TTableDescription& description);
 
     void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
     void SwitchIndexState(const TPathId& indexPathId, TTableIndex::EState state);

@@ -1,15 +1,15 @@
 #pragma once
 
-#include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
-#include "worker_info.h"
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 
 #include <yql/essentials/utils/log/log.h>
 
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/interconnect/interconnect.h>
-
 #include <util/generic/guid.h>
+#include <util/generic/maybe.h>
+#include <util/generic/vector.h>
 
 #include <utility>
 
@@ -33,7 +33,6 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
         TEvAllocateWorkersResponse();
         explicit TEvAllocateWorkersResponse(const TString& error, NYql::NDqProto::StatusIds::StatusCode statusCode);
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<NActors::TActorId>& ids);
-        explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<TWorkerInfo::TPtr>& workerInfos);
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<ui32>& nodes);
     };
 

@@ -126,7 +126,7 @@ public:
 
 public:
     void AddColumn(const ui32 id) {
-        AFL_VERIFY(ColumnIdsSet.emplace(id).second);
+        YDB_LOG_VERIFY(ColumnIdsSet.emplace(id).second);
         ColumnIds.emplace_back(id);
     }
 
@@ -137,7 +137,7 @@ public:
         , LockId(lockId)
         , ReadOnlyConflicts(readOnlyConflicts)
     {
-        AFL_VERIFY(Snapshot.Valid());
+        YDB_LOG_VERIFY(Snapshot.Valid());
     }
 
     TString ToString() const {

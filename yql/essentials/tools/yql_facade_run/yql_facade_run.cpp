@@ -249,6 +249,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("params-file", "Query parameters values in YSON format").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
         Params = TFileInput(file).ReadAll();
     });
+    opts.AddLongOption("project-settings-json", "Project settings in JSON format").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        ProjectSettings = TProjectSettings::FromJson(TFileInput(file).ReadAll());
+    });
     opts.AddLongOption("yson-attrs", "Provide operation yson attribues").Optional().RequiredArgument("VALUE").StoreResult(&YsonAttrs);
     opts.AddLongOption('G', "gateways", TStringBuilder() << "Used gateways, available: " << JoinSeq(",", SupportedGateways_)).DefaultValue(JoinSeq(",", GatewayTypes)).Handler1T<TString>([this](const TString& gateways) {
         GatewayTypes.clear();
@@ -733,7 +736,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     TModulesTable modules;
     const auto projectSettings = RunOptions_.QPlayerContext.CanRead()
                                      ? ProjectSettingsFromQContext(RunOptions_.QPlayerContext)
-                                     : TProjectSettings{};
+                                     : RunOptions_.ProjectSettings;
     const auto& mounts = RunOptions_.MountConfig ? RunOptions_.DataTable : defaultMounts;
     if (!CompileLibraries(translators, mounts, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate, projectSettings)) {
         *RunOptions_.ErrStream << "Errors on compile libraries:" << Endl;
@@ -810,6 +813,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     }
 
     TProgramFactory factory(RunOptions_.UseRepeatableRandomAndTimeProviders, FuncRegistry_.Get(), ctx.NextUniqueId, dataProvidersInit, Name_);
+    factory.SetProjectSettings(projectSettings);
     factory.AddUserDataTable(RunOptions_.DataTable);
     factory.SetModules(moduleResolver);
     factory.SetFileStorage(FileStorage_);

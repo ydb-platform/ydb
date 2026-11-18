@@ -35,7 +35,7 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
         if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != internalPathId) {
             continue;
         }
-        AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
+        YDB_LOG_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
         for (auto&& [_, portionInfo] : granuleMeta->GetPortions()) {
             if (reqSnapshot < portionInfo->RecordSnapshotMin()) {
                 continue;

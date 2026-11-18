@@ -36,7 +36,7 @@ void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCom
         }
     }
     THashMap<TString, std::vector<TBlobRange>> rangesByStorage;
-    AFL_VERIFY(Fetching.size() == FetchingStorageIds.size());
+    YDB_LOG_VERIFY(Fetching.size() == FetchingStorageIds.size());
     for (ui32 idx = 0; idx < Fetching.size(); ++idx) {
         auto rangesLocal = Fetching[idx].GetResult().GetRangesToFetch();
         auto& ranges = rangesByStorage[FetchingStorageIds[idx]];
@@ -64,7 +64,7 @@ void TIndexFetcherLogic::DoOnDataReceived(TReadActionsCollection& nextRead, NBlo
     THashMap<TString, std::vector<TBlobRange>> rangesByStorage;
     {
         auto g = blobs.BuildGuard();
-        AFL_VERIFY(Fetching.size() == FetchingStorageIds.size());
+        YDB_LOG_VERIFY(Fetching.size() == FetchingStorageIds.size());
         for (ui32 idx = 0; idx < Fetching.size(); ++idx) {
             Fetching[idx].FetchFrom(IndexMeta, FetchingStorageIds[idx], g);
             auto rangesLocal = Fetching[idx].GetResult().GetRangesToFetch();
@@ -99,16 +99,16 @@ TConclusionStatus TIndexFetcherLogic::DoOnDataCollected(NReader::NCommon::TFetch
         }
         ui32 idx = 0;
         for (auto&& c : i.GetResult().GetColumnsFetching()) {
-            AFL_VERIFY(idx < data.size());
+            YDB_LOG_VERIFY(idx < data.size());
             data[idx].emplace_back(c.GetBlobData());
             ++idx;
         }
     }
     for (ui32 idx = 0; idx < IndexAddressesVector.size(); ++idx) {
         auto it = IndexAddresses.find(IndexAddressesVector[idx]);
-        AFL_VERIFY(it != IndexAddresses.end());
+        YDB_LOG_VERIFY(it != IndexAddresses.end());
         for (auto&& originalDataAddress : it->second) {
-            AFL_VERIFY(idx < data.size());
+            YDB_LOG_VERIFY(idx < data.size());
             context.GetIndexes().AddData(originalDataAddress, IndexAddressesVector[idx], data[idx]);
         }
     }

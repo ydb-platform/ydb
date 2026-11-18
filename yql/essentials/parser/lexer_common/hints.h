@@ -29,7 +29,7 @@ using TSQLHints = TMap<NYql::TPosition, TVector<TSQLHint>>;
 // For example: SELECT /*+ Name(Value) */ -- Name2(Value2)
 // in this case TSQLHints will consist of single entry with position of SELECT token
 
-bool CollectSqlHints(ILexer& lexer, const TString& query, const TString& queryName,
+bool CollectSqlHints(const TParsedTokenList& tokens, const TString& queryName,
                      const TString& queryFile, TSQLHints& hints, NYql::TIssues& issues, size_t maxErrors, bool utf8Aware);
 
 } // namespace NSQLTranslation

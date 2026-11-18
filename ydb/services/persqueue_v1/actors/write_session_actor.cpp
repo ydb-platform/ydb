@@ -704,7 +704,7 @@ void TWriteSessionActor<Protocol>::DiscoverPartition(const NActors::TActorContex
         ctx.Send(PartitionChooser,  new TEvents::TEvPoison());
     }
 
-    if (ExpectedGeneration) {
+    if (ExpectedGeneration && AppData(ctx)->FeatureFlags.GetEnableTopicWriteSessionsInitQuoting()) {
         State = ES_WAIT_WRITE_SESSION_QUOTA;
         ctx.Send(
             NPQ::MakeWriteSessionsQuoterId(),

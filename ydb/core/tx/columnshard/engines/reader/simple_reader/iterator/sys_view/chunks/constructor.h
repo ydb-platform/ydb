@@ -53,7 +53,7 @@ private:
                 TBase::DropNextConstructor();
                 continue;
             }
-            AFL_VERIFY(!usage);
+            YDB_LOG_VERIFY(!usage);
             TBase::DropNextConstructor();
             break;
         }

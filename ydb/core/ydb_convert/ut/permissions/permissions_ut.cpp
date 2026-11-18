@@ -1,23 +1,22 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(FillACL) {
-    Y_UNIT_TEST(InterruptInheritance) {
-        for (const bool interruptInheritance : {false, true}) {
-            Ydb::Scheme::ModifyPermissionsRequest permissions;
-            permissions.set_interrupt_inheritance(interruptInheritance);
+    Y_UNIT_TEST_TWIN(InterruptInheritance, Interrupt) {
+        Ydb::Scheme::ModifyPermissionsRequest permissions;
+        permissions.set_interrupt_inheritance(Interrupt);
 
-            NKikimrSchemeOp::TModifyScheme modifyScheme;
-            TString error;
-            UNIT_ASSERT_C(FillACL(modifyScheme, permissions, error), error);
+        NKikimrSchemeOp::TModifyScheme modifyScheme;
+        TString error;
+        UNIT_ASSERT_C(FillACL(modifyScheme, permissions, error), error);
 
-            const NACLib::TDiffACL diffACL(modifyScheme.GetModifyACL().GetDiffACL());
-            UNIT_ASSERT(diffACL.HasInterruptInheritance());
-            UNIT_ASSERT_VALUES_EQUAL(diffACL.GetInterruptInheritance(), interruptInheritance);
-        }
+        const NACLib::TDiffACL diffACL(modifyScheme.GetModifyACL().GetDiffACL());
+        UNIT_ASSERT(diffACL.HasInterruptInheritance());
+        UNIT_ASSERT_VALUES_EQUAL(diffACL.GetInterruptInheritance(), Interrupt);
     }
 }
 

@@ -2,6 +2,7 @@
 #include "distconf_quorum.h"
 #include "node_warden_impl.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/config/validation/validators.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 
@@ -265,8 +266,17 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::HandleWakeup(STFUNC_SIG) {
         if (ev->Cookie == DataCenterRetryCookie) {
-            if (DataCenterReconciliation && WaitingForConfigValidation) {
+            if (DataCenterReconciliationDeadline) {
                 SendDataCenterSnapshot();
+            }
+            return;
+        }
+        if (ev->Cookie == DataCenterTimeoutCookie) {
+            if (DataCenterReconciliationDeadline && TActivationContext::Monotonic() >= DataCenterReconciliationDeadline) {
+                if (DataCenterPreflight) {
+                    throw TExError() << "Timed out waiting for BSC to acknowledge the previous DC state snapshot";
+                }
+                throw TExError() << "Timed out waiting for BSC to acknowledge the committed DC state snapshot";
             }
             return;
         }
@@ -755,10 +765,9 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::StartDataCenterReconciliation() {
-        DataCenterReconciliation = true;
-        WaitingForConfigValidation = true;
-        TActivationContext::Schedule(TDuration::Minutes(10), new IEventHandle(TEvents::TSystem::Wakeup, 0,
-            SelfId(), {}, nullptr, ConfigValidationTimeoutCookie));
+        DataCenterReconciliationDeadline = TActivationContext::Monotonic() + TDuration::Minutes(10);
+        TActivationContext::Schedule(DataCenterReconciliationDeadline, new IEventHandle(TEvents::TSystem::Wakeup, 0,
+            SelfId(), {}, nullptr, DataCenterTimeoutCookie));
         ControllerPipeId = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(),
             NTabletPipe::TClientRetryPolicy::WithRetries()));
         SendDataCenterSnapshot();
@@ -767,8 +776,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::SendDataCenterSnapshot() {
         auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto *command = request->Record.MutableRequest()->AddCommand()->MutableDefineDataCenterStates();
-        *command = Self->StorageConfig->GetDataCenterStates();
-        command->SetDistconfGeneration(Self->StorageConfig->GetDataCenterStatesVersion());
+        command->MutableDataCenter()->CopyFrom(Self->StorageConfig->GetDataCenterStates().GetDataCenter());
         NTabletPipe::SendData(SelfId(), ControllerPipeId, request.release());
     }
 
@@ -839,24 +847,26 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
         const auto& response = ev->Get()->Record.GetResponse();
-        if (DataCenterReconciliation) {
+        if (DataCenterReconciliationDeadline) {
             if (!response.GetSuccess()) {
                 TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvents::TSystem::Wakeup, 0,
                     SelfId(), {}, nullptr, DataCenterRetryCookie));
                 return;
             }
-            if (!response.HasAppliedDataCenterStatesVersion()
-                    || response.GetAppliedDataCenterStatesVersion() != Self->StorageConfig->GetDataCenterStatesVersion()) {
-                throw TExError() << "BSC did not acknowledge the current DC state version";
+            std::expected<TDataCenterStates, TString> applied = ParseDataCenterStates(response.GetAppliedDataCenterStates());
+            std::expected<TDataCenterStates, TString> desired = ParseDataCenterStates(Self->StorageConfig->GetDataCenterStates());
+            if (!response.HasAppliedDataCenterStates() || !applied || !desired || *applied != *desired) {
+                throw TExError() << "BSC did not acknowledge the current DC state snapshot";
             }
-            WaitingForConfigValidation = false;
+            DataCenterReconciliationDeadline = {};
             if (DataCenterPreflight) {
                 DataCenterPreflight = false;
-                DataCenterReconciliation = false;
                 NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);
                 return StartProposition(&ProposedStorageConfig);
             }
-            return Finish(TResult::OK, std::nullopt);
+            return Finish(TResult::OK, std::nullopt, [&](TResult *result) {
+                *result->MutableAppliedDataCenterStates() = response.GetAppliedDataCenterStates();
+            });
         }
 
         YDB_LOG_DEBUG("Received TEvControllerConfigResponse",

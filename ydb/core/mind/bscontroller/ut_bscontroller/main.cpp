@@ -1,6 +1,7 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
@@ -623,42 +624,41 @@ namespace {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
-    Y_UNIT_TEST(DistconfOwnsDataCenterStateVersion) {
+    Y_UNIT_TEST(DistconfOwnsDataCenterStates) {
         TTestActorRuntimeBase::TEventFilter previousFilter;
         TDataCenterStatesEnv env([&](TTestActorRuntime& runtime) {
             previousFilter = runtime.SetEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
                 if (event->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
                     auto *message = event->Get<TEvNodeWardenStorageConfig>();
                     auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>(*message->Config);
-                    config->SetDataCenterStatesVersion(7);
                     auto *dc = config->MutableDataCenterStates()->AddDataCenter();
                     dc->SetName("unknown-dc");
                     dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+                    dc = config->MutableDataCenterStates()->AddDataCenter();
+                    dc->SetName("unknown-other-dc");
+                    dc->SetState(NKikimrBlobStorage::TDataCenterState::INCLUDED);
                     message->Config = std::move(config);
                     message->SelfManagementEnabled = true;
                 }
                 return previousFilter(runtime, event);
             });
         });
-        auto request = env.Define({{"unknown-dc", TDataCenterStatesEnv::TDataCenter::EXCLUDED}});
-        UNIT_ASSERT(!env.Invoke(request).GetSuccess());
+        auto request = env.Define({{"unknown-other-dc", TDataCenterStatesEnv::TDataCenter::INCLUDED},
+            {"unknown-dc", TDataCenterStatesEnv::TDataCenter::EXCLUDED}});
         auto *command = request.MutableCommand(0)->MutableDefineDataCenterStates();
-        command->SetDistconfGeneration(6);
-        UNIT_ASSERT(!env.Invoke(request).GetSuccess());
-        command->SetDistconfGeneration(7);
         auto result = env.Invoke(request);
         UNIT_ASSERT_C(result.GetSuccess(), result.DebugString());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetAppliedDataCenterStatesVersion(), 7);
+        UNIT_ASSERT(ParseDataCenterStates(result.GetAppliedDataCenterStates()).value() == ParseDataCenterStates(command->GetDataCenter()).value());
         auto repeated = env.Invoke(request);
         UNIT_ASSERT(repeated.GetSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(repeated.GetAppliedDataCenterStatesVersion(), 7);
-        command->MutableDataCenter(0)->SetState(NKikimrBlobStorage::TDataCenterState::INCLUDED);
+        UNIT_ASSERT(ParseDataCenterStates(repeated.GetAppliedDataCenterStates()).value() == ParseDataCenterStates(command->GetDataCenter()).value());
+        command->MutableDataCenter(1)->SetState(NKikimrBlobStorage::TDataCenterState::INCLUDED);
         UNIT_ASSERT(!env.Invoke(request).GetSuccess());
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-        command->MutableDataCenter(0)->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        command->MutableDataCenter(1)->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
         auto afterRestart = env.Invoke(request);
         UNIT_ASSERT(afterRestart.GetSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(afterRestart.GetAppliedDataCenterStatesVersion(), 7);
+        UNIT_ASSERT(ParseDataCenterStates(afterRestart.GetAppliedDataCenterStates()).value() == ParseDataCenterStates(command->GetDataCenter()).value());
         env.Runtime->SetEventFilter(previousFilter);
     }
 
@@ -1036,7 +1036,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
         NKikimrBlobStorage::TDefineDataCenterStates* command = excludeAll.AddCommand()->MutableDefineDataCenterStates();
         for (const TString& dataCenter : dataCenters) {
-            NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter* item = command->AddDataCenter();
+            NKikimrBlobStorage::TDataCenterStates::TDataCenter* item = command->AddDataCenter();
             item->SetName(dataCenter);
             item->SetState(TDataCenter::EXCLUDED);
         }

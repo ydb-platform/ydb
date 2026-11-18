@@ -1,5 +1,4 @@
 #include "impl.h"
-#include <ydb/core/blobstorage/base/data_center_states.h>
 #include "config.h"
 #include "self_heal.h"
 #include "sys_view.h"
@@ -11,6 +10,7 @@
 #include "util.h"
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
@@ -738,14 +738,16 @@ void TBlobStorageController::RetryDataCenterStates() {
 }
 
 void TBlobStorageController::ReconcileDataCenterStates() {
-    if (!SelfManagementEnabled || !StorageConfig || !StorageConfig->HasDataCenterStates()
-            || StorageConfig->GetDataCenterStatesVersion() <= AppliedDataCenterStatesVersion) {
+    if (!SelfManagementEnabled || !StorageConfig || !StorageConfig->HasDataCenterStates()) {
+        return;
+    }
+    std::expected<TDataCenterStates, TString> desired = ParseDataCenterStates(StorageConfig->GetDataCenterStates());
+    if (!desired || *desired == DataCenterStates) {
         return;
     }
     auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     auto *command = request->Record.MutableRequest()->AddCommand()->MutableDefineDataCenterStates();
-    *command = StorageConfig->GetDataCenterStates();
-    command->SetDistconfGeneration(StorageConfig->GetDataCenterStatesVersion());
+    command->MutableDataCenter()->CopyFrom(StorageConfig->GetDataCenterStates().GetDataCenter());
     Send(SelfId(), request.release());
     if (!DataCenterRetryScheduled) {
         DataCenterRetryScheduled = true;

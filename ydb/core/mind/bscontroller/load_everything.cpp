@@ -131,7 +131,6 @@ public:
                 if (state.HaveValue<T::ShredState>()) {
                     Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
                 }
-                Self->AppliedDataCenterStatesVersion = state.GetValue<T::AppliedDataCenterStatesVersion>();
                 Self->EnableConfigV2 = state.GetValue<T::EnableConfigV2>();
                 if (state.HaveValue<T::DataCenterStates>()) {
                     auto states = ParseDataCenterStates(state.GetValue<T::DataCenterStates>());

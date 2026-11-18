@@ -728,10 +728,6 @@ namespace NKikimr::NBsController {
             state.Groups.ApplyToTable(this, txc);
             state.DrivesSerials.ApplyToTable(this, txc);
 
-            if (state.AppliedDataCenterStatesVersion.Changed()) {
-                db.Table<Schema::State>().Key(true).Update<Schema::State::AppliedDataCenterStatesVersion>(
-                    state.AppliedDataCenterStatesVersion.Get());
-            }
             if (state.DataCenterStates.Changed()) {
                 db.Table<Schema::State>().Key(true).Update<Schema::State::DataCenterStates>(
                     SerializeDataCenterStates(state.DataCenterStates.Get()));

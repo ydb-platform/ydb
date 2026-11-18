@@ -1,4 +1,5 @@
 #include "distconf_invoke.h"
+
 #include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 
@@ -9,7 +10,7 @@ namespace NKikimr::NStorage {
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
     bool ApplyStaticDataCenterStates(NKikimrBlobStorage::TStorageConfig *config,
-            const NKikimrBlobStorage::TDefineDataCenterStates& command) {
+            const NKikimrBlobStorage::TDataCenterStates& command) {
         auto states = ParseDataCenterStates(command);
         Y_ENSURE(states, states.error());
         THashMap<ui32, TString> dataCenters;
@@ -70,14 +71,12 @@ namespace NKikimr::NStorage {
         Y_ENSURE(previous, previous.error());
         bool changed = !generations.empty() || !config->HasDataCenterStates() || *previous != *states;
         if (changed) {
-            Y_ENSURE(config->GetGeneration() != Max<ui64>(), "Storage config generation overflow");
             *config->MutableDataCenterStates() = SerializeDataCenterStates(*states);
-            config->SetDataCenterStatesVersion(config->GetGeneration() + 1);
         }
         return changed;
     }
 
-    void TInvokeRequestHandlerActor::ApplyDataCenterStates(const NKikimrBlobStorage::TDefineDataCenterStates& command) {
+    void TInvokeRequestHandlerActor::ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command) {
         RunCommonChecks();
         auto config = *Self->StorageConfig;
         try {

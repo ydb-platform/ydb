@@ -1722,7 +1722,6 @@ private:
     TTabletResponsivenessPinger* ResponsivenessPinger;
     using TDataCenterStates = std::unordered_map<TString, NKikimrBlobStorage::TDataCenterState::EState>;
     TDataCenterStates DataCenterStates;
-    ui64 AppliedDataCenterStatesVersion = 0;
     void ReconcileDataCenterStates();
     void RetryDataCenterStates();
     bool DataCenterRetryScheduled = false;

@@ -1,8 +1,8 @@
 #include "distconf_invoke.h"
 #include "distconf_quorum.h"
-#include <ydb/core/blobstorage/base/data_center_states.h>
 
 #include <ydb/core/audit/audit_log.h>
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/util/address_classifier.h>
 
 #include <ydb/library/aclib/aclib.h>
@@ -326,12 +326,11 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::UpdateConfig(TQuery::TUpdateConfig *request) {
         RunCommonChecks();
-        const auto& current = *Self->StorageConfig;
-        const auto& proposed = request->GetConfig();
-        auto before = ParseDataCenterStates(current.GetDataCenterStates());
-        auto after = ParseDataCenterStates(proposed.GetDataCenterStates());
+        const NKikimrBlobStorage::TStorageConfig& current = *Self->StorageConfig;
+        const NKikimrBlobStorage::TStorageConfig& proposed = request->GetConfig();
+        std::expected<TDataCenterStates, TString> before = ParseDataCenterStates(current.GetDataCenterStates());
+        std::expected<TDataCenterStates, TString> after = ParseDataCenterStates(proposed.GetDataCenterStates());
         if (current.HasDataCenterStates() != proposed.HasDataCenterStates()
-                || current.GetDataCenterStatesVersion() != proposed.GetDataCenterStatesVersion()
                 || !before || !after || *before != *after) {
             throw TExError() << "Use ApplyDataCenterStates to change DC availability";
         }

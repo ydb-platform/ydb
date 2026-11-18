@@ -1060,7 +1060,7 @@ namespace NKikimr::NStorage {
 
     // Applies DC availability to ordinary static mirror-3-dc groups on a private config copy.
     bool ApplyStaticDataCenterStates(NKikimrBlobStorage::TStorageConfig *config,
-        const NKikimrBlobStorage::TDefineDataCenterStates& command);
+        const NKikimrBlobStorage::TDataCenterStates& command);
 
 } // NKikimr::NStorage
 

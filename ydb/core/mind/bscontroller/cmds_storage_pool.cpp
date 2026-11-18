@@ -1220,28 +1220,21 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd,
             TStatus& /*status*/) {
-        auto states = ParseDataCenterStates(cmd);
+        auto states = ParseDataCenterStates(cmd.GetDataCenter());
         if (!states) {
             throw TExError() << states.error();
         }
         if (Self.SelfManagementEnabled) {
-            if (!cmd.HasDistconfGeneration() || !Self.StorageConfig || !Self.StorageConfig->HasDataCenterStates()
-                    || cmd.GetDistconfGeneration() != Self.StorageConfig->GetDataCenterStatesVersion()) {
-                throw TExError() << "DC states must match the current distconf snapshot and its version";
+            if (!Self.StorageConfig || !Self.StorageConfig->HasDataCenterStates()) {
+                throw TExError() << "DC states must be defined in distconf";
             }
-            auto authoritative = ParseDataCenterStates(Self.StorageConfig->GetDataCenterStates());
+            std::expected<TDataCenterStates, TString> authoritative = ParseDataCenterStates(Self.StorageConfig->GetDataCenterStates());
             if (!authoritative || *authoritative != *states) {
                 throw TExError() << "DC states differ from distconf";
             }
-            if (cmd.GetDistconfGeneration() < AppliedDataCenterStatesVersion.Get()) {
-                throw TExError() << "Stale distconf DC state version";
+            if (*states == DataCenterStates.Get()) {
+                return; // acknowledge an already applied snapshot without rescanning groups
             }
-            if (cmd.GetDistconfGeneration() == AppliedDataCenterStatesVersion.Get() && *states == DataCenterStates.Get()) {
-                return; // the snapshot was already committed; acknowledge it without rescanning groups
-            }
-            AppliedDataCenterStatesVersion.Unshare() = cmd.GetDistconfGeneration();
-        } else if (cmd.HasDistconfGeneration()) {
-            throw TExError() << "Versioned DC states require distconf self-management";
         }
         DataCenterStates.Unshare() = std::move(*states);
     }
@@ -1381,7 +1374,7 @@ namespace NKikimr::NBsController {
                     GroupContentChanged.insert(groupId);
                 }
             }
-            if (Self.SelfManagementEnabled && AppliedDataCenterStatesVersion.Get()) {
+            if (Self.SelfManagementEnabled && Self.StorageConfig && Self.StorageConfig->HasDataCenterStates()) {
                 for (const TVSlotInfo* slot : group->VDisksInGroup) {
                     if (!HostRecords->GetHostId(slot->VSlotId.NodeId)) {
                         return std::unexpected<TString>("VDisk node has no HostRecord for DC state validation");

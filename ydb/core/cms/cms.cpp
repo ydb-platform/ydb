@@ -2998,6 +2998,11 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         auto order = request.Order;
         auto priority = request.Priority;
 
+        // A failed recheck must not discard pending eviction actions.
+        if (!ok && request.Request.GetEvictVDisks() && !scheduled.Request.ActionsSize()) {
+            scheduled.Request.CopyFrom(request.Request);
+        }
+
         ClusterInfo->UnscheduleActions(request.RequestId);
         State->ScheduledRequests.erase(it);
         if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks()) {

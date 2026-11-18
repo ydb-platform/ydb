@@ -3376,6 +3376,15 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Check that CMS returns ERROR when VDisks eviction is disabled
         env.CheckRequest("user", request.GetRequestId(), false, TStatus::ERROR, 0);
+        auto scheduled = env.CheckGetRequest("user", request.GetRequestId());
+        UNIT_ASSERT_VALUES_EQUAL(scheduled.GetRequests(0).ActionsSize(), 1);
+
+        env.RestartCms();
+        env.CheckRequest("user", request.GetRequestId(), false, TStatus::ERROR, 0);
+        scheduled = env.CheckGetRequest("user", request.GetRequestId());
+        UNIT_ASSERT_VALUES_EQUAL(scheduled.GetRequests(0).ActionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(scheduled.GetRequests(0).GetActions(0).GetType(), TAction::RESTART_SERVICES);
+        UNIT_ASSERT_VALUES_EQUAL(scheduled.GetRequests(0).GetActions(0).GetHost(), ToString(env.GetNodeId(0)));
 
         // Enable VDisks eviction again
         cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);

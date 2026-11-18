@@ -328,4 +328,8 @@ void TTargetBase::Reset(TActorId& id) {
 void TTargetBase::UpdateConfig(const NKikimrReplication::TReplicationConfig&) {
 }
 
+TString TTargetBase::GetSrcIndexPath() const {
+    Y_ABORT("Unreachable");
+}
+
 }

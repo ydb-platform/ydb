@@ -94,6 +94,8 @@ public:
 
     void UpdateConfig(const NKikimrReplication::TReplicationConfig&) override;
 
+    TString GetSrcIndexPath() const override;
+
 private:
     TReplication* const Replication;
     const ETargetKind Kind;

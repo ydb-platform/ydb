@@ -729,7 +729,8 @@ public:
             // operation may apply it to an index impl table directly (a consistent operation uses
             // one index version for all its impl tables, see CreateConsistentAlterTable).
             if (!context.IsAllowedPrivateTables && !isInternalShadowDataRepair &&
-                !(Transaction.GetInternal() && IsReplicationConfigOnlyAlter(alter))) {
+                !(Transaction.GetInternal() && IsReplicationConfigOnlyAlter(alter)))
+            {
                 checks.IsCommonSensePath(); //forbid alter impl index tables outside consistent operation
             }
 

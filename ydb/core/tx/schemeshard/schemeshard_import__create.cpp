@@ -865,7 +865,8 @@ private:
         auto& item = importInfo.Items.at(itemIdx);
         // An unspecified store type denotes a row table, just as in CreateTablePropose.
         if (!item.Table || item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN ||
-            !Self->Tables.at(item.DstPathId)->IsImportingReplica()) {
+            !Self->Tables.at(item.DstPathId)->IsImportingReplica())
+        {
             item.State = EState::Done;
         } else if (TPath::Init(item.DstPathId, Self).Parent().IsTableIndex()) {
             // Index impl tables are marked together with their base table: it waits for all of them.

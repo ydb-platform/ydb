@@ -218,8 +218,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                     if (*indexType == NKikimrSchemeOp::EIndexTypeGlobal
                         || *indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique)
                     {
-                        // Secondary indexes are replicated as a whole: the source is the index and
-                        // the stream lives on its only impl table.
+                        // Secondary indexes use the legacy scheme: src is the index, dst is its impl table.
                         const auto& target = ToAdd.emplace_back(
                             TReplication::ETargetKind::IndexTable,
                             std::make_shared<TTargetIndexTable::TIndexTableConfig>(

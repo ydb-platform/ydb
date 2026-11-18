@@ -133,6 +133,8 @@ public:
 
         virtual void UpdateConfig(const NKikimrReplication::TReplicationConfig&) = 0;
 
+        virtual TString GetSrcIndexPath() const = 0;
+
     protected:
         virtual IActor* CreateWorkerRegistar(const TActorContext& ctx) const = 0;
     };

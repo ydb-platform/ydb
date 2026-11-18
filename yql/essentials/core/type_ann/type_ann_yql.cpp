@@ -1029,6 +1029,71 @@ IGraphTransformer::TStatus ValidateYqlWarnShadow(
     return IGraphTransformer::TStatus::Repeat;
 }
 
+TExprNode::TPtr BuildYqlColumnOrAccessRef(
+    const TExprNode::TPtr& node,
+    const THashSet<TString>& possibleAliases,
+    TExprContext& ctx)
+{
+    if (!EnsureMinArgsCount(*node, 4, ctx) || !EnsureMaxArgsCount(*node, 5, ctx) || !EnsureAtom(*node->Child(1), ctx)) {
+        return nullptr;
+    }
+
+    const auto& source = node->ChildPtr(1);
+    if (possibleAliases.contains(TString(source->Content()))) {
+        return ctx.Builder(node->Pos())
+            .Callable("YqlColumnRef")
+            .Add(0, source)
+            .Add(1, node->ChildPtr(2))
+            .Seal()
+            .Build();
+    }
+
+    return ctx.Builder(node->Pos())
+        .Callable("YqlColumnRef")
+        .Add(0, node->ChildrenSize() == 5 ? node->ChildPtr(4) : source)
+        .Seal()
+        .Build();
+}
+
+IGraphTransformer::TStatus YqlColumnRefOrAccessWrapper(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TContext& ctx)
+{
+    if (!EnsureMinArgsCount(*input, 4, ctx.Expr) || !EnsureMaxArgsCount(*input, 5, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    bool isSourceUniversal;
+    bool areOptionsUniversal;
+    bool isBaseUniversal = false;
+    if (!EnsureAtomOrUniversal(*input->Child(1), ctx.Expr, isSourceUniversal) ||
+        !EnsureTupleOfAtomsOrUniversal(*input->Child(3), ctx.Expr, areOptionsUniversal) ||
+        (input->ChildrenSize() == 5 && !EnsureAtomOrUniversal(*input->Child(4), ctx.Expr, isBaseUniversal))) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (isSourceUniversal || areOptionsUniversal || isBaseUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+    if (input->Head().IsCallable("Void")) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+    if (!EnsureComputable(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    output = ctx.Expr.Builder(input->Pos())
+                 .Callable("SqlAccess")
+                 .Atom(0, "struct")
+                 .Add(1, input->HeadPtr())
+                 .Add(2, input->ChildPtr(2))
+                 .Add(3, input->ChildPtr(3))
+                 .Seal()
+                 .Build();
+    return IGraphTransformer::TStatus::Repeat;
+}
+
 IGraphTransformer::TStatus YqlColumnOrTypeWrapper(
     const TExprNode::TPtr& input,
     TExprNode::TPtr& output,

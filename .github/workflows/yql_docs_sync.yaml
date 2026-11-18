@@ -25,6 +25,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
         with:
@@ -40,6 +41,7 @@ jobs:
     needs: test
     if: github.repository == 'ydb-platform/ydb' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: write
       pull-requests: write

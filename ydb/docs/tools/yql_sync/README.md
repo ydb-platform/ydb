@@ -34,11 +34,23 @@ bash yql/essentials/docs/scripts/doc_upgrade_git.sh --selective --apply --report
 
 Review the changed pages and `ownership.json` together. Commit both in the same commit so that the next run can distinguish a synchronization from a local edit. Build the documentation before merging. A second run after committing an update produces no changes unless the source or destination changed again.
 
+### Recovering a split sync before merge
+
+If you committed the generated pages and their matching ownership update separately, stop before merging or applying another sync. Combine those commits into one on your unmerged branch (for example, using interactive rebase), or squash-merge a PR containing only that generated update. Do not combine unrelated local edits with a sync. A regular merge or rebase merge preserves the separate commits and does not fix this problem.
+
+After combining the commits, run the read-only command above on the clean branch. Check `newly_owned`: the synchronized pages must not appear there. If an intervening local `--apply` already proposed ownership changes, discard only that uncommitted generated ownership diff before repairing the commits; preserve any unrelated work. Do not commit the mistaken ownership transition or regenerate the configuration.
+
+If the separate commits have already reached `main`, the tool deliberately treats the content-only commit as a local edit and reports the affected files in `newly_owned`. A later config-only commit cannot prove that the earlier edit was a sync. Do not rewrite shared history, advance the checkpoint to skip it, or change `owner` back to `yql`: these files must remain YDB-owned and be updated manually. Automatic recovery would weaken the rule that local changes permanently end synchronization. The daily workflow avoids this situation by committing pages and ownership together.
+
+### Initial configuration
+
 The initial configuration is generated once with `--selective --initialize`. Initialization refuses to replace an existing configuration. Do not regenerate it to resolve a synchronization error: that would discard ownership history. The old `essentials.base_rev` files remain historical inputs and are not advanced by selective synchronization; per-file source revisions are stored in the ownership configuration.
 
 ## Daily workflow
 
 `.github/workflows/yql_docs_sync.yaml` runs at 02:00 UTC, which is 05:00 Moscow time. GitHub may delay scheduled runs. It reads source and destination from the same `main` checkout and creates or updates one `automation/yql-docs-sync` PR. It never merges that PR automatically. A manual run defaults to dry-run mode. No PR is created when neither content nor ownership changed.
+
+The test job has a 15-minute timeout; the synchronization job has a 45-minute timeout, including checkout, historical fetches, and PR creation. A stalled job therefore cannot hold the workflow's concurrency slot for the default six-hour job timeout.
 
 The workflow uses the existing `YDBOT_TOKEN` secret so that its PR triggers documentation checks. If the open sync branch contains commits with a committer other than the workflow bot, the next run stops instead of overwriting reviewer edits. Merge or close that PR and delete its branch before resuming automated updates. This guard protects ordinary reviewer commits; it is not an authentication mechanism.
 

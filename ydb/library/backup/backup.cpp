@@ -436,8 +436,8 @@ bool EnableOlapSortedRead(const TDriver& driver, TMaybe<bool>& cached) {
         return true;
     }
 
-        const auto issues = result.GetIssues().ToOneLineString();
-        if (IsUnknownOlapSortedReadPragma(TStringBuf(issues.data(), issues.size()))) {
+    const auto issues = result.GetIssues().ToOneLineString();
+    if (IsUnknownOlapSortedReadPragma(TStringBuf(issues.data(), issues.size()))) {
         LOG_W("Server does not support PRAGMA kikimr.OptEnableOlapSortedRead; "
             "column table dump will order rows in memory and may fail on large tables");
         cached = false;

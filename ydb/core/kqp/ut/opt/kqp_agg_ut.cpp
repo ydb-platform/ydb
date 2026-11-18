@@ -425,6 +425,86 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
         }
     }
 
+    // A filter that uses no aggregate column (here a scalar subquery) must stay above an aggregate
+    // without GROUP BY keys: such an aggregate still returns one row for an empty input.
+    Y_UNIT_TEST_TWIN(FilterOverGlobalAggregate, QueryService) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Utf8,
+                b Utf8,
+                c Int64,
+                PRIMARY KEY (a, c)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        // Runs the query in Query Service or Table Service and returns its first result set, if any.
+        auto execute = [&](const TString& query) -> TString {
+            if (QueryService) {
+                auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                return result.GetResultSets().empty() ? TString() : FormatResultSetYson(result.GetResultSet(0));
+            }
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result.GetResultSets().empty() ? TString() : FormatResultSetYson(result.GetResultSet(0));
+        };
+
+        execute(R"(
+            UPSERT INTO `/Root/t1` (a, b, c) VALUES
+                ("temp0"u, "temp1"u, 0),
+                ("temp0"u, "temp2"u, 1);
+        )");
+
+        // Both conjuncts are false. Pushing `$s = 1` below COUNT(*) would make it count 0 rows and return [[0u]].
+        CompareYson(R"([])", execute(R"(
+            $agg = (SELECT COUNT(*) AS cnt FROM `/Root/t1` WHERE a = "temp0"u AND b = "temp2"u);
+            $s = (SELECT 0 AS v);
+            SELECT * FROM $agg WHERE cnt = 0 AND $s = 1;
+        )"));
+
+        // Both conjuncts are true: the single row of the empty aggregate is returned.
+        CompareYson(R"([[0u]])", execute(R"(
+            $agg = (SELECT COUNT(*) AS cnt FROM `/Root/t1` WHERE a = "temp0"u AND b = "temp3"u);
+            $s = (SELECT 0 AS v);
+            SELECT * FROM $agg WHERE cnt = 0 AND $s = 0;
+        )"));
+
+        // Compare-and-set write: add b = extId with c = max(c) + 1 only if extId is new and max(c) equals expectedMaxRevision.
+        auto guardedUpsert = [&](const TString& extId, int expectedMaxRevision) {
+            execute(Sprintf(R"(
+                $tmp = (SELECT "%s"u AS b, COUNT(*) AS event_cnt
+                        FROM `/Root/t1` WHERE a = "temp0"u AND b = "%s"u);
+                $max_revision = (SELECT COALESCE(MAX(c), -1) FROM `/Root/t1` WHERE a = "temp0"u);
+                UPSERT INTO `/Root/t1`
+                    SELECT "temp0"u AS a, b, ($max_revision + 1) AS c
+                    FROM $tmp
+                    WHERE event_cnt = 0 AND $max_revision = %d;
+            )", extId.c_str(), extId.c_str(), expectedMaxRevision));
+        };
+
+        const TString readAll = R"(SELECT a, b, c FROM `/Root/t1` ORDER BY c;)";
+        const TString initialRows = R"([[["temp0"];["temp1"];[0]];[["temp0"];["temp2"];[1]]])";
+
+        // extId already exists and max(c) does not match: nothing is written.
+        guardedUpsert("temp2", 0);
+        CompareYson(initialRows, execute(readAll));
+
+        // extId is new but max(c) does not match: nothing is written.
+        guardedUpsert("temp4", 0);
+        CompareYson(initialRows, execute(readAll));
+
+        // extId is new and max(c) matches: the row is written with c = 2.
+        guardedUpsert("temp5", 1);
+        CompareYson(R"([[["temp0"];["temp1"];[0]];[["temp0"];["temp2"];[1]];[["temp0"];["temp5"];[2]]])", execute(readAll));
+    }
+
 }
 
 } // namespace NKikimr::NKqp

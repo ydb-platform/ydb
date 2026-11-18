@@ -1192,12 +1192,15 @@ protected:
     void TestCommonEncryptionRequirements(bool useSchemaSecrets, bool isFsBackup = false) {
         using namespace ::fmt::literals;
 
+        auto& runtime = *Server().GetRuntime();
+        NKikimr::TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
+        NKikimr::TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusImport);
         THolder<TTempDir> tempDirHolder;
         TString basePath;
         if (isFsBackup) {
             tempDirHolder = MakeHolder<TTempDir>();
             basePath = tempDirHolder->Path();
-            Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+            runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
         }
         // Create different objects with names that are expected to be hidden (anonymized) in encrypted exports
         // Create two object of each type in order to verify that we don't duplicate IVs

@@ -379,6 +379,96 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
 
     // ---- P0: request validation ----
 
+    Y_UNIT_TEST(EmptyTopicInRequest) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        auto ev = Fetch(runtime, MakeSettings({{"", 0, 0, 10000}}));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "Empty topic");
+    }
+
+    Y_UNIT_TEST(ZeroMaxBytes) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        auto ev = Fetch(runtime, MakeSettings({{"/Root/topic1", 0, 0, 0}}));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "No maxBytes");
+    }
+
+    Y_UNIT_TEST(DuplicatePartition) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        auto ev = Fetch(runtime, MakeSettings({
+            {"/Root/topic1", 0, 0, 10000},
+            {"/Root/topic1", 0, 1, 10000},
+        }));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "multiple times");
+    }
+
+    Y_UNIT_TEST(UnknownPartition) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        EnableFetchLogs(*setup);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        setup->CreateTopic("topic1", "dc1", 2);
+
+        auto ev = Fetch(runtime, MakeSettings({{"/Root/topic1", 42, 0, 10000}}));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "PQ12");
+    }
+
+    Y_UNIT_TEST(UnknownPartitionsThenValidTopicReturnsBadRequest) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        EnableFetchLogs(*setup);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        setup->CreateTopic("topic1", "dc1", 2);
+        setup->CreateTopic("topic2", "dc1", 2);
+
+        // Request order does not determine the order of metadata processing:
+        // the actor stores topics in a hash map.
+        auto ev = Fetch(runtime, MakeSettings({
+            {"/Root/topic1", 42, 0, 10000},
+            {"/Root/topic1", 43, 0, 10000},
+            {"/Root/topic2", 0, 0, 10000},
+            {"/Root/topic2", 1, 0, 10000},
+        }));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "/Root/topic1");
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "PQ12");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 0);
+    }
+
+    // Isolate a possible process abort if the double-PassAway regression returns (#58064).
+    SIMPLE_UNIT_FORKED_TEST(UnknownPartitionsInTwoTopicsReturnsBadRequest) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        EnableFetchLogs(*setup);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        setup->CreateTopic("topic1", "dc1", 2);
+        setup->CreateTopic("topic2", "dc1", 2);
+
+        // Both topics are invalid, regardless of their hash-map iteration order.
+        auto ev = Fetch(runtime, MakeSettings({
+            {"/Root/topic1", 42, 0, 10000},
+            {"/Root/topic2", 42, 0, 10000},
+        }));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "PQ12");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 0);
+    }
+
+    // ---- P1: runtime errors ----
 
     Y_UNIT_TEST(ReadyPartitionIsNotBlockedByEmptyPartitionPastMaxWait) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);

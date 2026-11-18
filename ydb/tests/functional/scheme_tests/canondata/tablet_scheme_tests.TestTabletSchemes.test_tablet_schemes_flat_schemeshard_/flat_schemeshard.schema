@@ -6534,6 +6534,11 @@
                 "ColumnId": 14,
                 "ColumnName": "SanitizedToken",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "CanRestoreRateLimiterMetering",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6553,7 +6558,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6696,6 +6702,11 @@
                 "ColumnId": 23,
                 "ColumnName": "ReplicationConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 24,
+                "ColumnName": "Kesus",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6724,7 +6735,8 @@
                     20,
                     21,
                     22,
-                    23
+                    23,
+                    24
                 ],
                 "RoomID": 0,
                 "Codec": 0,

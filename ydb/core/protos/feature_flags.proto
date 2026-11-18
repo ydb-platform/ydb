@@ -361,9 +361,11 @@ message TFeatureFlags {
     optional bool EnableKeyValueRequestInFlightLimit = 363 [default = false];
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
+    optional bool EnableIndexShadowDataRepair = 393 [default = false];
     // Allows persisting Waiting for column-table imports with unresolved dependencies.
     // Enable only after the rollback version supports resuming these imports.
     optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
+    optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
     // (LOGBROKER-10680). Default false is
     // the legacy zeroing behaviour that undercounted the consumed
     // write quota.

@@ -3,6 +3,25 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
+<<<<<<< HEAD
+=======
+void TInStoreSchemaUpdate::InitializeSchemaPreset(const TInStoreTable& table, const TOlapStoreInfo& storeInfo) {
+    const auto& tableInfo = table.GetTableInfoVerified();
+    YDB_LOG_VERIFY(tableInfo.Description.HasSchemaPresetId());
+    const ui32 presetId = tableInfo.Description.GetSchemaPresetId();
+    const auto& preset = storeInfo.GetPresetVerified(presetId);
+    SchemaPreset = storeInfo.GetDescription().GetSchemaPresets(preset.GetProtoIndex());
+}
+
+TConclusionStatus TInStoreSchemaUpdate::DoRestoreImpl(
+    const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) {
+    TEntityInitializationContext eContext(context.GetSSOperationContext());
+    TargetInStoreTable = std::make_shared<TInStoreTable>(context.GetOriginalEntity().GetPathId(), alterData, eContext);
+    InitializeSchemaPreset(*TargetInStoreTable, *TargetInStoreTable->GetStoreInfo());
+    return TConclusionStatus::Success();
+}
+
+>>>>>>> 0eeb313b336 ([YDB_LOG_VERIFY/ENSURE] Migrate ydb/core/tx/schemeshard (#59529))
 NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateInitializationContext& context) {
     auto alter = TConverterModifyToAlter().Convert(*context.GetModification());
     if (alter.IsFail()) {
@@ -58,7 +77,7 @@ void TInStoreSchemaUpdate::FillToShardTx(NKikimrTxColumnShard::TAlterTable& shar
     auto& alterBody = TargetInStoreTable->GetTableInfoVerified();
     *shardAlter.MutableTtlSettings() = alterBody.Description.GetTtlSettings();
 
-    AFL_VERIFY(!!SchemaPreset);
+    YDB_LOG_VERIFY(!!SchemaPreset);
     *shardAlter.MutableSchemaPreset() = *SchemaPreset;
 
     if (alterBody.Description.HasSchemaPresetVersionAdj()) {

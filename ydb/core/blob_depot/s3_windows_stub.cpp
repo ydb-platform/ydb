@@ -37,6 +37,12 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT("S3 is not supported on Windows");
     }
 
+    void TS3Manager::DropPendingPrepareWrites(const TActorId& /*pipeServerId*/) {}
+
+    void TS3Manager::OnS3WritesInFlightAbandoned(size_t /*count*/) {
+        Y_ABORT("S3 is not supported on Windows");
+    }
+
     void TS3Manager::OnKeyWritten(const TData::TKey& /*key*/, const TValueChain& /*valueChain*/) {}
 
     void TS3Manager::OnDataLoaded() {}

@@ -17,6 +17,7 @@ namespace NKikimr::NBlobDepot {
 
         const auto it = PipeServers.find(ev->Get()->ServerId);
         Y_ABORT_UNLESS(it != PipeServers.end());
+        S3Manager->DropPendingPrepareWrites(it->first);
         if (const auto& nodeId = it->second.NodeId) {
             if (const auto agentIt = Agents.find(*nodeId); agentIt != Agents.end() && agentIt->second.Connection &&
                     agentIt->second.Connection->PipeServerId == it->first) {
@@ -37,7 +38,11 @@ namespace NKikimr::NBlobDepot {
             // they were not in InFlightTrashS3, so we just have to delete them
             S3Manager->AddTrashToCollect(locator);
         }
+        const size_t abandoned = agent.S3WritesInFlight.size();
         agent.S3WritesInFlight.clear();
+        if (abandoned) {
+            S3Manager->OnS3WritesInFlightAbandoned(abandoned);
+        }
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {
@@ -53,6 +58,10 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(!it->second.NodeId || *it->second.NodeId == nodeId);
         it->second.NodeId = nodeId;
         auto& agent = Agents[nodeId];
+        if (agent.Connection && agent.Connection->PipeServerId != pipeServerId) {
+            S3Manager->DropPendingPrepareWrites(agent.Connection->PipeServerId);
+            OnAgentDisconnect(agent);
+        }
         if (!agent.Connection) {
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_AGENTS_CONNECTED] += 1;
         }
@@ -201,6 +210,18 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(agentIt != Agents.end());
         TAgent& agent = agentIt->second;
         return agent;
+    }
+
+    TBlobDepot::TAgent* TBlobDepot::FindAgent(const TActorId& pipeServerId) {
+        const auto pipe = PipeServers.find(pipeServerId);
+        if (pipe == PipeServers.end() || !pipe->second.NodeId) {
+            return nullptr;
+        }
+        const auto agent = Agents.find(*pipe->second.NodeId);
+        if (agent == Agents.end() || !agent->second.Connection || agent->second.Connection->PipeServerId != pipeServerId) {
+            return nullptr;
+        }
+        return &agent->second;
     }
 
     void TBlobDepot::ResetAgent(TAgent& agent) {

@@ -6,28 +6,23 @@ namespace NKikimr::NBlobDepot {
     using TS3Manager = TBlobDepot::TS3Manager;
 
     class TS3Manager::TTxPrepareWriteS3 : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-        const ui32 NodeId;
         const ui64 AgentInstanceId;
         std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle> Request;
         std::unique_ptr<IEventHandle> Response;
-        ui32 AllocatedLocatorCount = 0;
 
     public:
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_PREPARE_WRITE_S3; }
 
         TTxPrepareWriteS3(TBlobDepot *self, TAgent& agent, std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle> request)
             : TTransactionBase(self)
-            , NodeId(agent.Connection->NodeId)
             , AgentInstanceId(*agent.AgentInstanceId)
             , Request(std::move(request))
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            AllocatedLocatorCount = 0;
-
-            TAgent& agent = Self->GetAgent(NodeId);
-            if (!agent.Connection || agent.AgentInstanceId != AgentInstanceId) {
-                // agent has been disconnected while transaction was in queue -- do nothing
+            // A reconnect can reuse the same agent instance, but it has a different pipe server.
+            TAgent* agent = Self->FindAgent(Request->Recipient);
+            if (!agent || agent->AgentInstanceId != AgentInstanceId) {
                 return true;
             }
 
@@ -41,6 +36,7 @@ namespace NKikimr::NBlobDepot {
             NKikimrBlobDepot::TEvPrepareWriteS3Result *responseRecord;
             std::tie(Response, responseRecord) = TEvBlobDepot::MakeResponseFor(*Request);
 
+            ui32 allocatedLocatorCount = 0;
             for (const auto& record = Request->Get()->Record; const auto& item : record.GetItems()) {
                 auto *responseItem = responseRecord->AddItems();
 
@@ -59,10 +55,15 @@ namespace NKikimr::NBlobDepot {
                     // key will be deleted; we also rewrite spoiled locator because Len is different
                     db.Table<Schema::TrashS3>().Key(locator.Generation, locator.KeyId).Update<Schema::TrashS3::Len>(locator.Len);
 
-                    const bool inserted = agent.S3WritesInFlight.insert(locator).second;
+                    const bool inserted = agent->S3WritesInFlight.insert(locator).second;
                     Y_ABORT_UNLESS(inserted);
-                    ++AllocatedLocatorCount;
+                    ++allocatedLocatorCount;
                 }
+            }
+
+            // Disconnect cleanup can run before Complete, so update both counts in Execute.
+            if (allocatedLocatorCount) {
+                Self->S3Manager->OnS3WriteInFlightAdded(allocatedLocatorCount);
             }
 
             return true;
@@ -97,9 +98,6 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            if (AllocatedLocatorCount) {
-                Self->S3Manager->OnS3WriteInFlightAdded(AllocatedLocatorCount);
-            }
             if (Response) {
                 TActivationContext::Send(Response.release());
             }
@@ -190,14 +188,30 @@ namespace NKikimr::NBlobDepot {
             auto ev = std::move(PendingPrepareWrites.front());
             PendingPrepareWrites.pop_front();
 
-            auto& agent = Self->GetAgent(ev->Recipient);
+            TAgent* agent = Self->FindAgent(ev->Recipient);
+            if (!agent) {
+                continue;
+            }
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS07, "TEvPrepareWriteS3", (Id, Self->GetLogId()),
-                (AgentId, agent.Connection->NodeId), (Msg, ev->Get()->Record));
+                (AgentId, agent->Connection->NodeId), (Msg, ev->Get()->Record));
 
-            Self->Execute(std::make_unique<TTxPrepareWriteS3>(Self, agent,
+            Self->Execute(std::make_unique<TTxPrepareWriteS3>(Self, *agent,
                 std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle>(ev.Release())));
         }
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_PENDING_QUEUE_SIZE] = PendingPrepareWrites.size();
+    }
+
+    void TS3Manager::DropPendingPrepareWrites(const TActorId& pipeServerId) {
+        if (std::erase_if(PendingPrepareWrites, [&](const auto& ev) { return ev->Recipient == pipeServerId; })) {
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_PENDING_QUEUE_SIZE] = PendingPrepareWrites.size();
+        }
+    }
+
+    void TS3Manager::OnS3WritesInFlightAbandoned(size_t count) {
+        Y_ABORT_UNLESS(S3WritesInFlight >= count);
+        S3WritesInFlight -= count;
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_WRITES_IN_FLIGHT] = S3WritesInFlight;
+        RunPendingPrepareWritesIfPossible();
     }
 
     void TS3Manager::OnS3WriteInFlightAdded(ui32 count) {

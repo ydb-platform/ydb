@@ -52,10 +52,11 @@ namespace NKikimr::NBlobDepot {
             }
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                TAgent& agent = Self->GetAgent(NodeId);
-                if (!agent.Connection || agent.AgentInstanceId != AgentInstanceId) { // agent disconnected while transaction was in queue -- drop this request
+                TAgent* currentAgent = Self->FindAgent(Request->Recipient);
+                if (!currentAgent || currentAgent->AgentInstanceId != AgentInstanceId) {
                     return true;
                 }
+                TAgent& agent = *currentAgent;
 
                 if (!Self->Data->LoadMissingKeys(Request->Get()->Record, txc)) {
                     return false;

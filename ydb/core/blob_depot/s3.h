@@ -69,6 +69,8 @@ namespace NKikimr::NBlobDepot {
         void NotifyPutSlowDown();
         void HandlePutThrottleWakeup();
         void RunPendingPrepareWritesIfPossible();
+        void DropPendingPrepareWrites(const TActorId& pipeServerId);
+        void OnS3WritesInFlightAbandoned(size_t count);
         void OnS3WriteInFlightAdded(ui32 count);
         void OnS3WriteInFlightRemoved(bool success);
 

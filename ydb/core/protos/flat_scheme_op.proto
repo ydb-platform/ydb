@@ -446,7 +446,7 @@ message TTableDescription {
     optional TLocalHnswIndexDescription LocalHnswIndex = 56;
     
     // First snapshot compatible with the most recent nullable to NOT NULL transition.
-    optional NKikimrProto.TRowVersion NotNullSince = 56;
+    optional NKikimrProto.TRowVersion NotNullSince = 57;
 }
 
 message TCompressionOptions {

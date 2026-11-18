@@ -120,11 +120,17 @@ public:
         std::vector<TString>& msg) const = 0;
 };
 
+enum class ENameserviceNodesOverride {
+    None,
+    Yaml,
+    NodeRegistration,
+};
+
 /**
  * Applies unmanaged Console settings to the resolved YAML config. During bridged dynamic-node
- * startup the static nodes come from YAML hosts or, if omitted, from node registration.
+ * startup, returns the source that takes precedence over the Console nameservice node list.
  */
-void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to,
+ENameserviceNodesOverride ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to,
     const NKikimrConfig::TAppConfig& bootstrapConfig);
 
 using TValidatorsMap = TMap<TString, TSimpleSharedPtr<IConfigValidator>>;

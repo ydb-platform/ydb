@@ -1167,9 +1167,9 @@ ui32 NextValidKind(ui32 kind);
 bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig);
 NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, const IEnv& env);
 NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels);
-TMaybe<NKikimrConfig::TAppConfig> GetActualDynConfig(
+NKikimrConfig::TAppConfig GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
-    const TMaybe<NKikimrConfig::TAppConfig>& regularConfig,
+    const NKikimrConfig::TAppConfig& regularConfig,
     IConfigUpdateTracer& ConfigUpdateTracer);
 void UpdateConfigUpdateTracer(
     IConfigUpdateTracer& ConfigUpdateTracer);
@@ -1620,10 +1620,21 @@ public:
         }
 
         NKikimrConfig::TAppConfig yamlConfig = GetYamlConfigFromResult(*result, Labels);
-        NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig, AppConfig);
+        const auto nodesOverride = NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig, AppConfig);
 
         InitDebug.OldConfig.CopyFrom(result->GetConfig());
         ApplyActualDynConfigFromYaml(yamlConfig, result->GetConfig());
+        using EUpdateKind = TConfigItemInfo::EUpdateKind;
+        switch (nodesOverride) {
+            case NYamlConfig::ENameserviceNodesOverride::Yaml:
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::NameserviceConfigItem, EUpdateKind::NameserviceNodesFromConsoleYaml);
+                break;
+            case NYamlConfig::ENameserviceNodesOverride::NodeRegistration:
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::NameserviceConfigItem, EUpdateKind::NameserviceNodesFromNodeRegistration);
+                break;
+            case NYamlConfig::ENameserviceNodesOverride::None:
+                break;
+        }
     }
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) override {
@@ -1783,15 +1794,12 @@ public:
         }
     }
 
-    bool ApplyActualDynConfigFromYaml(const NKikimrConfig::TAppConfig& yamlConfig, const TMaybe<NKikimrConfig::TAppConfig>& regularConfigOpt) {
+    void ApplyActualDynConfigFromYaml(const NKikimrConfig::TAppConfig& yamlConfig, const NKikimrConfig::TAppConfig& regularConfig) {
         InitDebug.YamlConfig.CopyFrom(yamlConfig);
-        auto appConfig = GetActualDynConfig(yamlConfig, regularConfigOpt, ConfigUpdateTracer);
-        if (!appConfig) {
-            return false;
-        }
-        Logger.Out() << "Successfully applied dynamic config from YAML" << Endl;
-        ApplyConfigForNode(*appConfig);
-        return true;
+        auto appConfig = GetActualDynConfig(yamlConfig, regularConfig, ConfigUpdateTracer);
+        Logger.Out() << "Successfully applied dynamic config from "
+            << (yamlConfig.GetYamlConfigEnabled() ? "YAML" : "Console protobuf") << Endl;
+        ApplyConfigForNode(appConfig);
     }
 
     void InitConfigFromSeedNodesDynamic() {

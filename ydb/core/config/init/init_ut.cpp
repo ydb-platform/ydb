@@ -2,11 +2,11 @@
 #include "mock.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/folder/tempdir.h>
 #include <util/system/tempfile.h>
 #include <util/stream/output.h>
 #include <ydb/core/config/init/init.h>
 #include <ydb/core/config/validation/validators.h>
-#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
 using namespace NKikimr;
@@ -135,13 +135,13 @@ void PreFillArgs(std::vector<TString>& args, const TString& configPath) {
     args.push_back(configPath);
 }
 
-NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args, std::unique_ptr<NConfig::IEnv> envMock) {
+NKikimrConfig::TAppConfig RunConfigurator(const std::vector<TString>& args, NConfig::IEnv& env,
+        NConfig::INodeBrokerClient& nodeBrokerClient, NConfig::IDynConfigClient& dynConfigClient,
+        NConfig::TConfigsDispatcherInitInfo& configsDispatcherInitInfo) {
     auto errorCollector = NConfig::MakeDefaultErrorCollector();
     auto protoConfigFileProvider = NConfig::MakeDefaultProtoConfigFileProvider();
     auto configUpdateTracer = NConfig::MakeDefaultConfigUpdateTracer();
     auto memLogInit = NConfig::MakeNoopMemLogInitializer();
-    auto nodeBrokerClient = NConfig::MakeNoopNodeBrokerClient();
-    auto dynConfigClient = NConfig::MakeNoopDynConfigClient();
     auto configClient = NConfig::MakeNoopConfigClient();
     auto logger = NConfig::MakeNoopInitLogger();
 
@@ -150,10 +150,10 @@ NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args, std:
         *protoConfigFileProvider,
         *configUpdateTracer,
         *memLogInit,
-        *nodeBrokerClient,
-        *dynConfigClient,
+        nodeBrokerClient,
+        dynConfigClient,
         *configClient,
-        *envMock,
+        env,
         *logger,
     };
     auto initCfg = NConfig::MakeDefaultInitialConfigurator(deps);
@@ -180,7 +180,6 @@ NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args, std:
     TBasicKikimrServicesMask servicesMask;
     bool tinyMode;
     TString clusterName;
-    NConfig::TConfigsDispatcherInitInfo configsDispatcherInitInfo;
 
     initCfg->Apply(
         appConfig,
@@ -193,6 +192,13 @@ NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args, std:
         configsDispatcherInitInfo);
 
     return appConfig;
+}
+
+NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args, std::unique_ptr<NConfig::IEnv> envMock) {
+    TNodeBrokerClientMock nodeBroker;
+    TDynConfigClientMock console;
+    TConfigsDispatcherInitInfo dispatcher;
+    return RunConfigurator(args, *envMock, nodeBroker, console, dispatcher);
 }
 
 std::unique_ptr<NConfig::IEnv> GetEnvMock(const TString& hostName = "localhost", const TString& fqdnHostName = "localhost") {
@@ -225,64 +231,90 @@ Y_UNIT_TEST_SUITE(InitStructuredErrors) {
 }
 
 Y_UNIT_TEST_SUITE(DynamicNodeNameservice) {
-    struct TFixture : public NUnitTest::TBaseFixture {
-        NKikimrConfig::TAppConfig Console;
-        NKikimrConfig::TAppConfig Yaml;
-        NKikimrConfig::TAppConfig Registration;
+    struct TRegistrationResult : INodeRegistrationResult {
+        NKikimrConfig::TStaticNameserviceConfig Nameservice;
 
-        TFixture() {
-            auto* legacy = Console.MutableNameserviceConfig();
-            legacy->SetClusterUUID("cluster-uuid");
-            auto* oldNode = legacy->AddNode();
-            oldNode->SetNodeId(1);
-            oldNode->MutableWalleLocation()->SetDataCenter("BRO");
-
-            Yaml.SetYamlConfigEnabled(true);
-            auto* bridge = Yaml.MutableBridgeConfig();
-            bridge->AddPiles()->SetName("original");
-            bridge->AddPiles()->SetName("added");
-            for (ui32 id : {1u, 2u}) {
-                auto* node = Registration.MutableNameserviceConfig()->AddNode();
-                node->SetNodeId(id);
-                node->SetInterconnectHost(id == 1 ? "static-1" : "static-2");
-                node->MutableLocation()->SetBridgePileName(id == 1 ? "original" : "added");
-            }
+        void Apply(NKikimrConfig::TAppConfig& appConfig, ui32& nodeId, TKikimrScopeId&, TString&) const override {
+            nodeId = 50005;
+            appConfig.MutableDynamicNodeConfig()->MutableNodeInfo()->SetNodeId(nodeId);
+            appConfig.MutableNameserviceConfig()->MutableNode()->CopyFrom(Nameservice.GetNode());
         }
     };
 
-    Y_UNIT_TEST_F(BridgedYamlHostsSurviveLegacyConsoleItem, TFixture) {
-        Yaml.MutableNameserviceConfig()->CopyFrom(Registration.GetNameserviceConfig());
-        Yaml.MutableNameserviceConfig()->MutableNode(1)->SetInterconnectHost("from-yaml");
+    struct TConsoleResult : IConfigurationResult {
+        NKikimrConfig::TAppConfig Config;
+        std::optional<TString> MainYaml;
 
-        NYamlConfig::ReplaceUnmanagedKinds(Console, Yaml, Registration);
+        const NKikimrConfig::TAppConfig& GetConfig() const override { return Config; }
+        const std::optional<TString>& GetMainYamlConfig() const override { return MainYaml; }
+        TMap<ui64, TString> GetVolatileYamlConfigs() const override { return {}; }
+        bool HasDatabaseYamlConfig() const override { return false; }
+        const TString& GetDatabaseYamlConfig() const override { return Default<TString>(); }
+    };
 
-        const auto& nameservice = Yaml.GetNameserviceConfig();
-        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetClusterUUID(), "cluster-uuid");
-        UNIT_ASSERT_VALUES_EQUAL(nameservice.NodeSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(0).GetLocation().GetBridgePileName(), "original");
-        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(1).GetLocation().GetBridgePileName(), "added");
-        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(1).GetInterconnectHost(), "from-yaml");
+    Y_UNIT_TEST(StorageYamlBridgeUsesRegisteredNodesAtStartup) {
+        auto registration = std::make_shared<TRegistrationResult>();
+        UNIT_ASSERT(ParsePBFromString(R"(
+            Node { NodeId: 1 InterconnectHost: "static-1" Port: 19001 Location { BridgePileName: "original" } }
+            Node { NodeId: 2 InterconnectHost: "static-2" Port: 19001 Location { BridgePileName: "added" } }
+        )", &registration->Nameservice));
+        TNodeBrokerClientMock nodeBroker;
+        nodeBroker.SavedResult = registration;
+        auto response = std::make_shared<TConsoleResult>();
+        UNIT_ASSERT(ParsePBFromString(R"(
+            ClusterUUID: "cluster-uuid"
+            Node { NodeId: 1 WalleLocation { DataCenter: "BRO" } }
+        )", response->Config.MutableNameserviceConfig()));
+        response->MainYaml = R"(
+metadata: {kind: MainConfig, cluster: test, version: 1}
+config: {}
+)";
+        TDynConfigClientMock console;
+        console.SavedResult = response;
+
+        TTempDir configDir;
+        TFileOutput((configDir.Path() / CONFIG_NAME).GetPath()).Write(*response->MainYaml);
+        TFileOutput((configDir.Path() / STORAGE_CONFIG_NAME).GetPath()).Write(R"(
+metadata: {kind: StorageConfig, cluster: test, version: 1}
+config:
+  bridge_config:
+    piles: [{name: original}, {name: added}]
+  hosts:
+    - host: bootstrap-host
+      location: {bridge_pile_name: original}
+  host_configs:
+    - nvme: [/dev/disk1]
+)");
+        TConfigsDispatcherInitInfo dispatcher;
+        const auto config = RunConfigurator({
+            "server", "--config-dir", configDir.Name(), "--node-broker", "static-1:2135",
+            "--ic-port", "19002", "--tenant", "/Root/db", "--bridge-pile-name", "added",
+        }, *GetEnvMock(), nodeBroker, console, dispatcher);
+
+        auto expected = registration->Nameservice;
+        expected.SetClusterUUID(response->Config.GetNameserviceConfig().GetClusterUUID());
+        UNIT_ASSERT_VALUES_EQUAL(config.GetBridgeConfig().PilesSize(), 2);
+        UNIT_ASSERT_NO_DIFF(expected.DebugString(), config.GetNameserviceConfig().DebugString());
+        UNIT_ASSERT(dispatcher.DebugInfo);
+        const auto& updates = dispatcher.DebugInfo->InitInfo.at(NKikimrConsole::TConfigItem::NameserviceConfigItem).Updates;
+        const auto hasUpdate = [&](TConfigItemInfo::EUpdateKind kind) {
+            return AnyOf(updates, [kind](const auto& update) { return update.Kind == kind; });
+        };
+        UNIT_ASSERT(hasUpdate(TConfigItemInfo::EUpdateKind::ReplaceConfigWithConsoleProto));
+        UNIT_ASSERT(hasUpdate(TConfigItemInfo::EUpdateKind::NameserviceNodesFromNodeRegistration));
     }
 
-    Y_UNIT_TEST_F(BridgedYamlWithoutHostsUsesRegisteredStaticNodes, TFixture) {
-        NYamlConfig::ReplaceUnmanagedKinds(Console, Yaml, Registration);
+    Y_UNIT_TEST(YamlNameserviceWithoutConsoleItemIsTracedAsYaml) {
+        NKikimrConfig::TAppConfig yaml;
+        yaml.SetYamlConfigEnabled(true);
+        yaml.MutableNameserviceConfig()->AddNode()->SetNodeId(1);
+        auto tracer = MakeDefaultConfigUpdateTracer();
+        GetActualDynConfig(yaml, {}, *tracer);
 
-        const auto& nameservice = Yaml.GetNameserviceConfig();
-        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetClusterUUID(), "cluster-uuid");
-        UNIT_ASSERT_VALUES_EQUAL(nameservice.NodeSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(0).GetLocation().GetBridgePileName(), "original");
-        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(1).GetLocation().GetBridgePileName(), "added");
-        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(1).GetInterconnectHost(), "static-2");
-    }
-
-    Y_UNIT_TEST_F(OrdinaryYamlUsesConsoleNodes, TFixture) {
-        Yaml.ClearBridgeConfig();
-        Yaml.MutableNameserviceConfig()->CopyFrom(Registration.GetNameserviceConfig());
-
-        NYamlConfig::ReplaceUnmanagedKinds(Console, Yaml, Registration);
-
-        UNIT_ASSERT_VALUES_EQUAL(Yaml.GetNameserviceConfig().SerializeAsString(),
-            Console.GetNameserviceConfig().SerializeAsString());
+        const auto trace = tracer->Dump();
+        const auto& updates = trace.at(NKikimrConsole::TConfigItem::NameserviceConfigItem).Updates;
+        UNIT_ASSERT_VALUES_EQUAL(updates.size(), 1);
+        UNIT_ASSERT(updates.front().Kind == TConfigItemInfo::EUpdateKind::ReplaceConfigWithConsoleYaml);
     }
 }
 

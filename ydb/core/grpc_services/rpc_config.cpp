@@ -536,7 +536,10 @@ public:
 
         if (!NKikimr::IsAdministrator(AppData(), userToken) &&
             !(isNodeBootstrap && NKikimr::IsTokenAllowed(userToken, AppData()->RegisterDynamicNodeAllowedSIDs))) {
-            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
+            const char* errorMessage = isNodeBootstrap
+                ? "User is not a cluster administrator and is not authorized to register dynamic nodes."
+                : "User is not a cluster administrator.";
+            self->Reply(Ydb::StatusIds::UNAUTHORIZED, errorMessage,
                   NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
             return;
         }

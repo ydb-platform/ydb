@@ -800,6 +800,8 @@ config:
 
     static constexpr const char* NOT_CLUSTER_ADMIN_MSG = "User is not a cluster administrator.";
     static constexpr const char* NOT_DATABASE_ADMIN_MSG = "User is not a database administrator.";
+    static constexpr const char* NODE_BOOTSTRAP_ACCESS_DENIED_MSG =
+        "User is not a cluster administrator and is not authorized to register dynamic nodes.";
 
     void AssertDenied(const auto& op, const TString& what, std::optional<TString> expectedMessage = std::nullopt) {
         UNIT_ASSERT_C(op.status() == Ydb::StatusIds::UNAUTHORIZED,
@@ -899,9 +901,9 @@ config:
 
         const auto request = MakeFetchConfigRequest(/*seedNode*/ true);
         auto userFetch = DoFetchConfig(server.GetChannel(), "user@builtin", std::nullopt, request);
-        AssertDenied(userFetch.operation(), "Seed node FetchConfig", NOT_CLUSTER_ADMIN_MSG);
+        AssertDenied(userFetch.operation(), "Seed node FetchConfig", NODE_BOOTSTRAP_ACCESS_DENIED_MSG);
         auto anonymousFetch = DoFetchConfig(server.GetChannel(), std::nullopt, std::nullopt, request);
-        AssertDenied(anonymousFetch.operation(), "Anonymous seed node FetchConfig", NOT_CLUSTER_ADMIN_MSG);
+        AssertDenied(anonymousFetch.operation(), "Anonymous seed node FetchConfig", NODE_BOOTSTRAP_ACCESS_DENIED_MSG);
     }
 
     Y_UNIT_TEST(SeedNodeFetchAllowedWhenRegistrationSidsEmpty) {

@@ -90,7 +90,7 @@ class DistConfKiKiMRTest(object):
 
         if cls.protected_mode:
             node_sid = 'dynamic-nodes@cert'
-            security = cls.configurator.yaml_config['domains_config']['security_config']
+            security = cls.configurator.yaml_config['security_config']
             security['register_dynamic_node_allowed_sids'] = [node_sid]
             # The harness bootstraps the cluster with the certificate before obtaining the root token.
             security['bootstrap_allowed_sids'] = security['bootstrap_allowed_sids'] + [node_sid]

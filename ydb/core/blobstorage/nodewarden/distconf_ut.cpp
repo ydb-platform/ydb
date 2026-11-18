@@ -255,7 +255,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         return config;
     }
 
-    bool HasQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::initializer_list<ui32> nodeIds) {
+    bool HasQuorum(const NKikimrBlobStorage::TStorageConfig& config, const std::vector<ui32>& nodeIds) {
         std::vector<NStorage::TNodeIdentifier> successfulNodes;
         successfulNodes.reserve(nodeIds.size());
         for (ui32 nodeId : nodeIds) {
@@ -553,6 +553,33 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         const auto config = MakeStorageConfig(3, 0, {1});
         UNIT_ASSERT(HasQuorum(config, {1}));
         UNIT_ASSERT(!HasQuorum(config, {2, 3}));
+    }
+
+    Y_UNIT_TEST_TWIN(StaticBlockGroupQuorum, block82) {
+        const auto erasure = block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block;
+        const ui32 width = TBlobStorageGroupType(erasure).BlobSubgroupSize();
+        std::vector<ui32> members;
+        for (ui32 id = 1; id <= width; ++id) {
+            members.push_back(id);
+        }
+        const auto config = MakeStorageConfig(width + 1, 1, members, erasure);
+        UNIT_ASSERT_C(!NStorage::ValidateConfig(config), "valid block group rejected");
+        for (ui32 failures = 0; failures <= 3; ++failures) {
+            std::vector<ui32> available(members.begin() + failures, members.end());
+            UNIT_ASSERT_VALUES_EQUAL(HasQuorum(config, available), failures <= 2);
+            if (failures == 3) {
+                available.push_back(width + 1);
+                UNIT_ASSERT(!HasQuorum(config, available));
+            }
+        }
+        for (ui32 unknown : {1u, 20u, Max<ui32>()}) {
+            auto invalid = config;
+            invalid.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0)->SetErasureSpecies(unknown);
+            NStorage::TDistributedConfigKeeper::UpdateFingerprint(&invalid);
+            const auto error = NStorage::ValidateConfig(invalid);
+            UNIT_ASSERT(error);
+            UNIT_ASSERT_VALUES_EQUAL(*error, "invalid ErasureSpecies");
+        }
     }
 
     Y_UNIT_TEST(ConfigDriveQuorum) {
@@ -7644,7 +7671,7 @@ selector_config: []
         auto failover = fixture.Config;
         failover.MutableClusterState()->SetGeneration(2);
         failover.MutableClusterState()->SetPerPileState(1, NKikimrBridge::TClusterState::DISCONNECTED);
-        const auto hasNodeQuorum = [&](const auto& config, std::initializer_list<ui32> nodeIds) {
+        const auto hasNodeQuorum = [&](const auto& config, const std::vector<ui32>& nodeIds) {
             std::vector<NStorage::TNodeIdentifier> nodes;
             for (ui32 nodeId : nodeIds) {
                 nodes.emplace_back(config.GetAllNodes(nodeId - 1));
@@ -9210,6 +9237,41 @@ selector_config: []
 
     Y_UNIT_TEST(RecoveryIgnoresOlderConflict) {
         CheckAmbiguousRecovery(true);
+    }
+
+    Y_UNIT_TEST_TWIN(StaticBlockRecoversAcceptedProposal, block82) {
+        const auto erasure = block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block;
+        const ui32 width = TBlobStorageGroupType(erasure).BlobSubgroupSize();
+        TCommitConfirmationFixture fixture(false, width);
+        std::vector<ui32> members;
+        for (ui32 id = 1; id <= width; ++id) {
+            members.push_back(id);
+        }
+        fixture.Config = MakeStorageConfig(width, 1, members, erasure);
+        fixture.Config.MutableSelfManagementConfig()->SetEnabled(true);
+        fixture.Config.MutableSelfManagementConfig()->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(erasure));
+        for (auto& node : *fixture.Config.MutableAllNodes()) {
+            node.MutableLocation()->SetDataCenter("dc-1");
+            node.MutableLocation()->SetRack(std::to_string(node.GetNodeId()));
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        auto proposed = fixture.Config;
+        proposed.SetGeneration(2);
+        proposed.MutableSelfManagementConfig()->SetAutomaticBootstrap(true);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&proposed);
+        for (ui32 id : members) {
+            auto& metadata = fixture.Metadata(id);
+            metadata.MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+            if (id <= width - 2) {
+                metadata.MutableProposedStorageConfig()->CopyFrom(proposed);
+            }
+        }
+        fixture.Start();
+        CheckDurableConfigConverges(fixture, proposed);
+        const auto recovered = QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(recovered.GetFingerprint(), proposed.GetFingerprint());
+        UNIT_ASSERT(recovered.GetSelfManagementConfig().GetAutomaticBootstrap());
+        UNIT_ASSERT_VALUES_EQUAL(recovered.GetBlobStorageConfig().GetServiceSet().GetGroups(0).GetErasureSpecies(), erasure);
     }
 
     Y_UNIT_TEST(Block42QuorumOverridesNodeMajority) {

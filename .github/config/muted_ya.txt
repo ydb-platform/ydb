@@ -39,8 +39,6 @@ ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedClust
 ydb/tests/compatibility/topics test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/fq/multi_plane py3test.[test_dispatch.py] chunk
-ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping
-ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping_with_row_dispatcher
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/yds py3test.[*/*] chunk
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filters_optional_field

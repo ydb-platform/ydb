@@ -209,7 +209,8 @@ std::vector<std::shared_ptr<TPortionInfo>> TGranuleMeta::AddPortionsLoadedInBatc
     for (const auto& portion : portions) {
         if (!portion->IsCommitted()) {
             // uncommitted portions are all in memory: loaded by TTxInit or added by their write
-            AFL_VERIFY(InsertedPortionsById.contains(portion->GetPortionId()))("portion_id", portion->GetPortionId());
+            YDB_LOG_VERIFY(InsertedPortionsById.contains(portion->GetPortionId()),
+                {"portionId", portion->GetPortionId()});
             continue;
         }
         // compaction output below the loaded keys is already in memory.

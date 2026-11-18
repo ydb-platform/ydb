@@ -15,8 +15,8 @@ namespace {
 
 // a session locks its data at its start, before anything changes it; with deferred loading compaction runs before every portion is loaded
 void VerifyNoDeferredPortionLoading() {
-    AFL_VERIFY(!HasAppData() || !AppDataVerified().ColumnShardConfig.GetDeferredPortionLoadingSettings().GetEnabled())(
-                                  "reason", "data sharing is not supported with deferred portion loading");
+    YDB_LOG_VERIFY(!HasAppData() || !AppDataVerified().ColumnShardConfig.GetDeferredPortionLoadingSettings().GetEnabled(),
+        {"reason", "data sharing is not supported with deferred portion loading"});
 }
 
 }   // namespace

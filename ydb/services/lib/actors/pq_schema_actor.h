@@ -235,7 +235,9 @@ namespace NKikimr::NGRpcProxy::V1 {
                 YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "Unhandled",
                     {"eventType", ev->GetTypeRewrite()},
                     {"event", ev->GetTypeName()});
-                AFL_VERIFY_DEBUG(false)("eventType", ev->GetTypeRewrite())("event", ev->GetTypeName());
+                YDB_LOG_VERIFY_DEBUG(false,
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"event", ev->GetTypeName()});
             }
         }
 
@@ -353,11 +355,13 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
-                    AFL_ENSURE(response.ListNodeEntry)
-                        ("path", GetTopicPath())("database", TActorBase::Database);
-                    AFL_ENSURE(response.ListNodeEntry->Children.size() == 1)
-                        ("path", GetTopicPath())("database", TActorBase::Database)
-                        ("children", response.ListNodeEntry->Children.size());
+                    YDB_LOG_ENSURE(response.ListNodeEntry,
+                        {"path", GetTopicPath()},
+                        {"database", TActorBase::Database});
+                    YDB_LOG_ENSURE(response.ListNodeEntry->Children.size() == 1,
+                        {"path", GetTopicPath()},
+                        {"database", TActorBase::Database},
+                        {"children", response.ListNodeEntry->Children.size()});
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
 
                     if (response.Self) {

@@ -21,7 +21,7 @@ TVector<TString> GetTablePathSuffix(const TString& internalPath) {
     while (it != path.end() && *it != NMetadata::NProvider::TServiceOperator::GetPath()) {
         ++it;
     }
-    AFL_VERIFY(it != cend(path));
+    YDB_LOG_VERIFY(it != cend(path));
     return { it, cend(path) };
 }
 
@@ -47,7 +47,7 @@ void TUdfStoreInitializer::CreateNextTable() {
         }
         case EInitStep::KvVolume: {
             auto tablePath = SplitPath(TUdfModule::GetBehaviour()->GetStorageTablePath());
-            AFL_VERIFY(!tablePath.empty());
+            YDB_LOG_VERIFY(!tablePath.empty());
             tablePath.pop_back();
             tablePath.push_back("binaries");
             KvVolumePath = NKikimr::CombinePath(cbegin(tablePath), cend(tablePath));

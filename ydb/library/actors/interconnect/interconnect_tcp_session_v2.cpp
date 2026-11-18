@@ -126,6 +126,14 @@ namespace NActors {
         Proxy->Metrics->SetConnected(0);
         Proxy->RegisterDisconnect();
 
+        std::function<void()> onQuiesced;
+        if (EngineHandle && Proxy->Common->ConnectionAdmissionLevel) {
+            const ui64 cookie = Proxy->TrackQuiescingConnection(Params.AdmissionLevel);
+            const TActorId proxyId = Proxy->SelfId();
+            onQuiesced = [as = TActivationContext::ActorSystem(), proxyId, cookie] {
+                as->Send(new IEventHandle(proxyId, {}, new TEvConnectionQuiesced, 0, cookie));
+            };
+        }
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
 
         // atomically disconnect the direct interface so racing user threads observe a clean shutdown
@@ -146,7 +154,9 @@ namespace NActors {
         }
         Subscribers.clear();
 
-        Proxy->Common->UringEngineV2->Unregister(EngineHandle);
+        if (EngineHandle) {
+            Proxy->Common->UringEngineV2->Unregister(EngineHandle, std::move(onQuiesced));
+        }
 
         TActor::PassAway();
     }

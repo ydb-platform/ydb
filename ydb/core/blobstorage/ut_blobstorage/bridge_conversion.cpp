@@ -253,8 +253,6 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         BatchedPutDuringConversion(3);
     }
 
-    // static node not reporting its bridge capability (being disconnected) may still run without BridgeConfig, so it
-    // must block conversion
     // put started by DS proxy before conversion races with VDisks having new group generation and gets restarted
     // through node warden to the service of the group, which is the bridge proxy by then
     Y_UNIT_TEST(PutRestartedAfterConversion) {
@@ -311,36 +309,32 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         checker.CheckAll();
     }
 
-    Y_UNIT_TEST(AbsentStaticNodeBlocksConversion) {
+    Y_UNIT_TEST(AbsentStaticNodeReturnsAfterConversion) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
         const ui32 groupId = CreatePoolAndGetGroup(env);
 
         TDataChecker checker(env);
         checker.Write(groupId);
 
-        // all nodes but the last one are prepared; the last one goes away while still running old settings
+        // The last node misses the rollout entirely but keeps its disk metadata.
         const auto nodes = env.Runtime->GetNodes();
         std::vector<ui32> nodeIds(nodes.begin(), nodes.end());
         const ui32 absentNodeId = nodeIds.back();
         nodeIds.pop_back();
-        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId, nodeIds);
         env.StopNode(absentNodeId);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId, nodeIds);
         env.Sim(TDuration::Seconds(30));
 
-        auto res = ConvertToBridge(env);
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
-            res.GetErrorReason());
-        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "did not report");
-        UNIT_ASSERT(!QueryStorageConfig(env).HasClusterState());
-        checker.Write(groupId);
-
-        // the node returns with new settings, so the cluster may be converted now
-        env.StartNode(absentNodeId);
-        env.Sim(TDuration::Seconds(30));
-        res = ConvertToBridge(env);
+        const auto res = ConvertToBridge(env);
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
         env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT(QueryStorageConfig(env).HasClusterState());
         UNIT_ASSERT(!QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+        checker.Write(groupId);
+
+        // The returning node starts with bridge YAML and catches up to the committed storage generation.
+        env.StartNode(absentNodeId);
+        env.Sim(TDuration::Seconds(30));
         checker.Write(groupId, absentNodeId);
         checker.CheckAll(absentNodeId);
         checker.CheckAll();

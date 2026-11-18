@@ -106,7 +106,10 @@ namespace NKikimr::NStorage {
                EvRetryConfigPropagation,
                EvScatterTaskTimeout,
                EvUpdateBridgeFeatureRequirement,
+               EvBridgeFeatureRequirementApplied,
                EvHalt,
+               EvStartBridgeStartupRecovery,
+               EvBridgeStartupRecoveryConfig,
             };
 
             struct TEvUpdateBridgeFeatureRequirement
@@ -115,6 +118,31 @@ namespace NKikimr::NStorage {
 
                 explicit TEvUpdateBridgeFeatureRequirement(std::optional<ui32> requiredLevel)
                     : RequiredLevel(requiredLevel)
+                {}
+            };
+
+            struct TEvBridgeFeatureRequirementApplied
+                : TEventLocal<TEvBridgeFeatureRequirementApplied, EvBridgeFeatureRequirementApplied> {};
+
+            struct TEvStartBridgeStartupRecovery
+                : TEventLocal<TEvStartBridgeStartupRecovery, EvStartBridgeStartupRecovery> {
+                TStorageConfigPtr StaleConfig;
+                std::vector<ui32> PeerNodeIds;
+
+                TEvStartBridgeStartupRecovery(TStorageConfigPtr staleConfig, std::vector<ui32> peerNodeIds)
+                    : StaleConfig(std::move(staleConfig))
+                    , PeerNodeIds(std::move(peerNodeIds))
+                {}
+            };
+
+            struct TEvBridgeStartupRecoveryConfig
+                : TEventLocal<TEvBridgeStartupRecoveryConfig, EvBridgeStartupRecoveryConfig> {
+                ui32 PeerNodeId;
+                NKikimrBlobStorage::TStorageConfig Config;
+
+                TEvBridgeStartupRecoveryConfig(ui32 peerNodeId, NKikimrBlobStorage::TStorageConfig config)
+                    : PeerNodeId(peerNodeId)
+                    , Config(std::move(config))
                 {}
             };
 
@@ -163,6 +191,7 @@ namespace NKikimr::NStorage {
             ui64 Cookie; // binding cookie within the session
             TActorId SessionId; // interconnect session actor
             bool SupportsDirectRootQueries = false; // advertised by the direct parent
+            ui32 BridgeFeatureLevel = 0;
 
             TBinding(ui32 nodeId, ui64 cookie)
                 : NodeId(nodeId)
@@ -175,6 +204,7 @@ namespace NKikimr::NStorage {
                 , Cookie(origin.Cookie)
                 , SessionId(origin.SessionId)
                 , SupportsDirectRootQueries(origin.SupportsDirectRootQueries)
+                , BridgeFeatureLevel(origin.BridgeFeatureLevel)
             {}
 
             bool Expected(IEventHandle& ev) const {
@@ -206,6 +236,7 @@ namespace NKikimr::NStorage {
             ui32 LastReportedRootNodeId;
             std::optional<ui32> ReportedSubtreeHeight;
             bool SupportsMetadataOnlyCollect = false;
+            ui32 BridgeFeatureLevel = 0;
 
             TBoundNode(ui64 cookie, TActorId sessionId, ui32 lastReportedRootNodeId)
                 : Cookie(cookie)
@@ -264,6 +295,9 @@ namespace NKikimr::NStorage {
             TActorId ConfigReaderActor;
             ui64 PersistCookie = 0;
             bool LocalContributionExpired = false;
+            ui32 BridgeFeatureRequirement = 0;
+            bool WaitingForBridgeFeatureRequirement = false;
+            std::vector<TNodeIdentifier> TargetedNodes;
 
             TScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, ui64 scepterCounter, TMonotonic startTimestamp)
                 : Origin(std::move(origin))
@@ -334,6 +368,7 @@ namespace NKikimr::NStorage {
         // initialization state
         bool NodeListObtained = false;
         bool StorageConfigLoaded = false;
+        std::optional<TString> StartupRecoveryPileName;
 
         // outgoing binding
         static constexpr TDuration BindRequestTimeout = TDuration::Seconds(3);
@@ -390,6 +425,15 @@ namespace NKikimr::NStorage {
         using TScatterTasks = THashMap<ui64, TScatterTask>;
         TScatterTasks ScatterTasks;
         std::set<std::tuple<ui32, ui64>> AddedNodesScatterTasks;
+
+        struct TPendingBridgeConfig {
+            NKikimrBlobStorage::TStorageConfig Config;
+            bool Committed;
+        };
+        std::deque<TPendingBridgeConfig> PendingBridgeConfigs;
+        ui32 RequestedBridgeFeatureRequirement = 0;
+        ui32 AppliedBridgeFeatureRequirement = 0;
+        ui64 BridgeFeatureRequirementCookie = 0;
 
         std::optional<TActorId> StateStorageSelfHealActor;
         class TStateStorageSelfHealRefreshActor;
@@ -491,8 +535,16 @@ namespace NKikimr::NStorage {
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void ApplyCommittedStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev);
+        bool IsBridgeFeatureRequirementApplied(ui32 level) const;
+        static bool CanSendConfigToPeer(ui32 peerFeatureLevel, const NKikimrBlobStorage::TStorageConfig& config);
+        bool DeferBridgeConfig(const NKikimrBlobStorage::TStorageConfig& config, bool committed);
+        void RefreshBridgeFeatureRequirement();
+        void Handle(TEvPrivate::TEvBridgeFeatureRequirementApplied::TPtr ev);
+        void RequestCommittedBridgeConfig();
         void HandleConfigConfirm(STATEFN_SIG);
         void ReportStorageConfigToNodeWarden();
+        bool TryStartBridgeStartupRecovery();
+        void Handle(TEvPrivate::TEvBridgeStartupRecoveryConfig::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
@@ -729,6 +781,7 @@ namespace NKikimr::NStorage {
         // Scatter/gather logic
 
         void IssueScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, std::span<const TNodeIdentifier> targetedNodes = {});
+        void StartScatterTask(ui64 cookie, std::span<const TNodeIdentifier> targetedNodes);
         void PrepareScatterTaskRequest(ui64 cookie, const TScatterTask& task, ui32 subtreeHeight, TEvScatter& request);
         void IssueAddedNodeScatterTask(ui32 nodeId, ui64 cookie, TScatterTask& task);
         void CheckCompleteScatterTask(TScatterTasks::iterator it);
@@ -815,13 +868,16 @@ namespace NKikimr::NStorage {
         // Dynamic node interaction
 
         TBindQueue StaticBindQueue;
-        THashMap<TActorId, TActorId> DynamicConfigSubscribers; // <session id> -> <actor id>
+        struct TDynamicConfigSubscriber {
+            TActorId ActorId;
+            bool BridgeCapable;
+            ui32 BridgeFeatureLevel;
+        };
+        THashMap<TActorId, TDynamicConfigSubscriber> DynamicConfigSubscribers; // keyed by session id
         ui32 ConnectedToStaticNode = 0;
         TActorId StaticNodeSessionId;
         bool ReconnectScheduled = false;
         THashSet<ui32> ConnectedDynamicNodes;
-        THashSet<ui32> BridgeCapableDynamicNodes; // subset of ConnectedDynamicNodes running with BridgeConfig
-        THashMap<ui32, ui32> DynamicNodeFeatureLevels; // bridge feature levels of the ConnectedDynamicNodes reporting any
         ui64 StaticNodeSubscriptionCookie = 0;
 
         // these are used on the dynamic nodes
@@ -837,7 +893,7 @@ namespace NKikimr::NStorage {
         void OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId);
         void Handle(TEvNodeWardenDynamicConfigSubscribe::TPtr ev);
         // the node doesn't get the config requiring higher bridge feature level than the one it supports
-        void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache, ui32 bridgeFeatureLevel);
+        void PushConfigToDynamicNode(const TDynamicConfigSubscriber& subscriber, TActorId sessionId, bool addCache);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Event delivery
@@ -1001,10 +1057,11 @@ namespace NKikimr::NStorage {
         // away
         BridgeFeatureLevelRollback = 5,
         BridgeFeatureLevelHotStandby = 6,
+        BridgeFeatureLevelSessionAdmission = 7,
     };
 
     // bridge feature level of this version; every node has to support it to change the list of piles, add and remove them
-    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelHotStandby;
+    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelSessionAdmission;
 
     inline ui32 GetRequiredBridgeFeatureLevel(const NKikimrBlobStorage::TStorageConfig& config) {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();

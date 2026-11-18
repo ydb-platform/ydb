@@ -162,6 +162,7 @@ message THandshakeRequest {
     repeated TKeyValuePair Params = 26; // extra params for connection validation
 
     optional TRdmaHandshake RdmaHandshake = 27; // Perform outgoing RDMA handshake
+    optional bool SupportsConfigOnly = 30;
 }
 
 message THandshakeSuccess {
@@ -206,6 +207,11 @@ message THandshakeSuccess {
     // The peer supports RDMA, but could not initialize it due to a temporary
     // local condition. The outgoing side should retry RDMA later.
     optional bool RdmaRetryable = 23;
+    optional bool ConfigOnly = 24;
+}
+
+message THandshakeConfigOnly {
+    repeated THandshakeRequest.TKeyValuePair Params = 1;
 }
 
 message THandshakeReply {

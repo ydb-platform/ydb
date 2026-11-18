@@ -207,6 +207,12 @@ namespace NKikimr::NStorage {
         }
         const auto& currentDetails = current.GetClusterStateDetails();
         const bool clusterStateRemoved = NBridge::IsRollbackPending(currentDetails) && !proposed.HasClusterState();
+        if (current.HasClusterState() && proposed.HasClusterState()) {
+            const ui32 currentLevel = GetRequiredBridgeFeatureLevel(current);
+            if (currentLevel >= BridgeFeatureLevelSessionAdmission && GetRequiredBridgeFeatureLevel(proposed) < currentLevel) {
+                return "bridge session admission feature level cannot be lowered";
+            }
+        }
         if (currentDetails.GetNonUniformStorageEnabled() && !proposed.GetClusterStateDetails().GetNonUniformStorageEnabled()
                 && !clusterStateRemoved) {
             // it goes away only along with the cluster state, when the bridged cluster is rolled back

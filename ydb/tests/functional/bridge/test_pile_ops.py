@@ -4,6 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 import subprocess
 import tempfile
+
+import pytest
 import yaml
 
 from hamcrest import assert_that, is_
@@ -163,15 +165,17 @@ class TestBridgePileOps(BridgeKiKiMRTest):
     def update(self, updates):
         self.update_cluster_state(self.bridge_client, [PileState(pile_name=name, state=state) for name, state in updates])
 
-    def convert(self, original_node_ids):
-        # every node has to run with single-pile bridge config, nodes get it when restarted
+    def convert(self, original_node_ids, skip_storage_pool_conversion=False):
+        # The running nodes pick up the single-pile bridge config when restarted.
         cfg = self.fetch_config()
         cfg["config"]["bridge_config"] = {"piles": [{"name": ORIGINAL_PILE}]}
+        if skip_storage_pool_conversion:
+            cfg["config"]["bridge_config"]["enable_non_uniform_storage"] = True
         self.replace_config(cfg, original_node_ids)
         self.restart(original_node_ids, "with_bridge_config")
 
         def converted():
-            response = self.bridge_client.convert_to_bridge()
+            response = self.bridge_client.convert_to_bridge(skip_storage_pool_conversion)
             logger.debug("ConvertToBridge response: %s", response)
             return response.operation.status == StatusIds.SUCCESS
         assert_that(wait_for(converted, timeout_seconds=60), "conversion is refused")
@@ -224,6 +228,56 @@ class TestBridgePileOps(BridgeKiKiMRTest):
         for node_id in node_ids:
             self.cluster.nodes[node_id].start()
         return node_ids
+
+    @pytest.mark.parametrize("skip_storage_pool_conversion", [False, True])
+    def test_convert_and_provision_while_storage_node_is_offline(self, skip_storage_pool_conversion):
+        self.table_path = '/Root/mydb/bridge_offline_conversion'
+        self.tablet_ids = create_kv_tablets_and_wait_for_start(
+            self.cluster.client,
+            self.kv_client,
+            SwaggerClient(self.node.host, self.node.mon_port),
+            5,
+            self.table_path,
+            timeout_seconds=60,
+        )
+        self.wait_kv_works("before")
+
+        base_config = self.cluster.client.query_base_config().BaseConfig
+        offline_id = max(slot.VSlotId.NodeId for slot in base_config.VSlot if slot.VSlotId.NodeId != self.node.node_id)
+        offline_node = self.cluster.nodes[offline_id]
+        offline_node.stop()
+        live_ids = sorted(set(self.cluster.nodes) - {offline_id})
+
+        self.convert(live_ids, skip_storage_pool_conversion)
+        self.list_added_pile(live_ids)
+        self.wait_for_cluster_state(self.bridge_client, {ORIGINAL_PILE: PRIMARY, ADDED_PILE: INACTIVE}, 60)
+        code, output = self.ydb_cli(['-y', 'admin', 'cluster', 'bridge', 'provision-pile', '--pile', ADDED_PILE])
+        assert_that(code, is_(0), output)
+        assert_that(self.states(), is_({ORIGINAL_PILE: PRIMARY, ADDED_PILE: DISCONNECTED}))
+        self.wait_kv_works("while_offline")
+
+        config_dir = os.path.join(self.cluster.config_path, f"node_{offline_id}")
+        code, output = self.ydb_cli([
+            '-y', 'admin', 'node', 'config', 'init', '--config-dir', config_dir,
+            '--seed-node', f'{self.node.host}:{self.node.port}',
+        ])
+        assert_that(code, is_(0), output)
+        offline_node.start()
+
+        def returned():
+            config = self.cluster.client.query_base_config().BaseConfig
+            if not any(node.NodeId == offline_id and node.Connected for node in config.Node):
+                return False
+            generations = {group.GroupId: group.GroupGeneration for group in config.Group}
+            return any(
+                slot.VSlotId.NodeId == offline_id and slot.Ready and slot.GroupGeneration == generations.get(slot.GroupId)
+                for slot in config.VSlot
+            )
+
+        assert_that(wait_for(returned, timeout_seconds=120), "offline storage node did not rejoin")
+        for key in ("before", "while_offline"):
+            assert_that(self.kv_readable(key), key)
+        self.wait_kv_works("after_recovery")
 
     def test_convert_add_switch_remove(self):
         original_node_ids = sorted(self.cluster.nodes.keys())

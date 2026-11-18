@@ -98,7 +98,12 @@ namespace NActors {
                              ui32(ENetwork::HandshakeRequest)> {
 
         NActorsInterconnect::THandshakeRequest Record;
+        bool ConfigOnly = false;
     };
+
+    struct TEvHandshakeConfigOnlyDone : TEventLocal<TEvHandshakeConfigOnlyDone, ui32(ENetwork::EvHandshakeConfigOnlyDone)> {};
+
+    struct TEvConnectionQuiesced : TEventLocal<TEvConnectionQuiesced, ui32(ENetwork::EvConnectionQuiesced)> {};
 
     struct TEvHandshakeReplyOK
        : public TEventLocal<TEvHandshakeReplyOK,

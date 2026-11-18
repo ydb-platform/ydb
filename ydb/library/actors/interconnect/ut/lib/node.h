@@ -59,6 +59,7 @@ public:
 
         Common = MakeIntrusive<TInterconnectProxyCommon>();
         auto& common = Common;
+        common->ConnectionAdmissionLevel = std::make_shared<std::atomic<ui32>>(0);
         common->NameserviceId = GetNameserviceActorId();
         common->MonCounters = counters->GetSubgroup("nodeId", ToString(nodeId));
         common->ChannelsConfig = channelsSettings;
@@ -241,6 +242,10 @@ public:
 
     TInterconnectSettings& MutableInterconnectSettings() {
         return Common->Settings;
+    }
+
+    std::atomic<ui32>& GetConnectionAdmissionLevel() const {
+        return *Common->ConnectionAdmissionLevel;
     }
 
     std::shared_ptr<NInterconnect::NRdma::IMemPool> GetRdmaMemPool() const {

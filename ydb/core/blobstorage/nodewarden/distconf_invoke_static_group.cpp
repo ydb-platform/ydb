@@ -230,7 +230,10 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvents::TEvUndelivered::TPtr ev) {
-        if (const auto it = ActorToVDisk.find(ev->Sender); it != ActorToVDisk.end()) {
+        const ui32 eventType = ev->Get()->SourceType;
+        if (WaitingReplyFromNode && (eventType == TEvNodeConfigInvokeOnRoot::EventType || eventType == TEvInterconnect::EvForward)) {
+            throw TExRace() << "Hop node disconnected";
+        } else if (const auto it = ActorToVDisk.find(ev->Sender); it != ActorToVDisk.end()) {
             Y_ABORT_UNLESS(ev->Get()->SourceType == TEvBlobStorage::EvVStatus);
             OnVStatusError(it->second);
         }

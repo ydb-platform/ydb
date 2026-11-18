@@ -69,6 +69,8 @@ namespace NActors {
         EvUringMonRequest,
         EvUringQueueOverload,
         EvUringEventTooLarge,
+        EvHandshakeConfigOnlyDone,
+        EvConnectionQuiesced,
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // nonlocal messages; their indices must be preserved in order to work properly while doing rolling update

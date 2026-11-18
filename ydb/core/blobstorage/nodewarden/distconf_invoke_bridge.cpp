@@ -375,14 +375,10 @@ namespace NKikimr::NStorage {
             throw TExError() << "Cluster is already bridged one";
         }
 
-        // nodes running without BridgeConfig won't be able to work in bridged cluster, as well as the ones of versions
-        // not supporting the features the converted cluster requires
-        THashSet<ui32> requiredNodeIds;
-        for (const auto& node : Self->StorageConfig->GetAllNodes()) {
-            requiredNodeIds.insert(node.GetNodeId());
-        }
+        // The proposal enables session admission before it sends any bridged configuration. Disconnected nodes
+        // can return with compatible startup settings, so only bound nodes need to report now.
         const bool skipStoragePoolConversion = cmd.GetSkipStoragePoolConversion();
-        RequireBridgeCapability(BridgeFeatureLevel, std::move(requiredNodeIds), {}, [this, skipStoragePoolConversion] {
+        RequireBridgeCapability(BridgeFeatureLevel, {}, {}, [this, skipStoragePoolConversion] {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
             if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig,
                     skipStoragePoolConversion)) {
@@ -473,10 +469,8 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::RequireBridgeCapability(ui32 minFeatureLevel, THashSet<ui32> requiredNodeIds,
             THashSet<ui32> ignoredNodeIds, std::function<void()> callback) {
-        // every required static node must positively report its capability, as the one being temporarily disconnected
-        // may still run without it and return later; dynamic nodes can't be enumerated this way, the ones that are
-        // missed here can't serve bridged groups until restarted; every node that is connected gets the new config,
-        // so it must be capable even being ignored (that is, going to leave the cluster)
+        // Every required static node and every non-ignored bound node must report. Dynamic subscribers report
+        // through their static node. Reject any explicit incompatibility, including from nodes leaving the cluster.
         TEvScatter task;
         task.MutableCollectBridgeCapability();
         IssueScatterTask(std::move(task), [this, minFeatureLevel, requiredNodeIds = std::move(requiredNodeIds),
@@ -531,8 +525,7 @@ namespace NKikimr::NStorage {
                     if (!notCapable.empty()) {
                         err << "; ";
                     }
-                    err << "Some static nodes did not report their BridgeConfig, they must be running and connected"
-                        " NodeIds#";
+                    err << "Some static nodes did not report their BridgeConfig NodeIds#";
                     for (const ui32 nodeId : unknown) {
                         err << ' ' << nodeId;
                     }
@@ -616,11 +609,17 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::AddBridgePile(const TQuery::TAddBridgePile& cmd) {
         const TBridgePileId pileId = CheckPileOperation(cmd.GetPileName(), NKikimrBridge::TClusterState::INACTIVE, true);
-        RequireConnectedNodesCapability(BridgeFeatureLevelPileOps, TBridgePileId(), [this, pileId] {
+        auto proceed = [this, pileId] {
             // PDisks of the new pile are already known to BSC, static groups have to be allocated on the same ones
             BridgePileOpPileId = pileId;
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryBaseConfig);
-        });
+        };
+        const ui32 requiredLevel = GetRequiredBridgeFeatureLevel(*Self->StorageConfig);
+        if (requiredLevel >= BridgeFeatureLevelSessionAdmission) {
+            RequireBridgeCapability(requiredLevel, {}, {}, std::move(proceed));
+        } else {
+            RequireConnectedNodesCapability(BridgeFeatureLevelPileOps, TBridgePileId(), std::move(proceed));
+        }
     }
 
     void TInvokeRequestHandlerActor::AddBridgePileWithBaseConfig() {

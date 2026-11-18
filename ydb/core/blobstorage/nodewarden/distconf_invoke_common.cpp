@@ -918,6 +918,21 @@ namespace NKikimr::NStorage {
         } else if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
             InvokeOnRootPending.push_back(std::move(ev));
         } else if (Binding) {
+            const auto& record = ev->Get()->Record;
+            if (record.HasDescendCommittedStorageConfig()) {
+                const auto& config = record.GetDescendCommittedStorageConfig().GetCommittedStorageConfig();
+                if (!CanSendConfigToPeer(Binding->BridgeFeatureLevel, config)) {
+                    // Applying the commit locally also fences the old parent session. The next binding can
+                    // propagate the generation to a compatible root.
+                    if (!CommittedStorageConfig || CommittedStorageConfig->GetGeneration() < config.GetGeneration()) {
+                        ApplyCommittedStorageConfig(config);
+                    }
+                    auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+                    response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+                    SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
+                    return;
+                }
+            }
             // we have binding, so we have to forward this message to 'hop' node and return answer
             ForwardInvokeOnRoot(std::move(ev), Binding->NodeId);
         } else {
@@ -1013,14 +1028,22 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::ForwardInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev, ui32 hopNodeId) {
+        const bool pinToBinding = Binding && Binding->NodeId == hopNodeId &&
+            ev->Get()->Record.HasDescendCommittedStorageConfig() &&
+            GetRequiredBridgeFeatureLevel(ev->Get()->Record.GetDescendCommittedStorageConfig().GetCommittedStorageConfig())
+                >= BridgeFeatureLevelSessionAdmission;
         const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, {
             .Command = ev->Get()->Record,
             .Sender = ev->Sender,
             .SessionId = ev->InterconnectSession,
             .Cookie = ev->Cookie,
         }, hopNodeId));
-        TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(hopNodeId), actorId,
-            ev->Release().Release(), IEventHandle::FlagSubscribeOnSession));
+        auto forward = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(hopNodeId), actorId,
+            ev->Release().Release(), IEventHandle::FlagSubscribeOnSession | (pinToBinding ? IEventHandle::FlagTrackDelivery : 0));
+        if (pinToBinding) {
+            forward->Rewrite(TEvInterconnect::EvForward, Binding->SessionId);
+        }
+        TActivationContext::Send(forward.release());
     }
 
     void TDistributedConfigKeeper::Invoke(TInvokeQuery&& query) {

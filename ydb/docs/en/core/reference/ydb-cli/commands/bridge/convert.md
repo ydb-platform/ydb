@@ -30,7 +30,8 @@ View command help:
 ## Requirements {#requirements}
 
 - Configuration V2 and self-management must be enabled.
-- Every static and dynamic node must run a supporting build and must have been restarted with a single-pile `bridge_config`.
+- Every connected static and dynamic node must run a build that supports the conversion and must have been restarted with a single-pile `bridge_config`.
+- The available static nodes must provide the configuration and static-storage quorums. Unavailable static nodes can remain in the configuration and [rejoin after conversion](../../../../devops/deployment-options/manual/bridge-management.md#return-static-node).
 - The configuration must contain exactly one pile.
 - With `--skip-storage-pool-conversion`, `bridge_config.enable_non_uniform_storage` must be `true`. With default conversion, it must be unset until conversion completes.
 

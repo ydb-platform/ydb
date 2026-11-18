@@ -1011,6 +1011,21 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT(NStorage::ValidateConfig(proposed));
     }
 
+    Y_UNIT_TEST(BridgeSessionAdmissionFeatureLevelCannotBeLowered) {
+        auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        config.MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(
+            NStorage::BridgeFeatureLevelSessionAdmission);
+        auto proposed = config;
+        proposed.SetGeneration(config.GetGeneration() + 1);
+        UNIT_ASSERT(!NStorage::ValidateConfigUpdate(config, proposed));
+
+        proposed.MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(
+            NStorage::BridgeFeatureLevelHotStandby);
+        const auto error = NStorage::ValidateConfigUpdate(config, proposed);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(*error, "bridge session admission feature level cannot be lowered");
+    }
+
     // the list of piles can't be changed, piles can't be added or removed unless every node supports these bridge
     // features, dynamic nodes too, as nodes of older versions would be disconnected afterwards
     Y_UNIT_TEST(PileOperationsRequireFeatureLevel) {
@@ -1470,6 +1485,93 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         const auto incoming = check(inactive, 6, 2, config).first;
         UNIT_ASSERT(incoming);
         UNIT_ASSERT_STRING_CONTAINS(*incoming, "can't connect to each other");
+    }
+
+    Y_UNIT_TEST(OfflineStaticNodeRecoversCommittedBridgeConfigOnStartup) {
+        auto ordinary = MakeStorageConfig(3);
+        ordinary.MutableSelfManagementConfig()->SetEnabled(true);
+        ordinary.SetClusterUUID("cluster");
+        ordinary.SetSelfAssemblyUUID("assembly");
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&ordinary);
+
+        auto expanded = MakeStorageConfig(4, ordinary.GetGeneration() + 3);
+        expanded.MutableSelfManagementConfig()->SetEnabled(true);
+        expanded.SetClusterUUID(ordinary.GetClusterUUID());
+        expanded.SetSelfAssemblyUUID(ordinary.GetSelfAssemblyUUID());
+        for (auto& node : *expanded.MutableAllNodes()) {
+            node.MutableLocation()->SetBridgePileName(node.GetNodeId() == 4 ? "added" : "original");
+        }
+        expanded.MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(2));
+        expanded.MutableClusterState()->SetGeneration(2);
+        auto *registry = expanded.MutableClusterStateDetails()->MutablePileRegistry();
+        registry->AddPiles()->SetName("original");
+        registry->AddPiles()->SetName("added");
+        registry->SetRequiredFeatureLevel(NStorage::BridgeFeatureLevel);
+        TBridgePileId::FromPileIndex(0).CopyToProto(registry, &NKikimrBridge::TPileRegistry::SetImplicitPileId);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&expanded);
+
+        auto startup = expanded;
+        startup.SetGeneration(0);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&startup);
+
+        TNodeWardenTestState state;
+        const auto disk = std::make_pair(1u, TString("/dev/disk1_1"));
+        state.Metadata[disk].MutableCommittedStorageConfig()->CopyFrom(ordinary);
+
+        TTestActorSystem runtime(4);
+        auto& bridge = runtime.GetAppDataBridgeConfig();
+        bridge.AddPiles()->SetName("original");
+        bridge.AddPiles()->SetName("added");
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+
+        const auto checker = runtime.Register(CreateDistconfBridgeConnectionCheckerActor(
+            TBridgePileId::FromPileIndex(0), "original"), 1);
+        runtime.RegisterService(MakeDistconfBridgeConnectionCheckerActorId(), checker);
+        RegisterKeeper(runtime, startup, 1, state, {}, &bridge);
+
+        const auto edge = runtime.AllocateEdgeActor(1);
+        runtime.Send(new IEventHandle(checker, edge, new TEvInterconnect::TEvPrepareOutgoingConnection(2)), 1);
+        const auto prepared = runtime.WaitForEdgeActorEvent<TEvInterconnect::TEvPrepareOutgoingConnectionResult>(edge);
+        const auto *requestParams = std::get_if<THashMap<TString, TString>>(&prepared->Get()->Conclusion);
+        UNIT_ASSERT(requestParams && requestParams->size() == 1);
+        NKikimrBlobStorage::TConnectivityPayload request;
+        UNIT_ASSERT(request.ParseFromString(requestParams->begin()->second));
+        UNIT_ASSERT(request.GetStartupRecoveryRequest());
+        UNIT_ASSERT(!state.NodeWardenConfigs.contains(1));
+
+        auto sendRecoveryConfig = [&](ui32 peerNodeId, const NKikimrBlobStorage::TStorageConfig& config) {
+            NKikimrBlobStorage::TConnectivityPayload payload;
+            payload.SetStartupRecoveryAccepted(true);
+            payload.SetBridgeFeatureLevel(NStorage::BridgeFeatureLevel);
+            payload.SetBridgePileName(peerNodeId == 4 ? "added" : "original");
+            TBridgePileId::FromPileIndex(peerNodeId == 4 ? 1 : 0).CopyToProto(&payload,
+                &NKikimrBlobStorage::TConnectivityPayload::SetBridgePileId);
+            payload.MutableCommittedStorageConfig()->CopyFrom(config);
+            THashMap<TString, TString> params;
+            UNIT_ASSERT(payload.SerializeToString(&params["distconf"]));
+            runtime.Send(new IEventHandle(checker, edge, new TEvInterconnect::TEvNotifyConfigOnlyConnection(
+                peerNodeId, std::move(params))), 1);
+            runtime.Sim([&] { return runtime.HasImmediateEvents(); });
+        };
+
+        auto unrelated = expanded;
+        unrelated.SetSelfAssemblyUUID("unrelated-assembly");
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&unrelated);
+        sendRecoveryConfig(2, unrelated);
+        sendRecoveryConfig(4, expanded);
+        UNIT_ASSERT(!state.NodeWardenConfigs.contains(1));
+        UNIT_ASSERT_VALUES_EQUAL(state.Metadata.at(disk).GetCommittedStorageConfig().GetFingerprint(),
+            ordinary.GetFingerprint());
+
+        sendRecoveryConfig(2, expanded);
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return state.NodeWardenConfigs.contains(1) &&
+                state.Metadata.at(disk).GetCommittedStorageConfig().GetGeneration() == expanded.GetGeneration();
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(state.NodeWardenConfigs.at(1)->GetFingerprint(), expanded.GetFingerprint());
+        UNIT_ASSERT_VALUES_EQUAL(state.Metadata.at(disk).GetCommittedStorageConfig().GetFingerprint(),
+            expanded.GetFingerprint());
     }
 
     // the pile removed from the cluster and added again on the same (not formatted) hosts: its nodes have cluster state

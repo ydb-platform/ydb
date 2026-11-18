@@ -76,24 +76,19 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::ApplyConfigUpdateToDynamicNodes(bool drop) {
-        for (const auto& [sessionId, actorId] : DynamicConfigSubscribers) {
-            const auto it = DynamicNodeFeatureLevels.find(actorId.NodeId());
-            PushConfigToDynamicNode(actorId, sessionId, false, it != DynamicNodeFeatureLevels.end() ? it->second : 0);
+        for (const auto& [sessionId, subscriber] : DynamicConfigSubscribers) {
+            PushConfigToDynamicNode(subscriber, sessionId, false);
         }
         if (drop) {
             Y_ABORT_UNLESS(!PartOfNodeQuorum());
             DynamicConfigSubscribers.clear();
             UnsubscribeQueue.insert(ConnectedDynamicNodes.begin(), ConnectedDynamicNodes.end());
             ConnectedDynamicNodes.clear();
-            BridgeCapableDynamicNodes.clear();
-            DynamicNodeFeatureLevels.clear();
         }
     }
 
     void TDistributedConfigKeeper::OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId) {
         ConnectedDynamicNodes.erase(nodeId);
-        BridgeCapableDynamicNodes.erase(nodeId);
-        DynamicNodeFeatureLevels.erase(nodeId);
         DynamicConfigSubscribers.erase(sessionId);
         UnsubscribeQueue.insert(nodeId);
     }
@@ -104,10 +99,14 @@ namespace NKikimr::NStorage {
 
         const bool partOfNodeQuorum = PartOfNodeQuorum();
         const auto& subscription = ev->Get()->Record;
-        const ui32 bridgeFeatureLevel = GetReportedBridgeFeatureLevel(subscription.GetBridgeFeatureLevel(),
-            subscription.GetPileListChangeCapable());
+        const TDynamicConfigSubscriber subscriber{
+            .ActorId = ev->Sender,
+            .BridgeCapable = subscription.GetBridgeCapable(),
+            .BridgeFeatureLevel = GetReportedBridgeFeatureLevel(subscription.GetBridgeFeatureLevel(),
+                subscription.GetPileListChangeCapable()),
+        };
         if (!partOfNodeQuorum || StorageConfig) {
-            PushConfigToDynamicNode(ev->Sender, sessionId, true, bridgeFeatureLevel);
+            PushConfigToDynamicNode(subscriber, sessionId, true);
         }
         if (!partOfNodeQuorum) {
             return;
@@ -116,22 +115,12 @@ namespace NKikimr::NStorage {
         const ui32 peerNodeId = ev->Sender.NodeId();
         SubscribeToPeerNode(peerNodeId, sessionId);
         ConnectedDynamicNodes.insert(peerNodeId);
-        if (ev->Get()->Record.GetBridgeCapable()) { // older nodes do not report anything, they are not bridge-capable
-            BridgeCapableDynamicNodes.insert(peerNodeId);
-        } else {
-            BridgeCapableDynamicNodes.erase(peerNodeId);
-        }
-        if (bridgeFeatureLevel) {
-            DynamicNodeFeatureLevels[peerNodeId] = bridgeFeatureLevel;
-        } else {
-            DynamicNodeFeatureLevels.erase(peerNodeId);
-        }
-        const auto [_, inserted] = DynamicConfigSubscribers.try_emplace(sessionId, ev->Sender);
+        const auto [_, inserted] = DynamicConfigSubscribers.try_emplace(sessionId, subscriber);
         Y_ABORT_UNLESS(inserted);
     }
 
-    void TDistributedConfigKeeper::PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache,
-            ui32 bridgeFeatureLevel) {
+    void TDistributedConfigKeeper::PushConfigToDynamicNode(const TDynamicConfigSubscriber& subscriber,
+            TActorId sessionId, bool addCache) {
         auto ev = std::make_unique<TEvNodeWardenDynamicConfigPush>();
         auto& record = ev->Record;
         const auto& config = SelfManagementEnabled ? StorageConfig : BaseConfig;
@@ -139,12 +128,13 @@ namespace NKikimr::NStorage {
             ev->Record.SetNoQuorum(true);
         } else if (!StorageConfig) {
             // no storage configuration -- no nothing
-        } else if (const ui32 required = GetRequiredBridgeFeatureLevel(*config); bridgeFeatureLevel < required) {
-            // the node can't work with this configuration, it has to be upgraded
-            YDB_LOG_WARN("Dynamic node runs version not supporting bridge features of the config, config is not pushed",
+        } else if (const ui32 required = GetRequiredBridgeFeatureLevel(*config);
+                (config->HasClusterState() && !subscriber.BridgeCapable) || subscriber.BridgeFeatureLevel < required) {
+            YDB_LOG_WARN("Dynamic node cannot apply the bridged configuration",
                 {"marker", "NWDC88"},
-                {"nodeId", actorId.NodeId()},
-                {"bridgeFeatureLevel", bridgeFeatureLevel},
+                {"nodeId", subscriber.ActorId.NodeId()},
+                {"bridgeCapable", subscriber.BridgeCapable},
+                {"bridgeFeatureLevel", subscriber.BridgeFeatureLevel},
                 {"requiredBridgeFeatureLevel", required});
         } else {
             record.MutableConfig()->CopyFrom(*config);
@@ -155,7 +145,7 @@ namespace NKikimr::NStorage {
                 AddCacheUpdate(record.MutableCacheUpdate(), it, true);
             }
         }
-        auto handle = std::make_unique<IEventHandle>(actorId, SelfId(), ev.release());
+        auto handle = std::make_unique<IEventHandle>(subscriber.ActorId, SelfId(), ev.release());
         handle->Rewrite(TEvInterconnect::EvForward, sessionId);
         TActivationContext::Send(handle.release());
     }

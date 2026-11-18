@@ -6,6 +6,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 #include <array>
+#include <atomic>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
@@ -16,6 +17,7 @@ namespace NKikimr::NStorage {
     {
         TBridgePileId SelfBridgePileId; // resolved against local bridge config until storage config is received
         const std::optional<TString> SelfBridgePileName;
+        const std::shared_ptr<std::atomic<ui32>> AdmissionFloor;
 
         TStorageConfigPtr StorageConfig;
         TStorageConfigPtr CommittedStorageConfig;
@@ -27,6 +29,22 @@ namespace NKikimr::NStorage {
 
         std::deque<std::unique_ptr<IEventHandle>> PendingEvents;
 
+        struct TAdmissionRecheck {
+            ui64 Cookie;
+            size_t Pending;
+            std::vector<std::pair<TActorId, ui64>> Waiters;
+        };
+
+        ui64 NextAdmissionRecheckCookie = 0;
+        std::optional<TAdmissionRecheck> AdmissionRecheck;
+        // Keep candidates until the proxy confirms retirement. A newer handshake for the same peer can overlap.
+        THashSet<ui32> PeersBelowAdmissionLevel;
+
+        TActorId StartupRecoveryKeeper;
+        std::vector<ui32> StartupRecoveryPeers;
+        size_t NextStartupRecoveryPeer = 0;
+        ui64 StartupRecoveryGeneration = 0;
+
         // bridge feature levels reported by peers in the handshakes of their sessions (absent for the ones reporting
         // nothing); the sessions are not checked again, so the peers are disconnected once the config requires more
         THashMap<ui32, ui32> PeerFeatureLevels;
@@ -34,7 +52,7 @@ namespace NKikimr::NStorage {
         // the payload is sent with the key of the bridge feature level the config requires; older versions don't know the
         // keys of the levels they don't support, so they treat such peer as not bridge-capable one and neither connect,
         // nor take its configuration
-        static constexpr std::array<TStringBuf, 7> DistconfKeys{
+        static constexpr std::array<TStringBuf, BridgeFeatureLevel + 1> DistconfKeys{
             "distconf",
             "distconf-pile-list-changed", // BridgeFeatureLevelPileList
             "distconf-pile-ops", // BridgeFeatureLevelPileOps
@@ -42,15 +60,17 @@ namespace NKikimr::NStorage {
             "distconf-pile-overrides", // BridgeFeatureLevelPileOverrides
             "distconf-rollback", // BridgeFeatureLevelRollback
             "distconf-hot-standby", // BridgeFeatureLevelHotStandby
+            "distconf-session-admission", // BridgeFeatureLevelSessionAdmission
         };
-        static_assert(DistconfKeys.size() == BridgeFeatureLevel + 1);
 
         using TClusterState = NKikimrBridge::TClusterState;
 
     public:
-        TDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId, std::optional<TString> selfBridgePileName)
+        TDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId, std::optional<TString> selfBridgePileName,
+                std::shared_ptr<std::atomic<ui32>> admissionFloor)
             : SelfBridgePileId(selfBridgePileId)
             , SelfBridgePileName(std::move(selfBridgePileName))
+            , AdmissionFloor(std::move(admissionFloor))
         {}
 
         void Bootstrap() {
@@ -81,20 +101,29 @@ namespace NKikimr::NStorage {
             // pile ids come from pile registry of the storage config, which may differ from the local config order
             Y_ABORT_UNLESS(BridgeInfo->SelfNodePile);
             SelfBridgePileId = BridgeInfo->SelfNodePile->BridgePileId;
+            StartupRecoveryKeeper = {};
+            StartupRecoveryPeers.clear();
+
+            ApplyAdmissionRequirement();
 
             YDB_LOG_DEBUG("TEvNodeWardenStorageConfig received",
                 {"marker", "NWDCC06"},
                 {"storageConfig", StorageConfig});
 
-            // process any pending events
+            ProcessPendingEvents();
+
+            // disconnect peers if needed
+            DisconnectUnavailablePiles();
+        }
+
+        void ProcessPendingEvents() {
             for (auto& ev : std::exchange(PendingEvents, {})) {
                 TAutoPtr<IEventHandle> temp(ev.release());
                 Receive(temp);
             }
+        }
 
-            DisconnectIncapablePeers();
-
-            // disconnect peers if needed
+        void DisconnectUnavailablePiles() {
             TActorSystem* const as = TActivationContext::ActorSystem();
             for (const auto& pile : BridgeInfo->Piles) {
                 if (NBridge::PileStateTraits(pile.State).AllowsConnection &&
@@ -181,6 +210,49 @@ namespace NKikimr::NStorage {
                 PendingFeatureRequirement.value_or(0));
         }
 
+        void CompleteAdmissionRecheck() {
+            auto recheck = std::exchange(AdmissionRecheck, std::nullopt);
+            for (const auto& [actorId, cookie] : recheck->Waiters) {
+                Send(actorId, new TEvPrivate::TEvBridgeFeatureRequirementApplied, 0, cookie);
+            }
+        }
+
+        void ApplyAdmissionRequirement(TActorId requester = {}, ui64 cookie = 0) {
+            const ui32 required = GetRequiredFeatureLevel();
+            if (!AdmissionFloor || required < BridgeFeatureLevelSessionAdmission) {
+                if (AdmissionFloor) {
+                    AdmissionFloor->store(0);
+                    if (AdmissionRecheck) {
+                        CompleteAdmissionRecheck();
+                    }
+                }
+                DisconnectIncapablePeers();
+            } else if (AdmissionFloor->exchange(required) < required && !PeersBelowAdmissionLevel.empty()) {
+                if (AdmissionRecheck) {
+                    CompleteAdmissionRecheck();
+                }
+                AdmissionRecheck.emplace(TAdmissionRecheck{++NextAdmissionRecheckCookie, PeersBelowAdmissionLevel.size(), {}});
+                for (const ui32 peerId : PeersBelowAdmissionLevel) {
+                    Send(TActivationContext::InterconnectProxy(peerId), new TEvInterconnect::TEvRecheckConnectionAdmission,
+                        0, AdmissionRecheck->Cookie);
+                }
+            }
+            if (cookie) {
+                if (AdmissionRecheck) {
+                    AdmissionRecheck->Waiters.emplace_back(requester, cookie);
+                } else {
+                    Send(requester, new TEvPrivate::TEvBridgeFeatureRequirementApplied, 0, cookie);
+                }
+            }
+        }
+
+        void Handle(TEvInterconnect::TEvRecheckConnectionAdmissionResult::TPtr ev) {
+            if (AdmissionRecheck && ev->Cookie == AdmissionRecheck->Cookie && !--AdmissionRecheck->Pending) {
+                PeersBelowAdmissionLevel.clear();
+                CompleteAdmissionRecheck();
+            }
+        }
+
         void DisconnectIncapablePeers() {
             const ui32 required = GetRequiredFeatureLevel();
             for (auto it = PeerFeatureLevels.begin(); it != PeerFeatureLevels.end(); ) {
@@ -194,11 +266,22 @@ namespace NKikimr::NStorage {
 
         void Handle(TEvPrivate::TEvUpdateBridgeFeatureRequirement::TPtr ev) {
             PendingFeatureRequirement = ev->Get()->RequiredLevel;
-            DisconnectIncapablePeers();
+            ApplyAdmissionRequirement(ev->Sender, ev->Cookie);
+        }
+
+        static ui32 GetPeerAdmissionLevel(const NKikimrBlobStorage::TConnectivityPayload& incoming) {
+            return incoming.HasBridgePileId() ? GetPeerFeatureLevel(incoming) : 0;
+        }
+
+        void TrackAdmissionPeer(ui32 peerId, ui32 level) {
+            if (AdmissionFloor && level < BridgeFeatureLevelSessionAdmission && !AdmissionFloor->load()) {
+                PeersBelowAdmissionLevel.insert(peerId);
+            }
         }
 
         // remember bridge feature level of the peer of just established session
         void RegisterPeer(ui32 peerNodeId, const NKikimrBlobStorage::TConnectivityPayload& incoming) {
+            TrackAdmissionPeer(peerNodeId, GetPeerAdmissionLevel(incoming));
             if (const ui32 level = GetPeerFeatureLevel(incoming); level >= BridgeFeatureLevel) {
                 PeerFeatureLevels.erase(peerNodeId); // no feature can be required beyond this version's level
             } else if (IsPeerIncompatible(incoming)) {
@@ -217,7 +300,42 @@ namespace NKikimr::NStorage {
                 TActivationContext::InterconnectProxy(peerNodeId), {}, nullptr, 0));
         }
 
+        void Handle(TEvPrivate::TEvStartBridgeStartupRecovery::TPtr ev) {
+            StartupRecoveryKeeper = ev->Sender;
+            StartupRecoveryPeers = std::move(ev->Get()->PeerNodeIds);
+            StartupRecoveryGeneration = ev->Get()->StaleConfig->GetGeneration();
+            NextStartupRecoveryPeer = 0;
+            ProcessPendingEvents();
+            TryStartupRecovery();
+        }
+
+        void TryStartupRecovery() {
+            if (!StartupRecoveryPeers.empty()) {
+                const ui32 peerId = StartupRecoveryPeers[NextStartupRecoveryPeer];
+                NextStartupRecoveryPeer = (NextStartupRecoveryPeer + 1) % StartupRecoveryPeers.size();
+                Send(TActivationContext::InterconnectProxy(peerId), new TEvInterconnect::TEvConnectNode);
+                Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
+            }
+        }
+
+        bool IsStartupRecoveryPeer(ui32 peerId) const {
+            return std::ranges::find(StartupRecoveryPeers, peerId) != StartupRecoveryPeers.end();
+        }
+
         void Handle(TEvInterconnect::TEvPrepareOutgoingConnection::TPtr ev) {
+            if (StartupRecoveryKeeper) {
+                if (IsStartupRecoveryPeer(ev->Get()->PeerNodeId)) {
+                    NKikimrBlobStorage::TConnectivityPayload request;
+                    FillInSelfPile(&request);
+                    request.SetStartupRecoveryRequest(true);
+                    Send(ev->Sender, new TEvInterconnect::TEvPrepareOutgoingConnectionResult(CreateParams(request), true),
+                        0, ev->Cookie);
+                } else {
+                    Send(ev->Sender, new TEvInterconnect::TEvPrepareOutgoingConnectionResult(
+                        TString("waiting for committed bridge configuration")), 0, ev->Cookie);
+                }
+                return;
+            }
             if (IsSelfStatic && !StorageConfig) {
                 // we are still waiting for storage config at static node, so postpone this message
                 PendingEvents.emplace_back(ev.Release());
@@ -261,11 +379,50 @@ namespace NKikimr::NStorage {
             if (error) {
                 Send(ev->Sender, new TEvInterconnect::TEvPrepareOutgoingConnectionResult(std::move(*error)), 0, ev->Cookie);
             } else {
-                Send(ev->Sender, new TEvInterconnect::TEvPrepareOutgoingConnectionResult(CreateParams(outgoing)), 0, ev->Cookie);
+                Send(ev->Sender, new TEvInterconnect::TEvPrepareOutgoingConnectionResult(CreateParams(outgoing), true),
+                    0, ev->Cookie);
             }
         }
 
+        void ReplyToStartupRecoveryRequest(TEvInterconnect::TEvCheckIncomingConnection::TPtr& ev,
+                const NKikimrBlobStorage::TConnectivityPayload& incoming) {
+            const ui32 peerId = ev->Get()->PeerNodeId;
+            const auto *original = BridgeInfo ? BridgeInfo->ImplicitPile : nullptr;
+            std::optional<TString> error;
+            if (!ev->Get()->SupportsConfigOnly || !IsSelfStatic || peerId > MaxStaticNodeId ||
+                    GetPeerAdmissionLevel(incoming) < Max<ui32>(BridgeFeatureLevelSessionAdmission,
+                        GetRequiredFeatureLevel())) {
+                error = "peer does not support bridge startup recovery";
+            } else if (!original || original != BridgeInfo->SelfNodePile || original != BridgeInfo->GetPileForNode(peerId) ||
+                    !incoming.HasBridgePileName() || incoming.GetBridgePileName() != original->Name ||
+                    !NBridge::PileStateTraits(original->State).AllowsConnectionWithinPile) {
+                error = "bridge startup recovery requires a peer in the original pile";
+            } else if (!CommittedStorageConfig || !CommittedStorageConfig->HasClusterState() ||
+                    GetRequiredBridgeFeatureLevel(*CommittedStorageConfig) < BridgeFeatureLevelSessionAdmission) {
+                error = "committed bridge configuration is unavailable on this node";
+            }
+
+            if (error) {
+                Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::move(error), {}), 0, ev->Cookie);
+                return;
+            }
+            NKikimrBlobStorage::TConnectivityPayload reply;
+            FillInSelfPile(&reply);
+            reply.SetBridgePileName(original->Name);
+            reply.SetStartupRecoveryAccepted(true);
+            NKikimrBlobStorage::TConnectivityPayload protectedReply;
+            protectedReply.SetStartupRecoveryAccepted(true);
+            protectedReply.MutableCommittedStorageConfig()->CopyFrom(*CommittedStorageConfig);
+            Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::nullopt, CreateParams(reply),
+                GetPeerAdmissionLevel(incoming), true, CreateParams(protectedReply)), 0, ev->Cookie);
+        }
+
         void Handle(TEvInterconnect::TEvCheckIncomingConnection::TPtr ev) {
+            if (StartupRecoveryKeeper) {
+                Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(
+                    TString("waiting for committed bridge configuration"), {}), 0, ev->Cookie);
+                return;
+            }
             if (IsSelfStatic && !StorageConfig) {
                 // the same logic as for outgoing connection: postpone only for static nodes when no configuration has
                 // been received
@@ -275,9 +432,7 @@ namespace NKikimr::NStorage {
 
             std::optional<TString> error;
             NKikimrBlobStorage::TConnectivityPayload outgoing;
-            // the peer takes our config only if we report the features it requires
-            outgoing.SetPileListChangeCapable(true);
-            outgoing.SetBridgeFeatureLevel(BridgeFeatureLevel);
+            FillInSelfPile(&outgoing);
 
             const ui32 peerNodeId = ev->Get()->PeerNodeId;
 
@@ -286,6 +441,9 @@ namespace NKikimr::NStorage {
             auto& params = ev->Get()->Params;
             if (!ParsePayload(params, &incoming)) {
                 error = "failed to parse incoming connectivity check payload";
+            } else if (incoming.GetStartupRecoveryRequest()) {
+                ReplyToStartupRecoveryRequest(ev, incoming);
+                return;
             }
 
             // obtain peer's pile id (we must have one)
@@ -299,7 +457,8 @@ namespace NKikimr::NStorage {
                 // we already have an error, do nothing more
             } else if (!incoming.HasBridgePileId()) {
                 // peer is not bridge-capable; this is allowed only until the cluster gets converted to bridged one
-                if (!StorageConfig || !StorageConfig->HasClusterState()) {
+                if (GetRequiredFeatureLevel() < BridgeFeatureLevelSessionAdmission &&
+                        (!StorageConfig || !StorageConfig->HasClusterState())) {
                     YDB_LOG_DEBUG("Accepting connection from not bridge-capable peer",
                         {"marker", "NWDCC07"},
                         {"peerNodeId", peerNodeId});
@@ -371,7 +530,7 @@ namespace NKikimr::NStorage {
             }
 
             Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::move(error),
-                CreateParams(outgoing)), 0, ev->Cookie);
+                CreateParams(outgoing), GetPeerAdmissionLevel(incoming)), 0, ev->Cookie);
         }
 
         void FillInSelfPile(NKikimrBlobStorage::TConnectivityPayload *outgoing) {
@@ -398,7 +557,50 @@ namespace NKikimr::NStorage {
             }
         }
 
+        void Handle(TEvInterconnect::TEvCheckOutgoingConnection::TPtr ev) {
+            const auto& request = *ev->Get();
+            NKikimrBlobStorage::TConnectivityPayload incoming;
+            std::optional<TString> error;
+            if (!ParsePayload(request.Params, &incoming)) {
+                error = "failed to parse outgoing connectivity check reply";
+            } else if (StartupRecoveryKeeper || request.ConfigOnly) {
+                if (!StartupRecoveryKeeper || !request.ConfigOnly || !IsStartupRecoveryPeer(request.PeerNodeId) ||
+                        !incoming.GetStartupRecoveryAccepted() || !incoming.HasBridgePileName() ||
+                        !SelfBridgePileName || incoming.GetBridgePileName() != *SelfBridgePileName ||
+                        GetPeerAdmissionLevel(incoming) < BridgeFeatureLevelSessionAdmission) {
+                    error = "peer did not accept bridge startup recovery";
+                }
+            } else if (const ui32 required = GetRequiredFeatureLevel(); required >= BridgeFeatureLevelSessionAdmission
+                    && GetPeerAdmissionLevel(incoming) < required) {
+                error = "peer did not report the required bridge capability";
+            } else if (GetRequiredFeatureLevel() >= BridgeFeatureLevelSessionAdmission && BridgeInfo) {
+                const auto *expected = BridgeInfo->GetPileForNode(request.PeerNodeId);
+                if (expected && ResolvePeerPile(incoming) != expected->BridgePileId) {
+                    error = "incorrect peer bridge pile id provided";
+                }
+            }
+            if (!error && !request.ConfigOnly) {
+                RegisterPeer(request.PeerNodeId, incoming);
+            }
+            Send(ev->Sender, new TEvInterconnect::TEvCheckOutgoingConnectionResult(std::move(error),
+                GetPeerAdmissionLevel(incoming)), 0, ev->Cookie);
+        }
+
+        void Handle(TEvInterconnect::TEvNotifyConfigOnlyConnection::TPtr ev) {
+            auto& msg = *ev->Get();
+            NKikimrBlobStorage::TConnectivityPayload incoming;
+            if (StartupRecoveryKeeper && IsStartupRecoveryPeer(msg.PeerNodeId) && ParsePayload(msg.Params, &incoming) &&
+                    incoming.GetStartupRecoveryAccepted() && incoming.HasCommittedStorageConfig() &&
+                    incoming.GetCommittedStorageConfig().GetGeneration() > StartupRecoveryGeneration) {
+                Send(StartupRecoveryKeeper, new TEvPrivate::TEvBridgeStartupRecoveryConfig(msg.PeerNodeId,
+                    std::move(*incoming.MutableCommittedStorageConfig())));
+            }
+        }
+
         void Handle(TEvInterconnect::TEvNotifyOutgoingConnectionEstablished::TPtr ev) {
+            if (StartupRecoveryKeeper) {
+                return;
+            }
             auto& params = ev->Get()->Params;
             NKikimrBlobStorage::TConnectivityPayload incoming;
             if (!ParsePayload(params, &incoming)) {
@@ -414,7 +616,20 @@ namespace NKikimr::NStorage {
             }
         }
 
+        static bool IsUnexpectedBridgeDowngrade(const NKikimrBlobStorage::TStorageConfig& current,
+                const NKikimrBlobStorage::TStorageConfig& candidate) {
+            return current.HasClusterState() && GetRequiredBridgeFeatureLevel(current) >= BridgeFeatureLevelSessionAdmission &&
+                !candidate.HasClusterState() && candidate.GetGeneration() >= current.GetGeneration() &&
+                (!candidate.HasBridgeRollback() ||
+                    candidate.GetBridgeRollback().GetClusterStateGeneration() < current.GetClusterState().GetGeneration());
+        }
+
         void UpdateLocalConfig(const NKikimrBlobStorage::TConnectivityPayload& incoming) {
+            if (StorageConfig && (IsUnexpectedBridgeDowngrade(*StorageConfig, incoming.GetStorageConfig()) ||
+                    (incoming.HasCommittedStorageConfig() &&
+                        IsUnexpectedBridgeDowngrade(*StorageConfig, incoming.GetCommittedStorageConfig())))) {
+                return;
+            }
             if (IsSelfStatic && StorageConfig && !StorageConfig->GetGeneration() &&
                     std::ranges::none_of(incoming.GetStorageConfig().GetAllNodes(), [this](const auto& node) {
                         return node.GetNodeId() == SelfId().NodeId();
@@ -437,6 +652,9 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(BridgeInfo);
 
             if (!StorageConfig->HasClusterState() || !config.HasClusterState()) {
+                if (IsUnexpectedBridgeDowngrade(*StorageConfig, config) || IsUnexpectedBridgeDowngrade(config, *StorageConfig)) {
+                    return "missing bridge rollback history for newer ordinary configuration";
+                }
                 // at least one of parties runs config of the cluster not yet converted to bridged one; this is possible
                 // only for single-pile configuration and the party with older config will catch up through the
                 // config exchange
@@ -664,6 +882,13 @@ namespace NKikimr::NStorage {
         STRICT_STFUNC(StateFunc,
             hFunc(TEvNodeWardenStorageConfig, Handle)
             hFunc(TEvPrivate::TEvUpdateBridgeFeatureRequirement, Handle)
+            hFunc(TEvPrivate::TEvStartBridgeStartupRecovery, Handle)
+            hFunc(TEvInterconnect::TEvRecheckConnectionAdmissionResult, Handle)
+            hFunc(TEvInterconnect::TEvCheckOutgoingConnection, Handle)
+            hFunc(TEvInterconnect::TEvNotifyConfigOnlyConnection, Handle)
+            cFunc(TEvents::TSystem::Wakeup, TryStartupRecovery)
+            IgnoreFunc(TEvInterconnect::TEvNodeConnected)
+            IgnoreFunc(TEvInterconnect::TEvNodeDisconnected)
             hFunc(TEvInterconnect::TEvNodesInfo, Handle)
             hFunc(TEvInterconnect::TEvPrepareOutgoingConnection, Handle)
             hFunc(TEvInterconnect::TEvCheckIncomingConnection, Handle)
@@ -677,9 +902,9 @@ namespace NKikimr::NStorage {
 namespace NKikimr {
 
     IActor *CreateDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId,
-            std::optional<TString> selfBridgePileName) {
+            std::optional<TString> selfBridgePileName, std::shared_ptr<std::atomic<ui32>> admissionFloor) {
         return new NStorage::TDistributedConfigKeeper::TDistconfBridgeConnectionCheckerActor(selfBridgePileId,
-            std::move(selfBridgePileName));
+            std::move(selfBridgePileName), std::move(admissionFloor));
     }
 
 } // NKikimr

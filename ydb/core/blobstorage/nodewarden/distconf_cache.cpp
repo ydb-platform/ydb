@@ -54,10 +54,10 @@ namespace NKikimr::NStorage {
             SendEvent(nodeId, info, std::move(ev));
         }
         // propagate to connected dynamic nodes
-        for (const auto& [sessionId, actorId] : DynamicConfigSubscribers) {
+        for (const auto& [sessionId, subscriber] : DynamicConfigSubscribers) {
             auto ev = std::make_unique<TEvNodeWardenDynamicConfigPush>();
             ev->Record.MutableCacheUpdate()->CopyFrom(updates);
-            auto handle = std::make_unique<IEventHandle>(actorId, SelfId(), ev.release());
+            auto handle = std::make_unique<IEventHandle>(subscriber.ActorId, SelfId(), ev.release());
             handle->Rewrite(TEvInterconnect::EvForward, sessionId);
             TActivationContext::Send(handle.release());
         }

@@ -1018,8 +1018,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 const auto selfBridgePileId = TBridgePileId::FromPileIndex(*index);
 
                 const TActorId actorId = MakeDistconfBridgeConnectionCheckerActorId();
+                icCommon->ConnectionAdmissionLevel = std::make_shared<std::atomic<ui32>>(0);
                 setup->LocalServices.emplace_back(actorId, TActorSetupCmd(
-                    CreateDistconfBridgeConnectionCheckerActor(selfBridgePileId, bridgePileName),
+                    CreateDistconfBridgeConnectionCheckerActor(selfBridgePileId, bridgePileName,
+                        icCommon->ConnectionAdmissionLevel),
                     TMailboxType::ReadAsFilled,
                     interconnectPoolId));
                 icCommon->ConnectionCheckerActorIds.push_back(actorId);
@@ -1235,6 +1237,9 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
                                                   const NKikimr::TAppData* appData) {
     setup->RegisterSubSystem<IPDiskSubsystem>(CreatePDiskSubsystem());
     TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig());
+    nodeWardenConfig->UseBridgeSessionAdmission = std::ranges::any_of(setup->LocalServices, [](const auto& service) {
+        return service.first == MakeDistconfBridgeConnectionCheckerActorId();
+    });
     const auto& selfHealConfig = Config.GetCmsConfig().GetSentinelConfig().GetStateStorageSelfHealConfig();
     if (const ui32 timeout = selfHealConfig.GetSelfHealStateRequestTimeout()) {
         nodeWardenConfig->SelfHealStateRequestTimeout = TDuration::MicroSeconds(timeout);

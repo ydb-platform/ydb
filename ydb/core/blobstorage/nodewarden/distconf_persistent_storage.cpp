@@ -417,6 +417,9 @@ namespace NKikimr::NStorage {
             if (!newDrivesToRead.empty()) {
                 ReadConfig(newDrivesToRead);
                 PrevDrivesToRead = std::move(drivesToRead);
+            } else if (TryStartBridgeStartupRecovery()) {
+                // Keep the ordinary commit on disk until a peer supplies a newer bridged commit.
+                return;
             } else {
                 // apply locally committed storage configuration if any, or else apply startup YAML config
                 ApplyStorageConfig(*(LocalCommittedStorageConfig ?: BaseConfig));

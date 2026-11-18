@@ -8,7 +8,7 @@ Below are typical operations for converting a cluster to [bridge mode](../../../
 
 Conversion enables bridge mode for system storage and, by default, for all existing database storage pools. It preserves existing data and is irreversible.
 
-1. Make sure the cluster uses configuration V2 with `self_management_config.enabled: true` and that every static and dynamic node runs a build that supports bridge conversion. For configuration V1, first complete the [migration to V2](../../configuration-management/migration/migration-to-v2.md).
+1. Make sure the cluster uses configuration V2 with `self_management_config.enabled: true` and that every connected static and dynamic node runs a build that supports bridge conversion. The available static nodes must provide the configuration and static-storage quorums. For configuration V1, first complete the [migration to V2](../../configuration-management/migration/migration-to-v2.md).
 
 2. Fetch the current configuration through an available node:
 
@@ -27,11 +27,13 @@ Conversion enables bridge mode for system storage and, by default, for all exist
 
     To leave existing database pools ordinary, also set `bridge_config.enable_non_uniform_storage: true`. Do not set this option for default conversion; it can be enabled after conversion completes if mixed storage modes are required.
 
-4. Replace the configuration and perform a rolling restart of all static and dynamic nodes. Every connected node must run with the new `bridge_config` before conversion starts:
+4. Publish the single-pile configuration with `config replace`.
 
     ```bash
     {{ ydb-cli }} -e grpc://<node>:2135 -y admin cluster config replace -f config.yaml
     ```
+
+    Perform a rolling restart of the running static and dynamic nodes so every connected node starts with the new `bridge_config`. Keep the entries for unavailable static nodes in the configuration.
 
 5. Select the required scenario and run only one of these commands.
 
@@ -53,9 +55,21 @@ Conversion enables bridge mode for system storage and, by default, for all exist
 
 Conversion puts all existing nodes into one pile; it does not create a separate pile for each existing data center. For command details, see [admin cluster bridge convert](../../../reference/ydb-cli/commands/bridge/convert.md).
 
+#### Return a static node after conversion {#return-static-node}
+
+While the host is stopped, refresh its startup configuration from a healthy static node in the original pile. Use the configuration directory passed to `ydbd` on the returning host.
+
+```bash
+{{ ydb-cli }} -y admin node config init --config-dir /opt/ydb/cfg-dir --seed-node <seed-node>:2135
+```
+
+Start a compatible `ydbd` build using the host's existing node ID and original disks with their VDisks in place. The node obtains the current committed storage configuration from the cluster, including when the startup YAML already lists the newly added pile. See [admin node config init](../../../reference/ydb-cli/commands/configuration/node/init.md).
+
 ### Add a pile {#add-pile}
 
 Adding a pile allocates its storage and synchronizes bridged data without stopping the cluster.
+
+After a conversion that supports offline static nodes, you can register and provision the first additional pile while original hosts remain offline. The available static nodes must meet the configuration and static-storage quorums.
 
 1. If you ran [ordinary-cluster conversion](#convert), wait for it to complete. If the cluster initially ran in bridge mode or conversion has already completed, no additional wait is required. In either case, check the cluster state before adding a pile:
 
@@ -73,7 +87,7 @@ Adding a pile allocates its storage and synchronizes bridged data without stoppi
     {{ ydb-cli }} -e grpc://<node>:2135 admin cluster config fetch > config.yaml
     ```
 
-    In `config.hosts`, find every existing static node's entry and add `location.bridge_pile_name` with the name of its current pile. Edit the existing entries instead of duplicating them, and preserve the other `location` fields:
+    In `config.hosts`, set `location.bridge_pile_name` to the current pile name on every existing static node's entry, including entries for offline nodes. Keep the other `location` fields.
 
     ```yaml
     config:
@@ -95,7 +109,7 @@ Adding a pile allocates its storage and synchronizes bridged data without stoppi
     {{ ydb-cli }} -e grpc://<node>:2135 -y admin cluster config replace -f config.yaml
     ```
 
-    Perform a [rolling restart](../../../maintenance/manual/node_restarting.md) of every static and dynamic node whose settings changed. Do not add the new pile to `bridge_config` until the restart is complete.
+    Perform a [rolling restart](../../../maintenance/manual/node_restarting.md) of the running static and dynamic nodes whose settings changed. Complete the restart before adding the new pile to `bridge_config`.
 
 3. Fetch the current configuration again to use its current version:
 

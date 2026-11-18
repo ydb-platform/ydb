@@ -388,6 +388,10 @@ namespace NActors {
             }
         } Rdma;
         bool RunDelayedRdmaHandshake = false;
+        bool ConfigOnly = false;
+        THashMap<TString, TString> ConfigOnlyParams;
+        TVector<TActorId> ConfigOnlyCheckers;
+        std::optional<THashMap<TString, TString>> OutgoingConnectionParams;
 
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
@@ -551,6 +555,14 @@ namespace NActors {
                     } else if (Common->Settings.EncryptionMode == EEncryptionMode::REQUIRED && !Params.AuthOnly) {
                         Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Peer doesn't support encryption, which is required");
                     }
+
+                    if (ConfigOnly) {
+                        ExchangeConfigOnly(incoming);
+                        SendToProxy(MakeHolder<TEvHandshakeConfigOnlyDone>());
+                        ProgramInfo.Clear();
+                    } else if (OutgoingConnectionParams) {
+                        NotifyOutgoingConnection(*OutgoingConnectionParams, true);
+                    }
                 }
             } catch (const TExHandshakeFailed&) {
                 ProgramInfo.Clear();
@@ -575,6 +587,53 @@ namespace NActors {
             Rdma.Clear();
             MainChannel.Reset();
             ExternalDataChannel.Reset();
+        }
+
+        template <typename T>
+        static THashMap<TString, TString> ReadConnectionParams(const T& proto) {
+            THashMap<TString, TString> params;
+            for (const auto& item : proto.GetParams()) {
+                params.emplace(item.GetKey(), item.GetValue());
+            }
+            return params;
+        }
+
+        void NotifyOutgoingConnection(const THashMap<TString, TString>& params, bool success) {
+            for (const auto& checker : Common->ConnectionCheckerActorIds) {
+                Send(checker, new TEvInterconnect::TEvNotifyOutgoingConnectionEstablished(
+                    PeerNodeId, success, THashMap(params)));
+            }
+        }
+
+        void ExchangeConfigOnly(bool incoming) {
+            NActorsInterconnect::THandshakeConfigOnly request;
+            for (auto& [key, value] : ConfigOnlyParams) {
+                auto* item = request.AddParams();
+                item->SetKey(key);
+                item->SetValue(std::move(value));
+            }
+
+            auto send = [&] {
+                if (!Common->AllowsConnection(Params.AdmissionLevel)) {
+                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Peer is incompatible with current connection admission");
+                }
+                SendExBlock(MainChannel, request, "ConfigOnly", Common->Settings.MaxSerializedEventSize);
+            };
+            NActorsInterconnect::THandshakeConfigOnly reply;
+            if (incoming) {
+                ReceiveExBlock(MainChannel, reply, "ConfigOnly", Common->Settings.MaxSerializedEventSize);
+                send();
+            } else {
+                send();
+                ReceiveExBlock(MainChannel, reply, "ConfigOnly", Common->Settings.MaxSerializedEventSize);
+            }
+
+            if (reply.ParamsSize() && Common->AllowsConnection(Params.AdmissionLevel)) {
+                const auto params = ReadConnectionParams(reply);
+                for (const auto& checker : ConfigOnlyCheckers) {
+                    Send(checker, new TEvInterconnect::TEvNotifyConfigOnlyConnection(PeerNodeId, params));
+                }
+            }
         }
 
         void EstablishSecureConnection(TConnection& connection) {
@@ -1098,6 +1157,9 @@ namespace NActors {
                 while (pending--) {
                     auto ev = WaitForSpecificEvent<TEvInterconnect::TEvPrepareOutgoingConnectionResult>(
                         "EvPrepareOutgoingConnectionResult");
+                    if (ev->Get()->CheckReply) {
+                        ConfigOnlyCheckers.push_back(ev->Sender);
+                    }
                     std::visit(TOverloaded{
                         [&](TString& errorReason) {
                             Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, TStringBuilder() << "connection checker "
@@ -1112,6 +1174,7 @@ namespace NActors {
                         }
                     }, ev->Get()->Conclusion);
                 }
+                request.SetSupportsConfigOnly(!ConfigOnlyCheckers.empty());
 
                 if (Rdma) {
                     auto rdmaHs = request.MutableRdmaHandshake();
@@ -1133,20 +1196,6 @@ namespace NActors {
 
                 SendExBlock(MainChannel, request, "ExRequest");
 
-                auto notify = [&](auto& proto, bool success) {
-                    THashMap<TString, TString> params;
-                    for (const auto& item : proto.GetParams()) {
-                        params.emplace(item.GetKey(), item.GetValue());
-                    }
-                    auto& actors = Common->ConnectionCheckerActorIds;
-                    for (size_t i = 0; i < actors.size(); ++i) {
-                        Send(actors[i], new TEvInterconnect::TEvNotifyOutgoingConnectionEstablished(PeerNodeId, success,
-                            i + 1 != actors.size()
-                                ? THashMap(params)
-                                : std::move(params)));
-                    }
-                };
-
                 NActorsInterconnect::THandshakeReply reply;
                 if (!reply.ParseFromString(ReceiveExBlock(MainChannel, "ExReply"))) {
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Incorrect THandshakeReply");
@@ -1154,10 +1203,10 @@ namespace NActors {
                 ReportProto(reply, "ReceiveExBlock ExReply");
 
                 if (reply.HasErrorExplaination()) {
-                    notify(reply, false);
+                    NotifyOutgoingConnection(ReadConnectionParams(reply), false);
                     FailFromPeer(reply.GetErrorExplaination());
                 } else if (!reply.HasSuccess()) {
-                    notify(reply, false);
+                    NotifyOutgoingConnection(ReadConnectionParams(reply), false);
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "empty reply");
                 }
 
@@ -1168,6 +1217,30 @@ namespace NActors {
                 const auto& success = reply.GetSuccess();
                 ValidateClusterUUID(success, generateError);
                 ValidateCompatibilityInfo(success, generateError);
+
+                ConfigOnly = success.GetConfigOnly();
+                if (ConfigOnly && (ConfigOnlyCheckers.empty() || success.GetUseExternalDataChannel() ||
+                        success.GetUseSessionV2() || success.HasQpPrepared())) {
+                    generateError("Invalid configuration-only handshake negotiation");
+                }
+                auto params = ReadConnectionParams(success);
+                for (const auto& checker : ConfigOnlyCheckers) {
+                    Send(checker, new TEvInterconnect::TEvCheckOutgoingConnection(PeerNodeId, params, ConfigOnly));
+                }
+                for (size_t i = 0; i < ConfigOnlyCheckers.size(); ++i) {
+                    auto ev = WaitForSpecificEvent<TEvInterconnect::TEvCheckOutgoingConnectionResult>(
+                        "EvCheckOutgoingConnectionResult");
+                    if (const auto& errorReason = ev->Get()->ErrorReason) {
+                        generateError(TStringBuilder() << "connection checker refused the outgoing reply: " << *errorReason);
+                    }
+                    Params.AdmissionLevel = Max(Params.AdmissionLevel, ev->Get()->AdmissionLevel);
+                    for (auto& [key, value] : ev->Get()->ConfigOnlyParams) {
+                        ConfigOnlyParams.try_emplace(key, std::move(value));
+                    }
+                }
+                if (!Common->AllowsConnection(Params.AdmissionLevel)) {
+                    generateError("Peer is incompatible with current connection admission");
+                }
 
                 const auto& s = success.GetSenderActorId();
                 PeerVirtualId.Parse(s.data(), s.size());
@@ -1193,7 +1266,9 @@ namespace NActors {
                     ParsePeerScopeId(success.GetServerScopeId());
                 }
 
-                if (Rdma) {
+                if (ConfigOnly) {
+                    Rdma.Clear();
+                } else if (Rdma) {
                     if (success.HasQpPrepared()) {
                         rdmaSession = std::move(RunRdmaOutgoingHandshakePart(success));
                     } else {
@@ -1209,8 +1284,7 @@ namespace NActors {
                 // recover peer process info from peer's reply
                 ProgramInfo = GetProgramInfo(success);
 
-                // notify checker actors
-                notify(success, true);
+                OutgoingConnectionParams.emplace(std::move(params));
             } else if (!response.Header.SelfVirtualId) {
                 // peer reported error -- empty ack was generated by proxy for this request
                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_SESSION_MISMATCH, "Peer rejected session continuation handshake");
@@ -1479,6 +1553,46 @@ namespace NActors {
                     Common->Settings.V2.Enable && !Params.Encryption &&
                     Common->UringEngineV2;
 
+                const auto& checkers = Common->ConnectionCheckerActorIds;
+                auto requestParams = ReadConnectionParams(request);
+                const bool supportsConfigOnly = request.GetSupportsConfigOnly();
+                for (size_t i = 0; i < checkers.size(); ++i) {
+                    Send(checkers[i], new TEvInterconnect::TEvCheckIncomingConnection(PeerNodeId,
+                        i + 1 == checkers.size() ? std::move(requestParams) : requestParams, supportsConfigOnly));
+                }
+                THashMap<TString, TString> replyParams;
+                for (size_t i = 0; i < checkers.size(); ++i) {
+                    auto result = WaitForSpecificEvent<TEvInterconnect::TEvCheckIncomingConnectionResult>(
+                        "EvCheckIncomingConnectionResult");
+                    auto& verdict = *result->Get();
+                    if (verdict.ErrorReason) {
+                        generateError(TStringBuilder() << "connection checker refused to proceed with "
+                            "incoming connection: " << *verdict.ErrorReason, &verdict.ParamsToSend);
+                    }
+                    if (verdict.ConfigOnly) {
+                        if (!supportsConfigOnly) {
+                            generateError("Peer does not support configuration-only handshake");
+                        }
+                        ConfigOnly = true;
+                        ConfigOnlyCheckers.push_back(result->Sender);
+                        for (auto& [key, value] : verdict.ConfigOnlyParams) {
+                            ConfigOnlyParams.try_emplace(key, std::move(value));
+                        }
+                    }
+                    Params.AdmissionLevel = Max(Params.AdmissionLevel, verdict.AdmissionLevel);
+                    for (auto& [key, value] : verdict.ParamsToSend) {
+                        replyParams.try_emplace(key, std::move(value));
+                    }
+                }
+                if (!Common->AllowsConnection(Params.AdmissionLevel)) {
+                    generateError("Peer is incompatible with current connection admission");
+                }
+                if (ConfigOnly) {
+                    Params.UseExternalDataChannel = false;
+                    Params.UseSessionV2 = false;
+                    Params.AuthOnly = false;
+                }
+
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
                         HandshakeId = request.GetHandshakeId();
@@ -1496,13 +1610,7 @@ namespace NActors {
                 // remember program info (assuming successful handshake)
                 ProgramInfo = GetProgramInfo(request);
 
-                // copy request parameters as it goes out of scope
-                THashMap<TString, TString> params;
-                for (const auto& item : request.GetParams()) {
-                    params.emplace(item.GetKey(), item.GetValue());
-                }
-
-                const bool peerRequestedRdma = request.HasRdmaHandshake();
+                const bool peerRequestedRdma = !ConfigOnly && request.HasRdmaHandshake();
                 std::optional<NActorsInterconnect::TRdmaHandshake> rdmaIncomingHandshake;
                 if (Rdma && peerRequestedRdma) {
                     rdmaIncomingHandshake = request.GetRdmaHandshake();
@@ -1511,6 +1619,7 @@ namespace NActors {
                 }
 
                 // send to proxy
+                ev->ConfigOnly = ConfigOnly;
                 auto reply = AskProxy<TEvHandshakeReplyOK, TEvHandshakeReplyError>(std::move(ev), "TEvHandshakeRequest");
 
                 // parse it
@@ -1548,7 +1657,7 @@ namespace NActors {
                         } else {
                             success.SetRdmaErr("Unable to perform qp exchange on the incoming side");
                         }
-                    } else {
+                    } else if (!ConfigOnly) {
                         success.SetRdmaErr("Rdma is not ready on the incoming side");
                     }
                     if (peerRequestedRdma && RunDelayedRdmaHandshake) {
@@ -1563,29 +1672,11 @@ namespace NActors {
                     success.SetUseXdcShuffle(Params.UseXdcShuffle);
                     success.SetAllowDisablingPayloadChecksums(Params.AllowDisablingPayloadChecksums);
                     success.SetUseSessionV2(Params.UseSessionV2);
-
-                    ui32 pending = 0;
-                    auto& actors = Common->ConnectionCheckerActorIds;
-                    for (size_t i = 0; i < actors.size(); ++i) {
-                        Send(actors[i], new TEvInterconnect::TEvCheckIncomingConnection(PeerNodeId, i + 1 != actors.size()
-                            ? THashMap(params)
-                            : std::move(params)));
-                        ++pending;
-                    }
-                    while (pending--) {
-                        auto ev = WaitForSpecificEvent<TEvInterconnect::TEvCheckIncomingConnectionResult>(
-                            "EvCheckIncomingConnectionResult");
-
-                        if (const auto& errorReason = ev->Get()->ErrorReason) {
-                            generateError(TStringBuilder() << "connection checker refused to proceed with "
-                                "incoming connection: " << *errorReason, &ev->Get()->ParamsToSend);
-                        } else {
-                            for (auto&& [key, value] : ev->Get()->ParamsToSend) {
-                                auto *p = success.AddParams();
-                                p->SetKey(std::move(key));
-                                p->SetValue(std::move(value));
-                            }
-                        }
+                    success.SetConfigOnly(ConfigOnly);
+                    for (auto& [key, value] : replyParams) {
+                        auto* param = success.AddParams();
+                        param->SetKey(key);
+                        param->SetValue(std::move(value));
                     }
 
                     SendExBlock(MainChannel, record, "ExReply");
@@ -1607,12 +1698,14 @@ namespace NActors {
         }
 
         template <typename T>
-        void SendExBlock(TConnection& connection, const T& proto, const char* what) {
+        void SendExBlock(TConnection& connection, const T& proto, const char* what, ui32 maxSize = TExHeader::MaxSize) {
             TString data;
-            Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&data);
-            Y_ABORT_UNLESS(data.size() <= TExHeader::MaxSize);
-
-            ReportProto(proto, Sprintf("SendExBlock %s", what).data());
+            if (proto.ByteSizeLong() > maxSize || !proto.SerializeToString(&data)) {
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, TStringBuilder() << "Cannot send " << what << " block");
+            }
+            if (!ConfigOnly) {
+                ReportProto(proto, Sprintf("SendExBlock %s", what).data());
+            }
 
             TExHeader header;
             header.Size = data.size();
@@ -1621,10 +1714,10 @@ namespace NActors {
             connection.SendData(data.data(), data.size(), Sprintf("Send%sData", what));
         }
 
-        TString ReceiveExBlock(TConnection& connection, const char* what) {
+        TString ReceiveExBlock(TConnection& connection, const char* what, ui32 maxSize = TExHeader::MaxSize) {
             TExHeader header;
             connection.ReceiveData(&header, sizeof(header), Sprintf("Receive%sHeader", what));
-            if (header.Size > TExHeader::MaxSize) {
+            if (header.Size > maxSize) {
                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Incorrect extended header size");
             }
 
@@ -1641,8 +1734,8 @@ namespace NActors {
 
     private:
         template <typename T>
-        void ReceiveExBlock(TConnection& connection, T& proto, const char* what) {
-            if (!proto.ParseFromString(ReceiveExBlock(connection, what))) {
+        void ReceiveExBlock(TConnection& connection, T& proto, const char* what, ui32 maxSize = TExHeader::MaxSize) {
+            if (!proto.ParseFromString(ReceiveExBlock(connection, what, maxSize))) {
                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Incorrect packet from peer");
             }
         }

@@ -805,7 +805,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         using namespace NSysView;
         f.Env.Runtime->SendToPipe(f.Env.TabletId, f.Edge, new TEvSysView::TEvGetVSlotsRequest(),
             0, TTestActorSystem::GetPipeConfigWithRetries());
-        auto response = f.Env.WaitForEdgeActorEvent<TEvSysView::TEvGetVSlotsResponse>(f.Edge);
+        auto response = f.Env.WaitForEdgeActorEvent<TEvSysView::TEvGetVSlotsResponse>(f.Edge, false);
         ui32 ddiskSlots = 0;
         ui32 ordinarySlots = 0;
         std::optional<NKikimrSysView::TVSlotKey> ddiskKey;

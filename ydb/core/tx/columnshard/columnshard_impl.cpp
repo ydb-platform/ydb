@@ -1227,6 +1227,17 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
+    if (!record.HasOperationId()) {
+        // Not a request of the forced compaction protocol (an older schemeshard, a hand-made request): not served, like
+        // the other requests the shard has nothing to do for. FAILED would make the schemeshard retry it forever.
+        YDB_LOG_WARN("Forced compaction request without an operation id",
+            {"tablet", TabletID()},
+            {"pathId", pathId},
+            {"requestedFrom", ev->Sender});
+        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+        return;
+    }
+
     if (!TablesManager.HasPrimaryIndex()) {
         YDB_LOG_WARN("Forced compaction failed, no primary index",
             {"tablet", TabletID()},
@@ -1248,56 +1259,50 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
-    if (noIntersections.IsFail()) {
-        // The optimizer does not support forced compaction (i.e. it is not tiling++).
+    const auto needCompaction = granule->GetOptimizerPlanner().NeedCompaction();
+    if (needCompaction.IsFail()) {
+        // The planner does not support forced compaction (neither tiling++ nor lc-buckets).
         YDB_LOG_WARN("Forced compaction is not supported",
             {"tablet", TabletID()},
             {"pathId", pathId},
-            {"reason", noIntersections.GetErrorMessage()},
+            {"reason", needCompaction.GetErrorMessage()},
             {"requestedFrom", ev->Sender});
         reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
 
-    if (record.HasSeqNo()) {
-        TMessageSeqNo seqNo;
-        seqNo.DeserializeFromProto(record.GetSeqNo()).Validate();
-        if (seqNo < LastForcedCompactionSeqNo) {
-            YDB_LOG_DEBUG("Forced compaction request is outdated",
-                {"tablet", TabletID()},
-                {"pathId", pathId},
-                {"seqNo", ToString(seqNo)},
-                {"lastSeqNo", ToString(LastForcedCompactionSeqNo)});
-            return;
-        }
-        LastForcedCompactionSeqNo = seqNo;
-        // CASCADE: every portion is also rewritten to the current schema and the reply waits for that too; a cancel
-        // repeats the request with the flag off, which stops the rewrite. A plain request leaves the engine alone.
-        if (record.GetActualizeSchema()) {
-            engine.SetSchemeNeedActualization(true);   // always: the current schema may be newer than the last target
+    if (ForcedCompactionOperationId != record.GetOperationId()) {
+        // A new operation, not a retry of the one being served: the schemeshard repeats its request every few seconds
+        // until the shard answers, and a retry must neither move the rewrite threshold nor rebuild the rewrite queue.
+        // CASCADE: every portion is also rewritten to the current schema and the reply waits for that too. A plain
+        // operation turns off a rewrite left by a cancelled CASCADE (a cancel alone reaches no shard, the rewrite then
+        // runs to completion or is forgotten with a restart); otherwise it leaves the engine alone.
+        ForcedCompactionOperationId = record.GetOperationId();
+        if (record.GetCascade()) {
+            engine.SetSchemeNeedActualization(true);
         } else if (ForcedCompactionActualizeSchema) {
             engine.SetSchemeNeedActualization(false);
         }
-        ForcedCompactionActualizeSchema = record.GetActualizeSchema();
+        ForcedCompactionActualizeSchema = record.GetCascade();
     }
 
     // the latest request supersedes the held one: the waiter of a cancelled operation must not answer on behalf of
     // the next (also when this request is answered at once)
     ForcedCompactionWaiter.reset();
 
-    if (*noIntersections && (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
-        YDB_LOG_DEBUG("Forced compaction already done",
+    if (!*needCompaction && (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
+        // nothing to do: NOT_NEEDED at once; OK is for a request that waited for some work
+        YDB_LOG_DEBUG("Forced compaction not needed",
             {"tablet", TabletID()},
             {"pathId", pathId},
             {"requestedFrom", ev->Sender});
         FinishForcedCompactionActualization();
-        reply(NKikimrTxDataShard::TEvCompactTableResult::OK);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
 
-    // Portions still intersect (or are not rewritten yet): hold the request and reply once the table settles.
-    // Background compaction is kicked for this path; RecheckForcedCompactions() answers the waiter later.
+    // The planner still has work (or the portions are not rewritten yet): hold the request and reply OK once the
+    // table settles. Background compaction is kicked for this path; RecheckForcedCompactions() answers the waiter later.
     YDB_LOG_DEBUG("Forced compaction registered",
         {"tablet", TabletID()},
         {"pathId", pathId},
@@ -1321,10 +1326,11 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
         // The table has gone away (e.g. dropped): fail the pending request.
         status = NKikimrTxDataShard::TEvCompactTableResult::FAILED;
     } else {
-        const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
-        if (noIntersections.IsFail()) {
+        const auto needCompaction = granule->GetOptimizerPlanner().NeedCompaction();
+        if (needCompaction.IsFail()) {
+            // the planner was switched to one without forced compaction support meanwhile
             status = NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED;
-        } else if (*noIntersections && (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
+        } else if (!*needCompaction && (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
             status = NKikimrTxDataShard::TEvCompactTableResult::OK;
         }
     }

@@ -4,6 +4,7 @@
 
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
@@ -120,8 +121,29 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
         if (it != columnChunks.end()) {
             newChunks = to->GetIndexInfo().ActualizeColumnData(it->second, from->GetIndexInfo(), i);
-            YDB_LOG_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
+        } else if (TIndexInfo::IsSpecialColumn(i)) {
+            // the special columns stay as sparse as they were written (no delete flag without deletes)
+            continue;
+        } else if (!to->GetExternalDefaultValueVerified(i) && !to->GetIndexInfo().IsNullableVerified(i)) {
+            // nothing to materialize the column with
+            YDB_LOG_WARN("",
+                {"event", "sync_portion_column_not_materialized"},
+                {"column_id", i});
+            continue;
+        } else {
+            // a column the source was written without (added by ALTER): the rewrite materializes it with its default,
+            // page by page, so that the new portion carries every column of its schema
+            const auto& columnInfo = to->GetIndexInfo().GetColumnFeaturesVerified(i);
+            const auto& loader = columnInfo.GetLoader();
+            ui32 chunkIdx = 0;
+            for (const ui32 pageRecords : pageSizes) {
+                auto arr = loader->BuildDefaultAccessor(pageRecords);
+                auto blobAndMeta = loader->GetAccessorConstructor().SerializeToBlobAndMeta(arr, loader->BuildAccessorContext(pageRecords));
+                newChunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
+                    std::move(blobAndMeta.Blob), arr, TChunkAddress(i, chunkIdx++), columnInfo, std::move(blobAndMeta.Meta)));
+            }
         }
+        YDB_LOG_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
     }
 
     TPortionAccessorConstructor constructor = TPortionAccessorConstructor::BuildForRewriteBlobs(source.PortionInfo.GetPortionInfo());

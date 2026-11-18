@@ -137,7 +137,7 @@ struct TTestSchema {
     public:
         std::vector<TStorageTier> Tiers;
         bool WaitEmptyAfter = false;
-        bool UseForcedCompaction = false;
+        std::optional<TString> CompactionPlanner;   // the planner class of the table; the node default when not set
 
         TTableSpecials() noexcept = default;
 
@@ -154,7 +154,7 @@ struct TTestSchema {
         }
 
         bool GetUseForcedCompaction() const {
-            return UseForcedCompaction;
+            return CompactionPlanner == "tiling++";
         }
 
         TTableSpecials WithCodec(const TString& codec) const {
@@ -163,9 +163,14 @@ struct TTestSchema {
             return out;
         }
 
+        // tiling++: the planner with a settled end state a forced compaction waits for
         TTableSpecials WithForcedCompaction(bool forced) const {
+            return WithCompactionPlanner(forced ? std::optional<TString>("tiling++") : std::nullopt);
+        }
+
+        TTableSpecials WithCompactionPlanner(const std::optional<TString>& className) const {
             TTableSpecials out = *this;
-            out.UseForcedCompaction = forced;
+            out.CompactionPlanner = className;
             return out;
         }
 

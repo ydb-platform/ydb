@@ -565,7 +565,8 @@ private:
     // tables in a column store, so a shard that gets it hosts a single table, and it runs one forced compaction of a
     // table at a time; a repeated request (timeout retry, schemeshard restart or move, the next operation after a
     // cancel) supersedes the held one. Kept in memory only: on restart the schemeshard's persisted queue re-sends
-    // TEvCompactTable. The waiter is answered with OK once the table has no intersecting portions.
+    // TEvCompactTable. A request with nothing to do is answered NOT_NEEDED at once; the waiter is answered OK once the
+    // planner has nothing left to compact and, for CASCADE, the rewrite is done.
     struct TForcedCompactionWaiter {
         TInternalPathId InternalPathId;
         TActorId Sender;
@@ -574,10 +575,11 @@ private:
     };
 
     std::optional<TForcedCompactionWaiter> ForcedCompactionWaiter;
-    // The schemeshard's requests are applied in SeqNo order; ActualizeSchema of the latest one is in effect until the
-    // request is answered: the portions are being rewritten to the current schema (CASCADE) and the waiters also wait
-    // for that.
-    TMessageSeqNo LastForcedCompactionSeqNo;
+    // The forced compaction operation the shard serves (TEvCompactTable::OperationId): a request with the same id is a
+    // retry and only refreshes the waiter, a request with another id applies its Cascade flag anew, a request without an
+    // id is answered NOT_NEEDED. Cascade of the operation is in effect until the request is answered: the portions are
+    // being rewritten to the current schema and the waiter also waits for that.
+    std::optional<ui64> ForcedCompactionOperationId;
     bool ForcedCompactionActualizeSchema = false;
     void FinishForcedCompactionActualization();
     ui32 JitterIntervalMS = 200;

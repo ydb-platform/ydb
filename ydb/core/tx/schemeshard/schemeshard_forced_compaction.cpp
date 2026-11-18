@@ -338,9 +338,10 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
     request->Record.SetCompactBorrowed(true);
     if (it->second.TabletType == ETabletType::ColumnShard) {
         if (auto* info = InProgressForcedCompactionsByShard.FindPtr(shardIdx)) {
-            // CASCADE on a column table: the shard also rewrites every portion to the current schema
-            request->Record.SetActualizeSchema((*info)->Cascade);
-            *request->Record.MutableSeqNo() = NextRound().SerializeToProto();
+            // CASCADE on a column table: the shard also rewrites every portion to the current schema. The id lets the
+            // shard tell a timeout retry of this operation from a new one.
+            request->Record.SetCascade((*info)->Cascade);
+            request->Record.SetOperationId((*info)->Id);
         }
     }
 

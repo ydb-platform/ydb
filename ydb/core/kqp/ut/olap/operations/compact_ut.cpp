@@ -26,6 +26,19 @@ std::vector<ui64> GetPortionSchemaVersions(TTestHelper& helper) {
     return versions;
 }
 
+// Active portions of `/Root/ColumnTable` that store chunks of the column `columnName`.
+ui64 CountPortionsWithColumn(TTestHelper& helper, const TString& columnName) {
+    auto result = helper.GetKikimr().GetQueryClient()
+                      .ExecuteQuery(TStringBuilder() << "SELECT COUNT(DISTINCT PortionId) FROM `/Root/ColumnTable/.sys/primary_index_stats` "
+                                                     << "WHERE Activity = 1 AND EntityName = \"" << columnName << "\"",
+                          NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                      .GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    NYdb::TResultSetParser parser(result.GetResultSet(0));
+    UNIT_ASSERT(parser.TryNextRow());
+    return parser.ColumnParser(0).GetUint64();
+}
+
 void Compact(TTestHelper& helper, const bool cascade) {
     auto result = helper.GetKikimr().GetQueryClient()
                       .ExecuteQuery(TStringBuilder() << "ALTER TABLE `/Root/ColumnTable` COMPACT WITH (CASCADE = " << (cascade ? "true" : "false") << ")",
@@ -38,7 +51,8 @@ void Compact(TTestHelper& helper, const bool cascade) {
 
 Y_UNIT_TEST_SUITE(KqpOlapCompact) {
     // ALTER TABLE ... COMPACT WITH (CASCADE = true) on a column table also rewrites every portion to the current schema
-    // (as if SCHEME_NEED_ACTUALIZATION had been set) and completes only once that is done.
+    // (as if SCHEME_NEED_ACTUALIZATION had been set), materializing the columns added since, and completes only once
+    // that is done.
     Y_UNIT_TEST(CascadeActualizesSchema) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
@@ -79,6 +93,7 @@ Y_UNIT_TEST_SUITE(KqpOlapCompact) {
         testHelper.ExecuteQuery("ALTER TABLE `/Root/ColumnTable` ADD COLUMN Extra Uint64;");
         Compact(testHelper, /*cascade=*/false);
         UNIT_ASSERT_EQUAL(GetPortionSchemaVersions(testHelper), versionsBefore);
+        UNIT_ASSERT_VALUES_EQUAL(CountPortionsWithColumn(testHelper, "Extra"), 0);
 
         Compact(testHelper, /*cascade=*/true);
         const auto versionsAfter = GetPortionSchemaVersions(testHelper);
@@ -86,6 +101,8 @@ Y_UNIT_TEST_SUITE(KqpOlapCompact) {
         for (const ui64 version : versionsAfter) {
             UNIT_ASSERT_GT(version, oldVersion);
         }
+        // the rewrite does not only stamp the version: the added column is materialized (with its default) in every portion
+        UNIT_ASSERT_VALUES_EQUAL(CountPortionsWithColumn(testHelper, "Extra"), versionsAfter.size());
         testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTable`", "[[1000u]]");
     }
 }

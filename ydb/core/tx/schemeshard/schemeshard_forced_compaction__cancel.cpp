@@ -70,15 +70,8 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistForcedCompactionState(db, forcedCompactionInfo);
 
-        // A CASCADE request makes column shards rewrite their portions to the current schema: stop that on every shard
-        // that is not done (a waiting one may have got the request before a timeout retry or a schemeshard restart).
-        // Best effort: a stop lost to a pipe failure or a restart only means the rewrite runs to completion.
-        const auto stopColumnShard = [&](const TShardIdx& shardId) {
-            auto* shardInfo = Self->ShardInfos.FindPtr(shardId);
-            if (forcedCompactionInfo.Cascade && shardInfo && shardInfo->TabletType == ETabletType::ColumnShard) {
-                ColumnShardsToStop.emplace_back(shardInfo->TabletID, shardInfo->PathId);
-            }
-        };
+        // The shards are not told: a column shard with a CASCADE rewrite in flight runs it to completion (or forgets it
+        // with a restart), and its late reply finds no operation to complete.
 
         // clean waiting shards
         for (const auto& tablePathId : forcedCompactionInfo.TablesToCompact) {
@@ -88,7 +81,6 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
                     auto shardId = shardsQueue->Front();
                     Self->InProgressForcedCompactionsByShard.erase(shardId);
                     Self->PersistForcedCompactionDoneShard(db, shardId);
-                    stopColumnShard(shardId);
                     shardsQueue->PopFront();
                     --Self->ForcedCompactionTotalInQueues;
                 }
@@ -107,14 +99,8 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
             }
             Self->InProgressForcedCompactionsByShard.erase(shardId);
             Self->PersistForcedCompactionDoneShard(db, shardId);
-            stopColumnShard(shardId);
         }
         forcedCompactionInfo.ShardsInFlight.clear();
-        if (!ColumnShardsToStop.empty()) {
-            // numbered now, not in DoComplete: a CASCADE created and dispatched for the same table before this transaction
-            // completes must get a greater number, so that the shard drops the late stop instead of the new request
-            StopSeqNo = Self->NextRound().SerializeToProto();
-        }
 
         Self->CancellingForcedCompactions.emplace_back(*forcedCompactionInfoPtr, Request->Sender, request.GetTxId(), Request->Cookie);
         Self->ForcedCompactionNeedsImmediatePersist = true;
@@ -127,12 +113,6 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
             {"schemeshard", Self->SelfTabletId()},
             {"request", Request->Get()->Record.ShortDebugString()},
         );
-        for (const auto& [tabletId, pathId] : ColumnShardsToStop) {
-            auto request = std::make_unique<TEvDataShard::TEvCompactTable>(pathId);
-            request->Record.SetActualizeSchema(false);
-            *request->Record.MutableSeqNo() = StopSeqNo;
-            Self->PipeClientCache->Send(ctx, ui64(tabletId), request.release(), static_cast<ui64>(ECompactionType::ForcedStop));
-        }
         Self->ScheduleForcedCompactionProgress(ctx);
         SideEffects.ApplyOnComplete(Self, ctx);
     }
@@ -157,8 +137,6 @@ private:
 private:
     TSideEffects SideEffects;
     TEvForcedCompaction::TEvCancelRequest::TPtr Request;
-    TVector<std::pair<TTabletId, TPathId>> ColumnShardsToStop;
-    NKikimrTx::TMessageSeqNo StopSeqNo;
 };
 
 ITransaction* TSchemeShard::CreateTxCancelForcedCompaction(TEvForcedCompaction::TEvCancelRequest::TPtr& ev) {

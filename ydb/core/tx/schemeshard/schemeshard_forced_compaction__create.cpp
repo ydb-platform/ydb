@@ -88,7 +88,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
 
         if (tablePath.Base()->IsColumnTable()) {
             // Column tables have no index impl tables to cascade into; CASCADE instead makes the shards also
-            // rewrite every portion to the current schema (see TEvCompactTable::ActualizeSchema).
+            // rewrite every portion to the current schema (see TEvCompactTable::Cascade).
             {
                 // The operation is registered by the path id and the shards come from the table: the destination
                 // of a move has no table yet, the source is about to lose its id (a move is refused the other way
@@ -109,7 +109,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
             }
             if (tableInfo->IsReadOnly) {
                 // A read-only copy shares its shards with the source table: a request through the copy would be
-                // mixed up with one through the source (and stop its schema rewrite).
+                // mixed up with one through the source (a plain one would turn the source's CASCADE rewrite off).
                 return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST,
                     "Forced compaction is not supported for a read-only copy of a table, compact the source table");
             }

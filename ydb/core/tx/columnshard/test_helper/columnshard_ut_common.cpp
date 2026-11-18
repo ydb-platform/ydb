@@ -545,10 +545,16 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
     if (specials.CompressionLevel) {
         schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
     }
-    if (specials.GetUseForcedCompaction()) {
+    if (specials.CompactionPlanner) {
         auto* plannerConstructor = schema->MutableOptions()->MutableCompactionPlannerConstructor();
-        plannerConstructor->SetClassName("tiling++");
-        plannerConstructor->MutableTiling()->SetJson("{}");
+        plannerConstructor->SetClassName(*specials.CompactionPlanner);
+        if (*specials.CompactionPlanner == "tiling++") {
+            plannerConstructor->MutableTiling()->SetJson("{}");
+        } else if (*specials.CompactionPlanner == "lc-buckets") {
+            plannerConstructor->MutableLCBuckets();   // the default levels
+        } else {
+            Y_ABORT("unsupported compaction planner in the test table specials: %s", specials.CompactionPlanner->c_str());
+        }
     }
 }
 

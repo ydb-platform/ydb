@@ -3,7 +3,6 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -3777,9 +3776,9 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable");
         const ui64 compactionId = txId;
 
-        // ... and an empty table already has no intersecting portions, so the columnshard succeeds.
+        // ... and an empty table has nothing to compact, so the columnshard answers NOT_NEEDED at once.
         runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 1; });
-        UNIT_ASSERT_VALUES_EQUAL(block[0]->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        UNIT_ASSERT_VALUES_EQUAL(block[0]->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
 
         // the operation is registered by the table path: no rename while it is in progress, fine afterwards
         runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
@@ -3831,30 +3830,35 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         env.TestWaitNotification(runtime, txId);
 
         // Column tables have no index impl tables: CASCADE instead asks every shard to also rewrite its portions to
-        // the current schema (TEvCompactTable::ActualizeSchema), and a cancel repeats the request with the flag off.
-        // The requests carry the schemeshard's SeqNo so that the shard can drop an outdated one.
+        // the current schema (TEvCompactTable::Cascade). The requests carry the operation id so that the shard can tell
+        // a timeout retry from a new operation. A cancel sends the shards nothing: a rewrite in flight runs to completion.
         std::vector<NKikimrTxDataShard::TEvCompactTable> requests;
         auto observer = runtime.AddObserver<TEvDataShard::TEvCompactTable>(
             [&](const TEvDataShard::TEvCompactTable::TPtr& ev) { requests.push_back(ev->Get()->Record); });
-        const auto seqNo = [](const NKikimrTxDataShard::TEvCompactTable& request) {
-            UNIT_ASSERT(request.HasSeqNo());
-            TMessageSeqNo seqNo;
-            seqNo.DeserializeFromProto(request.GetSeqNo()).Validate();
-            return seqNo;
-        };
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true);
         const ui64 compactionId = txId;
         runtime.WaitFor("EvCompactTable", [&]{ return requests.size() >= 1; });
-        UNIT_ASSERT(requests[0].GetActualizeSchema());
-        UNIT_ASSERT(seqNo(requests[0]));
+        UNIT_ASSERT(requests[0].GetCascade());
+        UNIT_ASSERT_VALUES_EQUAL(requests[0].GetOperationId(), compactionId);
 
-        // The shard is in flight (its result is blocked): the cancel stops the rewrite on it.
+        // The shard is in flight (its result is blocked): the cancel only forgets it, no further request leaves the
+        // schemeshard, and the shard's late reply completes nothing.
         TestCancelCompaction(runtime, ++txId, "/MyRoot", compactionId);
-        runtime.WaitFor("EvCompactTable stop", [&]{ return requests.size() >= 2; });
-        UNIT_ASSERT(!requests[1].GetActualizeSchema());
-        UNIT_ASSERT(seqNo(requests[0]) < seqNo(requests[1]));
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_CANCELLED
+        );
+        block.Stop().Unblock();
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_CANCELLED
+        );
     }
 
     Y_UNIT_TEST(SchemeshardShouldNotMixCascadeCompactionWithSchemaActualizationOption) {
@@ -3977,13 +3981,14 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             /*maxShardsInFlight=*/1, Ydb::StatusIds::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST(SchemeshardShouldFailToCompactColumnTableWithoutTilingOptimizer) {
+    Y_UNIT_TEST(SchemeshardShouldCompactColumnTableWithLcBucketsOptimizer) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         Setup(runtime, env);
 
-        // Standalone column tables use the node-wide default compaction optimizer. Forced compaction
-        // is only supported for tiling++, so a table on a different optimizer must be rejected.
+        // Standalone column tables use the node-wide default compaction optimizer. lc-buckets has no settled state a
+        // forced compaction could wait for: the shard only rewrites the portions of a CASCADE request, and an empty
+        // table has none, so it answers NOT_NEEDED at once and the operation completes.
         runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset("lc-buckets");
 
         ui64 txId = 1000;
@@ -4000,10 +4005,17 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
 
-        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable");
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true);
+        const ui64 compactionId = txId;
 
         runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 1; });
         UNIT_ASSERT_VALUES_EQUAL(block[0]->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+        block.Stop().Unblock();
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
     }
 
     Y_UNIT_TEST(CheckForgetCancelledOperationSuccess) {

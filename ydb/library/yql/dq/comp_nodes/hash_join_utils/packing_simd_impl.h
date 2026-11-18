@@ -1,19 +1,11 @@
 #pragma once
 
 #include "packing.h"
+#include "tuple_simd_target.h"
 
 #include <array>
 
-// ISA-specific layout libraries are built without -m flags: inline code from
-// shared headers (std::, util) must stay callable on any CPU. Add includes above.
-#if defined(TUPLE_LAYOUT_AVX2)
-#ifdef __AVX2__
-#error "Build the AVX2 tuple layout without -mavx2"
-#endif
-#pragma clang attribute push(__attribute__((target("avx2"))), apply_to = function)
-#elif defined(TUPLE_LAYOUT_SSE42)
-#pragma clang attribute push(__attribute__((target("sse4.2"))), apply_to = function)
-#endif
+TUPLE_LAYOUT_TARGET_PUSH
 
 // This implementation is instantiated only by the ISA-specific libraries.
 
@@ -559,6 +551,4 @@ Y_FORCE_INLINE void SIMDPack<TTraits>::UnpackTupleOr(
 } // namespace NMiniKQL
 } // namespace NKikimr
 
-#if defined(TUPLE_LAYOUT_AVX2) || defined(TUPLE_LAYOUT_SSE42)
-#pragma clang attribute pop
-#endif
+TUPLE_LAYOUT_TARGET_POP

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_base3.pb.h>
 
 #include <expected>
 #include <unordered_map>

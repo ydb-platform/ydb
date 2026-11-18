@@ -57,9 +57,73 @@ constexpr const char* TableWithDefaultExpr = R"pb(
       KeyColumnNames: ["key"]
 )pb";
 
+void CheckMalformedDefaultExpression(bool alter, bool stored, bool hasDependency, const TString& error) {
+    TTestBasicRuntime runtime;
+    TTestEnv env(runtime);
+    EnableDefaultFromExpression(runtime);
+    runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+    runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+    ui64 txId = 100;
+
+    if (alter) {
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"pb(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )pb");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    NKikimrSchemeOp::TTableDescription schema;
+    schema.SetName("Table");
+    if (!alter) {
+        auto* key = schema.AddColumns();
+        key->SetName("key");
+        key->SetType("Uint32");
+        schema.AddKeyColumnNames("key");
+    }
+    auto* column = schema.AddColumns();
+    column->SetName("value");
+    if (!alter) {
+        column->SetType("Uint64");
+    }
+    auto* expression = column->MutableDefaultFromExpression();
+    expression->SetExprText("RandomNumber(1)");
+    expression->SetStored(stored);
+    expression->SetWritable(true);
+    if (hasDependency) {
+        expression->AddDependencyColumnNames("key");
+    }
+
+    if (alter) {
+        TestAlterTable(runtime, ++txId, "/MyRoot", schema.DebugString(),
+            {{NKikimrScheme::StatusInvalidParameter, error}});
+    } else {
+        TestCreateTable(runtime, ++txId, "/MyRoot", schema.DebugString(),
+            {{NKikimrScheme::StatusSchemeError, error}});
+    }
+}
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
+    Y_UNIT_TEST(CreateRejectsWritableVirtualColumn) {
+        CheckMalformedDefaultExpression(false, false, false, "Writable expression column 'value' must be stored");
+    }
+
+    Y_UNIT_TEST(AlterRejectsWritableVirtualColumn) {
+        CheckMalformedDefaultExpression(true, false, false, "Writable expression column 'value' must be stored");
+    }
+
+    Y_UNIT_TEST(CreateRejectsDefaultExpressionDependencies) {
+        CheckMalformedDefaultExpression(false, true, true, "DEFAULT expression column 'value' cannot have dependencies");
+    }
+
+    Y_UNIT_TEST(AlterRejectsDefaultExpressionDependencies) {
+        CheckMalformedDefaultExpression(true, true, true, "DEFAULT expression column 'value' cannot have dependencies");
+    }
+
     Y_UNIT_TEST(CreateTableWithDefaultExpression) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

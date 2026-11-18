@@ -545,6 +545,18 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             return nullptr;
         }
 
+        if (col.HasDefaultFromExpression() && col.GetDefaultFromExpression().GetWritable()) {
+            const auto& expression = col.GetDefaultFromExpression();
+            if (!expression.GetStored()) {
+                errStr = Sprintf("Writable expression column '%s' must be stored", colName.c_str());
+                return nullptr;
+            }
+            if (!expression.GetDependencyColumnNames().empty()) {
+                errStr = Sprintf("DEFAULT expression column '%s' cannot have dependencies", colName.c_str());
+                return nullptr;
+            }
+        }
+
         bool isAlterColumn = (source && colName2Id.contains(colName));
         if (isAlterColumn) {
             if (keys.contains(colName2Id.at(colName)) && columnFamily) {

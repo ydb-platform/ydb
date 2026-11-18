@@ -1,4 +1,3 @@
-* Added `ydb experimental reassign-tablets` in the experimental CLI build to start bulk tablet channel reassignment in the Hive selected by `--database`, with progress available through `ydb operation get` and cancellation through `ydb operation cancel`.
 * `ydb operation get` displays returned operation data even when the operation status indicates failure, while retaining a nonzero exit code. When metadata is unavailable, pretty output shows only common operation fields.
 * Cluster administration commands that allow omitting `--database` now reject tenant paths. Specify a root domain such as `/Root`, or omit the connection database.
 * `ydb scheme rmdir --recursive` now removes objects in parallel. Added `--in-flight` option to set the maximum number of objects removed at the same time (default: 16).

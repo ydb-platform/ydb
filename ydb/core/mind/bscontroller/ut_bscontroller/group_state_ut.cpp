@@ -184,7 +184,8 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
                         }
                         bool confirmed = GetMirror3dcGroupLayouts(edge.To)->Ensured == EMirror3dcLayout::LAYOUT_0
                             ? allActiveConfirmed : TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(info, unconfirmed);
-                        UNIT_ASSERT_C(!confirmed, "old state# " << edge.From << " new state# " << edge.To
+                        UNIT_ASSERT_C(!confirmed, "old state# " << NKikimrBlobStorage::TGroupState::EState_Name(edge.From)
+                            << " new state# " << NKikimrBlobStorage::TGroupState::EState_Name(edge.To)
                             << " unconfirmed disks# " << mask);
                     }
                 } while (std::next_permutation(after.begin(), after.end()));

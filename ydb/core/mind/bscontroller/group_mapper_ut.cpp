@@ -606,6 +606,17 @@ public:
 
 Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
+    Y_UNIT_TEST(ReturnSpaceAfterPDiskUnregistration) {
+        TTestContext context(1, 1, 1, 1, 1);
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1));
+        context.PopulateGroupMapper(mapper, 2);
+
+        const TPDiskId pdiskId(1, 1);
+        UNIT_ASSERT(mapper.TryAdjustSpaceAvailable(pdiskId, 1024));
+        UNIT_ASSERT_VALUES_EQUAL(mapper.UnregisterPDisk(pdiskId).SpaceAvailable, 1024);
+        UNIT_ASSERT(!mapper.TryAdjustSpaceAvailable(pdiskId, 1024));
+    }
+
     Y_UNIT_TEST(SimplestErasureNone) {
         // Single node with single PDisk with 2 slots on it
         TTestContext context(1, 1, 1, 1, 1);

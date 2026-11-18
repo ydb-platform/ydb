@@ -8,6 +8,7 @@ import random
 import string
 import re
 from html import unescape
+from operator import itemgetter
 from typing import Callable, List, Dict, Tuple
 from urllib.parse import parse_qs, urlsplit
 
@@ -382,58 +383,128 @@ class TestPqRowDispatcher(TestYdsBase):
     @pytest.mark.parametrize(
         'testcase',
         [
-            ("time > 101;", '(`time` > 101)'),
-            ('data = "hello2"', '(`data` = "hello2")'),
-            (' event IS NOT DISTINCT FROM "event2"', '(`event` IS NOT DISTINCT FROM "event2")'),
-            (' event IS DISTINCT FROM "event1"', '(`event` IS DISTINCT FROM "event1")'),
-            ('event IN ("event2")', '(`event` IN ("event2"))'),
-            ('event NOT IN ("event1", "event3")', '(NOT (`event` IN ("event1", "event3")))'),
-            ('event IN ("1", "2", "3", "4", "5", "6", "7", "event2")', '(`event` IN ("1"'),
             (
+                'int_gt',  # id
+                'time > 101;',  # filter
+                '(`time` > 101)',  # expected predicate
+            ),
+            (
+                'string_eq',
+                'data = "hello2"',
+                '(`data` = "hello2")',
+            ),
+            (
+                'is_not_distict',
+                ' event IS NOT DISTINCT FROM "event2"',
+                '(`event` IS NOT DISTINCT FROM "event2")',
+            ),
+            (
+                'is_distinct',
+                ' event IS DISTINCT FROM "event1"',
+                '(`event` IS DISTINCT FROM "event1")',
+            ),
+            (
+                'str_in',
+                'event IN ("event2")',
+                '(`event` IN ("event2"))',
+            ),
+            (
+                'str_not_in',
+                'event NOT IN ("event1", "event3")',
+                '(NOT (`event` IN ("event1", "event3")))',
+            ),
+            (
+                'str_in_many',
+                'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")',
+                '(`event` IN ("1"',
+            ),
+            (
+                'distinct_and_in',
                 ' event IS DISTINCT FROM data AND event IN ("1", "2", "3", "4", "5", "6", "7", "event2")',
                 '((`event` IS DISTINCT FROM `data`) AND (`event` IN ("1"',
             ),
             (
+                'if_else',
                 ' IF(event = "event2", event IS DISTINCT FROM data, FALSE)',
                 'IF((`event` = "event2"), (`event` IS DISTINCT FROM `data`), FALSE)',
             ),
-            (' nested REGEXP ".*abc.*"', '(CAST(`nested` AS String) REGEXP ".*abc.*")'),
-            (' CAST(nested AS String) REGEXP ".*abc.*"', '(CAST(`nested` AS String) REGEXP ".*abc.*")'),
-            ('event LIKE "event2%"', 'StartsWith(`event`, "event2")'),
-            ('event LIKE "%event2"', 'EndsWith(`event`, "event2")'),
-            ('event LIKE "%event2%"', 'String::Contains(`event`, "event2")'),
-            (' (data = "hello2") IS NOT DISTINCT FROM true', '((`data` = "hello2") IS NOT DISTINCT FROM TRUE)'),
             (
+                'regexp',
+                ' nested REGEXP ".*abc.*"',
+                '(CAST(`nested` AS String) REGEXP ".*abc.*")',
+            ),
+            (
+                'string_regexp',
+                ' CAST(nested AS String) REGEXP ".*abc.*"',
+                '(CAST(`nested` AS String) REGEXP ".*abc.*")',
+            ),
+            (
+                'like_head',
+                'event LIKE "event2%"',
+                'StartsWith(`event`, "event2")',
+            ),
+            (
+                'like_tail',
+                'event LIKE "%event2"',
+                'EndsWith(`event`, "event2")',
+            ),
+            (
+                'like_mid',
+                'event LIKE "%event2%"',
+                'String::Contains(`event`, "event2")',
+            ),
+            (
+                'pred_not_distinct',
+                ' (data = "hello2") IS NOT DISTINCT FROM true',
+                '((`data` = "hello2") IS NOT DISTINCT FROM TRUE)',
+            ),
+            (
+                'regexp_not_distinct',
                 ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true',
                 '((`data` REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)',
             ),
             (
+                'cast_utf8_regexp_not_distinct',
                 ' (CAST(data AS Utf8) REGEXP ".*hello2.*") IS NOT DISTINCT FROM true',
                 '((IF((CAST(`data` AS Utf8?) IS NOT NULL), CAST(CAST(`data` AS Utf8?) AS String), NULL) REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)',
             ),
-            (' CAST(`time` AS Date) > Date("1970-04-12")', '(CAST(`time` AS Date?) > Date("1970-04-12"))'),
             (
+                'cast_date_gt_literal',
+                ' CAST(`time` AS Date) > Date("1970-04-12")',
+                '(CAST(`time` AS Date?) > Date("1970-04-12"))',
+            ),
+            (
+                'cast_timestamp_gt_literal',
                 ' CAST(`time` AS Timestamp) > Timestamp("1970-01-01T00:00:00.000101Z")',
                 '(CAST(`time` AS Timestamp?) > Timestamp("1970-01-01T00:00:00.000101Z"))',
             ),
             (
+                'min_of_max_of',
                 ' MIN_OF(`time`, `time` + 5) >= 102 AND MAX_OF(`time`, `time` - 5) < 103',
                 '((MIN_OF(`time`, (`time` + 5)) >= 102) AND (MAX_OF(`time`, (`time` - 5)) < 103))',
             ),
-            (' `time` IN (102, 103, 104)', '(`time` IN (102, 103, 104))'),
             (
+                'int_in_many',
+                ' `time` IN (102, 103, 104)',
+                '(`time` IN (102, 103, 104))',
+            ),
+            (
+                'cast_interval_gt_literal',
                 ' CAST(`time` AS Interval) > Interval("PT0.000101S")',
                 '(CAST(`time` AS Interval?) > Interval("PT0.000101S"))',
             ),
             (
+                'cast_timestamp_minus_literal_gt_literal',
                 ' CAST(`time` AS Timestamp) - Interval("-PT0.000001S") > Timestamp("1970-01-01T00:00:00.000102Z")',
                 '((CAST(`time` AS Timestamp?) - Interval("-PT0.000001S")) > Timestamp("1970-01-01T00:00:00.000102Z"))',
             ),
         ],
+        ids=itemgetter(0),
     )
     def test_filters_non_optional_field(
-        self, ydb_topics: Callable[[str, ...], YdbTopics], testcase: List[Tuple[str, str]]
+        self, ydb_topics: Callable[[str, ...], YdbTopics], testcase: List[Tuple[str, str, str]]
     ):
+        _, filter, expected_predicate = testcase
         io = ydb_topics("test_filters_non_optional_field", shared=True)
         create_input_consumer(io)
 
@@ -450,80 +521,161 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 102, "data": "hello2", "event": "event2", "nested": ["abc", "key"]}',
         ]
         expected = ['102']
-        filter, expected_predicate = testcase
         self.run_and_check(io, sql + filter, data, expected, expected_predicate)
 
     @pytest.mark.parametrize(
         'testcase',
         [
-            ('data = "hello2"', '(`data` = "hello2")'),
-            ('flag', '`flag`'),
-            ('time * (field2 - field1) != 0', '((`time` * (`field2` - `field1`)) <> 0)'),
-            ('(field1 % field2) / 5 = 1', '(((`field1` % `field2`) / 5) = 1)'),
-            (' event IS NOT DISTINCT FROM "event2"', '(`event` IS NOT DISTINCT FROM "event2")'),
-            (' event IS DISTINCT FROM "event1"', '(`event` IS DISTINCT FROM "event1")'),
-            (' field1 IS DISTINCT FROM field2', '(`field1` IS DISTINCT FROM `field2`)'),
             (
+                'str_eq',  # id
+                'data = "hello2"',  # filter
+                '(`data` = "hello2")',  # expected predicate
+            ),
+            (
+                'bool_field',
+                'flag',
+                '`flag`',
+            ),
+            (
+                'int_mul_expr',
+                'time * (field2 - field1) != 0',
+                '((`time` * (`field2` - `field1`)) <> 0)',
+            ),
+            (
+                'int_div_expr',
+                '(field1 % field2) / 5 = 1',
+                '(((`field1` % `field2`) / 5) = 1)',
+            ),
+            (
+                'str_not_distinct',
+                ' event IS NOT DISTINCT FROM "event2"',
+                '(`event` IS NOT DISTINCT FROM "event2")',
+            ),
+            (
+                'str_distinct',
+                ' event IS DISTINCT FROM "event1"',
+                '(`event` IS DISTINCT FROM "event1")',
+            ),
+            (
+                'var_distinct_var',
+                ' field1 IS DISTINCT FROM field2',
+                '(`field1` IS DISTINCT FROM `field2`)',
+            ),
+            (
+                'partial_or_and',
                 'time == 102 OR (field2 IS NOT DISTINCT FROM 1005 AND Random(field1) < 10.0)',
                 '((`time` = 102) OR (`field2` IS NOT DISTINCT FROM 1005))',
             ),
-            ('event IN ("event2")', '(`event` IN ("event2"))'),
-            ('event IN ("1", "2", "3", "4", "5", "6", "7", "event2")', '(`event` IN ("1"'),
             (
+                'str_in',
+                'event IN ("event2")',
+                '(`event` IN ("event2"))',
+            ),
+            (
+                'str_in_many',
+                'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")',
+                '(`event` IN ("1"',
+            ),
+            (
+                'distinct_and_in',
                 ' event IS DISTINCT FROM data AND event IN ("1", "2", "3", "4", "5", "6", "7", "event2")',
                 '((`event` IS DISTINCT FROM `data`) AND COALESCE((`event` IN ("1"',
             ),
             (
+                'if_else',
                 ' IF(event == "event2", event IS DISTINCT FROM data, FALSE)',
                 'IF(COALESCE((`event` = "event2"), FALSE), (`event` IS DISTINCT FROM `data`), FALSE)',
             ),
-            (' COALESCE(event = "event2", TRUE)', 'COALESCE((`event` = "event2"), TRUE)'),
             (
+                'coalesce',
+                ' COALESCE(event = "event2", TRUE)',
+                'COALESCE((`event` = "event2"), TRUE)',
+            ),
+            (
+                'coalesce_many',
                 ' COALESCE(event = "event2", data = "hello2", TRUE)',
                 'COALESCE((`event` = "event2"), (`data` = "hello2"), TRUE)',
             ),
-            (" event ?? '' REGEXP @@e.*e.*t2@@", '(COALESCE(`event`, "") REGEXP "e.*e.*t2")'),
-            (" event ?? '' NOT REGEXP @@e.*e.*t1@@", '(NOT (COALESCE(`event`, "") REGEXP "e.*e.*t1"))'),
             (
+                'coalesce_regexp',
+                " event ?? '' REGEXP @@e.*e.*t2@@",
+                '(COALESCE(`event`, "") REGEXP "e.*e.*t2")',
+            ),
+            (
+                'coalesce_not_regexp',
+                " event ?? '' NOT REGEXP @@e.*e.*t1@@",
+                '(NOT (COALESCE(`event`, "") REGEXP "e.*e.*t1"))',
+            ),
+            (
+                'coalesce_regexp_or_eq',
                 " event ?? '' REGEXP data ?? '' OR time = 102",
                 '((COALESCE(`event`, "") REGEXP COALESCE(`data`, "")) OR (`time` = 102))',
             ),
             (
+                'regexp',
                 ' nested REGEXP ".*abc.*"',
                 '(IF((`nested` IS NOT NULL), CAST(`nested` AS String), NULL) REGEXP ".*abc.*")',
             ),
-            (' CAST(nested AS String) REGEXP ".*abc.*"', '(CAST(`nested` AS String?) REGEXP ".*abc.*")'),
-            ('event LIKE "event2%"', 'StartsWith(`event`, "event2")'),
-            ('event LIKE "%event2"', 'EndsWith(`event`, "event2")'),
-            ('event LIKE "%event2%"', 'String::Contains(`event`, "event2")'),
-            (' (data = "hello2") IS NOT DISTINCT FROM true', '((`data` = "hello2") IS NOT DISTINCT FROM TRUE)'),
             (
+                'cast_str_regexp',
+                ' CAST(nested AS String) REGEXP ".*abc.*"',
+                '(CAST(`nested` AS String?) REGEXP ".*abc.*")',
+            ),
+            (
+                'like_head',
+                'event LIKE "event2%"',
+                'StartsWith(`event`, "event2")',
+            ),
+            (
+                'like_tail',
+                'event LIKE "%event2"',
+                'EndsWith(`event`, "event2")',
+            ),
+            (
+                'like_mid',
+                'event LIKE "%event2%"',
+                'String::Contains(`event`, "event2")',
+            ),
+            (
+                'predicate_not_distinct',
+                ' (data = "hello2") IS NOT DISTINCT FROM true',
+                '((`data` = "hello2") IS NOT DISTINCT FROM TRUE)',
+            ),
+            (
+                'regexp_not_distinct',
                 ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true',
                 '((`data` REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)',
             ),
             (
+                'in_many_not_distinct',
                 ' (data in ("hello2", "hello3")) IS NOT DISTINCT FROM true',
                 '((`data` IN ("hello2", "hello3")) IS NOT DISTINCT FROM TRUE)',
             ),
             (
+                'coalesce_not_distinct',
                 ' COALESCE(event, data) IS DISTINCT FROM "event1"',
                 '(COALESCE(`event`, `data`) IS DISTINCT FROM "event1")',
             ),
             (
+                'unwrap_coalesce_not_distinct',
                 ' UNWRAP(coalesce(event, data)) IS distinct FROM "event1"',
                 '(Unwrap(COALESCE(`event`, `data`)) IS DISTINCT FROM "event1")',
             ),
             (
+                'tobytes_distinct',
                 ' tobytes(coalesce(cast(event as Utf8), cast(data as utf8))) IS distinct FROM "event1"',
                 '(CAST(COALESCE(CAST(`event` AS Utf8?), CAST(`data` AS Utf8?)) AS String) IS DISTINCT FROM "event1")',
             ),
             (
+                'cast_utf8_regexp_not_distinct',
                 ' (CAST(data AS Utf8) REGEXP ".*hello2.*") IS NOT DISTINCT FROM true',
                 '((IF((CAST(`data` AS Utf8?) IS NOT NULL), CAST(CAST(`data` AS Utf8?) AS String), NULL) REGEXP ".*hello2.*") IS NOT DISTINCT FROM TRUE)',
             ),
         ],
+        ids=itemgetter(0),
     )
-    def test_filters_optional_field(self, ydb_topics: Callable[[str, ...], YdbTopics], testcase: List[Tuple[str, str]]):
+    def test_filters_optional_field(self, ydb_topics: Callable[[str, ...], YdbTopics], testcase: List[Tuple[str, str, str]]):
+        _, filter, expected_predicate = testcase
         io = ydb_topics("test_filters_optional_field", shared=True)
         create_input_consumer(io)
 
@@ -540,7 +692,6 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 102, "data": "hello2", "event": "event2", "flag": true, "field1": 5, "field2": 1005, "nested": ["abc", "key"]}',
         ]
         expected = ['102']
-        filter, expected_predicate = testcase
         self.run_and_check(io, sql + filter, data, expected, expected_predicate)
 
     def test_filter_missing_fields(self, ydb_topics: Callable[[str, ...], YdbTopics]):

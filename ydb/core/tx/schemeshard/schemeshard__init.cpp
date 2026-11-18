@@ -29,6 +29,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TStorageChanges DbChanges;
     THashMap<TTxId, TDeque<TPathId>> Publications;
     TVector<TPathId> TablesToClean;
+    TVector<TPathId> TablesWithShadowData;
     TDeque<TPathId> BlockStoreVolumesToClean;
     TVector<ui64> ExportsToResume;
     TVector<ui64> ImportsToResume;
@@ -1644,6 +1645,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         // Read SubDomains
         {
+            Self->DatabaseFreezeStates.clear();
+            auto rows = db.Table<Schema::DatabaseFreezes>().Range().Select();
+            if (!rows.IsReady()) {
+                return false;
+            }
+            while (!rows.EndOfSet()) {
+                const TPathId pathId(selfId, rows.GetValue<Schema::DatabaseFreezes::PathId>());
+                auto& state = Self->DatabaseFreezeStates[pathId];
+                Y_ENSURE(state.ParseFromString(rows.GetValue<Schema::DatabaseFreezes::State>()));
+                if (!rows.Next()) {
+                    return false;
+                }
+            }
+        }
+        {
             TSchemeLimits rootLimits = TSchemeShard::DefaultLimits;
 
             if (Self->PathsById.contains(Self->RootPathId()) && Self->IsDomainSchemeShard) {
@@ -1957,6 +1973,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 {"schemeshard", Self->TabletID()},
             );
 
+            TablesWithShadowData.clear();
             for (const auto& rec: tableRows) {
                 TPathId pathId = std::get<0>(rec);
 
@@ -1981,6 +1998,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     if (config.HasCrossDataCenterFollowerCount()) {
                         config.ClearFollowerCount();
+                    }
+                    if (config.HasShadowData()) {
+                        TablesWithShadowData.push_back(pathId);
                     }
                 }
 
@@ -6896,6 +6916,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .ImportsIds = ImportsToResume,
             .CdcStreamScans = std::move(cdcStreamScansToResume),
             .TablesToClean = std::move(TablesToClean),
+            .TablesWithShadowData = std::move(TablesWithShadowData),
             .BlockStoreVolumesToClean = std::move(BlockStoreVolumesToClean),
             .RestoreTablesToUnmark = std::move(RestoreTablesToUnmark),
             .IncrementalBackupIds = std::move(IncrementalBackupsToResume),

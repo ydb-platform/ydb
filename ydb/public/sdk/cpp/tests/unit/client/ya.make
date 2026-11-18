@@ -1,5 +1,6 @@
 RECURSE(
     build_info
+    config
     connection_string
     coordination
     discovery_mutator
@@ -18,6 +19,7 @@ RECURSE(
     row_ranges
     retry
     retry_range
+    scheme
     table
     value
 )

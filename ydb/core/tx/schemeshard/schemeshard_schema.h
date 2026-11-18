@@ -2748,7 +2748,14 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, TestShards, CmdInitialize>;
     };
 
-    struct TableSchemeSnapshots : Table<141> {
+    struct DatabaseFreezes : Table<141> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct State : Column<2, NScheme::NTypeIds::String> {};
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, State>;
+    };
+
+    struct TableSchemeSnapshots : Table<142> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct TableDescription : Column<3, NScheme::NTypeIds::String> {};
@@ -2764,6 +2771,7 @@ struct Schema : NIceDb::Schema {
     };
 
     using TTables = SchemaTables<
+        DatabaseFreezes,
         Paths,
         TxInFlight,
         TxDependencies,

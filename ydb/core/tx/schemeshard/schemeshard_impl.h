@@ -348,6 +348,19 @@ public:
     THashMap<TTxId, TOperation::TPtr> Operations;
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
+    // One entry per database domain path; a SchemeShard may serve multiple databases.
+    THashMap<TPathId, NKikimrScheme::TDatabaseFreezeState> DatabaseFreezeStates;
+    THashMap<TPathId, TActorId> DatabaseFreezeWorkers;
+    // Pending progress is rebuilt by the worker after a restart, unlike the
+    // durable result in DatabaseFreezeStates.
+    THashMap<TPathId, TString> DatabaseFreezeProgress;
+    bool IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme& transaction);
+    bool IsDatabaseFreezeBlocking(const TPathId& pathId) const;
+    bool HasDatabaseFreezeSchemaWork(const TPathId& domainId) const;
+    void Handle(TEvSchemeShard::TEvDatabaseFreeze::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvDatabaseFreezeResult::TPtr& ev, const TActorContext& ctx);
+    struct TTxDatabaseFreeze;
+    struct TTxDatabaseFreezeDone;
     THashMap<TPathId, TPathDbRef> OwnDbRefs; // path's own type info record ref
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
 
@@ -442,6 +455,7 @@ public:
     bool EnableInitialUniqueIndex = false;
     bool EnableAddUniqueIndex = false;
     bool EnableOnlineAddUniqueIndex = false;
+    bool EnableHnswIndex = false;
     bool EnableFulltextIndex = false;
     bool EnableCompactFulltextIndex = false;
     bool EnableJsonIndex = false;
@@ -486,6 +500,7 @@ public:
     bool SysViewsRosterUpdateStarted = false;
     bool LocalIndexMigrationStarted = false;
     TActorId LocalIndexMigratorId;
+    TActorId IndexShadowDataRepairerId;
 
     TSet<TPathId> CleanDroppedPathsCandidates;
     TSet<TPathId> CleanDroppedSubDomainsCandidates;
@@ -1131,6 +1146,7 @@ public:
         TVector<ui64> ImportsIds;
         TVector<TPathId> CdcStreamScans;
         TVector<TPathId> TablesToClean;
+        TVector<TPathId> TablesWithShadowData;
         TDeque<TPathId> BlockStoreVolumesToClean;
         TVector<TPathId> RestoreTablesToUnmark;
         TVector<ui64> IncrementalBackupIds;
@@ -1143,6 +1159,8 @@ public:
     void CollectSysViewUpdates(const TActorContext& ctx);
 
     void CollectLocalIndexMigrations(const TActorContext& ctx);
+
+    void StartIndexShadowDataRepair(const TActorContext& ctx, TVector<TPathId>&& paths);
 
     void ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts);
 

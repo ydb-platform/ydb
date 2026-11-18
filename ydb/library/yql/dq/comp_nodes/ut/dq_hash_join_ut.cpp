@@ -7,6 +7,7 @@
 #include <ydb/library/yql/dq/comp_nodes/ut/join_perf/construct_join_graph.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_join_common.h>
+#include <yql/essentials/minikql/codegen/codegen.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -2842,6 +2843,43 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
         Test(BasicInnerJoinTestData(), BlockJoin);
+    }
+
+    // FromFlow compiles its input. Without a codegen stub on the join this throws TNoCodegen.
+    Y_UNIT_TEST_LLVM(ScalarHashJoinUnderCodegen) {
+        TDqSetup<LLVM> setup;
+        const TVector<ui64> leftKeys = {1, 2, 3};
+        const TVector<TString> leftValues = {"a", "b", "c"};
+        const TVector<ui64> rightKeys = {2, 3, 4};
+        const TVector<TString> rightValues = {"B", "C", "D"};
+        const TVector<ui64> expectedKeys = {2, 3};
+        const TVector<TString> expectedLeft = {"b", "c"};
+        const TVector<TString> expectedRight = {"B", "C"};
+
+        const auto left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+        const auto right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+        const auto expected = ConvertVectorsToTuples(setup, expectedKeys, expectedLeft, expectedKeys, expectedRight);
+
+        auto& pb = setup.GetDqProgramBuilder();
+        const auto leftColumns = AS_TYPE(TTupleType, AS_TYPE(TListType, left.Type)->GetItemType())->GetElements();
+        const auto rightColumns = AS_TYPE(TTupleType, AS_TYPE(TListType, right.Type)->GetItemType())->GetElements();
+        const auto leftArg = pb.Arg(left.Type);
+        const auto rightArg = pb.Arg(right.Type);
+        const ui32 leftRenames[] = {0, 0, 1, 1};
+        const ui32 rightRenames[] = {0, 2, 1, 3};
+        const auto join = pb.FromFlow(pb.DqScalarHashJoin(
+            ToWideFlow(pb, leftArg), ToWideFlow(pb, rightArg), EJoinKind::Inner, {0}, {0}, leftRenames, rightRenames,
+            pb.NewFlowType(pb.NewMultiType({leftColumns[0], leftColumns[1], rightColumns[0], rightColumns[1]}))));
+
+        auto graph = setup.BuildGraph(join, {leftArg.GetNode(), rightArg.GetNode()});
+        if (NYql::NCodegen::ICodegen::IsCodegenAvailable()) {
+            const auto expectedStatus = LLVM ? ECompileStatus::Compiled : ECompileStatus::NoCompilationStarted;
+            UNIT_ASSERT_C(setup.Pattern->GetCompileStatus() == expectedStatus,
+                static_cast<int>(setup.Pattern->GetCompileStatus()));
+        }
+        graph->GetEntryPoint(0, false)->SetValue(graph->GetContext(), NUdf::TUnboxedValue(left.Value));
+        graph->GetEntryPoint(1, false)->SetValue(graph->GetContext(), NUdf::TUnboxedValue(right.Value));
+        CompareListAndStreamIgnoringOrder(expected, *graph);
     }
 
     Y_UNIT_TEST_TWIN(TestOutputRowsOperatorStat, BlockJoin) {

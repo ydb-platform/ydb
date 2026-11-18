@@ -14,6 +14,7 @@
 #include <cmath>
 #include <span>
 #include <util/stream/str.h>
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NKMeans {
 
@@ -358,13 +359,14 @@ public:
         return false;
     }
 
-    void FindClusters(const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+    void FindClustersImpl(ui32 clusterCount, std::function<TStringBuf(ui32)> getCentroid,
+        const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) {
         clusters.clear();
         if (!IsExpectedFormat(embedding)) {
             return;
         }
-        for (ui32 i = 0; const auto& cluster : Clusters) {
-            auto cl = std::make_pair(i, (double)TMetric::Distance(cluster, embedding));
+        for (ui32 i = 0; i < clusterCount; i++) {
+            auto cl = std::make_pair(i, (double)TMetric::Distance(getCentroid(i), embedding));
             // upper_bound, not lower_bound: on equal distances the cluster with the lower number wins,
             // the same way as in FindCluster(). Otherwise rows may be assigned to different clusters
             // during the K-means and the upload passes of the index build.
@@ -377,7 +379,6 @@ public:
                 clusters.insert(it, cl);
                 clusters.pop_back();
             }
-            ++i;
         }
         if (skipRatio > 0 && clusters.size() > 1) {
             double thresh = (clusters[0].second < 0 ? clusters[0].second/skipRatio : clusters[0].second*skipRatio);
@@ -388,6 +389,18 @@ public:
                 }
             }
         }
+    }
+
+    void FindClusters(const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        FindClustersImpl((ui32)Clusters.size(), [&](ui32 n) { return Clusters.at(n); }, embedding, clusters, n, skipRatio);
+    }
+
+    void FindClusters(TConstArrayRef<TStringBuf> centroids, const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        FindClustersImpl((ui32)centroids.size(), [&](ui32 n) { return centroids.at(n); }, embedding, clusters, n, skipRatio);
+    }
+
+    void FindClusters(TConstArrayRef<TCell> centroids, const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        FindClustersImpl((ui32)centroids.size(), [&](ui32 n) { return centroids.at(n).AsBuf(); }, embedding, clusters, n, skipRatio);
     }
 
     std::optional<ui32> FindCluster(const TStringBuf embedding) override {
@@ -991,6 +1004,19 @@ bool ValidateHnswSettings(const Ydb::Table::KMeansTreeSettings& settings, TStrin
 
 bool ValidateHnswSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
     return ValidateSettingsImpl(settings, true, error, true);
+}
+
+bool AutoSelectHnswSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 dataSizeBytes, TString& error) {
+    if (!settings.has_levels() || !settings.levels()) {
+        settings.set_levels(1);
+    }
+    if (!settings.has_clusters() || !settings.clusters()) {
+        // Cap the default before narrowing to the protobuf's uint32 field.
+        // Explicit cluster counts are validated below without clamping.
+        const ui64 clusters = Min<ui64>(dataSizeBytes / 1_GB + 1, MaxClusters);
+        settings.set_clusters(clusters);
+    }
+    return ValidateHnswSettingsPartial(settings, error);
 }
 
 ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector) {

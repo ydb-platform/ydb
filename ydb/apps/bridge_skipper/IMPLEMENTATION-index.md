@@ -142,17 +142,18 @@ callbacks never access an actor object.
    NOT_SYNCHRONIZED piles that a valid report shows in config quorum, or that
    a fresh BSC-mode reply attributes a part to; when neither exists, a
    NOT_SYNCHRONIZED pile is participating and Unknown. In order: Failed when
-   every BSC reply has a RED part for the pile; Lost when at least
-   one outside report exists, every outside report shows the pile in config
-   quorum without node quorum, and no inside report shows its node quorum;
-   fallback Failed only for the BSC-host pile (PROMOTED, else PRIMARY), with no
-   fresh BSC reply anywhere and every current outside fallback reply reporting
-   a decisive RED static part without truncation. Own node quorum vetoes this
-   generic rule. It does not veto a separate storage proof when every outside
-   reply names a RED static group whose complete unique reason graph consists
-   only of RED VDisks caused by same-node, same-pile PDisk `DeviceIoError`.
-   Mixed transport/replication reasons, missing IDs and ambiguous IDs do not
-   establish this proof;
+   every BSC reply has a RED part for the pile; with no fresh BSC reply anywhere,
+   a known participating pile can also be Failed when every current outside
+   fallback reply reports a decisive RED static part with complete VDisk reasons
+   and no truncation. Own node quorum vetoes this generic rule. Only the BSC-host
+   pile (PROMOTED, else PRIMARY) can override that veto with a separate storage
+   proof: every outside reply names a RED static group whose complete unique
+   reason graph consists only of RED VDisks caused by same-node, same-pile PDisk
+   `DeviceIoError`. Mixed transport/replication reasons, missing IDs and ambiguous
+   IDs do not establish this proof;
+   Lost when at least one settled outside report exists, every settled outside
+   report shows the pile in config quorum without node quorum, and no inside
+   report shows its node quorum;
    Replicating when every BSC reply has a RED or replication-only part and one
    is replication-only; Healthy after the warm-up; otherwise Unknown, which an
    incomplete part also gives. SUSPENDED gets only the Lost rule;

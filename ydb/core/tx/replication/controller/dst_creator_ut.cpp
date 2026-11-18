@@ -1,6 +1,8 @@
 #include "dst_creator.h"
 #include "private_events.h"
 
+
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/replication/service/service.h>
 #include <ydb/core/tx/replication/ut_helpers/mock_service.h>
@@ -66,6 +68,156 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         TString error;
         UNIT_ASSERT_C(CheckReplicationConfig(replicatedDesc.GetReplicationConfig(), mode, consistency, error), error);
+    }
+
+    // BOOTSTRAP = 'SWITCHOVER': the destination is an ordinary writable table, as the old primary's
+    // the controller turns it into a replica in place instead of creating one.
+    TTestTableDescription PlainTable(const TString& name) {
+        return TTestTableDescription{
+            .Name = name,
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+        };
+    }
+
+    NKikimrScheme::EStatus RunSwitchover(TEnv<>& env, bool switchover) {
+        const auto src = PlainTable("Table");
+        env.CreateTable("/Root", *MakeTableDescription(src));
+        env.CreateTable("/Root", *MakeTableDescription(PlainTable("Replica")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.GetDescription("/Root/Replica").GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replica",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row, false /* initialScan */,
+            TReplication::EState::Ready, switchover
+        ));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        return ev->Get()->Status;
+    }
+
+    Y_UNIT_TEST(SwitchoverDemotesTableInPlace) {
+        TEnv env;
+        env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
+
+        UNIT_ASSERT_VALUES_EQUAL(RunSwitchover(env, true), NKikimrScheme::StatusSuccess);
+
+        // Keep the description alive: GetDescription returns by value.
+        auto desc = env.GetDescription("/Root/Replica");
+        const auto& replica = desc.GetPathDescription().GetTable();
+        CheckTableReplica(PlainTable("Table"), replica, EReplicationMode::ReadOnly, EConsistencyLevel::Row);
+        // The attach path requires a completed import of a table it did not create; taking over
+        // one that already holds its data satisfies that by definition.
+        UNIT_ASSERT_VALUES_EQUAL(replica.GetReplicationConfig().GetImportState(),
+            NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+    }
+
+    Y_UNIT_TEST(SwitchoverAcceptsAnAlreadyDemotedTable) {
+        // The demote may commit while its reply is lost on a broken pipe. The retry must not
+        // replay it -- its ApplyIf names the path version from before the demote bumped it, so a
+        // replay is refused and would leave the destination a read-only replica with no
+        // replication. Instead the creator describes the destination again, which has to accept a
+        // demote that is already done. This is that acceptance, reached directly.
+        TEnv env;
+        env.CreateTable("/Root", *MakeTableDescription(PlainTable("Table")));
+
+        auto demoted = PlainTable("Replica");
+        demoted.ReplicationConfig = TTestTableDescription::TReplicationConfig::Default();
+        env.CreateTable("/Root", *MakeTableDescription(demoted));
+        SetImportState(env, "/Root/Replica",
+            NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Row);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Replica"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replica",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row, false /* initialScan */,
+            TReplication::EState::Ready, true /* switchover */
+        ));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
+
+        auto desc = env.GetDescription("/Root/Replica");
+        const auto& replica = desc.GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(replica.GetReplicationConfig().GetMode(),
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(replica.GetReplicationConfig().GetImportState(),
+            NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+    }
+
+    Y_UNIT_TEST(SwitchoverReportsAPermanentlyRefusedDemote) {
+        // A demote can be refused for good -- a destination that is part of a backup collection,
+        // say -- and not because its ApplyIf version moved. Reconciling such a refusal by
+        // describing the destination and preparing the same alter again would spin forever, so an
+        // unchanged destination ends the attempt with the reason the operator has to act on.
+        // Simulated: the refusal is injected through an observer, which real threads do not run.
+        TEnv env(true, ERuntimeMode::Simulated);
+        env.CreateTable("/Root", *MakeTableDescription(PlainTable("Table")));
+        env.CreateTable("/Root", *MakeTableDescription(PlainTable("Replica")));
+
+        ui32 demotes = 0;
+        auto& runtime = env.GetRuntime();
+        auto observer = runtime.AddObserver<TEvPipeCache::TEvForward>(
+            [&](TEvPipeCache::TEvForward::TPtr& ev) {
+                auto* forwarded = ev->Get()->Ev.Get();
+                if (!forwarded || forwarded->Type()
+                        != NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType) {
+                    return;
+                }
+                const auto& record = static_cast<
+                    NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction*>(forwarded)->Record;
+                if (!record.TransactionSize()
+                        || !record.GetTransaction(0).GetAlterTable().HasReplicationConfig()) {
+                    return;
+                }
+                if (++demotes > 1) {
+                    // Let a second attempt through: a spin then ends in success and fails the
+                    // assertions below at once, instead of hanging until the runner gives up.
+                    return;
+                }
+                // Answer as SchemeShard does for a table it will not alter at all.
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
+                        NKikimrScheme::StatusPreconditionFailed, record.GetTxId(), 0,
+                        "Alter schema forbidden: table is part of a backup collection"),
+                    0, ev->Cookie));
+                ev.Reset();
+            });
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Replica"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replica",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row, false /* initialScan */,
+            TReplication::EState::Ready, true /* switchover */
+        ));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusPreconditionFailed);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "backup collection");
+        UNIT_ASSERT_VALUES_EQUAL(demotes, 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.GetDescription("/Root/Replica").GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+    }
+
+    Y_UNIT_TEST(WithoutSwitchoverAPlainTableIsRefused) {
+        // Without the mode the same destination is rejected, which is what makes the demote the
+        // operator's explicit decision rather than a side effect of creating a replication.
+        TEnv env;
+        UNIT_ASSERT_VALUES_EQUAL(RunSwitchover(env, false), NKikimrScheme::StatusSchemeError);
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.GetDescription("/Root/Replica").GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
     }
 
     void Basic(
@@ -364,6 +516,55 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
             UNIT_ASSERT(!result->Get()->IsSuccess());
             UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "expected IMPORTED");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ReplicaOwnership, TableOwnership) {
+        enum class EOwner { Fresh, Legacy, Current, Foreign };
+        struct TCase { EOwner Owner; bool InitialScan; };
+        UNIT_ASSERT(!NKikimrConfig::TFeatureFlags().GetEnableAsyncReplicationTableOwnership());
+        const TCase cases[] = {
+            {EOwner::Fresh, true}, {EOwner::Fresh, false},
+            {EOwner::Legacy, true}, {EOwner::Legacy, false},
+            {EOwner::Current, true}, {EOwner::Current, false},
+            {EOwner::Foreign, true}, {EOwner::Foreign, false},
+        };
+        for (const auto& test : cases) {
+            TFeatureFlags flags;
+            flags.FeatureFlags.SetEnableAsyncReplicationTableOwnership(TableOwnership);
+            TEnv env(flags);
+            const auto owner = env.GetPathId("/Root");
+            auto table = MakeTableDescription({.Name = "Source", .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}}, .ReplicationConfig = Nothing()});
+            env.CreateTable("/Root", *table);
+            if (test.Owner != EOwner::Fresh) {
+                table->SetName("Dst");
+                FillReplicationConfig(*table->MutableReplicationConfig(), EReplicationMode::ReadOnly, EConsistencyLevel::Row);
+                if (test.Owner != EOwner::Legacy) {
+                    owner.ToProto(table->MutableReplicationConfig()->MutableOwnerPathId());
+                }
+                env.CreateTable("/Root", *table);
+            }
+            // A non-initial-scan replication starts paused and waits for import into a placeholder.
+            env.GetRuntime().Register(CreateDstCreator(env.GetSender(), owner.OwnerId, env.GetYdbProxy(),
+                "/Root", test.Owner == EOwner::Foreign ? env.GetPathId("/Root/Source") : owner,
+                1, 1, TReplication::ETargetKind::Table, "/Root/Source", "/Root/Dst",
+                EReplicationMode::ReadOnly, EConsistencyLevel::Row, test.InitialScan, TReplication::EState::Paused));
+            const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            if (test.Owner == EOwner::Foreign) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusPreconditionFailed, result->Get()->Error);
+                UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "owned by another replication");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusSuccess, result->Get()->Error);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, env.GetPathId("/Root/Dst"));
+            }
+            const auto config = env.GetDescription("/Root/Dst").GetPathDescription().GetTable().GetReplicationConfig();
+            const bool owned = test.Owner == EOwner::Fresh ? TableOwnership : test.Owner != EOwner::Legacy;
+            UNIT_ASSERT_VALUES_EQUAL(config.HasOwnerPathId(), owned);
+            if (owned) {
+                UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config.GetOwnerPathId()), owner);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
         }
     }
 

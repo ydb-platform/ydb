@@ -9,7 +9,7 @@ using namespace NYdb::NTopic;
 using namespace NFederationTests;
 
 const TString prodDatabasePath  = "/logbroker-federation/prod";
-const TString fullProdDatabasePath  = "Root/logbroker-federation/prod";
+const TString fullProdDatabasePath  = "/Root/logbroker-federation/prod";
 const TString testDatabasePath  = "/logbroker-federation/test";
 const TString fullTestDatabasePath  = "/Root/logbroker-federation/test";
 const TString prodTopicPath = "topic";
@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
         std::vector<TString> allWritten = WriteLoadMessages(env.EndpointA, fullProdDatabasePath, srcTopicYdbPath,
                                                             "ap-producer", messageCount, messageSize, messageSize);
 
-        GetActivePartitionCount(env.EndpointA, prodDatabasePath, srcTopicYdbPath);
+        GetActivePartitionCount(env.EndpointA, fullProdDatabasePath, srcTopicYdbPath);
 
         size_t srcActivePartitions = 1;
         TInstant splitDeadline = TInstant::Now() + TDuration::Seconds(120);

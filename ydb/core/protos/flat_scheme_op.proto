@@ -318,6 +318,9 @@ message TTableReplicationConfig {
     optional EReplicationMode Mode = 1;
     optional EConsistencyLevel ConsistencyLevel = 2;
     optional EImportState ImportState = 3;
+    // PathId of the replication that owns this table. May outlive a dropped replication;
+    // a new replication can claim the table once the old replication's path is deleted.
+    optional NKikimrProto.TPathID OwnerPathId = 4;
 }
 
 message TTableIncrementalBackupConfig {
@@ -437,6 +440,9 @@ message TTableDescription {
     // Actual number of table partitions (shards), always filled in describe
     // results, so clients don't need to request the TablePartitions list.
     optional uint64 PartitionCount = 55;
+
+    // Local graph of the logical index owning this physical posting table.
+    optional TLocalHnswIndexDescription LocalHnswIndex = 56;
 }
 
 message TCompressionOptions {
@@ -770,6 +776,7 @@ message TColumnTableSchemeOptions {
     optional TInsertOptions InsertOptions = 6;
     optional bool DeduplicationEnabled = 7;
     optional bool CacheBlobsAfterWrite = 8 [default = false];
+    optional bool TieringNeedActualization = 9 [default = false];
 }
 
 message TColumnTableSchema {
@@ -818,6 +825,7 @@ message TColumnTableRequestedOptions {
     optional TInsertOptions InsertOptions = 6;
     optional bool DeduplicationEnabled = 7;
     optional bool CacheBlobsAfterWrite = 8 [default = false];
+    optional bool TieringNeedActualization = 9 [default = false];
 }
 
 message TAlterColumnTableSchema {
@@ -1381,7 +1389,7 @@ message THnswIndexDescription {
     // Includes the routing tree settings as well as the local graph parameters.
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
 
-    // Set by SchemeShard from the posting-table schema for DataShard graph builds.
+    // Set in LocalHnswIndex by SchemeShard for DataShard graph builds.
     // This is the posting-table column ID, which may differ from the base table's.
     optional uint32 EmbeddingColumnId = 2;
 
@@ -1389,6 +1397,13 @@ message THnswIndexDescription {
     // labels. These identify the graph's owners, rather than the posting table.
     optional string TablePath = 3;
     optional string IndexPath = 4;
+}
+
+message TLocalHnswIndexDescription {
+    // Identity of the logical index owning this graph, not a child of this table.
+    optional NKikimrProto.TPathID IndexId = 1;
+    optional uint64 SchemaVersion = 2;
+    optional THnswIndexDescription HnswIndexDescription = 3;
 }
 
 message TFulltextIndexDescription {
@@ -2198,8 +2213,11 @@ message TModifyScheme {
 
     optional TCreateTestShardSet CreateTestShardSet = 96;
 
+    // Conditional replication cleanup: skip if the table is owned by another replication.
+    optional NKikimrProto.TPathID ExpectedReplicationOwnerPathId = 97;
+
     // Captures the immutable source table scheme
-    optional bool CaptureTableSchemeSnapshot = 97 [default = false];
+    optional bool CaptureTableSchemeSnapshot = 98 [default = false];
 
     // Some entries are grouped by semantics, so are out of order
 }

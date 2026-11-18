@@ -1,0 +1,117 @@
+#pragma once
+
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_terminator.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
+
+namespace NKikimr::NMiniKQL {
+
+TComputationNodeFactory GetTestFactory(TComputationNodeFactory customFactory = {});
+
+template <typename T>
+NUdf::TUnboxedValuePod ToValue(T value) {
+    return NUdf::TUnboxedValuePod(value);
+}
+
+struct TUdfModuleInfo {
+    TString LibraryPath;
+    TString ModuleName;
+    NUdf::TUniquePtr<NUdf::IUdfModule> Module;
+};
+
+template <bool UseLLVM, bool EnableSpilling = false>
+struct TSetup {
+    explicit TSetup(TComputationNodeFactory nodeFactory = GetTestFactory(), TVector<TUdfModuleInfo>&& modules = {})
+        : Alloc(__LOCATION__)
+        , StatsRegistry(CreateDefaultStatsRegistry())
+        , RuntimeSettings(NYql::MakeRuntimeSettingsMutable())
+    {
+        RuntimeSettings->DatumValidation.Set(NYql::DefaultDatumTestValidationMode);
+        NodeFactory = nodeFactory;
+        FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
+        if (!modules.empty()) {
+            auto mutableRegistry = FunctionRegistry->Clone();
+            for (auto& m : modules) {
+                mutableRegistry->AddModule(m.LibraryPath, m.ModuleName, std::move(m.Module));
+            }
+
+            FunctionRegistry = mutableRegistry;
+        }
+
+        Alloc.Ref().ForcefullySetMemoryYellowZone(EnableSpilling);
+
+        RandomProvider = CreateDeterministicRandomProvider(1);
+        TimeProvider = CreateDeterministicTimeProvider(10000000);
+
+        Env.Reset(new TTypeEnvironment(Alloc));
+        PgmBuilder.Reset(new TProgramBuilder(*Env, *FunctionRegistry));
+    }
+
+    THolder<IComputationGraph> BuildGraph(TRuntimeNode pgm, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) {
+        return BuildGraph(pgm, EGraphPerProcess::Multi, entryPoints);
+    }
+
+    THolder<IComputationGraph> BuildGraph(TRuntimeNode pgm, EGraphPerProcess graphPerProcess) {
+        return BuildGraph(pgm, graphPerProcess, {});
+    }
+
+    TAutoPtr<IComputationGraph> BuildGraph(TRuntimeNode pgm, EGraphPerProcess graphPerProcess, const std::vector<TNode*>& entryPoints) {
+        Reset();
+        Explorer.Walk(pgm.GetNode(), Env->GetNodeStack());
+        TComputationPatternOpts opts(Alloc.Ref(), *Env, NodeFactory,
+                                     FunctionRegistry.Get(), NUdf::EValidateMode::Greedy, NUdf::EValidatePolicy::Exception,
+                                     UseLLVM ? "" : "OFF", graphPerProcess, StatsRegistry.Get(), CountersProvider, /*secureParamsProvider=*/nullptr, /*logProvider=*/nullptr, NYql::UnknownLangVersion, RuntimeSettings);
+        Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
+        auto graph = Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
+        Terminator.Reset(new TBindTerminator(graph->GetTerminator()));
+        return graph;
+    }
+
+    void RenameCallable(TRuntimeNode pgm, TString originalName, TString newName) {
+        const auto renameProvider = [originalName = std::move(originalName), newName = std::move(newName)](TInternName name) -> TCallableVisitFunc {
+            if (name == originalName) {
+                return [newName = newName](TCallable& callable, const TTypeEnvironment& env) {
+                    TCallableBuilder callableBuilder(env, newName,
+                                                     callable.GetType()->GetReturnType(), /*disableMerge=*/false);
+                    for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
+                        callableBuilder.Add(callable.GetInput(i));
+                    }
+                    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+                };
+            } else {
+                return TCallableVisitFunc();
+            }
+        };
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm.GetNode(), *Env);
+        bool wereChanges = false;
+        SinglePassVisitCallables(pgm, explorer, renameProvider, *Env, /*inPlace=*/true, wereChanges);
+    }
+
+    void Reset() {
+        Terminator.reset();
+        Pattern.Reset();
+    }
+
+    TScopedAlloc Alloc;
+    TComputationNodeFactory NodeFactory;
+    TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
+    TIntrusivePtr<IRandomProvider> RandomProvider;
+    TIntrusivePtr<ITimeProvider> TimeProvider;
+    IStatsRegistryPtr StatsRegistry;
+    NYql::TRuntimeSettings::TPtr RuntimeSettings;
+    NUdf::ICountersProvider* CountersProvider = nullptr;
+
+    THolder<TTypeEnvironment> Env;
+    THolder<TProgramBuilder> PgmBuilder;
+
+    TExploringNodeVisitor Explorer;
+    IComputationPattern::TPtr Pattern;
+    THolder<TBindTerminator> Terminator;
+};
+
+} // namespace NKikimr::NMiniKQL

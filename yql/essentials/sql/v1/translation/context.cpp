@@ -129,10 +129,12 @@ bool IsKnownSimpleFlag(TStringBuf flag) {
 TContext::TContext(TLexers lexers, TParsers parsers,
                    const NSQLTranslation::TTranslationSettings& settings,
                    NSQLTranslation::TSQLHints hints,
+                   const NSQLTranslation::TParsedTokenList& tokens,
                    TIssues& issues,
                    TString query)
     : Lexers(std::move(lexers))
     , Parsers(std::move(parsers))
+    , Tokens_(tokens)
     , ClusterMapping_(settings.ClusterMapping)
     , PathPrefix_(settings.PathPrefix)
     , ClusterPathPrefixes_(settings.ClusterPathPrefixes)
@@ -203,6 +205,14 @@ TContext::~TContext()
     for (auto& x : AllScopes) {
         x->Clear();
     }
+}
+
+TString TContext::QueryText(const TTokenIndexRange& range, TQueryTextOptions options) const {
+    return NSQLTranslationV1::QueryText(Tokens_, range, options);
+}
+
+TString TContext::ContextRecreationQuery() const {
+    return ContextRecreationQueryText(Tokens_, ForAllStatementsParts);
 }
 
 const NYql::TPosition& TContext::Pos() const {

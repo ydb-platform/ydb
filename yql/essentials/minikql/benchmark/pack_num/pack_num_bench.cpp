@@ -2,11 +2,10 @@
 
 #include <yql/essentials/minikql/pack_num.h>
 
-#include <library/cpp/testing/benchmark/bench.h>
+#include <benchmark/benchmark.h>
 #include <library/cpp/packedtypes/longs.h>
 
 #include <util/generic/xrange.h>
-#include <util/generic/singleton.h>
 #include <util/random/random.h>
 
 namespace {
@@ -99,75 +98,206 @@ struct TDictUtilsCoder64 {
     }
 };
 
-} // namespace
-
-#define DEF_WRITE_BENCH(base, limit)                                                                       \
-    Y_CPU_BENCHMARK(Write##base##_Kikimr_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */      \
-        char buffer[sizeof(ui##base) + 1];                 /* NOLINT(modernize-avoid-c-arrays) */          \
-        auto& data = Default<TSamples##base<limit>>();                                                     \
-        for (size_t i = 0; i < iface.Iterations(); ++i) {                                                  \
-            Y_DO_NOT_OPTIMIZE_AWAY(NKikimr::Pack##base(data.Data[i % data.COUNT], buffer));                \
-            NBench::Clobber();                                                                             \
-        }                                                                                                  \
-    }                                                                                                      \
-    Y_CPU_BENCHMARK(Write##base##_PackedTypes_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */ \
-        char buffer[sizeof(ui##base) + 1];                      /* NOLINT(modernize-avoid-c-arrays) */     \
-        auto& data = Default<TSamples##base<limit>>();                                                     \
-        for (size_t i = 0; i < iface.Iterations(); ++i) {                                                  \
-            Y_DO_NOT_OPTIMIZE_AWAY(Pack##base(data.Data[i % data.COUNT], buffer));                         \
-            NBench::Clobber();                                                                             \
-        }                                                                                                  \
-    }                                                                                                      \
-    Y_CPU_BENCHMARK(Write##base##_DictUtils_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */   \
-        char buffer[sizeof(ui##base) + 1];                    /* NOLINT(modernize-avoid-c-arrays) */       \
-        auto& data = Default<TSamples##base<limit>>();                                                     \
-        for (size_t i = 0; i < iface.Iterations(); ++i) {                                                  \
-            Y_DO_NOT_OPTIMIZE_AWAY(PackU##base(data.Data[i % data.COUNT], buffer));                        \
-            NBench::Clobber();                                                                             \
-        }                                                                                                  \
+template <ui32 LIMIT>
+void Write32_Kikimr(benchmark::State& state) {
+    char buffer[sizeof(ui32) + 1]; // NOLINT(modernize-avoid-c-arrays)
+    benchmark::DoNotOptimize(static_cast<char*>(buffer));
+    const TSamples32<LIMIT> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(NKikimr::Pack32(data.Data[i % data.COUNT], buffer));
+        benchmark::ClobberMemory();
+        ++i;
     }
+}
 
-#define DEF_READ_BENCH(base, limit)                                                                                       \
-    Y_CPU_BENCHMARK(Read##base##_KikimrLong_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */                  \
-        ui##base num = 0;                                                                                                 \
-        NBench::Escape(&num);                                                                                             \
-        const auto& data = *HugeSingleton<TCodedData##base<limit, TKikimrCoder##base>>();                                 \
-        for (size_t i = 0; i < iface.Iterations(); ++i) {                                                                 \
-            const size_t pos = i % data.COUNT;                                                                            \
-            Y_DO_NOT_OPTIMIZE_AWAY(NKikimr::Unpack##base(data.Data + pos * data.BYTES_PER_NUM, data.BYTES_PER_NUM, num)); \
-            NBench::Clobber();                                                                                            \
-        }                                                                                                                 \
-    }                                                                                                                     \
-    Y_CPU_BENCHMARK(Read##base##_KikimrShort_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */                 \
-        ui##base num = 0;                                                                                                 \
-        NBench::Escape(&num);                                                                                             \
-        const auto& data = *HugeSingleton<TCodedData##base<limit, TKikimrCoder##base>>();                                 \
-        for (size_t i = 0; i < iface.Iterations(); ++i) {                                                                 \
-            const size_t pos = i % data.COUNT;                                                                            \
-            Y_DO_NOT_OPTIMIZE_AWAY(NKikimr::Unpack##base(data.Data + pos * data.BYTES_PER_NUM, data.Length[pos], num));   \
-            NBench::Clobber();                                                                                            \
-        }                                                                                                                 \
-    }                                                                                                                     \
-    Y_CPU_BENCHMARK(Read##base##_PackedTypes_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */                 \
-        ui##base num = 0;                                                                                                 \
-        NBench::Escape(&num);                                                                                             \
-        const auto& data = *HugeSingleton<TCodedData##base<limit, TPackedTypesCoder##base>>();                            \
-        for (size_t i = 0; i < iface.Iterations(); ++i) {                                                                 \
-            const size_t pos = i % data.COUNT;                                                                            \
-            Y_DO_NOT_OPTIMIZE_AWAY(Unpack##base(num, data.Data + pos * data.BYTES_PER_NUM));                              \
-            NBench::Clobber();                                                                                            \
-        }                                                                                                                 \
-    }                                                                                                                     \
-    Y_CPU_BENCHMARK(Read##base##_DictUtils_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */                   \
-        ui##base num = 0;                                                                                                 \
-        NBench::Escape(&num);                                                                                             \
-        const auto& data = *HugeSingleton<TCodedData##base<limit, TDictUtilsCoder##base>>();                              \
-        for (size_t i = 0; i < iface.Iterations(); ++i) {                                                                 \
-            const size_t pos = i % data.COUNT;                                                                            \
-            Y_DO_NOT_OPTIMIZE_AWAY(UnpackU##base(&num, data.Data + pos * data.BYTES_PER_NUM));                            \
-            NBench::Clobber();                                                                                            \
-        }                                                                                                                 \
+template <ui32 LIMIT>
+void Write32_PackedTypes(benchmark::State& state) {
+    char buffer[sizeof(ui32) + 1]; // NOLINT(modernize-avoid-c-arrays)
+    benchmark::DoNotOptimize(static_cast<char*>(buffer));
+    const TSamples32<LIMIT> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(Pack32(data.Data[i % data.COUNT], buffer));
+        benchmark::ClobberMemory();
+        ++i;
     }
+}
+
+template <ui32 LIMIT>
+void Write32_DictUtils(benchmark::State& state) {
+    char buffer[sizeof(ui32) + 1]; // NOLINT(modernize-avoid-c-arrays)
+    benchmark::DoNotOptimize(static_cast<char*>(buffer));
+    const TSamples32<LIMIT> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(PackU32(data.Data[i % data.COUNT], buffer));
+        benchmark::ClobberMemory();
+        ++i;
+    }
+}
+
+template <ui32 LIMIT>
+void Read32_KikimrLong(benchmark::State& state) {
+    ui32 num = 0;
+    benchmark::DoNotOptimize(&num);
+    const TCodedData32<LIMIT, TKikimrCoder32> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        const size_t pos = i % data.COUNT;
+        benchmark::DoNotOptimize(NKikimr::Unpack32(data.Data + pos * data.BYTES_PER_NUM, data.BYTES_PER_NUM, num));
+        benchmark::ClobberMemory();
+        ++i;
+    }
+}
+
+template <ui32 LIMIT>
+void Read32_KikimrShort(benchmark::State& state) {
+    ui32 num = 0;
+    benchmark::DoNotOptimize(&num);
+    const TCodedData32<LIMIT, TKikimrCoder32> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        const size_t pos = i % data.COUNT;
+        benchmark::DoNotOptimize(NKikimr::Unpack32(data.Data + pos * data.BYTES_PER_NUM, data.Length[pos], num));
+        benchmark::ClobberMemory();
+        ++i;
+    }
+}
+
+template <ui32 LIMIT>
+void Read32_PackedTypes(benchmark::State& state) {
+    ui32 num = 0;
+    benchmark::DoNotOptimize(&num);
+    const TCodedData32<LIMIT, TPackedTypesCoder32> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        const size_t pos = i % data.COUNT;
+        benchmark::DoNotOptimize(Unpack32(num, data.Data + pos * data.BYTES_PER_NUM));
+        benchmark::ClobberMemory();
+        ++i;
+    }
+}
+
+template <ui32 LIMIT>
+void Read32_DictUtils(benchmark::State& state) {
+    ui32 num = 0;
+    benchmark::DoNotOptimize(&num);
+    const TCodedData32<LIMIT, TDictUtilsCoder32> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        const size_t pos = i % data.COUNT;
+        benchmark::DoNotOptimize(UnpackU32(&num, data.Data + pos * data.BYTES_PER_NUM));
+        benchmark::ClobberMemory();
+        ++i;
+    }
+}
+
+template <ui64 LIMIT>
+void Write64_Kikimr(benchmark::State& state) {
+    char buffer[sizeof(ui64) + 1]; // NOLINT(modernize-avoid-c-arrays)
+    benchmark::DoNotOptimize(static_cast<char*>(buffer));
+    const TSamples64<LIMIT> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(NKikimr::Pack64(data.Data[i % data.COUNT], buffer));
+        benchmark::ClobberMemory();
+        ++i;
+    }
+}
+
+template <ui64 LIMIT>
+void Write64_PackedTypes(benchmark::State& state) {
+    char buffer[sizeof(ui64) + 1]; // NOLINT(modernize-avoid-c-arrays)
+    benchmark::DoNotOptimize(static_cast<char*>(buffer));
+    const TSamples64<LIMIT> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(Pack64(data.Data[i % data.COUNT], buffer));
+        benchmark::ClobberMemory();
+        ++i;
+    }
+}
+
+template <ui64 LIMIT>
+void Write64_DictUtils(benchmark::State& state) {
+    char buffer[sizeof(ui64) + 1]; // NOLINT(modernize-avoid-c-arrays)
+    benchmark::DoNotOptimize(static_cast<char*>(buffer));
+    const TSamples64<LIMIT> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(PackU64(data.Data[i % data.COUNT], buffer));
+        benchmark::ClobberMemory();
+        ++i;
+    }
+}
+
+template <ui64 LIMIT>
+void Read64_KikimrLong(benchmark::State& state) {
+    ui64 num = 0;
+    benchmark::DoNotOptimize(&num);
+    const TCodedData64<LIMIT, TKikimrCoder64> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        const size_t pos = i % data.COUNT;
+        benchmark::DoNotOptimize(NKikimr::Unpack64(data.Data + pos * data.BYTES_PER_NUM, data.BYTES_PER_NUM, num));
+        benchmark::ClobberMemory();
+        ++i;
+    }
+}
+
+template <ui64 LIMIT>
+void Read64_KikimrShort(benchmark::State& state) {
+    ui64 num = 0;
+    benchmark::DoNotOptimize(&num);
+    const TCodedData64<LIMIT, TKikimrCoder64> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        const size_t pos = i % data.COUNT;
+        benchmark::DoNotOptimize(NKikimr::Unpack64(data.Data + pos * data.BYTES_PER_NUM, data.Length[pos], num));
+        benchmark::ClobberMemory();
+        ++i;
+    }
+}
+
+template <ui64 LIMIT>
+void Read64_PackedTypes(benchmark::State& state) {
+    ui64 num = 0;
+    benchmark::DoNotOptimize(&num);
+    const TCodedData64<LIMIT, TPackedTypesCoder64> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        const size_t pos = i % data.COUNT;
+        benchmark::DoNotOptimize(Unpack64(num, data.Data + pos * data.BYTES_PER_NUM));
+        benchmark::ClobberMemory();
+        ++i;
+    }
+}
+
+template <ui64 LIMIT>
+void Read64_DictUtils(benchmark::State& state) {
+    ui64 num = 0;
+    benchmark::DoNotOptimize(&num);
+    const TCodedData64<LIMIT, TDictUtilsCoder64> data;
+    size_t i = 0;
+    for (auto _ : state) {
+        const size_t pos = i % data.COUNT;
+        benchmark::DoNotOptimize(UnpackU64(&num, data.Data + pos * data.BYTES_PER_NUM));
+        benchmark::ClobberMemory();
+        ++i;
+    }
+}
+
+#define DEF_WRITE_BENCH(base, limit)                                                                  \
+    BENCHMARK_TEMPLATE(Write##base##_Kikimr, limit)->Name("Write" #base "_Kikimr_" #limit);           \
+    BENCHMARK_TEMPLATE(Write##base##_PackedTypes, limit)->Name("Write" #base "_PackedTypes_" #limit); \
+    BENCHMARK_TEMPLATE(Write##base##_DictUtils, limit)->Name("Write" #base "_DictUtils_" #limit);
+
+#define DEF_READ_BENCH(base, limit)                                                                 \
+    BENCHMARK_TEMPLATE(Read##base##_KikimrLong, limit)->Name("Read" #base "_KikimrLong_" #limit);   \
+    BENCHMARK_TEMPLATE(Read##base##_KikimrShort, limit)->Name("Read" #base "_KikimrShort_" #limit); \
+    BENCHMARK_TEMPLATE(Read##base##_PackedTypes, limit)->Name("Read" #base "_PackedTypes_" #limit); \
+    BENCHMARK_TEMPLATE(Read##base##_DictUtils, limit)->Name("Read" #base "_DictUtils_" #limit);
 
 DEF_WRITE_BENCH(32, 10)
 DEF_WRITE_BENCH(32, 126)
@@ -222,3 +352,5 @@ DEF_READ_BENCH(64, 4294967294ULL)
 DEF_READ_BENCH(64, 4294967295ULL)
 DEF_READ_BENCH(64, 4294967296ULL)
 DEF_READ_BENCH(64, 18446744073709551615ULL)
+
+} // namespace

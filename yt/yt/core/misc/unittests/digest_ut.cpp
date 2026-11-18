@@ -34,7 +34,7 @@ protected:
     IDigestPtr LogDigest_;
 };
 
-TEST_F(TLogDigestTest, TestStrictFixtureInRange)
+TEST_F(TLogDigestTest, StrictFixtureInRange)
 {
     CreateStandardLogDigest();
 
@@ -47,7 +47,7 @@ TEST_F(TLogDigestTest, TestStrictFixtureInRange)
     EXPECT_TRUE(LogNear(LogDigest_->GetQuantile(1.0), 0.77));
 }
 
-TEST_F(TLogDigestTest, TestStrictFixtureBelowRange)
+TEST_F(TLogDigestTest, StrictFixtureBelowRange)
 {
     CreateStandardLogDigest();
 
@@ -60,7 +60,7 @@ TEST_F(TLogDigestTest, TestStrictFixtureBelowRange)
     EXPECT_TRUE(LogNear(LogDigest_->GetQuantile(1.0), 0.5));
 }
 
-TEST_F(TLogDigestTest, TestStrictFixtureAboveRange)
+TEST_F(TLogDigestTest, StrictFixtureAboveRange)
 {
     CreateStandardLogDigest();
 
@@ -73,7 +73,7 @@ TEST_F(TLogDigestTest, TestStrictFixtureAboveRange)
     EXPECT_TRUE(LogNear(LogDigest_->GetQuantile(1.0), 1.0));
 }
 
-TEST_F(TLogDigestTest, TestNormalDistributionFixture)
+TEST_F(TLogDigestTest, NormalDistributionFixture)
 {
     CreateStandardLogDigest();
 
@@ -89,7 +89,7 @@ TEST_F(TLogDigestTest, TestNormalDistributionFixture)
     EXPECT_TRUE(LogNear(LogDigest_->GetQuantile(0.95), 0.852));
 }
 
-TEST_F(TLogDigestTest, TestUniformRandomFixture)
+TEST_F(TLogDigestTest, UniformRandomFixture)
 {
     CreateStandardLogDigest();
 
@@ -107,7 +107,7 @@ TEST_F(TLogDigestTest, TestUniformRandomFixture)
     EXPECT_TRUE(LogNear(LogDigest_->GetQuantile(0.0), 0.5));
 }
 
-TEST_F(TLogDigestTest, TestCoincidingBounds)
+TEST_F(TLogDigestTest, CoincidingBounds)
 {
     auto config = New<TLogDigestConfig>();
     config->LowerBound = 1.0;
@@ -151,7 +151,7 @@ protected:
     IDigestPtr Digest_;
 };
 
-TEST_F(THistogramDigestTest, TestStrictFixtureInRange)
+TEST_F(THistogramDigestTest, StrictFixtureInRange)
 {
     CreateStandardHistogramDigest();
 
@@ -164,7 +164,7 @@ TEST_F(THistogramDigestTest, TestStrictFixtureInRange)
     EXPECT_NEAR(Digest_->GetQuantile(1.0), 0.77, Epsilon);
 }
 
-TEST_F(THistogramDigestTest, TestStrictFixtureBelowRange)
+TEST_F(THistogramDigestTest, StrictFixtureBelowRange)
 {
     CreateStandardHistogramDigest();
 
@@ -177,7 +177,7 @@ TEST_F(THistogramDigestTest, TestStrictFixtureBelowRange)
     EXPECT_NEAR(Digest_->GetQuantile(1.0), 0.0, Epsilon);
 }
 
-TEST_F(THistogramDigestTest, TestStrictFixtureAboveRange)
+TEST_F(THistogramDigestTest, StrictFixtureAboveRange)
 {
     CreateStandardHistogramDigest();
 
@@ -190,7 +190,7 @@ TEST_F(THistogramDigestTest, TestStrictFixtureAboveRange)
     EXPECT_NEAR(Digest_->GetQuantile(1.0), 1.0, Epsilon);
 }
 
-TEST_F(THistogramDigestTest, TestNormalDistributionFixture)
+TEST_F(THistogramDigestTest, NormalDistributionFixture)
 {
     CreateStandardHistogramDigest();
 
@@ -206,7 +206,7 @@ TEST_F(THistogramDigestTest, TestNormalDistributionFixture)
     EXPECT_NEAR(Digest_->GetQuantile(0.95), 0.852, Epsilon);
 }
 
-TEST_F(THistogramDigestTest, TestUniformRandomFixture)
+TEST_F(THistogramDigestTest, UniformRandomFixture)
 {
     CreateStandardHistogramDigest();
 
@@ -224,7 +224,7 @@ TEST_F(THistogramDigestTest, TestUniformRandomFixture)
     EXPECT_NEAR(Digest_->GetQuantile(0.0), 0.0, Epsilon);
 }
 
-TEST_F(THistogramDigestTest, TestCoincidingBounds)
+TEST_F(THistogramDigestTest, CoincidingBounds)
 {
     auto config = New<THistogramDigestConfig>();
     config->LowerBound = 1.0;

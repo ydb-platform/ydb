@@ -241,7 +241,7 @@ public:
     }
 
     bool Next() {
-        AFL_VERIFY(IsValid());
+        YDB_LOG_VERIFY(IsValid());
         ++Current;
         return Current != End;
     }
@@ -251,18 +251,18 @@ public:
     }
 
     TPortionAddress GetPortionAddress() const {
-        AFL_VERIFY(IsValid());
+        YDB_LOG_VERIFY(IsValid());
         return Current->first;
     }
 
     std::shared_ptr<IDBModifier> GetModification() const {
-        AFL_VERIFY(IsValid());
+        YDB_LOG_VERIFY(IsValid());
         return Current->second;
     }
 
     bool operator<(const TIterator& item) const {
-        AFL_VERIFY(IsValid());
-        AFL_VERIFY(item.IsValid());
+        YDB_LOG_VERIFY(IsValid());
+        YDB_LOG_VERIFY(item.IsValid());
         return Current->first < item.Current->first;
     }
 };

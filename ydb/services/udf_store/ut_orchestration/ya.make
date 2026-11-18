@@ -4,6 +4,7 @@ SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/core/kqp/common/dynamic_function_registry
     ydb/core/testlib/default
     ydb/services/udf_store
     ydb/services/udf_store/compile_controller/protos

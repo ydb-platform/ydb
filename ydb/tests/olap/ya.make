@@ -13,6 +13,7 @@ PY3TEST()
         test_overloads.py
         zip_bomb.py
         test_create.py
+        test_cut_history.py
         test_delete.py
         test_insert.py
         test_primary_key_ordering.py

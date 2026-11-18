@@ -622,7 +622,7 @@ namespace NKikimr::NBsController {
         if (query.GetView() == TQuery::PILES) {
             // A pool filter can hide other pools of the same owner and change its apparent mode.
             const bool reportBridgeDatabases = !query.HasStoragePool() && !query.StoragePoolIdsSize() && !query.GetFilterPools();
-            ui64 bridgeDatabases = 0;
+            NBridgeStorage::TCounts bridgeDatabasesBySyncStatus;
             std::map<TBridgePileId, NBridgeStorage::TCounts> bridgeDatabaseCounts;
             for (auto& [key, owner] : owners) {
                 Y_UNUSED(key);
@@ -633,7 +633,7 @@ namespace NKikimr::NBsController {
                     owner.Copies.try_emplace(TBridgePileId());
                 }
                 const bool bridged = reportBridgeDatabases && owner.Mode == NKikimrBridge::BRIDGED;
-                bridgeDatabases += bridged;
+                NBridgeStorage::TCounts ownerCopies;
                 for (const auto& [pileId, copy] : owner.Copies) {
                     if (!pileId && owner.Mode == NKikimrBridge::MIXED) {
                         continue;
@@ -645,12 +645,19 @@ namespace NKikimr::NBsController {
                     databaseCounts[pileId].CountDatabase(status);
                     if (bridged) {
                         bridgeDatabaseCounts[pileId].CountDatabase(status);
+                        ownerCopies.Count(status);
                     }
+                }
+                if (bridged) {
+                    bridgeDatabasesBySyncStatus.CountDatabase(ownerCopies.GetStatus());
                 }
             }
             report.MutablePiles()->set_unattributed_storage_pools(unattributedPools);
             if (reportBridgeDatabases) {
-                report.MutablePiles()->set_bridge_databases(bridgeDatabases);
+                report.MutablePiles()->set_bridge_databases(bridgeDatabasesBySyncStatus.Total);
+                if (!query.HasPileName()) {
+                    bridgeDatabasesBySyncStatus.ToProto(report.MutablePiles()->mutable_bridge_databases_by_sync_status());
+                }
             }
             for (const auto* pile : piles) {
                 if (!budget.Visit() || !budget.Fits(pile->Name.size() + 128)) {

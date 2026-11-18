@@ -13,7 +13,7 @@ class TArithmeticFormulaTestWithoutVariables
     , public ::testing::WithParamInterface<std::tuple<const char*, i64>>
 { };
 
-TEST_P(TArithmeticFormulaTestWithoutVariables, Test)
+TEST_P(TArithmeticFormulaTestWithoutVariables, Evaluate)
 {
     const auto& args = GetParam();
     const auto& formula = std::get<0>(args);
@@ -115,7 +115,7 @@ class TArithmeticFormulaTestParseError
     , public ::testing::WithParamInterface<const char*>
 { };
 
-TEST_P(TArithmeticFormulaTestParseError, Test)
+TEST_P(TArithmeticFormulaTestParseError, RejectMalformedFormula)
 {
     const auto& args = GetParam();
     const auto& formula = args;
@@ -282,7 +282,7 @@ TEST(TArithmeticFormulaTest, Equality)
     assertComparison(MakeArithmeticFormula("%false"), MakeArithmeticFormula("%true"), false);
 }
 
-TEST(TArithmeticFormulaTest, TestValidateVariable)
+TEST(TArithmeticFormulaTest, ValidateVariable)
 {
     ValidateArithmeticFormulaVariable("abc");
     ValidateArithmeticFormulaVariable("abc123");

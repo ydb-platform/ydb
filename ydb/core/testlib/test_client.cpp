@@ -60,6 +60,7 @@
 #include <ydb/core/mind/tenant_slot_broker.h>
 #include <ydb/core/mon_alloc/monitor.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -76,6 +77,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/cdc_aggregator/tablet/tablet.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
@@ -650,6 +652,17 @@ namespace Tests {
             &Settings->AppConfig->GetSharedCacheConfig(),
             Settings->EnableForceFollowers,
             Settings->ProxyDSMocks);
+
+        {
+            auto& appData = Runtime->GetAppData(0);
+            const auto& pqConfig = appData.PQConfig;
+            if (pqConfig.GetEnabled() && pqConfig.GetMirrorConfig().GetEnabled() && appData.PersQueueMirrorReaderFactory) {
+                appData.PersQueueMirrorReaderFactory->Initialize(
+                    Runtime->GetActorSystem(0),
+                    pqConfig.GetMirrorConfig().GetPQLibSettings()
+                );
+            }
+        }
 
         // WARNING: must be careful about modifying app data after actor system starts
 
@@ -1240,6 +1253,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NUdfStore::CreateWasmCompileController, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::CdcAggregator] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NCdcAggregator::CreateCdcAggregator, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
     }
 
     void TServer::SetupLocalService(ui32 nodeIdx, const TString &domainName) {
@@ -1797,7 +1814,7 @@ namespace Tests {
                 auto& privateApiConfig = *protoConfig.MutablePrivateApi();
                 privateApiConfig.SetEnabled(true);
                 privateApiConfig.SetTaskServiceEndpoint(endpoint);
-                privateApiConfig.SetTaskServiceDatabase("Root");
+                privateApiConfig.SetTaskServiceDatabase("/Root");
             }
 
             {

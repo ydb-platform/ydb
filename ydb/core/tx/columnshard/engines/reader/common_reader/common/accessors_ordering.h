@@ -19,13 +19,13 @@ private:
     bool SourceIdxInitialized = false;
 
     virtual ui32 DoGetSourceIdx() const override {
-        AFL_VERIFY(SourceIdxInitialized);
+        YDB_LOG_VERIFY(SourceIdxInitialized);
         return SourceIdx;
     }
 
 public:
     void SetIndex(const ui32 index) {
-        AFL_VERIFY(!SourceIdxInitialized);
+        YDB_LOG_VERIFY(!SourceIdxInitialized);
         SourceIdxInitialized = true;
         SourceIdx = index;
     }
@@ -133,7 +133,8 @@ public:
                 case ESourcesSorting::LastPkAsc:
                     return TLessByFinish()(l, r);
             }
-            AFL_VERIFY(false)("sources_sorting", (ui64)SourcesSorting);
+            YDB_LOG_VERIFY(false,
+                {"sourcesSorting", (ui64)SourcesSorting});
             return false;
         }
 
@@ -180,7 +181,7 @@ public:
     }
 
     TObject& MutableNextObject() {
-        AFL_VERIFY(GetSize());
+        YDB_LOG_VERIFY(GetSize());
         if (AlreadySorted.empty()) {
             PrepareOrdered(1);
         }
@@ -188,7 +189,7 @@ public:
     }
 
     void Initialize(std::deque<TObject>&& objects) {
-        AFL_VERIFY(!Initialized);
+        YDB_LOG_VERIFY(!Initialized);
         Initialized = true;
         HeapObjects = std::move(objects);
         // we need a min heap, so we use a reversed comparator to achieve that
@@ -209,7 +210,7 @@ public:
         if (AlreadySorted.empty()) {
             PrepareOrdered(1);
         }
-        AFL_VERIFY(AlreadySorted.size());
+        YDB_LOG_VERIFY(AlreadySorted.size());
         auto result = std::move(AlreadySorted.front());
         AlreadySorted.pop_front();
         return result;
@@ -251,7 +252,7 @@ public:
 
     std::shared_ptr<TPortionDataAccessor> ExtractAccessorVerified(const ui64 portionId) {
         auto it = Accessors.find(portionId);
-        AFL_VERIFY(it != Accessors.end());
+        YDB_LOG_VERIFY(it != Accessors.end());
         auto result = std::move(it->second);
         Accessors.erase(it);
         return std::move(result);
@@ -264,7 +265,7 @@ public:
             return TConclusionStatus::Success();
         }
 
-        AFL_VERIFY(InFlightRequests);
+        YDB_LOG_VERIFY(InFlightRequests);
         --InFlightRequests;
 
         if (accessors.HasErrors()) {
@@ -285,7 +286,7 @@ public:
             Accessors = std::move(accessors.ExtractPortions());
         } else {
             for (auto&& i : accessors.ExtractPortions()) {
-                AFL_VERIFY(Accessors.emplace(i.first, std::move(i.second)).second);
+                YDB_LOG_VERIFY(Accessors.emplace(i.first, std::move(i.second)).second);
             }
         }
         return TConclusionStatus::Success();
@@ -382,7 +383,7 @@ private:
             Accessors.StartRequest(std::move(request), context);
         }
         if (!Accessors.GetSize()) {
-            AFL_VERIFY(Accessors.HasRequest());
+            YDB_LOG_VERIFY(Accessors.HasRequest());
             YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
                 {"event", "SKIP_NO_ACCESSORS"},
                 {"hasRequest", Accessors.HasRequest()},

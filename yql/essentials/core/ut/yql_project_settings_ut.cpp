@@ -34,6 +34,38 @@ private:
 
 Y_UNIT_TEST_SUITE(TProjectSettingsTest) {
 
+Y_UNIT_TEST(FromJsonPreservesPragmas) {
+    const auto settings = TProjectSettings::FromJson(R"({"Pragmas":[
+        {"Name":"UnicodeLiterals","Value":[]},
+        {"Name":"config.flags","Value":["LLVM", "OFF"]},
+        {"Name":"UnicodeLiterals","Value":[""]}
+    ]})");
+    UNIT_ASSERT_VALUES_EQUAL(settings.Pragmas.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(settings.Pragmas[0].Name, "UnicodeLiterals");
+    UNIT_ASSERT(settings.Pragmas[0].Value.empty());
+    UNIT_ASSERT_VALUES_EQUAL(settings.Pragmas[1].Name, "config.flags");
+    UNIT_ASSERT_VALUES_EQUAL(settings.Pragmas[1].Value, (TVector<TString>{"LLVM", "OFF"}));
+    UNIT_ASSERT_VALUES_EQUAL(settings.Pragmas[2].Name, "UnicodeLiterals");
+    UNIT_ASSERT_VALUES_EQUAL(settings.Pragmas[2].Value, TVector<TString>{""});
+}
+
+Y_UNIT_TEST(FromJsonEmptySettings) {
+    UNIT_ASSERT(TProjectSettings::FromJson("{}").Pragmas.empty());
+    UNIT_ASSERT(TProjectSettings::FromJson(R"({"Pragmas":[]})").Pragmas.empty());
+}
+
+Y_UNIT_TEST(FromJsonRejectsInvalidSettings) {
+    for (const TStringBuf json : {
+             "", "{invalid}", "[]", "null",
+             R"({"Pragmas":{}})",
+             R"({"Pragmas":[{}]})",
+             R"({"Pragmas":[{"Name":1,"Value":[]}]})",
+             R"({"Pragmas":[{"Name":"UnicodeLiterals","Value":[true]}]})",
+             R"({"Pragmas":[{"Name":"UnicodeLiterals","Value":"true"}]})"}) {
+        UNIT_ASSERT_EXCEPTION(TProjectSettings::FromJson(json), yexception);
+    }
+}
+
 Y_UNIT_TEST(DefaultIsEmpty) {
     TProjectSettings settings;
     UNIT_ASSERT(settings.Pragmas.empty());

@@ -26,13 +26,13 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
-        AFL_VERIFY(p);
-        AFL_VERIFY(Portions.emplace(p->GetPortionId(), p).second);
+        YDB_LOG_VERIFY(p);
+        YDB_LOG_VERIFY(Portions.emplace(p->GetPortionId(), p).second);
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
-        AFL_VERIFY(p);
-        AFL_VERIFY(Portions.erase(p->GetPortionId()));
+        YDB_LOG_VERIFY(p);
+        YDB_LOG_VERIFY(Portions.erase(p->GetPortionId()));
     }
 
     TPortionsSnapshot GetPortionsSnapshot() const {

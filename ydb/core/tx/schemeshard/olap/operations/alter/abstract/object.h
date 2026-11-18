@@ -34,7 +34,7 @@ public:
     }
 
     [[nodiscard]] TConclusionStatus Initialize(const TEntityInitializationContext& context) {
-        AFL_VERIFY(!Initialized);
+        YDB_LOG_VERIFY(!Initialized);
         Initialized = true;
         return DoInitialize(context);
     }

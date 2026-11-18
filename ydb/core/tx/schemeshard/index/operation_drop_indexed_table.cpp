@@ -415,6 +415,16 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
         }
     }
 
+    // Check before expanding DROP into operations on the table and its indexes.
+    if (tx.HasExpectedReplicationOwnerPathId()) {
+        const auto& config = context.SS->Tables.at(table->PathId)->ReplicationConfig();
+        if (config.HasOwnerPathId()
+            && TPathId::FromProto(config.GetOwnerPathId()) != TPathId::FromProto(tx.GetExpectedReplicationOwnerPathId())) {
+            return {CreateReject(nextId, NKikimrScheme::StatusSuccess,
+                "Table is owned by another replication; cleanup skipped")};
+        }
+    }
+
     TVector<ISubOperation::TPtr> result;
     result.push_back(CreateDropTable(NextPartId(nextId, result), tx));
     if (auto reject = CascadeDropTableChildren(result, nextId, table)) {

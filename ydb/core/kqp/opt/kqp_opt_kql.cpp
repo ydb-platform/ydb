@@ -124,7 +124,7 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKi
             TExprBase literalExpr = BuildYqlLiteralFromTypedValue(column->DefaultFromLiteral, pos, ctx);
             const auto* colType = tableDesc.GetColumnType(name);
             YQL_ENSURE(colType);
-            if (colType->IsOptionalOrNull() && !column->DefaultFromLiteral.type().has_optional_type()) {
+            if (colType->IsOptionalOrNull()) {
                 memberValue = Build<TCoJust>(ctx, pos)
                     .Input(literalExpr)
                     .Done();

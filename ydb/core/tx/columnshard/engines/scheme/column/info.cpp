@@ -5,6 +5,8 @@
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
 
+#include <ydb/library/formats/arrow/arrow_helpers.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION
 
 namespace NKikimr::NOlap {
@@ -65,6 +67,9 @@ TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<
 std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInfo::ActualizeColumnData(
     const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TSimpleColumnInfo& sourceColumnFeatures) const {
     YDB_LOG_VERIFY(Loader);
+    const bool targetIsSparsed = Loader->GetAccessorConstructor()->GetClassName() == NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
+    const bool sparsedDefaultChanged =
+        targetIsSparsed && !NArrow::ScalarEqualsNullable(DefaultValue.GetValue(), sourceColumnFeatures.DefaultValue.GetValue());
     const auto checkNeedActualize = [&]() {
         if (!Serializer.IsEqualTo(sourceColumnFeatures.Serializer)) {
             YDB_LOG_DEBUG("",
@@ -78,6 +83,12 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
             YDB_LOG_DEBUG("",
                 {"event", "actualization"},
                 {"reason", "loader"});
+            return true;
+        }
+        if (sparsedDefaultChanged) {
+            YDB_LOG_DEBUG("",
+                {"event", "actualization"},
+                {"reason", "sparsed_default"});
             return true;
         }
         return false;
@@ -95,7 +106,7 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
             additionalData = chunkPrep->GetRecord().GetMeta().GetAdditionalAccessorData();
         }
         const auto loadContext = Loader->BuildAccessorContext(s->GetRecordsCountVerified(), std::nullopt, additionalData);
-        if (!DataAccessorConstructor.IsEqualTo(sourceColumnFeatures.DataAccessorConstructor)) {
+        if (!DataAccessorConstructor.IsEqualTo(sourceColumnFeatures.DataAccessorConstructor) || sparsedDefaultChanged) {
             auto chunkedArray =
                 sourceColumnFeatures.Loader->ApplyVerified(s->GetData(), s->GetRecordsCountVerified(), std::nullopt, additionalData);
             auto newArray = DataAccessorConstructor->Construct(chunkedArray, loadContext).DetachResult();

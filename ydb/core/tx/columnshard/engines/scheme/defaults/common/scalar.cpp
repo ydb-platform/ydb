@@ -311,12 +311,18 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromTypedValue(const 
                 }
                 scalar = std::make_shared<arrow::StringScalar>(value.text_value());
                 break;
-            case Ydb::Type::STRING:
-                if (valueCase != Ydb::Value::kBytesValue) {
+            case Ydb::Type::STRING: {
+                TString bytes;
+                if (valueCase == Ydb::Value::kBytesValue) {
+                    bytes = value.bytes_value();
+                } else if (valueCase == Ydb::Value::kTextValue) {
+                    bytes = value.text_value();
+                } else {
                     return invalidLiteral;
                 }
-                scalar = std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(std::string(value.bytes_value())));
+                scalar = std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(std::string(bytes)));
                 break;
+            }
             case Ydb::Type::YSON:
                 if (valueCase != Ydb::Value::kBytesValue) {
                     return invalidLiteral;
@@ -497,10 +503,17 @@ TConclusion<Ydb::TypedValue> TColumnDefaultScalarValue::SerializeToTypedValue(co
             outType->set_type_id(Ydb::Type::DOUBLE);
             value->set_double_value(static_cast<const arrow::DoubleScalar&>(*Value).value);
             break;
-        case arrow::Type::STRING:
-            outType->set_type_id(typeIdOr(Ydb::Type::UTF8));
-            value->set_text_value(static_cast<const arrow::StringScalar&>(*Value).value->ToString());
+        case arrow::Type::STRING: {
+            const auto typeId = typeIdOr(Ydb::Type::UTF8);
+            outType->set_type_id(typeId);
+            const TString text = static_cast<const arrow::StringScalar&>(*Value).value->ToString();
+            if (typeId == Ydb::Type::STRING) {
+                value->set_bytes_value(text);
+            } else {
+                value->set_text_value(text);
+            }
             break;
+        }
         case arrow::Type::BINARY: {
             const TString bytes = static_cast<const arrow::BinaryScalar&>(*Value).value->ToString();
             if (type.GetTypeId() == NScheme::NTypeIds::JsonDocument) {

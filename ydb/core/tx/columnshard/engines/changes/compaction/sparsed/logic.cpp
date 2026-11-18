@@ -1,5 +1,6 @@
 #include "logic.h"
 
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
@@ -21,7 +22,8 @@ void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor
             if (idx < portionSchemas.size() && portionSchemas[idx] && Context.GetSchemaInfo()) {
                 fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchemas[idx], *Context.GetSchemaInfo(), Context.GetColumnId());
             }
-            if (!NArrow::ScalarEqualsNullable(fill, Context.GetDefaultValue())) {
+            const auto outputDefault = Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()).GetDefaultValue().GetValue();
+            if (!NArrow::ScalarEqualsNullable(fill, outputDefault)) {
                 const auto& containers = mergingContext.GetInputContainers();
                 const ui32 rows = idx < containers.size() && containers[idx] ? containers[idx]->num_rows() : 0;
                 if (rows) {
@@ -30,6 +32,46 @@ void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor
                 }
             }
         }
+        const auto materializeMismatched = [&](std::shared_ptr<NArrow::NAccessor::IChunkedArray>& item) {
+            const auto expand = [&](auto&& self, std::shared_ptr<NArrow::NAccessor::IChunkedArray>& current) -> void {
+                if (!current) {
+                    return;
+                }
+                using EType = NArrow::NAccessor::IChunkedArray::EType;
+                if (current->GetType() == EType::CompositeChunkedArray) {
+                    const auto composite = std::static_pointer_cast<NArrow::NAccessor::TCompositeChunkedArray>(current);
+                    auto chunks = composite->GetChunks();
+                    bool changed = false;
+                    for (auto& chunk : chunks) {
+                        const auto before = chunk;
+                        self(self, chunk);
+                        changed = changed || chunk != before;
+                    }
+                    if (changed) {
+                        if (chunks.size() == 1) {
+                            current = std::move(chunks.front());
+                        } else {
+                            current = std::make_shared<NArrow::NAccessor::TCompositeChunkedArray>(
+                                std::move(chunks), current->GetRecordsCount(), current->GetDataType());
+                        }
+                    }
+                    return;
+                }
+                if (current->GetType() == EType::SerializedChunkedArray) {
+                    current = current->GetArraySlow(0, current).GetArray();
+                }
+                if (current && current->GetType() == EType::SparsedArray) {
+                    const auto sparsed = std::static_pointer_cast<NArrow::NAccessor::TSparsedArray>(current);
+                    const auto outputDefault =
+                        Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()).GetDefaultValue().GetValue();
+                    if (!NArrow::ScalarEqualsNullable(sparsed->GetDefaultValue(), outputDefault)) {
+                        current = std::make_shared<NArrow::NAccessor::TTrivialChunkedArray>(sparsed->GetChunkedArray());
+                    }
+                }
+            };
+            expand(expand, item);
+        };
+        materializeMismatched(p);
         Cursors.emplace_back(TSparsedChunkCursor(p, Context.GetLoader(), idx++));
     }
 }

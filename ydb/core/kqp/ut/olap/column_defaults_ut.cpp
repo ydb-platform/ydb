@@ -462,6 +462,10 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         UNIT_ASSERT_STRING_CONTAINS(bulk.GetIssues().ToString(), "Missing default columns");
         ExpectSchemeError(db, "ALTER TABLE `/Root/CsFlagOff` ALTER COLUMN Value SET DEFAULT 6;",
             "Default values are not supported in column tables");
+        ExecScheme(db, "ALTER TABLE `/Root/CsFlagOff` ADD COLUMN Extra Uint32;");
+        ExecDml(db, "INSERT INTO `/Root/CsFlagOff` (Key) VALUES (3);");
+        CompareYson(R"([[1u;[5u];#];[3u;[5u];#]])",
+            SelectYson(db, "SELECT Key, Value, Extra FROM `/Root/CsFlagOff` ORDER BY Key;"));
     }
 
     Y_UNIT_TEST(ShowCreateBytesDefaultWhenFlagOff) {
@@ -719,7 +723,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Required FROM `/Root/CsKeep` WHERE Key = 1;"), "nn");
     }
 
-    Y_UNIT_TEST(SparsedSetDefault) {
+    Y_UNIT_TEST(SparsedSetDefaultRejected) {
         TKikimrRunner kikimr(DefaultsSettings());
         auto db = kikimr.GetQueryClient();
         ExecScheme(db, R"(
@@ -731,12 +735,45 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         )");
         ExecScheme(db,
             "ALTER OBJECT `/Root/DefSparse` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Value, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
-        ExecScheme(db, "ALTER TABLE `/Root/DefSparse` ALTER COLUMN Value SET DEFAULT 1;");
-        ExecDml(db, "INSERT INTO `/Root/DefSparse` (Key) VALUES (1);");
-        ExecScheme(db, "ALTER TABLE `/Root/DefSparse` ALTER COLUMN Value SET DEFAULT 2;");
-        ExecDml(db, "INSERT INTO `/Root/DefSparse` (Key) VALUES (2);");
-        CompareYson(R"([[1u;[1u]];[2u;[2u]]])",
-            SelectYson(db, "SELECT Key, Value FROM `/Root/DefSparse` ORDER BY Key;"));
+        ExpectSchemeError(db, "ALTER TABLE `/Root/DefSparse` ALTER COLUMN Value SET DEFAULT 1;",
+            "Changing default value of a sparsed column is not supported");
+        ExpectSchemeError(db, "ALTER TABLE `/Root/DefSparse` ALTER COLUMN Value DROP DEFAULT;",
+            "Changing default value of a sparsed column is not supported");
+    }
+
+    Y_UNIT_TEST(SparsedDefaultChangeViaPlainKeepsValues) {
+        auto cs = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/DefSparsePlain` (
+                Key Uint32 NOT NULL,
+                Value Uint32,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(Key)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )");
+        ExecScheme(db,
+            "ALTER OBJECT `/Root/DefSparsePlain` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Value, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`, `DEFAULT_VALUE`=`5`);");
+        ExecDml(db, "INSERT INTO `/Root/DefSparsePlain` (Key) VALUES (1);");
+        ExecDml(db, "INSERT INTO `/Root/DefSparsePlain` (Key, Value) VALUES (4, 7);");
+        UNIT_ASSERT(cs->WaitCompactions(TDuration::Seconds(20)));
+        CompareYson(R"([[1u;[5u]];[4u;[7u]]])",
+            SelectYson(db, "SELECT Key, Value FROM `/Root/DefSparsePlain` ORDER BY Key;"));
+        ExecScheme(db,
+            "ALTER OBJECT `/Root/DefSparsePlain` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Value, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
+        ExecScheme(db, "ALTER TABLE `/Root/DefSparsePlain` ALTER COLUMN Value SET DEFAULT 9;");
+        ExecScheme(db,
+            "ALTER OBJECT `/Root/DefSparsePlain` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Value, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`);");
+        ExecScheme(db,
+            "ALTER OBJECT `/Root/DefSparsePlain` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        const auto actualized = cs->GetActualizationsCount().Val();
+        cs->WaitActualization(TDuration::Seconds(30), true);
+        UNIT_ASSERT_C(cs->GetActualizationsCount().Val() > actualized, "default change did not actualize portions");
+        UNIT_ASSERT(TRestartTabletsCommand().Execute(kikimr).IsSuccess());
+        CompareYson(R"([[1u;[5u]];[4u;[7u]]])",
+            SelectYson(db, "SELECT Key, Value FROM `/Root/DefSparsePlain` ORDER BY Key;"));
     }
 
     Y_UNIT_TEST(DictionaryCompactionKeepsFill) {

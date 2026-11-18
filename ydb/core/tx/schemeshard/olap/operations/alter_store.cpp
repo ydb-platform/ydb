@@ -531,18 +531,11 @@ public:
             }
         }
 
-        {
-            const bool sparsedEnabled = AppData()->FeatureFlags.GetEnableSparsedColumns();
-            const bool defaultsEnabled = AppData()->FeatureFlags.GetEnableCsDefaultValues();
+        if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
             for (auto& [_, preset] : alterData->SchemaPresets) {
                 for (auto& [_, column] : preset.GetColumns().GetColumns()) {
-                    const bool sparsed = column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
-                    if (!sparsedEnabled && sparsed) {
+                    if (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName) {
                         result->SetError(NKikimrScheme::StatusSchemeError, "schema update error: sparsed columns are disabled");
-                        return result;
-                    }
-                    if (column.GetDefaultValue().GetValue() && !defaultsEnabled) {
-                        result->SetError(NKikimrScheme::StatusSchemeError, "column table defaults are disabled");
                         return result;
                     }
                 }

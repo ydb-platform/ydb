@@ -277,8 +277,27 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
 bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
     Y_ABORT_UNLESS(GetName() == diffColumn.GetName());
     const bool sqlDefaultChange = diffColumn.GetDefaultScalar() || diffColumn.GetDropDefault().value_or(false);
+    const bool currentSparsed = AccessorConstructor &&
+        AccessorConstructor.GetClassName() == NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
+    bool targetSparsed = currentSparsed;
+    if (diffColumn.GetAccessorConstructor()) {
+        const auto& requested = *diffColumn.GetAccessorConstructor();
+        if (!requested || !requested.GetObjectPtr()) {
+            targetSparsed = false;
+        } else {
+            targetSparsed = requested.GetObjectPtr()->GetClassName() == NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
+        }
+    }
+    if (sqlDefaultChange && (currentSparsed || targetSparsed)) {
+        errors.AddError("Changing default value of a sparsed column is not supported");
+        return false;
+    }
     if (diffColumn.GetDefaultValue() && IsKeyColumn()) {
         errors.AddError("Default value is not supported for primary key columns in column tables");
+        return false;
+    }
+    if (diffColumn.GetDefaultValue() && !AppData()->FeatureFlags.GetEnableSparsedColumns()) {
+        errors.AddError("schema update error: sparsed columns are disabled");
         return false;
     }
     if (sqlDefaultChange && !AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
@@ -301,7 +320,8 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         const auto columnArrowType = NArrow::TStatusValidator::GetValid(NArrow::GetArrowType(Type));
         DefaultValue.AlignToColumnType(columnArrowType);
         if (!DefaultValue.IsCompatibleType(columnArrowType)) {
-            errors.AddError("incompatible types for default write");
+            errors.AddError(
+                "incompatible types for default write: def" + DefaultValue.DebugString() + ", col:" + columnArrowType->ToString());
             return false;
         }
     }

@@ -2373,13 +2373,17 @@ public:
                                 return SyncError();
                             }
                             if (table.Metadata->Kind == EKikimrTableKind::Olap) {
-                                if (const auto* column = table.Metadata->Columns.FindPtr(TString(columnName))) {
-                                    alter_columns->SetType(column->Type);
-                                    auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfoMod(column->TypeInfo, column->TypeMod);
-                                    alter_columns->SetTypeId(columnType.TypeId);
-                                    if (columnType.TypeInfo) {
-                                        *alter_columns->MutableTypeInfo() = *columnType.TypeInfo;
-                                    }
+                                const auto* column = table.Metadata->Columns.FindPtr(columnNameStr);
+                                if (!column) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), TStringBuilder()
+                                        << "Column " << columnNameStr << " does not exist"));
+                                    return SyncError();
+                                }
+                                alter_columns->SetType(column->Type);
+                                auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfoMod(column->TypeInfo, column->TypeMod);
+                                alter_columns->SetTypeId(columnType.TypeId);
+                                if (columnType.TypeInfo) {
+                                    *alter_columns->MutableTypeInfo() = *columnType.TypeInfo;
                                 }
                             }
 

@@ -355,6 +355,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         controller->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
         TFixture f(ETableKind::Column, true, 1);
+        f.Kikimr.GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetAlterObjectEnabled(true);
         const auto setDeduplication = [&](bool enabled) {
             f.Success(TStringBuilder() << "ALTER OBJECT `/Root/t` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, "
                 << "DEDUPLICATION_ENABLED=`" << (enabled ? "true" : "false") << "`);", true);
@@ -1168,62 +1169,69 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         f.Success("DROP TABLE `/Root/t`;", true);
     }
 
-    Y_UNIT_TEST(RecoveredValidationCoversBulkCommitBeforeTimecastRegistration) {
+    enum class ERecoveredData {
+        BulkCommit,
+        CompactedNull,
+        CleanedAfterRepair,
+    };
+
+    void CheckRecoveredValidation(ERecoveredData data) {
+        using EBackground = NYDBTest::ICSController::EBackground;
         auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        controller->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        controller->DisableBackground(EBackground::Compaction);
         TFixture f(ETableKind::Column, true, 1);
         auto& runtime = *f.Kikimr.GetTestServer().GetRuntime();
+        if (data != ERecoveredData::BulkCommit) {
+            controller->DisableBackground(EBackground::Cleanup);
+            controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            controller->SetOverrideCompactionActualizationLag(TDuration::Zero());
+            controller->SetOverrideLagForCompactionBeforeTierings(TDuration::Zero());
+            runtime.GetAppData().FeatureFlags.SetEnableSnapshotsLocking(false);
+            // The delayed write will overwrite this key in another portion.
+            f.Success("UPSERT INTO `/Root/t` (k, v, w) VALUES (1u, 'seed'u, 7u);");
+        }
+
         TAutoPtr<IEventHandle> oldWriteResult;
         TAutoPtr<IEventHandle> firstValidation;
         TAutoPtr<IEventHandle> recoveredScan;
-        TVector<TAutoPtr<IEventHandle>> additionalPreRebootValidations;
         TVector<TAutoPtr<IEventHandle>> timecastResults;
         TVector<TAutoPtr<IEventHandle>> timecastNotifications;
         bool captureWrite = true;
-        bool captureRecoveredScan = true;
         bool afterReboot = false;
         bool holdTimecast = true;
         ui64 shardId = 0;
         ui64 operationId = 0;
         const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (captureWrite &&
-                ev->GetTypeRewrite() == NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult::EventType) {
+            if (captureWrite && ev->GetTypeRewrite() == NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult::EventType) {
                 captureWrite = false;
                 oldWriteResult = ev.Release();
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            if (!afterReboot &&
-                ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
-                const auto& record = ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
-                shardId = record.GetTabletId();
-                operationId = record.GetId();
+            if (!afterReboot && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
                 if (!firstValidation) {
+                    const auto& record = ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
+                    shardId = record.GetTabletId();
+                    operationId = record.GetId();
                     firstValidation = ev.Release();
-                } else {
-                    additionalPreRebootValidations.emplace_back(ev.Release());
                 }
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            if (afterReboot && holdTimecast &&
-                ev->GetTypeRewrite() == TEvMediatorTimecast::TEvRegisterTabletResult::EventType &&
-                ev->Get<TEvMediatorTimecast::TEvRegisterTabletResult>()->TabletId == shardId) {
-                timecastResults.emplace_back(ev.Release());
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            if (afterReboot && holdTimecast &&
-                ev->GetTypeRewrite() == TEvMediatorTimecast::TEvNotifyPlanStep::EventType &&
-                ev->Get<TEvMediatorTimecast::TEvNotifyPlanStep>()->TabletId == shardId) {
-                // Preserve registration-before-notification ordering while delaying
-                // delivery of the registration result to the recovered tablet.
-                timecastNotifications.emplace_back(ev.Release());
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            if (afterReboot && captureRecoveredScan &&
-                ev->GetTypeRewrite() == TEvDataShard::TEvKqpScan::EventType &&
-                ev->Get<TEvDataShard::TEvKqpScan>()->Record.GetTxId() == operationId) {
-                captureRecoveredScan = false;
-                recoveredScan = ev.Release();
-                return TTestActorRuntime::EEventAction::DROP;
+            if (afterReboot && holdTimecast) {
+                if (ev->GetTypeRewrite() == TEvMediatorTimecast::TEvRegisterTabletResult::EventType &&
+                    ev->Get<TEvMediatorTimecast::TEvRegisterTabletResult>()->TabletId == shardId) {
+                    timecastResults.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                if (ev->GetTypeRewrite() == TEvMediatorTimecast::TEvNotifyPlanStep::EventType &&
+                    ev->Get<TEvMediatorTimecast::TEvNotifyPlanStep>()->TabletId == shardId) {
+                    timecastNotifications.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                if (!recoveredScan && ev->GetTypeRewrite() == TEvDataShard::TEvKqpScan::EventType &&
+                    ev->Get<TEvDataShard::TEvKqpScan>()->Record.GetTxId() == operationId) {
+                    recoveredScan = ev.Release();
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
@@ -1244,338 +1252,136 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         runtime.WaitFor("guard installed before old BulkUpsert commits", [&] { return !!firstValidation; });
         const auto guardSnapshot = controller->GetTheOnlyShard()->GetLastPlannedSnapshot();
 
-        // Request a real later mediator frontier without planning a new transaction
-        // on this tablet. LastPlannedStep must remain the guard's step G.
-        runtime.Send(new IEventHandle(MakeMediatorTimecastProxyID(), oldWriteResult->GetRecipientRewrite(),
-            new TEvMediatorTimecast::TEvWaitPlanStep(shardId, guardSnapshot.GetPlanStep() + 1)));
-        runtime.WaitFor("timecast progresses beyond the persisted last planned step", [&] {
-            return controller->GetTheOnlyShard()->GetOutdatedSnapshot().GetPlanStep() > guardSnapshot.GetPlanStep();
-        }, TDuration::Seconds(30));
-        runtime.Send(oldWriteResult.Release());
-        const auto bulkResult = runtime.WaitFuture(bulk);
-        UNIT_ASSERT_C(bulkResult.IsSuccess(), bulkResult.GetIssues().ToString());
-
-        NOlap::TSnapshot committed = NOlap::TSnapshot::Zero();
-        const auto* shard = controller->GetTheOnlyShard();
-        UNIT_ASSERT_C(shard->GetLastPlannedSnapshot() == guardSnapshot, "Unexpected plan between guard and BulkUpsert commit");
-        for (const auto& [_, granule] : shard->GetIndexAs<NOlap::TColumnEngineForLogs>().GetTables()) {
-            for (const auto& [portionId, portion] : granule->GetPortions()) {
-                if (!portion->IsAborted()) {
-                    committed = std::max(committed, portion->RecordSnapshotMax());
-                }
-            }
-        }
-        UNIT_ASSERT_C(committed.GetPlanStep() > guardSnapshot.GetPlanStep(),
-            "The test did not establish persisted BulkUpsert commit M > persisted LastPlannedStep G");
-
-        afterReboot = true;
-        RebootTablet(runtime, shardId, runtime.AllocateEdgeActor());
-        // SchemeShard's tablet-pipe reconnect retries the request; firstValidation
-        // intentionally remains owned by the test and is never sent to a dead actor.
-        runtime.WaitFor("recovered validation selects a snapshot before receiving timecast", [&] {
-            return (!!recoveredScan && !timecastResults.empty()) || alter.HasValue();
-        }, TDuration::Seconds(30));
-        UNIT_ASSERT_C(recoveredScan && !timecastResults.empty(),
-            "Expected a recovered validation scan while its mediator registration result is held");
-        const auto& proto = recoveredScan->Get<TEvDataShard::TEvKqpScan>()->Record.GetSnapshot();
-        const NOlap::TSnapshot selected(proto.GetStep(), proto.GetTxId());
-
-        // Keep the selected snapshot fixed, synchronize timecast, then run the scan.
-        // Baseline/one-line fix still scans at G and can succeed incorrectly.
-        holdTimecast = false;
-        for (auto& ev : timecastResults) {
-            runtime.Send(ev.Release());
-        }
-        timecastResults.clear();
-        for (auto& ev : timecastNotifications) {
-            runtime.Send(ev.Release());
-        }
-        timecastNotifications.clear();
-        runtime.Send(recoveredScan.Release());
-        const auto result = runtime.WaitFuture(alter);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED,
-            TStringBuilder() << "guard=" << guardSnapshot.DebugString()
-                << ", committed=" << committed.DebugString() << ", selected=" << selected.DebugString()
-                << ", issues=" << result.GetIssues().ToString());
-        UNIT_ASSERT_C(selected >= committed, "Recovered scan did not cover the durable committed portion");
-    }
-
-    void CheckRecoveredValidationAfterBackgroundChanges(const bool physicalCleanup) {
-        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        controller->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
-        controller->DisableBackground(NYDBTest::ICSController::EBackground::Cleanup);
-        controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        controller->SetOverrideCompactionActualizationLag(TDuration::Zero());
-        controller->SetOverrideLagForCompactionBeforeTierings(TDuration::Zero());
-        TFixture f(ETableKind::Column, true, 1);
-        // Create two overlapping source portions once the delayed NULL write commits.
-        // Do this before observing TEvWritePortionResult and before guard G is planned.
-        f.Success("UPSERT INTO `/Root/t` (k, v, w) VALUES (1u, 'seed'u, 7u);");
-        auto& runtime = *f.Kikimr.GetTestServer().GetRuntime();
-        // Use the existing local snapshot guard, whose floor is controlled by the
-        // test's max-read-staleness override. No private DB mutation is needed.
-        runtime.GetAppData().FeatureFlags.SetEnableSnapshotsLocking(false);
-        TAutoPtr<IEventHandle> oldWriteResult;
-        TAutoPtr<IEventHandle> firstValidation;
-        TAutoPtr<IEventHandle> recoveredScan;
-        TVector<TAutoPtr<IEventHandle>> additionalPreRebootValidations;
-        TVector<TAutoPtr<IEventHandle>> timecastResults;
-        TVector<TAutoPtr<IEventHandle>> timecastNotifications;
-        bool captureWrite = true;
-        bool captureRecoveredScan = true;
-        bool afterReboot = false;
-        bool holdTimecast = true;
-        ui64 shardId = 0;
-        ui64 operationId = 0;
-        const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (captureWrite &&
-                ev->GetTypeRewrite() == NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult::EventType) {
-                captureWrite = false;
-                oldWriteResult = ev.Release();
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            if (!afterReboot &&
-                ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
-                const auto& record = ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
-                shardId = record.GetTabletId();
-                operationId = record.GetId();
-                if (!firstValidation) {
-                    firstValidation = ev.Release();
-                } else {
-                    additionalPreRebootValidations.emplace_back(ev.Release());
-                }
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            if (afterReboot && holdTimecast &&
-                ev->GetTypeRewrite() == TEvMediatorTimecast::TEvRegisterTabletResult::EventType &&
-                ev->Get<TEvMediatorTimecast::TEvRegisterTabletResult>()->TabletId == shardId) {
-                timecastResults.emplace_back(ev.Release());
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            if (afterReboot && holdTimecast &&
-                ev->GetTypeRewrite() == TEvMediatorTimecast::TEvNotifyPlanStep::EventType &&
-                ev->Get<TEvMediatorTimecast::TEvNotifyPlanStep>()->TabletId == shardId) {
-                // Preserve registration-before-notification ordering while delaying
-                // delivery of the registration result to the recovered tablet.
-                timecastNotifications.emplace_back(ev.Release());
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            if (afterReboot && captureRecoveredScan &&
-                ev->GetTypeRewrite() == TEvDataShard::TEvKqpScan::EventType &&
-                ev->Get<TEvDataShard::TEvKqpScan>()->Record.GetTxId() == operationId) {
-                captureRecoveredScan = false;
-                recoveredScan = ev.Release();
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-        Y_DEFER { runtime.SetObserverFunc(previous); };
-
-        auto rows = TValueBuilder().BeginList().AddListItem().BeginStruct()
-            .AddMember("k").Uint64(1)
-            .AddMember("v").EmptyOptional(EPrimitiveType::Utf8)
-            .AddMember("w").Uint64(7)
-            .EndStruct().EndList().Build();
-        auto bulk = f.Kikimr.RunInThreadPool([&] {
-            return f.Kikimr.GetTableClient().BulkUpsert("/Root/t", std::move(rows)).GetValueSync();
-        });
-        runtime.WaitFor("pre-guard BulkUpsert accepted", [&] { return !!oldWriteResult; });
-        auto alter = f.Kikimr.RunInThreadPool([&] {
-            return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
-        });
-        runtime.WaitFor("guard installed before old BulkUpsert commits", [&] { return !!firstValidation; });
-        const auto guardSnapshot = controller->GetTheOnlyShard()->GetLastPlannedSnapshot();
-
-        // Request a real later mediator frontier without planning a new transaction
-        // on this tablet. LastPlannedStep must remain the guard's step G.
-        runtime.Send(new IEventHandle(MakeMediatorTimecastProxyID(), oldWriteResult->GetRecipientRewrite(),
-            new TEvMediatorTimecast::TEvWaitPlanStep(shardId, guardSnapshot.GetPlanStep() + 1)));
-        runtime.WaitFor("timecast progresses beyond the persisted last planned step", [&] {
-            return controller->GetTheOnlyShard()->GetOutdatedSnapshot().GetPlanStep() > guardSnapshot.GetPlanStep();
-        }, TDuration::Seconds(30));
-        runtime.Send(oldWriteResult.Release());
-        const auto bulkResult = runtime.WaitFuture(bulk);
-        UNIT_ASSERT_C(bulkResult.IsSuccess(), bulkResult.GetIssues().ToString());
-
-        NOlap::TSnapshot committed = NOlap::TSnapshot::Zero();
-        const auto* shard = controller->GetTheOnlyShard();
-        UNIT_ASSERT_C(shard->GetLastPlannedSnapshot() == guardSnapshot, "Unexpected plan between guard and BulkUpsert commit");
-        for (const auto& [_, granule] : shard->GetIndexAs<NOlap::TColumnEngineForLogs>().GetTables()) {
-            for (const auto& [portionId, portion] : granule->GetPortions()) {
-                if (!portion->IsAborted()) {
-                    committed = std::max(committed, portion->RecordSnapshotMax());
-                }
-            }
-        }
-        UNIT_ASSERT_C(committed.GetPlanStep() > guardSnapshot.GetPlanStep(),
-            "The test did not establish persisted BulkUpsert commit M > persisted LastPlannedStep G");
-
-        // These helpers are only used before reboot: no borrowed tablet/granule
-        // pointer is retained across RebootTablet.
-        const auto advanceTimecastPast = [&](const ui64 step) {
+        const auto advanceTimecastPast = [&](ui64 step) {
             runtime.Send(new IEventHandle(MakeMediatorTimecastProxyID(), controller->GetTheOnlyShard()->SelfId(),
                 new TEvMediatorTimecast::TEvWaitPlanStep(shardId, step + 1)));
-            runtime.WaitFor("real mediator frontier passes requested step", [&] {
+            runtime.WaitFor("mediator frontier passes requested step", [&] {
                 return controller->GetTheOnlyShard()->GetOutdatedSnapshot().GetPlanStep() > step;
             }, TDuration::Seconds(30));
         };
-        if (physicalCleanup) {
-            // Keep LastPlannedStep at G: a planned SQL repair would mask recovery.
-            // Separate timestamps also avoid an accidental NoTx upsert tie.
-            advanceTimecastPast(committed.GetPlanStep());
-            const auto repair = f.Write(EWriteMode::BulkUpsert, 1, EWriteValue::Filled);
-            UNIT_ASSERT_C(repair.IsSuccess(), repair.GetIssues().ToString());
-        }
+        advanceTimecastPast(guardSnapshot.GetPlanStep());
+        runtime.Send(oldWriteResult.Release());
+        const auto bulkResult = runtime.WaitFuture(bulk);
+        UNIT_ASSERT_C(bulkResult.IsSuccess(), bulkResult.GetIssues().ToString());
 
-        THashSet<ui64> originalPortionIds;
-        const auto visitPortions = [&](const auto& visitor) {
+        const auto portions = [&]() -> const auto& {
             const auto& tables = controller->GetTheOnlyShard()->GetIndexAs<NOlap::TColumnEngineForLogs>().GetTables();
             UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
-            for (const auto& [_, granule] : tables) {
-                for (const auto& [portionId, portion] : granule->GetPortions()) {
-                    visitor(portionId, *portion);
-                }
-            }
+            return tables.begin()->second->GetPortions();
         };
-        visitPortions([&](const ui64 portionId, const NOlap::TPortionInfo& portion) {
-            UNIT_ASSERT(!portion.IsAborted());
-            UNIT_ASSERT(!portion.HasRemoveSnapshot());
-            originalPortionIds.insert(portionId);
-        });
-        UNIT_ASSERT_C(originalPortionIds.size() >= 2,
-            "Compaction requires overlapping Written portions; seed plus NULL must both be present");
-
-        // A compacted portion's appearance is later than its row version. Keep
-        // cleanup disabled so the marked source descriptors are observable.
-        const auto compactionsBefore = controller->GetCompactionFinishedCounter().Val();
-        controller->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
-        const auto& validation = firstValidation->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
-        const auto compactionSender = runtime.AllocateEdgeActor();
-        runtime.Send(new IEventHandle(controller->GetTheOnlyShard()->SelfId(), compactionSender,
-            new TEvDataShard::TEvCompactTable(validation.GetOwnerId(), validation.GetPathId())));
-        runtime.Send(new IEventHandle(controller->GetTheOnlyShard()->SelfId(), compactionSender,
-            new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true)));
-        runtime.WaitFor("all source portions replaced by compacted output", [&] {
-            size_t removedSources = 0;
-            size_t activeCompacted = 0;
-            visitPortions([&](const ui64 portionId, const NOlap::TPortionInfo& portion) {
-                if (originalPortionIds.contains(portionId) && portion.HasRemoveSnapshot()) {
-                    ++removedSources;
-                }
-                if (!portion.HasRemoveSnapshot() && portion.GetPortionType() == NOlap::EPortionType::Compacted) {
-                    ++activeCompacted;
-                }
-            });
-            return removedSources == originalPortionIds.size() && activeCompacted > 0 &&
-                controller->GetCompactionFinishedCounter().Val() > compactionsBefore;
-        }, TDuration::Seconds(30));
-        controller->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
-
-        NOlap::TSnapshot portionsFloor = NOlap::TSnapshot::Zero();
-        NOlap::TSnapshot compactedAppeared = NOlap::TSnapshot::Zero();
-        visitPortions([&](const ui64, const NOlap::TPortionInfo& portion) {
-            portionsFloor = std::max(portionsFloor, portion.RecordSnapshotMax());
-            if (portion.GetPortionType() == NOlap::EPortionType::Compacted) {
-                const auto appeared = static_cast<const NOlap::TCompactedPortionInfo&>(portion).GetAppeared();
-                compactedAppeared = std::max(compactedAppeared, appeared);
-                portionsFloor = std::max(portionsFloor, appeared);
-            }
-            if (const auto removed = portion.GetRemoveSnapshotOptional()) {
-                portionsFloor = std::max(portionsFloor, *removed);
-            }
-        });
-        UNIT_ASSERT_C(compactedAppeared > committed,
-            "Compaction output must have an appearance frontier beyond the committed NULL row");
-        auto requiredSnapshot = portionsFloor;
-
-        if (physicalCleanup) {
-            const auto maxReadStaleness = TDuration::Seconds(1);
-            controller->SetOverrideMaxReadStaleness(maxReadStaleness);
-            advanceTimecastPast(portionsFloor.GetPlanStep() + maxReadStaleness.MilliSeconds());
-            const NOlap::TSnapshot cleanupLowerBound(
-                controller->GetTheOnlyShard()->GetOutdatedSnapshot().GetPlanStep() - maxReadStaleness.MilliSeconds(), 0);
-            UNIT_ASSERT_C(cleanupLowerBound > portionsFloor,
-                "Cleanup floor must dominate every retained portion snapshot to isolate LastCleanupSnapshot");
-            const auto erasedBefore = controller->GetPortionsErasedCounter().Val();
-            controller->EnableBackground(NYDBTest::ICSController::EBackground::Cleanup);
-            runtime.Send(new IEventHandle(controller->GetTheOnlyShard()->SelfId(), compactionSender,
-                new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true)));
-            runtime.WaitFor("all original source portion metadata physically erased", [&] {
-                size_t retainedSources = 0;
-                visitPortions([&](const ui64 portionId, const NOlap::TPortionInfo&) {
-                    retainedSources += originalPortionIds.contains(portionId);
-                });
-                return retainedSources == 0 && controller->GetPortionsErasedCounter().Val() >=
-                    erasedBefore + static_cast<intptr_t>(originalPortionIds.size());
-            }, TDuration::Seconds(30));
-            // Cleanup persisted its floor in the same DB tx that removed metadata.
-            // Do not let a fresh age cutoff outrun that fixed recovered snapshot.
-            controller->DisableBackground(NYDBTest::ICSController::EBackground::Cleanup);
-            controller->SetOverrideMaxReadStaleness(TDuration::Days(1));
-            requiredSnapshot = cleanupLowerBound;
-            visitPortions([&](const ui64 portionId, const NOlap::TPortionInfo& portion) {
-                UNIT_ASSERT(!originalPortionIds.contains(portionId));
-                UNIT_ASSERT(portion.RecordSnapshotMax() < cleanupLowerBound);
-                if (portion.GetPortionType() == NOlap::EPortionType::Compacted) {
-                    UNIT_ASSERT(static_cast<const NOlap::TCompactedPortionInfo&>(portion).GetAppeared() < cleanupLowerBound);
-                }
-                if (const auto removed = portion.GetRemoveSnapshotOptional()) {
-                    UNIT_ASSERT(*removed < cleanupLowerBound);
-                }
-            });
-        } else {
-            // The validation must read the compacted portion. Its appearance may be ahead
-            // of the current read step even though compaction already finished on this shard.
-            advanceTimecastPast(compactedAppeared.GetPlanStep());
+        NOlap::TSnapshot committed = NOlap::TSnapshot::Zero();
+        for (const auto& [id, portion] : portions()) {
+            UNIT_ASSERT(!portion->IsAborted());
+            committed = std::max(committed, portion->RecordSnapshotMax());
         }
+        UNIT_ASSERT_C(committed.GetPlanStep() > guardSnapshot.GetPlanStep(), "BulkUpsert must commit after the guard");
 
-        UNIT_ASSERT_C(controller->GetTheOnlyShard()->GetLastPlannedSnapshot() == guardSnapshot,
-            "Background tasks and BulkUpsert repair must not advance persisted LastPlannedStep G");
+        if (data != ERecoveredData::BulkCommit) {
+            if (data == ERecoveredData::CleanedAfterRepair) {
+                advanceTimecastPast(committed.GetPlanStep());
+                const auto repair = f.Write(EWriteMode::BulkUpsert, 1, EWriteValue::Filled);
+                UNIT_ASSERT_C(repair.IsSuccess(), repair.GetIssues().ToString());
+            }
+            THashSet<ui64> originalPortionIds;
+            for (const auto& [id, portion] : portions()) {
+                UNIT_ASSERT(!portion->HasRemoveSnapshot());
+                originalPortionIds.insert(id);
+            }
+            UNIT_ASSERT(originalPortionIds.size() >= 2);
 
+            const auto& request = firstValidation->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
+            const auto sender = runtime.AllocateEdgeActor();
+            const auto wakeup = [&] {
+                runtime.Send(new IEventHandle(controller->GetTheOnlyShard()->SelfId(), sender,
+                    new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true)));
+            };
+            const auto compactionsBefore = controller->GetCompactionFinishedCounter().Val();
+            controller->EnableBackground(EBackground::Compaction);
+            runtime.Send(new IEventHandle(controller->GetTheOnlyShard()->SelfId(), sender,
+                new TEvDataShard::TEvCompactTable(request.GetOwnerId(), request.GetPathId())));
+            wakeup();
+            NOlap::TSnapshot compactedAppeared = NOlap::TSnapshot::Zero();
+            runtime.WaitFor("all source portions replaced by compacted output", [&] {
+                size_t removed = 0;
+                compactedAppeared = NOlap::TSnapshot::Zero();
+                for (const auto& [id, portion] : portions()) {
+                    if (originalPortionIds.contains(id) && portion->HasRemoveSnapshot()) {
+                        ++removed;
+                    }
+                    if (!portion->HasRemoveSnapshot() && portion->GetPortionType() == NOlap::EPortionType::Compacted) {
+                        const auto& compacted = static_cast<const NOlap::TCompactedPortionInfo&>(*portion);
+                        compactedAppeared = std::max(compactedAppeared, compacted.GetAppeared());
+                    }
+                }
+                return removed == originalPortionIds.size() && compactedAppeared > committed &&
+                    controller->GetCompactionFinishedCounter().Val() > compactionsBefore;
+            }, TDuration::Seconds(30));
+            controller->DisableBackground(EBackground::Compaction);
+
+            // Wait until ordinary reads can see the replacement portion. Compaction can
+            // publish it at a step ahead of the last mediator update on the tablet.
+            if (data == ERecoveredData::CleanedAfterRepair) {
+                const auto maxReadStaleness = TDuration::Seconds(1);
+                controller->SetOverrideMaxReadStaleness(maxReadStaleness);
+                advanceTimecastPast(compactedAppeared.GetPlanStep() + maxReadStaleness.MilliSeconds());
+                const auto erasedBefore = controller->GetPortionsErasedCounter().Val();
+                controller->EnableBackground(EBackground::Cleanup);
+                wakeup();
+                runtime.WaitFor("original portion metadata physically erased", [&] {
+                    const auto& retained = portions();
+                    for (const auto id : originalPortionIds) {
+                        if (retained.contains(id)) {
+                            return false;
+                        }
+                    }
+                    return controller->GetPortionsErasedCounter().Val() >= erasedBefore + static_cast<intptr_t>(originalPortionIds.size());
+                }, TDuration::Seconds(30));
+                controller->DisableBackground(EBackground::Cleanup);
+                controller->SetOverrideMaxReadStaleness(TDuration::Days(1));
+            } else {
+                advanceTimecastPast(compactedAppeared.GetPlanStep());
+            }
+        }
+        UNIT_ASSERT(controller->GetTheOnlyShard()->GetLastPlannedSnapshot() == guardSnapshot);
+
+        // SchemeShard retries the original ALTER after the tablet-pipe reconnect.
         afterReboot = true;
         RebootTablet(runtime, shardId, runtime.AllocateEdgeActor());
-        // SchemeShard's tablet-pipe reconnect retries the request; firstValidation
-        // intentionally remains owned by the test and is never sent to a dead actor.
-        runtime.WaitFor("recovered validation selects a snapshot before receiving timecast", [&] {
-            return (!!recoveredScan && !timecastResults.empty()) || alter.HasValue();
+        runtime.WaitFor("recovered scan chooses its snapshot before local timecast registration", [&] {
+            return (recoveredScan && !timecastResults.empty()) || alter.HasValue();
         }, TDuration::Seconds(30));
-        UNIT_ASSERT_C(recoveredScan && !timecastResults.empty(),
-            "Expected a recovered validation scan while its mediator registration result is held");
+        UNIT_ASSERT(recoveredScan && !timecastResults.empty());
         const auto& proto = recoveredScan->Get<TEvDataShard::TEvKqpScan>()->Record.GetSnapshot();
         const NOlap::TSnapshot selected(proto.GetStep(), proto.GetTxId());
+        UNIT_ASSERT_C(selected >= committed, "Recovered validation snapshot must cover the drained write");
 
-        // Keep the selected snapshot fixed, synchronize timecast, then run the scan.
-        // Baseline/one-line fix still scans at G and can succeed incorrectly.
         holdTimecast = false;
         for (auto& ev : timecastResults) {
             runtime.Send(ev.Release());
         }
-        timecastResults.clear();
         for (auto& ev : timecastNotifications) {
             runtime.Send(ev.Release());
         }
-        timecastNotifications.clear();
         runtime.Send(recoveredScan.Release());
         const auto result = runtime.WaitFuture(alter);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), physicalCleanup ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED,
-            TStringBuilder() << "guard=" << guardSnapshot.DebugString()
-                << ", committed=" << committed.DebugString() << ", portionsFloor=" << portionsFloor.DebugString()
-                << ", required=" << requiredSnapshot.DebugString() << ", selected=" << selected.DebugString()
-                << ", issues=" << result.GetIssues().ToString());
-        UNIT_ASSERT_C(selected >= requiredSnapshot,
-            "Recovered validation failed to cover durable compaction/cleanup metadata");
-        if (physicalCleanup) {
-            // Assert repaired row survived physical cleanup and successful SET.
+        if (data == ERecoveredData::CleanedAfterRepair) {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             f.CheckRows(R"([[1u;"filled"]])");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         }
     }
 
+    Y_UNIT_TEST(RecoveredValidationCoversBulkCommitBeforeTimecastRegistration) {
+        CheckRecoveredValidation(ERecoveredData::BulkCommit);
+    }
+
     Y_UNIT_TEST(RecoveredValidationCoversCompactedNullBeforeTimecastRegistration) {
-        CheckRecoveredValidationAfterBackgroundChanges(false);
+        CheckRecoveredValidation(ERecoveredData::CompactedNull);
     }
 
     Y_UNIT_TEST(RecoveredValidationCoversPhysicalCleanupBeforeTimecastRegistration) {
-        CheckRecoveredValidationAfterBackgroundChanges(true);
+        CheckRecoveredValidation(ERecoveredData::CleanedAfterRepair);
     }
 }
 

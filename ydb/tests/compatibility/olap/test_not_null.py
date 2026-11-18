@@ -36,14 +36,22 @@ class NotNullChecks:
         self.execute("ALTER TABLE `not_null_table` ALTER COLUMN v SET NOT NULL;")
 
     def check_constraint(self, key):
-        rows = self.execute("SELECT k, v FROM `not_null_table` WHERE k <= 2u ORDER BY k;")[0].rows
-        assert [(row.k, row.v) for row in rows] == [(1, "one"), (2, "two")]
-        with pytest.raises((ydb.BadRequest, ydb.PreconditionFailed, ydb.GenericError)):
+        with pytest.raises((ydb.BadRequest, ydb.PreconditionFailed, ydb.GenericError)) as error:
             self.execute(f"UPSERT INTO `not_null_table` (k, v) VALUES ({key}u, NULL);")
+        if isinstance(error.value, ydb.GenericError):
+            message = str(error.value).replace("\\'", "'")
+            assert (
+                "Failed to convert 'v': Null to Utf8" in message
+                or "Can't set optional or NULL value to not null column: v" in message
+            ), message
+
+        rows = self.execute("SELECT k, v FROM `not_null_table` ORDER BY k;")[0].rows
+        expected = [(1, "one"), (2, "two")] + [(k, "written") for k in range(3, key)]
+        assert [(row.k, row.v) for row in rows] == expected
+
         self.execute(f'UPSERT INTO `not_null_table` (k, v) VALUES ({key}u, "written");')
         rows = self.execute(f"SELECT v FROM `not_null_table` WHERE k = {key}u;")[0].rows
         assert [row.v for row in rows] == ["written"]
-        assert not self.execute("SELECT k FROM `not_null_table` WHERE v IS NULL;")[0].rows
 
     def configure_feature(self, enabled):
         flags = self.config.yaml_config.setdefault("feature_flags", {})

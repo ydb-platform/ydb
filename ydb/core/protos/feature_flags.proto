@@ -496,4 +496,7 @@ message TFeatureFlags {
     // write quota.
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
     optional bool EnableColumnShardStats = 395 [default = false];
+    // Prioritizes replication-token requests by the number of additional VDisk failures needed to violate the group
+    // failure model. Existing FIFO token scheduling is preserved while the flag is disabled.
+    optional bool EnableReplTokenPriority = 396 [default = false];
 }

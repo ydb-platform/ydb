@@ -11,10 +11,12 @@ PEERDIR(
     ydb/core/base
     ydb/core/blobstorage
     ydb/core/erasure
+    ydb/core/testlib/default
 )
 
 SRCS(
     blobstorage_hullreplwritesst_ut.cpp
+    blobstorage_replbroker_ut.cpp
     ut/blobstorage_repl_eta_ut.cpp
     blobstorage_replrecoverymachine_ut.cpp
 )

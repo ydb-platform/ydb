@@ -304,9 +304,16 @@ void TPersQueueBaseRequestProcessor::Handle(
     for (ui32 i = 0; i < ev->Get()->TopicsRequested.size(); ++i) {
         if (ev->Get()->Result->ResultSet[i].PQGroupInfo) {
             const auto& pqTabletConfig = ev->Get()->Result->ResultSet[i].PQGroupInfo->Description.GetPQTabletConfig();
-            TopicsConverters.push_back(ev->Get()->TopicsRequested[i]->UpgradeToFullConverter(
+            auto converter = ev->Get()->TopicsRequested[i]->UpgradeToFullConverter(
                     pqTabletConfig,
-                    AppData(ctx)->PQConfig.GetTestDatabaseRoot()));
+                    AppData(ctx)->PQConfig.GetTestDatabaseRoot());
+            if (!converter->IsValid()) {
+                YDB_LOG_WARN_CTX(ctx, "Failed to build topic name converter, skip topic",
+                    {"reason", converter->GetReason()},
+                    {"topic_path", pqTabletConfig.GetTopicPath()});
+                converter = nullptr;
+            }
+            TopicsConverters.push_back(std::move(converter));
         } else {
             TopicsConverters.push_back(nullptr);
         }
@@ -334,7 +341,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
     ui32 i = 0;
     for (const auto& entry : TopicsDescription->ResultSet) {
         auto converter = TopicsConverters[i++];
-        if (!converter) {
+        if (!converter || !converter->IsValid()) {
             continue;
         }
         if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo) {
@@ -953,10 +960,17 @@ public:
             auto& converter = ev->Get()->TopicsRequested[i];
             if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo && converter) {
                 auto& description = entry.PQGroupInfo->Description;
-                auto converter = ev->Get()->TopicsRequested[i]->UpgradeToFullConverter(description.GetPQTabletConfig(),
-                                                                                                           AppData(ctx)->PQConfig.GetTestDatabaseRoot());
-                Y_ABORT_UNLESS(TopicInfo.contains(converter->GetClientsideName()));
-                auto& topicInfo = TopicInfo[converter->GetClientsideName()];
+                auto fullConverter = converter->UpgradeToFullConverter(description.GetPQTabletConfig(),
+                                                                        AppData(ctx)->PQConfig.GetTestDatabaseRoot());
+                if (!fullConverter->IsValid()) {
+                    YDB_LOG_WARN_CTX(ctx, "Failed to build topic name converter, skip topic",
+                        {"reason", fullConverter->GetReason()},
+                        {"topic_path", description.GetPQTabletConfig().GetTopicPath()});
+                    continue;
+                }
+                const auto& name = fullConverter->GetClientsideName();
+                Y_ABORT_UNLESS(TopicInfo.contains(name));
+                auto& topicInfo = TopicInfo[name];
                 topicInfo.BalancerTabletId = description.GetBalancerTabletID();
                 topicInfo.PQInfo = entry.PQGroupInfo;
             }

@@ -88,6 +88,27 @@ public:
         EXPECT_CALL(*this, HandleDescribeTopicsByName(_, _))
             .WillOnce(handle);
     }
+
+    void SetDescribeTopicsByNameAnswerForRequestedTopics(
+            const NSchemeCache::TSchemeCacheNavigate::TResultSet& resultSet,
+            const TString& localDc
+    ) {
+        using namespace testing;
+        auto handle = [=](TEvPqMetaCache::TEvDescribeTopicsByNameRequest::TPtr& ev, const TActorContext& ctx) {
+            auto result = std::make_shared<NSchemeCache::TSchemeCacheNavigate>();
+            result->ResultSet = resultSet;
+            auto factory = NPersQueue::TTopicNamesConverterFactory(AppData(ctx)->PQConfig, localDc);
+            TVector<NPersQueue::TDiscoveryConverterPtr> converters;
+            for (const auto& topic : ev->Get()->Topics) {
+                converters.push_back(factory.MakeDiscoveryConverter(topic, {}));
+            }
+            auto* response = new TEvPqMetaCache::TEvDescribeTopicsResponse(std::move(converters), result);
+            ctx.Send(ev->Sender, response);
+        };
+
+        EXPECT_CALL(*this, HandleDescribeTopicsByName(_, _))
+            .WillOnce(handle);
+    }
 };
 
 } // namespace NKikimr

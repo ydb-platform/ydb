@@ -900,7 +900,7 @@ private:
         if (query.UserSID) {
             event.SetUserToken(NACLib::TUserToken(Settings_.YqlToken, query.UserSID,
                 query.GroupSIDs ? *query.GroupSIDs : TVector<NACLib::TSID>{ GetRuntime()->GetAppData(targetNodeIndex).AllAuthenticatedUsers })
-                    .SerializeAsString());
+                                   .SerializeAsString());
         }
 
         const auto& database = GetDatabasePath(query.Database);

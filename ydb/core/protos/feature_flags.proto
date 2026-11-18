@@ -365,34 +365,8 @@ message TFeatureFlags {
     optional bool EnableSourceTopicMutateRestricted = 376 [default = false];
     optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
     optional bool EnableMLPConsumerInFlightMutateDisabled = 378 [default = false];
-<<<<<<< HEAD
-=======
-    optional bool EnableCoroutineCompactionSelector = 379 [default = false];
-    // Show REPLICATING VDisks with only phantom-like blobs remaining as READY ones in node whiteboard and system views
-    // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
-    optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
-    optional bool EnableCsPortionsCacheAcrossRestarts = 381 [default = false];
-    optional bool EnableCsGeneralCacheConsumerWeights = 382 [default = false];
-
-    // Enables policy-driven data tiering for row-oriented tables.
-    // When disabled, no new migrations to colder tiers are scheduled.
-    // Existing data in all tiers remains readable.
-    optional bool EnableDataTiering = 383 [default = false];
-    // Gate for HNSW creation and acceleration once the implementation is included.
-    optional bool EnableHnswIndex = 384 [default = false];
-    optional bool EnableColumnshardCutHistorySending = 385 [default = false];
-    optional bool EnableCdcAggregator = 386 [default = false];
-    // Requires EnableSnapshotsLocking to publish the registry consumed by DataShard.
-    optional bool EnableDataShardSnapshotLocking = 387 [default = false];
-    optional bool EnableRowTableZstdCompression = 388 [default = false];
-    optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
-    optional bool EnableCsDefaultValues = 390 [default = false];
-    optional bool EnableTopicWriteSessionsInitQuoting = 391 [default = false];
-    optional bool EnableAsyncReplicationChecksumCheck = 392 [default = false];
-    optional bool EnableIndexShadowDataRepair = 393 [default = false];
     // (LOGBROKER-10680). Default false is
     // the legacy zeroing behaviour that undercounted the consumed
     // write quota.
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
->>>>>>> 28203938c24 (LOGBROKER-10680: [PQ] Gate the write quota accounting fix behind a feature flag (#59814))
 }

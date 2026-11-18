@@ -103,6 +103,7 @@ struct TCompactionPolicy : public TThrRefBase {
     NKikimrCompaction::ECompactionStrategy CompactionStrategy;
     NKikimrCompaction::TCompactionPolicy::TShardPolicy ShardPolicy;
     bool KeepEraseMarkers;
+    ui32 TieringCompactionConflictLimit;
 
     TVector<TGenerationPolicy> Generations;
 
@@ -143,6 +144,7 @@ struct TCompactionPolicy : public TThrRefBase {
                 && DroppedRowsPercentToCompact == p.DroppedRowsPercentToCompact
                 && CompactionStrategy == p.CompactionStrategy
                 && KeepEraseMarkers == p.KeepEraseMarkers
+                && TieringCompactionConflictLimit == p.TieringCompactionConflictLimit
                 && ::google::protobuf::util::MessageDifferencer::Equals(ShardPolicy, p.ShardPolicy);
     }
 };

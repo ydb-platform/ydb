@@ -61,6 +61,11 @@ namespace NCompGen {
         bool AllowForcedCompaction() override;
         void OutputHtml(IOutputStream& out) override;
 
+        ui32 GetTierCompactionConflicts(ui32 generation) const;
+        std::optional<ui32> GetSerialTierCompactionGeneration() const {
+            return SerialTierGeneration;
+        }
+
     public:
         enum class EState {
             Free,
@@ -224,6 +229,11 @@ namespace NCompGen {
             TCompactionParams* Params = nullptr;
         };
 
+        struct TTierConflicts {
+            ui32 Count = 0;
+            std::optional<ui64> WaitRevision;
+        };
+
     private:
         void SubmitTask(TCompactionTask& task, TString type, ui32 priority, ui32 generation);
         void UpdateTask(TCompactionTask& task, TString type, ui32 priority);
@@ -266,8 +276,9 @@ namespace NCompGen {
         void CheckTierGenerations();
         bool CanStartTierCompaction(ui32 generation) const;
         bool HasFreeTierInputs(ui32 generation) const;
-        void ReleaseTierCompaction(ui32 generation, ui64 compactionId);
+        void ReleaseTierCompaction(ui32 generation, ui64 compactionId, bool success);
         void DeferTierCompaction(ui32 generation);
+        void NoteTierCompactionConflict(ui32 generation);
         void CancelTierCompactions();
         void BeginTierGenCompaction(TTaskId taskId, ui32 generation);
         ui64 PrepareTierCompaction(TTaskId taskId, TSnapEdge edge, ui32 generation,
@@ -303,8 +314,9 @@ namespace NCompGen {
         bool TierManaged = false;
         THashMap<ui32, TTierCompaction> TierCompactions;
         THashMap<TLogoBlobID, ui32> BusyTierParts;
-        // Blocked generations retry after the reservation set changes.
-        THashMap<ui32, ui64> TierWaitRevisions;
+        // Count actual conflicts, retrying only after the reservation set changes.
+        THashMap<ui32, TTierConflicts> TierConflicts;
+        std::optional<ui32> SerialTierGeneration;
         ui64 TierOccupancyRevision = 0;
         std::optional<ui32> TierSweepGeneration;
         size_t NextTierSweep = 0;

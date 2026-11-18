@@ -20,6 +20,47 @@ namespace {
 
     Y_UNIT_TEST_SUITE(TLocalDbTest) {
 
+        Y_UNIT_TEST(TieringConflictLimitDefaultsForNewAndLegacyPolicies) {
+            const TCompactionPolicy policy;
+            UNIT_ASSERT_VALUES_EQUAL(policy.TieringCompactionConflictLimit, 5);
+
+            NKikimrCompaction::TCompactionPolicy proto;
+            UNIT_ASSERT(!proto.HasTieringCompactionConflictLimit());
+            const TCompactionPolicy legacy(proto);
+            UNIT_ASSERT_VALUES_EQUAL(legacy.TieringCompactionConflictLimit, 5);
+            UNIT_ASSERT(legacy == policy);
+        }
+
+        Y_UNIT_TEST(TieringConflictLimitRoundTripsAndAffectsEquality) {
+            const auto policy = PolicyWithTiers({0, 42, 42});
+            const auto original = PolicyWithTiers({0, 42, 42});
+            UNIT_ASSERT(*policy == *original);
+            policy->TieringCompactionConflictLimit = 9;
+            UNIT_ASSERT(!(*policy == *original));
+
+            NKikimrCompaction::TCompactionPolicy proto;
+            policy->Serialize(proto);
+            UNIT_ASSERT_VALUES_EQUAL(proto.GetTieringCompactionConflictLimit(), 9);
+            const TCompactionPolicy restored(proto);
+            UNIT_ASSERT_VALUES_EQUAL(restored.TieringCompactionConflictLimit, 9);
+            UNIT_ASSERT(restored == *policy);
+
+            proto.ClearTieringCompactionConflictLimit();
+            const TCompactionPolicy legacy(proto);
+            UNIT_ASSERT(legacy == *original);
+        }
+
+        Y_UNIT_TEST(TieringConflictLimitMustBePositive) {
+            const auto policy = CreateDefaultUserTablePolicy();
+            TString error;
+            UNIT_ASSERT_C(ValidateCompactionPolicy(*policy, error), error);
+            policy->TieringCompactionConflictLimit = 0;
+            UNIT_ASSERT(!ValidateCompactionPolicy(*policy, error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "TieringCompactionConflictLimit must be positive");
+            UNIT_ASSERT(!ValidateCompactionPolicyChange(*CreateDefaultTablePolicy(), *policy, error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "TieringCompactionConflictLimit must be positive");
+        }
+
         Y_UNIT_TEST(GenerationTierIdRoundTrip) {
             auto policy = PolicyWithTiers({std::nullopt, 0, 42});
             NKikimrCompaction::TCompactionPolicy proto;

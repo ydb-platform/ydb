@@ -149,6 +149,13 @@ namespace {
         bool HasPending() const { return !Pending.empty(); }
         bool HasRunning() const { return !Running.empty(); }
 
+        bool HasPending(ui32 generation) const {
+            const TString prefix = TStringBuilder() << "gen" << generation << "-table-";
+            return std::any_of(Pending.begin(), Pending.end(), [&](const auto& entry) {
+                return entry.second.Name.StartsWith(prefix);
+            });
+        }
+
         bool RunPending() {
             return !Pending.empty() && Grant(Pending.begin());
         }
@@ -1627,10 +1634,13 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), hotId);
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.Rejected.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.Rejected.back(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 1);
+        UNIT_ASSERT(!f.Strategy->GetSerialTierCompactionGeneration());
         UNIT_ASSERT(!f.Broker.RunPending(3));
         f.Strategy->UpdateCompactions();
         UNIT_ASSERT(!f.Broker.RunPending(3));
         UNIT_ASSERT(f.Backend.Cancelled.empty());
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 1);
 
         f.Complete(hotId, {});
         UNIT_ASSERT(f.Broker.RunPending(3));
@@ -1638,6 +1648,266 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(coldId)->Context->Inputs.size(), 2);
         UNIT_ASSERT(f.Backend.Started.at(coldId)->Mode == TCompactionParams::EMode::Regular);
         f.Complete(coldId, {ColdTier});
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 1);
+    }
+
+    Y_UNIT_TEST(RegularSuccessRetainsConflictsUntilTheSameGenerationCompletesATac) {
+        TStrategyFixture f;
+        f.AddPart(40, 1);
+        f.AddPart(41, 1, 2);
+        f.AddPart(10, 3, 3);
+        f.AddPart(50, 3, 4);
+        f.Policy->Generations[0].ForceCountToCompact = 2;
+        f.Policy->Generations[2].ForceCountToCompact = 2;
+        // Keep the regular result in its source generation so a subsequent
+        // policy sweep exercises the same generation's accumulated conflicts.
+        f.Policy->Generations[2].UpliftPartSize = Max<ui64>();
+        f.Start();
+
+        UNIT_ASSERT(f.Broker.RunPending(1));
+        const ui64 hotId = f.Backend.StartedGeneration(1);
+        UNIT_ASSERT(f.Broker.RunPending(3));
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 1);
+        f.Complete(hotId, {});
+
+        UNIT_ASSERT(f.Broker.RunPending(3));
+        const ui64 regularId = f.Backend.OnlyStarted();
+        UNIT_ASSERT(f.Backend.Started.at(regularId)->Mode == TCompactionParams::EMode::Regular);
+        const auto regularChanges = f.Complete(regularId, {ColdTier});
+        UNIT_ASSERT_VALUES_EQUAL(regularChanges.NewPartLevels.begin()->second, 3);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 1);
+        UNIT_ASSERT(!f.Strategy->GetSerialTierCompactionGeneration());
+
+        f.Backend.Enabled = true;
+        f.Strategy->UpdateCompactions();
+        UNIT_ASSERT(f.Broker.RunPending(3));
+        const ui64 tacId = f.Backend.OnlyStarted();
+        UNIT_ASSERT(f.Backend.Started.at(tacId)->Mode == TCompactionParams::EMode::TierAware);
+        // Successful TAC resets the counter even when its data stays in the
+        // source tier; physical cooling is not the success criterion.
+        f.Complete(tacId, {ColdTier});
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 0);
+        UNIT_ASSERT(!f.Strategy->GetSerialTierCompactionGeneration());
+    }
+
+    Y_UNIT_TEST(FiveConflictsDrainRunningWorkAndPrioritizeTheBlockedGeneration) {
+        TStrategyFixture f;
+        f.AddPart(40, 1);
+        f.AddPart(41, 1, 2);
+        f.AddPart(10, 3, 3);
+        f.AddPart(50, 3, 4);
+        f.AddPart(60, 5, 5);
+        f.AddPart(61, 5, 6);
+        f.Policy->Generations[0].ForceCountToCompact = 2;
+        f.Policy->Generations[2].ForceCountToCompact = 2;
+        f.Policy->Generations[4].ForceCountToCompact = 2;
+        f.Start();
+
+        ui64 hotId = 0;
+        for (ui32 attempt = 1; attempt <= 5; ++attempt) {
+            UNIT_ASSERT(f.Broker.RunPending(1));
+            hotId = f.Backend.StartedGeneration(1);
+            UNIT_ASSERT(f.Broker.RunPending(3));
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), hotId);
+            UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), attempt);
+            UNIT_ASSERT(!f.Broker.RunPending(3));
+            if (attempt < 5) {
+                UNIT_ASSERT(!f.Strategy->GetSerialTierCompactionGeneration());
+                f.Cancel(hotId);
+            }
+        }
+        UNIT_ASSERT(f.Strategy->GetSerialTierCompactionGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(*f.Strategy->GetSerialTierCompactionGeneration(), 3);
+        UNIT_ASSERT(f.Backend.Started.contains(hotId));
+        UNIT_ASSERT(!f.Broker.RunPending(5));
+
+        f.Complete(hotId, {});
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 5);
+        UNIT_ASSERT(f.Strategy->GetSerialTierCompactionGeneration());
+        UNIT_ASSERT(f.Broker.RunPending(3));
+        const ui64 cancelledId = f.Backend.OnlyStarted();
+        UNIT_ASSERT(f.Backend.Started.at(cancelledId)->Mode == TCompactionParams::EMode::TierAware);
+        f.Cancel(cancelledId);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 5);
+        UNIT_ASSERT(f.Strategy->GetSerialTierCompactionGeneration());
+        UNIT_ASSERT(!f.Broker.RunPending(5));
+        UNIT_ASSERT(f.Broker.RunPending(3));
+        const ui64 retryId = f.Backend.OnlyStarted();
+        UNIT_ASSERT(retryId != cancelledId);
+        UNIT_ASSERT(f.Backend.Started.at(retryId)->Mode == TCompactionParams::EMode::TierAware);
+        f.Complete(retryId, {ColdTier});
+
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 0);
+        UNIT_ASSERT(!f.Strategy->GetSerialTierCompactionGeneration());
+        UNIT_ASSERT(f.Broker.RunPending(5));
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(f.Backend.OnlyStarted())->TierId, ArchiveTier);
+    }
+
+    Y_UNIT_TEST(TheConfiguredConflictLimitControlsSerialFallback) {
+        TStrategyFixture f;
+        f.Policy->TieringCompactionConflictLimit = 1;
+        f.AddPart(40, 1);
+        f.AddPart(41, 1, 2);
+        f.AddPart(10, 3, 3);
+        f.AddPart(50, 3, 4);
+        f.Policy->Generations[0].ForceCountToCompact = 2;
+        f.Policy->Generations[2].ForceCountToCompact = 2;
+        f.Start();
+
+        UNIT_ASSERT(f.Broker.RunPending(1));
+        const ui64 hotId = f.Backend.StartedGeneration(1);
+        UNIT_ASSERT(f.Broker.RunPending(3));
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 1);
+        UNIT_ASSERT(f.Strategy->GetSerialTierCompactionGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(*f.Strategy->GetSerialTierCompactionGeneration(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), hotId);
+        f.Complete(hotId, {});
+
+        UNIT_ASSERT(f.Broker.RunPending(3));
+        const ui64 coldId = f.Backend.OnlyStarted();
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(coldId)->Context->Inputs.size(), 2);
+        UNIT_ASSERT(f.Backend.Started.at(coldId)->Mode == TCompactionParams::EMode::TierAware);
+        f.Complete(coldId, {ColdTier});
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 0);
+        UNIT_ASSERT(!f.Strategy->GetSerialTierCompactionGeneration());
+    }
+
+    Y_UNIT_TEST(AnIdleSweepCancelledByExclusiveRetryCanBeScheduledAgain) {
+        TStrategyFixture f;
+        f.Policy->TieringCompactionConflictLimit = 1;
+        f.AddPart(40, 1);
+        f.AddPart(41, 1, 2);
+        f.AddPart(10, 3, 3);
+        f.AddPart(50, 3, 4);
+        f.AddPart(60, 5, 5);
+        f.Policy->Generations[0].ForceCountToCompact = 2;
+        f.Policy->Generations[2].ForceCountToCompact = 2;
+        f.Start();
+        UNIT_ASSERT(f.Broker.RunPending(1));
+        const ui64 hotId = f.Backend.OnlyStarted();
+
+        f.Backend.Enabled = true;
+        f.Strategy->UpdateCompactions();
+        UNIT_ASSERT(f.Broker.HasPending(5));
+        UNIT_ASSERT(f.Broker.RunPending(3));
+        UNIT_ASSERT(f.Strategy->GetSerialTierCompactionGeneration() == 3);
+        UNIT_ASSERT(!f.Broker.HasPending(5));
+
+        f.Complete(hotId, {});
+        UNIT_ASSERT(f.Broker.RunPending(3));
+        const ui64 exclusiveId = f.Backend.OnlyStarted();
+        UNIT_ASSERT(f.Backend.Started.at(exclusiveId)->Mode == TCompactionParams::EMode::TierAware);
+        f.Complete(exclusiveId, {});
+        UNIT_ASSERT(!f.Strategy->GetSerialTierCompactionGeneration());
+
+        // Cancelling the pending broker task must also release the sweep's
+        // scheduler marker, so future ticks can schedule the remaining part.
+        f.Strategy->UpdateCompactions();
+        UNIT_ASSERT(f.Broker.RunPending(5));
+        const ui64 archiveId = f.Backend.OnlyStarted();
+        UNIT_ASSERT(f.Backend.Started.at(archiveId)->Mode == TCompactionParams::EMode::TierAware);
+        f.Complete(archiveId, {ArchiveTier});
+    }
+
+    Y_UNIT_TEST(EachTierFinalHasItsOwnConflictCounterAndExclusiveRetry) {
+        for (ui32 tier : {0u, ColdTier, ArchiveTier}) {
+            TStrategyFixture f;
+            f.Policy->TieringCompactionConflictLimit = 1;
+            const ui32 finalLevel = f.Policy->GetFinalLevel(tier);
+            const ui32 blockingGeneration = tier == 0 ? 3 : 1;
+            f.AddPart(20, blockingGeneration);
+            f.AddPart(30, blockingGeneration, 2);
+            f.AddPart(10, finalLevel, 3);
+            f.AddPart(40, finalLevel, 4);
+            f.Policy->Generations[blockingGeneration - 1].ForceCountToCompact = 2;
+            f.Start();
+
+            UNIT_ASSERT(f.Broker.RunPending(blockingGeneration));
+            const ui64 blockingId = f.Backend.OnlyStarted();
+            UNIT_ASSERT(f.Broker.RunPending(finalLevel));
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), blockingId);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Rejected.back(), finalLevel);
+            UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(finalLevel), 1);
+            UNIT_ASSERT(f.Strategy->GetSerialTierCompactionGeneration() == finalLevel);
+            UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(0), 0);
+            UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(blockingGeneration), 0);
+            for (ui32 otherTier : {0u, ColdTier, ArchiveTier}) {
+                if (otherTier != tier) {
+                    UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(
+                        f.Policy->GetFinalLevel(otherTier)), 0);
+                }
+            }
+
+            // Finish the active operation without preemption. Its Regular
+            // success must not consume the final level's accumulated conflict.
+            f.Complete(blockingId, {});
+            UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(finalLevel), 1);
+            UNIT_ASSERT(f.Broker.RunPending(finalLevel));
+            const ui64 cancelledId = f.Backend.OnlyStarted();
+            UNIT_ASSERT(f.Backend.Started.at(cancelledId)->Mode == TCompactionParams::EMode::TierAware);
+            f.Cancel(cancelledId);
+            UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(finalLevel), 1);
+            UNIT_ASSERT(f.Strategy->GetSerialTierCompactionGeneration() == finalLevel);
+
+            UNIT_ASSERT(f.Broker.RunPending(finalLevel));
+            const ui64 retryId = f.Backend.OnlyStarted();
+            UNIT_ASSERT(retryId != cancelledId);
+            UNIT_ASSERT(f.Backend.Started.at(retryId)->Mode == TCompactionParams::EMode::TierAware);
+            const auto changes = f.Complete(retryId, {tier});
+            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.begin()->second, finalLevel);
+            UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(finalLevel), 0);
+            UNIT_ASSERT(!f.Strategy->GetSerialTierCompactionGeneration());
+            UNIT_ASSERT(f.Backend.Started.empty());
+            UNIT_ASSERT(!f.Broker.HasPending());
+        }
+    }
+
+    Y_UNIT_TEST(SchemaReflectionPreservesExclusiveRetryAndStopClearsIt) {
+        for (bool restart : {false, true}) {
+            TStrategyFixture f;
+            f.Policy->TieringCompactionConflictLimit = 1;
+            f.AddPart(40, 1);
+            f.AddPart(41, 1, 2);
+            f.AddPart(10, 3, 3);
+            f.AddPart(50, 3, 4);
+            f.Policy->Generations[0].ForceCountToCompact = 2;
+            f.Policy->Generations[2].ForceCountToCompact = 2;
+            f.Start();
+            UNIT_ASSERT(f.Broker.RunPending(1));
+            const ui64 originalId = f.Backend.OnlyStarted();
+            UNIT_ASSERT(f.Broker.RunPending(3));
+            UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 1);
+            UNIT_ASSERT(f.Strategy->GetSerialTierCompactionGeneration() == 3);
+
+            if (restart) {
+                const auto state = f.Strategy->SnapshotState();
+                f.Strategy->Stop();
+                UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 0);
+                UNIT_ASSERT(!f.Strategy->GetSerialTierCompactionGeneration());
+                f.Strategy->Start(state);
+                UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 0);
+                UNIT_ASSERT(!f.Strategy->GetSerialTierCompactionGeneration());
+                UNIT_ASSERT(f.Broker.RunPending(1));
+            } else {
+                f.Strategy->ReflectSchema();
+                UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 1);
+                UNIT_ASSERT(f.Strategy->GetSerialTierCompactionGeneration() == 3);
+                UNIT_ASSERT(!f.Broker.RunPending(1));
+                UNIT_ASSERT(f.Broker.RunPending(3));
+                const ui64 retryId = f.Backend.OnlyStarted();
+                UNIT_ASSERT(f.Backend.Started.at(retryId)->Mode == TCompactionParams::EMode::TierAware);
+                // A delayed cancellation for the drained operation must not
+                // release the replacement TAC's reservations or serial mode.
+                f.Strategy->CompactionCancelled(originalId, *f.Backend.Cancelled.at(originalId));
+                UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), retryId);
+                UNIT_ASSERT(f.Strategy->GetSerialTierCompactionGeneration() == 3);
+                f.Complete(retryId, {});
+                UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(3), 0);
+                UNIT_ASSERT(!f.Strategy->GetSerialTierCompactionGeneration());
+            }
+            UNIT_ASSERT(f.Backend.Cancelled.contains(originalId));
+        }
     }
 
     Y_UNIT_TEST(ReservedEpochsDoNotTriggerRepeatedCompactionOfAFreeColdSingleton) {
@@ -1688,6 +1958,7 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
             {0, TEpoch::Max()}, forcedId), 0);
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), diskId);
         UNIT_ASSERT(f.Backend.Cancelled.empty());
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(0), 1);
         UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), 0);
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.MemoryRetryRequests, 0);
         f.Strategy->UpdateCompactions();
@@ -1703,7 +1974,45 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         const ui32 retryRequests = f.Backend.MemoryRetryRequests;
         f.Complete(memoryId, {0});
         UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), forcedId);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(0), 1);
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.MemoryRetryRequests, retryRequests);
+        f.Strategy->UpdateCompactions();
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.MemoryRetryRequests, retryRequests);
+    }
+
+    Y_UNIT_TEST(AStarvedForcedMemoryRequestRetriesExclusivelyWithoutLosingItsUserId) {
+        TStrategyFixture f;
+        f.Policy->TieringCompactionConflictLimit = 1;
+        f.AddPart(20, 1);
+        f.AddPart(30, 1, 2);
+        f.Policy->Generations[0].ForceCountToCompact = 2;
+        f.Backend.MemoryEpoch = TEpoch::FromIndex(40);
+        f.Start();
+        const ui64 diskId = f.RunPending();
+        constexpr ui64 forcedId = 777;
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->BeginMemCompaction(0,
+            {0, TEpoch::Max()}, forcedId), 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(0), 1);
+        UNIT_ASSERT(f.Strategy->GetSerialTierCompactionGeneration() == 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), 0);
+        f.Strategy->UpdateCompactions();
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.MemoryRetryRequests, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(0), 1);
+        UNIT_ASSERT(f.Backend.Cancelled.empty());
+
+        f.Complete(diskId, {});
+        UNIT_ASSERT(f.Backend.MemoryRetryRequests > 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), 0);
+        const ui64 memoryId = f.Strategy->BeginMemCompaction(0,
+            {0, TEpoch::Max()}, forcedId);
+        UNIT_ASSERT(memoryId != 0);
+        UNIT_ASSERT(f.Backend.Started.at(memoryId)->Mode == TCompactionParams::EMode::TierAware);
+        UNIT_ASSERT(!f.Backend.Started.at(memoryId)->Tiering->AllowCooling);
+        const ui32 retryRequests = f.Backend.MemoryRetryRequests;
+        f.Complete(memoryId, {0});
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), forcedId);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetTierCompactionConflicts(0), 0);
+        UNIT_ASSERT(!f.Strategy->GetSerialTierCompactionGeneration());
         f.Strategy->UpdateCompactions();
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.MemoryRetryRequests, retryRequests);
     }

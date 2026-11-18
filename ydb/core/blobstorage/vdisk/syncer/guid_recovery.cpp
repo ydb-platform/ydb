@@ -2,6 +2,7 @@
 #include "guid_proxyobtain.h"
 #include "blobstorage_syncer_committer.h"
 #include "blobstorage_syncquorum.h"
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 
 #include <ydb/library/actors/core/interconnect.h>
@@ -324,30 +325,25 @@ namespace NKikimr {
                 , Sublog(false, self.ToString() + ": ")
             {}
 
-            void SetResponse(const TVDiskID &vdisk, TVDiskEternalGuid guid, ESyncState state) {
+            bool SetResponse(const TVDiskID& vdisk, TVDiskEternalGuid guid, ESyncState state, TActorId proxyId) {
                 Y_VERIFY_S(Neighbors[vdisk].VDiskIdShort == vdisk, VDiskLogPrefix);
+                if (Neighbors[vdisk].Get().ProxyId != proxyId) {
+                    return false;
+                }
 
                 Sublog.Log() << "RESPONSE: vdisk# " << vdisk.ToString()
                     << " state# " << state << " guid# " << guid << "\n";
 
                 Neighbors[vdisk].Get().Setup(guid, state);
                 QuorumTracker.Update(vdisk);
+                return true;
             }
 
             void RunSurveyOfAllVDisks(std::function<void(TVDiskInfo<TNeighborVDiskState>&)> func) {
+                QuorumTracker.Clear();
                 for (auto &x : Neighbors) {
+                    x.Get() = {};
                     func(x);
-                }
-            }
-
-            void ReconfigureAllWorkingProxies(
-                        std::function<void(TVDiskInfo<TNeighborVDiskState>&)> func)
-            {
-                for (auto &x : Neighbors) {
-                    const auto &v = x.Get();
-                    if (!v.Obtained) {
-                        func(x);
-                    }
                 }
             }
 
@@ -363,14 +359,13 @@ namespace NKikimr {
                 return counter;
             }
 
-            bool GotQuorum() const {
-                return QuorumTracker.HasQuorum();
-            }
-
-
-            // calculates final decision
-            TDecision ReachAVerdict() const {
-                Y_VERIFY_S(QuorumTracker.HasQuorum(), VDiskLogPrefix);
+            std::optional<TDecision> TryReachAVerdict(const TBlobStorageGroupInfo& info) const {
+                if (CanConfirmLocalGuid(info)) {
+                    return TDecision::Good(LocallyRecoveredState.Guid);
+                }
+                if (!QuorumTracker.HasQuorum()) {
+                    return std::nullopt;
+                }
 
                 TVDiskQuorumDecision quorumDecision = VDiskQuorumDecision();
                 if (quorumDecision.IsInconsistent) {
@@ -394,6 +389,26 @@ namespace NKikimr {
             NSync::TVDiskNeighbors<TNeighborVDiskState> Neighbors;
             NSync::TQuorumTracker QuorumTracker;
             TSublog<> Sublog;
+
+            bool CanConfirmLocalGuid(const TBlobStorageGroupInfo& info) const {
+                if (LocallyRecoveredState.State != TLocalVal::Final || info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc
+                        || info.GetMirror3dcState().State == NKikimrBlobStorage::TGroupState::NORMAL) {
+                    return false;
+                }
+                // The final local record is persisted only after the original GUID publication.
+                // Here we only confirm that identity; creating or changing it uses the original protocol.
+                TBlobStorageGroupInfo::TGroupVDisks confirmed(&info.GetTopology());
+                for (const auto& peer : Neighbors) {
+                    const auto& response = peer.Get();
+                    if (response.Obtained && response.State == TSyncVal::Final) {
+                        if (response.Guid != LocallyRecoveredState.Guid) {
+                            return false;
+                        }
+                        confirmed |= TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), peer.VDiskIdShort);
+                    }
+                }
+                return TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(info, ~confirmed);
+            }
 
             TVDiskQuorumDecision VDiskQuorumDecision() const {
                 // analyze obtained results
@@ -648,6 +663,12 @@ namespace NKikimr {
                 YDB_LOG_INFO_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: START"));
                 SUBLOGLINE(NotifyId, ctx, { stream << "GuidRecovery: START"; });
 
+                StartSurvey(ctx);
+                Become(&TThis::ObtainGuidQuorumFunc);
+                Phase = PhaseObtainGuid;
+            }
+
+            void StartSurvey(const TActorContext& ctx) {
                 // run Obtain VDisk Guid proxy for every VDisk in the group
                 auto runProxyForVDisk = [this, &ctx] (TVDiskInfo<TNeighborVDiskState>& x) {
                     auto selfVDiskId = GInfo->GetVDiskId(VCtx->ShortSelfVDisk);
@@ -659,28 +680,16 @@ namespace NKikimr {
                 };
 
                 DecisionMaker.RunSurveyOfAllVDisks(runProxyForVDisk);
-                Become(&TThis::ObtainGuidQuorumFunc);
-                Phase = PhaseObtainGuid;
             }
 
             void HandleObtainGuidQuorumMode(TEvVGenerationChange::TPtr &ev,
                                             const TActorContext &ctx) {
-                // save new Group Info
+                if (ev->Get()->NewInfo->GroupGeneration <= GInfo->GroupGeneration) {
+                    return;
+                }
+                DecisionMaker.AbandomOngoingRequests(ctx);
                 GInfo = ev->Get()->NewInfo;
-
-                // reconfigure every proxy that hasn't returned a value yet
-                const TString& logPrefix = VCtx->VDiskLogPrefix;
-                auto reconfigureProxy = [&ctx, &logPrefix] (std::unique_ptr<TEvVGenerationChange> &&msg,
-                                                            TVDiskInfo<TNeighborVDiskState>& x) {
-                    Y_VERIFY_S(!x.Get().Obtained, logPrefix);
-                    ctx.Send(x.Get().ProxyId, msg.release());
-                };
-
-                using namespace std::placeholders;
-                auto call = [&reconfigureProxy, msg = ev->Get()] (TVDiskInfo<TNeighborVDiskState>& x) {
-                    reconfigureProxy(std::unique_ptr<TEvVGenerationChange>(msg->Clone()), x);
-                };
-                DecisionMaker.ReconfigureAllWorkingProxies(call);
+                StartSurvey(ctx);
             }
 
             STRICT_STFUNC(ObtainGuidQuorumFunc,
@@ -699,12 +708,13 @@ namespace NKikimr {
                 SUBLOGLINE(NotifyId, ctx, {
                     stream << "GuidRecovery: ObtainedFromPeer: " << msg->ToString();
                 });
-                DecisionMaker.SetResponse(msg->VDiskId, msg->Guid, msg->State);
-                if (DecisionMaker.GotQuorum()) {
-                    // kill actors that didn't respond
+                if (msg->VDiskId.GroupGeneration != GInfo->GroupGeneration
+                        || !DecisionMaker.SetResponse(msg->VDiskId, msg->Guid, msg->State, ev->Sender)) {
+                    return;
+                }
+                if (auto decision = DecisionMaker.TryReachAVerdict(*GInfo)) {
                     DecisionMaker.AbandomOngoingRequests(ctx);
-                    // reach a verdict and save it
-                    Decision = std::make_unique<TDecision>(DecisionMaker.ReachAVerdict());
+                    Decision = std::make_unique<TDecision>(std::move(*decision));
 
                     // log result of guid recovery
                     auto pri = NActors::NLog::PRI_INFO;

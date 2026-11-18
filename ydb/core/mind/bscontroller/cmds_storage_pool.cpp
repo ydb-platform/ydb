@@ -1261,9 +1261,21 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd,
             TStatus& /*status*/) {
-        auto states = ParseDataCenterStates(cmd);
+        auto states = ParseDataCenterStates(cmd.GetDataCenter());
         if (!states) {
             throw TExError() << states.error();
+        }
+        if (Self.SelfManagementEnabled) {
+            if (!Self.StorageConfig || !Self.StorageConfig->HasDataCenterStates()) {
+                throw TExError() << "DC states must be defined in distconf";
+            }
+            std::expected<TDataCenterStates, TString> authoritative = ParseDataCenterStates(Self.StorageConfig->GetDataCenterStates());
+            if (!authoritative || *authoritative != *states) {
+                throw TExError() << "DC states differ from distconf";
+            }
+            if (*states == DataCenterStates.Get()) {
+                return; // acknowledge an already applied snapshot without rescanning groups
+            }
         }
         DataCenterStates.Unshare() = std::move(*states);
     }
@@ -1401,6 +1413,20 @@ namespace NKikimr::NBsController {
                         current = *next;
                     }
                     GroupContentChanged.insert(groupId);
+                }
+            }
+            if (Self.SelfManagementEnabled && Self.StorageConfig && Self.StorageConfig->HasDataCenterStates()) {
+                for (const TVSlotInfo* slot : group->VDisksInGroup) {
+                    if (!HostRecords->GetHostId(slot->VSlotId.NodeId)) {
+                        return std::unexpected<TString>("VDisk node has no HostRecord for DC state validation");
+                    }
+                    NActorsInterconnect::TNodeLocation location;
+                    HostRecords->GetLocation(slot->VSlotId.NodeId).Serialize(&location, false);
+                    auto it = DataCenterStates.Get().find(location.GetDataCenter());
+                    if (it != DataCenterStates.Get().end() && it->second == TFailRealm::EXCLUDED
+                            && current.Realms[slot->RingIdx] != TFailRealm::EXCLUDED) {
+                        return std::unexpected<TString>("Group cannot include a DC excluded by distconf");
+                    }
                 }
             }
             if (previous.State != current.State) {

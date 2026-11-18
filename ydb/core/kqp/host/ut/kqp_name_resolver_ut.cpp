@@ -321,10 +321,10 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
         TFixture f;
         f.Ok("PRAGMA ydb.Cost_Based_Optimization_Level('\\x30'); "
             "PRAGMA kikimr.CostBasedOptimizationLevel = '4'; SELECT id FROM t;");
-        const auto& settings = f.Result.Names->CostBasedOptimizationPragmas;
+        const auto& settings = f.Result.Names->ProviderPragmas;
         UNIT_ASSERT_VALUES_EQUAL(settings.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(*settings.at(&std::get<TPragmaStatement>(f.Ast->Statements[0].Value)), "0");
-        UNIT_ASSERT_VALUES_EQUAL(*settings.at(&std::get<TPragmaStatement>(f.Ast->Statements[1].Value)), "4");
+        UNIT_ASSERT_VALUES_EQUAL(settings.at(&std::get<TPragmaStatement>(f.Ast->Statements[0].Value)).Values.at(0), "0");
+        UNIT_ASSERT_VALUES_EQUAL(settings.at(&std::get<TPragmaStatement>(f.Ast->Statements[1].Value)).Values.at(0), "4");
         for (const TString sql : {"PRAGMA ydb.CostBasedOptimizationLevel = 0; SELECT id FROM t;",
             "PRAGMA ydb.CostBasedOptimizationLevel('0', '4'); SELECT id FROM t;"}) {
             f.Resolve(sql);
@@ -335,6 +335,37 @@ Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
             TNewYqlParserFallback);
         UNIT_ASSERT_EXCEPTION(f.Resolve("PRAGMA yt.CostBasedOptimizationLevel = '0'; SELECT id FROM t;"),
             TNewYqlParserFallback);
+    }
+
+    Y_UNIT_TEST(GenericProviderPragmas) {
+        TFixture f;
+        f.Ok("PRAGMA ydb.Opt_Disable_Top_Sort = 'true'; "
+            "PRAGMA kikimr.UseLlvm = default; PRAGMA ydb.UseLlvm; "
+            "PRAGMA config.flags('DecimalCommonTypeConversionMode', 'with_common_type_fixup'); SELECT id FROM t;");
+        const auto& pragmas = f.Result.Names->ProviderPragmas;
+        const auto setting = [&](size_t index) -> const TProviderPragma& {
+            return pragmas.at(&std::get<TPragmaStatement>(f.Ast->Statements[index].Value));
+        };
+        UNIT_ASSERT_VALUES_EQUAL(pragmas.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(setting(0).Provider, "kikimr");
+        UNIT_ASSERT_VALUES_EQUAL(setting(0).Name, "optdisabletopsort");
+        UNIT_ASSERT_VALUES_EQUAL(setting(0).Values.at(0), "true");
+        UNIT_ASSERT(setting(1).Default);
+        UNIT_ASSERT(!setting(2).Default);
+        UNIT_ASSERT_VALUES_EQUAL(setting(2).Values.at(0), "");
+        UNIT_ASSERT_VALUES_EQUAL(setting(3).Provider, "config");
+        UNIT_ASSERT_VALUES_EQUAL(setting(3).Values.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(setting(3).Values.at(0), "DecimalCommonTypeConversionMode");
+        const auto collected = CollectTableReferences(*f.Ast, {"local", "/Root", {}});
+        UNIT_ASSERT(collected.IsOk());
+        UNIT_ASSERT_VALUES_EQUAL(collected.ProviderPragmas.size(), pragmas.size());
+        for (const TString sql : {"PRAGMA config.flags; SELECT 1;",
+            "PRAGMA config.flags = default; SELECT 1;",
+            "PRAGMA config.flags('UseBlocks', default); SELECT 1;",
+            "PRAGMA config.flags('UseBlocks', true); SELECT 1;"}) {
+            f.Resolve(sql);
+            UNIT_ASSERT_C(!f.Result.IsOk(), sql);
+        }
     }
 
     // Diagnostics should retain SQL file/line/column information after CST release.

@@ -6,6 +6,7 @@ SRCS(
     kqp_ast_ut.cpp
     kqp_new_parser_ut.cpp
     kqp_name_resolver_ut.cpp
+    kqp_pragma_ut.cpp
     kqp_expr_lowering_ut.cpp
     kqp_type_annotation_ut.cpp
 )
@@ -14,6 +15,7 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/type_ann
     yql/essentials/parser/pg_wrapper
+    yql/essentials/providers/config
     yql/essentials/public/udf/service/exception_policy
 )
 

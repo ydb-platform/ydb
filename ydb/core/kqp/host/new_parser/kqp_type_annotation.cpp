@@ -135,9 +135,8 @@ public:
                 Write(*write);
             } else {
                 const auto& pragma = std::get<TPragmaStatement>(statement.Value);
-                // This setting affects the optimizer only. Resolution decoded
-                // its syntax; the host uses the provider's value validation.
-                if (Names.CostBasedOptimizationPragmas.contains(&pragma)) {
+                // The caller applies provider settings before annotation.
+                if (Names.ProviderPragmas.contains(&pragma)) {
                     continue;
                 }
                 // Enabling comma joins affects syntax acceptance, not scalar
@@ -826,6 +825,20 @@ private:
             const auto aType = node->Head().GetTypeAnn();
             const auto bType = node->Tail().GetTypeAnn();
             if (IsSameAnnotation(RemoveOptionality(*aType), RemoveOptionality(*bType))) { return true; }
+            const auto& aDry = RemoveOptionality(*aType);
+            const auto& bDry = RemoveOptionality(*bType);
+            // Integer shuffle hashes are independent of width. Preserve the
+            // original keys and let the physical join widen them, as it does
+            // for legacy plans. Other representations (e.g. Decimal scales)
+            // still need normalization before shuffling.
+            if (aDry.GetKind() == ETypeAnnotationKind::Data && bDry.GetKind() == ETypeAnnotationKind::Data) {
+                const auto aSlot = aDry.Cast<TDataExprType>()->GetSlot();
+                const auto bSlot = bDry.Cast<TDataExprType>()->GetSlot();
+                if (IsDataTypeIntegral(aSlot) && IsDataTypeIntegral(bSlot)
+                    && IsDataTypeSigned(aSlot) == IsDataTypeSigned(bSlot)) {
+                    return true;
+                }
+            }
             const auto* common = JoinCommonDryKeyType(node->Pos(), true, aType, bType, Ctx, Types);
             if (!common) { Unsupported(predicate.Range, "join keys without a common comparison type"); }
             const auto cast = [&](TNode value) {

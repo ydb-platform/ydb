@@ -1074,6 +1074,11 @@ TVector<NKikimrSchemeOp::TTableDescription> CalcIndexImplTables(
     }
     case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
     case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+        // Backup metadata can reach this path before index validation. Let the
+        // caller reject materialization when no vector column was specified.
+        if (indexColumns.KeyColumns.empty()) {
+            break;
+        }
         const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
         NKikimrSchemeOp::TTableDescription levelTableDesc, postingTableDesc, prefixTableDesc;
         if (static_cast<int>(indexDesc.IndexImplTableDescriptionsSize()) == 2 + static_cast<int>(prefixVectorIndex)) {
@@ -1085,7 +1090,6 @@ TVector<NKikimrSchemeOp::TTableDescription> CalcIndexImplTables(
         }
         auto postingDataColumns = indexDataColumns;
         if (indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
-            Y_ENSURE(!indexColumns.KeyColumns.empty());
             postingDataColumns.insert(indexColumns.KeyColumns.back());
         }
         impl.push_back(CalcVectorKmeansTreeLevelImplTableDesc(basePartitionConfig, levelTableDesc));

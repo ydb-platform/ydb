@@ -1030,10 +1030,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     indexBuild.SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo.Id));
 
-    if (buildInfo.IsBuildVectorIndex()
-            && (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
-                || buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw)) {
-        *indexBuild.MutableVectorIndexKmeansTreeDescription()->MutableSettings() = buildInfo.GetVectorSettings();
+    if (buildInfo.IsBuildVectorIndex()) {
+        if (const auto* settings = buildInfo.TryGetVectorSettings()) {
+            *indexBuild.MutableVectorIndexKmeansTreeDescription()->MutableSettings() = *settings;
+        }
     }
 
     YDB_LOG_NOTICE("ApplyPropose",

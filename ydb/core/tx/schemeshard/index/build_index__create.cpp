@@ -467,11 +467,21 @@ private:
                     return false;
                 }
                 if (isHnsw) {
-                    *vectorIndexKmeansTreeDescription.MutableSettings() =
-                        std::get<NKikimrSchemeOp::THnswIndexDescription>(existingIndex->SpecializedIndexDescription).GetSettings();
+                    const auto* description = std::get_if<NKikimrSchemeOp::THnswIndexDescription>(
+                        &existingIndex->SpecializedIndexDescription);
+                    if (!description) {
+                        explain = "REBUILD INDEX: HNSW index description is missing or does not match index type";
+                        return false;
+                    }
+                    *vectorIndexKmeansTreeDescription.MutableSettings() = description->GetSettings();
                 } else {
-                    vectorIndexKmeansTreeDescription =
-                        std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(existingIndex->SpecializedIndexDescription);
+                    const auto* description = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+                        &existingIndex->SpecializedIndexDescription);
+                    if (!description) {
+                        explain = "REBUILD INDEX: KMeans index description is missing or does not match index type";
+                        return false;
+                    }
+                    vectorIndexKmeansTreeDescription = *description;
                 }
                 // Merge user-provided settings over existing ones
                 const auto& userSettings = requestedSettings;

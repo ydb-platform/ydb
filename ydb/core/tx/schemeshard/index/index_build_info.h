@@ -240,6 +240,21 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         NKikimrSchemeOp::THnswIndexDescription,
         NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
 
+    const Ydb::Table::KMeansTreeSettings* TryGetVectorSettings() const {
+        if (IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            if (const auto* description = std::get_if<NKikimrSchemeOp::THnswIndexDescription>(&SpecializedIndexDescription)) {
+                return &description->GetSettings();
+            }
+        } else if (IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+            if (const auto* description = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&SpecializedIndexDescription)) {
+                return &description->GetSettings();
+            }
+        }
+        return nullptr;
+    }
+
+    void RestoreSpecializedIndexDescription(const NKikimrSchemeOp::TIndexCreationConfig& config);
+
     const Ydb::Table::KMeansTreeSettings& GetVectorSettings() const {
         if (IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
             return std::get<NKikimrSchemeOp::THnswIndexDescription>(SpecializedIndexDescription).GetSettings();
@@ -749,9 +764,9 @@ public:
         indexInfo->Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesProcessed>(0));
         indexInfo->Processed.SetCpuTimeUs(row.template GetValueOrDefault<Schema::IndexBuild::CpuTimeUsProcessed>(0));
 
-        // Restore the operation details: ImplTableDescriptions and SpecializedIndexDescription.
+        // Restore the operation details, including absent or mismatched descriptions.
+        NKikimrSchemeOp::TIndexCreationConfig creationConfig;
         if (row.template HaveValue<Schema::IndexBuild::CreationConfig>()) {
-            NKikimrSchemeOp::TIndexCreationConfig creationConfig;
             Y_ENSURE(creationConfig.ParseFromString(row.template GetValue<Schema::IndexBuild::CreationConfig>()));
 
             auto& descriptions = *creationConfig.MutableIndexImplTableDescriptions();
@@ -759,72 +774,8 @@ public:
             for (auto& description : descriptions) {
                 indexInfo->ImplTableDescriptions.emplace_back(std::move(description));
             }
-
-            switch (creationConfig.GetSpecializedIndexDescriptionCase()) {
-                case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription:
-                case NKikimrSchemeOp::TIndexCreationConfig::kHnswIndexDescription: {
-                    if (creationConfig.HasHnswIndexDescription()) {
-                        indexInfo->SpecializedIndexDescription = creationConfig.GetHnswIndexDescription();
-                    } else {
-                        indexInfo->SpecializedIndexDescription = creationConfig.GetVectorIndexKmeansTreeDescription();
-                    }
-                    const Ydb::Table::KMeansTreeSettings* restoredSettings = nullptr;
-                    if (indexInfo->IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
-                        if (const auto* description = std::get_if<NKikimrSchemeOp::THnswIndexDescription>(
-                                &indexInfo->SpecializedIndexDescription)) {
-                            restoredSettings = &description->GetSettings();
-                        }
-                    } else if (indexInfo->IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-                        if (const auto* description = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-                                &indexInfo->SpecializedIndexDescription)) {
-                            restoredSettings = &description->GetSettings();
-                        }
-                    }
-                    if (!restoredSettings) {
-                        indexInfo->IsBroken = true;
-                        indexInfo->AddIssue("Persisted vector index type and description do not match");
-                        // Keep diagnostics/cancellation able to serialize the broken build.
-                        if (indexInfo->IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
-                            indexInfo->SpecializedIndexDescription.emplace<NKikimrSchemeOp::THnswIndexDescription>();
-                        } else if (indexInfo->IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-                            indexInfo->SpecializedIndexDescription.emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>();
-                        }
-                        break;
-                    }
-                    const auto& settings = *restoredSettings;
-                    TString createError;
-                    const bool valid = indexInfo->IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
-                        ? NKikimr::NKMeans::ValidateHnswSettingsPartial(settings, createError)
-                        : NKikimr::NKMeans::ValidateSettingsPartial(settings, createError);
-                    if (!valid) {
-                        indexInfo->IsBroken = true;
-                        indexInfo->AddIssue(createError);
-                        break;
-                    }
-                    indexInfo->KMeans.K = settings.clusters();
-                    indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + settings.levels();
-                    indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();
-                    indexInfo->KMeans.Adaptive = settings.adaptive_clusters() && indexInfo->IsBuildPrefixedVectorIndex();
-                    indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
-                    indexInfo->KMeans.OverlapClusters = settings.overlap_clusters()
-                        ? settings.overlap_clusters() : NTableIndex::NKMeans::DefaultOverlapClusters;
-                    indexInfo->KMeans.OverlapRatio = settings.has_overlap_ratio()
-                        ? settings.overlap_ratio() : NTableIndex::NKMeans::DefaultOverlapRatio;
-                    indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(indexInfo->GetKMeansVectorSettings(), indexInfo->KMeans.Rounds, createError);
-                    break;
-                }
-                case NKikimrSchemeOp::TIndexCreationConfig::kFulltextIndexDescription: {
-                    auto& desc = *creationConfig.MutableFulltextIndexDescription();
-                    indexInfo->SpecializedIndexDescription = std::move(desc);
-                    break;
-                }
-                case NKikimrSchemeOp::TIndexCreationConfig::kBloomFilterDescription:
-                case NKikimrSchemeOp::TIndexCreationConfig::kBloomNGrammFilterDescription:
-                case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
-                    /* do nothing */
-                    break;
-                }
         }
+        indexInfo->RestoreSpecializedIndexDescription(creationConfig);
 
         YDB_LOG_DEBUG("Restored index build",
             {"buildId", indexInfo->Id},
@@ -1051,7 +1002,10 @@ public:
         if (IsBuildVectorIndex()) {
             const auto inProgress = InProgressShards.size();
             const auto toUpload = ToUploadShards.size();
-            Y_ENSURE(KMeans.Level != 0 && KMeans.Levels != 0);
+            // A broken restored description may leave the tree shape unknown.
+            if (!KMeans.Level || !KMeans.Levels) {
+                return 0.f;
+            }
             if (!KMeans.NeedsAnotherLevel() && !KMeans.NeedsAnotherParent()
                 && toUpload == 0 && inProgress == 0) {
                 return 100.f;

@@ -20,6 +20,10 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <yql/essentials/ast/yql_ast_escaping.h>
+
+#include <util/stream/str.h>
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
@@ -244,6 +248,99 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             UNIT_ASSERT(!level.HasLocalHnswIndex());
             return true;
         });
+    }
+
+    Y_UNIT_TEST(RebuildVectorIndexRejectsMismatchedDescription) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "RebuildMetadata"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "embedding" Type: "String" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "idx" Type: EIndexTypeGlobalVectorKmeansTree
+                KeyColumnNames: ["embedding"]
+                VectorIndexKmeansTreeDescription { Settings {
+                    settings { metric: DISTANCE_COSINE vector_type: VECTOR_TYPE_FLOAT vector_dimension: 2 }
+                    clusters: 2 levels: 1
+                } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto path = DescribePath(runtime, "/MyRoot/RebuildMetadata/idx", true, true, true);
+        const TPathId indexId(TTestTxConfig::SchemeShard, path.GetPathDescription().GetSelf().GetPathId());
+        auto* ss = dynamic_cast<TSchemeShard*>(runtime.FindActor(ResolveTablet(runtime, TTestTxConfig::SchemeShard)));
+        UNIT_ASSERT(ss);
+        auto index = ss->Indexes.at(indexId);
+        const auto original = index->SpecializedIndexDescription;
+        for (ui32 alternative = 0; alternative < 3; ++alternative) {
+            runtime.RunCall([&] {
+                if (alternative == 0) {
+                    index->SpecializedIndexDescription.emplace<std::monostate>();
+                } else if (alternative == 1) {
+                    index->SpecializedIndexDescription.emplace<NKikimrSchemeOp::THnswIndexDescription>();
+                } else {
+                    index->SpecializedIndexDescription.emplace<NKikimrSchemeOp::TFulltextIndexDescription>();
+                }
+                return true;
+            });
+            TestRebuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot",
+                "/MyRoot/RebuildMetadata", "idx", {"embedding"}, Ydb::StatusIds::BAD_REQUEST);
+        }
+        runtime.RunCall([&] {
+            index->SpecializedIndexDescription = original;
+            return true;
+        });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/RebuildMetadata/idx", true, true, true),
+            {NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+    }
+
+    Y_UNIT_TEST_TWIN(RestartWithMismatchedDescriptionCanBeCancelled, Fulltext) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["id"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TBlockEvents<TEvDataShard::TEvLocalKMeansRequest> blocker(runtime);
+        const ui64 buildId = ++txId;
+        AsyncBuildVectorIndex(runtime, buildId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "idx", {"embedding"});
+        runtime.WaitFor("LocalKMeansRequest", [&] { return blocker.size(); });
+
+        NKikimrSchemeOp::TIndexCreationConfig config;
+        if (Fulltext) {
+            config.MutableFulltextIndexDescription();
+        }
+        TStringStream escapedConfig;
+        NYql::EscapeArbitraryAtom(config.SerializeAsString(), '"', &escapedConfig);
+        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '( '('Id (Uint64 '%lu)) ))
+                (let value '( '('CreationConfig (String '%s)) ))
+                (return (AsList (UpdateRow 'IndexBuild key value)))
+            )
+        )", buildId, escapedConfig.Str().c_str()));
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        blocker.Stop().Unblock();
+        const auto restored = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
+        UNIT_ASSERT_STRING_CONTAINS(restored.DebugString(), "Persisted index type and description do not match");
+        UNIT_ASSERT_DOUBLES_EQUAL(restored.GetIndexBuild().GetProgress(), 0.0, 1e-6);
+        UNIT_ASSERT_STRING_CONTAINS(TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildId), "IsBroken: YES");
+        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
+        env.TestWaitNotification(runtime, buildId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const auto cancelled = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
+        UNIT_ASSERT_VALUES_EQUAL_C(cancelled.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLED,
+            cancelled.DebugString());
     }
 
     Y_UNIT_TEST(VectorPrimaryKeyEmbeddingClusteredBuild) {

@@ -176,13 +176,15 @@ private:
                 }
 
                 const auto& tableDescription = pathDescription.GetTable();
-                // The dump schema format cannot represent generated-column definitions.
+                // The dump schema format cannot represent column expressions.
                 if (Request_->GetRequestType().GetOrElse("") == "dump") {
                     for (const auto& column : tableDescription.GetColumns()) {
                         if (column.HasDefaultFromExpression()) {
                             Request_->RaiseIssue(NYql::TIssue(TStringBuilder()
                                 << "Cannot dump table " << TablePath.Quote()
-                                << ": exporting tables with generated columns is not supported"));
+                                << (column.GetDefaultFromExpression().GetWritable()
+                                    ? ": exporting tables with DEFAULT expressions is not supported"
+                                    : ": exporting tables with generated columns is not supported")));
                             return Reply(Ydb::StatusIds::UNSUPPORTED, ctx);
                         }
                     }

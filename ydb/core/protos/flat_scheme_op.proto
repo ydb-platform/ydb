@@ -122,7 +122,7 @@ message TColumnDescription {
         string DefaultFromSequence = 7; // Path to sequence for default values
         Ydb.TypedValue DefaultFromLiteral = 10; // Literal default value
         google.protobuf.NullValue EmptyDefault = 12; // Drop default case
-        TDefaultExpressionColumnDescription DefaultFromExpression = 15; // GENERATED ALWAYS AS (<expr>)
+        TDefaultExpressionColumnDescription DefaultFromExpression = 15; // DEFAULT <expr> or GENERATED ALWAYS AS (<expr>)
     }
     optional bool NotNull = 8;
     // flag that indicates that column is currently under the build

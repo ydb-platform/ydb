@@ -36,6 +36,16 @@ public:
 };
 
 template <class TPolicy>
+class IRequestObserver {
+public:
+    virtual ~IRequestObserver() = default;
+    virtual void OnStarted() = 0;
+    virtual void OnCacheHit(const typename TPolicy::TAddress& address, const typename TPolicy::TObject& object) = 0;
+    virtual void OnRetrieved(const typename TPolicy::TAddress& address, const typename TPolicy::TObject& object) = 0;
+    virtual void OnFinished() = 0;
+};
+
+template <class TPolicy>
 class ICallback {
 private:
     using TAddress = typename TPolicy::TAddress;

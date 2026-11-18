@@ -7,6 +7,7 @@
 
 #include <library/cpp/object_factory/object_factory.h>
 #include <util/generic/bitmap.h>
+#include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 
 namespace NKikimrSchemeOp {
@@ -14,6 +15,14 @@ class TSkipIndexBitSetStorage;
 }
 
 namespace NKikimr::NOlap::NIndexes {
+
+class IIndexDecodeObserver {
+public:
+    virtual ~IIndexDecodeObserver() = default;
+    virtual void OnBegin(ui64 encodedBytes, TStringBuf codec) = 0;
+    virtual void OnEnd() = 0;
+};
+
 class IBitsStorageViewer {
 private:
     virtual bool DoGet(const ui32 index) const = 0;

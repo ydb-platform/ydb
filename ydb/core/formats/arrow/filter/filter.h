@@ -114,6 +114,18 @@ public:
     void Append(const TColumnFilter& filter);
     void Add(const bool value, const ui32 count = 1);
     std::optional<ui32> GetFilteredCount() const;
+    std::optional<ui32> GetFilteredCountIfKnown() const noexcept {
+        if (FilteredCount) {
+            return FilteredCount;
+        }
+        if (IsTotalDenyFilter()) {
+            return 0;
+        }
+        if (IsTotalAllowFilter()) {
+            return RecordsCount;
+        }
+        return std::nullopt;
+    }
     ui32 GetFilteredCountVerified() const;
     const std::vector<bool>& BuildSimpleFilter() const;
     std::shared_ptr<arrow::BooleanArray> BuildArrowFilter(

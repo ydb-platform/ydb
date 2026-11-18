@@ -103,6 +103,8 @@ enum EEv {
 
     EvFindEmptyHistoryIntervalsScanFinished,
 
+    EvStatsUpdate,
+
     EvEnd
 };
 

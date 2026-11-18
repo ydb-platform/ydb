@@ -105,6 +105,7 @@ END()
 
 RECURSE(
     engines
+    stats
     splitter
     tools/visualize_portions
     tools/memory_tests

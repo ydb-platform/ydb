@@ -1823,16 +1823,15 @@ private:
         FillDqInput(read.Ptr(), stageProto, stageProto.AddSources(), dataSourceCategory, ctx, false);
     }
 
-    // A column the shard fills itself when the row is new and leaves alone when it already exists.
-    // GENERATED columns also carry DEFAULT_KIND_EXPRESSION but are recomputed on every write, so
-    // they are never handled this way
-    static bool IsLocallyFilledDefaultColumn(const TKikimrColumnMetadata& column) {
+    // Omitted DEFAULT values apply only to new rows during UPSERT.
+    // GENERATED columns are recomputed on every write and must not use this path.
+    static bool IsDefaultColumn(const TKikimrColumnMetadata& column) {
         switch (column.DefaultKind) {
             case NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE:
             case NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL:
                 return true;
             case NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION:
-                return column.DefaultExpression && !column.DefaultExpression->IsGenerated();
+                return column.DefaultExpression && column.DefaultExpression->Writable;
             default:
                 return false;
         }
@@ -1858,7 +1857,7 @@ private:
         }
 
         const auto isDefaultColumn = [&tableMeta](const TString& columnName) {
-            return IsLocallyFilledDefaultColumn(tableMeta->Columns.at(columnName));
+            return IsDefaultColumn(tableMeta->Columns.at(columnName));
         };
 
         // Not DEFAULT columns
@@ -1995,7 +1994,7 @@ private:
             const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
             YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 
-            if (IsLocallyFilledDefaultColumn(*columnMeta)) {
+            if (IsDefaultColumn(*columnMeta)) {
                 result.Ids.insert(columnMeta->Id);
                 result.Names.insert(columnName);
             }

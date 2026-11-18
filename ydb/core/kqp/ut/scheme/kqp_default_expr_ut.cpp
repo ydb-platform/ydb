@@ -17,19 +17,19 @@ namespace {
 NKikimrConfig::TAppConfig DefaultExprAppConfig(
     bool enabled = true,
     bool indexStreamWrite = true,
-    bool generatedStored = false)
+    bool generatedStored = false,
+    bool compileTimeDefaults = true)
 {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(enabled);
     appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(generatedStored);
-    appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(true);
+    appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(compileTimeDefaults);
     appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(indexStreamWrite);
     return appConfig;
 }
 
-// CREATE TABLE stores every captured DEFAULT source as an expression. A volatile expression makes
-// it possible to verify that evaluation stays on the write path; multiplying its result by zero
-// keeps the value predictable so the tests below can assert exact rows
+// A volatile expression stays on the write path; multiplying its result by zero
+// keeps the value predictable so the tests can assert exact rows
 constexpr const char* DefaultExpr = "RandomNumber(1) * 0ul + 42ul";
 
 class TTestFixture {
@@ -37,8 +37,9 @@ public:
     explicit TTestFixture(
         bool featureFlagEnabled = true,
         bool indexStreamWrite = true,
-        bool generatedStored = false)
-        : Kikimr(TKikimrSettings(DefaultExprAppConfig(featureFlagEnabled, indexStreamWrite, generatedStored))
+        bool generatedStored = false,
+        bool compileTimeDefaults = true)
+        : Kikimr(TKikimrSettings(DefaultExprAppConfig(featureFlagEnabled, indexStreamWrite, generatedStored, compileTimeDefaults))
               .SetWithSampleTables(false))
         , Db(Kikimr.GetQueryClient())
         , Session(Db.GetSession().GetValueSync().GetSession())
@@ -389,7 +390,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             "Unknown name: $factor");
     }
 
-    Y_UNIT_TEST(PragmaContext) {
+    Y_UNIT_TEST(UnrelatedPragmaAccepted) {
         TTestFixture fixture;
         fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Uint64 DEFAULT " << DefaultExpr,
             "PRAGMA AnsiInForEmptyOrNullableItemsCollections;\n"));
@@ -408,14 +409,33 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;[42u]]]");
     }
 
-    Y_UNIT_TEST(LiteralSourceStoredAsExpression) {
-        TTestFixture fixture;
-        fixture.Exec(DefaultExprDDL("v Int32 DEFAULT 5"));
+    Y_UNIT_TEST_TWIN(LiteralDefaultPreservesMetadata, Enabled) {
+        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        fixture.Exec(DefaultExprDDL("v Uint32 DEFAULT 5"));
 
-        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), "5");
+        const auto col = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT_C(col.HasDefaultFromLiteral(), col.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(col.GetDefaultFromLiteral().type().type_id()),
+            static_cast<int>(Ydb::Type::UINT32));
+        UNIT_ASSERT_VALUES_EQUAL(col.GetDefaultFromLiteral().value().uint32_value(), 5u);
+
+        auto tableClient = fixture.Runner().GetTableClient();
+        auto session = tableClient.GetSession().GetValueSync().GetSession();
+        auto describe = session.DescribeTable("/Root/TestTable").GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        const auto& proto = NYdb::TProtoAccessor::GetProto(describe.GetTableDescription());
+        bool found = false;
+        for (const auto& column : proto.columns()) {
+            if (column.name() == "v") {
+                found = true;
+                UNIT_ASSERT_C(column.has_from_literal(), column.ShortDebugString());
+                UNIT_ASSERT_VALUES_EQUAL(column.from_literal().value().uint32_value(), 5u);
+            }
+        }
+        UNIT_ASSERT_C(found, "column v not found in DescribeTable");
 
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
-        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[5]]]");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[5u]]]");
     }
 
     Y_UNIT_TEST(DeterministicSourceStoredAsExpression) {
@@ -428,18 +448,20 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;[9]]]");
     }
 
-    Y_UNIT_TEST(LiteralSourceFallsBackToLiteralWhenFeatureFlagDisabled) {
+    Y_UNIT_TEST(FeatureFlagDisabledPreservesConstantFolding) {
         TTestFixture fixture(/* featureFlagEnabled */ false);
-        fixture.Exec(DefaultExprDDL("v Uint32 DEFAULT 5"));
-
-        const auto col = fixture.ColumnDesc("/Root/TestTable", "v");
-        UNIT_ASSERT_C(col.HasDefaultFromLiteral(), col.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(col.GetDefaultFromLiteral().type().type_id()),
-            static_cast<int>(Ydb::Type::UINT32));
-        UNIT_ASSERT_VALUES_EQUAL(col.GetDefaultFromLiteral().value().uint32_value(), 5u);
-
+        fixture.Exec(DefaultExprDDL("v Int64 DEFAULT CAST(7 AS Int64) + 2l"));
+        const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.DebugString());
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
-        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[5u]]]");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[9]]]");
+    }
+
+    Y_UNIT_TEST_TWIN(NullDefault, Enabled) {
+        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        fixture.Exec(DefaultExprDDL("v Int32 DEFAULT NULL"));
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;#]]");
     }
 
     Y_UNIT_TEST(FeatureFlagDisabled) {
@@ -545,7 +567,15 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
     Y_UNIT_TEST(ParameterRejected) {
         TTestFixture fixture;
-        fixture.Rejects(DefaultExprDDL("v Int32 DEFAULT $p", "DECLARE $p AS Int32;\n"), "Unknown name: $p");
+        auto db = fixture.Runner().GetQueryClient();
+        auto params = NYdb::TParamsBuilder()
+            .AddParam("$p").Int32(7).Build()
+            .Build();
+        auto result = db.ExecuteQuery(
+            DefaultExprDDL("v Int32 DEFAULT $p", "DECLARE $p AS Int32;\n"),
+            TTxControl::NoTx(), params).GetValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), "DEFAULT must not retain a query parameter");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown name: $p");
     }
 
     Y_UNIT_TEST(NonRowCallableRejected) {
@@ -712,8 +742,12 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         }
     }
 
-    Y_UNIT_TEST(ExpressionSequenceAndLiteralDefaultCombinations) {
-        TTestFixture fixture;
+    Y_UNIT_TEST_TWIN(ExpressionSequenceAndLiteralDefaultCombinations, CompileTimeDefaults) {
+        TTestFixture fixture(
+            /* featureFlagEnabled */ true,
+            /* indexStreamWrite */ true,
+            /* generatedStored */ false,
+            /* compileTimeDefaults */ CompileTimeDefaults);
         fixture.Exec(TStringBuilder() << R"(
             CREATE TABLE TestTable (
                 id Serial,
@@ -967,6 +1001,22 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             "RandomNumber() DEFAULT with a constant dependency must be shared between rows of one write");
     }
 
+    Y_UNIT_TEST(UpdateAndDeleteRequireDefaultedKey) {
+        TTestFixture fixture;
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Uint64 NOT NULL DEFAULT Ensure(RandomNumber(1), false, "key default evaluated"),
+                v Int32,
+                PRIMARY KEY (k)
+            );
+        )");
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (1ul, 1);");
+
+        fixture.Rejects("UPDATE TestTable ON (v) VALUES (2);", "Key columns are not specified");
+        fixture.Rejects("DELETE FROM TestTable ON (v) VALUES (2);", "Key columns are not specified");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1u;[1]]]");
+    }
+
     Y_UNIT_TEST(PrimaryKeyDefaultCollision) {
         TTestFixture fixture;
         fixture.Exec(TStringBuilder() << R"(
@@ -1036,6 +1086,17 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
         fixture.Rejects(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << DefaultExpr << ";",
             "can only be defined in CREATE TABLE");
+    }
+
+    Y_UNIT_TEST_TWIN(SetCoercedDefaultExprRejected, FeatureEnabled) {
+        TTestFixture fixture(FeatureEnabled);
+        fixture.Exec(DefaultExprDDL("v Int64"));
+
+        fixture.Rejects(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << DefaultExpr << ";",
+            "can only be defined in CREATE TABLE");
+        const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT_C(!column.HasDefaultFromExpression() && !column.HasDefaultFromLiteral(),
+            column.ShortDebugString());
     }
 
     Y_UNIT_TEST(SetDefaultExprOnPrimaryKeyColumnRejected) {

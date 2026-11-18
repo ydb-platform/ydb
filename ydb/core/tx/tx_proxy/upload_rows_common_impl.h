@@ -440,7 +440,7 @@ private:
                     return TConclusionStatus::Fail(TStringBuilder()
                         << "Bulk upsert is not supported for tables with STORED generated columns: column "
                         << name);
-                } else {
+                } else if (colInfo.DefaultExpression->Writable) {
                     defaultColumnsLeft.insert(name);
                 }
             }

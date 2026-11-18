@@ -271,7 +271,7 @@ public:
 };
 
 TFindEmptyHistoryIntervalsContext BuildFindEmptyHistoryIntervalsContext(const TTabletStorageInfo& storageInfo, ui32 generation,
-    ui32 requiredBarrierGeneration, const NOlap::TColumnEngineForLogs* index, TActorId tabletActorId) {
+    ui32 requiredBarrierGeneration, const NOlap::TColumnEngineForLogs& index, TActorId tabletActorId) {
     TFindEmptyHistoryIntervalsContext result;
     result.TabletId = storageInfo.TabletID;
     result.TabletActorId = tabletActorId;
@@ -288,16 +288,16 @@ TFindEmptyHistoryIntervalsContext BuildFindEmptyHistoryIntervalsContext(const TT
                 NFindEmptyHistoryIntervals::THistoryInterval{ to, history[i].GroupID });
         }
     }
-    if (result.Intervals.empty() || !index) {
+    if (result.Intervals.empty()) {
         return result;
     }
     const auto add = [&](const auto& portion) {
-        const auto schema = portion->GetSchema(index->GetVersionedIndex());
+        const auto schema = portion->GetSchema(index.GetVersionedIndex());
         if (portion->HasBlobsInBlobStorage(schema->GetIndexInfo())) {
             result.Portions.push_back({ portion->GetPathId(), portion->GetPortionId(), schema, portion->PredictAccessorsMemory(schema) });
         }
     };
-    for (const auto& [_, granule] : index->GetTables()) {
+    for (const auto& [_, granule] : index.GetTables()) {
         for (const auto& [_, portion] : granule->GetPortions()) {
             add(portion);
         }

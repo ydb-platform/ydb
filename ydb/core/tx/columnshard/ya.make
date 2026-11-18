@@ -7,6 +7,7 @@ SRCS(
     columnshard_find_empty_history_intervals.cpp
     columnshard.cpp
     columnshard__init.cpp
+    columnshard__load_portions.cpp
     columnshard__locks.cpp
     columnshard__notify_tx_completion.cpp
     columnshard__overload.cpp

@@ -3168,6 +3168,15 @@ message TColumnShardConfig {
     }
 
     optional TBackupSettings BackupSettings = 79;
+
+    message TDeferredPortionLoadingSettings {
+        // For benchmarks only: needs the index table of portions and the portion ids in the operations, both filled by the normalizer
+        optional bool Enabled = 1 [default = false];
+        // a batch also takes the rest of the portions sharing its last key
+        optional uint32 PortionsPerBatch = 2 [default = 1000];
+    }
+
+    optional TDeferredPortionLoadingSettings DeferredPortionLoadingSettings = 80;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

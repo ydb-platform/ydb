@@ -67,6 +67,7 @@ class TEngineLoadingFinish: public ITxReader {
 private:
     using TBase = ITxReader;
     TColumnEngineForLogs* Self = nullptr;
+    const bool PortionsLoaded;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
 
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
@@ -74,9 +75,10 @@ private:
     }
 
 public:
-    TEngineLoadingFinish(const TString& name, TColumnEngineForLogs* self)
+    TEngineLoadingFinish(const TString& name, TColumnEngineForLogs* self, const bool portionsLoaded)
         : TBase(name)
         , Self(self)
+        , PortionsLoaded(portionsLoaded)
     {
     }
 };

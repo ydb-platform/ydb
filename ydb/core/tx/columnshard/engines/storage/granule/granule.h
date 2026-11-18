@@ -383,7 +383,13 @@ public:
                                 << ")";
     }
 
+    bool LoadsChunksAtStart() const {
+        return MetadataMemoryManager->LoadsChunksAtStart();
+    }
+
     void UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion);
+    // One batch of deferred loading, in the order of the index; returns the committed portions it added
+    std::vector<std::shared_ptr<TPortionInfo>> AddLoadedPortions(const std::vector<std::shared_ptr<TPortionInfo>>& portions);
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;

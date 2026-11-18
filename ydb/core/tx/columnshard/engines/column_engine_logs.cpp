@@ -414,24 +414,24 @@ void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, c
 }
 
 std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(
-    const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, std::vector<TPortionAddress>&& uncommittedPortions) {
+    const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, std::vector<TPortionAddress>&& uncommittedPortions, const bool loadPortions) {
     auto result = std::make_shared<TTxCompositeReader>("column_engines");
     result->AddChildren(std::make_shared<NEngineLoading::TEngineCountersReader>("counters", this, dsGroupSelector));
     result->AddChildren(std::make_shared<NEngineLoading::TEngineShardingInfoReader>("sharding_info", this, dsGroupSelector));
     result->AddChildren(std::make_shared<NEngineLoading::TEngineUncommittedPortionsReader>(
         "uncommitted_portions", this, dsGroupSelector, std::move(uncommittedPortions)));
-    if (GranulesStorage->GetTables().size()) {
+    if (loadPortions && GranulesStorage->GetTables().size()) {
         auto granules = std::make_shared<TTxCompositeReader>("granules");
         for (auto&& i : GranulesStorage->GetTables()) {
             granules->AddChildren(i.second->BuildLoader(dsGroupSelector, GetVersionedIndex()));
         }
         result->AddChildren(granules);
     }
-    result->AddChildren(std::make_shared<NEngineLoading::TEngineLoadingFinish>("finish", this));
+    result->AddChildren(std::make_shared<NEngineLoading::TEngineLoadingFinish>("finish", this, loadPortions));
     return result;
 }
 
-bool TColumnEngineForLogs::FinishLoading() {
+bool TColumnEngineForLogs::FinishLoading(const bool portionsLoaded) {
     for (const auto& [pathId, spg] : GranulesStorage->GetTables()) {
         for (const auto& [_, portionInfo] : spg->GetPortions()) {
             Counters->AddPortion(*portionInfo);
@@ -439,7 +439,9 @@ bool TColumnEngineForLogs::FinishLoading() {
                 AddCleanupPortion(portionInfo);
             }
         }
-        spg->SetLoadedKeyRanges(TLoadedKeyRanges::BuildEverything());
+        if (portionsLoaded) {
+            spg->SetLoadedKeyRanges(TLoadedKeyRanges::BuildEverything());
+        }
 
         for (const auto& [_, portion] : spg->GetPortions()) {
             if (portion->GetPortionType() == EPortionType::Written) {
@@ -456,6 +458,15 @@ bool TColumnEngineForLogs::FinishLoading() {
     Y_ABORT_UNLESS(!(LastGranule >> 63), "near to int overflow");
     Y_ABORT_UNLESS(!(LastInsertWriteId >> 63), "near to int overflow");
     return true;
+}
+
+void TColumnEngineForLogs::AddLoadedPortions(const TInternalPathId pathId, const std::vector<TPortionInfo::TPtr>& portions) {
+    for (const auto& portion : GetGranulePtrVerified(pathId)->AddLoadedPortions(portions)) {
+        Counters->AddPortion(*portion);
+        if (portion->HasRemoveSnapshot()) {
+            AddCleanupPortion(portion);
+        }
+    }
 }
 
 void TColumnEngineForLogs::PrefetchPortionsMetadata() {

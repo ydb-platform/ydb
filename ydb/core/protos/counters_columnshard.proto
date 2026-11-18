@@ -218,4 +218,5 @@ enum ETxTypes {
     TXTYPE_CLEANUP_SCHEMAS = 43                             [(TxTypeOpts) = {Name: "TxCleanupSchemasWithnoData"}];
     TXTYPE_ABORT_LOCK = 44                                  [(TxTypeOpts) = {Name: "TxAbortLock"}];
     TXTYPE_TX_ABORT = 45                                    [(TxTypeOpts) = {Name: "TxTxAbort"}];
+    TXTYPE_LOAD_PORTIONS_BATCH = 46                         [(TxTypeOpts) = {Name: "TxLoadPortionsBatch"}];
 }

@@ -47,7 +47,7 @@ TCommandExperimental::TCommandExperimental()
     AddCommand(std::make_unique<TCommandDeleteSession>());
     AddCommand(std::make_unique<TCommandExperimentalTopic>());
     AddCommand(std::make_unique<TCommandUdf>());
-    AddCommand(std::make_unique<TCommandReassignTablets>());
+    AddDangerousCommand(std::make_unique<TCommandReassignTablets>());
 }
 
 TCommandReassignTablets::TCommandReassignTablets()

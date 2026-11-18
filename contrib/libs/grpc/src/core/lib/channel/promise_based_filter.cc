@@ -375,11 +375,11 @@ void BaseCallData::SendMessage::GotPipe(T* pipe_end) {
   switch (state_) {
     case State::kInitial:
       state_ = State::kIdle;
-      Activity::current()->ForceImmediateRepoll();
+      GetContext<Activity>()->ForceImmediateRepoll();
       break;
     case State::kGotBatchNoPipe:
       state_ = State::kGotBatch;
-      Activity::current()->ForceImmediateRepoll();
+      GetContext<Activity>()->ForceImmediateRepoll();
       break;
     case State::kIdle:
     case State::kGotBatch:
@@ -568,7 +568,7 @@ void BaseCallData::SendMessage::WakeInsideCombiner(Flusher* flusher,
       }
       if (completed_status_.ok()) {
         state_ = State::kIdle;
-        Activity::current()->ForceImmediateRepoll();
+        GetContext<Activity>()->ForceImmediateRepoll();
       } else {
         state_ = State::kCancelled;
       }
@@ -676,7 +676,7 @@ void BaseCallData::ReceiveMessage::GotPipe(T* pipe_end) {
       break;
     case State::kBatchCompletedNoPipe:
       state_ = State::kBatchCompleted;
-      Activity::current()->ForceImmediateRepoll();
+      GetContext<Activity>()->ForceImmediateRepoll();
       break;
     case State::kIdle:
     case State::kForwardedBatch:

@@ -1,4 +1,4 @@
-* Added `ydb workload scheme init|run` to create and alter row tables and topics using YAML configuration, with optional `initial_count` preparation, mixed CREATE/ALTER traffic in `run`, separate concurrency limits, configurable ALTER batch sizes and validation of existing schemas and actual partition counts before starting traffic.
+* Added `ydb workload scheme` to load-test schema operations by creating and altering tables and topics.
 * Cluster administration commands that allow omitting `--database` now reject tenant paths. Specify a root domain such as `/Root`, or omit the connection database.
 * `ydb scheme rmdir --recursive` now removes objects in parallel. Added `--in-flight` option to set the maximum number of objects removed at the same time (default: 16).
 * Workload imports with `--file-output-path` now skip database post-import actions such as index building and statistics collection.

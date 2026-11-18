@@ -23,6 +23,7 @@ PEERDIR(
     ydb/core/persqueue/public
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/describer
+    ydb/library/persqueue/topic_parser
 )
 
 END()

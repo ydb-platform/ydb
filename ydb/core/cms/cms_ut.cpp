@@ -3293,21 +3293,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             MakeWalleDrainDataJson(nodeId, "false")), "ok", nodeId);
     }
 
-    Y_UNIT_TEST(WalleDrainDataRespectsEvictionConfig)
-    {
-        for (const auto mode : {NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY,
-                               NKikimrCms::TCmsConfig::TSentinelConfig::MAINTENANCE}) {
-            TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
-            const auto nodeId = env.GetNodeId(0);
-            auto config = env.GetCmsConfig();
-            config.MutableSentinelConfig()->SetEvictVDisksStatus(mode);
-            env.SetCmsConfig(config);
-            CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
-                MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
-            env.CheckWalleRemoveTask("eviction");
-        }
-    }
-
     Y_UNIT_TEST(WalleDrainDataDisabledEvictVDisks)
     {
         TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());

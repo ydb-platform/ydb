@@ -165,6 +165,35 @@ TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType) {
     return TStringBuilder() << "Invalid index type " << static_cast<int>(indexType);
 }
 
+std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(NYdb::NTable::EIndexType type, bool enableCompactFulltext) {
+    switch (type) {
+        case NYdb::NTable::EIndexType::GlobalSync:
+            return NKikimrSchemeOp::EIndexTypeGlobal;
+        case NYdb::NTable::EIndexType::GlobalAsync:
+            return NKikimrSchemeOp::EIndexTypeGlobalAsync;
+        case NYdb::NTable::EIndexType::GlobalUnique:
+            return NKikimrSchemeOp::EIndexTypeGlobalUnique;
+        case NYdb::NTable::EIndexType::GlobalVectorKMeansTree:
+            return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+        case NYdb::NTable::EIndexType::GlobalHnsw:
+            return NKikimrSchemeOp::EIndexTypeGlobalHnsw;
+        case NYdb::NTable::EIndexType::GlobalFulltextPlain:
+            return enableCompactFulltext
+                ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
+        case NYdb::NTable::EIndexType::GlobalFulltextRelevance:
+            return enableCompactFulltext
+                ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+                : NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+        case NYdb::NTable::EIndexType::GlobalJson:
+            return enableCompactFulltext
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson;
+        default:
+            return std::nullopt;
+    }
+}
+
 std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type, bool enableFulltextCompact) {
     switch (type) {
         case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:

@@ -137,27 +137,28 @@ private:
         RequestInFlight = false;
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
-            std::unordered_set<ui32> discoveredChunks;
-            for (const auto& [chunkIdx, chunk] : ev->Get()->Chunks) {
-                discoveredChunks.insert(chunkIdx);
-                if (!Data.Chunks.contains(chunkIdx)) {
-                    // chunk was allocated but wasn't committed to SyncLog
-                    // entryPoint before crash
-                    Data.Chunks[chunkIdx] = TPhantomFlagStorageData::TChunk{
-                        .DataSize = 0,
-                    };
-                }
-            }
-
             std::unordered_map<ui32, TPhantomFlagStorageData::TChunk> chunks;
-            for (const auto& [chunkIdx, chunk] : Data.Chunks) {
-                if (discoveredChunks.contains(chunkIdx)) {
-                    chunks[chunkIdx] = chunk;
+            for (const auto& [chunkIdx, chunk] : ev->Get()->Chunks) {
+                const auto it = Data.Chunks.find(chunkIdx);
+                if (it != Data.Chunks.end() && (it->second.DataSize || !Ctx.EnableReplication)) {
+                    chunks.emplace(chunkIdx, it->second);
                 } else if (!Ctx.EnableReplication) {
+                    chunks.emplace(chunkIdx, TPhantomFlagStorageData::TChunk{.DataSize = 0});
+                } else if (!Ctx.SyncLogCtx->IsReadOnlyVDisk) {
+                    // Interrupted drops and unpublished allocations can leave ChunkKeeper ownership behind.
+                    // Older recovery can also carry these chunks forward as empty manifest entries.
                     EnqueueChunkDeletion(chunkIdx);
                 }
             }
-            std::exchange(Data.Chunks, chunks); // filter out deallocated chunks
+
+            if (!Ctx.EnableReplication) {
+                for (const auto& [chunkIdx, chunk] : Data.Chunks) {
+                    if (!chunks.contains(chunkIdx)) {
+                        EnqueueChunkDeletion(chunkIdx);
+                    }
+                }
+            }
+            Data.Chunks = std::move(chunks);
             SelectTailChunk();
             break;
         }

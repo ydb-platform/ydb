@@ -1,5 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
+#include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_events.h>
 
 #include <util/random/random.h>
 
@@ -1146,6 +1147,86 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             *ctx.Env, donor, peerNodeId, std::move(noChunkIndexRequest));
         UNIT_ASSERT_VALUES_EQUAL(noChunkIndex->Get()->Record.GetStatus(), NKikimrProto::ERROR);
         UNIT_ASSERT(!noChunkIndex->Get()->Record.HasChunkIndex());
+    }
+
+    Y_UNIT_TEST(ReclaimsUnpublishedPhantomFlagStorageChunksOnRestart) {
+        TTestCtxBase ctx({
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .PDiskChunkSize = 32_MB,
+            .EnablePhantomFlagStorage = true,
+            .EnablePersistentPhantomFlagStorage = true,
+            .EnablePhantomFlagStorageReplication = true,
+        });
+        ctx.CreateOneGroup();
+
+        const TIntrusivePtr<TBlobStorageGroupInfo> group = ctx.Env->GetGroupInfo(ctx.GroupId);
+        const TActorId donor = group->GetActorId(0);
+        const ui32 donorNodeId = donor.NodeId();
+        using TSubsystem = NKikimrVDiskData::TChunkKeeperEntryPoint::ESubsystem;
+        constexpr TSubsystem subsystem = NKikimrVDiskData::TChunkKeeperEntryPoint::PhantomFlagStorage;
+
+        const auto getChunkKeeperId = [&] {
+            const TActorId sender = ctx.Env->Runtime->AllocateEdgeActor(donorNodeId);
+            std::unique_ptr<IEventHandle> request = std::make_unique<IEventHandle>(donor, sender, new TEvGetSkeletonState);
+            request->Rewrite(TEvBlobStorage::EvForwardToSkeleton, donor);
+            ctx.Env->Runtime->Send(request.release(), donorNodeId);
+            const TEvGetSkeletonStateResult::TPtr result = ctx.Env->WaitForEdgeActorEvent<TEvGetSkeletonStateResult>(
+                sender, true, ctx.Env->Now() + TDuration::Seconds(10));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT(result->Get()->ChunkKeeperActorId);
+            return result->Get()->ChunkKeeperActorId;
+        };
+        const auto discover = [&](const TActorId& chunkKeeperId) {
+            const TActorId sender = ctx.Env->Runtime->AllocateEdgeActor(donorNodeId);
+            ctx.Env->Runtime->Send(new IEventHandle(chunkKeeperId, sender, new TEvChunkKeeperDiscover(subsystem)),
+                donorNodeId);
+            const TEvChunkKeeperDiscoverResult::TPtr result =
+                ctx.Env->WaitForEdgeActorEvent<TEvChunkKeeperDiscoverResult>(
+                    sender, true, ctx.Env->Now() + TDuration::Seconds(10));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+            std::unordered_set<ui32> chunks;
+            for (const TEvChunkKeeperDiscoverResult::TChunkInfo& chunk : result->Get()->Chunks) {
+                chunks.insert(chunk.ChunkIdx);
+            }
+            return chunks;
+        };
+
+        // Reproduce the durable state after a drop commits its empty manifest and crashes before the frees.
+        const TActorId chunkKeeperId = getChunkKeeperId();
+        constexpr ui32 chunkCount = 2;
+        std::unordered_set<ui32> strandedChunks;
+        for (ui32 chunkNumber = 0; chunkNumber < chunkCount; ++chunkNumber) {
+            const TActorId sender = ctx.Env->Runtime->AllocateEdgeActor(donorNodeId);
+            ctx.Env->Runtime->Send(new IEventHandle(chunkKeeperId, sender, new TEvChunkKeeperAllocate(subsystem)),
+                donorNodeId);
+            const TEvChunkKeeperAllocateResult::TPtr result =
+                ctx.Env->WaitForEdgeActorEvent<TEvChunkKeeperAllocateResult>(
+                    sender, true, ctx.Env->Now() + TDuration::Seconds(10));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT(result->Get()->ChunkIdx);
+            UNIT_ASSERT(strandedChunks.insert(*result->Get()->ChunkIdx).second);
+        }
+        UNIT_ASSERT(discover(chunkKeeperId) == strandedChunks);
+
+        ctx.Env->RestartNode(donorNodeId);
+        ctx.Env->Sim(TDuration::Seconds(5));
+        const TActorId recoveredChunkKeeperId = getChunkKeeperId();
+        std::unordered_set<ui32> ownedChunks = discover(recoveredChunkKeeperId);
+        for (ui32 attempt = 0; attempt < 20 && !ownedChunks.empty(); ++attempt) {
+            ctx.Env->Sim(TDuration::Seconds(1));
+            ownedChunks = discover(recoveredChunkKeeperId);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ownedChunks.size(), 0);
+
+        using TList = TEvBlobStorage::TEvVPhantomFlagStorageListChunks;
+        using TListResult = TEvBlobStorage::TEvVPhantomFlagStorageListChunksResult;
+        const TListResult::TPtr list = QueryPhantomFlagStorage(*ctx.Env, donor, group->GetActorId(1).NodeId(),
+            std::make_unique<TList>(group->GetVDiskId(1), group->GetVDiskId(0)));
+        UNIT_ASSERT_VALUES_EQUAL(list->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(list->Get()->Record.ChunkIndexesSize(), 0);
     }
 
     Y_UNIT_TEST(PhantomFlagStorageRequestsWithDisabledChunkKeeper) {

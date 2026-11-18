@@ -414,7 +414,12 @@ public:
 
         auto& info = PerVDiskInfo[orderNumber];
         Y_ABORT_UNLESS(!info.HasItemsToMerge());
-        if (record.GetStatus() == NKikimrProto::OK) {
+        bool requireReplicated = IncludePartPlacement && Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+            && Info->IsFailRealmReadable(vdiskId.FailRealm)
+            && (HasMirror3dcPendingRealm(Info->GetMirror3dcState().State) || AppData()->FeatureFlags.GetEnableMirror3dcPendingRealm());
+        if (record.GetStatus() == NKikimrProto::OK && requireReplicated && !record.GetReplicated()) {
+            info.ErrorReason = TStringBuilder() << vdiskId << ": VDisk replication is incomplete";
+        } else if (record.GetStatus() == NKikimrProto::OK) {
             info.PushDataFromMessage(record, *this, Info->Type, Reverse, orderNumber);
             if (info.HasItemsToMerge()) {
                 Heap.push_back(&info);

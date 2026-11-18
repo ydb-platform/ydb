@@ -1905,7 +1905,7 @@ namespace NKikimr {
                 // replies must not become visible after the bridge syncer has taken a snapshot without them.
                 PendingAssimilations.emplace_back(*lsn, ev.Release());
             } else {
-                const TActorId actorId = RunInBatchPool(ctx, CreateAssimilationActor(Hull->GetIndexSnapshot(), ev, SelfVDiskId));
+                const TActorId actorId = RunInBatchPool(ctx, CreateAssimilationActor(Hull->GetIndexSnapshot(), ev, SelfVDiskId, ReplDone));
                 ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
         }

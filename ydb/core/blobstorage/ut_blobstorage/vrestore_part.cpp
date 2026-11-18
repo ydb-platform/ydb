@@ -85,6 +85,23 @@ namespace {
             return Info->GetVDiskInSubgroup(subgroupIdx, FullId.Hash());
         }
 
+        void EnterSoloDisaster(ui32 includedRealm) {
+            using R = NKikimrBlobStorage::TDataCenterState;
+            ui32 groupId = Info->GroupID.GetRawId();
+            NKikimrBlobStorage::TConfigRequest config;
+            config.SetIgnoreGroupFailModelChecks(true);
+            auto *definition = config.AddCommand()->MutableDefineGroupState()->AddGroups();
+            definition->SetGroupId(groupId);
+            definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER);
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                definition->AddFailRealmStates(realm == includedRealm ? R::INCLUDED : R::PENDING);
+            }
+            auto response = Env.Invoke(config);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            Env.Sim(TDuration::Seconds(5));
+            Info = Env.GetGroupInfo(groupId);
+        }
+
         void PutLocalPart(ui32 subgroupIdx, ui32 partId) {
             Env.PutBlob(VDisk(subgroupIdx), TLogoBlobID(FullId, partId), Data);
         }
@@ -182,11 +199,40 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
         UNIT_ASSERT(!fixture.Read(8, 3));
     }
 
-    Y_UNIT_TEST(SoloDisasterRepairsConfirmedBlobFromPendingRealms) {
-        using R = NKikimrBlobStorage::TDataCenterState;
+    Y_UNIT_TEST(SoloDisasterPlacementNeedsReplicatedSources) {
         TFeatureFlags flags;
         flags.SetEnableMirror3dcPendingRealm(true);
         TFixture f(std::move(flags));
+        ui32 included = f.VDisk(2).FailRealm;
+        for (ui32 disk : {2u, 5u, 8u}) {
+            TVDiskID id = f.VDisk(disk);
+            TActorId service = f.Info->GetActorId(TVDiskIdShort(id));
+            f.Env.Runtime->Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, service, {}, nullptr, 0), service.NodeId());
+            f.Env.WaitForVDiskRepl(service, id);
+        }
+        f.EnterSoloDisaster(included);
+        const TActorId edge = f.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        auto scan = [&](bool includePlacement) {
+            auto request = std::make_unique<TEvBlobStorage::TEvAssimilate>(std::nullopt, std::nullopt, std::nullopt, true, true);
+            request->ExpectedGeneration = f.Info->GroupGeneration;
+            request->IncludePartPlacement = includePlacement;
+            f.Env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, f.Info->GroupID, request.release());
+            });
+            auto response = f.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvAssimilateResult>(edge, false,
+                f.Env.Runtime->GetClock() + TDuration::Minutes(1));
+            UNIT_ASSERT(response);
+            return response->Get()->Status;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(scan(false), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(scan(true), NKikimrProto::ERROR);
+    }
+
+    Y_UNIT_TEST(SoloDisasterRepairsConfirmedBlobFromPendingRealms) {
+        TFeatureFlags flags;
+        flags.SetEnableMirror3dcPendingRealm(true);
+        TFixture f(std::move(flags));
+        f.Env.CommenceReplication();
         // A legal NORMAL write placed both pairs outside the future Included realm.
         for (ui32 disk : {0u, 1u, 3u, 4u}) {
             f.PutLocalPart(disk, disk % 3 + 1);
@@ -208,18 +254,7 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
             }
             return true;
         };
-        NKikimrBlobStorage::TConfigRequest config;
-        config.SetIgnoreGroupFailModelChecks(true);
-        auto *definition = config.AddCommand()->MutableDefineGroupState()->AddGroups();
-        definition->SetGroupId(groupId);
-        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER);
-        for (ui32 realm = 0; realm < 3; ++realm) {
-            definition->AddFailRealmStates(realm == included ? R::INCLUDED : R::PENDING);
-        }
-        auto response = f.Env.Invoke(config);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        f.Env.Sim(TDuration::Seconds(5));
-        f.Info = f.Env.GetGroupInfo(groupId);
+        f.EnterSoloDisaster(included);
         UNIT_ASSERT_VALUES_EQUAL(f.RestorePart(6, 1).GetStatus(), NKikimrProto::ERROR);
         UNIT_ASSERT(!f.Read(6, 1));
         UNIT_ASSERT(!f.Read(2, 3));

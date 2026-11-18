@@ -26,7 +26,7 @@ namespace NKikimr {
         static constexpr size_t MaxResultItems = 10'000;
 
     public:
-        TAssimilationActor(THullDsSnap&& snap, TEvBlobStorage::TEvVAssimilate::TPtr& ev, TVDiskID vdiskId)
+        TAssimilationActor(THullDsSnap&& snap, TEvBlobStorage::TEvVAssimilate::TPtr& ev, TVDiskID vdiskId, bool replicated)
             : Snap(std::move(snap))
             , Ev(ev.Release())
             , Result(std::make_unique<TEvBlobStorage::TEvVAssimilateResult>(NKikimrProto::OK, TString(), vdiskId))
@@ -46,6 +46,7 @@ namespace NKikimr {
                 SkipBlobsUpTo.emplace(LogoBlobIDFromLogoBlobID(record.GetSkipBlobsUpTo()));
             }
 
+            Result->Record.SetReplicated(replicated);
             RecordSize = Result->Record.ByteSizeLong();
         }
 
@@ -310,8 +311,8 @@ namespace NKikimr {
         }
     };
 
-    IActor *CreateAssimilationActor(THullDsSnap&& snap, TEvBlobStorage::TEvVAssimilate::TPtr& ev, TVDiskID vdiskId) {
-        return new TAssimilationActor(std::move(snap), ev, vdiskId);
+    IActor *CreateAssimilationActor(THullDsSnap&& snap, TEvBlobStorage::TEvVAssimilate::TPtr& ev, TVDiskID vdiskId, bool replicated) {
+        return new TAssimilationActor(std::move(snap), ev, vdiskId, replicated);
     }
 
 } // NKikimr

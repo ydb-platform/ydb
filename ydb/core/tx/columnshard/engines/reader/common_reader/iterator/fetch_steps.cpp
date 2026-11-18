@@ -155,6 +155,19 @@ ui64 TAllocateMemoryStep::GetProcessingDataSize(const IDataSource& /*source*/) c
     return 0;
 }
 
+TConclusion<TExecutionResult> TReadNotNullFilter::DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& /*step*/) const {
+    auto& table = source.MutableStageData().MutableTable();
+    const auto& context = *source.GetContext();
+    context.ApplyReadNotNullFilter(table);
+    for (const auto columnId : context.GetReadNotNullColumns()->GetColumnIds()) {
+        if (!context.GetProgramInputColumns()->GetColumnIds().contains(columnId)) {
+            table.Remove(columnId);
+        }
+    }
+
+    return TExecutionResult::Done();
+}
+
 TConclusion<TExecutionResult> TBuildStageResultStep::DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& /*step*/) const {
     source.BuildStageResult();
     return TExecutionResult::Done();

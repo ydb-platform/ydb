@@ -224,6 +224,12 @@ void ToOperation(const NKikimrSetColumnConstraint::TSetColumnConstraint& constra
             operation->set_ready(true);
             operation->set_status(Ydb::StatusIds::CANCELLED);
             break;
+        case Ydb::Table::SetNotNullState::STATE_REJECTED:
+            if (constraint.HasEndTime()) {
+                operation->set_ready(true);
+                operation->set_status(constraint.GetFailureStatus());
+            }
+            break;
         default:
             operation->set_ready(false);
             break;

@@ -101,6 +101,7 @@ void TWriteOperation::OnWriteFinish(NTabletFlatExecutor::TTransactionContext& tx
 }
 
 void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const {
+    proto.SetSchemaVersion(SchemaVersion);
     for (auto&& writeId : InsertWriteIds) {
         proto.AddInternalWriteIds((ui64)writeId);
     }
@@ -115,6 +116,7 @@ void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& prot
 }
 
 void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
+    SchemaVersion = proto.GetSchemaVersion();
     for (auto&& writeId : proto.GetInternalWriteIds()) {
         InsertWriteIds.push_back(TInsertWriteId(writeId));
     }

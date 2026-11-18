@@ -8,6 +8,15 @@ TConclusionStatus TStandaloneSchemaUpdate::DoRestoreImpl(
     const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) {
     UpdateSchema = alterData->AlterBody->HasAlterSchema();
     UpdateTTL = alterData->AlterBody->HasAlterTtlSettings();
+    const auto& originalColumns = context.GetOriginalEntityAsVerified<TStandaloneTable>().GetTableSchemaVerified().GetColumns();
+    for (const auto& column : alterData->AlterBody->GetAlterSchema().GetAlterColumns()) {
+        const auto* previous = originalColumns.GetByName(column.GetName());
+        if (column.GetNotNull() && previous && !previous->IsNotNull()) {
+            SetsNotNull = true;
+            break;
+        }
+    }
+
     TargetStandalone = std::make_shared<TStandaloneTable>(context.GetOriginalEntity().GetPathId(), alterData);
     return TConclusionStatus::Success();
 }
@@ -20,15 +29,15 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
         return alter;
     }
     auto alterCS = alter.DetachResult();
-    UpdateSchema = alterCS.HasAlterSchema();
-    UpdateTTL = alterCS.HasAlterTtlSettings();
     std::optional<TOlapSchemaUpdate> alterSchema;
     std::optional<TOlapTTLUpdate> alterTTL;
     std::optional<TOlapMultiColumnStatisticsUpdate> alterMultiColumnStatistics;
     if (alterCS.HasAlterSchema()) {
         TSimpleErrorCollector collector;
         TOlapSchemaUpdate schemaUpdate;
-        if (!schemaUpdate.Parse(alterCS.GetAlterSchema(), collector)) {
+        const auto& modification = *context.GetModification();
+        const bool allowConstraintChanges = modification.GetInternal() && modification.GetLockGuard().GetOwnerTxId();
+        if (!schemaUpdate.Parse(alterCS.GetAlterSchema(), collector, allowConstraintChanges)) {
             return TConclusionStatus::Fail("update parse error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
         alterSchema = std::move(schemaUpdate);
@@ -100,7 +109,16 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
     auto saSharding = originalTable.GetTableInfoVerified().GetStandaloneShardingVerified();
 
     auto targetInfo = std::make_shared<TColumnTableInfo>(originalTable.GetTableInfoVerified().AlterVersion + 1, std::move(description), std::move(saSharding), alterCS);
-    TargetStandalone = std::make_shared<TStandaloneTable>(context.GetOriginalEntity().GetPathId(), targetInfo);
+    return DoRestoreImpl(context, targetInfo);
+}
+
+TConclusionStatus TStandaloneSchemaUpdate::DoFinishImpl(const TUpdateFinishContext& context) {
+    if (SetsNotNull) {
+        const auto& snapshot = context.GetSnapshotVerified();
+        auto* since = GetTargetTableInfo()->Description.MutableNotNullSince();
+        since->SetStep(snapshot.GetPlanStep());
+        since->SetTxId(snapshot.GetTxId());
+    }
 
     return TConclusionStatus::Success();
 }

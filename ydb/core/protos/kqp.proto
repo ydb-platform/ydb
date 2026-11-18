@@ -6,6 +6,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "ydb/library/actors/protos/actors.proto";
+import "ydb/core/protos/base.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 
@@ -255,6 +256,7 @@ message TKqpTableMetadataProto {
     optional uint64 RecordsCount = 13;
     optional uint64 DataSize = 14;
     optional bool StatsLoaded = 15;
+    optional NKikimrProto.TRowVersion NotNullSince = 16;
 }
 
 message TKqpAlterTableRequest {

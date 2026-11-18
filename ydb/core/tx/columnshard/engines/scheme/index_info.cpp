@@ -43,7 +43,14 @@ std::optional<ui32> TIndexInfo::GetBloomNgramSize(const ui32 columnId, const boo
 }
 
 TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
-    if (!other.GetPrimaryKey()->Equals(PrimaryKey)) {
+    // Tightening nullability preserves key ordering and representation.
+    bool compatible = PrimaryKey->num_fields() == other.PrimaryKey->num_fields();
+    for (int i = 0; compatible && i < PrimaryKey->num_fields(); ++i) {
+        const auto& before = PrimaryKey->field(i);
+        const auto& after = other.PrimaryKey->field(i);
+        compatible = (before->nullable() || !after->nullable()) && before->name() == after->name() && before->type()->Equals(after->type());
+    }
+    if (!compatible) {
         return TConclusionStatus::Fail(
             TStringBuilder() << "PK mismatch: this=" << PrimaryKey->ToString() << " other=" << other.GetPrimaryKey()->ToString());
     }
@@ -166,7 +173,7 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, 
     if (!SchemaWithSpecials) {
         InitializeCaches(operators, columns, nullptr);
         BuildColumnIndexByName();
-        BuildUsedStorageIds();
+        BuildColumnProperties();
     }
     for (auto&& [id, column] : columns) {
         Columns[id] = TNameTypeInfo(column.Name, column.PType);
@@ -398,7 +405,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
 
     Version = schema.GetVersion();
     BuildColumnIndexByName();
-    BuildUsedStorageIds();
+    BuildColumnProperties();
     Validate();
     return true;
 }
@@ -686,6 +693,9 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
         }
         if (columnProto) {
             InsertColumn(*columnProto, keyOrder, operators, cache);
+            if (keyOrder) {
+                PrimaryKey = PrimaryKey->SetField(*keyOrder, GetColumnFieldVerified(columnId)).ValueOrDie();
+            }
         }
     }
     for (const auto& [indexId, indexProto] : diff.GetModifiedIndexes()) {
@@ -701,7 +711,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
 
     DeserializeOptionsFromProto(diff.GetSchemaOptions());
     Version = diff.GetVersion();
-    BuildUsedStorageIds();
+    BuildColumnProperties();
     Validate();
 }
 
@@ -772,10 +782,25 @@ void TIndexInfo::InsertColumn(const NKikimrSchemeOp::TOlapColumnDescription& col
     ColumnIdxSortedByName.insert(std::lower_bound(ColumnIdxSortedByName.begin(), ColumnIdxSortedByName.end(), position, byName), position);
 }
 
-void TIndexInfo::BuildUsedStorageIds() {
+void TIndexInfo::BuildColumnProperties() {
     UsedStorageIds = std::make_shared<std::set<TString>>();
+    RequiredWriteColumnIds.clear();
+    SetNotNullColumnIds.clear();
+    ReadNotNullColumnIds.clear();
     for (auto&& i : ColumnFeatures) {
         UsedStorageIds->emplace(i->GetOperator()->GetStorageId());
+        if (!IsSpecialColumn(i->GetColumnId())) {
+            if (i->GetFilterNullsOnRead()) {
+                ReadNotNullColumnIds.emplace_back(i->GetColumnId());
+            }
+
+            if (i->GetIsSetNotNullInProgress()) {
+                SetNotNullColumnIds.emplace_back(i->GetColumnId());
+            }
+            if (i->GetIsSetNotNullInProgress() || !i->GetIsNullable()) {
+                RequiredWriteColumnIds.emplace_back(i->GetColumnId());
+            }
+        }
     }
 }
 

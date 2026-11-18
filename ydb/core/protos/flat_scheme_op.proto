@@ -1,3 +1,4 @@
+import "ydb/core/protos/base.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/core/protos/blockstore_config.proto";
@@ -440,6 +441,9 @@ message TTableDescription {
     // Actual number of table partitions (shards), always filled in describe
     // results, so clients don't need to request the TablePartitions list.
     optional uint64 PartitionCount = 55;
+
+    // First snapshot compatible with the most recent nullable to NOT NULL transition.
+    optional NKikimrProto.TRowVersion NotNullSince = 56;
 }
 
 message TCompressionOptions {
@@ -466,6 +470,7 @@ message TOlapColumnDiff {
     optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
     optional string ColumnFamilyName = 9 [deprecated = true];
     optional bool NotNull = 10;
+    optional bool SetNotNullInProgress = 11;
 }
 
 message TOlapColumnDescription {
@@ -488,6 +493,10 @@ message TOlapColumnDescription {
     optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
     optional uint32 ColumnFamilyId = 14 [deprecated = true];
     optional string ColumnFamilyName = 15 [deprecated = true];
+    // Internal write constraint; reads remain nullable until validation completes.
+    optional bool SetNotNullInProgress = 16 [default = false];
+    // Older row versions can become visible again when deduplication is disabled.
+    optional bool FilterNullsOnRead = 17;
 }
 
 message TIndexDataExtractor {
@@ -1079,6 +1088,9 @@ message TColumnTableDescription {
     optional bool IsBackup = 17;
 
     repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 18;
+
+    // First snapshot compatible with the most recent nullable to NOT NULL transition.
+    optional NKikimrProto.TRowVersion NotNullSince = 19;
 }
 
 message TAlterColumnTable {

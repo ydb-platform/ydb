@@ -380,6 +380,7 @@ message TInternalOperationData {
     optional bool IsBulk = 5;
     optional uint64 SchemeShardLocalPathId = 6;
     repeated uint64 PortionIds = 7;
+    optional uint64 SchemaVersion = 8;
 }
 
 // Sent by columnshard when some overload reason stopped being relevant

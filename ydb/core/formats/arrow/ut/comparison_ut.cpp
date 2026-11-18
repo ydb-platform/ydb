@@ -172,6 +172,20 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
         CheckPair(batch, 4, 3, std::partial_ordering::equivalent);
     }
 
+    Y_UNIT_TEST(CompareKeysAcrossSetNotNull) {
+        const auto values = MakeArray<arrow::Int64Builder, i64>({1, 2});
+        const auto before = MakeBatch(values);
+        const auto after = arrow::RecordBatch::Make(arrow::schema({before->schema()->field(0)->WithNullable(false)}), 2, {values});
+        const TSimpleRow oldKey(before, 0);
+        const TSimpleRow newKey(after, 1);
+        UNIT_ASSERT(oldKey < newKey);
+        UNIT_ASSERT(oldKey == TSimpleRow(after, 0));
+        UNIT_ASSERT(newKey.CompareNotNull(oldKey) == std::partial_ordering::greater);
+        const TSimpleRowRef oldBorder(TSimpleRowViewV0(oldKey.GetData()), *before->schema());
+        const TSimpleRowRef newBorder(TSimpleRowViewV0(newKey.GetData()), *after->schema());
+        UNIT_ASSERT(oldBorder < newBorder);
+    }
+
     Y_UNIT_TEST(CompositeKeysAndPrefixes) {
         const auto first = MakeArray<arrow::StringBuilder, std::string>({"a", "a", "b"});
         const auto second = MakeArray<arrow::Int32Builder, i32>({2, 1, 0});

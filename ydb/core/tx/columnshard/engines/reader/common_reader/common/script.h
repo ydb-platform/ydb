@@ -221,6 +221,8 @@ public:
         Steps.emplace_back(step);
     }
 
+    void AddReadNotNullFilter(const TColumnsSetIds& columns);
+
     void AddFetchingStep(const TColumnsSetIds& columns, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage);
     void AddAssembleStep(const TColumnsSetIds& columns, const TString& purposeId, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage,
         const bool sequential);

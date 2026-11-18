@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/events.h>
+#include <ydb/core/base/row_version.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/subdomain.h>
@@ -380,6 +381,7 @@ struct TSchemeCacheNavigate {
         THashMap<TString, TString> Attributes;
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
         THashSet<TString> NotNullColumns;
+        TRowVersion NotNullSince = TRowVersion::Min();
         THashSet<TString> SetNotNullInProgressColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TMultiColumnStatisticsDescription> MultiColumnStatistics;

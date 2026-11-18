@@ -52,6 +52,14 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     }
     StopLocalDbBackup(ctx);
 
+    for (const auto& [_, validator] : ColumnConstraintValidators) {
+        if (validator.ActorId) {
+            ctx.Send(validator.ActorId, new TEvents::TEvPoisonPill);
+        }
+    }
+
+    ColumnConstraintValidators.clear();
+
     StoragesManager->Stop();
     DataLocksManager->Stop();
     if (Tiers) {

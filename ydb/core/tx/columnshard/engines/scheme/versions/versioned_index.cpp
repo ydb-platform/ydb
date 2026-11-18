@@ -7,14 +7,17 @@
 namespace NKikimr::NOlap {
 
 const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo) {
-    if (SnapshotByVersion.empty()) {
+    const auto newVersion = indexInfo->GetVersion();
+    if (!SnapshotByVersion.empty()) {
+        const auto& latest = GetLastSchema()->GetIndexInfo();
+        const auto compatibility = newVersion > LastSchemaVersion ? latest.CheckCompatible(*indexInfo) : indexInfo->CheckCompatible(latest);
+        AFL_VERIFY(compatibility.IsSuccess())("error", compatibility.GetErrorMessage());
+    }
+    if (SnapshotByVersion.empty() || newVersion > LastSchemaVersion) {
         PrimaryKey = indexInfo->GetPrimaryKey();
-    } else {
-        Y_ABORT_UNLESS(PrimaryKey->Equals(indexInfo->GetPrimaryKey()));
     }
 
     const bool needActualization = indexInfo->GetSchemeNeedActualization();
-    auto newVersion = indexInfo->GetVersion();
     auto itVersion =
         SnapshotByVersion.emplace(newVersion, TSchemaInfoByVersion(std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot)));
     YDB_LOG_VERIFY(itVersion.second,

@@ -303,6 +303,7 @@ message TMigrateTable {
 
     repeated TMigrateColumn Columns = 6;
     repeated TMigratePartition Partitions = 7;
+    optional NKikimrProto.TRowVersion NotNullSince = 8;
 }
 
 message TMigrateTableIndex {

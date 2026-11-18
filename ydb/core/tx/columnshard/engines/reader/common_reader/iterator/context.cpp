@@ -1,11 +1,14 @@
 #include "context.h"
 
+#include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/util/bit_run_reader.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
@@ -103,13 +106,55 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     } else {
         ProgramInputColumns = FFColumns;
     }
-    AllUsageColumns = std::make_shared<TColumnsSet>(*FFColumns + *PredicateColumns);
+    const auto& readNotNullIds = readSchema->GetIndexInfo().GetReadNotNullColumnIds();
+    ReadNotNullColumns = readNotNullIds.empty() ? EmptyColumns : std::make_shared<TColumnsSet>(readNotNullIds, readSchema);
+    AllUsageColumns = std::make_shared<TColumnsSet>(*FFColumns + *PredicateColumns + *ReadNotNullColumns);
 
     PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), readSchema);
     MergeColumns = std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns);
 
     YDB_LOG_DEBUG("",
         {"columnsContextInfo", DebugString()});
+}
+
+void TSpecialReadContext::IncludeReadNotNullColumnsForMerge() {
+    if (!ReadNotNullColumns->IsEmpty()) {
+        ProgramInputColumns = std::make_shared<TColumnsSet>(*ProgramInputColumns + *ReadNotNullColumns);
+        FFColumns = ProgramInputColumns;
+    }
+}
+
+void TSpecialReadContext::ApplyReadNotNullFilter(NArrow::NAccessor::TAccessorsCollection& table) const {
+    for (const auto columnId : ReadNotNullColumns->GetColumnIds()) {
+        const auto& accessor = table.GetAccessorVerified(columnId);
+        if (!accessor->HasNulls().value_or(true)) {
+            continue;
+        }
+
+        const auto column = accessor->GetChunkedArray();
+        if (!column->null_count()) {
+            continue;
+        }
+
+        auto valid = NArrow::TColumnFilter::BuildAllowFilter();
+        for (const auto& chunk : column->chunks()) {
+            const auto nulls = chunk->null_count();
+            if (!nulls || nulls == chunk->length()) {
+                valid.Add(!nulls, chunk->length());
+                continue;
+            }
+
+            arrow::internal::BitRunReader bits(chunk->null_bitmap_data(), chunk->offset(), chunk->length());
+            for (auto run = bits.NextRun(); run.length; run = bits.NextRun()) {
+                valid.Add(run.set, run.length);
+            }
+        }
+
+        table.AddFilter(valid);
+        if (table.IsEmptyFilter()) {
+            break;
+        }
+    }
 }
 
 TString TSpecialReadContext::DebugString() const {

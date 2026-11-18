@@ -82,13 +82,27 @@ void FillSetColumnConstraint(
         *proto.MutableEndTime() = SecondsToProtoTimeStamp(operationInfo.EndTime.Seconds());
     }
 
-    // Map internal state to proto state
+    const TString tablePath = TPath::Init(operationInfo.TablePathId, self).PathString();
     proto.SetProgress(CalcProgress(operationInfo));
 
     if (operationInfo.ValidationFailed) {
-        // Validation found NULL values (or hit an internal error) in the column(s)
-        // being altered. This is distinct from an explicit user cancellation.
         proto.SetState(ProtoState::STATE_REJECTED);
+        auto* issue = proto.AddIssues();
+        issue->set_severity(NYql::TSeverityIds::S_ERROR);
+        for (const auto& [_, shard] : operationInfo.ValidationShards) {
+            if (shard.ValidateStatus == NKikimrSetColumnConstraint::UNAVAILABLE ||
+                shard.ValidateStatus == NKikimrSetColumnConstraint::BAD_REQUEST) {
+                proto.SetFailureStatus(shard.ValidateStatus == NKikimrSetColumnConstraint::UNAVAILABLE
+                    ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::BAD_REQUEST);
+                issue->set_message(shard.DebugMessage ? shard.DebugMessage : "Column constraint validation failed");
+                break;
+            }
+        }
+
+        if (!proto.HasFailureStatus()) {
+            issue->set_message(TStringBuilder() << "Validation failed for SET NOT NULL on table `"
+                << tablePath << "`: one or more columns contain NULL values");
+        }
     } else if (operationInfo.IsCancelled) {
         // Operation was cancelled by an explicit user request.
         proto.SetState(ProtoState::STATE_CANCELLED);
@@ -115,8 +129,7 @@ void FillSetColumnConstraint(
     }
 
     auto* settings = proto.MutableSettings();
-    TPath tablePath = TPath::Init(operationInfo.TablePathId, self);
-    settings->SetTablePath(tablePath.PathString());
+    settings->SetTablePath(tablePath);
     for (const auto& col : operationInfo.SetNotNullColumns) {
         settings->AddNotNullColumns(TString(col));
     }

@@ -223,6 +223,7 @@ namespace {
             entry.DomainDescription.Drop();
             entry.Columns.clear();
             entry.NotNullColumns.clear();
+            entry.NotNullSince = TRowVersion::Min();
             entry.Indexes.clear();
             entry.MultiColumnStatistics.clear();
             entry.Sequences.clear();
@@ -754,6 +755,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Columns.clear();
             KeyColumnTypes.clear();
             NotNullColumns.clear();
+            NotNullSince = TRowVersion::Min();
             SetNotNullInProgressColumns.clear();
             Indexes.clear();
             MultiColumnStatistics.clear();
@@ -789,6 +791,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
             const auto& tableDesc = pathDesc.GetTable();
+            NotNullSince = TRowVersion::FromProto(tableDesc.GetNotNullSince());
 
             for (const auto& columnDesc : tableDesc.GetColumns()) {
                 auto& column = Columns[columnDesc.GetId()];
@@ -888,6 +891,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         void FillTableInfoFromColumnTable(const NKikimrSchemeOp::TPathDescription& pathDesc) {
             const auto& desc = pathDesc.GetColumnTableDescription();
+            NotNullSince = TRowVersion::FromProto(desc.GetNotNullSince());
 
             THashMap<TString, ui32> nameToId;
             const auto& schemaDesc = desc.GetSchema();
@@ -899,6 +903,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
                 column.PType = typeInfoMod.TypeInfo;
                 column.PTypeMod = typeInfoMod.TypeMod;
+                column.SetNotNullInProgress = columnDesc.GetSetNotNullInProgress();
+                if (column.SetNotNullInProgress) {
+                    SetNotNullInProgressColumns.insert(columnDesc.GetName());
+                }
                 nameToId[column.Name] = column.Id;
                 if (columnDesc.GetNotNull()) {
                     NotNullColumns.insert(columnDesc.GetName());
@@ -1207,6 +1215,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             , IsPrivatePath(other.IsPrivatePath)
             , IsVirtual(other.IsVirtual)
             , SchemaVersion(other.SchemaVersion)
+            , NotNullSince(other.NotNullSince)
             , Partitioning(std::make_shared<TPartitioning>())
         {
             if (other.Subscriber) {
@@ -2034,6 +2043,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.Self = Self;
             entry.Columns = Columns;
             entry.NotNullColumns = NotNullColumns;
+            entry.NotNullSince = NotNullSince;
             entry.SetNotNullInProgressColumns = SetNotNullInProgressColumns;
             entry.Indexes = Indexes;
             entry.MultiColumnStatistics = MultiColumnStatistics;
@@ -2316,6 +2326,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
         TVector<NScheme::TTypeInfo> KeyColumnTypes;
         THashSet<TString> NotNullColumns;
+        TRowVersion NotNullSince = TRowVersion::Min();
         THashSet<TString> SetNotNullInProgressColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TMultiColumnStatisticsDescription> MultiColumnStatistics;

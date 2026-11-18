@@ -95,6 +95,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             if (preventDuplicates) {
                 acc.AddStep(std::make_shared<TDuplicateFilter>());
             }
+            acc.AddReadNotNullFilter(*GetReadNotNullColumns());
             if (const auto& chainProgram = GetReadMetadata()->GetProgram().GetGraphOptional()) {
                 acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
             } else {

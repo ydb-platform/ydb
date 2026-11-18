@@ -163,9 +163,7 @@ class RestartToAnotherVersionFixture:
             yield
 
         self.stop_driver()
-        # Force-kill: graceful drain during teardown can SIGSEGV ydbd (e.g. MiniKQL
-        # DecimalEquals in a still-running KQP scan while ColumnShard gets ReasonPill).
-        # Test body already finished; we do not need a clean cluster shutdown here.
+        # Kill: graceful drain can SIGSEGV after the test body already passed.
         self.cluster.stop(kill=True)
 
     def _new_readiness_table_name(self):
@@ -213,8 +211,7 @@ class RestartToAnotherVersionFixture:
         return "creating right now" in str(error)
 
     def _probe_data_plane(self, table_name, settings):
-        # Full stop/start can leave data tablets unresolved after SchemeShard is up.
-        # UPSERT+SELECT catches Failed to resolve tablet that a scheme-only probe misses.
+        # Scheme-only probe misses "Failed to resolve tablet" after full restart.
         self._execute_data_query(
             "UPSERT INTO `%s` (id) VALUES (1)" % table_name,
             settings,
@@ -228,9 +225,9 @@ class RestartToAnotherVersionFixture:
             raise AssertionError("readiness data probe returned no rows for %s" % table_name)
 
     def _wait_for_readiness(self):
-        timeout = 120  # seconds
-        interval = 2  # seconds
-        request_timeout = 30  # seconds
+        timeout = 120
+        interval = 2
+        request_timeout = 30
         settings = (
             ydb.BaseRequestSettings()
             .with_timeout(request_timeout)
@@ -260,12 +257,9 @@ class RestartToAnotherVersionFixture:
                     try:
                         self._execute_scheme_query(query, settings)
                     except Exception as e:
-                        if self._is_path_already_exists(e):
-                            logger.info("Readiness table %s already exists", table_name)
-                        elif self._is_path_creating(e):
+                        if not self._is_path_already_exists(e):
                             raise
-                        else:
-                            raise
+                        logger.info("Readiness table %s already exists", table_name)
                     self._probe_data_plane(table_name, settings)
                     self._drop_readiness_table(table_name, settings)
                     return
@@ -369,7 +363,7 @@ class MixedClusterFixture:
             yield
 
         self.stop_driver()
-        # See RestartToAnotherVersionFixture.setup_cluster: teardown does not need drain.
+        # Kill: graceful drain can SIGSEGV after the test body already passed.
         self.cluster.stop(kill=True)
 
 
@@ -438,11 +432,10 @@ class RollingUpgradeAndDowngradeFixture:
         if self.recreate_driver:
             self.driver = self.create_driver()
 
-        timeout = 120  # seconds
-        interval = 2  # seconds
-        # Scheme ops during a rolling restart often outlive a 10s cancel window
-        # and stay in EPathStateCreate after the client has given up.
-        request_timeout = 30  # seconds
+        timeout = 120
+        interval = 2
+        # Scheme ops during rolling restart often outlive a short cancel window.
+        request_timeout = 30
         settings = (
             ydb.BaseRequestSettings()
             .with_timeout(request_timeout)
@@ -454,8 +447,7 @@ class RollingUpgradeAndDowngradeFixture:
         deadline = start_time + timeout
         last_exception = None
         attempt = 0
-        # One fixed name across retries collides with the previous iteration's
-        # still-running CREATE/DROP (Overloaded: path exists but creating right now).
+        # Fresh name per attempt: retries collide with CREATE still in progress.
         table_name = self._new_readiness_table_name()
         while time.time() < deadline:
             attempt += 1
@@ -522,7 +514,7 @@ class RollingUpgradeAndDowngradeFixture:
             yield
 
         self.stop_driver()
-        # See RestartToAnotherVersionFixture.setup_cluster: teardown does not need drain.
+        # Kill: graceful drain can SIGSEGV after the test body already passed.
         self.cluster.stop(kill=True)
 
     def roll(self):

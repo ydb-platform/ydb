@@ -115,30 +115,23 @@ def _query(table, indexes, columns):
     )
 
 
-def _read_differences(driver, table, indexes, columns):
-    # Avoid Python datetime range limits.
-    settings = (ydb.QueryClientSettings()
-                .with_native_date_in_result_sets(False)
-                .with_native_datetime_in_result_sets(False)
-                .with_native_timestamp_in_result_sets(False)
-                .with_native_interval_in_result_sets(False))
-    with ydb.QuerySessionPool(driver, query_client_settings=settings) as pool:
-        with pool.checkout() as session:
-            # Async index tables require StaleRO.
-            for asynchronous, mode in ((False, ydb.QuerySnapshotReadOnly()), (True, ydb.QueryStaleReadOnly())):
-                positions = [position for position, (_, _, is_async) in enumerate(indexes) if is_async == asynchronous]
-                if not positions:
-                    continue
-                selected = [indexes[position] for position in positions]
-                stream = session.transaction(mode).execute(_query(table, selected, columns), commit_tx=True)
-                try:
-                    for result_set in stream:
-                        if result_set.truncated:
-                            raise ydb.TruncatedResponseError("Validation result was truncated by the server")
-                        for row in result_set.rows:
-                            yield positions[row["index_id"]], row
-                finally:
-                    stream.cancel()
+def _read_differences(pool, table, indexes, columns):
+    with pool.checkout() as session:
+        # Async index tables require StaleRO.
+        for asynchronous, mode in ((False, ydb.QuerySnapshotReadOnly()), (True, ydb.QueryStaleReadOnly())):
+            positions = [position for position, (_, _, is_async) in enumerate(indexes) if is_async == asynchronous]
+            if not positions:
+                continue
+            selected = [indexes[position] for position in positions]
+            stream = session.transaction(mode).execute(_query(table, selected, columns), commit_tx=True)
+            try:
+                for result_set in stream:
+                    if result_set.truncated:
+                        raise ydb.TruncatedResponseError("Validation result was truncated by the server")
+                    for row in result_set.rows:
+                        yield positions[row["index_id"]], row
+            finally:
+                stream.cancel()
 
 
 def _difference(table, indexes, columns, position, result):
@@ -172,7 +165,7 @@ def _check_schema(driver, session, described):
         source.check_schema(driver, session)
 
 
-def _check_async(driver, session, table, indexes, columns, described, retries, delay):
+def _check_async(driver, session, pool, table, indexes, columns, described, retries, delay):
     # Stale main-table reads can hide index corruption.
     for source in [table] + [index for _, index, _ in indexes]:
         if any(value for _, value in source.description.read_replicas_settings.ListFields()):
@@ -185,7 +178,7 @@ def _check_async(driver, session, table, indexes, columns, described, retries, d
             diagnostics.seek(0)
             diagnostics.truncate()
             counts = [0] * len(indexes)
-            for position, result in _read_differences(driver, table, indexes, columns):
+            for position, result in _read_differences(pool, table, indexes, columns):
                 counts[position] += 1
                 diagnostics.write(_difference(table, indexes, columns, position, result) + "\n")
             _check_schema(driver, session, described)
@@ -205,7 +198,7 @@ def _check_async(driver, session, table, indexes, columns, described, retries, d
     return False, counts
 
 
-def _validate(driver, session, path, writes_stopped, async_retries, async_retry_delay):
+def _validate(driver, session, pool, path, writes_stopped, async_retries, async_retry_delay):
     table = Table(driver, session, path)
     indexes = []
     checked = []
@@ -235,15 +228,16 @@ def _validate(driver, session, path, writes_stopped, async_retries, async_retry_
     for name, _, _ in synchronous:
         mismatches[name] = 0
     if synchronous:
-        for position, result in _read_differences(driver, table, synchronous, columns):
+        for position, result in _read_differences(pool, table, synchronous, columns):
             name = synchronous[position][0]
             print(_difference(table, synchronous, columns, position, result))
             mismatches[name] += 1
     async_confirmed = False
     if asynchronous and writes_stopped:
         print("Writes stopped: asserted by the caller; checking async convergence", flush=True)
-        async_confirmed, counts = _check_async(driver, session, table, asynchronous, columns, described,
-                                               async_retries, async_retry_delay)
+        async_confirmed, counts = _check_async(
+            driver, session, pool, table, asynchronous, columns, described, async_retries, async_retry_delay,
+        )
         mismatches.update((name, count) for (name, _, _), count in zip(asynchronous, counts))
     _check_schema(driver, session, described)
     consistent = True
@@ -270,10 +264,17 @@ def validate(driver, session, path, *, writes_stopped=False, async_retries=20, a
     if not math.isfinite(async_retry_delay) or async_retry_delay <= 0:
         raise ValueError("async_retry_delay must be a finite positive number")
     print(f"WARNING: {DDL_WARNING}", file=sys.stderr)
+    # Avoid Python datetime range limits.
+    settings = (ydb.QueryClientSettings()
+                .with_native_date_in_result_sets(False)
+                .with_native_datetime_in_result_sets(False)
+                .with_native_timestamp_in_result_sets(False)
+                .with_native_interval_in_result_sets(False))
     # YDB Decimal precision exceeds Python's default.
     with decimal.localcontext() as context:
         context.prec = max(context.prec, 35)
-        return _validate(driver, session, path, writes_stopped, async_retries, async_retry_delay)
+        with ydb.QuerySessionPool(driver, query_client_settings=settings) as pool:
+            return _validate(driver, session, pool, path, writes_stopped, async_retries, async_retry_delay)
 
 
 def main(argv=None):
@@ -303,7 +304,7 @@ def main(argv=None):
                     result = validate(driver, session, path, writes_stopped=args.writes_stopped,
                                       async_retries=args.async_retries, async_retry_delay=args.async_retry_delay)
                     return 3 if result is None else (0 if result else 1)
-    except (ydb.Error, ValueError, RuntimeError, OSError) as error:
+    except Exception as error:
         print(f"Validation failed: {error}", file=sys.stderr)
         return 2
 

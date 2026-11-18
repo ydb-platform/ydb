@@ -61,5 +61,5 @@ ydb/tools/validate_indexes/bin/validate-indexes \
 | --- | --- |
 | `0` | All sync/unique indexes match and any async indexes are confirmed, or no supported indexes exist. |
 | `1` | A sync/unique mismatch was found; takes precedence over async `inconclusive`. |
-| `2` | Validation failed: read/schema error, unready index, interrupted/truncated stream or temporary-storage failure. Earlier output is partial. |
+| `2` | Validation failed: read/schema error, unready index, interrupted/truncated stream, temporary-storage failure or unexpected execution error. Earlier output is partial. |
 | `3` | Async consistency was not confirmed: writes were not asserted stopped, read replicas are configured, or retries were exhausted. |

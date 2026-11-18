@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import math
+import os
 import struct
 import subprocess
 import threading
@@ -771,8 +772,8 @@ class TestValidateIndexes(unittest.TestCase):
         original_read = validator._read_differences
         passes = []
 
-        def read(driver, table, indexes, columns):
-            yield from original_read(driver, table, indexes, columns)
+        def read(pool, table, indexes, columns):
+            yield from original_read(pool, table, indexes, columns)
             if any(asynchronous for _, _, asynchronous in indexes):
                 passes.append(len(passes) + 1)
                 if after_pass:
@@ -887,13 +888,13 @@ class TestValidateIndexes(unittest.TestCase):
                         return response
                     raise ydb.Unavailable("Async validation stream was interrupted")
 
-                def read(driver, table, indexes, columns):
+                def read(pool, table, indexes, columns):
                     attempts.append(True)
                     if len(attempts) == 1:
-                        yield from original_read(driver, table, indexes, columns)
+                        yield from original_read(pool, table, indexes, columns)
                     else:
                         with mock.patch.object(ydb.query.base.SyncResponseContextIterator, "__next__", fail_response):
-                            yield from original_read(driver, table, indexes, columns)
+                            yield from original_read(pool, table, indexes, columns)
 
                 output, error = io.StringIO(), io.StringIO()
                 with mock.patch.object(validator, "_read_differences", read):
@@ -1031,6 +1032,8 @@ class TestValidateIndexes(unittest.TestCase):
         self.assertIn("by_payload: consistent", output.getvalue())
         self.assertIn("by_async: consistent", output.getvalue())
         self.assertEqual(len(reads), 3)
+        self.assertEqual(len({request.session_id for _, _, request in reads}), 1,
+                         "Sync validation and async retries must reuse the QueryService session")
         for (stub, method, request), mode in zip(reads, ("snapshot_read_only", "stale_read_only", "stale_read_only")):
             self.assertIs(stub, validator._apis.QueryService.Stub)
             self.assertEqual(method, "ExecuteQuery")
@@ -1038,6 +1041,31 @@ class TestValidateIndexes(unittest.TestCase):
             self.assertTrue(request.tx_control.commit_tx)
         self.assertNotIn("by_async/indexImplTable", reads[0][2].query_content.text)
         self.assertIn("by_async/indexImplTable", reads[1][2].query_content.text)
+
+    def test_unexpected_exception_is_error(self):
+        self._create()
+        self._erase_index()
+        binary = yatest.common.binary_path("ydb/tools/validate_indexes/bin/validate-indexes")
+        for exception in ("KeyError", "TypeError", "validator.decimal.InvalidOperation"):
+            with self.subTest(exception=exception):
+                code = f"""
+import sys
+from unittest import mock
+from ydb.tools.validate_indexes import validate_indexes as validator
+
+with mock.patch.object(validator, "_difference", side_effect={exception}("Unexpected result")):
+    sys.exit(validator.main(sys.argv[1:]))
+"""
+                result = subprocess.run(
+                    [binary, "-c", code, "--endpoint", self.endpoint, "--database", "/Root", "--table", self.table],
+                    env=dict(os.environ, Y_PYTHON_ENTRY_POINT=":main"),
+                    capture_output=True, text=True, timeout=90,
+                )
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn("Validation failed:", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertNotIn("by_value: ", result.stdout)
+                self.assertNotIn(f"{self.table}: ", result.stdout)
 
     def test_failed_stream_is_not_restarted(self):
         self._create()

@@ -415,6 +415,8 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
         CollectLocalIndexMigrations(ctx);
     }
 
+    StartIndexShadowDataRepair(ctx, std::move(opts.TablesWithShadowData));
+
     InitializeStatistics(ctx);
 
     SubscribeToTempTableOwners();
@@ -5679,6 +5681,9 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     if (LocalIndexMigratorId) {
         ctx.Send(LocalIndexMigratorId, new TEvents::TEvPoisonPill());
     }
+    if (IndexShadowDataRepairerId) {
+        ctx.Send(IndexShadowDataRepairerId, new TEvents::TEvPoisonPill());
+    }
     for (TActorId schemeUploader : RunningExportSchemeUploaders) {
         ctx.Send(schemeUploader, new TEvents::TEvPoisonPill());
     }
@@ -5687,6 +5692,9 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     }
     for (TActorId schemeQueryExecutor : RunningImportSchemeQueryExecutors) {
         ctx.Send(schemeQueryExecutor, new TEvents::TEvPoisonPill());
+    }
+    for (TActorId restorer : RunningImportKesusRestorers) {
+        ctx.Send(restorer, new TEvents::TEvPoisonPill());
     }
     for (TActorId continuousBackupCleaner : RunningContinuousBackupCleaners) {
         ctx.Send(continuousBackupCleaner, new TEvents::TEvPoisonPill());
@@ -6026,6 +6034,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvImportSchemeReady, Handle);
         HFuncTraced(TEvPrivate::TEvImportSchemaMappingReady, Handle);
         HFuncTraced(TEvPrivate::TEvImportSchemeQueryResult, Handle);
+        HFuncTraced(TEvPrivate::TEvImportKesusResult, Handle);
         // } // NImport
 
         // namespace NBackup {

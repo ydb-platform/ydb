@@ -9,6 +9,7 @@
 
 #include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/regexp/regexp.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 
 #include <ydb/library/actors/core/hfunc.h>
@@ -96,6 +97,7 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             ev->Record.SetSanitizedToken(this->UserToken->GetSanitizedToken());
         }
         ev->Record.SetPeerName(this->Request->GetPeerName());
+        ev->Record.SetCanRestoreRateLimiterMetering(IsAdministrator(AppData(), this->UserToken.Get()));
 
         auto& createImport = *ev->Record.MutableRequest();
         createImport.MutableOperationParams()->CopyFrom(request.operation_params());

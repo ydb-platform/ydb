@@ -606,6 +606,50 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
 }}
 
 Y_UNIT_TEST_SUITE(TOlap) {
+    Y_UNIT_TEST(DefaultValueRequiresFlags) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableCsDefaultValues(false));
+        runtime.GetAppData().FeatureFlags.SetEnableSparsedColumns(false);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        const TString column = R"({ Name: "value" Type: "Uint32" DefaultValue { Scalar { Uint32: 5 } } })";
+        const TString schema = TStringBuilder() << R"(
+            Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+            KeyColumnNames: "timestamp"
+            Columns )" << column;
+        const TExpectedResult rejected(NKikimrScheme::StatusSchemeError, "column table defaults are disabled");
+
+        auto tryAll = [&](const TString& suffix, const TVector<TExpectedResult>& expected) {
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"DefTable" << suffix << "\" ColumnShardCount: 1 Schema { " << schema << " }", expected);
+            env.TestWaitNotification(runtime, txId);
+            TestCreateOlapStore(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"DefStore" << suffix << "\" ColumnShardCount: 1 SchemaPresets { Name: \"default\" Schema { "
+                    << schema << " } }", expected);
+            env.TestWaitNotification(runtime, txId);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"ColumnTable\" AlterSchema { AddColumns { Name: \"value" << suffix
+                    << "\" Type: \"Uint32\" DefaultValue { Scalar { Uint32: 5 } } } }", expected);
+            env.TestWaitNotification(runtime, txId);
+        };
+
+        tryAll("Off", {rejected});
+        TestLs(runtime, "/MyRoot/DefTableOff", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/DefStoreOff", false, NLs::PathNotExist);
+
+        runtime.GetAppData().FeatureFlags.SetEnableCsDefaultValues(true);
+        tryAll("Cs", {NKikimrScheme::StatusAccepted});
+
+        runtime.GetAppData().FeatureFlags.SetEnableCsDefaultValues(false);
+        runtime.GetAppData().FeatureFlags.SetEnableSparsedColumns(true);
+        tryAll("Sparsed", {NKikimrScheme::StatusAccepted});
+    }
+
     Y_UNIT_TEST_FLAG(PgTypesRejected, EnableTablePgTypes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(EnableTablePgTypes));

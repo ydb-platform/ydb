@@ -172,6 +172,10 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         return false;
     }
     if (columnSchema.HasDefaultValue()) {
+        if (!AppData()->FeatureFlags.GetEnableCsDefaultValues() && !AppData()->FeatureFlags.GetEnableSparsedColumns()) {
+            errors.AddError("column table defaults are disabled");
+            return false;
+        }
         auto conclusion = DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue());
         if (conclusion.IsFail()) {
             errors.AddError(conclusion.GetErrorMessage());

@@ -7947,15 +7947,18 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     Y_UNIT_TEST(TestNamedResourcesTrackingDisabled) {
         TNamedResourcesTrackingTest test(false);
+        // the poll made on startup, before the settings arrive from hive, is not reported: see below
+        const ui32 requests = test.QueueUsageRequests;
         test.Runtime.SimulateSleep(TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL(test.GetUsage(), 0);
         UNIT_ASSERT(!test.HasMaximum());
-        UNIT_ASSERT_VALUES_EQUAL(test.QueueUsageRequests, 0);
+        UNIT_ASSERT_VALUES_EQUAL(test.QueueUsageRequests, requests);
     }
 
     Y_UNIT_TEST(TestNamedResourcesTrackingToggled) {
         TNamedResourcesTrackingTest test(true);
         test.WaitFor("queue usage was not reported to hive", [&] { return test.GetUsage() == 3 && test.HasMaximum(); });
+        UNIT_ASSERT_GT(test.QueueUsageRequests, 0); // the observer sees the polls
 
         // the tasks are still there, but the reported usage and maximum are reset and the broker is not polled
         test.SetTracking(false);

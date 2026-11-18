@@ -2,8 +2,6 @@ IF (ARCH_X86_64 AND OS_LINUX)
 
 YQL_LIBRARY()
 
-CFLAGS(-mavx2)
-
 SRCS(tuple_avx2.cpp)
 
 PEERDIR(

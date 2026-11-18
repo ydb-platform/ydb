@@ -341,6 +341,8 @@ namespace NActors {
         struct TEvPrepareOutgoingConnectionResult : TEventLocal<TEvPrepareOutgoingConnectionResult, EvPrepareOutgoingConnectionResult> {
             std::variant<TString, THashMap<TString, TString>> Conclusion;
             const bool CheckReply;
+            // Short replacements for inline values if the complete request exceeds the wire limit.
+            THashMap<TString, TString> CompactParams;
 
             TEvPrepareOutgoingConnectionResult(std::variant<TString, THashMap<TString, TString>>&& conclusion,
                     bool checkReply = false)
@@ -365,7 +367,7 @@ namespace NActors {
         static constexpr ui32 MaxExtendedHandshakeSize = 1024 * 1024;
 
         // A checker may request another exchange on the negotiated channel before publishing a session.
-        enum class EConnectionParamsExchange { None, ConfigOnly, Validate };
+        using EConnectionParamsExchange = NActorsInterconnect::EConnectionParamsExchange;
         struct TEvCheckIncomingConnectionResult : TEventLocal<TEvCheckIncomingConnectionResult, EvCheckIncomingConnectionResult> {
             std::optional<TString> ErrorReason;
             THashMap<TString, TString> ParamsToSend;
@@ -374,7 +376,7 @@ namespace NActors {
             THashMap<TString, TString> ExchangeParams;
 
             TEvCheckIncomingConnectionResult(std::optional<TString>&& errorReason, THashMap<TString, TString>&& paramsToSend,
-                    ui32 admissionLevel = 0, EConnectionParamsExchange exchange = EConnectionParamsExchange::None,
+                    ui32 admissionLevel = 0, EConnectionParamsExchange exchange = EConnectionParamsExchange::EXCHANGE_INLINE,
                     THashMap<TString, TString> exchangeParams = {})
                 : ErrorReason(std::move(errorReason))
                 , ParamsToSend(std::move(paramsToSend))

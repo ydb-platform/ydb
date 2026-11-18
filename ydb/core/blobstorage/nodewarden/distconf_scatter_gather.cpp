@@ -171,8 +171,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& task) {
         if (task.WaitingForBridgeFeatureRequirement ||
-                (task.Request.HasProposeStorageConfig() &&
-                    !CanSendConfigToPeer(info.BridgeFeatureLevel, task.Request.GetProposeStorageConfig().GetConfig())) ||
+                info.BridgeFeatureLevel < task.BridgeFeatureRequirement ||
                 (!info.ReportedSubtreeHeight && !info.ExpiredScatterTasks.empty() && IsTimedScatterRequest(task.Request))) {
             return;
         }

@@ -590,23 +590,21 @@ namespace NKikimr::NStorage {
             return false;
         }
 
-        // A process finishing a rollback can still be running with the old multi-pile YAML.
-        // After a later conversion the disk can have the same rollback record but the YAML names different piles.
-        if (LocalCommittedStorageConfig->HasBridgeRollback()) {
-            const auto registry = GetPileRegistry(*LocalCommittedStorageConfig, Cfg->BridgeConfig.get());
-            if (registry && registry->PilesSize() == 1) {
-                return false;
-            }
-        }
-
         const ui32 selfNodeId = SelfId().NodeId();
         const auto& nodes = BaseConfig->GetAllNodes();
         const auto self = std::ranges::find_if(nodes, [selfNodeId](const auto& node) {
             return node.GetNodeId() == selfNodeId;
         });
         Y_ABORT_UNLESS(self != nodes.end());
-        StartupRecoveryPileName = TNodeLocation(self->GetLocation()).GetBridgePileName();
-        Y_ABORT_UNLESS(StartupRecoveryPileName);
+        const auto pileName = TNodeLocation(self->GetLocation()).GetBridgePileName();
+        Y_ABORT_UNLESS(pileName); // multi-pile startup YAML names every static host's pile
+        // A process finishing a rollback can boot locally with the old multi-pile YAML. A later conversion
+        // can give the original pile a different name, even reusing the historical name for another pile.
+        const auto& rollback = LocalCommittedStorageConfig->GetBridgeRollback();
+        if (rollback.HasPileName() && rollback.GetPileName() == *pileName) {
+            return false;
+        }
+        StartupRecoveryPileName = pileName;
 
         std::vector<ui32> peerNodeIds;
         for (const auto& node : nodes) {

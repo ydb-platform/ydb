@@ -401,8 +401,14 @@ namespace NKikimr::NStorage {
             if (error) {
                 Send(ev->Sender, new TEvInterconnect::TEvPrepareOutgoingConnectionResult(std::move(*error)), 0, ev->Cookie);
             } else {
-                Send(ev->Sender, new TEvInterconnect::TEvPrepareOutgoingConnectionResult(CreateParams(outgoing), true),
-                    0, ev->Cookie);
+                auto result = std::make_unique<TEvInterconnect::TEvPrepareOutgoingConnectionResult>(CreateParams(outgoing), true);
+                if (outgoing.HasStorageConfig()) {
+                    outgoing.ClearStorageConfig();
+                    outgoing.ClearCommittedStorageConfig();
+                    outgoing.MutableStorageConfigMeta()->CopyFrom(TStorageConfigMeta(*StorageConfig));
+                    result->CompactParams = CreateParams(outgoing);
+                }
+                Send(ev->Sender, result.release(), 0, ev->Cookie);
             }
         }
 
@@ -436,7 +442,7 @@ namespace NKikimr::NStorage {
             protectedReply.SetStartupRecoveryAccepted(true);
             protectedReply.MutableCommittedStorageConfig()->CopyFrom(*CommittedStorageConfig);
             Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::nullopt, CreateParams(reply),
-                GetPeerAdmissionLevel(incoming), EExchange::ConfigOnly, CreateParams(protectedReply)), 0, ev->Cookie);
+                GetPeerAdmissionLevel(incoming), EExchange::EXCHANGE_CONFIG_ONLY, CreateParams(protectedReply)), 0, ev->Cookie);
         }
 
         void Handle(TEvInterconnect::TEvCheckIncomingConnection::TPtr ev) {
@@ -516,10 +522,10 @@ namespace NKikimr::NStorage {
             const bool canExchange = ev->Get()->SupportsParamsExchange && GetPeerAdmissionLevel(incoming) >= BridgeFeatureLevelSessionAdmission;
             if (!error && canExchange && ((incoming.HasStorageConfigMeta() && !matches) ||
                     (!hasPeerConfig && StorageConfig && !isPeerStatic) ||
-                    (incoming.HasStorageConfig() && UseConfigReference() &&
+                    (incoming.HasStorageConfig() && StorageConfig &&
                         TStorageConfigMeta(incoming.GetStorageConfig()) != TStorageConfigMeta(*StorageConfig)))) {
                 Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::nullopt,
-                    CreateParams(outgoing), GetPeerAdmissionLevel(incoming), EExchange::Validate), 0, ev->Cookie);
+                    CreateParams(outgoing), GetPeerAdmissionLevel(incoming), EExchange::EXCHANGE_VALIDATE), 0, ev->Cookie);
                 return;
             }
             const bool hasSelfConfig = static_cast<bool>(StorageConfig);
@@ -597,8 +603,8 @@ namespace NKikimr::NStorage {
             std::optional<TString> error;
             if (!ParsePayload(request.Params, &incoming)) {
                 error = "failed to parse outgoing connectivity check reply";
-            } else if (StartupRecoveryKeeper || request.Exchange == EExchange::ConfigOnly) {
-                if (!StartupRecoveryKeeper || request.Exchange != EExchange::ConfigOnly || !IsStartupRecoveryPeer(request.PeerNodeId) ||
+            } else if (StartupRecoveryKeeper || request.Exchange == EExchange::EXCHANGE_CONFIG_ONLY) {
+                if (!StartupRecoveryKeeper || request.Exchange != EExchange::EXCHANGE_CONFIG_ONLY || !IsStartupRecoveryPeer(request.PeerNodeId) ||
                         !incoming.GetStartupRecoveryAccepted() || !incoming.HasBridgePileName() ||
                         !SelfBridgePileName || incoming.GetBridgePileName() != *SelfBridgePileName ||
                         GetPeerAdmissionLevel(incoming) < BridgeFeatureLevelSessionAdmission) {
@@ -614,7 +620,7 @@ namespace NKikimr::NStorage {
                 }
             }
             THashMap<TString, TString> exchangeParams;
-            if (!error && request.Exchange == EExchange::Validate) {
+            if (!error && request.Exchange == EExchange::EXCHANGE_VALIDATE) {
                 if (GetPeerAdmissionLevel(incoming) < BridgeFeatureLevelSessionAdmission) {
                     error = "peer does not support configuration exchange";
                 } else {
@@ -623,7 +629,7 @@ namespace NKikimr::NStorage {
                     FillConfigBodies(full, true);
                     exchangeParams = CreateParams(full);
                 }
-            } else if (!error && request.Exchange == EExchange::None) {
+            } else if (!error && request.Exchange == EExchange::EXCHANGE_INLINE) {
                 RegisterPeer(request.PeerNodeId, incoming);
             }
             Send(ev->Sender, new TEvInterconnect::TEvCheckOutgoingConnectionResult(std::move(error),

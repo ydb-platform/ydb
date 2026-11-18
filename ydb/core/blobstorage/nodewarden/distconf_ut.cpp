@@ -1503,11 +1503,14 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_STRING_CONTAINS(*incoming, "can't connect to each other");
     }
 
-    Y_UNIT_TEST(OfflineStaticNodeRecoversCommittedBridgeConfigOnStartup) {
+    void CheckOfflineStaticNodeRecovery(bool afterRollback) {
         auto ordinary = MakeStorageConfig(3);
         ordinary.MutableSelfManagementConfig()->SetEnabled(true);
         ordinary.SetClusterUUID("cluster");
         ordinary.SetSelfAssemblyUUID("assembly");
+        if (afterRollback) {
+            ordinary.MutableBridgeRollback()->SetPileName("previous");
+        }
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&ordinary);
 
         auto expanded = MakeStorageConfig(4, ordinary.GetGeneration() + 3);
@@ -1584,6 +1587,14 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_VALUES_EQUAL(state.NodeWardenConfigs.at(1)->GetFingerprint(), expanded.GetFingerprint());
         UNIT_ASSERT_VALUES_EQUAL(state.Metadata.at(disk).GetCommittedStorageConfig().GetFingerprint(),
             expanded.GetFingerprint());
+    }
+
+    Y_UNIT_TEST(OfflineStaticNodeRecoversCommittedBridgeConfigOnStartup) {
+        CheckOfflineStaticNodeRecovery(false);
+    }
+
+    Y_UNIT_TEST(OfflineStaticNodeRecoversAfterPreviousBridgeRollback) {
+        CheckOfflineStaticNodeRecovery(true);
     }
 
     // the pile removed from the cluster and added again on the same (not formatted) hosts: its nodes have cluster state

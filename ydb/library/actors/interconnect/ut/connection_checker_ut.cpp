@@ -12,7 +12,7 @@
 
 namespace {
 
-    constexpr size_t ConfigPayloadSize = 1024 * 1024 + 1;
+    constexpr size_t ConfigPayloadSize = NActors::TEvInterconnect::MaxExtendedHandshakeSize + 1;
 
     class TPinger : public TActorBootstrapped<TPinger> {
         const TActorId PongerId;
@@ -135,7 +135,7 @@ namespace {
                     protectedParams.emplace("committed", TString(ConfigPayloadSize, 'c'));
                 }
                 Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::nullopt, std::move(params),
-                    0, configOnly ? TEvInterconnect::EConnectionParamsExchange::ConfigOnly : TEvInterconnect::EConnectionParamsExchange::None, std::move(protectedParams)), 0, ev->Cookie);
+                    0, configOnly ? TEvInterconnect::EConnectionParamsExchange::EXCHANGE_CONFIG_ONLY : TEvInterconnect::EConnectionParamsExchange::EXCHANGE_INLINE, std::move(protectedParams)), 0, ev->Cookie);
             }
 
             ++*NumIncoming;
@@ -152,10 +152,10 @@ namespace {
 
         void Handle(TEvInterconnect::TEvCheckOutgoingConnection::TPtr ev) {
             UNIT_ASSERT(CheckReply);
-            UNIT_ASSERT_VALUES_EQUAL((ev->Get()->Exchange == TEvInterconnect::EConnectionParamsExchange::ConfigOnly), ConfigReceived != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL((ev->Get()->Exchange == TEvInterconnect::EConnectionParamsExchange::EXCHANGE_CONFIG_ONLY), ConfigReceived != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Params.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Params.at("hello"), "world");
-            const auto error = (ev->Get()->Exchange == TEvInterconnect::EConnectionParamsExchange::ConfigOnly) ? std::nullopt : std::optional<TString>("outgoing check rejected");
+            const auto error = (ev->Get()->Exchange == TEvInterconnect::EConnectionParamsExchange::EXCHANGE_CONFIG_ONLY) ? std::nullopt : std::optional<TString>("outgoing check rejected");
             Send(ev->Sender, new TEvInterconnect::TEvCheckOutgoingConnectionResult(error), 0, ev->Cookie);
             if (error && ReplyRejected) {
                 ReplyRejected->Signal();
@@ -185,12 +185,17 @@ namespace {
         TManualEvent& Checked;
 
         void Handle(TEvInterconnect::TEvPrepareOutgoingConnection::TPtr ev) {
-            Send(ev->Sender, new TEvInterconnect::TEvPrepareOutgoingConnectionResult(THashMap<TString, TString>{}, true));
+            // The value fits inline on its own. The surrounding handshake fields push the request over the limit.
+            auto result = std::make_unique<TEvInterconnect::TEvPrepareOutgoingConnectionResult>(
+                THashMap<TString, TString>{{"config", TString(TEvInterconnect::MaxExtendedHandshakeSize - 1, 'q')}}, true);
+            result->CompactParams.emplace("config", "reference");
+            Send(ev->Sender, result.release());
         }
 
         void Handle(TEvInterconnect::TEvCheckIncomingConnection::TPtr ev) {
             if (ev->Get()->SupportsParamsExchange) {
-                Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult({}, {}, 1, EExchange::Validate));
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Params.at("config"), "reference");
+                Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult({}, {}, 1, EExchange::EXCHANGE_VALIDATE));
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Params.at("request").size(), ConfigPayloadSize);
                 std::optional<TString> error = Reject ? std::make_optional(TString("stale configuration")) : std::nullopt;
@@ -201,7 +206,7 @@ namespace {
 
         void Handle(TEvInterconnect::TEvCheckOutgoingConnection::TPtr ev) {
             THashMap<TString, TString> params;
-            if (ev->Get()->Exchange == EExchange::Validate) {
+            if (ev->Get()->Exchange == EExchange::EXCHANGE_VALIDATE) {
                 params.emplace("request", TString(ConfigPayloadSize, 'q'));
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Params.at("reply").size(), ConfigPayloadSize);

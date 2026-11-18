@@ -116,6 +116,12 @@ message TRdmaErrSync {
     required string Text = 2;
 }
 
+enum EConnectionParamsExchange {
+    EXCHANGE_INLINE = 0;
+    EXCHANGE_CONFIG_ONLY = 1;
+    EXCHANGE_VALIDATE = 2;
+}
+
 message THandshakeRequest {
     required uint64 Protocol = 1;
 
@@ -207,8 +213,7 @@ message THandshakeSuccess {
     // The peer supports RDMA, but could not initialize it due to a temporary
     // local condition. The outgoing side should retry RDMA later.
     optional bool RdmaRetryable = 23;
-    optional bool ConfigOnly = 24;
-    optional bool ValidateParams = 25;
+    optional EConnectionParamsExchange ParamsExchange = 24;
 }
 
 message THandshakeConnectionParams {

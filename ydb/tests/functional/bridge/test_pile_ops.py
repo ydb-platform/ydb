@@ -251,7 +251,7 @@ class TestBridgePileOps(BridgeKiKiMRTest):
 
         if previous_rollback:
             original_ids = sorted(self.cluster.nodes)
-            self.convert(original_ids, pile_name="previous")
+            self.convert(original_ids, pile_name=ADDED_PILE)
             operation = self.bridge_client.rollback().operation
             assert_that(operation.status, is_(StatusIds.SUCCESS), str(operation))
 

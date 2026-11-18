@@ -94,7 +94,7 @@ def create_external_table(session, external_table, external_data_source):
     ids=["relative_paths_disabled", "relative_paths_enabled"],
 )
 class TestRootPathSafety:
-    def test_relative_database_uses_the_same_connection_and_resource_base(
+    def test_ambiguous_relative_database_is_rejected(
         self, ydb_cluster, ydb_root, ydb_client_session,
     ):
         relative_database = ydb_root.lstrip("/")
@@ -104,11 +104,16 @@ class TestRootPathSafety:
                 session.transaction().execute(
                     'UPSERT INTO orders (key, value) VALUES (1, "tenant");', commit_tx=True,
                 )
-                output = execute_ydb_cli_command(
-                    ydb_cluster.nodes[1], relative_database,
-                    ["sql", "-s", "SELECT key, value FROM orders;", "--format", "json-unicode-array"],
+                node = ydb_cluster.nodes[1]
+                execution = yatest.common.execute(
+                    [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}",
+                     "--database", relative_database, "table", "drop", "orders"],
+                    check_exit_code=False,
                 )
-                assert json.loads(output) == [{"key": 1, "value": "tenant"}]
+                assert execution.exit_code != 0
+                assert "Ambiguous slashless database path" in execution.std_err.decode("utf-8")
+                rows = session.transaction().execute("SELECT key, value FROM orders;", commit_tx=True)[0].rows
+                assert [(row.key, row.value) for row in rows] == [(1, "tenant")]
 
     @pytest.mark.parametrize(
         "path", ["/", "//"],

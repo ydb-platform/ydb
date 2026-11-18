@@ -63,9 +63,16 @@ TScopedDriver ResolveDatabase(TClientCommand::TConfig& config) {
     TScopedDriver driver{TDriver(driverConfig)};
     NScheme::TSchemeClient client(driver);
     auto root = client.ListDirectory("/").GetValueSync();
+    if (!root.IsSuccess()) {
+        Cerr << "Cannot resolve the relative database path; specify an absolute database path starting with '/'." << Endl;
+    }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(root);
     Y_ENSURE(root.GetChildren().size() == 1, "Exactly one cluster root expected");
-    config.Database = NormalizePath("/" + root.GetChildren().front().Name + "/" + config.Database);
+    const TString rootName(root.GetChildren().front().Name);
+    if (config.Database == rootName || config.Database.StartsWith(rootName + "/")) {
+        throw TMisuseException() << "Ambiguous slashless database path; specify an absolute database path starting with '/'.";
+    }
+    config.Database = NormalizePath("/" + rootName + "/" + config.Database);
     return driver;
 }
 

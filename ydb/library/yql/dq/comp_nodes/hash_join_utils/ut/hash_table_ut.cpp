@@ -545,6 +545,18 @@ template <typename TTable> void TestApplyReturnsPackedRows() {
     UNIT_ASSERT_VALUES_EQUAL(visited, 1u);
 }
 
+template <typename TTable>
+concept CRowHashLookup = requires(TTable& table, const ui8 *row, size_t& slot) {
+    table.Build(row, row, 1);
+    table.Find(row, row);
+    table.PrefetchBuffer(row);
+    table.Apply(row, row, [](const ui8 *) { return true; });
+    table.Apply(row, row, slot, [](const ui8 *) { return true; });
+};
+
+static_assert(CRowHashLookup<TNeumannHashTable<false, true>>);
+static_assert(!CRowHashLookup<TNeumannHashTable<false, true, true>>);
+
 void TestApplyWithExternalKeys() {
     TScopedAlloc alloc(__LOCATION__);
 
@@ -559,9 +571,9 @@ void TestApplyWithExternalKeys() {
     auto layout = TTupleLayout::Create({key, group});
     UNIT_ASSERT_LE(layout->TotalRowSize, ui32(16));
 
-    constexpr ui32 size = 5;
-    std::vector<ui32> keys{1, 2, 3, 4, 99};
-    std::vector<ui32> groups{5, 5, 6, 5, 5};
+    constexpr ui32 size = 6;
+    std::vector<ui32> keys{1, 2, 3, 4, 5, 99};
+    std::vector<ui32> groups{5, 6, 5, 6, 5, 5};
     const ui8 *cols[2] = {(const ui8 *)keys.data(), (const ui8 *)groups.data()};
     std::vector<ui8> valid((size + 7) / 8, ~0);
     const ui8 *colsValid[2] = {valid.data(), valid.data()};
@@ -571,31 +583,31 @@ void TestApplyWithExternalKeys() {
     layout->Pack(cols, colsValid, packed.data(), overflow, 0, size);
 
     TNeumannHashTable<false, true, true> table(layout.Get());
-    const std::vector<ui32> indices{0, 1, 2};
-    const std::vector<ui32> hashes{42, 42, 42};
+    const std::vector<ui32> indices{4, 2, 1, 0};
+    const std::vector<ui32> hashes{42, 42, 77, 77};
     table.Build(packed.data(), overflow.data(), indices, hashes);
 
     const auto groupOf = [&](const ui8 *row) { return ReadUnaligned<ui32>(row + layout->PayloadOffset); };
     const auto sameGroup = [&](const ui8 *lhs, const ui8 *, const ui8 *rhs, const ui8 *) {
         return groupOf(lhs) == groupOf(rhs);
     };
+    const auto lookup = [&](ui32 probeIndex, ui32 hash) {
+        const ui8 *const probe = packed.data() + layout->TotalRowSize * probeIndex;
+        std::vector<ui32> matched;
+        table.Apply(probe, overflow.data(), hash, sameGroup, [&](const ui8 *const row) {
+            UNIT_ASSERT(row >= packed.data() && row < packed.data() + layout->TotalRowSize * size);
+            matched.push_back(ReadUnaligned<ui32>(row + layout->KeyColumnsOffset));
+            return true;
+        });
+        std::sort(matched.begin(), matched.end());
+        return matched;
+    };
 
-    const ui8 *const probe = packed.data() + layout->TotalRowSize * (size - 1);
-    std::vector<ui32> matched;
-    table.Apply(probe, overflow.data(), 42, sameGroup, [&](const ui8 *const row) {
-        UNIT_ASSERT(row >= packed.data() && row < packed.data() + layout->TotalRowSize * size);
-        matched.push_back(ReadUnaligned<ui32>(row + layout->KeyColumnsOffset));
-        return true;
-    });
-    std::sort(matched.begin(), matched.end());
-    UNIT_ASSERT_VALUES_EQUAL(matched, (std::vector<ui32>{1, 2}));
-
-    ui32 visited = 0;
-    table.Apply(probe, overflow.data(), 7, sameGroup, [&](const ui8 *const) {
-        ++visited;
-        return true;
-    });
-    UNIT_ASSERT_VALUES_EQUAL(visited, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(lookup(5, 42), (std::vector<ui32>{3, 5}));
+    UNIT_ASSERT_VALUES_EQUAL(lookup(5, 77), (std::vector<ui32>{1}));
+    UNIT_ASSERT_VALUES_EQUAL(lookup(3, 77), (std::vector<ui32>{2}));
+    UNIT_ASSERT_VALUES_EQUAL(lookup(3, 42), (std::vector<ui32>{}));
+    UNIT_ASSERT_VALUES_EQUAL(lookup(5, 7), (std::vector<ui32>{}));
 }
 
 } // namespace

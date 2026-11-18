@@ -545,6 +545,59 @@ template <typename TTable> void TestApplyReturnsPackedRows() {
     UNIT_ASSERT_VALUES_EQUAL(visited, 1u);
 }
 
+void TestApplyWithExternalKeys() {
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc key;
+    key.Role = EColumnRole::Key;
+    key.DataSize = sizeof(ui32);
+
+    TColumnDesc group;
+    group.Role = EColumnRole::Payload;
+    group.DataSize = sizeof(ui32);
+
+    auto layout = TTupleLayout::Create({key, group});
+    UNIT_ASSERT_LE(layout->TotalRowSize, ui32(16));
+
+    constexpr ui32 size = 5;
+    std::vector<ui32> keys{1, 2, 3, 4, 99};
+    std::vector<ui32> groups{5, 5, 6, 5, 5};
+    const ui8 *cols[2] = {(const ui8 *)keys.data(), (const ui8 *)groups.data()};
+    std::vector<ui8> valid((size + 7) / 8, ~0);
+    const ui8 *colsValid[2] = {valid.data(), valid.data()};
+
+    std::vector<ui8> packed(layout->TotalRowSize * size + 64, 0);
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    layout->Pack(cols, colsValid, packed.data(), overflow, 0, size);
+
+    TNeumannHashTable<false, true, true> table(layout.Get());
+    const std::vector<ui32> indices{0, 1, 2};
+    const std::vector<ui32> hashes{42, 42, 42};
+    table.Build(packed.data(), overflow.data(), indices, hashes);
+
+    const auto groupOf = [&](const ui8 *row) { return ReadUnaligned<ui32>(row + layout->PayloadOffset); };
+    const auto sameGroup = [&](const ui8 *lhs, const ui8 *, const ui8 *rhs, const ui8 *) {
+        return groupOf(lhs) == groupOf(rhs);
+    };
+
+    const ui8 *const probe = packed.data() + layout->TotalRowSize * (size - 1);
+    std::vector<ui32> matched;
+    table.Apply(probe, overflow.data(), 42, sameGroup, [&](const ui8 *const row) {
+        UNIT_ASSERT(row >= packed.data() && row < packed.data() + layout->TotalRowSize * size);
+        matched.push_back(ReadUnaligned<ui32>(row + layout->KeyColumnsOffset));
+        return true;
+    });
+    std::sort(matched.begin(), matched.end());
+    UNIT_ASSERT_VALUES_EQUAL(matched, (std::vector<ui32>{1, 2}));
+
+    ui32 visited = 0;
+    table.Apply(probe, overflow.data(), 7, sameGroup, [&](const ui8 *const) {
+        ++visited;
+        return true;
+    });
+    UNIT_ASSERT_VALUES_EQUAL(visited, 0u);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(NeumannHashTableTest) {
@@ -554,6 +607,10 @@ Y_UNIT_TEST_SUITE(NeumannHashTableTest) {
 
     Y_UNIT_TEST(ApplyReturnsPackedRowsWithConsecutiveDuplicates) {
         TestApplyReturnsPackedRows<TNeumannTableSeq>();
+    }
+
+    Y_UNIT_TEST(ApplyWithExternalKeys) {
+        TestApplyWithExternalKeys();
     }
 
     Y_UNIT_TEST(RequiredMemoryForBuild) {

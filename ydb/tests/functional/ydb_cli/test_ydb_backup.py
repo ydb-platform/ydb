@@ -433,6 +433,44 @@ class TestDumpGeneratedColumns(BaseCliTestWithDatabase):
         assert f"/Root/{table_name}" in result.stderr, result.stderr
         assert not os.path.exists(backup_files_dir)
 
+    @pytest.mark.parametrize("generated_kind", ["STORED", "VIRTUAL"])
+    @pytest.mark.parametrize(
+        "dump_options",
+        [[], ["--consistency-level", "table"]],
+        ids=["database_copy", "table_copy"],
+    )
+    def test_dump_validates_directory_before_copying(self, generated_kind, dump_options):
+        folder_name = "_".join(("validate_before_copy", generated_kind, *dump_options)).replace("-", "_").lower()
+        folder_path = f"/Root/{folder_name}"
+        self.driver.scheme_client.make_directory(folder_path)
+        self.driver.scheme_client.make_directory(f"{folder_path}/nested")
+        session = self.driver.table_client.session().create()
+        create_table_with_data(session, f"{folder_name}/regular")
+        # The nested table is visited after the regular table, regardless of
+        # the order in which ListDirectory returns the root's children.
+        self.execute_ydb_cli_command(["sql", "-s", f"""
+            CREATE TABLE `{folder_path}/nested/generated` (
+                key Uint32 NOT NULL,
+                value Int32,
+                generated Int32 GENERATED ALWAYS AS (value + 1) {generated_kind},
+                PRIMARY KEY (key)
+            );
+        """])
+        root_children_before = {child.name for child in self.driver.scheme_client.list_directory("/Root").children}
+
+        backup_files_dir = yatest.common.output_path(folder_name + "_dump")
+        result = self.execute_ydb_cli_command([
+            "-vv", "tools", "dump", "--path", folder_path, "--output", backup_files_dir,
+        ] + dump_options, check_exit_code=False)
+
+        assert result.exit_code != 0, result.stdout
+        assert "UNSUPPORTED" in result.stderr, result.stderr
+        assert "exporting tables with generated columns is not supported" in result.stderr, result.stderr
+        assert "Copy table" not in result.stderr, result.stderr
+        assert not os.path.exists(backup_files_dir)
+        root_children_after = {child.name for child in self.driver.scheme_client.list_directory("/Root").children}
+        assert root_children_after == root_children_before
+
     @pytest.mark.parametrize(
         "dump_options",
         [[], ["--consistency-level", "table"], ["--avoid-copy"], ["--scheme-only"]],

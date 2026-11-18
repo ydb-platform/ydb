@@ -581,6 +581,38 @@ namespace {
         return type;
     }
 
+    bool ShouldPreserveDefaultExpression(const TExprBase& expression) {
+        if (expression.Ref().HasSideEffects()) {
+            return true;
+        }
+        if (NDq::IsConstantExpr(expression.Ptr())) {
+            return false;
+        }
+
+        // Main also evaluates expressions outside the constant-folding whitelist when
+        // coercion is needed. Keep that path unless it has known runtime dependencies.
+        if (!IsPureIsolatedLambda(expression.Ref()) || FindNode(expression.Ptr(), [](const TExprNode::TPtr& node) {
+            return node->HasSideEffects() || TCoNonDeterministicBase::Match(node.Get())
+                || IsNonRowColumnNode(*node)
+                || node->IsCallable({"Parameter", "CurrentActorId", "HostRuntimeSetting", "UdfRuntimeSetting"});
+        })) {
+            return true;
+        }
+
+        TNodeSet boundArguments;
+        VisitExpr(expression.Ptr(), [&](const TExprNode::TPtr& node) {
+            if (node->IsLambda()) {
+                for (const auto& argument : node->Head().Children()) {
+                    boundArguments.insert(argument.Get());
+                }
+            }
+            return true;
+        });
+        return !!FindNode(expression.Ptr(), [&](const TExprNode::TPtr& node) {
+            return node->IsArgument() && !boundArguments.contains(node.Get());
+        });
+    }
+
     std::optional<IGraphTransformer::TStatus> ValidateDefaultColumn(const TTypeAnnotationNode* columnType, const TTypeAnnotationNode* defaultType,
         const TExprBase& defaultExpr, TPositionHandle pos, const TString& name, const TKikimrTableDescription* table, TExprContext& ctx,
         const TTypeAnnotationContext& typesCtx, std::function<void(TExprNode::TPtr)> onRepeat, const bool columnNotNull,
@@ -974,7 +1006,7 @@ namespace {
             // Preserve the existing constant folding before checking for a literal.
             // Nonconstant expressions must stay unevaluated, including during coercion.
             const TExprNode* defaultSource = FindDefaultSourceConstraint(columnTuple);
-            const bool preserveSourceExpression = defaultSource && !NDq::IsConstantExpr(constrValue.Ptr());
+            const bool preserveSourceExpression = defaultSource && ShouldPreserveDefaultExpression(constrValue);
 
             if (auto status = ValidateDefaultColumn(type, defaultType, constraint.Value().Cast(), constraint.Pos(),
                 columnName, nullptr, ctx, typeCtx, [&](TExprNode::TPtr expr) {
@@ -2655,7 +2687,7 @@ private:
                         if (auto status = ValidateDefaultColumn(columnType, defaultType, defaultExpr, nameNode.Pos(), name, table, ctx, Types, [&](TExprNode::TPtr expr) {
                             alterColumnList.Ptr()->ChildRef(1) = std::move(expr);
                             ctx.Step.Repeat(TExprStep::ExprEval);
-                        }, columnNotNull, !NDq::IsConstantExpr(defaultExpr.Ptr())))
+                        }, columnNotNull, ShouldPreserveDefaultExpression(defaultExpr)))
                         {
                             return *status;
                         }

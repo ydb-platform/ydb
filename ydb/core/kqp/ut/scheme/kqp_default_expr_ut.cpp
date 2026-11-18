@@ -502,6 +502,58 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;[9]]]");
     }
 
+    Y_UNIT_TEST_TWIN(CoercedDefaultPreservesMetadata, Enabled) {
+        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        for (const auto& [expression, expected] : {
+            std::pair{"Abs(-5)", 5},
+            std::pair{"ListSum(ListMap(AsList(2, 3), ($x) -> { RETURN $x; }))", 5},
+            std::pair{R"(String::LevensteinDistance("a", "b"))", 1}})
+        {
+            fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Int64 DEFAULT " << expression));
+            const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
+            UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromLiteral().value().int64_value(), expected);
+            fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+            fixture.Check("SELECT k, v FROM TestTable;", TStringBuilder() << "[[1;[" << expected << "]]]");
+            fixture.Exec("DROP TABLE TestTable;");
+        }
+    }
+
+    Y_UNIT_TEST(RuntimeSettingCoercionStaysExpression) {
+        TTestFixture fixture;
+        for (const auto* expression : {
+            "Length(Yql::HostRuntimeSetting('test'))",
+            "Length(Yql::UdfRuntimeSetting('String', 'test'))",
+            "Length(Yql::CurrentActorId())"})
+        {
+            fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Int64 DEFAULT " << expression));
+            AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
+            fixture.Exec("DROP TABLE TestTable;");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AddCoercedDefaultPreservesMetadata, Enabled) {
+        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        fixture.Exec(DefaultExprDDL("v Int64"));
+        fixture.Exec("ALTER TABLE TestTable ADD COLUMN added Int64 DEFAULT Abs(-5);");
+        const auto column = fixture.ColumnDesc("/Root/TestTable", "added");
+        UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromLiteral().value().int64_value(), 5);
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Check("SELECT k, added FROM TestTable;", "[[1;[5]]]");
+    }
+
+    Y_UNIT_TEST_TWIN(SetCoercedDefaultPreservesMetadata, Enabled) {
+        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        fixture.Exec(DefaultExprDDL("v Int64"));
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT Abs(-5);");
+        const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromLiteral().value().int64_value(), 5);
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[5]]]");
+    }
+
     Y_UNIT_TEST_TWIN(LegacyDefaultConstructorsPreserveLiteralMetadata, Enabled) {
         TTestFixture fixture(/* featureFlagEnabled */ Enabled);
         fixture.Exec(R"(

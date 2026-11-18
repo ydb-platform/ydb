@@ -92,7 +92,7 @@ public:
             {"schema", keySchema});
         YDB_LOG_VERIFY(KeyColumns.IsSameDataSchema(dataSchema),
             {"batch", KeyColumns.DebugJson()},
-            {"schema", dataSchema.ToString()});
+            {"schema", dataSchema});
         Y_ABORT_UNLESS(KeyColumns.InitPosition(GetPosition(order.GetStart())));
         Y_ABORT_UNLESS(VersionColumns.InitPosition(GetPosition(order.GetStart())));
         if (Filter) {

@@ -49,6 +49,7 @@ enum class ENodeFields : ui8 {
     MaxVDiskRawUsage,
     MaxNormalizedOccupancy,
     CapacityAlert,
+    DDisks,
     COUNT
 };
 
@@ -361,6 +362,23 @@ class TJsonNodes : public TViewerPipeClient {
                     }
                 }
             }
+        }
+
+        bool HasUnavailableDDisk() const {
+            return std::ranges::any_of(DDisks, [](const auto& entry) {
+                using TState = NKikimrWhiteboard::TDDiskStateInfo;
+                const auto& disk = entry.second;
+                return (disk.HasDDiskStatus() && disk.GetDDiskStatus() != TState::Ready)
+                    || (disk.HasPersistentBufferStatus() && disk.GetPersistentBufferStatus() != TState::Ready);
+            });
+        }
+
+        bool HasDDiskSpaceProblem(ui32 threshold) const {
+            return std::ranges::any_of(DDisks, [threshold](const auto& entry) {
+                const auto& disk = entry.second;
+                return (disk.HasDDiskOccupancy() && 100 * disk.GetDDiskOccupancy() >= threshold)
+                    || (disk.HasPersistentBufferOccupancy() && 100 * disk.GetPersistentBufferOccupancy() >= threshold);
+            });
         }
 
         void CalcCpuUsage() {
@@ -996,6 +1014,8 @@ class TJsonNodes : public TViewerPipeClient {
             result = ENodeFields::PDisks;
         } else if (field == "VDisks") {
             result = ENodeFields::VDisks;
+        } else if (field == "DDisks") {
+            result = ENodeFields::DDisks;
         } else if (field == "Peers") {
             result = ENodeFields::Peers;
         } else if (field == "ReversePeers") {
@@ -1060,7 +1080,7 @@ class TJsonNodes : public TViewerPipeClient {
 
     bool ParsePresentationNodeField(TStringBuf paramName, TStringBuf fieldValue, ENodeFields& outField) {
         outField = ParseENodeFields(fieldValue);
-        if (outField == ENodeFields::COUNT) {
+        if (outField == ENodeFields::COUNT || outField == ENodeFields::DDisks) {
             InvalidParamError = TStringBuilder() << "unknown " << paramName << " field: " << fieldValue;
             return false;
         }
@@ -1080,6 +1100,7 @@ class TJsonNodes : public TViewerPipeClient {
     static inline const TFieldsType FieldsHiddenFromStrictDatabaseUsers = TFieldsType()
                                                                              .set(+ENodeFields::PDisks)
                                                                              .set(+ENodeFields::VDisks)
+                                                                             .set(+ENodeFields::DDisks)
                                                                              .set(+ENodeFields::Peers)
                                                                              .set(+ENodeFields::ReversePeers)
                                                                              .set(+ENodeFields::Missing)
@@ -1323,6 +1344,7 @@ public:
         if (!fieldsRequired.empty()) {
             if (fieldsRequired == "all") {
                 FieldsRequired = FieldsAll;
+                FieldsRequired.set(+ENodeFields::DDisks, IncludeDDisks);
             } else {
                 TStringBuf source = fieldsRequired;
                 for (TStringBuf value = source.NextTok(','); !value.empty(); value = source.NextTok(',')) {
@@ -1344,11 +1366,18 @@ public:
         if (!FilterGroup.empty()) {
             AddGroupByFieldToRequired(FieldsRequired, FilterGroupBy);
         }
+        if (IncludeDDisks && FieldsRequired.test(+ENodeFields::VDisks)) {
+            FieldsRequired.set(+ENodeFields::DDisks);
+        }
         FieldsRequested = FieldsRequired; // no dependent fields
+        IncludeDDisks |= FieldsRequired.test(+ENodeFields::DDisks);
+        if (IncludeDDisks && With != EWith::Everything) {
+            FieldsRequired.set(+ENodeFields::DDisks);
+        }
         if (AliveOnly) {
             FieldsRequired.set(+ENodeFields::SystemState);
         }
-        if (IncludeDDisks && FieldsRequired.test(+ENodeFields::VDisks)) {
+        if (FieldsRequired.test(+ENodeFields::DDisks)) {
             FieldsRequired.set(+ENodeFields::PDisks);
         }
         for (auto field = +ENodeFields::NodeId; field != +ENodeFields::COUNT; ++field) {
@@ -1380,6 +1409,8 @@ public:
             if (DenyStrictDatabaseOnlyUnsafeQueryParams()) {
                 return;
             }
+            IncludeDDisks = false;
+            FieldsRequired.reset(+ENodeFields::DDisks);
             // Omitted filter_peer_role leaves the constructor default (Any); force database peers only.
             if (!Params.Get("filter_peer_role")) {
                 FilterPeerRole = EPeerRole::Database;
@@ -1423,11 +1454,12 @@ public:
             GroupsResponse = MakeCachedRequestBSControllerGroups();
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::Pools;
-        } else if (!FilterGroupIds.empty() || FieldsRequired.test(+ENodeFields::VDisks)) {
+        } else if (!FilterGroupIds.empty() || FieldsRequired.test(+ENodeFields::VDisks)
+                || FieldsRequired.test(+ENodeFields::DDisks)) {
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::VSlots;
         }
-        if (IncludeDDisks && FieldsRequired.test(+ENodeFields::VDisks)) {
+        if (FieldsRequested.test(+ENodeFields::DDisks) && ShouldRenderNodeField(ENodeFields::DDisks)) {
             if (!StoragePoolsResponse) {
                 StoragePoolsResponse = MakeCachedRequestBSControllerPools();
             }
@@ -1501,6 +1533,27 @@ public:
     bool HasPendingFilters() const {
         return (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty()
             || ProblemNodesOnly || AliveOnly || UptimeSeconds > 0 || !FilterGroup.empty() || RestrictToDatabaseNodes;
+    }
+
+    void UpdateMaximumSlotsPerDisk(const TNode& node) {
+        if (node.DDisks.empty()) {
+            return;
+        }
+        THashMap<ui32, THashSet<ui32>> slots;
+        for (const auto& entry : node.SysViewVDisks) {
+            slots[entry.GetKey().GetPDiskId()].insert(entry.GetKey().GetVSlotId());
+        }
+        for (const auto& disk : node.VDisks) {
+            if (disk.HasVDiskSlotId()) {
+                slots[disk.GetPDiskId()].insert(disk.GetVDiskSlotId());
+            }
+        }
+        for (const auto& [key, disk] : node.DDisks) {
+            slots[key.first].insert(key.second);
+        }
+        for (const auto& [pdiskId, ids] : slots) {
+            MaximumSlotsPerDisk = std::max(MaximumSlotsPerDisk.value_or(0), ids.size());
+        }
     }
 
     bool PreFilterDone() const {
@@ -1654,10 +1707,11 @@ public:
                 InvalidateNodes();
                 AddEvent("Alive Filter Applied");
             }
-            if (With == EWith::MissingDisks && FieldsAvailable.test(+ENodeFields::Missing)) {
+            const bool storageFilterReady = !IncludeDDisks || FieldsAvailable.test(+ENodeFields::DDisks);
+            if (With == EWith::MissingDisks && FieldsAvailable.test(+ENodeFields::Missing) && storageFilterReady) {
                 TNodeView nodeView;
                 for (TNode* node : NodeView) {
-                    if (node->MissingDisks != 0) {
+                    if (node->MissingDisks != 0 || (IncludeDDisks && node->HasUnavailableDDisk())) {
                         nodeView.push_back(node);
                     }
                 }
@@ -1666,10 +1720,10 @@ public:
                 InvalidateNodes();
                 AddEvent("Missing Filter Applied");
             }
-            if (With == EWith::SpaceProblems && FieldsAvailable.test(+ENodeFields::DiskSpaceUsage)) {
+            if (With == EWith::SpaceProblems && FieldsAvailable.test(+ENodeFields::DiskSpaceUsage) && storageFilterReady) {
                 TNodeView nodeView;
                 for (TNode* node : NodeView) {
-                    if (node->DiskSpaceUsage >= SpaceUsageProblem) {
+                    if (node->DiskSpaceUsage >= SpaceUsageProblem || (IncludeDDisks && node->HasDDiskSpaceProblem(SpaceUsageProblem))) {
                         nodeView.push_back(node);
                     }
                 }
@@ -1800,6 +1854,7 @@ public:
                 case ENodeFields::NodeInfo:
                 case ENodeFields::PDisks:
                 case ENodeFields::VDisks:
+                case ENodeFields::DDisks:
                 case ENodeFields::Tablets:
                 case ENodeFields::Peers:
                 case ENodeFields::SubDomainKey:
@@ -1944,6 +1999,7 @@ public:
                 case ENodeFields::NodeInfo:
                 case ENodeFields::PDisks:
                 case ENodeFields::VDisks:
+                case ENodeFields::DDisks:
                 case ENodeFields::Tablets:
                 case ENodeFields::SubDomainKey:
                 case ENodeFields::DisconnectTime:
@@ -3029,6 +3085,12 @@ public:
                 }
             }
             FieldsAvailable |= FieldsPDisks;
+            if (FieldsRequired.test(+ENodeFields::DDisks)) {
+                FieldsAvailable.set(+ENodeFields::DDisks);
+                for (const TNode* node : NodeView) {
+                    UpdateMaximumSlotsPerDisk(*node);
+                }
+            }
         }
         bool needCalcPeers = false;
         if (FieldsNeeded(FieldsPeers)) {
@@ -3765,37 +3827,37 @@ public:
                         }
                     }
                 }
-                if (IsNodeFieldRequestedForResponse(ENodeFields::VDisks)) {
-                    if (IncludeDDisks) {
-                        for (const auto& entry : node->SysViewVDisks) {
-                            if (entry.GetInfo().GetDDisk()) {
-                                const auto& key = entry.GetKey();
-                                auto& ddisk = node->DDisks[std::make_pair(key.GetPDiskId(), key.GetVSlotId())];
-                                ddisk.SetPDiskId(key.GetPDiskId());
-                                ddisk.SetDDiskSlotId(key.GetVSlotId());
-                                ddisk.SetGroupId(entry.GetInfo().GetGroupId());
-                                const auto group = DDiskGroupPools.find(ddisk.GetGroupId());
-                                if (group != DDiskGroupPools.end()) {
-                                    const auto pool = DDiskStoragePoolNames.find(group->second);
-                                    if (pool != DDiskStoragePoolNames.end()) {
-                                        ddisk.SetStoragePoolName(pool->second);
-                                    }
-                                }
-                                if (!ddisk.HasHasWhiteboardData()) {
-                                    ddisk.SetHasWhiteboardData(false);
+                if (IsNodeFieldRequestedForResponse(ENodeFields::DDisks)) {
+                    for (const auto& entry : node->SysViewVDisks) {
+                        if (entry.GetInfo().GetDDisk()) {
+                            const auto& key = entry.GetKey();
+                            auto& ddisk = node->DDisks[std::make_pair(key.GetPDiskId(), key.GetVSlotId())];
+                            ddisk.SetPDiskId(key.GetPDiskId());
+                            ddisk.SetDDiskSlotId(key.GetVSlotId());
+                            ddisk.SetGroupId(entry.GetInfo().GetGroupId());
+                            const auto group = DDiskGroupPools.find(ddisk.GetGroupId());
+                            if (group != DDiskGroupPools.end()) {
+                                const auto pool = DDiskStoragePoolNames.find(group->second);
+                                if (pool != DDiskStoragePoolNames.end()) {
+                                    ddisk.SetStoragePoolName(pool->second);
                                 }
                             }
+                            if (!ddisk.HasHasWhiteboardData()) {
+                                ddisk.SetHasWhiteboardData(false);
+                            }
                         }
-                        for (auto& [key, ddisk] : node->DDisks) {
-                            FillDDiskIdentity(ddisk, node->GetNodeId());
-                            jsonNode.AddDDisks()->Swap(&ddisk);
-                        }
-                        auto* resultDDisks = jsonNode.MutableDDisks();
-                        std::sort(resultDDisks->begin(), resultDDisks->end(), [](const auto& a, const auto& b) {
-                            return std::make_pair(a.GetPDiskId(), a.GetDDiskSlotId())
-                                < std::make_pair(b.GetPDiskId(), b.GetDDiskSlotId());
-                        });
                     }
+                    for (auto& [key, ddisk] : node->DDisks) {
+                        FillDDiskIdentity(ddisk, node->GetNodeId());
+                        jsonNode.AddDDisks()->Swap(&ddisk);
+                    }
+                    auto* resultDDisks = jsonNode.MutableDDisks();
+                    std::sort(resultDDisks->begin(), resultDDisks->end(), [](const auto& a, const auto& b) {
+                        return std::make_pair(a.GetPDiskId(), a.GetDDiskSlotId())
+                            < std::make_pair(b.GetPDiskId(), b.GetDDiskSlotId());
+                    });
+                }
+                if (IsNodeFieldRequestedForResponse(ENodeFields::VDisks)) {
                     std::sort(node->VDisks.begin(), node->VDisks.end(), [](const NKikimrWhiteboard::TVDiskStateInfo& a, const NKikimrWhiteboard::TVDiskStateInfo& b) {
                         return VDiskIDFromVDiskID(a.vdiskid()) < VDiskIDFromVDiskID(b.vdiskid());
                     });
@@ -3856,7 +3918,7 @@ public:
                   - name: include_ddisks
                     in: query
                     description: >
-                        Return DDisks separately instead of legacy VDisk fallback entries (requires VDisks).
+                        Include DDisks alongside requested VDisks. Request `fields_required=DDisks` to select them independently.
                         DDisks are omitted for database-level users, like VDisks.
                     required: false
                     type: boolean
@@ -4063,6 +4125,7 @@ public:
                           * `SystemState`
                           * `PDisks`
                           * `VDisks`
+                          * `DDisks` (one record per DDisk/Persistent Buffer slot)
                           * `Tablets`
                           * `Peers`
                           * `Host`
@@ -4092,7 +4155,7 @@ public:
                           * `MaxVDiskRawUsage`
                           * `CapacityAlert`
                           * `MaxNormalizedOccupancy`
-                        Database-level users never receive `PDisks`, `VDisks`, `Peers`, `ReversePeers`,
+                        Database-level users never receive `PDisks`, `VDisks`, `DDisks`, `Peers`, `ReversePeers`,
                         `Missing`, `DiskSpaceUsage`, `MaxPDiskUsage`, `MaxVDiskSlotUsage`, `MaxVDiskRawUsage`,
                         `MaxNormalizedOccupancy` or `CapacityAlert` in node objects (metadata bitsets hide these too).
                         Peer graph arrays are hidden; per-node interconnect aggregates (`Connections`, `PingTime`,

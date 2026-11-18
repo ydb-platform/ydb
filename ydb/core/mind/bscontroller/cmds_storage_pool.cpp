@@ -931,6 +931,9 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status) {
         NKikimrBlobStorage::TBaseConfig *pb = status.MutableBaseConfig();
+        pb->SetHasDDiskPools(std::ranges::any_of(StoragePools.Get(), [](const auto& entry) {
+            return entry.second.DDisk;
+        }));
 
         if (cmd.GetRetrieveDevices()) {
             DrivesSerials.ForEach([&](const auto& serial, const auto& driveInfo) {

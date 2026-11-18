@@ -3448,8 +3448,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TServer server(settings);
         auto& runtime = *server.GetRuntime();
         const auto sender = runtime.AllocateEdgeActor();
+        const auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
         bool withSample = true;
         bool includeDDisks = false;
+        bool returnDDiskPoolNames = false;
+        bool reportBufferProblem = false;
         ui32 storagePoolRequests = 0;
         ui32 groupRequests = 0;
         std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse> cachedPools;
@@ -3459,6 +3462,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 ++storagePoolRequests;
             } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsRequest) {
                 ++groupRequests;
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsRequest) {
+                const auto& request = ev->Get<NSysView::TEvSysView::TEvGetVSlotsRequest>()->Record;
+                const bool scopedToPDisk = request.GetFrom().HasPDiskId() && request.GetTo().HasPDiskId();
+                returnDDiskPoolNames = request.GetIncludeDDiskPoolNames();
+                UNIT_ASSERT_VALUES_EQUAL(returnDDiskPoolNames, scopedToPDisk && includeDDisks);
             }
             if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse) {
                 auto& record = ev->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>()->Record;
@@ -3470,6 +3478,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     entry->MutableKey()->SetVSlotId(slot);
                     entry->MutableInfo()->SetGroupId(42);
                     entry->MutableInfo()->SetDDisk(true);
+                    if (returnDDiskPoolNames) {
+                        entry->MutableInfo()->SetStoragePoolName("ddisk-pool");
+                    }
                 }
                 auto* ordinary = record.AddEntries();
                 ordinary->MutableKey()->SetNodeId(runtime.GetNodeId(0));
@@ -3499,6 +3510,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
             } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvPDiskStateResponse) {
                 auto& record = ev->Get<TEvWhiteboard::TEvPDiskStateResponse>()->Record;
                 record.ClearDDiskStateInfo();
+                if (reportBufferProblem) {
+                    record.ClearPDiskStateInfo();
+                    auto* pdisk = record.AddPDiskStateInfo();
+                    pdisk->SetPDiskId(1);
+                    pdisk->SetState(NKikimrBlobStorage::TPDiskState::Normal);
+                    pdisk->SetTotalSize(1000);
+                    pdisk->SetAvailableSize(900);
+                }
                 if (withSample) {
                     for (auto [pdisk, slot] : {std::make_pair(2u, 1009u), {1u, 1012u}, {1u, 1010u}, {1u, 1011u}}) {
                         auto* sample = record.AddDDiskStateInfo();
@@ -3514,6 +3533,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         sample->SetAllocatedSize(1024);
                         if (slot == 1010) {
                             sample->SetPersistentBufferId("whiteboard-buffer-id");
+                            if (reportBufferProblem) {
+                                sample->SetPersistentBufferStatus(NKikimrWhiteboard::TDDiskStateInfo::Broken);
+                                sample->SetPersistentBufferOccupancy(0.95);
+                            }
                         }
                     }
                 }
@@ -3574,6 +3597,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
             }
             for (bool sample : {true, false}) {
                 withSample = sample;
+                storagePoolRequests = 0;
+                groupRequests = 0;
                 THttpRequest httpReq(HTTP_METHOD_GET);
                 httpReq.CgiParameters.emplace("node_id", ToString(runtime.GetNodeId(0)));
                 httpReq.CgiParameters.emplace("pdisk_id", "1");
@@ -3590,8 +3615,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 UNIT_ASSERT_C(bodyPos != TString::npos, result->Answer);
                 NJson::TJsonValue json;
                 UNIT_ASSERT_C(NJson::ReadJsonTree(result->Answer.substr(bodyPos + 4), &json), result->Answer);
-                auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
                 checkDisks(json["Whiteboard"], sample, true);
+                UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, 0);
+                UNIT_ASSERT_VALUES_EQUAL(groupRequests, 0);
+                if (includeDDisks) {
+                    for (const auto& disk : json["Whiteboard"]["DDisks"].GetArray()) {
+                        UNIT_ASSERT_VALUES_EQUAL(disk["StoragePoolName"].GetString(), "ddisk-pool");
+                    }
+                }
                 for (bool offload : {false, true}) {
                     storagePoolRequests = 0;
                     groupRequests = 0;
@@ -3646,6 +3677,180 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     }
                 }
             }
+        }
+
+        includeDDisks = true;
+        withSample = true;
+        reportBufferProblem = true;
+        for (TStringBuf filter : {"missing", "space"}) {
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /viewer/nodes?type=static&fields_required=DDisks&offload_merge=false&with="
+                    << filter << " HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
+            const auto& nodes = json["Nodes"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(nodes.size(), 1);
+            UNIT_ASSERT(!nodes[0].Has("PDisks"));
+            UNIT_ASSERT(!nodes[0].Has("VDisks"));
+            UNIT_ASSERT_VALUES_EQUAL(nodes[0]["DDisks"].GetArray().size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(nodes[0]["DDisks"][0]["PersistentBufferStatus"].GetString(), "Broken");
+        }
+    }
+
+    Y_UNIT_TEST(NbsStorageDiscovery) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        enum class EMode { RealController, Configured, Legacy };
+        EMode mode = EMode::RealController;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
+                if (mode == EMode::Configured) {
+                    record.SetHasDDiskPools(true);
+                } else if (mode == EMode::Legacy) {
+                    record.ClearHasDDiskPools();
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        for (EMode responseMode : {EMode::RealController, EMode::Configured, EMode::Legacy}) {
+            mode = responseMode;
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                "GET /storage/nbs HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(result->Response->Body, &json));
+            UNIT_ASSERT(json.Has("Configured"));
+            if (mode == EMode::Legacy) {
+                UNIT_ASSERT_VALUES_EQUAL(json["Configured"].GetType(), NJson::JSON_NULL);
+            } else {
+                UNIT_ASSERT(json["Configured"].IsBoolean());
+                UNIT_ASSERT_VALUES_EQUAL(json["Configured"].GetBoolean(), mode == EMode::Configured);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PDiskMergesMixedSlotsFromWhiteboardAndBSC) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        const ui32 nodeId = runtime.GetNodeId(0);
+        bool hasWhiteboardPDisk = true;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto& record = ev->Get<NSysView::TEvSysView::TEvGetPDisksResponse>()->Record;
+                    record.ClearEntries();
+                    auto* entry = record.AddEntries();
+                    entry->MutableKey()->SetNodeId(nodeId);
+                    entry->MutableKey()->SetPDiskId(1);
+                    entry->MutableInfo()->SetExpectedSlotCount(7);
+                    entry->MutableInfo()->SetNumActiveSlots(3);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto& record = ev->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>()->Record;
+                    record.ClearEntries();
+                    for (ui32 slotId : {1001, 1002, 1010}) {
+                        auto* entry = record.AddEntries();
+                        entry->MutableKey()->SetNodeId(nodeId);
+                        entry->MutableKey()->SetPDiskId(1);
+                        entry->MutableKey()->SetVSlotId(slotId);
+                        entry->MutableInfo()->SetGroupId(slotId);
+                        entry->MutableInfo()->SetGroupGeneration(1);
+                        entry->MutableInfo()->SetDDisk(slotId == 1010);
+                    }
+                    break;
+                }
+                case TEvWhiteboard::EvPDiskStateResponse: {
+                    auto& record = ev->Get<TEvWhiteboard::TEvPDiskStateResponse>()->Record;
+                    record.ClearPDiskStateInfo();
+                    record.ClearDDiskStateInfo();
+                    if (hasWhiteboardPDisk) {
+                        auto* disk = record.AddPDiskStateInfo();
+                        disk->SetPDiskId(1);
+                        disk->SetExpectedSlotCount(9);
+                    }
+                    auto* disk = record.AddDDiskStateInfo();
+                    disk->SetPDiskId(1);
+                    disk->SetDDiskSlotId(1010);
+                    disk->SetHasWhiteboardData(false);
+                    break;
+                }
+                case TEvWhiteboard::EvVDiskStateResponse: {
+                    auto& record = ev->Get<TEvWhiteboard::TEvVDiskStateResponse>()->Record;
+                    record.ClearVDiskStateInfo();
+                    for (ui32 slotId : {1001, 1010}) {
+                        auto* vdisk = record.AddVDiskStateInfo();
+                        vdisk->SetPDiskId(1);
+                        vdisk->SetVDiskSlotId(slotId);
+                        vdisk->MutableVDiskId()->SetGroupID(slotId);
+                        vdisk->MutableVDiskId()->SetGroupGeneration(1);
+                        vdisk->SetAllocatedSize(123);
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        for (const bool withPDisk : {true, false}) {
+            hasWhiteboardPDisk = withPDisk;
+            THttpRequest httpReq(HTTP_METHOD_GET);
+            httpReq.CgiParameters.emplace("node_id", ToString(nodeId));
+            httpReq.CgiParameters.emplace("pdisk_id", "1");
+            httpReq.CgiParameters.emplace("include_ddisks", "true");
+            auto page = MakeHolder<TMonPage>("pdisk", "title");
+            TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/info", nullptr);
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NMon::TEvHttpInfo(monReq)));
+            TAutoPtr<IEventHandle> handle;
+            const auto* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+            const auto bodyPos = result->Answer.find("\r\n\r\n");
+            UNIT_ASSERT_C(bodyPos != TString::npos, result->Answer);
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(result->Answer.substr(bodyPos + 4), &json), result->Answer);
+            const auto& whiteboard = json["Whiteboard"];
+            UNIT_ASSERT_VALUES_EQUAL(whiteboard["PDisk"]["ExpectedSlotCount"].GetUInteger(), withPDisk ? 9 : 7);
+            UNIT_ASSERT_VALUES_EQUAL(whiteboard["PDisk"]["NumActiveSlots"].GetUInteger(), 3);
+
+            const auto& vdisks = whiteboard["VDisks"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(vdisks.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(vdisks[0]["VDiskSlotId"].GetUInteger(), 1001);
+            UNIT_ASSERT_VALUES_EQUAL(vdisks[0]["AllocatedSize"].GetString(), "123");
+            UNIT_ASSERT_VALUES_EQUAL(vdisks[1]["VDiskSlotId"].GetUInteger(), 1002);
+            UNIT_ASSERT_VALUES_EQUAL(vdisks[1]["NodeId"].GetUInteger(), nodeId);
+            UNIT_ASSERT(vdisks[1].Has("HasWhiteboardData"));
+            UNIT_ASSERT(!vdisks[1]["HasWhiteboardData"].GetBoolean());
+
+            const auto& ddisks = whiteboard["DDisks"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(ddisks.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ddisks[0]["DDiskSlotId"].GetUInteger(), 1010);
+            UNIT_ASSERT(ddisks[0].Has("HasWhiteboardData"));
+            UNIT_ASSERT(!ddisks[0]["HasWhiteboardData"].GetBoolean());
         }
     }
 
@@ -3702,6 +3907,61 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 UNIT_ASSERT_VALUES_EQUAL(groups.front().GetMap().at("GroupId"), "0");
             }
         }
+    }
+
+    Y_UNIT_TEST(StorageGroupsExcludeDDisksFromWhiteboard) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateRequest) {
+                const auto& fields = ev->Get<TEvWhiteboard::TEvBSGroupStateRequest>()->Record.GetFieldsRequired();
+                UNIT_ASSERT(std::ranges::find(fields, NKikimrWhiteboard::TBSGroupStateInfo::kDDiskFieldNumber) != fields.end());
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateResponse) {
+                auto& record = ev->Get<TEvWhiteboard::TEvBSGroupStateResponse>()->Record;
+                record.ClearBSGroupStateInfo();
+                const ui32 nodeId = ev->Sender.NodeId();
+                for (ui32 groupId : {10, 11, 12}) {
+                    NKikimrBlobStorage::TGroupInfo group;
+                    group.SetGroupID(groupId);
+                    group.SetGroupGeneration(1);
+                    group.SetErasureSpecies(TBlobStorageGroupType::ErasureNone);
+                    group.SetStoragePoolName(groupId == 11 ? "nbs-ddisk" : "nbs-metadata");
+                    auto* slot = group.AddRings()->AddFailDomains()->AddVDiskLocations();
+                    slot->SetNodeID(nodeId);
+                    slot->SetPDiskID(1);
+                    slot->SetVDiskSlotID(groupId);
+                    if (nodeId == runtime.GetNodeId(0) && groupId != 10) {
+                        group.SetDDisk(groupId == 11);
+                    }
+                    TEvWhiteboard::TEvBSGroupStateUpdate update(TBlobStorageGroupInfo::Parse(group, nullptr, nullptr));
+                    record.AddBSGroupStateInfo()->Swap(&update.Record);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /storage/groups?whiteboard_only=true&sort=GroupId HTTP/1.1\r\n\r\n", endpoint, {});
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        const auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(result->Response->Body, &json), result->Response->Body);
+        UNIT_ASSERT_VALUES_EQUAL(json["TotalGroups"].GetUInteger(), 2);
+        const auto& groups = json["StorageGroups"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["GroupId"].GetString(), "10");
+        UNIT_ASSERT_VALUES_EQUAL(groups[1]["GroupId"].GetString(), "12");
     }
 
     void CheckVDiskReplicationStatus(bool groups) {

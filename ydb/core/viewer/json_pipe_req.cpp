@@ -757,7 +757,8 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> 
     return MakeRequestToPipe<NSysView::TEvSysView::TEvGetPDisksResponse>(pipeClient, request.release());
 }
 
-TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVDiskInfo(ui32 nodeId, ui32 pdiskId) {
+TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVDiskInfo(
+        ui32 nodeId, ui32 pdiskId, bool includeDDiskPoolNames) {
     TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
     auto request = std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>();
     request->Record.SetInclusiveFrom(true);
@@ -768,6 +769,9 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> 
     request->Record.MutableTo()->SetNodeId(nodeId);
     request->Record.MutableTo()->SetPDiskId(pdiskId);
     request->Record.MutableTo()->SetVSlotId(std::numeric_limits<ui32>::max());
+    if (includeDDiskPoolNames) {
+        request->Record.SetIncludeDDiskPoolNames(true);
+    }
     return MakeRequestToPipe<NSysView::TEvSysView::TEvGetVSlotsResponse>(pipeClient, request.release());
 }
 

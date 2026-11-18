@@ -1675,6 +1675,9 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(std::get<0>(group.StoragePoolId));
             pb->SetStoragePoolId(std::get<1>(group.StoragePoolId));
             pb->SetSeenOperational(group.SeenOperational);
+            if (group.DDisk) {
+                pb->SetDDisk(true);
+            }
             if (group.GroupSizeInUnits != 0) {
                 pb->SetGroupSizeInUnits(group.GroupSizeInUnits);
             }

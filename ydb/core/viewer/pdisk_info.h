@@ -3,6 +3,7 @@
 #include "viewer.h"
 #include "ddisk_info.h"
 #include <ydb/core/viewer/yaml/yaml.h>
+#include <util/generic/map.h>
 
 #include <algorithm>
 
@@ -110,7 +111,7 @@ public:
 
     void SendBSCRequest() {
         SysViewPDisks = RequestBSControllerPDiskInfo(NodeId, PDiskId);
-        SysViewVSlots = RequestBSControllerVDiskInfo(NodeId, PDiskId);
+        SysViewVSlots = RequestBSControllerVDiskInfo(NodeId, PDiskId, IncludeDDisks);
     }
 
     bool RetryRequest() {
@@ -161,13 +162,13 @@ public:
     }
 
     void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
-        if (SysViewPDisks.Set(std::move(ev))) {
+        if (SysViewPDisks.Set(std::move(ev), /*updateCache=*/ false)) {
             TBase::RequestDone();
         }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
-        if (SysViewVSlots.Set(std::move(ev))) {
+        if (SysViewVSlots.Set(std::move(ev), /*updateCache=*/ false)) {
             TBase::RequestDone();
         }
     }
@@ -203,6 +204,7 @@ public:
         bool hasPDisk = false;
         bool hasVDisk = false;
         THashMap<ui32, NKikimrWhiteboard::TDDiskStateInfo> ddisks;
+        TMap<ui32, NKikimrWhiteboard::TVDiskStateInfo> vdisks;
         if (IncludeDDisks && WhiteboardPDisk) {
             for (const auto& sample : WhiteboardPDisk->Record.GetDDiskStateInfo()) {
                 if (sample.GetPDiskId() == PDiskId) {
@@ -226,7 +228,11 @@ public:
         if (WhiteboardVDisk && WhiteboardVDisk->Record.VDiskStateInfoSize() > 0) {
             for (const auto& vdisk : WhiteboardVDisk->Record.GetVDiskStateInfo()) {
                 if (vdisk.GetPDiskId() == PDiskId) {
-                    proto.MutableWhiteboard()->AddVDisks()->CopyFrom(vdisk);
+                    if (IncludeDDisks && vdisk.HasVDiskSlotId()) {
+                        vdisks[vdisk.GetVDiskSlotId()].CopyFrom(vdisk);
+                    } else {
+                        proto.MutableWhiteboard()->AddVDisks()->CopyFrom(vdisk);
+                    }
                     hasVDisk = true;
                 }
             }
@@ -243,23 +249,50 @@ public:
                 pdiskInfo.SetAvailableSize(bscInfo.GetAvailableSize());
                 pdiskInfo.SetTotalSize(bscInfo.GetTotalSize());
             }
+            if (IncludeDDisks) {
+                auto& pdiskInfo = *proto.MutableWhiteboard()->MutablePDisk();
+                if (!pdiskInfo.HasExpectedSlotCount() && bscInfo.HasExpectedSlotCount()) {
+                    pdiskInfo.SetExpectedSlotCount(bscInfo.GetExpectedSlotCount());
+                }
+                if (!pdiskInfo.HasNumActiveSlots() && bscInfo.HasNumActiveSlots()) {
+                    pdiskInfo.SetNumActiveSlots(bscInfo.GetNumActiveSlots());
+                }
+            }
         }
         if (SysViewVSlots && SysViewVSlots->Record.EntriesSize() > 0) {
             for (const auto& vdisk : SysViewVSlots->Record.GetEntries()) {
                 proto.MutableBSC()->AddVDisks()->CopyFrom(vdisk);
-                if (IncludeDDisks && vdisk.GetInfo().GetDDisk()) {
-                    auto& ddisk = ddisks[vdisk.GetKey().GetVSlotId()];
+                const auto& key = vdisk.GetKey();
+                const auto& bscInfo = vdisk.GetInfo();
+                const ui32 slotId = key.GetVSlotId();
+                if (IncludeDDisks && bscInfo.GetDDisk()) {
+                    auto& ddisk = ddisks[slotId];
                     ddisk.SetPDiskId(PDiskId);
-                    ddisk.SetDDiskSlotId(vdisk.GetKey().GetVSlotId());
-                    ddisk.SetGroupId(vdisk.GetInfo().GetGroupId());
+                    ddisk.SetDDiskSlotId(slotId);
+                    ddisk.SetGroupId(bscInfo.GetGroupId());
+                    if (bscInfo.HasStoragePoolName()) {
+                        ddisk.SetStoragePoolName(bscInfo.GetStoragePoolName());
+                    }
                     if (!ddisk.HasHasWhiteboardData()) {
                         ddisk.SetHasWhiteboardData(false);
                     }
                     continue;
                 }
-                if (!hasVDisk) {
-                    const auto& bscInfo(vdisk.GetInfo());
-                    auto& vdiskInfo(*proto.MutableWhiteboard()->AddVDisks());
+                if (!hasVDisk || IncludeDDisks) {
+                    auto& vdiskInfo = IncludeDDisks ? vdisks[slotId] : *proto.MutableWhiteboard()->AddVDisks();
+                    if (IncludeDDisks) {
+                        const auto& id = vdiskInfo.GetVDiskId();
+                        if (vdiskInfo.HasVDiskId() && id.GetGroupID() == bscInfo.GetGroupId()
+                                && id.GetGroupGeneration() == bscInfo.GetGroupGeneration()
+                                && id.GetRing() == bscInfo.GetFailRealm() && id.GetDomain() == bscInfo.GetFailDomain()
+                                && id.GetVDisk() == bscInfo.GetVDisk()) {
+                            continue;
+                        }
+                        vdiskInfo.Clear();
+                        vdiskInfo.SetNodeId(NodeId);
+                        vdiskInfo.SetVDiskSlotId(slotId);
+                        vdiskInfo.SetHasWhiteboardData(false);
+                    }
                     vdiskInfo.SetPDiskId(PDiskId);
                     vdiskInfo.MutableVDiskId()->SetGroupID(bscInfo.GetGroupId());
                     vdiskInfo.MutableVDiskId()->SetGroupGeneration(bscInfo.GetGroupGeneration());
@@ -269,6 +302,11 @@ public:
                     vdiskInfo.SetAllocatedSize(bscInfo.GetAllocatedSize());
                     vdiskInfo.SetAvailableSize(bscInfo.GetAvailableSize());
                 }
+            }
+        }
+        for (auto& [slotId, vdisk] : vdisks) {
+            if (!ddisks.contains(slotId)) {
+                proto.MutableWhiteboard()->AddVDisks()->Swap(&vdisk);
             }
         }
         for (auto& [slotId, ddisk] : ddisks) {

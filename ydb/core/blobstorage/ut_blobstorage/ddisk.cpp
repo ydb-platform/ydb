@@ -808,10 +808,13 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto response = f.Env.WaitForEdgeActorEvent<TEvSysView::TEvGetVSlotsResponse>(f.Edge);
         ui32 ddiskSlots = 0;
         ui32 ordinarySlots = 0;
+        std::optional<NKikimrSysView::TVSlotKey> ddiskKey;
         for (const auto& entry : response->Get()->Record.GetEntries()) {
+            UNIT_ASSERT(!entry.GetInfo().HasStoragePoolName());
             if (entry.GetInfo().GetDDisk()) {
                 ++ddiskSlots;
                 UNIT_ASSERT(entry.GetInfo().HasGroupId());
+                ddiskKey = entry.GetKey();
             } else {
                 ++ordinarySlots;
             }
@@ -819,6 +822,46 @@ Y_UNIT_TEST_SUITE(DDisk) {
         // The fixture creates three DDisk groups with five slots each, plus a conventional pool.
         UNIT_ASSERT_VALUES_EQUAL(ddiskSlots, 15);
         UNIT_ASSERT(ordinarySlots > 0);
+
+        UNIT_ASSERT(ddiskKey);
+        auto scoped = std::make_unique<TEvSysView::TEvGetVSlotsRequest>();
+        scoped->Record.SetIncludeDDiskPoolNames(true);
+        scoped->Record.SetInclusiveFrom(true);
+        scoped->Record.SetInclusiveTo(true);
+        scoped->Record.MutableFrom()->CopyFrom(*ddiskKey);
+        scoped->Record.MutableFrom()->SetVSlotId(0);
+        scoped->Record.MutableTo()->CopyFrom(*ddiskKey);
+        scoped->Record.MutableTo()->SetVSlotId(Max<ui32>());
+        f.Env.Runtime->SendToPipe(f.Env.TabletId, f.Edge, scoped.release(),
+            0, TTestActorSystem::GetPipeConfigWithRetries());
+        response = f.Env.WaitForEdgeActorEvent<TEvSysView::TEvGetVSlotsResponse>(f.Edge);
+        bool foundDDisk = false;
+        for (const auto& entry : response->Get()->Record.GetEntries()) {
+            UNIT_ASSERT_VALUES_EQUAL(entry.GetKey().GetNodeId(), ddiskKey->GetNodeId());
+            UNIT_ASSERT_VALUES_EQUAL(entry.GetKey().GetPDiskId(), ddiskKey->GetPDiskId());
+            UNIT_ASSERT_VALUES_EQUAL(entry.GetInfo().HasStoragePoolName(), entry.GetInfo().GetDDisk());
+            if (entry.GetInfo().GetDDisk()) {
+                UNIT_ASSERT_VALUES_EQUAL(entry.GetInfo().GetStoragePoolName(), "ddisk_pool");
+                foundDDisk = true;
+            }
+        }
+        UNIT_ASSERT(foundDDisk);
+
+        const auto baseConfig = f.Env.FetchBaseConfig();
+        UNIT_ASSERT(baseConfig.HasHasDDiskPools());
+        UNIT_ASSERT(baseConfig.GetHasDDiskPools());
+        ui32 baseConfigDDiskSlots = 0;
+        ui32 baseConfigOrdinarySlots = 0;
+        for (const auto& group : baseConfig.GetGroup()) {
+            if (group.GetDDisk()) {
+                UNIT_ASSERT_VALUES_EQUAL(group.GetStoragePoolName(), "ddisk_pool");
+                baseConfigDDiskSlots += group.VSlotIdSize();
+            } else {
+                baseConfigOrdinarySlots += group.VSlotIdSize();
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(baseConfigDDiskSlots, ddiskSlots);
+        UNIT_ASSERT(baseConfigOrdinarySlots > 0);
     }
 
     Y_UNIT_TEST(Basic) {

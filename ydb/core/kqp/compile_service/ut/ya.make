@@ -9,6 +9,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    kqp_query_cache_ut.cpp
     kqp_replay_log_ut.cpp
 )
 

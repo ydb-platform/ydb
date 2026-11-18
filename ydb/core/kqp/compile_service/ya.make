@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     kqp_compile_actor.cpp
     kqp_compile_service.cpp
+    kqp_query_cache.cpp
     kqp_compile_computation_pattern_service.cpp
     kqp_warmup_compile_actor.cpp
 )
@@ -13,6 +14,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/cms/console/events
     ydb/core/kqp/common
+    ydb/core/kqp/common/compile_cache
     ydb/core/kqp/common/simple
     ydb/core/kqp/common/warmup
     ydb/core/kqp/compile_service/helpers

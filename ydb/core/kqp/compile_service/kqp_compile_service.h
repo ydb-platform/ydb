@@ -71,37 +71,89 @@ private:
     THashMap<TString, ui32> Index_;
 };
 
-// Cache is shared between query sessions, compile service and kqp proxy.
-// Currently we don't use RW lock, because of cache promotions during lookup:
-// in benchmark both versions (RW spinlock and adaptive W spinlock) show same
-// performance. Might consider RW lock again in future.
+// Node-wide cache of compiled queries, shared by the session actors, the compile service and the
+// KQP proxy. Thread-safe. Two implementations live behind this interface, selected once at node
+// start by the EnableCompileCacheV2 feature flag: TKqpQueryCacheV1 below and the one built on
+// TKqpCache (kqp_query_cache.cpp). The interface exists only for the rollout: once V2 is the
+// default everywhere, V1 and the interface go away and V2 becomes the concrete TKqpQueryCache.
 class TKqpQueryCache: public TThrRefBase {
 public:
     // Opens lazily on first non-warmup access with non-empty pending set,
     // closes once after the duration (no timer, checked on access).
     static constexpr TDuration WarmupObservationWindow = TDuration::Minutes(5);
 
-    TKqpQueryCache(size_t size, TDuration ttl)
+    virtual bool Insert(const TKqpCompileResult::TConstPtr& compileResult) = 0;
+
+    // Idempotent; no-op once the window is closed.
+    virtual void MarkWarmupInsert(const TString& uid) = 0;
+
+    virtual void AttachReplayMessage(const TString uid, TString replayMessage) = 0;
+
+    virtual TString ReplayMessageByUid(const TString uid, TDuration timeout) = 0;
+
+    virtual TKqpCompileResult::TConstPtr FindByUid(const TString& uid, bool promote) = 0;
+
+    virtual bool Replace(const TKqpCompileResult::TConstPtr& compileResult) = 0;
+
+    virtual TKqpCompileResult::TConstPtr FindByQuery(const TKqpQueryId& query, bool promote) = 0;
+
+    // find by either uid or query.
+    // warmupAttribution defaults to None so new callers don't pollute counters.
+    virtual TKqpCompileResult::TConstPtr Find(
+        const TMaybe<TString>& uid,
+        TMaybe<TKqpQueryId>& query,
+        bool disablePgCompatibility,
+        TKqpTempTablesState::TConstPtr tempTablesState,
+        bool promote,
+        const NACLib::TSID& userSid,
+        TIntrusivePtr<TKqpCounters> counters,
+        TIntrusivePtr<TKqpDbCounters>& dbCounters,
+        const TActorId& sender,
+        const TActorContext& ctx,
+        EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None) = 0;
+
+    virtual bool EraseByUid(const TString& uid) = 0;
+
+    virtual bool EraseIfCurrent(const TKqpCompileResult::TConstPtr& compileResult) = 0;
+
+    virtual size_t Size() const = 0;
+
+    virtual ui64 Bytes() const = 0;
+
+    virtual TVector<TKqpQueryCacheSnapshot::TEntry> GetSnapshot() const = 0;
+
+    virtual size_t EraseExpiredQueries() = 0;
+
+    virtual void Clear() = 0;
+};
+
+// Cache is shared between query sessions, compile service and kqp proxy.
+// Currently we don't use RW lock, because of cache promotions during lookup:
+// in benchmark both versions (RW spinlock and adaptive W spinlock) show same
+// performance. Might consider RW lock again in future.
+class TKqpQueryCacheV1: public TKqpQueryCache {
+public:
+    TKqpQueryCacheV1(size_t size, TDuration ttl)
         : List(size)
         , Ttl(ttl) {}
 
-    bool Insert(const TKqpCompileResult::TConstPtr& compileResult);
+    bool Insert(const TKqpCompileResult::TConstPtr& compileResult) override;
 
     // Idempotent; no-op once the window is closed.
-    void MarkWarmupInsert(const TString& uid);
+    void MarkWarmupInsert(const TString& uid) override;
 
-    void AttachReplayMessage(const TString uid, TString replayMessage);
+    void AttachReplayMessage(const TString uid, TString replayMessage) override;
 
-    TString ReplayMessageByUid(const TString uid, TDuration timeout);
+    TString ReplayMessageByUid(const TString uid, TDuration timeout) override;
 
-    TKqpCompileResult::TConstPtr FindByUid(const TString& uid, bool promote) {
+    TKqpCompileResult::TConstPtr FindByUid(const TString& uid, bool promote) override {
         TGuard<TAdaptiveLock> guard(Lock);
         return FindByUidImpl(uid, promote);
     }
 
-    bool Replace(const TKqpCompileResult::TConstPtr& compileResult);
+    bool Replace(const TKqpCompileResult::TConstPtr& compileResult) override;
 
-    TKqpCompileResult::TConstPtr FindByQuery(const TKqpQueryId& query, bool promote) {
+    TKqpCompileResult::TConstPtr FindByQuery(const TKqpQueryId& query, bool promote) override {
         TGuard<TAdaptiveLock> guard(Lock);
         return FindByQueryImpl(query, promote);
     }
@@ -119,25 +171,25 @@ public:
         TIntrusivePtr<TKqpDbCounters>& dbCounters,
         const TActorId& sender,
         const TActorContext& ctx,
-        EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None);
+        EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None) override;
 
-    bool EraseByUid(const TString& uid) {
+    bool EraseByUid(const TString& uid) override {
         TGuard<TAdaptiveLock> guard(Lock);
         return EraseByUidImpl(uid);
     }
 
-    bool EraseIfCurrent(const TKqpCompileResult::TConstPtr& compileResult) {
+    bool EraseIfCurrent(const TKqpCompileResult::TConstPtr& compileResult) override {
         TGuard<TAdaptiveLock> guard(Lock);
         const auto& uid = compileResult->Uid;
         return FindByUidImpl(uid, false) == compileResult && EraseByUidImpl(uid);
     }
 
-    size_t Size() const {
+    size_t Size() const override {
         TGuard<TAdaptiveLock> guard(Lock);
         return SizeImpl();
     }
 
-    ui64 Bytes() const {
+    ui64 Bytes() const override {
         TGuard<TAdaptiveLock> guard(Lock);
         return BytesImpl();
     }
@@ -146,10 +198,10 @@ public:
         return ByteSize;
     }
 
-    TVector<TKqpQueryCacheSnapshot::TEntry> GetSnapshot() const;
-    size_t EraseExpiredQueries();
+    TVector<TKqpQueryCacheSnapshot::TEntry> GetSnapshot() const override;
+    size_t EraseExpiredQueries() override;
 
-    void Clear();
+    void Clear() override;
 
 private:
     TKqpCompileResult::TConstPtr FindByUidImpl(const TString& uid, bool promote, std::optional<bool> disablePgCompatibility = std::nullopt);
@@ -234,6 +286,10 @@ private:
 };
 
 using TKqpQueryCachePtr = TIntrusivePtr<TKqpQueryCache>;
+
+// `compileCacheV2` selects the implementation (the EnableCompileCacheV2 feature flag, read once at
+// node start); `size` is a number of entries, `ttl == Zero` disables expiry.
+TKqpQueryCachePtr CreateKqpQueryCache(bool compileCacheV2, size_t size, TDuration ttl);
 
 bool HasTempTablesNameClashes(
     TKqpCompileResult::TConstPtr compileResult,

@@ -4,6 +4,7 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table_enum.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
@@ -50,6 +51,7 @@ bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType);
 NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexCreationConfig& indexCreation);
 NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexAlteringConfig& indexAlter);
 TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType);
+std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(NYdb::NTable::EIndexType type, bool enableCompactFulltext);
 std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type, bool enableFulltextCompact);
 NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase type, bool enableFulltextCompact);
 bool IsLocalTableIndex(Ydb::Table::TableIndex::TypeCase type);

@@ -23,42 +23,6 @@
 
 namespace NKikimr::NReplication::NController {
 
-namespace {
-
-    std::optional<NKikimrSchemeOp::EIndexType> ConvertIndexType(NYdb::NTable::EIndexType type, bool enableCompactFulltext) {
-        // The SDK does not distinguish compact fulltext indexes from regular ones, while the set
-        // of their impl tables differs (e.g. a compact relevance index has no dict table).
-        switch (type) {
-        case NYdb::NTable::EIndexType::GlobalSync:
-            return NKikimrSchemeOp::EIndexTypeGlobal;
-        case NYdb::NTable::EIndexType::GlobalAsync:
-            return NKikimrSchemeOp::EIndexTypeGlobalAsync;
-        case NYdb::NTable::EIndexType::GlobalUnique:
-            return NKikimrSchemeOp::EIndexTypeGlobalUnique;
-        case NYdb::NTable::EIndexType::GlobalVectorKMeansTree:
-            return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
-        case NYdb::NTable::EIndexType::GlobalHnsw:
-            return NKikimrSchemeOp::EIndexTypeGlobalHnsw;
-        case NYdb::NTable::EIndexType::GlobalFulltextPlain:
-            return enableCompactFulltext
-                ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
-                : NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
-        case NYdb::NTable::EIndexType::GlobalFulltextRelevance:
-            return enableCompactFulltext
-                ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
-                : NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
-        case NYdb::NTable::EIndexType::GlobalJson:
-            return enableCompactFulltext
-                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
-                : NKikimrSchemeOp::EIndexTypeGlobalJson;
-        default:
-            // Local indexes are a part of the table itself, there is nothing to replicate.
-            return std::nullopt;
-        }
-    }
-
-} // anonymous
-
 class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     void DescribePath(ui32 idx) {
         Y_ABORT_UNLESS(idx < Paths.size());
@@ -175,9 +139,9 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                     // Async indexes are maintained by the destination's own change exchange.
                     // Other index types (fulltext, vector, json) are replicated as their impl
                     // tables: their names are defined by the index type and its keys.
-                    const auto indexType = ConvertIndexType(index.GetIndexType(),
+                    const auto indexType = NTableIndex::TryConvertIndexType(index.GetIndexType(),
                         AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
-                    if (!indexType) {
+                    if (!indexType || !NTableIndex::HasReplicatedImplTables(*indexType)) {
                         YDB_LOG_DEBUG("Skip target for local index",
                             {"path", indexSrcPath},
                             {"type", index.GetIndexType()});

@@ -2,18 +2,22 @@
 
 #include "tuple.h"
 #include "hashes_calc.h"
+#include "packing_simd_impl.h"
 #include "tuple_bitmatrix.h"
 
 #include <algorithm>
 #include <queue>
 
-// The AVX2 library is built without -mavx2: inline code from shared headers
-// (std::, util) must stay callable on CPUs without AVX2. Keep includes above.
-#ifdef TUPLE_LAYOUT_AVX2
-#pragma clang attribute push(__attribute__((target("avx2"))), apply_to = function)
+// ISA-specific layout libraries are built without -m flags: inline code from
+// shared headers (std::, util) must stay callable on any CPU. Add includes above.
+#if defined(TUPLE_LAYOUT_AVX2)
+#ifdef __AVX2__
+#error "Build the AVX2 tuple layout without -mavx2"
 #endif
-
-#include "packing_simd_impl.h"
+#pragma clang attribute push(__attribute__((target("avx2"))), apply_to = function)
+#elif defined(TUPLE_LAYOUT_SSE42)
+#pragma clang attribute push(__attribute__((target("sse4.2"))), apply_to = function)
+#endif
 
 // Included only by the ISA-specific layout implementations. Keeping the layout
 // and packing definitions together allows inlining without LTO.
@@ -830,6 +834,6 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
 
 } // namespace NKikimr::NMiniKQL::NPackedTuple
 
-#ifdef TUPLE_LAYOUT_AVX2
+#if defined(TUPLE_LAYOUT_AVX2) || defined(TUPLE_LAYOUT_SSE42)
 #pragma clang attribute pop
 #endif

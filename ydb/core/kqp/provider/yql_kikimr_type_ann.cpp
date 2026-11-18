@@ -1,4 +1,4 @@
-#include "column_expression.h"
+#include "generated_column.h"
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_settings.h"
 #include "yql_kikimr_type_ann_pg.h"

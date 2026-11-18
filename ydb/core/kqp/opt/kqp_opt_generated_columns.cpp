@@ -1,4 +1,4 @@
-#include "kqp_opt_column_expressions.h"
+#include "kqp_opt_generated_columns.h"
 
 #include "kqp_opt_impl.h"
 

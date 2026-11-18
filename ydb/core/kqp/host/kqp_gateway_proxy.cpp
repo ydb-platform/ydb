@@ -370,8 +370,8 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
         if (cMeta.IsDefaultFromExpression()) {
             auto& generated = *columnDesc.MutableDefaultFromExpression();
             generated.SetExprText(cMeta.DefaultExpression->ExprText);
-            generated.SetContext(cMeta.DefaultExpression->Context);
-            generated.SetKind(ColumnExpressionKindToSchemeProto(cMeta.DefaultExpression->Kind));
+            generated.SetStored(cMeta.DefaultExpression->Stored);
+            generated.SetWritable(cMeta.DefaultExpression->Writable);
             for (const auto& dependency : cMeta.DefaultExpression->Dependencies) {
                 generated.AddDependencyColumnNames(dependency);
             }

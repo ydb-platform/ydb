@@ -1059,8 +1059,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 Type: "Uint64"
                 DefaultFromExpression {
                     ExprText: "42u"
-                    Kind: DEFAULT
-                    Context: "USE `/MyRoot`;"
+                    Stored: true Writable: true
                 }
             }
             Columns {
@@ -1068,7 +1067,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 Type: "Int32"
                 DefaultFromExpression {
                     ExprText: "a + b"
-                    Kind: GENERATED_STORED
+                    Stored: true
                     DependencyColumnNames: ["a", "b"]
                 }
             }
@@ -1077,7 +1076,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 Type: "Int32"
                 DefaultFromExpression {
                     ExprText: "a - b"
-                    Kind: GENERATED_VIRTUAL
+                    Stored: false
                     DependencyColumnNames: ["a", "b"]
                 }
             }
@@ -1108,9 +1107,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         const auto* defaultValue = findColumn(describe, "default_value");
         UNIT_ASSERT_C(defaultValue && defaultValue->HasDefaultFromExpression(), describe.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(defaultValue->GetDefaultFromExpression().GetExprText(), "42u");
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(defaultValue->GetDefaultFromExpression().GetKind()),
-            static_cast<int>(NKikimrSchemeOp::TDefaultExpressionColumnDescription::DEFAULT));
-        UNIT_ASSERT_VALUES_EQUAL(defaultValue->GetDefaultFromExpression().GetContext(), "USE `/MyRoot`;");
+        UNIT_ASSERT(defaultValue->GetDefaultFromExpression().GetStored());
+        UNIT_ASSERT(defaultValue->GetDefaultFromExpression().GetWritable());
         UNIT_ASSERT_VALUES_EQUAL(defaultValue->GetDefaultFromExpression().DependencyColumnNamesSize(), 0u);
 
         const auto* sum = findColumn(describe, "sum");
@@ -1122,8 +1120,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         const auto* diff = findColumn(describe, "diff");
         UNIT_ASSERT_C(diff && diff->HasDefaultFromExpression(), describe.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(diff->GetDefaultFromExpression().GetExprText(), "a - b");
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(diff->GetDefaultFromExpression().GetKind()),
-            static_cast<int>(NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_VIRTUAL));
+        UNIT_ASSERT(!diff->GetDefaultFromExpression().GetStored());
     }
 
     Y_UNIT_TEST(CannotCopyBackupTable) {

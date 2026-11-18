@@ -715,7 +715,7 @@ Y_UNIT_TEST(TableDefaultLiteral) {
         R"(
             CREATE TABLE `test_show_create` (
                 `Key` Uint32,
-                `Value` Float DEFAULT CAST(4.0 AS FLOAT),
+                `Value` Float DEFAULT 4,
                 PRIMARY KEY (`Key`)
             );
         )"
@@ -1892,7 +1892,7 @@ Y_UNIT_TEST(Table) {
                 `Value1` Utf8,
                 `Value2` Bool,
                 `Value3` String,
-                `Value4` Timestamp DEFAULT CAST('2000-01-02T02:26:50.999900Z' AS TIMESTAMP),
+                `Value4` Timestamp DEFAULT TIMESTAMP('2000-01-02T02:26:50.999900Z'),
                 `Value5` String,
                 INDEX `Index1` GLOBAL ASYNC ON (`Key2`, `Value1`, `Value2`) COVER (`Value5`, `Value3`),
                 INDEX `Index2` GLOBAL USING vector_kmeans_tree ON (`Value5`) COVER (`Value1`, `Value3`) WITH (distance = manhattan, vector_type = 'float', vector_dimension = 2, clusters = 2, levels = 1),

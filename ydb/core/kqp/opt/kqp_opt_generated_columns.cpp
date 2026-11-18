@@ -18,7 +18,7 @@ using namespace NYql::NNodes;
 namespace {
 
 bool IsVirtualGeneratedColumn(const TKikimrColumnMetadata* column) {
-    return column && column->IsDefaultFromExpression() && !column->DefaultExpression->IsStored();
+    return column && column->IsDefaultFromExpression() && !column->DefaultExpression->Stored;
 }
 
 TVector<TString> GetMissingStoredGeneratedDeps(const TVector<const TKikimrColumnMetadata*>& generatedColumns,
@@ -376,7 +376,7 @@ TVector<const TKikimrColumnMetadata*> CollectStoredGeneratedColumns(const TKikim
     TVector<const TKikimrColumnMetadata*> generatedColumns;
     for (const auto& name : table.Metadata->ColumnOrder) {
         const auto* colMeta = table.Metadata->Columns.FindPtr(name);
-        if (colMeta && colMeta->IsDefaultFromExpression() && colMeta->DefaultExpression->IsGenerated() && colMeta->DefaultExpression->IsStored()) {
+        if (colMeta && colMeta->IsDefaultFromExpression() && colMeta->DefaultExpression->IsGenerated() && colMeta->DefaultExpression->Stored) {
             generatedColumns.push_back(colMeta);
         }
     }

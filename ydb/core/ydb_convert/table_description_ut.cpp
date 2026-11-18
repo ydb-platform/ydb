@@ -44,12 +44,52 @@ Ydb::Table::ColumnMeta NullDefaultColumn(const TString& typeText, bool notNull, 
 }
 
 Y_UNIT_TEST_SUITE(ConvertTableDescription) {
+    Y_UNIT_TEST(GeneratedExpressionWireCompatibility) {
+        // Serialized by the old schema: ExprText=1, dependencies=2, Stored=3.
+        const TString wire("\x0a\x05" "a + 1" "\x12\x01" "a" "\x18\x01", 12);
+        NKikimrSchemeOp::TDefaultExpressionColumnDescription scheme;
+        UNIT_ASSERT(scheme.ParseFromString(wire));
+        UNIT_ASSERT_VALUES_EQUAL(scheme.GetExprText(), "a + 1");
+        UNIT_ASSERT_VALUES_EQUAL(scheme.DependencyColumnNamesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(scheme.GetDependencyColumnNames(0), "a");
+        UNIT_ASSERT(scheme.GetStored());
+        UNIT_ASSERT(!scheme.GetWritable());
+
+        NKikimrKqp::TDefaultExpression metadata;
+        UNIT_ASSERT(metadata.ParseFromString(wire));
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetExprText(), "a + 1");
+        UNIT_ASSERT_VALUES_EQUAL(metadata.DependenciesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetDependencies(0), "a");
+        UNIT_ASSERT(metadata.GetStored());
+        UNIT_ASSERT(!metadata.GetWritable());
+    }
+
     NKikimrSchemeOp::TModifyScheme BuildInternalAlter(const NKikimrKqp::TKqpAlterTableRequest& request) {
         NKikimrSchemeOp::TModifyScheme result;
         auto status = Ydb::StatusIds::SUCCESS;
         TString error;
         UNIT_ASSERT_C(BuildAlterTableModifyScheme(&request, &result, TTableProfiles{}, TPathId{}, status, error), error);
         return result;
+    }
+
+    Y_UNIT_TEST(InternalDefaultExpressionPreservesMetadata) {
+        TActorSystemStub actorSystem;
+        NKikimrKqp::TKqpAlterTableRequest request;
+        request.set_path("/Root/Table");
+        auto& column = *request.add_alter_columns();
+        column.SetName("value");
+        column.SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION);
+        auto& expression = *column.MutableDefaultFromExpression();
+        expression.SetExprText("RandomNumber(1)");
+        expression.SetStored(true);
+        expression.SetWritable(true);
+
+        const auto scheme = BuildInternalAlter(request);
+        const auto& result = scheme.GetAlterTable().GetColumns(0).GetDefaultFromExpression();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetExprText(), "RandomNumber(1)");
+        UNIT_ASSERT(result.GetStored());
+        UNIT_ASSERT(result.GetWritable());
+        UNIT_ASSERT_VALUES_EQUAL(result.DependencyColumnNamesSize(), 0);
     }
 
     Y_UNIT_TEST(InternalGeneratedColumnPreservesExpression) {

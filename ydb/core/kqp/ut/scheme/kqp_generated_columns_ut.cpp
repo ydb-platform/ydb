@@ -22,7 +22,6 @@ namespace {
 
 static NKikimrConfig::TAppConfig GeneratedColumnsAppConfig(bool enableIndexStreamWrite = true) {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(false);
     appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(true);
     appConfig.MutableFeatureFlags()->SetEnableGeneratedVirtual(true);
     appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
@@ -174,9 +173,7 @@ void CheckGeneratedColumnPersisted(const std::string& createTable, bool expectSt
         found = true;
         UNIT_ASSERT_C(col.HasDefaultFromExpression(), "generated payload not persisted");
         const auto& generated = col.GetDefaultFromExpression();
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(generated.GetKind()), static_cast<int>(expectStored
-            ? NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_STORED
-            : NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_VIRTUAL));
+        UNIT_ASSERT_VALUES_EQUAL(generated.GetStored(), expectStored);
 
         UNIT_ASSERT_VALUES_EQUAL(generated.GetExprText(), "k + 1");
 
@@ -897,27 +894,6 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         fixture.Check("SELECT k, c, g FROM TestTable ORDER BY k;", "[[1;7;[8]]]");
     }
 
-    Y_UNIT_TEST(DependsOnDefaultDuringPartialUpsertOfExistingRow) {
-        TTestFixture fixture(R"(
-            CREATE TABLE TestTable (
-                k Int32 NOT NULL,
-                a Int32 NOT NULL,
-                c Int32 NOT NULL DEFAULT 7,
-                g Int32 GENERATED ALWAYS AS (a + c) STORED,
-                PRIMARY KEY (k),
-                INDEX idx_g GLOBAL ON (g)
-            );
-        )");
-
-        fixture.Exec("UPSERT INTO TestTable (k, a, c) VALUES (1, 3, 9);");
-        fixture.Check("SELECT k, c, g FROM TestTable VIEW idx_g WHERE g = 12;", "[[1;9;[12]]]");
-
-        fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (1, 5);");
-        fixture.Check("SELECT k, a, c, g FROM TestTable;", "[[1;5;9;[14]]]");
-        fixture.Check("SELECT k, c, g FROM TestTable VIEW idx_g WHERE g = 12;", "[]");
-        fixture.Check("SELECT k, c, g FROM TestTable VIEW idx_g WHERE g = 14;", "[[1;9;[14]]]");
-    }
-
     Y_UNIT_TEST(Insert) {
         TTestFixture fixture(R"(
             CREATE TABLE TestTable (
@@ -1298,40 +1274,6 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         fixture.Check("SELECT id, g FROM TestTable ORDER BY id;", "[[1;10]]");
     }
 
-    Y_UNIT_TEST(DefaultExprFeatureFlagDisabledPreservesGeneratedAndSerialColumns) {
-        auto appConfig = GeneratedColumnsAppConfig();
-        appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(false);
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
-
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            auto result = session.ExecuteQuery(R"(
-                CREATE TABLE TestTable (
-                    id Serial,
-                    payload Int32,
-                    generated Int32 GENERATED ALWAYS AS (COALESCE(payload, 0) + 1) STORED,
-                    PRIMARY KEY (id)
-                );
-            )", TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            auto result = session.ExecuteQuery(
-                "INSERT INTO TestTable (payload) VALUES (5);", TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            auto result = session.ExecuteQuery(
-                "SELECT payload, generated FROM TestTable;", TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson("[[[5];[6]]]", FormatResultSetYson(result.GetResultSet(0)));
-        }
-    }
-
     Y_UNIT_TEST(ShowCreateTable) {
         auto appConfig = GeneratedColumnsAppConfig();
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -1415,16 +1357,14 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         }
 
         const auto replayedSt = generatedOf("st");
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(replayedSt.GetKind()),
-            static_cast<int>(NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_STORED));
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(replayedSt.GetKind()), static_cast<int>(originSt.GetKind()));
+        UNIT_ASSERT_VALUES_EQUAL(replayedSt.GetStored(), true);
+        UNIT_ASSERT_VALUES_EQUAL(replayedSt.GetStored(), originSt.GetStored());
         UNIT_ASSERT_VALUES_EQUAL(replayedSt.GetExprText(), originSt.GetExprText());
         UNIT_ASSERT_VALUES_EQUAL(replayedSt.DependencyColumnNamesSize(), originSt.DependencyColumnNamesSize());
 
         const auto replayedVt = generatedOf("vt");
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(replayedVt.GetKind()),
-            static_cast<int>(NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_VIRTUAL));
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(replayedVt.GetKind()), static_cast<int>(originVt.GetKind()));
+        UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetStored(), false);
+        UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetStored(), originVt.GetStored());
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetExprText(), originVt.GetExprText());
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.DependencyColumnNamesSize(), originVt.DependencyColumnNamesSize());
     }

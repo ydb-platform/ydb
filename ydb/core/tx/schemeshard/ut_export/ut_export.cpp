@@ -2699,7 +2699,7 @@ partitioning_settings {
               Type: "Int32"
               DefaultFromExpression {
                 ExprText: "a + b"
-                Kind: GENERATED_STORED
+                Stored: true
                 DependencyColumnNames: ["a", "b"]
               }
             }
@@ -2733,7 +2733,7 @@ partitioning_settings {
               Type: "Timestamp"
               DefaultFromExpression {
                 ExprText: "CurrentUtcTimestamp()"
-                Kind: DEFAULT
+                Stored: true Writable: true
               }
             }
             KeyColumnNames: ["key"]

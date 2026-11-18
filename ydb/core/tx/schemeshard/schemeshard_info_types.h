@@ -907,7 +907,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
 
         bool IsGenerated() const {
             NKikimrSchemeOp::TDefaultExpressionColumnDescription desc;
-            return TryGetDefaultExpression(desc) && desc.GetKind() != NKikimrSchemeOp::TDefaultExpressionColumnDescription::DEFAULT;
+            return TryGetDefaultExpression(desc) && !desc.GetWritable();
         }
     };
 

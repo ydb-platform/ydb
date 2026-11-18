@@ -436,7 +436,7 @@ private:
             }
 
             if (colInfo.IsDefaultFromExpression()) {
-                if (isPublicBulkUpsert && colInfo.DefaultExpression->IsGenerated() && colInfo.DefaultExpression->IsStored()) {
+                if (isPublicBulkUpsert && colInfo.DefaultExpression->IsGenerated() && colInfo.DefaultExpression->Stored) {
                     return TConclusionStatus::Fail(TStringBuilder()
                         << "Bulk upsert is not supported for tables with STORED generated columns: column "
                         << name);

@@ -19,8 +19,8 @@ TString AssembleGeneratedQuery(const TString& exprBody) {
     return TStringBuilder() << "SELECT " << exprBody << " FROM `__yql_generated_column_source`;";
 }
 
-TString AssembleDefaultQuery(const TString& context, const TString& exprBody) {
-    return TStringBuilder() << context << "SELECT " << exprBody << ";";
+TString AssembleDefaultQuery(const TString& exprBody) {
+    return TStringBuilder() << "SELECT " << exprBody << ";";
 }
 
 namespace {
@@ -295,7 +295,7 @@ bool EmitOutOfRowError(const TGeneratedFindings& findings, bool readsDataIsSubqu
     return false;
 }
 
-// Compiles `<context>SELECT <expr> [FROM <source>];` down to the projection lambda and rejects
+// Compiles `SELECT <expr> [FROM <source>];` down to the projection lambda and rejects
 // everything that is not a scalar expression over the row
 TExprNode::TPtr CompileScalarExpr(const TString& sqlText, const TDiagnostics& diagnostics, ui32 expectedReads,
     TExprContext& ctx, NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder,

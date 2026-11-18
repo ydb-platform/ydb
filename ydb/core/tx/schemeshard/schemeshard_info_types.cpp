@@ -559,7 +559,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             if (col.HasDefaultFromExpression()
-                && col.GetDefaultFromExpression().GetKind() != NKikimrSchemeOp::TDefaultExpressionColumnDescription::DEFAULT)
+                && !col.GetDefaultFromExpression().GetWritable())
             {
                 errStr = Sprintf("Cannot add a generated (GENERATED ALWAYS AS) expression to the existing column '%s'", colName.data());
                 return nullptr;
@@ -629,7 +629,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromExpression && columnFamily && columnFamily->GetId() != 0) {
                 NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
                 if (generatedDesc.ParseFromString(sourceColumn.DefaultValue)
-                    && generatedDesc.GetKind() == NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_VIRTUAL)
+                    && !generatedDesc.GetStored())
                 {
                     errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
                     return nullptr;
@@ -801,38 +801,23 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             if (col.HasDefaultFromExpression()) {
                 const auto& defaultExpression = col.GetDefaultFromExpression();
-                if (!defaultExpression.HasKind()) {
-                    errStr = Sprintf("Column '%s' has an expression default of unknown kind", colName.c_str());
+                const bool stored = defaultExpression.GetStored();
+                if (defaultExpression.GetWritable()) {
+                    if (!featureFlags.EnableDefaultFromExpression) {
+                        errStr = Sprintf("DEFAULT expressions are disabled. Column: %s", colName.c_str());
+                        return nullptr;
+                    }
+                } else if (stored && !featureFlags.EnableGeneratedStored) {
+                    errStr = Sprintf("STORED GENERATED columns are disabled. Column: %s", colName.c_str());
+                    return nullptr;
+                } else if (!stored && !featureFlags.EnableGeneratedVirtual) {
+                    errStr = Sprintf("VIRTUAL GENERATED columns are disabled. Column: %s", colName.c_str());
                     return nullptr;
                 }
 
-                switch (defaultExpression.GetKind()) {
-                    case NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_STORED: {
-                        if (!featureFlags.EnableGeneratedStored) {
-                            errStr = Sprintf("STORED GENERATED columns are disabled. Column: %s", colName.c_str());
-                            return nullptr;
-                        }
-                        break;
-                    }
-                    case NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_VIRTUAL: {
-                        if (!featureFlags.EnableGeneratedVirtual) {
-                            errStr = Sprintf("VIRTUAL GENERATED columns are disabled. Column: %s", colName.c_str());
-                            return nullptr;
-                        }
-
-                        if (columnFamily && columnFamily->GetId() != 0) {
-                            errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
-                            return nullptr;
-                        }
-                        break;
-                    }
-                    case NKikimrSchemeOp::TDefaultExpressionColumnDescription::DEFAULT: {
-                        if (!featureFlags.EnableDefaultFromExpression) {
-                            errStr = Sprintf("DEFAULT expressions are disabled. Column: %s", colName.c_str());
-                            return nullptr;
-                        }
-                        break;
-                    }
+                if (!stored && columnFamily && columnFamily->GetId() != 0) {
+                    errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
+                    return nullptr;
                 }
             }
 

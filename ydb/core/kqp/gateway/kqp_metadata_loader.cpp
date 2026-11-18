@@ -368,7 +368,8 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
             auto& columnMeta = emplaceResult.first->second;
             columnMeta.DefaultExpression.ConstructInPlace();
             columnMeta.DefaultExpression->ExprText = columnDesc.DefaultExpression->ExprText;
-            columnMeta.DefaultExpression->Kind = static_cast<NYql::EColumnExpressionKind>(columnDesc.DefaultExpression->Kind);
+            columnMeta.DefaultExpression->Stored = columnDesc.DefaultExpression->Stored;
+            columnMeta.DefaultExpression->Writable = columnDesc.DefaultExpression->Writable;
             columnMeta.DefaultExpression->Dependencies.assign(
                 columnDesc.DefaultExpression->Dependencies.begin(), columnDesc.DefaultExpression->Dependencies.end());
         }

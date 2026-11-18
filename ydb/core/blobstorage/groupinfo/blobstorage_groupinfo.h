@@ -174,6 +174,7 @@ public:
         virtual bool CheckQuorumForSubgroup(const TSubgroupVDisks& subgroupDisks) const = 0;
         virtual bool CheckQuorumForGroup(const TGroupVDisks& groupDisks) const = 0;
         virtual bool CheckQuorumForGroupDomains(const TGroupFailDomains& domains) const = 0;
+        virtual ui32 GetReplTokenPriority(const TGroupVDisks& failedDisks) const = 0;
         virtual bool IsDegraded(const TGroupVDisks& failedDisks) const = 0;
         virtual bool OneStepFromDegradedOrWorse(const TGroupVDisks& failedDisks) const = 0;
 

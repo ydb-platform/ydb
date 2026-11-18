@@ -68,6 +68,15 @@ public:
         return CheckFailModelForGroupDomains(~domains);
     }
 
+    ui32 GetReplTokenPriority(const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) const override {
+        // An ordinary erasure tolerates failures in at most Handoff fail domains. A failure of any VDisk makes its
+        // whole fail domain unavailable. Fewer additional failures to exceed Handoff mean a higher token priority.
+        const auto failedDomains = TBlobStorageGroupInfo::TGroupFailDomains::CreateFromGroupDiskSet(failedDisks,
+            TBlobStorageGroupInfo::TGroupFailDomains::EDiskCondition::ANY);
+        const ui32 numFailedDomains = failedDomains.GetNumSetItems();
+        return numFailedDomains <= Top->GType.Handoff() ? Top->GType.Handoff() + 1 - numFailedDomains : 0;
+    }
+
     bool IsDegraded(const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) const override {
         const auto& domains = TBlobStorageGroupInfo::TGroupFailDomains::CreateFromGroupDiskSet(failedDisks,
             TBlobStorageGroupInfo::TGroupFailDomains::EDiskCondition::ANY);
@@ -159,6 +168,15 @@ public:
 
     bool CheckQuorumForGroupDomains(const TBlobStorageGroupInfo::TGroupFailDomains& domains) const override {
         return CheckFailModelForGroupDomains(~domains);
+    }
+
+    ui32 GetReplTokenPriority(const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) const override {
+        // Mirror-3-of-4 tolerates failures in at most two fail domains. Count domains rather than individual VDisks,
+        // because another failure inside an already failed domain does not bring the group closer to model violation.
+        const auto failedDomains = TBlobStorageGroupInfo::TGroupFailDomains::CreateFromGroupDiskSet(failedDisks,
+            TBlobStorageGroupInfo::TGroupFailDomains::EDiskCondition::ANY);
+        const ui32 numFailedDomains = failedDomains.GetNumSetItems();
+        return numFailedDomains <= 2 ? 3 - numFailedDomains : 0;
     }
 
     bool IsDegraded(const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) const override {
@@ -262,6 +280,52 @@ class TQuorumCheckerMirror3dc : public TQuorumCheckerBase {
     bool CheckQuorumForGroupDomains(const TBlobStorageGroupInfo::TGroupFailDomains& domains) const override {
         // treat all unset domains as failed ones -- and check if the subset fits the failure model
         return CheckFailModelForGroupDomains(~domains);
+    }
+
+    ui32 GetReplTokenPriority(const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) const override {
+        // Mirror-3-dc violates its failure model when either all three fail realms have a failed domain, or two fail
+        // realms have at least two failed domains each. Calculate the number of additional failures needed for both
+        // cases and use the shorter path. A fail domain is considered failed when any of its VDisks has failed.
+        const auto failedDomains = TBlobStorageGroupInfo::TGroupFailDomains::CreateFromGroupDiskSet(failedDisks,
+            TBlobStorageGroupInfo::TGroupFailDomains::EDiskCondition::ANY);
+
+        ui32 numRealmsWithFailure = 0;
+        ui32 numRealmsWithTwoFailures = 0;
+        TVector<ui32> costsToTwoFailures;
+        costsToTwoFailures.reserve(Top->FailRealms.size());
+
+        for (const TBlobStorageGroupInfo::TFailRealm& realm : Top->FailRealms) {
+            ui32 numFailedDomains = 0;
+            for (const TBlobStorageGroupInfo::TFailDomain& domain : realm.FailDomains) {
+                numFailedDomains += failedDomains[domain.FailDomainOrderNumber];
+            }
+            numRealmsWithFailure += numFailedDomains >= 1;
+            numRealmsWithTwoFailures += numFailedDomains >= 2;
+            if (numFailedDomains < 2 && realm.FailDomains.size() >= 2) {
+                costsToTwoFailures.push_back(2 - numFailedDomains);
+            }
+        }
+
+        if (!CheckFailModel(numRealmsWithFailure, numRealmsWithTwoFailures)) {
+            return 0;
+        }
+        // CheckFailModel guarantees numRealmsWithFailure <= 2 and numRealmsWithTwoFailures <= 1 below, so the
+        // unsigned subtractions in both paths cannot underflow.
+
+        // First path: introduce a failed domain into every realm.
+        ui32 tokenPriority = Top->FailRealms.size() >= 3 ? 3 - numRealmsWithFailure : Max<ui32>();
+
+        // Second path: make two realms contain at least two failed domains. Prefer realms requiring fewer failures.
+        const ui32 realmsNeededWithTwoFailures = 2 - numRealmsWithTwoFailures;
+        if (costsToTwoFailures.size() >= realmsNeededWithTwoFailures) {
+            std::sort(costsToTwoFailures.begin(), costsToTwoFailures.end());
+            ui32 failuresToTwoRealmsWithTwoFailures = 0;
+            for (ui32 i = 0; i < realmsNeededWithTwoFailures; ++i) {
+                failuresToTwoRealmsWithTwoFailures += costsToTwoFailures[i];
+            }
+            tokenPriority = Min(tokenPriority, failuresToTwoRealmsWithTwoFailures);
+        }
+        return tokenPriority;
     }
 
     bool IsDegraded(const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) const override {

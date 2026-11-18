@@ -19,6 +19,10 @@ VERSION(79.1)
 
 ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-79.1/icu4c-79.1-sources.tgz)
 
+PEERDIR(
+    library/cpp/sanitizer/include
+)
+
 ADDINCL(
     GLOBAL contrib/libs/icu/include
     contrib/libs/icu/common

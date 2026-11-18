@@ -191,10 +191,10 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
 
     ui64 parentQueryId = 0;
     if (isBreaker) {
-        YDB_LOG_UPDATE_MESSAGE(message, {"breakerTxSpanId", ToString(*params.BreakerQuerySpanId)});
+        YDB_LOG_UPDATE_MESSAGE(message, {"breakerTxSpanId", *params.BreakerQuerySpanId});
         parentQueryId = params.BreakerQuerySpanId.GetRef();
     } else if (params.VictimQuerySpanId && *params.VictimQuerySpanId != 0) {
-        YDB_LOG_UPDATE_MESSAGE(message, {"victimTxSpanId", ToString(*params.VictimQuerySpanId)});
+        YDB_LOG_UPDATE_MESSAGE(message, {"victimTxSpanId", *params.VictimQuerySpanId});
         parentQueryId = params.VictimQuerySpanId.GetRef();
     }
 

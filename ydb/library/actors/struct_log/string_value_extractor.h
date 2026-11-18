@@ -29,3 +29,4 @@ protected:
 };
 
 } // namespace NActors::NStructuredLog
+

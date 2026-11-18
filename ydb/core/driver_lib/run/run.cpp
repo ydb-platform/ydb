@@ -4,6 +4,7 @@
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
+#include <ydb/core/kqp/event_log/kqp_event_log_writer.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/common/dynamic_function_registry.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -1857,6 +1858,13 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 #endif
 }
 
+using namespace NKikimr::NKqp::NEventLog;
+
+TBaseColumnShardLogWriter::TDatabaseSettings GetSettings(const TString& tableName) {
+    TBaseColumnShardLogWriter::TDatabaseSettings settings{.DatabasePath = "/local/testdb", .StoreName = tableName, .TableName  = tableName};
+    return settings;
+}
+
 void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
 {
     auto logBackend = CreateLogBackendWithUnifiedAgent(runConfig, Counters);
@@ -1916,6 +1924,10 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         size_t firstDot = fullHostName.find_first_of('.');
         LogSettings->ShortHostName = fullHostName.substr(0, firstDot);
     }
+
+    /* auto sinks = std::make_shared<NLog::TSettings::TLogSinkMap>();
+    (*sinks)["1"] = std::make_shared<NToColumnShard::TKqpEventLogWriter>(GetSettings("kqp_requests"));
+    LogSettings->Sinks = sinks; */
 }
 
 void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)

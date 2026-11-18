@@ -846,6 +846,7 @@ void THive::BuildLocalConfig() {
 void THive::BuildCurrentConfig() {
     const bool previousLockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
     const auto previousCountersExportMode = CurrentConfig.GetCountersExportMode();
+    const bool previousTrackResourceBrokerUsage = CurrentConfig.GetTrackResourceBrokerUsage();
     CurrentConfig = ClusterConfig;
     CurrentConfig.MergeFrom(DatabaseConfig);
     CurrentConfig.SetTabletEventHistorySize(std::min(CurrentConfig.GetTabletEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
@@ -853,6 +854,9 @@ void THive::BuildCurrentConfig() {
     bool broadcastLocalSettings = false;
     if (CurrentConfig.GetCountersExportMode() != previousCountersExportMode) {
         UpdateCountersExportMode();
+        broadcastLocalSettings = true;
+    }
+    if (CurrentConfig.GetTrackResourceBrokerUsage() != previousTrackResourceBrokerUsage) {
         broadcastLocalSettings = true;
     }
     TabletLimit.clear();
@@ -3723,6 +3727,7 @@ void THive::RemoveFromPingInProgress(TNodeId node) {
 
 void THive::FillLocalSettings(NKikimrLocal::THiveSettings* settings) const {
     settings->SetCountersExportMode(CurrentConfig.GetCountersExportMode());
+    settings->SetTrackResourceBrokerUsage(CurrentConfig.GetTrackResourceBrokerUsage());
 }
 
 void THive::SendPing(const TNodePing& nodePing) {

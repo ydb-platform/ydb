@@ -2972,6 +2972,7 @@ message THiveConfig {
     repeated TNamedResourceSettings NamedResources = 97 [(ParamDescription) = "Settings of named resources (e.g. resource broker queues). Entries override built-in defaults."];
 
     optional ECountersExportMode CountersExportMode = 98 [default = COUNTERS_EXPORT_MODE_BASIC, (ParamDescription) = "Which balancing counters Hive and Locals of its nodes export. Each mode includes the previous ones. Per-node counters produce one counter group per node."];
+    optional bool TrackResourceBrokerUsage = 100 [default = true, (ParamDescription) = "Whether Locals track resource broker queue usage and report it as rb/* named resources. When turned off, Locals stop polling the resource broker and reset the usage and queue limits they have reported."];
 }
 
 message THealthCheckConfig {

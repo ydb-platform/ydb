@@ -301,14 +301,44 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
-    void UpdateSettings(const NKikimrLocal::THiveSettings& settings) {
+    // Called from the TEvPing handler only, which sends the status and the tablet metrics afterwards
+    void UpdateSettings(const NKikimrLocal::THiveSettings& settings, const TActorContext& ctx) {
         // Replace the full snapshot. Apply individual settings here when added.
+        const bool previousTrackResourceBrokerUsage = HiveSettings.GetTrackResourceBrokerUsage();
         HiveSettings.CopyFrom(settings);
         if (HiveSettings.GetCountersExportMode() >= NKikimrConfig::THiveConfig::COUNTERS_EXPORT_MODE_LOCAL_PER_NODE_COUNTERS) {
             CreateNodeUsageCounters(); // the values appear with the next metrics sent to Hive
         } else {
             NodeUsageCounters.reset();
         }
+        if (previousTrackResourceBrokerUsage != HiveSettings.GetTrackResourceBrokerUsage()) {
+            if (HiveSettings.GetTrackResourceBrokerUsage()) {
+                StartQueueUsageTracking(ctx);
+            } else {
+                StopQueueUsageTracking(ctx);
+            }
+        }
+    }
+
+    void StartQueueUsageTracking(const TActorContext& ctx) {
+        YDB_LOG_INFO_CTX(ctx, "TLocalNodeRegistrar: resource broker usage tracking enabled");
+        // the next poll of the resource broker reports everything
+        LastQueueUsageResend = TInstant::Zero();
+    }
+
+    // The status and the tablet metrics are sent by the caller (TEvPing handler)
+    void StopQueueUsageTracking(const TActorContext& ctx) {
+        YDB_LOG_INFO_CTX(ctx, "TLocalNodeRegistrar: resource broker usage tracking disabled");
+        // Hive keeps reported values until they are changed: reset them
+        for (const auto& [tabletId, reported] : ReportedQueueUsage) {
+            for (const auto& [name, value] : reported) {
+                if (value != TQueueUsageValue{}) {
+                    ReportQueueUsage(tabletId, name, TQueueUsageValue{});
+                }
+            }
+        }
+        ReportedQueueUsage.clear();
+        QueueLimits.clear();
     }
 
     void CreateNodeUsageCounters() {
@@ -569,7 +599,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
         // Updates also apply while connected; an ordinary ping changes nothing.
         if (record.HasHiveSettings()) {
-            UpdateSettings(record.GetHiveSettings());
+            UpdateSettings(record.GetHiveSettings(), ctx);
         }
 
         if (!Connected) {
@@ -1019,11 +1049,39 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         auto req = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
         req->Record.MutableFieldsRequired()->Assign(REQUIRED_FIELDS.begin(), REQUIRED_FIELDS.end());
         Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), req.release());
-        Send(NResourceBroker::MakeResourceBrokerID(), new NResourceBroker::TEvResourceBroker::TEvQueueUsageRequest());
+        if (HiveSettings.GetTrackResourceBrokerUsage()) {
+            Send(NResourceBroker::MakeResourceBrokerID(), new NResourceBroker::TEvResourceBroker::TEvQueueUsageRequest());
+        }
         Schedule(UPDATE_SYSTEM_USAGE_INTERVAL, new TEvPrivate::TEvUpdateSystemUsage());
     }
 
+    // Queues the usage of a resource broker queue by an online tablet to be sent to Hive
+    bool ReportQueueUsage(const TTabletId& tabletId, const TString& name, const TQueueUsageValue& value) {
+        auto it = OnlineTablets.find(tabletId);
+        if (it == OnlineTablets.end()) {
+            return false;
+        }
+        SetNamedResource(it->second.ResourceValues, name, value.Value, value.Transferable);
+        // same bookkeeping as for TEvTabletMetrics
+        if (!TabletMetricsAckCookiesSupported) {
+            auto [legacy, inserted] = LegacyPendingTabletMetrics.emplace(tabletId, 1);
+            if (!inserted) {
+                legacy->second = 2;
+            }
+        }
+        auto uit = UpdatedTabletMetrics.find(tabletId);
+        if (uit == UpdatedTabletMetrics.end()) {
+            UpdatedTabletMetrics.emplace(tabletId, TUpdatedTabletMetrics{});
+        } else if (uit->second.InFlight) {
+            uit->second.UpdatedAfterSend = true;
+        }
+        return true;
+    }
+
     void Handle(NResourceBroker::TEvResourceBroker::TEvQueueUsageResponse::TPtr& ev, const TActorContext& ctx) {
+        if (!HiveSettings.GetTrackResourceBrokerUsage()) {
+            return; // requested before the tracking was disabled
+        }
         const auto& queues = ev->Get()->Queues;
 
         TMap<TString, ui64> queueLimits;
@@ -1055,25 +1113,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
         bool changed = false;
         auto reportChange = [&](const TTabletId& tabletId, const TString& name, const TQueueUsageValue& value) {
-            auto it = OnlineTablets.find(tabletId);
-            if (it == OnlineTablets.end()) {
-                return;
-            }
-            SetNamedResource(it->second.ResourceValues, name, value.Value, value.Transferable);
-            // same bookkeeping as for TEvTabletMetrics
-            if (!TabletMetricsAckCookiesSupported) {
-                auto [legacy, inserted] = LegacyPendingTabletMetrics.emplace(tabletId, 1);
-                if (!inserted) {
-                    legacy->second = 2;
-                }
-            }
-            auto uit = UpdatedTabletMetrics.find(tabletId);
-            if (uit == UpdatedTabletMetrics.end()) {
-                UpdatedTabletMetrics.emplace(tabletId, TUpdatedTabletMetrics{});
-            } else if (uit->second.InFlight) {
-                uit->second.UpdatedAfterSend = true;
-            }
-            changed = true;
+            changed |= ReportQueueUsage(tabletId, name, value);
         };
 
         // Tablets which went offline are forgotten, see also the (re)start of a tablet

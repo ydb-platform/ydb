@@ -33,7 +33,7 @@ public:
             std::make_shared<NOlap::NIndexes::NMinMax::TIndexMeta>(IndexId, "pk_min_max", NOlap::NBlobOperations::TGlobal::DefaultStorageId,
                 inheritPortionStorage, PkColumnId,
                 NOlap::NIndexes::TReadDataExtractorContainer(std::make_shared<NOlap::NIndexes::TDefaultDataExtractor>())))
-                                  .SerializeToProto();
+                                   .SerializeToProto();
     }
 
     auto BuildPortion() {

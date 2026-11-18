@@ -8,6 +8,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 
 namespace NKikimr::NKqp {
 
@@ -108,6 +109,19 @@ private:
     TKqpQuerySettings Settings_;
     std::shared_ptr<const TParameterTypes> QueryParameterTypes_;
 };
+// GUC settings encoded for TKqpQueryId. Encoding costs about a microsecond, so
+// the bytes are kept while the settings stay equal to the ones they were encoded
+// from; comparing the settings is much cheaper. Who changed them and when does
+// not matter.
+class TKqpEncodedGUCSettings {
+public:
+    TStringBuf Get(const TGUCSettings& gUCSettings);
+
+private:
+    std::optional<TGUCSettings> Source_;
+    TString Encoded_;
+};
+
 } // namespace NKikimr::NKqp
 
 template<>

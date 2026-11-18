@@ -953,7 +953,6 @@ public:
         // for extra sanity we make extra hop to the compile service, which might handle the issue better
 
         auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, GetEncodedGUCSettings(), txCtx);
-        OnCompileRequestSent();
         YDB_LOG_DEBUG("Sending CompileQuery request",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
@@ -967,7 +966,6 @@ public:
         YQL_ENSURE(QueryState);
         auto txCtx = GetTxContextForCompilation();
         auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie, GUCSettings, GetEncodedGUCSettings(), txCtx);
-        OnCompileRequestSent();
         YDB_LOG_DEBUG("Sending CompileSplittedQuery request",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
@@ -1002,7 +1000,6 @@ public:
 
             auto txCtx = GetTxContextForCompilation();
             auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings, GetEncodedGUCSettings(), txCtx);
-            OnCompileRequestSent();
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
                 QueryState->KqpSessionSpan.GetTraceId());
             return;
@@ -1012,8 +1009,6 @@ public:
     }
 
     void Handle(TEvKqp::TEvCompileResponse::TPtr& ev) {
-        OnCompileResponse();
-
         // outdated event from previous query.
         // ignoring that.
         if (ev->Cookie < QueryId) {
@@ -1032,7 +1027,6 @@ public:
                 if (!QueryState->HasTxControl()) {
                     YQL_ENSURE(QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE || QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN);
                     auto ev = QueryState->BuildSplitRequest(CompilationCookie, GUCSettings, GetEncodedGUCSettings());
-                    OnCompileRequestSent();
                     Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
                         QueryState->KqpSessionSpan.GetTraceId());
                 } else {
@@ -1063,8 +1057,6 @@ public:
     }
 
     void Handle(TEvKqp::TEvSplitResponse::TPtr& ev) {
-        OnCompileResponse();
-
         // outdated event from previous query.
         // ignoring that.
         if (ev->Cookie < QueryId) {
@@ -2692,38 +2684,8 @@ public:
     void HandleNoop(T&) {
     }
 
-    void HandleNoop(TEvKqp::TEvCompileResponse::TPtr&) {
-        OnCompileResponse();
-    }
-
-    void HandleNoop(TEvKqp::TEvSplitResponse::TPtr&) {
-        OnCompileResponse();
-    }
-
-    // GUC settings are changed only by the PG translator, which shares them with
-    // the session: inside a compile actor, or inside the worker actor that serves
-    // forwarded requests. The bytes are encoded once and reused until a
-    // compilation could have changed the settings. While a compile request is in
-    // flight, and for a session that has a worker, they are encoded for every
-    // key, as there is no way to tell when the translator is done with them.
     TStringBuf GetEncodedGUCSettings() {
-        if (!EncodedGUCSettingsValid || CompileRequestsInFlight > 0 || WorkerId) {
-            EncodedGUCSettings = TKqpQueryId::EncodeGUCSettings(*GUCSettings);
-            EncodedGUCSettingsValid = true;
-        }
-        return EncodedGUCSettings;
-    }
-
-    void OnCompileRequestSent() {
-        ++CompileRequestsInFlight;
-        EncodedGUCSettingsValid = false;
-    }
-
-    void OnCompileResponse() {
-        if (CompileRequestsInFlight > 0) {
-            --CompileRequestsInFlight;
-        }
-        EncodedGUCSettingsValid = false;
+        return EncodedGUCSettings.Get(*GUCSettings);
     }
 
     void InvalidateQuery() {
@@ -4671,9 +4633,7 @@ private:
     std::shared_ptr<std::atomic<bool>> CompilationCookie;
 
     TGUCSettings::TPtr GUCSettings;
-    TString EncodedGUCSettings;
-    bool EncodedGUCSettingsValid = false;
-    ui32 CompileRequestsInFlight = 0;
+    TKqpEncodedGUCSettings EncodedGUCSettings;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };

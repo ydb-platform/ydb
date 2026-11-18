@@ -192,6 +192,16 @@ Y_UNIT_TEST_SUITE(KqpQueryId) {
         id.SetQueryParameterTypes(types);
         CheckEqual(id, MakeId("SELECT 1", types, "user", guc));
 
+        // Cached GUC bytes follow the settings: equal settings reuse them, a change re-encodes.
+        TKqpEncodedGUCSettings encoded;
+        const TString before(encoded.Get(guc));
+        UNIT_ASSERT_VALUES_EQUAL(encoded.Get(guc), before);
+        guc.Set("search_path", "other");
+        UNIT_ASSERT_VALUES_UNEQUAL(encoded.Get(guc), before);
+        UNIT_ASSERT_VALUES_EQUAL(encoded.Get(guc), TKqpQueryId::EncodeGUCSettings(guc));
+        guc.Set("search_path", "public");
+        UNIT_ASSERT_VALUES_EQUAL(encoded.Get(guc), before);
+
         // A key built from GUC settings encoded in advance is the same key.
         CheckEqual(id, TKqpQueryId("db", "/Root", "id", "user", "SELECT 1", TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY),
             types, TKqpQueryId::EncodeGUCSettings(guc)));

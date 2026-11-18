@@ -48,13 +48,6 @@ struct TKqpQuerySettings {
     bool operator<=(const TKqpQuerySettings&) = delete;
     bool operator>=(const TKqpQuerySettings&) = delete;
 
-    size_t GetHash() const noexcept {
-        auto tuple = std::make_tuple(
-            DocumentApiRestricted, IsInternalCall, IsAnalyze, QueryType, Syntax,
-            UsePessimisticLocks, RuntimeParameterSizeLimitSatisfied);
-        return THash<decltype(tuple)>()(tuple);
-    }
-
     // Appends bytes that are equal exactly when operator== is true.
     void AppendCacheKey(TString& out) const {
         std::apply([&out](const auto&... field) {
@@ -78,10 +71,3 @@ struct TKqpQuerySettings {
 };
 
 } // namespace NKikimr::NKqp
-
-template<>
-struct THash<NKikimr::NKqp::TKqpQuerySettings> {
-    inline size_t operator()(const NKikimr::NKqp::TKqpQuerySettings& settings) const {
-        return settings.GetHash();
-    }
-};

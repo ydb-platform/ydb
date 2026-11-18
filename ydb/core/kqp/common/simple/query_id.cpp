@@ -67,21 +67,35 @@ TKqpQueryId::TKqpQueryId(TStringBuf cluster, TStringBuf database, TStringBuf dat
     }
 
     const size_t headerSize = FieldCount * sizeof(ui32);
+    // Only a guess to avoid reallocations, not part of the format: 64 bytes for
+    // the settings and the parameter count, 24 bytes per parameter name and type.
+    const size_t sizeEstimate = headerSize + cluster.size() + database.size() + databaseId.size() + userSid.size()
+        + text.size() + encodedGUCSettings.size() + 64 + (QueryParameterTypes_ ? QueryParameterTypes_->size() * 24 : 0);
     TString key;
-    key.reserve(headerSize + cluster.size() + database.size() + databaseId.size() + userSid.size() + text.size()
-        + encodedGUCSettings.size() + 64 + (QueryParameterTypes_ ? QueryParameterTypes_->size() * 24 : 0));
+    key.reserve(sizeEstimate);
     key.resize(headerSize);
 
     ui32 ends[FieldCount];
-    const TStringBuf strings[] = {cluster, database, databaseId, userSid, text};
-    for (size_t field = 0; field < std::size(strings); ++field) {
-        key.append(strings[field]);
+    size_t nextField = 0;
+    auto endField = [&](EField field) {
+        Y_DEBUG_ABORT_UNLESS(field == nextField++, "fields must be written in EField order");
         ends[field] = key.size();
-    }
+    };
+    key.append(cluster);
+    endField(FieldCluster);
+    key.append(database);
+    endField(FieldDatabase);
+    key.append(databaseId);
+    endField(FieldDatabaseId);
+    key.append(userSid);
+    endField(FieldUserSid);
+    key.append(text);
+    endField(FieldText);
     Settings_.AppendCacheKey(key);
-    ends[FieldSettings] = key.size();
+    endField(FieldSettings);
     key.append(encodedGUCSettings);
-    ends[FieldGUCSettings] = key.size();
+    endField(FieldGUCSettings);
+    Y_DEBUG_ABORT_UNLESS(nextField == FieldCount);
     memcpy(key.begin(), ends, headerSize);
 
     // An absent map differs from an empty one.
@@ -106,6 +120,14 @@ TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const 
     const TGUCSettings& gUCSettings)
     : TKqpQueryId(cluster, database, databaseId, "", text, settings, std::move(queryParameterTypes), gUCSettings)
 {}
+
+TStringBuf TKqpEncodedGUCSettings::Get(const TGUCSettings& gUCSettings) {
+    if (!Source_ || !(*Source_ == gUCSettings)) {
+        Source_ = gUCSettings;
+        Encoded_ = TKqpQueryId::EncodeGUCSettings(gUCSettings);
+    }
+    return Encoded_;
+}
 
 TStringBuf TKqpQueryId::Field(EField field) const {
     ui32 ends[FieldCount];

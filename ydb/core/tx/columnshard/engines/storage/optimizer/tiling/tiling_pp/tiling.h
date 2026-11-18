@@ -189,22 +189,31 @@ struct Tiling: ICompactionUnit<TPortion> {
     void DoAddPortion(typename TPortion::TPtr p) override {
         switch (p->GetProduced()) {
             case NPortion::EVICTED:
-                AFL_VERIFY(false)("reason", "Unexpected portion type")("type", "EVICTED");
+                YDB_LOG_VERIFY(false,
+                    {"reason", "Unexpected portion type"},
+                    {"type", "EVICTED"});
                 break;
             case NPortion::INACTIVE:
-                AFL_VERIFY(false)("reason", "Unexpected portion type")("type", "INACTIVE");
+                YDB_LOG_VERIFY(false,
+                    {"reason", "Unexpected portion type"},
+                    {"type", "INACTIVE"});
                 break;
             case NPortion::UNSPECIFIED:
             case NPortion::COMPACTED:
-                AFL_VERIFY(false)("reason", "Legacy portions");
+                YDB_LOG_VERIFY(false,
+                    {"reason", "Legacy portions"});
                 break;
             default:
                 break;
         }
 
         const ui64 portionId = p->GetPortionId();
-        AFL_VERIFY(!InternalLevel.contains(portionId))("portion_id", portionId)("existing_level", (ui32)InternalLevel[portionId].Level)(
-            "existing_width", InternalLevel[portionId].Width)("blob_bytes", p->GetTotalBlobBytes())("reason", "tiling++_portion_already_exists");
+        YDB_LOG_VERIFY(!InternalLevel.contains(portionId),
+            {"portionId", portionId},
+            {"existingLevel", (ui32)InternalLevel[portionId].Level},
+            {"existingWidth", InternalLevel[portionId].Width},
+            {"blobBytes", p->GetTotalBlobBytes()},
+            {"reason", "tiling++_portion_already_exists"});
 
         Place(p, TInstant::Now());
     }
@@ -267,7 +276,8 @@ struct Tiling: ICompactionUnit<TPortion> {
             case NPortion::INACTIVE:
             case NPortion::UNSPECIFIED:
             case NPortion::COMPACTED:
-                AFL_VERIFY(false)("reason", "Remove not tracked portions");
+                YDB_LOG_VERIFY(false,
+                    {"reason", "Remove not tracked portions"});
                 break;
             default:
                 break;
@@ -276,7 +286,8 @@ struct Tiling: ICompactionUnit<TPortion> {
         const ui64 portionId = p->GetPortionId();
         auto lit = InternalLevel.find(portionId);
         if (lit == InternalLevel.end()) {
-            AFL_VERIFY(false)("reason", "Remove unknown portion");
+            YDB_LOG_VERIFY(false,
+                {"reason", "Remove unknown portion"});
             return;
         }
 
@@ -290,7 +301,8 @@ struct Tiling: ICompactionUnit<TPortion> {
                 mit->second.UnregisterRoutingWidth(portionId);
                 mit->second.RemovePortion(p);
             } else {
-                AFL_VERIFY(false)("reason", "Bad level info");
+                YDB_LOG_VERIFY(false,
+                    {"reason", "Bad level info"});
             }
         }
         InternalLevel.erase(lit);
@@ -335,8 +347,10 @@ struct Tiling: ICompactionUnit<TPortion> {
                 continue;
             }
             const ui8 currentLevel = lit->second.Level;
-            AFL_VERIFY(currentLevel >= 2)("reason", "only_middle_levels_should_have_aging_timers")("portion_id", portionId)(
-                "level", (ui32)currentLevel);
+            YDB_LOG_VERIFY(currentLevel >= 2,
+                {"reason", "only_middle_levels_should_have_aging_timers"},
+                {"portionId", portionId},
+                {"level", (ui32)currentLevel});
             const auto nextLevel = static_cast<ui8>(currentLevel - 1);
             DoRemovePortion(p);
             Place(p, currentInstant, /*accumulatorAllowed=*/false, nextLevel);
@@ -408,7 +422,8 @@ struct Tiling: ICompactionUnit<TPortion> {
                 return std::nullopt;
             }
             GeneratedTasksPriorityLevel->Collect(result->Priority.GetLevel());
-            AFL_VERIFY(result->Portions.size() > 1)("reason", "zero_or_one_sized_task");
+            YDB_LOG_VERIFY(result->Portions.size() > 1,
+                {"reason", "zero_or_one_sized_task"});
         }
 
         return result;

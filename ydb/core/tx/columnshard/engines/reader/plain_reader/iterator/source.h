@@ -50,43 +50,43 @@ private:
 
     virtual TConclusion<NCommon::TExecutionResult> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return NCommon::TExecutionResult::Done();
     }
 
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>();
     }
 
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
         const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
 
     virtual TConclusionStatus DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TConclusionStatus::Fail("incorrect method usage DoAssembleAccessor");
     }
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TDataAddress& /*address*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
 
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TCheckHeaderContext& /*fetchContext*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
 
@@ -143,7 +143,7 @@ public:
     }
 
     void StartMerging() {
-        AFL_VERIFY(!MergingStartedFlag);
+        YDB_LOG_VERIFY(!MergingStartedFlag);
         MergingStartedFlag = true;
     }
 
@@ -182,7 +182,7 @@ public:
     {
         UsageClass =
             GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start.BuildSortablePosition(), finish.BuildSortablePosition());
-        AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
+        YDB_LOG_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
             {"event", "portions_for_merge"},
             {"start", Start.DebugJson()},
@@ -263,7 +263,7 @@ public:
     }
 
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const override {
-        AFL_VERIFY(columnIds.size());
+        YDB_LOG_VERIFY(columnIds.size());
         switch (type) {
             case EMemType::Raw:
                 return GetPortionAccessor().GetColumnRawBytes(columnIds, false);
@@ -275,7 +275,7 @@ public:
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnsIds) const override {
-        AFL_VERIFY(columnsIds.size());
+        YDB_LOG_VERIFY(columnsIds.size());
         return GetPortionAccessor().GetColumnRawBytes(columnsIds, false);
     }
 

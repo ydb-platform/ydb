@@ -16,6 +16,13 @@ namespace NKikimr::NPQ {
 
 constexpr ui64 MaxMessageSize = 150_MB;
 
+bool MirrorCredentialsNeedResolution(const NKikimrPQ::TMirrorPartitionConfig::TCredentials& credentials);
+TString GetMirrorCredentialsSecretName(const NKikimrPQ::TMirrorPartitionConfig::TCredentials& credentials);
+bool SetMirrorCredentialsSecretValue(
+    NKikimrPQ::TMirrorPartitionConfig::TCredentials& credentials,
+    const TString& value
+);
+
 class IPersQueueMirrorReaderFactory {
 public:
     IPersQueueMirrorReaderFactory()
@@ -39,6 +46,9 @@ public:
         const NKikimrPQ::TMirrorPartitionConfig::TCredentials& cred
     ) const noexcept {
         try {
+            if (MirrorCredentialsNeedResolution(cred)) {
+                ythrow yexception() << "unresolved secret reference in mirror credentials";
+            }
             return GetCredentialsProviderImpl(cred);
         } catch(...) {
             return NThreading::MakeErrorFuture<NYdb::TCredentialsProviderFactoryPtr>(std::current_exception());

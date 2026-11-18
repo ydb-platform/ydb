@@ -126,7 +126,6 @@ public:
         TKqpRequestCounters::TPtr counters,
         const TExecuterConfig& executerConfig,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
         TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing(),
@@ -148,7 +147,6 @@ public:
         , Planner(nullptr)
         , ExecuterRetriesConfig(executerConfig.TableServiceConfig.GetExecuterRetriesConfig())
         , AggregationSettings(executerConfig.TableServiceConfig.GetAggregationConfig())
-        , StatementResultIndex(statementResultIndex)
         , BlockTrackingMode(executerConfig.GetBlockTrackingMode())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
@@ -450,7 +448,7 @@ protected:
     void SendStreamData(NKikimr::NKqp::TKqpExecuterTxResult & txResult, TVector<NYql::NDq::TDqSerializedBatch>&& batches,
         ui32 channelId, ui32 seqNo, bool finished)
     {
-        auto resultIndex = *txResult.QueryResultIndex + StatementResultIndex;
+        auto resultIndex = *txResult.QueryResultIndex;
         auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
         streamEv->Record.SetSeqNo(seqNo);
         streamEv->Record.SetQueryResultIndex(resultIndex);
@@ -2154,8 +2152,6 @@ protected:
 
     THashMap<ui64, TActorId> ResultChannelToComputeActor;
 
-    ui32 StatementResultIndex;
-
     bool AlreadyReplied = false;
 
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
@@ -2192,7 +2188,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,
     TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, TActorId bufferActorId,
@@ -2204,7 +2200,7 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,
     TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
     const IKqpTransactionManagerPtr& txManager, bool useKqpTasksGraphV2);

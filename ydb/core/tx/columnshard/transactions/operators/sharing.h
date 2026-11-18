@@ -35,7 +35,7 @@ private:
     }
 
     virtual bool DoIsAsync() const override {
-        AFL_VERIFY(SharingTask);
+        YDB_LOG_VERIFY(SharingTask);
         return !SharingTask->IsFinished();
     }
 

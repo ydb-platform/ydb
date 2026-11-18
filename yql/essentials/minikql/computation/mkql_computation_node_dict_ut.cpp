@@ -6,7 +6,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

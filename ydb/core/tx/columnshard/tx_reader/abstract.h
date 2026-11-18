@@ -62,7 +62,7 @@ public:
         , PrechargeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("PRECHARGE:" + stageName))
         , ReaderCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("EXECUTE:" + stageName))
     {
-        AFL_VERIFY(StageName);
+        YDB_LOG_VERIFY(StageName);
     }
 
     bool GetIsStarted() const {

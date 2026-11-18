@@ -20,7 +20,7 @@ void TColumnShard::OnFirstGC(ui32 completedBarrierGeneration, const TActorContex
 }
 
 void TColumnShard::Handle(TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, const TActorContext& ctx) {
-    AFL_VERIFY(FindEmptyHistoryIntervals);
+    YDB_LOG_VERIFY(FindEmptyHistoryIntervals);
     if (auto result = FindEmptyHistoryIntervals->HandleFinish(ev, IsCutHistoryEnabled(), Counters.GetCSCounters())) {
         Execute(CreateTxSaveCutHistoryRequests(this, std::move(result->Intervals), result->Finished), ctx);
     } else {

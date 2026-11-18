@@ -23,7 +23,7 @@ private:
         }
 
         TSharedPtrHashContainer() {
-            AFL_VERIFY(!!Object);
+            YDB_LOG_VERIFY(!!Object);
         }
 
         ISubscriber* operator->() const {
@@ -50,7 +50,7 @@ public:
 
     void RegisterSubscriber(const std::shared_ptr<ISubscriber>& s) {
         for (auto&& et : s->GetEventTypes()) {
-            AFL_VERIFY(Subscribers[et].emplace(s).second);
+            YDB_LOG_VERIFY(Subscribers[et].emplace(s).second);
         }
     }
 
@@ -78,7 +78,7 @@ public:
         for (auto&& i : toRemove) {
             for (auto&& evType : i->GetEventTypes()) {
                 auto it = Subscribers.find(evType);
-                AFL_VERIFY(it != Subscribers.end());
+                YDB_LOG_VERIFY(it != Subscribers.end());
                 it->second.erase(i);
                 if (it->second.empty()) {
                     Subscribers.erase(it);

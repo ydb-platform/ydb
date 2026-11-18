@@ -11,6 +11,8 @@ struct TAggExecStat {
     ui64 TasksCount = 0;
     ui64 InputBytes = 0;
     ui64 OutputBytes = 0;
+    ui64 HopInputEventsCount = 0;
+    ui64 HopLateEventsCount = 0;
 };
 
 } // namespace NKikimr::NKqp

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/yson/node/node.h>
+
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -14,6 +16,12 @@ struct TProjectSettings {
     };
 
     TVector<TPragma> Pragmas;
+
+    static TProjectSettings FromJson(TStringBuf json);
+
+    static TProjectSettings FromYson(const NYT::TNode& settings);
+
+    NYT::TNode ToYson() const;
 
     void AddPragma(TString name, TVector<TString> values);
 

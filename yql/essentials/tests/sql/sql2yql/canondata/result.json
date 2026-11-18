@@ -10114,6 +10114,13 @@
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_select_yql-from_anon_values_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-from_as_table_emptylist]": [
+        {
+            "checksum": "d2497c6d378382192e80334da92454de",
+            "size": 1800,
+            "uri": "https://{canondata_backend}/1597364/52683d50af83d221529dccab9f717645fadb76dd/resource.tar.gz#test_sql2yql.test_select_yql-from_as_table_emptylist_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-from_as_table_imm]": [
         {
             "checksum": "19d0a262b6344cbce5d1ef8b57cfca95",
@@ -19429,6 +19436,11 @@
     "test_sql_format.test[select_yql-from_anon_values]": [
         {
             "uri": "file://test_sql_format.test_select_yql-from_anon_values_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-from_as_table_emptylist]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-from_as_table_emptylist_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-from_as_table_imm]": [

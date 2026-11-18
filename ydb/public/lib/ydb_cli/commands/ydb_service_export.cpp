@@ -140,7 +140,8 @@ void TCommandExportToYt::Config(TConfig& config) {
     TYdbOperationCommand::Config(config);
 
     TStringBuilder proxyHelp;
-    proxyHelp << "YT proxy to connect to" << Endl
+    proxyHelp << "YT proxy to connect to: [http://|https://]HOST[:PORT]" << Endl
+        << "  HTTPS uses port 443 by default; other proxies use port 80" << Endl
         << "  Search order:" << Endl
         << "    1. This option" << Endl
         << "    2. \"YT_PROXY\" environment variable";

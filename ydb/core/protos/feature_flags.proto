@@ -491,4 +491,8 @@ message TFeatureFlags {
     optional bool EnableTopicWriteSessionsInitQuoting = 391 [default = false];
     optional bool EnableAsyncReplicationChecksumCheck = 392 [default = false];
     optional bool EnableIndexShadowDataRepair = 393 [default = false];
+    // (LOGBROKER-10680). Default false is
+    // the legacy zeroing behaviour that undercounted the consumed
+    // write quota.
+    optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
 }

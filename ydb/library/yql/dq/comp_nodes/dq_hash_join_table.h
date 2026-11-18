@@ -114,6 +114,10 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.Empty();
     }
 
+    const IBlockLayoutConverter::TPackResult& BuildData() const {
+        return BuildData_;
+    }
+
     ui64 RequiredMemoryForBuild(int nTuples) const {
         return Table_.RequiredMemoryForBuild(nTuples);
     }

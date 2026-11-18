@@ -1,17 +1,18 @@
 #pragma once
 
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/hashes_calc.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/neumann_hash_table.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/spilled_storage.h>
 #include <ydb/library/yql/dq/comp_nodes/type_utils.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
-#include <util/str_stl.h>
 #include <util/system/unaligned_mem.h>
 
+#include <algorithm>
+#include <cstring>
 #include <optional>
 #include <string>
-#include <unordered_map>
 
 namespace NKikimr::NMiniKQL {
 
@@ -30,12 +31,6 @@ struct TMarkJoinKeys {
 };
 
 using TMarkKeyBytes = std::basic_string<char, std::char_traits<char>, TMKQLAllocator<char>>;
-
-struct TMarkKeyBytesHash {
-    size_t operator()(const TMarkKeyBytes& key) const {
-        return THash<TStringBuf>{}(TStringBuf(key.data(), key.size()));
-    }
-};
 
 class TMarkKeyColumns {
   public:
@@ -87,12 +82,52 @@ class TMarkKeyColumns {
         }
     }
 
-    void SerializeMark(TSingleTuple row, ui32 index, TMarkKeyBytes& key) const {
-        key.clear();
-        AppendColumn(row, Columns_[index], key);
+    ui32 GroupHash(TSingleTuple row, TMarkKeyBytes& key) const {
+        SerializeGroup(row, key);
+        return NPackedTuple::CalculateCRC32<NSimd::TSimdFallbackTraits>(reinterpret_cast<const ui8*>(key.data()),
+                                                                        key.size());
+    }
+
+    bool GroupEqual(TSingleTuple lhs, TSingleTuple rhs) const {
+        return std::all_of(GroupColumns_.begin(), GroupColumns_.end(),
+                           [&](ui32 column) { return ColumnEqual(lhs, rhs, column); });
+    }
+
+    bool MarkEqual(TSingleTuple lhs, TSingleTuple rhs, ui32 index) const {
+        return ColumnEqual(lhs, rhs, Columns_[index]);
     }
 
   private:
+    bool ColumnEqual(TSingleTuple lhs, TSingleTuple rhs, ui32 column) const {
+        const bool lhsNull = IsNull(lhs.PackedData, column);
+        if (lhsNull != IsNull(rhs.PackedData, column)) {
+            return false;
+        }
+        if (lhsNull) {
+            return true;
+        }
+        const auto& desc = Layout_->KeyColumns[column];
+        const ui8* lhsValue = lhs.PackedData + desc.Offset;
+        const ui8* rhsValue = rhs.PackedData + desc.Offset;
+        if (column < Layout_->KeyColumnsFixedNum) {
+            return std::memcmp(lhsValue, rhsValue, desc.DataSize) == 0;
+        }
+        const ui8 prefixSize = lhsValue[0];
+        if (prefixSize != rhsValue[0]) {
+            return false;
+        }
+        if (prefixSize < 255) {
+            return std::memcmp(lhsValue + 1, rhsValue + 1, prefixSize) == 0;
+        }
+        const ui32 lhsOffset = ReadUnaligned<ui32>(lhsValue + 1);
+        const ui32 rhsOffset = ReadUnaligned<ui32>(rhsValue + 1);
+        const ui32 size = ReadUnaligned<ui32>(lhsValue + 1 + sizeof(ui32));
+        const ui32 inlineOffset = 1 + 2 * sizeof(ui32);
+        return size == ReadUnaligned<ui32>(rhsValue + 1 + sizeof(ui32)) &&
+               std::memcmp(lhsValue + inlineOffset, rhsValue + inlineOffset, desc.DataSize - inlineOffset) == 0 &&
+               std::memcmp(lhs.OverflowBegin + lhsOffset, rhs.OverflowBegin + rhsOffset, size) == 0;
+    }
+
     void AppendColumn(TSingleTuple row, ui32 column, TMarkKeyBytes& key) const {
         if (IsNull(row.PackedData, column)) {
             key.push_back('\0');
@@ -142,12 +177,7 @@ class TMarkRowMatcher {
             return false;
         }
         for (ui32 index = 0; index < MarksCount_; ++index) {
-            if (nulls & (1u << index)) {
-                continue;
-            }
-            Probe.SerializeMark(probeRow, index, ProbeValue_);
-            Build.SerializeMark(buildRow, index, BuildValue_);
-            if (ProbeValue_ != BuildValue_) {
+            if (!(nulls & (1u << index)) && !Build.MarkEqual(probeRow, buildRow, index)) {
                 return false;
             }
         }
@@ -159,8 +189,6 @@ class TMarkRowMatcher {
 
   private:
     const ui32 MarksCount_;
-    TMarkKeyBytes ProbeValue_;
-    TMarkKeyBytes BuildValue_;
 };
 
 class TStoredRows {
@@ -218,19 +246,25 @@ class TStoredRows {
 };
 
 template <TSpillerSettings Settings> class TMarkGroups {
-    struct TGroup {
-        bool HasNull = false;
-        TMKQLVector<TSingleTuple> NullRows;
-        TMKQLVector<TSingleTuple> OtherRows;
+    using TGroupTable = NPackedTuple::TNeumannHashTable<false, true, true>;
+
+    struct TBucketGroups {
+        TGroupTable NullRows;
+        TGroupTable OtherRows;
+        const ui8* Overflow = nullptr;
     };
 
-    using TGroups = std::unordered_map<TMarkKeyBytes, TGroup, TMarkKeyBytesHash, std::equal_to<TMarkKeyBytes>,
-                                       TMKQLAllocator<std::pair<const TMarkKeyBytes, TGroup>>>;
+    struct TGroupRows {
+        TMKQLVector<ui32> Indices;
+        TMKQLVector<ui32> Hashes;
+    };
+
     static constexpr ui32 BucketMask = static_cast<ui32>(Settings.Buckets) - 1;
 
   public:
     TMarkGroups(TSides<const NPackedTuple::TTupleLayout*> layouts, const TMarkJoinKeys& keys)
         : Matcher_(layouts, keys)
+        , BuildLayout_(layouts.Build)
         , Widths_{.Build = layouts.Build->TotalRowSize, .Probe = layouts.Probe->TotalRowSize}
         , HasMark_(!keys.Columns.empty())
         , ScansRows_(keys.Columns.size() > 1)
@@ -238,8 +272,13 @@ template <TSpillerSettings Settings> class TMarkGroups {
         , AllMarks_(Matcher_.Probe.AllMarks())
         , ByGroup_(HasMark_ && Matcher_.Build.HasGroup())
         , KeepsGroups_(ByGroup_ && (keys.ProbeNullable | keys.BuildNullable) != 0)
-        , Groups_(KeepsGroups_ ? Settings.Buckets : 0)
-    {}
+    {
+        if (KeepsGroups_) {
+            for (int bucket = 0; bucket < Settings.Buckets; ++bucket) {
+                Groups_.push_back(EmptyGroups());
+            }
+        }
+    }
 
     void Prepare(TPackResult& pack, ESide side) {
         if (!ByGroup_) {
@@ -249,9 +288,7 @@ template <TSpillerSettings Settings> class TMarkGroups {
         const ui32 width = Widths_.SelectSide(side);
         for (i64 index = 0; index < pack.NTuples; ++index) {
             ui8* row = pack.PackedTuples.data() + index * width;
-            columns.SerializeGroup({.PackedData = row, .OverflowBegin = pack.Overflow.data()}, Key_);
-            const ui32 group = NPackedTuple::CalculateCRC32<NSimd::TSimdFallbackTraits>(
-                reinterpret_cast<const ui8*>(Key_.data()), Key_.size());
+            const ui32 group = columns.GroupHash({.PackedData = row, .OverflowBegin = pack.Overflow.data()}, Key_);
             WriteUnaligned<ui32>(row, (ReadUnaligned<ui32>(row) & ~BucketMask) | (group & BucketMask));
         }
     }
@@ -268,29 +305,34 @@ template <TSpillerSettings Settings> class TMarkGroups {
         if (!KeepsGroups_) {
             return;
         }
-        TGroups& groups = Groups_[bucket];
-        groups.clear();
-        size_t index = 0;
-        table.ForEachFrom(index, [&](TSingleTuple row) {
+        const TPackResult& data = table.BuildData();
+        const ui8* tuples = data.PackedTuples.data();
+        const ui8* overflow = data.Overflow.data();
+        TGroupRows nullRows;
+        TGroupRows otherRows;
+        for (i64 index = 0; index < data.NTuples; ++index) {
+            const TSingleTuple row{.PackedData = tuples + index * Widths_.Build, .OverflowBegin = overflow};
             if (Matcher_.Build.HasNullGroupKey(row)) {
-                return;
+                continue;
             }
             const bool hasNull = Matcher_.Build.NullMarks(row) != 0;
             if (!hasNull && !ProbeNullable_) {
-                return;
+                continue;
             }
-            Matcher_.Build.SerializeGroup(row, Key_);
-            TGroup& group = groups[Key_];
-            group.HasNull = group.HasNull || hasNull;
-            if (ScansRows_) {
-                (hasNull ? group.NullRows : group.OtherRows).push_back(row);
-            }
-        }, [] { return false; });
+            TGroupRows& rows = hasNull ? nullRows : otherRows;
+            rows.Indices.push_back(static_cast<ui32>(index));
+            rows.Hashes.push_back(Matcher_.Build.GroupHash(row, Key_));
+        }
+        TBucketGroups& groups = Groups_[bucket];
+        groups = EmptyGroups();
+        groups.Overflow = overflow;
+        groups.NullRows.Build(tuples, overflow, nullRows.Indices, nullRows.Hashes);
+        groups.OtherRows.Build(tuples, overflow, otherRows.Indices, otherRows.Hashes);
     }
 
     void ReleaseGroups() {
-        for (TGroups& groups : Groups_) {
-            TGroups().swap(groups);
+        for (TBucketGroups& groups : Groups_) {
+            groups = EmptyGroups();
         }
     }
 
@@ -307,6 +349,10 @@ template <TSpillerSettings Settings> class TMarkGroups {
     }
 
   private:
+    TBucketGroups EmptyGroups() const {
+        return {.NullRows = TGroupTable(BuildLayout_), .OtherRows = TGroupTable(BuildLayout_)};
+    }
+
     bool IsNull(TSingleTuple row) {
         if (!HasMark_ || Matcher_.Probe.HasNullGroupKey(row)) {
             return false;
@@ -318,19 +364,29 @@ template <TSpillerSettings Settings> class TMarkGroups {
         if (!KeepsGroups_) {
             return false;
         }
-        const TGroups& groups = Groups_[Settings.BucketIndex(row)];
-        Matcher_.Probe.SerializeGroup(row, Key_);
-        const auto it = groups.find(Key_);
-        if (it == groups.end()) {
+        const TBucketGroups& groups = Groups_[Settings.BucketIndex(row)];
+        const ui32 hash = Matcher_.Probe.GroupHash(row, Key_);
+        const bool any = !ScansRows_ || nulls == AllMarks_;
+        const auto accept = [&](TSingleTuple buildRow) { return any || Matcher_.IsUnknown(row, nulls, buildRow); };
+        return Contains(groups, groups.NullRows, row, hash, accept) ||
+               (nulls != 0 && Contains(groups, groups.OtherRows, row, hash, accept));
+    }
+
+    bool Contains(const TBucketGroups& groups, const TGroupTable& table, TSingleTuple row, ui32 hash,
+                  std::predicate<TSingleTuple> auto accept) const {
+        if (table.Empty()) {
             return false;
         }
-        const TGroup& group = it->second;
-        if (!ScansRows_ || nulls == AllMarks_) {
-            return nulls != 0 || group.HasNull;
-        }
-        const auto unknown = [&](TSingleTuple buildRow) { return Matcher_.IsUnknown(row, nulls, buildRow); };
-        return std::any_of(group.NullRows.begin(), group.NullRows.end(), unknown) ||
-               (nulls != 0 && std::any_of(group.OtherRows.begin(), group.OtherRows.end(), unknown));
+        const auto groupEqual = [&](const ui8* lhs, const ui8* lhsOverflow, const ui8* rhs, const ui8* rhsOverflow) {
+            return Matcher_.Build.GroupEqual({.PackedData = lhs, .OverflowBegin = lhsOverflow},
+                                             {.PackedData = rhs, .OverflowBegin = rhsOverflow});
+        };
+        bool found = false;
+        table.Apply(row.PackedData, row.OverflowBegin, hash, groupEqual, [&](const ui8* buildRow) {
+            found = accept({.PackedData = buildRow, .OverflowBegin = groups.Overflow});
+            return !found;
+        });
+        return found;
     }
 
     ui32 MarkNulls(TSingleTuple row) const {
@@ -338,6 +394,7 @@ template <TSpillerSettings Settings> class TMarkGroups {
     }
 
     TMarkRowMatcher Matcher_;
+    const NPackedTuple::TTupleLayout* BuildLayout_;
     const TSides<ui32> Widths_;
     const bool HasMark_;
     const bool ScansRows_;
@@ -347,7 +404,7 @@ template <TSpillerSettings Settings> class TMarkGroups {
     const bool KeepsGroups_;
     bool BuildNotEmpty_ = false;
     bool BuildHasNull_ = false;
-    TMKQLVector<TGroups> Groups_;
+    TMKQLVector<TBucketGroups> Groups_;
     TMarkKeyBytes Key_;
 };
 

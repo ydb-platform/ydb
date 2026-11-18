@@ -183,8 +183,8 @@ std::string ValueTableDDL() {
 void AssertFromExpression(const NKikimrSchemeOp::TColumnDescription& col, const TString& exprText) {
     UNIT_ASSERT_C(col.HasDefaultFromExpression(), "expected an expression default: " << col.ShortDebugString());
     const auto& defaultExpression = col.GetDefaultFromExpression();
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(defaultExpression.GetKind()),
-        static_cast<int>(NKikimrSchemeOp::TDefaultExpressionColumnDescription::DEFAULT));
+    UNIT_ASSERT(defaultExpression.GetStored());
+    UNIT_ASSERT(defaultExpression.GetWritable());
     UNIT_ASSERT_VALUES_EQUAL(defaultExpression.GetExprText(), exprText);
     UNIT_ASSERT_VALUES_EQUAL_C(defaultExpression.DependencyColumnNamesSize(), 0u,
         "a DEFAULT expression must not have dependencies: " << defaultExpression.ShortDebugString());
@@ -383,14 +383,10 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;[42]]]");
     }
 
-    Y_UNIT_TEST(NamedNodeContext) {
+    Y_UNIT_TEST(NamedNodeRejected) {
         TTestFixture fixture;
-        fixture.Exec(DefaultExprDDL("v Uint64 DEFAULT RandomNumber(1) * $factor + 42ul", "$factor = 0ul;\n"));
-
-        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), "RandomNumber(1) * $factor + 42ul");
-
-        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
-        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[42u]]]");
+        fixture.Rejects(DefaultExprDDL("v Uint64 DEFAULT RandomNumber(1) * $factor + 42ul", "$factor = 0ul;\n"),
+            "Unknown name: $factor");
     }
 
     Y_UNIT_TEST(PragmaContext) {
@@ -404,7 +400,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
     Y_UNIT_TEST(UnrelatedDeclareAccepted) {
         TTestFixture fixture;
-        // A DECLARE in the statement prefix must be stripped when the expression is recompiled
+        // Unrelated query declarations are not part of the stored expression
         fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Uint64 DEFAULT " << DefaultExpr,
             "DECLARE $unused AS Int32;\n"));
 
@@ -540,11 +536,11 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Rejects(DefaultExprDDL("v Bool DEFAULT NOT EXISTS (SELECT k FROM Source)"), "subquery");
     }
 
-    Y_UNIT_TEST(NamedExpressionSubqueryRejected) {
+    Y_UNIT_TEST(NamedExpressionRejected) {
         TTestFixture fixture;
         fixture.Exec("CREATE TABLE Source (k Int32 NOT NULL, PRIMARY KEY (k));");
         fixture.Rejects(DefaultExprDDL("v Bool DEFAULT 1 IN $ids", "$ids = (SELECT k FROM Source);\n"),
-            "subquery");
+            "Unknown name: $ids");
     }
 
     Y_UNIT_TEST(ParameterRejected) {
@@ -1167,8 +1163,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
         const auto replayed = fixture.ColumnDesc("/Root/TestTable", "v").GetDefaultFromExpression();
         UNIT_ASSERT_VALUES_EQUAL(replayed.GetExprText(), origin.GetExprText());
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(replayed.GetKind()), static_cast<int>(origin.GetKind()));
-        UNIT_ASSERT_VALUES_EQUAL(replayed.GetContext(), origin.GetContext());
+        UNIT_ASSERT_VALUES_EQUAL(replayed.GetStored(), origin.GetStored());
+        UNIT_ASSERT_VALUES_EQUAL(replayed.GetWritable(), origin.GetWritable());
 
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;[42u]]]");
@@ -1199,19 +1195,15 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
     Y_UNIT_TEST(SurvivesSchemeShardRestart) {
         TTestFixture fixture;
-        const TString expression = "RandomNumber(1) * $factor + 42ul";
-        fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Uint64 DEFAULT " << expression,
-            "$factor = 0ul;\n"));
+        const TString expression = DefaultExpr;
+        fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Uint64 DEFAULT " << expression));
 
-        const auto beforeRestart = fixture.ColumnDesc("/Root/TestTable", "v").GetDefaultFromExpression();
-        UNIT_ASSERT_STRING_CONTAINS(beforeRestart.GetContext(), "$factor = 0ul;");
 
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.RestartSchemeShard("/Root/TestTable");
 
         const auto afterRestart = fixture.ColumnDesc("/Root/TestTable", "v").GetDefaultFromExpression();
         UNIT_ASSERT_VALUES_EQUAL(afterRestart.GetExprText(), expression);
-        UNIT_ASSERT_VALUES_EQUAL(afterRestart.GetContext(), beforeRestart.GetContext());
         fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
         fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;[42u]]]");
     }

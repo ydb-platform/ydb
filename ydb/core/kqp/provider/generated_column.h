@@ -10,7 +10,7 @@ namespace NYql {
 TString AssembleGeneratedQuery(const TString& exprBody);
 
 // Wraps a raw DEFAULT expression body in a FROM-less SELECT envelope
-TString AssembleDefaultQuery(const TString& context, const TString& exprBody);
+TString AssembleDefaultQuery(const TString& exprBody);
 
 // Compiles the stored SQL text of a GENERATED column into
 // a normalized `(lambda '(row) <expr>)` whose single argument is the table row

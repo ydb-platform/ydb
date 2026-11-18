@@ -629,59 +629,17 @@ struct TColumnEncoding {
 
 using TColumnEncodingsList = TVector<TColumnEncoding>;
 
-enum class EColumnExpressionKind : ui8 {
-    GeneratedStored = 0,
-    GeneratedVirtual = 1,
-    Default = 2,
-};
-
 struct TDefaultExpressionColumnInfo {
     TString ExprText;
     NYql::TExprNode::TPtr Expr; // Compiled ExprText
     TVector<TString> Dependencies;
-    EColumnExpressionKind Kind = EColumnExpressionKind::GeneratedStored;
+    bool Stored = false;
+    bool Writable = false;
 
-    // GENERATED ALWAYS AS (<expr>), as opposed to a DEFAULT <expr>
     bool IsGenerated() const {
-        return Kind != EColumnExpressionKind::Default;
-    }
-
-    // The value is materialized in storage
-    bool IsStored() const {
-        return Kind != EColumnExpressionKind::GeneratedVirtual;
-    }
-
-    // The user may supply a value for the column explicitly
-    bool IsWritable() const {
-        return Kind == EColumnExpressionKind::Default;
+        return !Writable;
     }
 };
-
-#define YQL_ASSERT_COLUMN_EXPRESSION_KIND(proto)                                                              \
-    static_assert(static_cast<int>(EColumnExpressionKind::GeneratedStored) == proto::GENERATED_STORED);       \
-    static_assert(static_cast<int>(EColumnExpressionKind::GeneratedVirtual) == proto::GENERATED_VIRTUAL);     \
-    static_assert(static_cast<int>(EColumnExpressionKind::Default) == proto::DEFAULT)
-
-YQL_ASSERT_COLUMN_EXPRESSION_KIND(NKikimrKqp::TDefaultExpression);
-YQL_ASSERT_COLUMN_EXPRESSION_KIND(NKikimrSchemeOp::TDefaultExpressionColumnDescription);
-
-#undef YQL_ASSERT_COLUMN_EXPRESSION_KIND
-
-inline EColumnExpressionKind ColumnExpressionKindFromProto(NKikimrKqp::TDefaultExpression::EKind kind) {
-    return static_cast<EColumnExpressionKind>(kind);
-}
-
-inline EColumnExpressionKind ColumnExpressionKindFromProto(NKikimrSchemeOp::TDefaultExpressionColumnDescription::EKind kind) {
-    return static_cast<EColumnExpressionKind>(kind);
-}
-
-inline NKikimrKqp::TDefaultExpression::EKind ColumnExpressionKindToKqpProto(EColumnExpressionKind kind) {
-    return static_cast<NKikimrKqp::TDefaultExpression::EKind>(kind);
-}
-
-inline NKikimrSchemeOp::TDefaultExpressionColumnDescription::EKind ColumnExpressionKindToSchemeProto(EColumnExpressionKind kind) {
-    return static_cast<NKikimrSchemeOp::TDefaultExpressionColumnDescription::EKind>(kind);
-}
 
 struct TKikimrColumnMetadata {
 
@@ -771,8 +729,8 @@ struct TKikimrColumnMetadata {
             const auto& defaultExpression = message->GetDefaultFromExpression();
             DefaultExpression = TDefaultExpressionColumnInfo{};
             DefaultExpression->ExprText = defaultExpression.GetExprText();
-            DefaultExpression->Context = defaultExpression.GetContext();
-            DefaultExpression->Kind = ColumnExpressionKindFromProto(defaultExpression.GetKind());
+            DefaultExpression->Stored = defaultExpression.GetStored();
+            DefaultExpression->Writable = defaultExpression.GetWritable();
             DefaultExpression->Dependencies.assign(defaultExpression.GetDependencies().begin(), defaultExpression.GetDependencies().end());
         }
     }
@@ -822,8 +780,8 @@ struct TKikimrColumnMetadata {
         if (DefaultExpression) {
             auto& defaultExpression = *message->MutableDefaultFromExpression();
             defaultExpression.SetExprText(DefaultExpression->ExprText);
-            defaultExpression.SetContext(DefaultExpression->Context);
-            defaultExpression.SetKind(ColumnExpressionKindToKqpProto(DefaultExpression->Kind));
+            defaultExpression.SetStored(DefaultExpression->Stored);
+            defaultExpression.SetWritable(DefaultExpression->Writable);
             for (const auto& dep : DefaultExpression->Dependencies) {
                 defaultExpression.AddDependencies(dep);
             }

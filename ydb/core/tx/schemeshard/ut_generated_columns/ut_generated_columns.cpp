@@ -9,7 +9,6 @@ using namespace NSchemeShardUT_Private;
 namespace {
 
 void EnableGeneratedColumns(TTestActorRuntime& runtime) {
-    runtime.GetAppData().FeatureFlags.SetEnableDefaultFromExpression(false);
     runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
     runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
 }
@@ -97,7 +96,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -133,7 +132,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Utf8"
                   DefaultFromExpression {
                       ExprText: "first || \" \" || last"
-                      Kind: GENERATED_VIRTUAL
+                      Stored: false
                       DependencyColumnNames: ["first", "last"]
                   }
               }
@@ -250,7 +249,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -259,7 +258,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a - b"
-                      Kind: GENERATED_VIRTUAL
+                      Stored: false
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -297,7 +296,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -334,7 +333,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -382,7 +381,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -420,7 +419,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -458,7 +457,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -519,7 +518,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -552,7 +551,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Timestamp"
                   DefaultFromExpression {
                       ExprText: "created"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["created"]
                   }
               }
@@ -580,7 +579,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Timestamp"
                   DefaultFromExpression {
                       ExprText: "created"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["created"]
                   }
               }
@@ -609,7 +608,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -618,7 +617,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_VIRTUAL
+                      Stored: false
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -681,7 +680,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   FamilyName: "alt"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -692,8 +691,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
         {
             auto describe = DescribePath(runtime, "/MyRoot/StoredTable");
             const auto* sum = FindColumn(describe, "sum");
-            UNIT_ASSERT(sum && sum->HasDefaultFromExpression() && sum->GetDefaultFromExpression().GetKind()
-                == NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_STORED);
+            UNIT_ASSERT(sum && sum->HasDefaultFromExpression() && sum->GetDefaultFromExpression().GetStored());
             UNIT_ASSERT_VALUES_UNEQUAL(sum->GetFamily(), 0u);
         }
 
@@ -709,7 +707,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   FamilyName: "alt"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_VIRTUAL
+                      Stored: false
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -737,7 +735,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -780,7 +778,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + b"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a", "b"]
                   }
               }
@@ -843,7 +841,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Timestamp"
                   DefaultFromExpression {
                       ExprText: "created"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["created"]
                   }
               }
@@ -891,7 +889,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + 1"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a"]
                   }
               }
@@ -918,7 +916,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + 1"
-                      Kind: GENERATED_VIRTUAL
+                      Stored: false
                       DependencyColumnNames: ["a"]
                   }
               }
@@ -953,7 +951,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a + 1"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a"]
                   }
               }

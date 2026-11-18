@@ -27,7 +27,7 @@ const NKikimrSchemeOp::TColumnDescription* FindColumn(const NKikimrScheme::TEvDe
 }
 
 void CheckDefaultExpression(const NKikimrScheme::TEvDescribeSchemeResult& describe, const TString& name,
-    const TString& expectedExprText, const TString& expectedContext = "")
+    const TString& expectedExprText)
 {
     const auto* column = FindColumn(describe, name);
     UNIT_ASSERT_C(column, "column '" << name << "' not found in describe result: " << describe.ShortDebugString());
@@ -35,10 +35,9 @@ void CheckDefaultExpression(const NKikimrScheme::TEvDescribeSchemeResult& descri
         "column '" << name << "' has no expression default: " << column->ShortDebugString());
 
     const auto& defaultExpression = column->GetDefaultFromExpression();
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(defaultExpression.GetKind()),
-        static_cast<int>(NKikimrSchemeOp::TDefaultExpressionColumnDescription::DEFAULT));
+    UNIT_ASSERT(defaultExpression.GetStored());
+    UNIT_ASSERT(defaultExpression.GetWritable());
     UNIT_ASSERT_VALUES_EQUAL(defaultExpression.GetExprText(), expectedExprText);
-    UNIT_ASSERT_VALUES_EQUAL(defaultExpression.GetContext(), expectedContext);
     UNIT_ASSERT_VALUES_EQUAL_C(defaultExpression.DependencyColumnNamesSize(), 0u,
         "a DEFAULT expression must not have dependencies: " << defaultExpression.ShortDebugString());
 }
@@ -52,8 +51,7 @@ constexpr const char* TableWithDefaultExpr = R"pb(
           Type: "Timestamp"
           DefaultFromExpression {
               ExprText: "CurrentUtcTimestamp()"
-              Kind: DEFAULT
-              Context: "USE `/MyRoot`;"
+              Stored: true Writable: true
           }
       }
       KeyColumnNames: ["key"]
@@ -73,7 +71,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         env.TestWaitNotification(runtime, txId);
 
         auto describe = DescribePath(runtime, "/MyRoot/Table");
-        CheckDefaultExpression(describe, "ts", "CurrentUtcTimestamp()", "USE `/MyRoot`;");
+        CheckDefaultExpression(describe, "ts", "CurrentUtcTimestamp()");
 
         const auto* keyColumn = FindColumn(describe, "key");
         UNIT_ASSERT(keyColumn && !keyColumn->HasDefaultFromExpression());
@@ -90,10 +88,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
             { { NKikimrScheme::StatusSchemeError, "DEFAULT expressions are disabled. Column: ts" } });
     }
 
-    Y_UNIT_TEST(UnsetKindIsSchemaError) {
+    Y_UNIT_TEST(LegacyVirtualExpressionAccepted) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         EnableDefaultFromExpression(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
 
         ui64 txId = 100;
 
@@ -108,8 +107,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
                   }
               }
               KeyColumnNames: ["key"]
-        )pb",
-            { { NKikimrScheme::StatusSchemeError, "expression default of unknown kind" } });
+        )pb");
+        env.TestWaitNotification(runtime, txId);
+        const auto describe = DescribePath(runtime, "/MyRoot/Table");
+        const auto* column = FindColumn(describe, "ts");
+        UNIT_ASSERT(column && column->HasDefaultFromExpression());
+        UNIT_ASSERT(!column->GetDefaultFromExpression().GetStored());
+        UNIT_ASSERT(!column->GetDefaultFromExpression().GetWritable());
     }
 
     // A generated column is computed from the row, a DEFAULT column is not, so only the former
@@ -128,7 +132,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
                   Type: "Uint64"
                   DefaultFromExpression {
                       ExprText: "RandomNumber(1)"
-                      Kind: DEFAULT
+                      Stored: true Writable: true
                   }
               }
               Columns { Name: "a" Type: "Int32" }
@@ -155,7 +159,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
                   Family: 1
                   DefaultFromExpression {
                       ExprText: "CurrentUtcTimestamp()"
-                      Kind: DEFAULT
+                      Stored: true Writable: true
                   }
               }
               KeyColumnNames: ["key"]
@@ -189,7 +193,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
                   Type: "Timestamp"
                   DefaultFromExpression {
                       ExprText: "CurrentUtcTimestamp()"
-                      Kind: DEFAULT
+                      Stored: true Writable: true
                   }
               }
               KeyColumnNames: ["key"]
@@ -218,7 +222,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
                   NotNull: true
                   DefaultFromExpression {
                       ExprText: "CurrentUtcTimestamp()"
-                      Kind: DEFAULT
+                      Stored: true Writable: true
                   }
               }
               KeyColumnNames: ["key"]
@@ -277,14 +281,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
                   Name: "ts"
                   DefaultFromExpression {
                       ExprText: "CurrentUtcTimestamp()"
-                      Kind: DEFAULT
-                      Context: "USE `/MyRoot`;"
+                      Stored: true Writable: true
                   }
               }
         )pb");
         env.TestWaitNotification(runtime, txId);
 
-        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "ts", "CurrentUtcTimestamp()", "USE `/MyRoot`;");
+        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "ts", "CurrentUtcTimestamp()");
     }
 
     Y_UNIT_TEST(AlterDropDefaultExpression) {
@@ -329,7 +332,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
                   Name: "ts"
                   DefaultFromExpression {
                       ExprText: "CurrentUtcTimestamp()"
-                      Kind: DEFAULT
+                      Stored: true Writable: true
                   }
               }
         )pb",
@@ -353,7 +356,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
                   Type: "Int32"
                   DefaultFromExpression {
                       ExprText: "a * 2"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["a"]
                   }
               }
@@ -367,7 +370,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
                   Name: "doubled"
                   DefaultFromExpression {
                       ExprText: "CurrentUtcTimestamp()"
-                      Kind: DEFAULT
+                      Stored: true Writable: true
                   }
               }
         )pb",
@@ -402,7 +405,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
                   Name: "a"
                   DefaultFromExpression {
                       ExprText: "key + 1"
-                      Kind: GENERATED_STORED
+                      Stored: true
                       DependencyColumnNames: ["key"]
                   }
               }
@@ -421,12 +424,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         TestCreateTable(runtime, ++txId, "/MyRoot", TableWithDefaultExpr);
         env.TestWaitNotification(runtime, txId);
 
-        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "ts", "CurrentUtcTimestamp()", "USE `/MyRoot`;");
+        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "ts", "CurrentUtcTimestamp()");
 
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
-        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "ts", "CurrentUtcTimestamp()", "USE `/MyRoot`;");
+        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "ts", "CurrentUtcTimestamp()");
     }
 
     Y_UNIT_TEST(CopyTablePreservesDefaultExpression) {
@@ -442,7 +445,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         TestCopyTable(runtime, ++txId, "/MyRoot", "TableCopy", "/MyRoot/Table");
         env.TestWaitNotification(runtime, txId);
 
-        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/TableCopy"), "ts", "CurrentUtcTimestamp()", "USE `/MyRoot`;");
+        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/TableCopy"), "ts", "CurrentUtcTimestamp()");
     }
 
     Y_UNIT_TEST(RenameTablePreservesDefaultExpression) {
@@ -459,6 +462,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), { NLs::PathNotExist });
-        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/TableRenamed"), "ts", "CurrentUtcTimestamp()", "USE `/MyRoot`;");
+        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/TableRenamed"), "ts", "CurrentUtcTimestamp()");
     }
 }

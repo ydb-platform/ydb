@@ -473,7 +473,7 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
                 Type: "Int32"
                 DefaultFromExpression {
                     ExprText: "a + b"
-                    Kind: GENERATED_STORED
+                    Stored: true
                     DependencyColumnNames: ["a", "b"]
                 }
             }
@@ -507,7 +507,7 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
                 Type: "Timestamp"
                 DefaultFromExpression {
                     ExprText: "CurrentUtcTimestamp()"
-                    Kind: DEFAULT
+                    Stored: true Writable: true
                 }
             }
             KeyColumnNames: ["key"]

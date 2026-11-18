@@ -2293,7 +2293,7 @@ public:
                         }
 
                         generatedColumns.insert(genName);
-                        if (!genMeta.DefaultExpression->IsStored()) {
+                        if (!genMeta.DefaultExpression->Stored) {
                             virtualGeneratedColumns.insert(genName);
                         }
 

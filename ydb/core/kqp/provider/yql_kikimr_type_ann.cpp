@@ -301,7 +301,7 @@ IGraphTransformer::TStatus CompileDefaultExpressionLambdas(const TKikimrTableDes
             continue;
         }
 
-        const TString defaultQuery = AssembleDefaultQuery(col.DefaultExpression->Context, col.DefaultExpression->ExprText);
+        const TString defaultQuery = AssembleDefaultQuery(col.DefaultExpression->ExprText);
         NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
             sessionCtx.Query().Type, cluster, defaultQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
         settingsBuilder.SetFromConfig(sessionCtx.Config());
@@ -836,7 +836,7 @@ namespace {
 
             auto& columnMeta = meta.Columns[columnName];
             const bool isGenerated = columnMeta.DefaultExpression->IsGenerated();
-            const bool stored = columnMeta.DefaultExpression->IsStored();
+            const bool stored = columnMeta.DefaultExpression->Stored;
 
             if (isGenerated) {
                 if (stored && !sessionCtx.Config().FeatureFlags.GetEnableGeneratedStored()) {
@@ -867,7 +867,7 @@ namespace {
             // Recompile the stored SQL text into (lambda '(row) <expr>)
             const TString query = isGenerated
                 ? AssembleGeneratedQuery(columnMeta.DefaultExpression->ExprText)
-                : AssembleDefaultQuery(columnMeta.DefaultExpression->Context, columnMeta.DefaultExpression->ExprText);
+                : AssembleDefaultQuery(columnMeta.DefaultExpression->ExprText);
             NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
                 sessionCtx.Query().Type, cluster, query, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
             settingsBuilder.SetFromConfig(sessionCtx.Config());
@@ -997,9 +997,9 @@ namespace {
 
             if (useDefaultFromExpression) {
                 columnMeta.DefaultExpression = TDefaultExpressionColumnInfo{};
-                columnMeta.DefaultExpression->Context = TString(defaultSource->Child(0)->Content());
                 columnMeta.DefaultExpression->ExprText = TString(defaultSource->Child(1)->Content());
-                columnMeta.DefaultExpression->Kind = EColumnExpressionKind::Default;
+                columnMeta.DefaultExpression->Stored = true;
+                columnMeta.DefaultExpression->Writable = true;
                 columnMeta.SetDefaultFromExpression();
             } else {
                 if (IsYqlNullExprNode(constrValue)) {
@@ -1061,9 +1061,7 @@ namespace {
 
             columnMeta.DefaultExpression = TDefaultExpressionColumnInfo{};
             columnMeta.DefaultExpression->ExprText = TString(generatedValue.Child(1)->Content());
-            columnMeta.DefaultExpression->Kind = generatedValue.Child(2)->Content() == "stored"
-                ? EColumnExpressionKind::GeneratedStored
-                : EColumnExpressionKind::GeneratedVirtual;
+            columnMeta.DefaultExpression->Stored = generatedValue.Child(2)->Content() == "stored";
             columnMeta.SetDefaultFromExpression();
         }
 

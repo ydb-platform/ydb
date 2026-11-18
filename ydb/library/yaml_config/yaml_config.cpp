@@ -97,9 +97,21 @@ void ResolveAndParseYamlConfig(
     NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true, std::move(unknownFieldsCollector)), appConfig, true, /*phase=*/ nullptr, /*relaxed=*/ true);
 }
 
-void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to) {
+void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to,
+        const NKikimrConfig::TAppConfig& bootstrapConfig) {
+    const bool bridgedYaml = to.GetYamlConfigEnabled() && (to.HasBridgeConfig() || bootstrapConfig.HasBridgeConfig());
+    const bool hasYamlNodes = to.GetNameserviceConfig().NodeSize() != 0;
     if (from.HasNameserviceConfig()) {
-        to.MutableNameserviceConfig()->CopyFrom(from.GetNameserviceConfig());
+        auto nameservice = from.GetNameserviceConfig();
+        if (bridgedYaml && hasYamlNodes) {
+            // A pre-conversion Console item can list only the original pile and omit its name.
+            nameservice.MutableNode()->Swap(to.MutableNameserviceConfig()->MutableNode());
+        }
+        to.MutableNameserviceConfig()->Swap(&nameservice);
+    }
+    const auto& registeredNodes = bootstrapConfig.GetNameserviceConfig().GetNode();
+    if (bridgedYaml && !hasYamlNodes && to.HasNameserviceConfig() && !registeredNodes.empty()) {
+        to.MutableNameserviceConfig()->MutableNode()->CopyFrom(registeredNodes);
     }
 
     if (from.HasNetClassifierDistributableConfig()) {

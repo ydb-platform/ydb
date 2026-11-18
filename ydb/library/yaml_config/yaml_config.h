@@ -121,10 +121,11 @@ public:
 };
 
 /**
- * Replaces kinds not managed by yaml config (e.g. NetClassifierConfig) from config 'from' in config 'to'
- * if corresponding configs are presenet in 'from'
+ * Applies unmanaged Console settings to the resolved YAML config. During bridged dynamic-node
+ * startup the static nodes come from YAML hosts or, if omitted, from node registration.
  */
-void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to);
+void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to,
+    const NKikimrConfig::TAppConfig& bootstrapConfig);
 
 using TValidatorsMap = TMap<TString, TSimpleSharedPtr<IConfigValidator>>;
 

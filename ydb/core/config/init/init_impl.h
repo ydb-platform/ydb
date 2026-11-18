@@ -1620,7 +1620,7 @@ public:
         }
 
         NKikimrConfig::TAppConfig yamlConfig = GetYamlConfigFromResult(*result, Labels);
-        NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig);
+        NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig, AppConfig);
 
         InitDebug.OldConfig.CopyFrom(result->GetConfig());
         ApplyActualDynConfigFromYaml(yamlConfig, result->GetConfig());

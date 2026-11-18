@@ -224,6 +224,68 @@ Y_UNIT_TEST_SUITE(InitStructuredErrors) {
     }
 }
 
+Y_UNIT_TEST_SUITE(DynamicNodeNameservice) {
+    struct TFixture : public NUnitTest::TBaseFixture {
+        NKikimrConfig::TAppConfig Console;
+        NKikimrConfig::TAppConfig Yaml;
+        NKikimrConfig::TAppConfig Registration;
+
+        TFixture() {
+            auto* legacy = Console.MutableNameserviceConfig();
+            legacy->SetClusterUUID("cluster-uuid");
+            auto* oldNode = legacy->AddNode();
+            oldNode->SetNodeId(1);
+            oldNode->MutableWalleLocation()->SetDataCenter("BRO");
+
+            Yaml.SetYamlConfigEnabled(true);
+            auto* bridge = Yaml.MutableBridgeConfig();
+            bridge->AddPiles()->SetName("original");
+            bridge->AddPiles()->SetName("added");
+            for (ui32 id : {1u, 2u}) {
+                auto* node = Registration.MutableNameserviceConfig()->AddNode();
+                node->SetNodeId(id);
+                node->SetInterconnectHost(id == 1 ? "static-1" : "static-2");
+                node->MutableLocation()->SetBridgePileName(id == 1 ? "original" : "added");
+            }
+        }
+    };
+
+    Y_UNIT_TEST_F(BridgedYamlHostsSurviveLegacyConsoleItem, TFixture) {
+        Yaml.MutableNameserviceConfig()->CopyFrom(Registration.GetNameserviceConfig());
+        Yaml.MutableNameserviceConfig()->MutableNode(1)->SetInterconnectHost("from-yaml");
+
+        NYamlConfig::ReplaceUnmanagedKinds(Console, Yaml, Registration);
+
+        const auto& nameservice = Yaml.GetNameserviceConfig();
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetClusterUUID(), "cluster-uuid");
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.NodeSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(0).GetLocation().GetBridgePileName(), "original");
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(1).GetLocation().GetBridgePileName(), "added");
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(1).GetInterconnectHost(), "from-yaml");
+    }
+
+    Y_UNIT_TEST_F(BridgedYamlWithoutHostsUsesRegisteredStaticNodes, TFixture) {
+        NYamlConfig::ReplaceUnmanagedKinds(Console, Yaml, Registration);
+
+        const auto& nameservice = Yaml.GetNameserviceConfig();
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetClusterUUID(), "cluster-uuid");
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.NodeSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(0).GetLocation().GetBridgePileName(), "original");
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(1).GetLocation().GetBridgePileName(), "added");
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(1).GetInterconnectHost(), "static-2");
+    }
+
+    Y_UNIT_TEST_F(OrdinaryYamlUsesConsoleNodes, TFixture) {
+        Yaml.ClearBridgeConfig();
+        Yaml.MutableNameserviceConfig()->CopyFrom(Registration.GetNameserviceConfig());
+
+        NYamlConfig::ReplaceUnmanagedKinds(Console, Yaml, Registration);
+
+        UNIT_ASSERT_VALUES_EQUAL(Yaml.GetNameserviceConfig().SerializeAsString(),
+            Console.GetNameserviceConfig().SerializeAsString());
+    }
+}
+
 
 Y_UNIT_TEST_SUITE(StaticNodeSelectorsInit) {
 

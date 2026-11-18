@@ -15,9 +15,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(78.3)
+VERSION(79.1)
 
-ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-78.3/icu4c-78.3-sources.tgz)
+ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-79.1/icu4c-79.1-sources.tgz)
 
 ADDINCL(
     GLOBAL contrib/libs/icu/include
@@ -503,7 +503,7 @@ SRCS(
     i18n/zonemeta.cpp
     i18n/zrule.cpp
     i18n/ztrans.cpp
-    icudt78_dat.rodata
+    icudt79_dat.rodata
     io/locbund.cpp
     io/sprintf.cpp
     io/sscanf.cpp

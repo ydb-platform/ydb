@@ -31,19 +31,21 @@ private:
 
 protected:
     const std::shared_ptr<TGranuleMeta> GranuleMeta;
+    const bool HasDeletions;
     const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot PortionsIndexSnapshot;
     std::shared_ptr<NArrow::TColumnFilter> BuildPortionFilter(const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual,
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage,
         const bool useDeletionFilter) const;
 
 public:
-    ISubsetToMerge(
-        const std::shared_ptr<TGranuleMeta>& granule, const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
+    ISubsetToMerge(const std::shared_ptr<TGranuleMeta>& granule, const bool hasDeletions,
+        const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
         : GranuleMeta(granule)
+        , HasDeletions(hasDeletions)
         , PortionsIndexSnapshot(portionsIndexSnapshot)
     {
         YDB_LOG_VERIFY(GranuleMeta);
-        YDB_LOG_VERIFY(PortionsIndexSnapshot);
+        YDB_LOG_VERIFY(!HasDeletions || PortionsIndexSnapshot);
     }
 
     virtual ~ISubsetToMerge() = default;
@@ -67,9 +69,9 @@ private:
         const bool useDeletionFilter) const override;
 
 public:
-    TReadPortionToMerge(TReadPortionInfoWithBlobs&& rPortion, const std::shared_ptr<TGranuleMeta>& granuleMeta,
+    TReadPortionToMerge(TReadPortionInfoWithBlobs&& rPortion, const std::shared_ptr<TGranuleMeta>& granuleMeta, const bool hasDeletions,
         const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
-        : TBase(granuleMeta, portionsIndexSnapshot)
+        : TBase(granuleMeta, hasDeletions, portionsIndexSnapshot)
         , ReadPortion(std::move(rPortion))
     {
     }
@@ -96,7 +98,7 @@ private:
 
 public:
     TWritePortionsToMerge(std::vector<TWritePortionInfoWithBlobsResult>&& portions, const std::shared_ptr<TGranuleMeta>& granuleMeta,
-        const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot);
+        const bool hasDeletions, const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot);
 };
 
 }   // namespace NKikimr::NOlap::NCompaction

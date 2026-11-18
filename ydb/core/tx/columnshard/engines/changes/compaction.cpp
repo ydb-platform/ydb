@@ -36,7 +36,12 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     self.BackgroundController.StartCompaction(GranuleMeta->GetPathId(), GetTaskIdentifier());
     NeedGranuleStatusProvide = true;
     GranuleMeta->OnCompactionStarted();
-    PortionsIndexSnapshot = GranuleMeta->GetPortionsIndex().GetPortionsSnapshot();
+    HasDeletions = std::any_of(SwitchedPortions.begin(), SwitchedPortions.end(), [](const TPortionInfo::TConstPtr& portion) {
+        return portion->GetMeta().GetDeletionsCount();
+    });
+    if (HasDeletions) {
+        PortionsIndexSnapshot = GranuleMeta->GetPortionsIndex().GetPortionsSnapshot();
+    }
 }
 
 void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {

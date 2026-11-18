@@ -59,6 +59,7 @@ std::shared_ptr<NArrow::TColumnFilter> ISubsetToMerge::BuildPortionFilter(const 
     if (pInfo.GetMeta().GetDeletionsCount() && useDeletionFilter) {
         // A deletion marker has to be kept only while some portion outside of this task may still hold an older record with the
         // same key. Elsewhere the marker (together with the records it shadows inside the task) is dropped from the result.
+        AFL_VERIFY(HasDeletions && PortionsIndexSnapshot);
         const std::vector<TKeyInterval> olderIntervals =
             NGranule::NPortionsIndex::TPortionsIndex::GetOlderIntervals(*PortionsIndexSnapshot, pInfo, portionsInUsage);
         const NArrow::TSimpleRow keyStart = pInfo.IndexKeyStart();
@@ -132,8 +133,9 @@ ui64 TWritePortionsToMerge::GetColumnMaxChunkMemory() const {
 }
 
 TWritePortionsToMerge::TWritePortionsToMerge(std::vector<TWritePortionInfoWithBlobsResult>&& portions,
-    const std::shared_ptr<TGranuleMeta>& granuleMeta, const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
-    : TBase(granuleMeta, portionsIndexSnapshot)
+    const std::shared_ptr<TGranuleMeta>& granuleMeta, const bool hasDeletions,
+    const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
+    : TBase(granuleMeta, hasDeletions, portionsIndexSnapshot)
     , WritePortions(std::move(portions))
 {
     ui32 idx = 0;

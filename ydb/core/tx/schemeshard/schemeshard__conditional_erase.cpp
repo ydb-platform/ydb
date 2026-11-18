@@ -79,6 +79,9 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
     }
 
     void DoExecuteOnTable(TTableInfo::TPtr tableInfo, const TPathId tablePathId, const TActorContext& ctx) {
+        if (Self->IsDatabaseFreezeBlocking(tablePathId)) {
+            return;
+        }
         if (!tableInfo->IsTTLEnabled()) {
             LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTL is not enabled for table #P1"
                 << ", at schemeshard: " << Self->TabletID());

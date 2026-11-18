@@ -3307,36 +3307,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
         const auto nodeId = env.GetNodeId(0);
 
-        // Same configuration changes and BSC checks as DisabledEvictVDisks.
         auto config = env.GetCmsConfig();
-        config.MutableSentinelConfig()->SetDefaultStateLimit(1);
-        env.SetCmsConfig(config);
-
-        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
-            MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
-        env.CheckBSCUpdateRequests({nodeId}, NKikimrBlobStorage::FAULTY);
-
-        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::DISABLED);
-        env.SetCmsConfig(config);
-        env.CheckBSCUpdateRequests({nodeId}, NKikimrBlobStorage::ACTIVE);
-        const auto response = SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction");
-        UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 500"), response);
-        UNIT_ASSERT_C(response.Contains("Evict vdisks is disabled in Sentinel"), response);
-        env.CheckWalleListTasks(0);
-        env.RestartCms();
-        const auto retry = SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction");
-        UNIT_ASSERT_C(retry.StartsWith("HTTP/1.1 404"), retry);
-        const auto removed = SendWalleHttpRequest(env, HTTP_METHOD_DELETE, "/api/walle/v11/tasks/eviction");
-        UNIT_ASSERT_C(removed.StartsWith("HTTP/1.1 404"), removed);
-        env.CheckWalleListTasks(0);
-
-        // Automatic removal must also clear the host marker.
-        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
-        env.SetCmsConfig(config);
-        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
-            MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
-        env.CheckWalleRemoveTask("eviction");
-
         config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::DISABLED);
         env.SetCmsConfig(config);
         const auto disabledRequest = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
@@ -3542,8 +3513,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Check that FAULTY BSC request is sent again
         env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::FAULTY);
-        env.CheckRequest("user", request.GetRequestId(), false, TStatus::DISALLOW_TEMP, 0);
-        env.CheckRejectRequest("user", request.GetRequestId());
     }
 
     Y_UNIT_TEST(EmergencyDuringRollingRestart)

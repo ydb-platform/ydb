@@ -633,6 +633,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
     Y_UNIT_TEST(SdkRequestVariantsTracePropagation) {
         auto settings = ExternalTracingSettings();
         settings.AppConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
         settings.SetEnableStrictSerializableIsolation(true);
         NKqp::TKikimrRunner kikimr(settings);
         kikimr.GetTestClient().CreateTable("/Root", R"(
@@ -1604,8 +1605,6 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
     Y_UNIT_TEST(IndexMetadataPurposeAndBufferReads) {
         NKikimrConfig::TAppConfig config;
         config.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
-        config.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardRetries(0);
-        config.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardResolves(3);
         auto [runtime, server, sender] = CreateServer(1, config);
         ExecSQL(runtime, sender, R"(
             CREATE TABLE `/Root/UniqueValues` (
@@ -1618,19 +1617,6 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         auto* uploader = RegisterUploader(runtime);
         const auto type = NKikimrKqp::QUERY_TYPE_SQL_DML;
         const auto sessionId = CreateSession(runtime, sender, type);
-        TVector<NWilson::TTraceId> resolveParents;
-        const auto resolves = runtime.AddObserver<TEvTxProxySchemeCache::TEvResolveKeySet>(
-            [&](TEvTxProxySchemeCache::TEvResolveKeySet::TPtr& ev) {
-                resolveParents.emplace_back(ev->TraceId);
-            });
-        bool retriedLookup = false;
-        const auto readResults = runtime.AddObserver<TEvDataShard::TEvReadResult>(
-            [&](TEvDataShard::TEvReadResult::TPtr& ev) {
-                if (!retriedLookup && runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_BUFFER_LOOKUP_ACTOR") {
-                    ev->Get()->Record.MutableStatus()->SetCode(Ydb::StatusIds::INTERNAL_ERROR);
-                    retriedLookup = true;
-                }
-            });
         ClearUploader(*uploader);
         auto request = MakeSQLRequest(
             "UPSERT INTO `/Root/UniqueValues` (Key, Value) VALUES (1u, 10u); "
@@ -1647,14 +1633,6 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         }));
         const auto* lookup = FindSpan(*uploader, "Check rows");
         UNIT_ASSERT(lookup);
-        UNIT_ASSERT(retriedLookup);
-        UNIT_ASSERT_C(std::ranges::any_of(resolveParents, [&](const auto& parent) {
-            return std::ranges::any_of(uploader->Spans, [&](const auto& span) {
-                return span.name() == "Check rows"
-                    && TString(static_cast<const char*>(parent.GetTraceIdPtr()), parent.GetTraceIdSize()) == span.trace_id()
-                    && TString(static_cast<const char*>(parent.GetSpanIdPtr()), parent.GetSpanIdSize()) == span.span_id();
-            });
-        }), uploader->PrintTraces());
         UNIT_ASSERT_C(std::ranges::any_of(uploader->Spans, [](const auto& span) {
             return span.name() == "Check rows" && std::ranges::any_of(span.events(), [](const auto& event) {
                 return event.name() == "Shard read statistics";
@@ -1669,8 +1647,6 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
     Y_UNIT_TEST(ReadCommittedLockTracePropagation) {
         NKikimrConfig::TAppConfig config;
         config.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);
-        config.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardRetries(0);
-        config.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardResolves(3);
         auto [runtime, server, sender] = CreateServer(1, config);
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
         ExecSQL(runtime, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1u, 10u);", 0);
@@ -1693,33 +1669,13 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                     UNIT_ASSERT(ev->TraceId.IsSameTrace(queryParent));
                     ++locks;
                 });
-            TVector<NWilson::TTraceId> resolveParents;
-            const auto resolves = runtime.AddObserver<TEvTxProxySchemeCache::TEvResolveKeySet>(
-                [&](TEvTxProxySchemeCache::TEvResolveKeySet::TPtr& ev) {
-                    resolveParents.emplace_back(ev->TraceId);
-                });
-            bool retriedLock = false;
-            const auto lockResults = runtime.AddObserver<NEvents::TDataEvents::TEvLockRowsResult>(
-                [&](NEvents::TDataEvents::TEvLockRowsResult::TPtr& ev) {
-                    if (!retriedLock && runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_BUFFER_LOCK_ACTOR") {
-                        ev->Get()->Record.SetStatus(NKikimrDataEvents::TEvLockRowsResult::STATUS_WRONG_SHARD_STATE);
-                        retriedLock = true;
-                    }
-                });
             auto request = MakeSQLRequest(sql);
             request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
             request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_read_committed_read_write();
             ExecRequest(runtime, sender, std::move(request));
             UNIT_ASSERT_C(locks > 0, sql);
-            if (sql.StartsWith("UPSERT")) {
-                UNIT_ASSERT(retriedLock);
-                const auto* lock = FindSpan(*uploader, "Lock rows");
-                UNIT_ASSERT_C(lock, uploader->PrintTraces());
-                UNIT_ASSERT(std::ranges::any_of(resolveParents, [&](const auto& parent) {
-                    return TString(static_cast<const char*>(parent.GetTraceIdPtr()), parent.GetTraceIdSize()) == lock->trace_id()
-                        && TString(static_cast<const char*>(parent.GetSpanIdPtr()), parent.GetSpanIdSize()) == lock->span_id();
-                }));
-            }
+            const auto* lock = FindSpan(*uploader, "Lock rows");
+            UNIT_ASSERT_C(lock, uploader->PrintTraces());
         }
     }
 

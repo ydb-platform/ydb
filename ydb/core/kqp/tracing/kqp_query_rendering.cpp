@@ -229,10 +229,6 @@ TQueryTraceDescription DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery& quer
                         hasReads = true;
                         noteTable(readTable, multiRead, input.GetVectorResolve().GetTable().GetPath());
                         break;
-                    case NKqpProto::TKqpPhyConnection::kVectorSearch:
-                        hasReads = true;
-                        noteTable(readTable, multiRead, input.GetVectorSearch().GetTable().GetPath());
-                        break;
                     default:
                         break;
                 }

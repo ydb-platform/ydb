@@ -163,7 +163,10 @@ class RestartToAnotherVersionFixture:
             yield
 
         self.stop_driver()
-        self.cluster.stop()
+        # Force-kill: graceful drain during teardown can SIGSEGV ydbd (e.g. MiniKQL
+        # DecimalEquals in a still-running KQP scan while ColumnShard gets ReasonPill).
+        # Test body already finished; we do not need a clean cluster shutdown here.
+        self.cluster.stop(kill=True)
 
     def _new_readiness_table_name(self):
         self._readiness_seq = getattr(self, "_readiness_seq", 0) + 1
@@ -366,7 +369,8 @@ class MixedClusterFixture:
             yield
 
         self.stop_driver()
-        self.cluster.stop()
+        # See RestartToAnotherVersionFixture.setup_cluster: teardown does not need drain.
+        self.cluster.stop(kill=True)
 
 
 all_binary_combinations_rolling = [
@@ -518,7 +522,8 @@ class RollingUpgradeAndDowngradeFixture:
             yield
 
         self.stop_driver()
-        self.cluster.stop()
+        # See RestartToAnotherVersionFixture.setup_cluster: teardown does not need drain.
+        self.cluster.stop(kill=True)
 
     def roll(self):
         all_nodes = [(id, n, "node") for id, n in self.cluster.nodes.items()] + \

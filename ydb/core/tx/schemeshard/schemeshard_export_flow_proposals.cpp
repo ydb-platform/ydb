@@ -337,7 +337,23 @@ void FillEncryptionSettings(
                 // even if changefeeds or indexes were added in the meantime.
                 const auto& snapshot = mapping.GetIndexExportSnapshot();
                 auto& table = *task.MutableTable()->MutableTable();
-                table.MutableTableIndexes()->CopyFrom(snapshot.GetTable().GetTable().GetTableIndexes());
+                // A KMeans build can publish its detected settings after index prefixes have been frozen.
+                auto indexes = snapshot.GetTable().GetTable().GetTableIndexes();
+                for (auto& saved : indexes) {
+                    if (!saved.HasVectorIndexKmeansTreeDescription()) {
+                        continue;
+                    }
+                    for (const auto& current : table.GetTableIndexes()) {
+                        if (current.GetPathOwnerId() == saved.GetPathOwnerId()
+                            && current.GetLocalPathId() == saved.GetLocalPathId()
+                            && current.GetState() == NKikimrSchemeOp::EIndexStateReady
+                            && current.HasVectorIndexKmeansTreeDescription()) {
+                            *saved.MutableVectorIndexKmeansTreeDescription() = current.GetVectorIndexKmeansTreeDescription();
+                            break;
+                        }
+                    }
+                }
+                table.MutableTableIndexes()->Swap(&indexes);
                 table.MutableCdcStreams()->CopyFrom(snapshot.GetTable().GetTable().GetCdcStreams());
                 task.MutableChangefeedUnderlyingTopics()->CopyFrom(snapshot.GetChangefeedUnderlyingTopics());
             }

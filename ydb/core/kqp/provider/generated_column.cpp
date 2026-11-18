@@ -355,6 +355,10 @@ void CollectColumnRefs(const TExprNode& body, const TExprNode* rowArg, THashSet<
 
 }   // namespace
 
+bool IsNonRowColumnNode(const TExprNode& node) {
+    return node.IsCallable() && IsNonRowNode(node);
+}
+
 TExprNode::TPtr CompileGeneratedExpr(const TString& sqlText, const TString& columnName, TExprContext& ctx,
     NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder, const IModuleResolver::TPtr& moduleResolver)
 {

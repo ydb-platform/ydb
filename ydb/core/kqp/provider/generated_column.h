@@ -12,6 +12,9 @@ TString AssembleGeneratedQuery(const TString& exprBody);
 // Wraps a raw DEFAULT expression body in a FROM-less SELECT envelope
 TString AssembleDefaultQuery(const TString& exprBody);
 
+// Identifies callables that require table, file or session context.
+bool IsNonRowColumnNode(const TExprNode& node);
+
 // Compiles the stored SQL text of a GENERATED column into
 // a normalized `(lambda '(row) <expr>)` whose single argument is the table row
 TExprNode::TPtr CompileGeneratedExpr(const TString& sqlText, const TString& columnName, TExprContext& ctx,

@@ -445,7 +445,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             }
             return false;
         });
-        UNIT_ASSERT_LT(lag->Val(), TDuration::Minutes(1).MilliSeconds());
+        UNIT_ASSERT_LT(lag->Val(), static_cast<i64>(TDuration::Minutes(1).MilliSeconds()));
     }
 
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {

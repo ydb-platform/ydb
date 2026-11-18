@@ -1297,6 +1297,18 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         UNIT_ASSERT_C(found, "column v not found in DescribeTable");
     }
 
+    Y_UNIT_TEST(DumpDescribeRejectsDefaultExpression) {
+        TTestFixture fixture;
+        fixture.Exec(ValueTableDDL());
+        auto session = fixture.Runner().GetTableClient().CreateSession().ExtractValueSync().GetSession();
+        auto describe = session.DescribeTable("/Root/TestTable",
+            NYdb::NTable::TDescribeTableSettings().RequestType("dump")).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::UNSUPPORTED, describe.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(describe.GetIssues().ToString(), "/Root/TestTable");
+        UNIT_ASSERT_STRING_CONTAINS(describe.GetIssues().ToString(),
+            "exporting tables with DEFAULT expressions is not supported");
+    }
+
     Y_UNIT_TEST(SurvivesSchemeShardRestart) {
         TTestFixture fixture;
         const TString expression = DefaultExpr;

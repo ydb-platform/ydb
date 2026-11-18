@@ -58,7 +58,7 @@ namespace NTable {
     private:
         void AddPageSize(const TPageCollection *collection, const TPageLocation& location)
         {
-            if (Touched[collection].insert(location.Offset).second) {
+            if (Touched[collection->Id].insert(location.Offset).second) {
                 Pages++;
                 Bytes += location.Size;
             }
@@ -66,7 +66,7 @@ namespace NTable {
 
     private:
         IPages* Env;
-        THashMap<const TPageCollection*, THashSet<TPageOffset>> Touched;
+        THashMap<TLogoBlobID, THashSet<TPageOffset>> Touched;
         ui64 Pages = 0;
         ui64 Bytes = 0;
     };

@@ -14,6 +14,7 @@ SRCS(
     flat_cxx_database_ut.cpp
     ut_db_iface.cpp
     ut_db_scheme.cpp
+    ut_dbase_size.cpp
     flat_executor_ut.cpp
     flat_executor_alter_ut.cpp
     flat_executor_database_ut.cpp

@@ -1,6 +1,8 @@
 YQL_LIBRARY()
 
 SRCS(
+    hnsw_index/hnsw_index_build_unit.cpp
+    hnsw_index/hnsw_index_build_unit.h
     datashard.h
     datashard__engine_host.h
     datashard__lock_rows.h
@@ -34,12 +36,18 @@ SRCS(
     read_iterator.h
     read_table_scan.h
     setup_sys_locks.h
+    build_index/table_range_reader.h
+    build_index/vector_resolve_actor.h
+    build_index/delta_kmeans.cpp
     build_index/filter_kmeans.cpp
     build_index/fulltext.cpp
     build_index/fulltext_dict.cpp
+    build_index/table_range_reader.cpp
+    build_index/vector_resolve_actor.cpp
     build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
     build_index/secondary_index.cpp
+    cdc_aggregated_heartbeats.cpp
     cdc_stream_heartbeat.cpp
     cdc_stream_scan.cpp
     change_collector_cdc_stream.cpp
@@ -470,12 +478,15 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/formats
     ydb/core/io_formats/ydb_dump
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
     ydb/core/split
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tx/cdc_aggregator/public
     ydb/core/tx/datashard/snapshot_retention
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/locks
@@ -523,6 +534,7 @@ ELSE()
     PEERDIR(
         contrib/libs/apache/arrow
         ydb/core/formats/arrow
+        ydb/library/table_digest
     )
 ENDIF()
 
@@ -545,6 +557,7 @@ RECURSE_FOR_TESTS(
     ut_disk_quotas
     ut_direct_restore
     ut_erase_rows
+    ut_erase_rows_proxy
     ut_export
     ut_external_blobs
     ut_followers

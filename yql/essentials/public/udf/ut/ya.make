@@ -1,6 +1,7 @@
 UNITTEST_FOR(yql/essentials/public/udf)
 
 SRCS(
+    sanitizer_utils_ut.cpp
     udf_counter_ut.cpp
     udf_value_ut.cpp
     udf_data_type_ut.cpp

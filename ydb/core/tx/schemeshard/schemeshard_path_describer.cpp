@@ -255,6 +255,7 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
                 return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
@@ -1699,6 +1700,15 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     pathId.ToProto(desc.MutablePathId());
     info->Serialize(desc);
 
+    if (const auto& shardIdx = info->AggregatorShardIdx; shardIdx != InvalidShardIdx) {
+        Y_ABORT_UNLESS(ShardInfos.contains(shardIdx));
+        const auto& shardInfo = ShardInfos.at(shardIdx);
+
+        if (shardInfo.TabletID != InvalidTabletId) {
+            desc.SetAggregatorTabletId(ui64(shardInfo.TabletID));
+        }
+    }
+
     Y_ABORT_UNLESS(PathsById.contains(pathId));
     auto path = PathsById.at(pathId);
 
@@ -1791,11 +1801,10 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
     desc.SetVersion(info->AlterVersion);
 
     if (const auto& shardIdx = info->ControllerShardIdx; shardIdx != InvalidShardIdx) {
-        Y_ABORT_UNLESS(ShardInfos.contains(shardIdx));
-        const auto& shardInfo = ShardInfos.at(shardIdx);
-
-        if (shardInfo.TabletID != InvalidTabletId) {
-            desc.SetControllerId(ui64(shardInfo.TabletID));
+        // The controller shard may already be deleted if the replication is being dropped
+        const auto it = ShardInfos.find(shardIdx);
+        if (it != ShardInfos.end() && it->second.TabletID != InvalidTabletId) {
+            desc.SetControllerId(ui64(it->second.TabletID));
         }
     }
 }

@@ -30,7 +30,12 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    mkql
+)
+
 RECURSE_FOR_TESTS(
+    table_digest
     ut
     ut_pg
 )

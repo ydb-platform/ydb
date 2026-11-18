@@ -12,72 +12,18 @@
 #include "secret_settings.h"
 
 #include <yql/essentials/sql/settings/partitioning.h>
-#include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 #include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/yql_paths.h>
 
 #include <util/generic/scope.h>
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
-#include <util/string/strip.h>
-
-#include <library/cpp/protobuf/util/simple_reflection.h>
 
 namespace {
 
 using namespace NSQLTranslationV1;
 
 using NSQLTranslation::ESqlMode;
-
-template <typename Callback>
-void VisitAllFields(const NProtoBuf::Message& msg, Callback& callback) {
-    const auto* descr = msg.GetDescriptor();
-    for (int i = 0; i < descr->field_count(); ++i) {
-        const auto* fd = descr->field(i);
-        if (fd->cpp_type() != NProtoBuf::FieldDescriptor::CPPTYPE_MESSAGE) {
-            continue;
-        }
-        NProtoBuf::TConstField field(msg, fd);
-        if (field.IsMessage()) {
-            for (size_t j = 0; j < field.Size(); ++j) {
-                const auto& message = *field.Get<NProtoBuf::Message>(j);
-                callback(message);
-                VisitAllFields(message, callback);
-            }
-        }
-    }
-}
-
-struct TTokenCollector {
-    void operator()(const NProtoBuf::Message& message) {
-        if (const auto* token = dynamic_cast<const NSQLv1Generated::TToken*>(&message)) {
-            if (!Tokens.empty()) {
-                Tokens << ' ';
-            }
-            Tokens << token->GetValue();
-        }
-    }
-
-    TStringBuilder Tokens;
-};
-
-TString CollectTokens(const TRule_select_stmt& selectStatement) {
-    TTokenCollector tokenCollector;
-    VisitAllFields(selectStatement, tokenCollector);
-    return tokenCollector.Tokens;
-}
-
-bool BuildContextRecreationQuery(TContext& context, TStringBuilder& query) {
-    TVector<TString> statements;
-    if (!SplitQueryToStatements(context.Lexers, context.Parsers, context.Query, statements, context.Issues, context.Settings)) {
-        return false;
-    }
-
-    for (size_t id : context.ForAllStatementsParts) {
-        query << statements[id] << '\n';
-    }
-    return true;
-}
 
 TNodeResult TryYqlSelect(
     TContext& context,
@@ -1777,7 +1723,7 @@ TMaybe<TVector<TEncoding>> ColumnEncoding(const TRule_encoding& node, TTranslati
 }
 
 TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTranslation& ctx) {
-    TNodePtr defaultExpr;
+    TMaybe<TDefaultExpression> defaultExpression;
     TVector<TIdentifier> families;
     TMaybe<TCompression> compression;
     bool nullable = true;
@@ -1881,7 +1827,8 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
                     };
                     ctx.Context().DisableLegacyNotNull = true;
 
-                    defaultExpr = Unwrap(expr.Build(opt.GetRule_expr2()));
+                    auto& defaultValue = defaultExpression.ConstructInPlace();
+                    defaultValue.Expr = Unwrap(expr.Build(opt.GetRule_expr2()));
 
                     if (AnyOf(ctx.Context().Issues.begin(), ctx.Context().Issues.end(), [](const auto& issue) {
                             return issue.GetCode() == TIssuesIds::YQL_MISSING_IS_BEFORE_NOT_NULL;
@@ -1894,9 +1841,12 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
                         return {};
                     }
 
-                    if (!defaultExpr) {
+                    if (!defaultValue.Expr) {
                         return {};
                     }
+
+                    defaultValue.ContextPrefix = ctx.Context().ContextRecreationQuery();
+                    defaultValue.ExprText = ctx.Context().QueryText(opt.GetRule_expr2());
 
                     break;
                 }
@@ -1944,24 +1894,9 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
                         }
                     }
 
-                    TStringBuilder contextPrefix;
-                    if (!BuildContextRecreationQuery(ctx.Context(), contextPrefix)) {
-                        return {};
-                    }
+                    TString contextPrefix = ctx.Context().ContextRecreationQuery();
 
-                    const auto& lparen = opt.GetToken3();
-                    const auto& rparen = opt.GetToken5();
-                    auto begin = GetQueryPosition(ctx.Context().Query, lparen);
-                    auto end = GetQueryPosition(ctx.Context().Query, rparen);
-
-                    if (begin == std::string::npos || end == std::string::npos) {
-                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken2());
-                        ctx.Context().Error(pos) << "Failed to extract GENERATED ALWAYS AS expression text";
-                        return {};
-                    }
-
-                    begin += lparen.value().size();
-                    TString exprBody = StripString(ctx.Context().Query.substr(begin, end - begin));
+                    TString exprBody = ctx.Context().QueryText(opt.GetRule_expr4());
 
                     bool generatedStored = false;
                     if (opt.HasBlock6()) {
@@ -1984,7 +1919,7 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
     }
 
     return TColumnOptions{
-        .DefaultExpr = std::move(defaultExpr),
+        .Default = std::move(defaultExpression),
         .Families = std::move(families),
         .Compression = std::move(compression),
         .Nullable = nullable,
@@ -2004,7 +1939,7 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         return {};
     }
 
-    auto&& [defaultExpr, families, compression, nullable, columnEncoding, generated] = columnOptions.GetRef();
+    auto&& [defaultExpression, families, compression, nullable, columnEncoding, generated] = columnOptions.GetRef();
 
     if (!type) {
         type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
@@ -2019,7 +1954,7 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         .Name = name,
         .Type = std::move(type),
         .Families = families,
-        .DefaultExpr = defaultExpr,
+        .Default = defaultExpression,
         .Compression = compression,
         .Nullable = nullable,
         .Serial = serial,
@@ -4439,18 +4374,20 @@ TNodePtr TSqlTranslation::DoStatement(const TRule_do_stmt& stmt, bool makeLambda
 bool TSqlTranslation::DefineActionOrSubqueryBody(TSqlQuery& query, TBlocks& blocks, const TRule_define_action_or_subquery_body& body) {
     if (body.HasBlock2()) {
         Ctx_.PushCurrentBlocks(&blocks);
+        const auto contextPartsSize = Ctx_.ForAllStatementsParts.size();
         Y_DEFER {
             Ctx_.PopCurrentBlocks();
+            Ctx_.ForAllStatementsParts.resize(contextPartsSize);
         };
 
-        size_t statementNumber = 0;
-        if (!query.Statement(blocks, body.GetBlock2().GetRule_sql_stmt_core1(), statementNumber++)) {
+        const auto& firstStatement = body.GetBlock2().GetRule_sql_stmt_core1();
+        if (!query.Statement(blocks, firstStatement, GetTokenIndexRange(firstStatement))) {
             return false;
         }
 
         for (const auto& nestedStmtItem : body.GetBlock2().GetBlock2()) {
             const auto& nestedStmt = nestedStmtItem.GetRule_sql_stmt_core2();
-            if (!query.Statement(blocks, nestedStmt, statementNumber++)) {
+            if (!query.Statement(blocks, nestedStmt, GetTokenIndexRange(nestedStmt))) {
                 return false;
             }
         }
@@ -4970,10 +4907,8 @@ bool TSqlTranslation::ParseViewQuery(
     std::map<TString, TDeferredAtom>& features,
     const TRule_select_stmt& query) {
     TStringBuilder queryText;
-    if (!BuildContextRecreationQuery(Ctx_, queryText)) {
-        return false;
-    }
-    queryText << CollectTokens(query);
+    queryText << Ctx_.ContextRecreationQuery();
+    queryText << Ctx_.QueryText(query, {.AreCommentSkipped = true, .IsWhitespaceNormalized = true});
 
     ui32 flags = NYql::TAstNodeFlags::ArbitraryContent | NYql::TAstNodeFlags::UnstableFormat;
     features["query_text"] = {Ctx_.Pos(), queryText, flags};
@@ -4995,7 +4930,6 @@ bool TSqlTranslation::ParseViewQuery(
     std::map<TString, TDeferredAtom>& features,
     const TRule_define_action_or_subquery_body& body,
     const NSQLv1Generated::TToken& beforeToken,
-    const NSQLv1Generated::TToken& afterToken,
     const TString& service,
     const TDeferredAtom& cluster)
 {
@@ -5046,38 +4980,11 @@ bool TSqlTranslation::ParseViewQuery(
     blockNode->Add("block", blockNode->Q(queryNode));
     features[TStreamingQuerySettings::QUERY_AST_FEATURE] = TDeferredAtom(blockNode, Ctx_);
 
-    auto begin = GetQueryPosition(Ctx_.Query, beforeToken);
-    auto end = GetQueryPosition(Ctx_.Query, afterToken);
-    YQL_ENSURE(begin < Ctx_.Query.size() && end < Ctx_.Query.size());
-    begin += beforeToken.value().size();
-    YQL_ENSURE(begin < end);
-
     ui32 flags = NYql::TAstNodeFlags::ArbitraryContent | NYql::TAstNodeFlags::UnstableFormat;
     features[TStreamingQuerySettings::QUERY_TEXT_FEATURE] =
-        TDeferredAtom(Ctx_.Pos(), Ctx_.Query.substr(begin, end - begin), flags);
+        TDeferredAtom(Ctx_.Pos(), Ctx_.QueryText(body, {.IsSurroundingTriviaIncluded = true}), flags);
 
     return true;
-}
-
-std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token) {
-    if (1 == token.GetLine() && 0 == token.GetColumn()) {
-        return 0;
-    }
-
-    TPosition pos = {0, 1};
-    TTextWalker walker(pos, /*utf8Aware=*/true);
-
-    std::string::size_type position = 0;
-    for (char c : query) {
-        walker.Advance(c);
-        ++position;
-
-        if (pos.Row == token.GetLine() && pos.Column == token.GetColumn()) {
-            return position;
-        }
-    }
-
-    return std::string::npos;
 }
 
 class TReturningListColumns: public INode {

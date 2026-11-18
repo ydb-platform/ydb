@@ -29,8 +29,8 @@ protected:
         TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
-        AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
-        AFL_VERIFY(proto.HasCountMinSketch());
+        YDB_LOG_VERIFY(TBase::DoDeserializeFromProto(proto));
+        YDB_LOG_VERIFY(proto.HasCountMinSketch());
         auto& sketch = proto.GetCountMinSketch();
         for (auto&& i : sketch.GetColumnIds()) {
             AddColumnId(i);

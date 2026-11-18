@@ -1,7 +1,7 @@
 #include "overload_manager_service.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_actor.h>

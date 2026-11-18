@@ -270,7 +270,7 @@ public:
                     if (to_lower(*cluster) == "default") {
                         cluster = State_->Gateway->GetDefaultClusterName();
                         node.ChildRef(1) = ctx.NewAtom(node.Pos(), *cluster);
-                        return true;
+                        return ValidateNilePermissions(node, *State_, ctx);
                     }
 
                     const bool validate = State_->Configuration->ValidateClusters.Get().GetOrElse(DEFAULT_VALIDATE_CLUSTERS);
@@ -280,7 +280,7 @@ public:
                     }
                 }
 
-                return true;
+                return ValidateNilePermissions(node, *State_, ctx);
             }
         }
 

@@ -535,7 +535,23 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        const auto parentIndex = context.SS->Indexes.find(path->ParentPathId);
+        const bool hasReadyUniqueIndex = parentIndex != context.SS->Indexes.end()
+            && parentIndex->second->Type == NKikimrSchemeOp::EIndexTypeGlobalUnique
+            && parentIndex->second->State == NKikimrSchemeOp::EIndexStateReady;
+        const auto& alterPartitionConfig = table->AlterData->PartitionConfigCompatible();
+        const bool disablesShadowData = alterPartitionConfig.HasShadowData()
+            && !alterPartitionConfig.GetShadowData();
         table->FinishAlter();
+
+        if (disablesShadowData && hasReadyUniqueIndex) {
+            // Republish the index's Children listing with the implementation table's new schema version.
+            auto indexPath = context.SS->PathsById.at(path->ParentPathId);
+            ++indexPath->DirAlterVersion;
+            context.SS->PersistPathDirAlterVersion(db, indexPath);
+            context.SS->ClearDescribePathCaches(indexPath);
+            context.OnComplete.PublishToSchemeBoard(OperationId, indexPath->PathId);
+        }
 
         path->SetAsyncReplica(table->IsAsyncReplica());
 
@@ -698,7 +714,10 @@ public:
                     .NotBackupTable();
             }
 
-            if (!context.IsAllowedPrivateTables) {
+            const bool isInternalShadowDataRepair = Transaction.GetInternal()
+                && Transaction.GetOperationType() == NKikimrSchemeOp::ESchemeOpRepairIndexShadowData
+                && AllowShadowData;
+            if (!context.IsAllowedPrivateTables && !isInternalShadowDataRepair) {
                 checks.IsCommonSensePath(); //forbid alter impl index tables outside consistent operation
             }
 
@@ -786,6 +805,32 @@ public:
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
                     return result;
                 }
+            }
+        }
+
+        const auto& replicationConfig = table->ReplicationConfig();
+        const auto replicationPathId = replicationConfig.HasOwnerPathId()
+            ? TPathId::FromProto(replicationConfig.GetOwnerPathId()) : TPathId{};
+        if (alter.HasReplicationConfig()) {
+            const auto& config = alter.GetReplicationConfig();
+            const auto newReplicationPathId = config.HasOwnerPathId()
+                ? TPathId::FromProto(config.GetOwnerPathId()) : TPathId{};
+            if (replicationPathId && replicationPathId != newReplicationPathId
+                && !Transaction.HasExpectedReplicationOwnerPathId())
+            {
+                const auto replicationPath = context.SS->PathsById.find(replicationPathId);
+                // A DROP in progress still owns its tables until the controller
+                // has stopped and SchemeShard has committed deletion of its path.
+                if (!newReplicationPathId || !context.SS->IsLocalId(replicationPathId)
+                    || (replicationPath != context.SS->PathsById.end() && !replicationPath->second->Dropped())) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "Table is owned by another replication");
+                    return result;
+                }
+            }
+            if (newReplicationPathId && replicationConfig.GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+                && !replicationConfig.HasOwnerPathId()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot attach a replication to a table that is already read-only");
+                return result;
             }
         }
 
@@ -1342,6 +1387,26 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
             return {CreateAlterColumnTable(id, tx)};
         }
         return {CreateAlterTable(id, tx)};
+    }
+
+    // Fence cleanup before creating sub-operations for an index table.
+    if (tx.HasExpectedReplicationOwnerPathId()) {
+        const auto checks = path.Check().NotUnderOperation();
+        if (!checks) {
+            return {CreateReject(id, checks.GetStatus(), checks.GetError())};
+        }
+        const auto table = context.SS->Tables.find(path->PathId);
+        if (table != context.SS->Tables.end()) {
+            if (table->second->AlterData) {
+                return {CreateReject(id, NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight")};
+            }
+            const auto& config = table->second->ReplicationConfig();
+            if (config.HasOwnerPathId()
+                && TPathId::FromProto(config.GetOwnerPathId()) != TPathId::FromProto(tx.GetExpectedReplicationOwnerPathId())) {
+                return {CreateReject(id, NKikimrScheme::StatusSuccess,
+                    "Table is owned by another replication; cleanup skipped")};
+            }
+        }
     }
 
     if (auto result = DropLocalBloomIndexesOnFilterDisable(id, tx, path, context)) {

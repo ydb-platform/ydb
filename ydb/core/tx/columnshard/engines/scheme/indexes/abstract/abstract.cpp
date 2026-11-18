@@ -5,12 +5,12 @@
 namespace NKikimr::NOlap::NIndexes {
 
 const NKikimr::NOlap::TBlobRange& TChunkOriginalData::GetBlobRangeVerified() const {
-    AFL_VERIFY(Range);
+    YDB_LOG_VERIFY(Range);
     return *Range;
 }
 
 const TString& TChunkOriginalData::GetDataVerified() const {
-    AFL_VERIFY(Data);
+    YDB_LOG_VERIFY(Data);
     return *Data;
 }
 

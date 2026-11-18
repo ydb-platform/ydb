@@ -41,7 +41,7 @@ public:
     virtual ~ISourcesConstructor() = default;
 
     void FillReadStats(const std::shared_ptr<TReadStats>& stats) const {
-        AFL_VERIFY(stats);
+        YDB_LOG_VERIFY(stats);
         DoFillReadStats(*stats);
     }
 
@@ -73,7 +73,7 @@ public:
     std::unique_ptr<TDataSourceLease> TryExtractNext(const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit);
 
     void InitCursor(const std::shared_ptr<IScanCursor>& cursor) {
-        AFL_VERIFY(!InitCursorFlag);
+        YDB_LOG_VERIFY(!InitCursorFlag);
         InitCursorFlag = true;
         if (cursor && cursor->IsInitialized()) {
             return DoInitCursor(cursor);
@@ -129,7 +129,7 @@ public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
     std::unique_ptr<ISourcesConstructor> ExtractSelectInfo() const {
-        AFL_VERIFY(!!SourcesConstructor);
+        YDB_LOG_VERIFY(!!SourcesConstructor);
         return std::move(SourcesConstructor);
     }
 
@@ -166,12 +166,12 @@ public:
         if (it == LockConflictCounters.end()) {
             it = LockConflictCounters.emplace(lockId, std::make_shared<TAtomicCounter>()).first;
         }
-        AFL_VERIFY(ConflictingWrites.emplace(writeId, TWriteIdInfo(lockId, it->second)).second);
+        YDB_LOG_VERIFY(ConflictingWrites.emplace(writeId, TWriteIdInfo(lockId, it->second)).second);
     }
 
     void SetWriteConflicting(const TInsertWriteId writeId) const {
         auto it = ConflictingWrites.find(writeId);
-        AFL_VERIFY(it != ConflictingWrites.end());
+        YDB_LOG_VERIFY(it != ConflictingWrites.end());
         it->second.MarkAsConflicting();
     }
 

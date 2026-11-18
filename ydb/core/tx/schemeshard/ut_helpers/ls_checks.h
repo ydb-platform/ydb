@@ -210,6 +210,8 @@ namespace NLs {
     TCheckFunc StreamSchemaChanges(bool value);
     TCheckFunc StreamAwsRegion(const TString& value);
     TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed);
+    TCheckFunc StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatMode mode);
+    TCheckFunc StreamHasAggregatorTabletId(bool value);
     TCheckFunc RetentionPeriod(const TDuration& value);
     TCheckFunc ConsumerExist(const TString& name);
     TCheckFunc ConsumersSize(ui64 size);

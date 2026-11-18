@@ -11,6 +11,7 @@
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/ydb_convert/kesus_description.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -21,6 +22,43 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateKesusPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo& importInfo,
+    ui32 itemIdx,
+    TString& error
+) {
+    error.clear();
+    const auto& item = importInfo.Items.at(itemIdx);
+    Y_ABORT_UNLESS(item.Kesus);
+
+    const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
+    std::pair<TString, TString> wdAndPath;
+    if (!TrySplitPathByDb(item.DstPathName, domainPath.PathString(), wdAndPath, error)) {
+        return nullptr;
+    }
+
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
+    auto& record = propose->Record;
+    auto& modifyScheme = *record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateKesus);
+    // Let the scheme operation create missing directories from the relative name.
+    modifyScheme.SetWorkingDir(wdAndPath.first);
+    modifyScheme.SetInternal(true);
+    // Let the common import handler resume an already existing creation.
+    modifyScheme.SetFailOnExist(false);
+    FillKesusDescription(*modifyScheme.MutableKesus(), item.Kesus->node().config(), wdAndPath.second);
+    modifyScheme.MutableKesus()->MutableConfig()->clear_path();
+
+    FillOwner(record, item.Permissions);
+    record.SetOwner(ChooseAppropriateOwner(record, AppData()));
+    if (!FillACL(modifyScheme, item.Permissions, error)) {
+        return nullptr;
+    }
+    return propose;
+}
 
 static bool FillDefaultValues(
     const NKikimr::NSchemeShard::TImportInfo::TItem& item,

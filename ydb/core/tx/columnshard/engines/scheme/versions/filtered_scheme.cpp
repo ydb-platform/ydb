@@ -22,12 +22,12 @@ TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& or
 }
 
 TColumnSaver TFilteredSnapshotSchema::GetColumnSaver(const ui32 columnId) const {
-    AFL_VERIFY(IdIntoIndex.contains(columnId));
+    YDB_LOG_VERIFY(IdIntoIndex.contains(columnId));
     return OriginalSnapshot->GetColumnSaver(columnId);
 }
 
 std::shared_ptr<TColumnLoader> TFilteredSnapshotSchema::GetColumnLoaderOptional(const ui32 columnId) const {
-    AFL_VERIFY(IdIntoIndex.contains(columnId));
+    YDB_LOG_VERIFY(IdIntoIndex.contains(columnId));
     return OriginalSnapshot->GetColumnLoaderOptional(columnId);
 }
 
@@ -44,7 +44,7 @@ std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::stri
 
 ui32 TFilteredSnapshotSchema::GetColumnIdVerified(const std::string& columnName) const {
     auto result = OriginalSnapshot->GetColumnIdVerified(columnName);
-    AFL_VERIFY(IdIntoIndex.contains(result));
+    YDB_LOG_VERIFY(IdIntoIndex.contains(result));
     return result;
 }
 

@@ -51,12 +51,14 @@ PEERDIR(
     library/cpp/threading/hot_swap
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/cms/console/events
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
     ydb/core/kqp/common
     ydb/core/kqp/common/buffer
     ydb/core/kqp/common/result_set_format
+    ydb/core/kqp/common/result_set_format/settings
     ydb/core/kqp/runtime/common
     ydb/core/kqp/runtime/streaming
     ydb/core/kqp/tracing
@@ -65,6 +67,7 @@ PEERDIR(
     ydb/core/persqueue/public
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/scheme/mkql
     ydb/core/tx/scheme_board
     ydb/core/ydb_convert
     ydb/library/aclib

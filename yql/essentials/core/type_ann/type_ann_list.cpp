@@ -716,11 +716,7 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                auto newDefault = defaultValue->ChildPtr(1);
-                if (defaultValue->Head().ChildrenSize() == 1) {
-                    newDefault = ctx.Expr.ReplaceNode(std::move(newDefault), defaultValue->Head().Head(),
-                        ExpandType(input->Pos(), finishType, ctx.Expr));
-                }
+                auto newDefault = ExpandTraitsDefaultLambda(*defaultValue, ExpandType(input->Pos(), finishType, ctx.Expr), ctx.Expr);
 
                 output = ctx.Expr.ChangeChild(*input, defaultValueIndex, std::move(newDefault));
                 return IGraphTransformer::TStatus::Repeat;

@@ -52,7 +52,7 @@ public:
             return *this;
         }
 
-        AFL_VERIFY(!Has());
+        YDB_LOG_VERIFY(!Has());
         const bool has = other.Defined.load(std::memory_order_acquire);
         if (has) {
             ::new (Ptr()) T(std::move(*other.Ptr()));
@@ -65,13 +65,13 @@ public:
     void Reset() = delete;
 
     void Set(const T& value) {
-        AFL_VERIFY(!Has());
+        YDB_LOG_VERIFY(!Has());
         ::new (Ptr()) T(value);
         Defined.store(true, std::memory_order_release);
     }
 
     void Set(T&& value) {
-        AFL_VERIFY(!Has());
+        YDB_LOG_VERIFY(!Has());
         ::new (Ptr()) T(std::move(value));
         Defined.store(true, std::memory_order_release);
     }

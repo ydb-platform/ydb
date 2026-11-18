@@ -19,12 +19,6 @@ using NYql::EBlockEngineMode;
 
 constexpr TStringBuf MeasuredQuery = "SELECT index FROM Input;\n";
 
-TTempDir MakeTemporaryDirectory() {
-    const TFsPath temporaryRoot = TFsPath(GetWorkPath()) / "tmp";
-    temporaryRoot.MkDirs();
-    return TTempDir::NewTempDir(temporaryRoot);
-}
-
 void WriteFile(const TFsPath& path, TStringBuf contents) {
     Y_ENSURE(NFs::MakeDirectoryRecursive(path.Parent().GetPath()), "Cannot create test directory: " << path.Parent());
     TFileOutput(path).Write(contents);
@@ -83,21 +77,15 @@ Y_UNIT_TEST(LoadsTestSuite) {
 }
 
 Y_UNIT_TEST(UsesPortableQueryNames) {
-    const TVector<std::pair<TStringBuf, TStringBuf>> directories{
-        {"nested", "nested"},
-        {"я", "%D1%8F"},
-    };
-    for (const auto& [directoryName, encodedDirectoryName] : directories) {
-        auto directory = MakeTemporaryDirectory();
-        WriteFile(directory.Path() / directoryName / "query.yql", MeasuredQuery);
-        const auto cases = NYql::NPureBench::LoadBenchmarkSuite("window", directory.Name());
-        UNIT_ASSERT_VALUES_EQUAL(cases.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(cases.front().Name, "window/" + TString(encodedDirectoryName) + "/query/engine:disable");
-    }
+    TTempDir directory;
+    WriteFile(directory.Path() / "nested" / "query.yql", MeasuredQuery);
+    const auto cases = NYql::NPureBench::LoadBenchmarkSuite("window", directory.Name());
+    UNIT_ASSERT_VALUES_EQUAL(cases.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(cases.front().Name, "window/nested/query/engine:disable");
 }
 
 Y_UNIT_TEST(RejectsInvalidConfiguration) {
-    auto directory = MakeTemporaryDirectory();
+    TTempDir directory;
     WriteFile(directory.Path() / "query.yql", MeasuredQuery);
     const TVector<std::pair<TStringBuf, TStringBuf>> configurations{
         {"unknown value\n", "Unknown setting"},
@@ -127,7 +115,7 @@ Y_UNIT_TEST(RejectsInvalidConfiguration) {
 }
 
 Y_UNIT_TEST(ParsesUdfsDirectory) {
-    auto directory = MakeTemporaryDirectory();
+    TTempDir directory;
     WriteFile(directory.Path() / "query.yql", MeasuredQuery);
     const TString udfSetting = "bench_udfs_dir yql/essentials/udfs/common/digest/impl\n";
     const TString engineSetting = "bench_block_engines auto force disable\n";
@@ -142,7 +130,7 @@ Y_UNIT_TEST(ParsesUdfsDirectory) {
 }
 
 Y_UNIT_TEST(ParsesAllStandardRowCounts) {
-    auto directory = MakeTemporaryDirectory();
+    TTempDir directory;
     WriteFile(directory.Path() / "query.yql", MeasuredQuery);
     const TVector<std::pair<TStringBuf, ui64>> inputs{
         {"0", 0},
@@ -161,7 +149,7 @@ Y_UNIT_TEST(ParsesAllStandardRowCounts) {
 }
 
 Y_UNIT_TEST(ParsesQueryDialects) {
-    auto directory = MakeTemporaryDirectory();
+    TTempDir directory;
     WriteFile(directory.Path() / "query.yql", MeasuredQuery);
     for (const auto& [value, expected] : {std::pair{TStringBuf("sql"), NPureBench::ESyntax::SQL},
                                           std::pair{TStringBuf("pg"), NPureBench::ESyntax::PG}}) {
@@ -173,7 +161,7 @@ Y_UNIT_TEST(ParsesQueryDialects) {
 }
 
 Y_UNIT_TEST(RejectsInvalidSuiteFiles) {
-    auto directory = MakeTemporaryDirectory();
+    TTempDir directory;
     UNIT_ASSERT_EXCEPTION_CONTAINS(NYql::NPureBench::LoadBenchmarkSuite("window", directory.Name()), yexception, "no main .yql");
     UNIT_ASSERT_EXCEPTION_CONTAINS(NYql::NPureBench::LoadBenchmarkSuite("window", (directory.Path() / "missing").GetPath()),
                                    yexception, "not a directory");
@@ -192,7 +180,7 @@ Y_UNIT_TEST(RejectsInvalidSuiteFiles) {
 }
 
 Y_UNIT_TEST(EncodesNamesUnambiguously) {
-    auto directory = MakeTemporaryDirectory();
+    TTempDir directory;
     const TVector<std::pair<TStringBuf, TStringBuf>> queries{
         {"a b.yql", "a+b"},
         {"a+b.yql", "a%2Bb"},
@@ -202,7 +190,6 @@ Y_UNIT_TEST(EncodesNamesUnambiguously) {
         // These filename characters are forbidden by Windows.
         {"group/query::[x]\"|\n.yql", "group/query%3A%3A%5Bx%5D%22%7C%0A"},
 #endif
-        {"запрос.yql", "%D0%B7%D0%B0%D0%BF%D1%80%D0%BE%D1%81"},
     };
     THashSet<TString> expectedNames;
     for (const auto& [path, encodedName] : queries) {

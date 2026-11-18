@@ -259,6 +259,7 @@ class TDataShard
     class TTxHandleSafeSampleKScan;
     class TTxHandleSafeLocalKMeansScan;
     class TTxHandleSafePrefixKMeansScan;
+    class TTxHandleSafeDeltaKMeansScan;
     class TTxHandleSafeFilterKMeansScan;
     class TTxHandleSafeReshuffleKMeansScan;
     class TTxHandleSafeRecomputeKMeansScan;
@@ -289,6 +290,7 @@ class TDataShard
     friend class TScanTransactionProcessor;
     friend class TDataShardEngineHost;
     friend class TExecuteKqpScanTxUnit;
+    friend class TAlterTableUnit;
     friend class TTableScan;
     friend class TKqpScan;
 
@@ -314,6 +316,7 @@ class TDataShard
 
     friend class TTableStatsCoroBuilder;
     friend class THnswIndexBuildActor;
+    friend class THnswIndexBuildUnit;
     friend class TReadTableScan;
     friend class TWaitForStreamClearanceUnit;
     friend class TBuildIndexScan;
@@ -455,6 +458,7 @@ class TDataShard
             TRowVersion BaseVersion;
             ui64 BuildToken = 0;
             THnswSnapshotScanCallback Finish;
+            std::shared_ptr<THnswSnapshotScanControl> Control;
         };
 
         struct TEvHnswSnapshotFinished : public TEventLocal<TEvHnswSnapshotFinished, EvHnswSnapshotFinished> {
@@ -1515,6 +1519,8 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvDeltaKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvDeltaKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvFilterKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvFilterKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev, const TActorContext& ctx);
@@ -1997,7 +2003,8 @@ public:
     void TrackHnswOpenTransactions(ui32 localTid, const NTable::TDatabase& db, TPathId indexId = {});
     TRowVersion GetHnswBuildVersion() const;
     void StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table, TRowVersion base,
-        TTransactionContext& txc, THnswSnapshotScanCallback finish = {}, TPathId indexId = {});
+        TTransactionContext& txc, THnswSnapshotScanCallback finish = {}, TPathId indexId = {},
+        std::shared_ptr<THnswSnapshotScanControl> control = {});
     void Handle(TEvPrivate::TEvRebuildHnswIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStartHnswSnapshotScan::TPtr& ev, const TActorContext& ctx);
     class TTxRebuildHnswIndex;
@@ -3953,6 +3960,7 @@ protected:
             HFunc(TEvDataShard::TEvRecomputeKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvLocalKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvPrefixKMeansRequest, Handle);
+            HFunc(TEvDataShard::TEvDeltaKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvFilterKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvBuildFulltextIndexRequest, Handle);
             HFunc(TEvDataShard::TEvBuildFulltextDictRequest, Handle);

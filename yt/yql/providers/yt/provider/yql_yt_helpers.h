@@ -21,6 +21,8 @@ namespace NYql {
 
 constexpr TStringBuf YtUnspecifiedCluster = "$runtime";
 
+bool ValidateNilePermissions(const TExprNode& node, const TYtState& state, TExprContext& ctx);
+
 // Equivalent to Derive* with mode=Auto
 TString GetClusterFromSection(const NNodes::TYtSection& section);
 TString GetClusterFromSectionList(const NNodes::TYtSectionList& sectionList);

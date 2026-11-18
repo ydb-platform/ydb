@@ -21,7 +21,7 @@ TRequestInput::TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portion
     , TabletId(tabletId)
     , MemoryProcessGuard(memoryProcessGuard)
 {
-    AFL_VERIFY(portions.size());
+    YDB_LOG_VERIFY(portions.size());
     ActualSchema = versions->GetLastSchema();
     for (auto&& i : portions) {
         Portions.emplace_back(std::make_shared<TFullPortionInfo>(i, versions->GetSchemaVerified(i->GetSchemaVersionVerified())));

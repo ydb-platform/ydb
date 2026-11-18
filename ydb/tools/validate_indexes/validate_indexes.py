@@ -243,7 +243,7 @@ def _validate(driver, session, path, writes_stopped, async_retries, async_retry_
     if asynchronous and writes_stopped:
         print("Writes stopped: asserted by the caller; checking async convergence", flush=True)
         async_confirmed, counts = _check_async(driver, session, table, asynchronous, columns, described,
-                                              async_retries, async_retry_delay)
+                                               async_retries, async_retry_delay)
         mismatches.update((name, count) for (name, _, _), count in zip(asynchronous, counts))
     _check_schema(driver, session, described)
     consistent = True

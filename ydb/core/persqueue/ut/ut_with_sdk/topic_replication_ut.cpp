@@ -1,10 +1,11 @@
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/mlp/ut/common/common.h>
-#include <ydb/core/persqueue/public/schema/common.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
+#include <ydb/core/tx/tx_processing.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/http/simple/http_client.h>
@@ -167,6 +168,16 @@ public:
         UNIT_ASSERT(Stub->AlterTopic(&context, request, &response).ok());
         UNIT_ASSERT(response.operation().ready());
         UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), expectedStatus, response.operation().ShortDebugString());
+    }
+
+    void Alter(const Ydb::Topic::AlterTopicRequest& request) {
+        auto stub = Ydb::Topic::V1::TopicService::NewStub(grpc::CreateChannel(
+            Setup.GetEndpoint(), grpc::InsecureChannelCredentials()));
+        grpc::ClientContext context;
+        InitContext(context);
+        Ydb::Topic::AlterTopicResponse response;
+        UNIT_ASSERT(stub->AlterTopic(&context, request, &response).ok());
+        AssertSuccess(response.operation());
     }
 
     void EnableMirroring(const TString& source, const TString& destination, TInstant readFrom = TInstant::Zero()) {
@@ -450,7 +461,11 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         const TString source = "/Root/active_replication_source";
         const TString destination = "/Root/active_replication_destination";
         env.Create(source, true);
-        env.Create(destination, false);
+        const auto created = env.Client.CreateTopic(destination, NYdb::NTopic::TCreateTopicSettings()
+            .RetentionPeriod(TDuration::Days(1))
+            .BeginAddConsumer("reader").EndAddConsumer()
+            .BeginAddConsumer("replicator").EndAddConsumer()).GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
         env.Commit(destination, 0);
         env.EnableMirroring(source, destination);
 
@@ -468,24 +483,81 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         env.WaitForOffsets(destination, 2, 5);
 
         auto& runtime = env.Setup.GetRuntime();
-        ui64 txId = 1006;
         auto setReplicateOffsets = [&](bool replicateOffsets) {
-            // The consumer option is read-only in the public API.
+            Ydb::Topic::AlterTopicRequest request;
+            request.set_path(destination);
+            auto* consumer = request.add_alter_consumers();
+            consumer->set_name("reader");
+            consumer->set_set_replicate_offsets(replicateOffsets);
+            env.Alter(request);
+
             NPQ::NTest::CreateDescriberActor(runtime, env.Setup.GetDatabase(), destination);
             const auto description = NPQ::NTest::GetDescriberResponse(runtime);
             const auto& topic = description->Topics.at(destination);
             UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
-            NKikimrSchemeOp::TPersQueueGroupDescription scheme;
-            NPQ::NSchema::CopyConfig(scheme, topic.Info->Description);
-            auto* consumer = NPQ::GetConsumer(*scheme.MutablePQTabletConfig(), "reader");
-            UNIT_ASSERT(consumer);
-            consumer->SetReplicateOffsets(replicateOffsets);
-            NPQ::NTest::DoRequest(runtime, txId, scheme);
-            ++txId;
+            const auto* persisted = NPQ::GetConsumer(topic.Info->Description.GetPQTabletConfig(), "reader");
+            UNIT_ASSERT(persisted);
+            UNIT_ASSERT_VALUES_EQUAL(persisted->GetReplicateOffsets(), replicateOffsets);
             return topic.Info->Description.GetPartitions(0).GetTabletId();
         };
 
         const ui64 tabletId = setReplicateOffsets(false);
+        // Rebuilding consumers for unrelated changes must preserve reader=false,
+        // while a newly added consumer still gets the default true.
+        const auto altered = env.Client.AlterTopic(destination, NYdb::NTopic::TAlterTopicSettings()
+            .SetRetentionPeriod(TDuration::Hours(12))
+            .BeginAddConsumer("extra").EndAddConsumer()).GetValueSync();
+        UNIT_ASSERT_C(altered.IsSuccess(), altered.GetIssues().ToString());
+        const auto described = env.Describe(destination);
+        UNIT_ASSERT_VALUES_EQUAL(described.read_rules_size(), 3);
+        for (const auto& consumer : described.read_rules()) {
+            UNIT_ASSERT_VALUES_EQUAL(consumer.replicate_offsets(), consumer.consumer_name() != "reader");
+        }
+        ui64 commitTxId = 100000;
+        ui64 planStep = 0;
+        auto checkTransactionalCommits = [&](bool allowed) {
+            for (bool immediate : {false, true}) {
+                const auto edge = runtime.AllocateEdgeActor();
+                const auto id = ++commitTxId;
+                auto request = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+                request->Record.SetTxId(id);
+                ActorIdToProto(edge, request->Record.MutableSourceActor());
+                auto* data = request->Record.MutableData();
+                data->SetImmediate(immediate);
+                auto* operation = data->AddOperations();
+                operation->SetPartitionId(0);
+                operation->SetPath(destination);
+                operation->SetConsumer("reader");
+                operation->SetCommitOffsetsBegin(2);
+                operation->SetCommitOffsetsEnd(3);
+                auto& tabletRuntime = static_cast<NKikimr::TTestActorRuntime&>(runtime);
+                tabletRuntime.SendToPipe(tabletId, edge, request.Release());
+                auto response = runtime.GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(edge, TDuration::Seconds(30));
+                UNIT_ASSERT(response);
+                if (!immediate) {
+                    UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::PREPARED);
+                    planStep = Max(planStep + 1, response->Get()->Record.GetMinStep());
+                    auto plan = MakeHolder<TEvTxProcessing::TEvPlanStep>();
+                    plan->Record.SetStep(planStep);
+                    auto* tx = plan->Record.AddTransactions();
+                    tx->SetTxId(id);
+                    ActorIdToProto(edge, tx->MutableAckTo());
+                    tabletRuntime.SendToPipe(tabletId, edge, plan.Release());
+                    response = runtime.GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(edge, TDuration::Seconds(30));
+                    UNIT_ASSERT(response);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetTxId(), id);
+                UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(),
+                    allowed ? NKikimrPQ::TEvProposeTransactionResult::COMPLETE : NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+                    response->Get()->Record.ShortDebugString());
+                env.WaitForOffsets(destination, allowed ? 3 : 2, 5);
+                if (allowed) {
+                    env.Commit(destination, 2);
+                    env.WaitForOffsets(destination, 2, 5);
+                }
+            }
+        };
+        checkTransactionalCommits(true);
         const auto allowed = env.Client.CommitOffset(destination, 0, "reader", 3,
             NYdb::NTopic::TCommitOffsetSettings().ClientTimeout(TDuration::Seconds(10))).GetValueSync();
         UNIT_ASSERT_C(allowed.IsSuccess(), allowed.GetIssues().ToString());
@@ -511,6 +583,7 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         UNIT_ASSERT_STRING_CONTAINS(unknownResponse->Get()->Record.GetErrorReason(), "Commits for consumer are disabled");
 
         setReplicateOffsets(true);
+        checkTransactionalCommits(false);
         const auto disabled = env.Client.CommitOffset(destination, 0, "reader", 3).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(disabled.GetStatus(), NYdb::EStatus::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(disabled.GetIssues().ToString(), "Commits for consumer are disabled");

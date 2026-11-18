@@ -1003,8 +1003,8 @@ message Consumer {
     // Not set or zero value means no limit.
     optional int64 read_speed_messages_per_second = 12 [(Ydb.value) = ">= 0"];
 
-    // Whether offsets for this consumer are replicated from the source topic. Read-only, returned by Describe requests.
-    bool replicate_offsets = 13;
+    // Whether offsets for this consumer are replicated from the source topic. Defaults to true when omitted.
+    optional bool replicate_offsets = 13;
 }
 
 // Consumer alter description.

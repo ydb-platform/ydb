@@ -1014,39 +1014,86 @@ Y_UNIT_TEST(DescribeTopicSmokeAndMissing) {
     }
 }
 
+Y_UNIT_TEST(ReplicateOffsetsViaYql) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_replicate_offsets_yql";
+    ExecuteDDL(*setup, R"(
+        CREATE TOPIC `/Root/topic_replicate_offsets_yql` (
+            CONSUMER inherited,
+            CONSUMER `local` WITH (replicate_offsets = false),
+            CONSUMER replicated WITH (replicate_offsets = true)
+        );
+    )");
+
+    auto check = [&](bool localReplicateOffsets, bool added) {
+        const auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), added ? 4 : 3);
+        for (const auto& consumer : config.GetConsumers()) {
+            const auto& name = consumer.GetName();
+            UNIT_ASSERT_VALUES_EQUAL_C(consumer.HasReplicateOffsets(), name != "inherited", name);
+            const bool expected = name == "local" ? localReplicateOffsets : name != "added";
+            UNIT_ASSERT_VALUES_EQUAL_C(consumer.GetReplicateOffsets(), expected, name);
+        }
+    };
+    check(false, false);
+
+    ExecuteDDL(*setup, R"(
+        ALTER TOPIC `/Root/topic_replicate_offsets_yql`
+            ADD CONSUMER added WITH (replicate_offsets = false);
+    )");
+    check(false, true);
+
+    ExecuteDDL(*setup, R"(
+        ALTER TOPIC `/Root/topic_replicate_offsets_yql`
+            ALTER CONSUMER `local` SET (replicate_offsets = true);
+    )");
+    check(true, true);
+
+    ExecuteDDL(*setup, R"(
+        ALTER TOPIC `/Root/topic_replicate_offsets_yql`
+            ALTER CONSUMER `local` SET (replicate_offsets = false);
+    )");
+    check(false, true);
+
+    ExecuteDDL(*setup, R"(
+        ALTER TOPIC `/Root/topic_replicate_offsets_yql`
+            ALTER CONSUMER `local` SET (important = true);
+    )");
+    check(false, true);
+}
+
 Y_UNIT_TEST(DescribeReplicateOffsets) {
     auto server = CreateSimulatedServer();
     auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_replicate_offsets";
-    auto createRequest = MakeCreateTopicRequest(path);
-    createRequest.add_consumers()->set_name("default");
-    auto createResult = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
-        runtime, createRequest, CreateCreateTopicActor, path);
-    AssertStatus(createResult, Ydb::StatusIds::SUCCESS);
-
     auto channel = grpc::CreateChannel(
         "localhost:" + ToString(server->Server->GrpcPort), grpc::InsecureChannelCredentials());
     auto pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
 
     for (const std::optional<bool> replicateOffsets : {std::optional<bool>{}, {false}, {true}}) {
-        // The flag is read-only in the public API, so provide the internal config through scheme cache.
-        auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
-            [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-                for (auto& entry : ev->Get()->Request->ResultSet) {
-                    if (!entry.PQGroupInfo) {
-                        continue;
-                    }
-                    auto copy = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>(*entry.PQGroupInfo);
-                    for (auto& consumer : *copy->Description.MutablePQTabletConfig()->MutableConsumers()) {
-                        if (consumer.GetName() == "user" && replicateOffsets.has_value()) {
-                            consumer.SetReplicateOffsets(*replicateOffsets);
-                        } else {
-                            consumer.ClearReplicateOffsets();
-                        }
-                    }
-                    entry.PQGroupInfo = copy;
-                }
-            });
+        const TString path = TStringBuilder() << "/Root/topic_replicate_offsets_"
+            << (replicateOffsets ? (*replicateOffsets ? "true" : "false") : "default");
+        auto createRequest = MakeCreateTopicRequest(path);
+        if (replicateOffsets.has_value()) {
+            createRequest.mutable_consumers(0)->set_replicate_offsets(*replicateOffsets);
+        }
+        createRequest.add_consumers()->set_name("default");
+        auto createResult = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+            runtime, createRequest, CreateCreateTopicActor, path);
+        AssertStatus(createResult, Ydb::StatusIds::SUCCESS);
+
+        const auto createdTopic = DescribeTopic(runtime, path);
+        for (const auto& consumer : createdTopic.consumers()) {
+            UNIT_ASSERT_VALUES_EQUAL(consumer.replicate_offsets(),
+                consumer.name() != "user" || replicateOffsets.value_or(true));
+        }
+
+        Ydb::Topic::AlterTopicRequest alterRequest;
+        alterRequest.set_path(path);
+        alterRequest.mutable_set_retention_period()->set_seconds(3600);
+        auto alterResult = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, alterRequest, CreateAlterTopicActor, path);
+        AssertStatus(alterResult, Ydb::StatusIds::SUCCESS);
 
         const auto topic = DescribeTopic(runtime, path);
         UNIT_ASSERT_VALUES_EQUAL(topic.consumers_size(), 2);

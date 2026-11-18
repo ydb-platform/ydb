@@ -318,6 +318,9 @@ TResult ApplyChangesInt(
         Ydb::StatusIds_StatusCode status;
         TString error;
         FillConsumer(consumer, *pqTabletConfig, c, status, error, false);
+        if (!c.HasReplicateOffsets()) {
+            consumer.clear_replicate_offsets();
+        }
     }
 
 

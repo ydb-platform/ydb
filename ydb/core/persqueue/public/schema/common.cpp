@@ -406,6 +406,9 @@ TResult AddConsumer(
     ::NKikimrPQ::TPQTabletConfig_TConsumer* consumer = config->AddConsumers();
 
     consumer->SetName(consumerName);
+    if (consumerConfig.has_replicate_offsets()) {
+        consumer->SetReplicateOffsets(consumerConfig.replicate_offsets());
+    }
 
     if (auto r = ProcessConsumerType(consumer, consumerConfig); !r) {
         return r;

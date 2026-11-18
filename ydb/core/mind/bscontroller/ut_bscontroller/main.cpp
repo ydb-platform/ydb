@@ -625,40 +625,51 @@ namespace {
 
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
     Y_UNIT_TEST(DistconfOwnsDataCenterStates) {
+        using TDataCenter = NKikimrBlobStorage::TDataCenterState;
         TTestActorRuntimeBase::TEventFilter previousFilter;
-        TDataCenterStatesEnv env([&](TTestActorRuntime& runtime) {
-            previousFilter = runtime.SetEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-                if (event->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
-                    auto *message = event->Get<TEvNodeWardenStorageConfig>();
-                    auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>(*message->Config);
-                    auto *dc = config->MutableDataCenterStates()->AddDataCenter();
-                    dc->SetName("unknown-dc");
-                    dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
-                    dc = config->MutableDataCenterStates()->AddDataCenter();
-                    dc->SetName("unknown-other-dc");
-                    dc->SetState(NKikimrBlobStorage::TDataCenterState::INCLUDED);
-                    message->Config = std::move(config);
-                    message->SelfManagementEnabled = true;
-                }
-                return previousFilter(runtime, event);
-            });
+        TDataCenterStatesEnv env;
+        auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+        const auto baseConfig = FetchBaseConfig(&env);
+        for (const auto& host : baseConfig.GetNode()) {
+            auto *node = config->AddAllNodes();
+            node->SetNodeId(host.GetNodeId());
+            node->SetHost(host.GetHostKey().GetFqdn());
+            node->SetPort(host.GetHostKey().GetIcPort());
+            node->MutableLocation()->CopyFrom(host.GetLocation());
+        }
+        auto *dc = config->MutableDataCenterStates()->AddDataCenter();
+        dc->SetName("2");
+        dc->SetState(TDataCenter::EXCLUDED);
+        dc = config->MutableDataCenterStates()->AddDataCenter();
+        dc->SetName("1");
+        dc->SetState(TDataCenter::INCLUDED);
+
+        previousFilter = env.Runtime->SetEventFilter([config, &previousFilter](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                auto *message = event->Get<TEvNodeWardenStorageConfig>();
+                message->Config = config;
+                message->SelfManagementEnabled = true;
+            }
+            return previousFilter(runtime, event);
         });
-        auto request = env.Define({{"unknown-other-dc", TDataCenterStatesEnv::TDataCenter::INCLUDED},
-            {"unknown-dc", TDataCenterStatesEnv::TDataCenter::EXCLUDED}});
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        auto request = env.Define({{"1", TDataCenter::INCLUDED}, {"2", TDataCenter::EXCLUDED}});
         auto *command = request.MutableCommand(0)->MutableDefineDataCenterStates();
         auto result = env.Invoke(request);
         UNIT_ASSERT_C(result.GetSuccess(), result.DebugString());
         UNIT_ASSERT(ParseDataCenterStates(result.GetAppliedDataCenterStates()).value() == ParseDataCenterStates(command->GetDataCenter()).value());
+        env.CheckStates(env.ReadGroups(), TDataCenter::EXCLUDED);
         auto repeated = env.Invoke(request);
         UNIT_ASSERT(repeated.GetSuccess());
         UNIT_ASSERT(ParseDataCenterStates(repeated.GetAppliedDataCenterStates()).value() == ParseDataCenterStates(command->GetDataCenter()).value());
-        command->MutableDataCenter(1)->SetState(NKikimrBlobStorage::TDataCenterState::INCLUDED);
+        command->MutableDataCenter(1)->SetState(TDataCenter::INCLUDED);
         UNIT_ASSERT(!env.Invoke(request).GetSuccess());
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-        command->MutableDataCenter(1)->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        command->MutableDataCenter(1)->SetState(TDataCenter::EXCLUDED);
         auto afterRestart = env.Invoke(request);
         UNIT_ASSERT(afterRestart.GetSuccess());
         UNIT_ASSERT(ParseDataCenterStates(afterRestart.GetAppliedDataCenterStates()).value() == ParseDataCenterStates(command->GetDataCenter()).value());
+        env.CheckStates(env.ReadGroups(), TDataCenter::EXCLUDED);
         env.Runtime->SetEventFilter(previousFilter);
     }
 
@@ -1166,10 +1177,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         using DC = TDataCenterStatesEnv::TDataCenter;
         TDataCenterStatesEnv env;
         const auto before = env.ReadGroups();
+        auto unknownState = env.Define({});
+        // DataCenter { Name: "2" State: 77 }
+        UNIT_ASSERT(unknownState.MutableCommand(0)->MutableDefineDataCenterStates()->ParseFromString(
+            TString("\x0a\x05\x0a\x01" "2" "\x10\x4d", 7)));
         for (const auto& request : {
                 env.Define({{"", DC::EXCLUDED}}),
                 env.Define({{"2", DC::EXCLUDED}, {"2", DC::INCLUDED}}),
-                env.Define({{"2", static_cast<DC::EState>(77)}}),
+                unknownState,
                 env.Define({{"1", DC::EXCLUDED}, {"2", DC::EXCLUDED}})}) {
             UNIT_ASSERT(!env.Invoke(request).GetSuccess());
         }

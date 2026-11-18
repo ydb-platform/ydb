@@ -4406,6 +4406,14 @@ selector_config: []
         return true;
     }
 
+    void SetMetadataDiskGuid(ui32 nodeId, IEventHandle& ev) {
+        if (ev.GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadataResult::EventType) {
+            ev.Get<NStorage::TEvNodeWardenWriteMetadataResult>()->Guid = nodeId * 1000 + 1;
+        } else if (ev.GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadataResult::EventType) {
+            ev.Get<NStorage::TEvNodeWardenReadMetadataResult>()->Guid = nodeId * 1000 + 1;
+        }
+    }
+
     Y_UNIT_TEST(StaticDataCenterOperationWaitsForBscSnapshotAck) {
         TCommitConfirmationFixture fixture;
         fixture.UseMirror3dcGroup();
@@ -4419,6 +4427,7 @@ selector_config: []
         ui32 requests = 0;
         std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
         runtime.FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            SetMetadataDiskGuid(node, *event);
             if (CaptureInvokeResult(*event, client, response)) {
                 return false;
             }
@@ -4455,8 +4464,8 @@ selector_config: []
         dc->SetName("dc-3");
         dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
         runtime.Send(new IEventHandle(fixture.Root(), client, request.release()), 1);
-        UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 1; }));
-        UNIT_ASSERT(!response);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 1 || response; }));
+        UNIT_ASSERT_C(!response, response->DebugString());
         UNIT_ASSERT(SimUntil(runtime, [&] {
             return fixture.Metadata(1).GetCommittedStorageConfig().GetDataCenterStates().SerializeAsString() == snapshot.SerializeAsString();
         }));
@@ -4485,14 +4494,6 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(ui32(response->GetStatus()), ui32(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK));
         UNIT_ASSERT(response->HasAppliedDataCenterStates());
         UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().DataCenterSize(), 0);
-    }
-
-    void SetMetadataDiskGuid(ui32 nodeId, IEventHandle& ev) {
-        if (ev.GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadataResult::EventType) {
-            ev.Get<NStorage::TEvNodeWardenWriteMetadataResult>()->Guid = nodeId * 1000 + 1;
-        } else if (ev.GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadataResult::EventType) {
-            ev.Get<NStorage::TEvNodeWardenReadMetadataResult>()->Guid = nodeId * 1000 + 1;
-        }
     }
 
     void CheckStaticVDiskSlainAfterSlotReuse(bool obsoleteOccupant) {

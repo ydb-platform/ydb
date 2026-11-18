@@ -3,10 +3,14 @@
 #include "stream_remover.h"
 #include "util.h"
 
+#include <ydb/core/base/path.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+
+#include <util/generic/algorithm.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -44,10 +48,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
                 ProxyGeneration);
             break;
         case TReplication::ETargetKind::Topic:
-            Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(SrcPath, NYdb::NTopic::TAlterTopicSettings()
-                .AppendDropConsumers(StreamName)),
-                0,
-                ProxyGeneration);
+            Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(SrcPath,
+                NYdb::NTopic::TAlterTopicSettings().AppendDropConsumers(StreamName)), 0, ProxyGeneration);
             break;
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("Unreachable");
@@ -62,6 +64,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, HandleResult);
             hFunc(TEvYdbProxy::TEvAlterTopicResponse, HandleResult);
+            hFunc(TEvYdbProxy::TEvListDirectoryResponse, Handle);
             hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
@@ -92,6 +95,11 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
 
             // Keep cleanup pending: the important consumer still retains source data.
             if (Kind == TReplication::ETargetKind::Topic) {
+                if (result.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
+                    Send(YdbProxy, new TEvYdbProxy::TEvListDirectoryRequest(
+                        TString(ExtractParent(SrcPath)), {}), 0, ProxyGeneration);
+                    return;
+                }
                 return Schedule(RetryInterval, new TEvents::TEvWakeup(ProxyGeneration));
             }
         } else {
@@ -99,6 +107,36 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
                 {"issues", result.GetIssues().ToOneLineString()});
         }
 
+        Reply(std::move(result));
+    }
+
+    void Handle(TEvYdbProxy::TEvListDirectoryResponse::TPtr& ev) {
+        if (ev->Cookie != ProxyGeneration) {
+            return;
+        }
+
+        const auto& result = ev->Get()->Result;
+        if (result.IsSuccess()) {
+            const auto& children = result.GetChildren();
+            const auto child = FindIf(children, [&](const auto& entry) {
+                return TStringBuf(entry.Name) == ExtractBase(SrcPath);
+            });
+            // A successful directory listing includes children regardless of their ACLs.
+            if (EqualToOneOf(result.GetEntry().Type, NYdb::NScheme::ESchemeEntryType::Directory,
+                NYdb::NScheme::ESchemeEntryType::SubDomain) && child == children.end())
+            {
+                return Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}));
+            }
+        } else {
+            YDB_LOG_ERROR("Cannot confirm source topic absence",
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()});
+        }
+
+        Schedule(RetryInterval, new TEvents::TEvWakeup(ProxyGeneration));
+    }
+
+    void Reply(NYdb::TStatus result) {
         Send(Parent, new TEvPrivate::TEvDropStreamResult(ReplicationId, TargetId, std::move(result)));
         PassAway();
     }
@@ -187,8 +225,13 @@ private:
 IActor* CreateStreamRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
+    auto srcPath = target->GetSrcPath();
+    if (target->GetKind() == TReplication::ETargetKind::Topic) {
+        srcPath = CanonizePath(IsStartWithSlash(srcPath) ? srcPath
+            : replication->GetConfig().GetSrcConnectionParams().GetDatabase() + "/" + srcPath);
+    }
     return CreateStreamRemover(ctx.SelfID, replication->GetYdbProxy(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetStreamName());
+        replication->GetId(), target->GetId(), target->GetKind(), srcPath, target->GetStreamName());
 }
 
 IActor* CreateStreamRemover(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,

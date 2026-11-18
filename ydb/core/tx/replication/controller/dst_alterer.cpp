@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -87,7 +88,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
                 return Error(NKikimrScheme::StatusInvalidParameter, TopicMirror.Error);
             }
 
-            partition.MutableMirrorFrom()->CopyFrom(TopicMirror.Config);
+            partition.MutableMirrorFrom()->CopyFrom(*TopicMirror.Config);
         } else {
             partition.ClearMirrorFrom();
         }
@@ -283,7 +284,7 @@ public:
             const TPathId& dstPathId,
             const TReplication::EState desiredState,
             const TPathId& replicationPathId,
-            const TTopicMirrorSettings& topicMirror)
+            TTopicMirrorSettings&& topicMirror)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , ReplicationId(rid)
@@ -292,7 +293,7 @@ public:
         , DstPathId(dstPathId)
         , ReplicationPathId(replicationPathId)
         , DesiredState(desiredState)
-        , TopicMirror(topicMirror)
+        , TopicMirror(std::move(topicMirror))
         , LogPrefix(CreateActorLogPrefix("DstAlterer", ReplicationId, TargetId))
     {
     }
@@ -362,10 +363,10 @@ IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorC
     const auto desiredState = replication->GetState() == TReplication::EState::Removing
         ? TReplication::EState::Done : replication->GetDesiredState();
     if (target->GetKind() == TReplication::ETargetKind::Topic) {
-        const TTopicMirrorSettings topicMirror(replication->GetConfig().GetSrcConnectionParams(),
+        TTopicMirrorSettings topicMirror(replication->GetConfig().GetSrcConnectionParams(),
             target->GetSrcPath(), target->GetStreamConsumerName());
         return CreateDstTopicAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-            replication->GetId(), target->GetId(), target->GetDstPathId(), desiredState, topicMirror);
+            replication->GetId(), target->GetId(), target->GetDstPathId(), desiredState, std::move(topicMirror));
     }
 
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
@@ -382,10 +383,10 @@ IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
 
 IActor* CreateDstTopicAlterer(const TActorId& parent, ui64 schemeShardId,
         ui64 rid, ui64 tid, const TPathId& dstPathId, TReplication::EState desiredState,
-        const TTopicMirrorSettings& topicMirror)
+        TTopicMirrorSettings&& topicMirror)
 {
     return new TDstAlterer(parent, schemeShardId, rid, tid, TReplication::ETargetKind::Topic,
-        dstPathId, desiredState, {}, topicMirror);
+        dstPathId, desiredState, {}, std::move(topicMirror));
 }
 
 }

@@ -1,8 +1,12 @@
 #pragma once
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 #include <util/generic/string.h>
+
+#include <memory>
+
+namespace NKikimrPQ {
+    class TMirrorPartitionConfig;
+}
 
 namespace NKikimrReplication {
     class TConnectionParams;
@@ -22,10 +26,12 @@ Ydb::Topic::CreateTopicRequest BuildTopicMirrorRequest(const NYdb::NTopic::TTopi
     const TString& consumer);
 
 struct TTopicMirrorSettings {
-    NKikimrPQ::TMirrorPartitionConfig Config;
+    std::unique_ptr<NKikimrPQ::TMirrorPartitionConfig> Config;
     TString Error;
 
-    TTopicMirrorSettings() = default;
+    TTopicMirrorSettings();
+    TTopicMirrorSettings(TTopicMirrorSettings&&) noexcept;
+    ~TTopicMirrorSettings();
     TTopicMirrorSettings(const NKikimrReplication::TConnectionParams& params,
         const TString& srcPath, const TString& consumer);
 };

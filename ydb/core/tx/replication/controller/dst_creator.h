@@ -39,6 +39,6 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
 IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
     const TString& database, const TPathId& pathId,
     ui64 rid, ui64 tid, const TString& srcPath, const TString& dstPath,
-    const TTopicMirrorSettings& topicMirror);
+    TTopicMirrorSettings&& topicMirror);
 
 }

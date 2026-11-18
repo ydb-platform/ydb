@@ -12,6 +12,6 @@ IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
     const TPathId& replicationPathId = {});
 IActor* CreateDstTopicAlterer(const TActorId& parent, ui64 schemeShardId,
     ui64 rid, ui64 tid, const TPathId& dstPathId, TReplication::EState desiredState,
-    const TTopicMirrorSettings& topicMirror);
+    TTopicMirrorSettings&& topicMirror);
 
 }

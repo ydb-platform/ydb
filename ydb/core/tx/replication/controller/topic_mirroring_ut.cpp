@@ -112,6 +112,17 @@ public:
         }
     }
 
+    void CheckDropWithMissingSource() {
+        NYdb::NTopic::TTopicClient client(Source.GetDriver());
+        const auto dropped = client.DropTopic("/Root/topic").GetValueSync();
+        UNIT_ASSERT_C(dropped.IsSuccess(), dropped.GetIssues().ToString());
+
+        Exec("DROP ASYNC REPLICATION `/Root/replication`;");
+        UNIT_ASSERT_VALUES_EQUAL(Destination.GetDescription("/Root/replication").GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT(!Config().GetPartitionConfig().HasMirrorFrom());
+    }
+
     void WriteAndWait(const TString& payload, ui64 endOffset) {
         NYdb::NTopic::TTopicClient sourceClient(Source.GetDriver()), destinationClient(Destination.GetDriver());
         auto writer = sourceClient.CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
@@ -149,6 +160,29 @@ public:
         UNIT_ASSERT(Runtime.GetCurrentTime() - start >= TDuration::Seconds(10));
     }
 
+    void CheckAmbiguousAbsence() {
+        for (const auto status : {NYdb::EStatus::SUCCESS, NYdb::EStatus::UNAUTHORIZED}) {
+            Reply(NYdb::EStatus::SCHEME_ERROR);
+            const auto request = Runtime.GrabEdgeEvent<TEvYdbProxy::TEvListDirectoryRequest>(Proxy);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(request->Get()->GetArgs()), "/Root");
+
+            NYdb::NScheme::TSchemeEntry parent;
+            parent.Type = NYdb::NScheme::ESchemeEntryType::SubDomain;
+            NYdb::NScheme::TSchemeEntry topic;
+            topic.Name = "topic";
+            topic.Type = NYdb::NScheme::ESchemeEntryType::Topic;
+            std::vector<NYdb::NScheme::TSchemeEntry> children;
+            if (status == NYdb::EStatus::SUCCESS) {
+                children.push_back(topic);
+            }
+            const auto start = Runtime.GetCurrentTime();
+            Runtime.Send(Remover, Proxy, new TEvYdbProxy::TEvListDirectoryResponse(
+                NYdb::NScheme::TListDirectoryResult(NYdb::TStatus(status, {}), parent, std::move(children))));
+            Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(Proxy);
+            UNIT_ASSERT(Runtime.GetCurrentTime() - start >= TDuration::Seconds(10));
+        }
+    }
+
     void FinishWithMissingConsumer() {
         Reply(NYdb::EStatus::NOT_FOUND);
         const auto result = Runtime.GrabEdgeEvent<TEvPrivate::TEvDropStreamResult>(Parent);
@@ -175,6 +209,7 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
     Y_UNIT_TEST(ConsumerCleanupRetriesUnauthorizedAndAcceptsMissing) {
         TConsumerRemovalFixture test;
         test.DenyAndWaitForRetry();
+        test.CheckAmbiguousAbsence();
         test.FinishWithMissingConsumer();
     }
 
@@ -188,6 +223,11 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
         TTopicMirroringFixture test("localhost", true);
         test.Done();
         UNIT_ASSERT(!test.Config().GetPartitionConfig().HasMirrorFrom());
+    }
+
+    Y_UNIT_TEST(DropSucceedsAfterSourceTopicWasDeleted) {
+        TTopicMirroringFixture test;
+        test.CheckDropWithMissingSource();
     }
 
     Y_UNIT_TEST(MissingDestinationCannotResume) {

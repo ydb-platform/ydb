@@ -1,5 +1,6 @@
 #include "topic_mirror.h"
 
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -100,10 +101,19 @@ Ydb::Topic::CreateTopicRequest BuildTopicMirrorRequest(const NYdb::NTopic::TTopi
     return request;
 }
 
+TTopicMirrorSettings::TTopicMirrorSettings()
+    : Config(std::make_unique<NKikimrPQ::TMirrorPartitionConfig>())
+{
+}
+
 TTopicMirrorSettings::TTopicMirrorSettings(const NKikimrReplication::TConnectionParams& params,
         const TString& srcPath, const TString& consumer)
+    : TTopicMirrorSettings()
 {
-    Error = PatchMirrorConfig(Config, params, srcPath, consumer);
+    Error = PatchMirrorConfig(*Config, params, srcPath, consumer);
 }
+
+TTopicMirrorSettings::TTopicMirrorSettings(TTopicMirrorSettings&&) noexcept = default;
+TTopicMirrorSettings::~TTopicMirrorSettings() = default;
 
 }

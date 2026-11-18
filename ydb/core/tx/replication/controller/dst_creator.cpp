@@ -9,6 +9,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/replication/common/family_settings.h>
@@ -401,7 +402,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return Error(NKikimrScheme::StatusInvalidParameter, TopicMirror.Error);
         }
 
-        auto request = BuildTopicMirrorRequest(result.GetTopicDescription(), TopicMirror.Config.GetConsumer());
+        auto request = BuildTopicMirrorRequest(result.GetTopicDescription(), TopicMirror.Config->GetConsumer());
 
         std::pair<TString, TString> path;
         TString error;
@@ -417,7 +418,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         // Start mirroring only after the controller has persisted the destination id.
         TxBody.MutableCreatePersQueueGroup()->MutablePQTabletConfig()
-            ->SetReplicationSourceConsumer(TopicMirror.Config.GetConsumer());
+            ->SetReplicationSourceConsumer(TopicMirror.Config->GetConsumer());
 
         AllocateTxId();
     }
@@ -647,7 +648,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case TReplication::ETargetKind::IndexTable:
             return CheckTableScheme(desc.GetTable(), error);
         case TReplication::ETargetKind::Topic: {
-            const auto& expectedConsumer = TopicMirror.Config.GetConsumer();
+            const auto& expectedConsumer = TopicMirror.Config->GetConsumer();
             const auto& actualConsumer = desc.GetPersQueueGroup().GetPQTabletConfig().GetReplicationSourceConsumer();
             if (desc.HasPersQueueGroup() && !expectedConsumer.empty() && actualConsumer == expectedConsumer) {
                 return true;
@@ -1033,7 +1034,7 @@ public:
             const TString& database,
             bool initialScan,
             TReplication::EState desiredState,
-            const TTopicMirrorSettings& topicMirror)
+            TTopicMirrorSettings&& topicMirror)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -1049,7 +1050,7 @@ public:
         , CreatePlaceholder(kind != TReplication::ETargetKind::Topic
             && !initialScan && desiredState == TReplication::EState::Paused)
         , DesiredState(desiredState)
-        , TopicMirror(topicMirror)
+        , TopicMirror(std::move(topicMirror))
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
     {
@@ -1184,11 +1185,11 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     Y_ABORT_UNLESS(target);
 
     if (target->GetKind() == TReplication::ETargetKind::Topic) {
-        const TTopicMirrorSettings topicMirror(replication->GetConfig().GetSrcConnectionParams(),
+        TTopicMirrorSettings topicMirror(replication->GetConfig().GetSrcConnectionParams(),
             target->GetSrcPath(), target->GetStreamConsumerName());
         return CreateDstTopicCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
             replication->GetDatabase(), replication->GetPathId(),
-            replication->GetId(), target->GetId(), target->GetSrcPath(), target->GetDstPath(), topicMirror);
+            replication->GetId(), target->GetId(), target->GetSrcPath(), target->GetDstPath(), std::move(topicMirror));
     }
 
     return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
@@ -1210,11 +1211,11 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
 IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, const TString& srcPath, const TString& dstPath,
-        const TTopicMirrorSettings& topicMirror)
+        TTopicMirrorSettings&& topicMirror)
 {
     return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, TReplication::ETargetKind::Topic,
         srcPath, dstPath, EReplicationMode::ReadOnly, EConsistencyLevel::Row, database, true,
-        TReplication::EState::Ready, topicMirror);
+        TReplication::EState::Ready, std::move(topicMirror));
 }
 
 }

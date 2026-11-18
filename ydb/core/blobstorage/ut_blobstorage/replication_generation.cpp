@@ -25,6 +25,88 @@ TIntrusivePtr<NMonitoring::TDynamicCounters> GetReplCounters(TEnvironmentSetup& 
     return counters;
 }
 
+enum class EDurabilityReplicatedField {
+    False,
+    Missing,
+};
+
+void CheckDurabilityReplicatedAffectsTokenPriority(EDurabilityReplicatedField field,
+        TReplTokenPriority expectedPriority) {
+    constexpr ui32 nodeCount = 8;
+    using TRuntimeFilter = std::function<bool(ui32, std::unique_ptr<IEventHandle>&)>;
+    TRuntimeFilter runtimeFilter;
+    TFeatureFlags featureFlags;
+    featureFlags.SetEnableReplTokenPriority(true);
+    TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+        .NodeCount = nodeCount,
+        .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        .PrepareRuntime = [&](TTestActorSystem& runtime) {
+            runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                return runtimeFilter ? runtimeFilter(nodeId, ev) : true;
+            };
+        },
+        .FeatureFlags = std::move(featureFlags),
+    });
+    env.CreateBoxAndPool(1, 1);
+    env.Sim(TDuration::Minutes(1));
+
+    const ui32 groupId = env.GetGroups().front();
+    const auto info = env.GetGroupInfo(groupId);
+    const auto [targetNode, targetPDisk, targetVSlot] = DecomposeVDiskServiceId(info->GetActorId(0));
+    Y_UNUSED(targetVSlot);
+    const TVDiskIdShort peerVDiskId(info->GetVDiskId(1));
+
+    const TString data(128_KB, 'D');
+    for (ui32 step = 1; step <= 16; ++step) {
+        const TLogoBlobID blob(1, 1, step, 0, data.size(), 0);
+        env.PutBlob(groupId, blob, data);
+        env.WaitForSync(info, blob);
+    }
+
+    env.Cleanup();
+    env.PDiskMockStates.at({targetNode, targetPDisk}).Reset();
+
+    bool peerStatusSeen = false;
+    std::optional<TReplTokenPriority> observedPriority;
+    runtimeFilter = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+        if (nodeId != targetNode) {
+            return true;
+        }
+        if (ev->GetTypeRewrite() == TEvBlobStorage::EvVStatusResult) {
+            auto& record = ev->Get<TEvBlobStorage::TEvVStatusResult>()->Record;
+            if (record.HasVDiskID()
+                    && TVDiskIdShort(VDiskIDFromVDiskID(record.GetVDiskID())) == peerVDiskId) {
+                UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT(record.GetJoinedGroup());
+                UNIT_ASSERT(record.GetReplicated());
+                UNIT_ASSERT(record.HasDurabilityReplicated());
+                peerStatusSeen = true;
+                if (field == EDurabilityReplicatedField::False) {
+                    record.SetDurabilityReplicated(false);
+                } else {
+                    record.ClearDurabilityReplicated();
+                }
+            }
+        } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvQueryReplToken) {
+            const auto* msg = ev->Get<TEvQueryReplToken>();
+            if (msg->PDiskId == targetPDisk && msg->SupportsYield) {
+                UNIT_ASSERT(!observedPriority);
+                observedPriority = msg->Priority;
+                return false;
+            }
+        }
+        return true;
+    };
+    env.Initialize();
+
+    for (ui32 i = 0; i != 600 && !observedPriority; ++i) {
+        env.Sim(TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT_C(peerStatusSeen, "The replication priority poll must receive the selected peer status");
+    UNIT_ASSERT_C(observedPriority, "The replication scheduler must request a priority-aware token");
+    UNIT_ASSERT_VALUES_EQUAL(*observedPriority, expectedPriority);
+}
+
 // Hold a real replication plan while its queues connect, optionally replace a
 // different group member, then disconnect all sources before granting the plan
 // its token. Disks on the disconnected nodes retain their contents.
@@ -679,5 +761,13 @@ Y_UNIT_TEST_SUITE(ReplicationGeneration) {
 
     Y_UNIT_TEST(YieldWaitsForActiveQuantumBoundary) {
         CheckYieldWaitsForActiveQuantumBoundary();
+    }
+
+    Y_UNIT_TEST(DurabilityUnreplicatedPeerRaisesTokenPriority) {
+        CheckDurabilityReplicatedAffectsTokenPriority(EDurabilityReplicatedField::False, 1);
+    }
+
+    Y_UNIT_TEST(MissingDurabilityReplicatedPreservesTokenPriorityCompatibility) {
+        CheckDurabilityReplicatedAffectsTokenPriority(EDurabilityReplicatedField::Missing, 2);
     }
 }

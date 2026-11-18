@@ -254,7 +254,10 @@ namespace NKikimr {
             if (!PendingPeerStatuses.erase(shortId)) {
                 return;
             }
-            if (record.GetStatus() == NKikimrProto::OK && record.GetJoinedGroup() && record.GetReplicated()) {
+            // Older VDisks do not send DurabilityReplicated, so a missing field retains the legacy healthy status.
+            const bool durabilityReplicated = !record.HasDurabilityReplicated() || record.GetDurabilityReplicated();
+            if (record.GetStatus() == NKikimrProto::OK && record.GetJoinedGroup() && record.GetReplicated()
+                    && durabilityReplicated) {
                 HealthyPeerDisks.insert(shortId);
             }
             if (PendingPeerStatuses.empty()) {

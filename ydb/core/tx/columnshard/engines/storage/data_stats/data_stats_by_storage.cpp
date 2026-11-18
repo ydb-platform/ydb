@@ -72,7 +72,8 @@ void TDataStatsByStorage::RemovePortion(const NOlap::TPortionInfo& portion, cons
 
 TStorageStats& TDataStatsByStorage::GetStorageVerified(const TString& storageId) {
     auto it = Storages.find(storageId);
-    AFL_VERIFY(it != Storages.end())("storage_id", storageId);
+    YDB_LOG_VERIFY(it != Storages.end(),
+        {"storageId", storageId});
     return it->second;
 }
 

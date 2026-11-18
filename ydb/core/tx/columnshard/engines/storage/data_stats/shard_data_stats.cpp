@@ -40,7 +40,7 @@ TShardDataStats::TShardDataStats(const std::shared_ptr<NOlap::IStoragesManager>&
     , TabletId(tabletId)
     , PortionSizeHistograms(Counters.BuildPortionSizeHistograms())
 {
-    AFL_VERIFY(StoragesManager);
+    YDB_LOG_VERIFY(StoragesManager);
 }
 
 TShardDataStats::~TShardDataStats() {
@@ -60,7 +60,8 @@ void TShardDataStats::AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& por
 
 void TShardDataStats::RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) {
     auto granule = Granules.find(portion->GetPathId());
-    AFL_VERIFY(granule != Granules.end())("path_id", portion->GetPathId());
+    YDB_LOG_VERIFY(granule != Granules.end(),
+        {"pathId", portion->GetPathId()});
     const ui64 smallBlobBytes = portion->GetSmallBlobBytesInBlobStorage(GetSmallBlobThreshold(GetBlobStorageId()));
     granule->second.RemovePortion(*portion, smallBlobBytes);
     if (granule->second.IsEmpty()) {
@@ -69,12 +70,12 @@ void TShardDataStats::RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& 
     Total.RemovePortion(*portion, smallBlobBytes);
 
     auto schemaVersion = SchemaVersionsInUse.find(portion->GetSchemaVersionVerified());
-    AFL_VERIFY(schemaVersion != SchemaVersionsInUse.end());
+    YDB_LOG_VERIFY(schemaVersion != SchemaVersionsInUse.end());
     if (schemaVersion->second.Dec() == 0) {
         SchemaVersionsInUse.erase(schemaVersion);
     }
     PortionsMetadataRamBytes -= portion->GetMetadataMemorySize();
-    AFL_VERIFY(PortionsMetadataRamBytes >= 0);
+    YDB_LOG_VERIFY(PortionsMetadataRamBytes >= 0);
     Counters.OnIndexMetadataUsageBytes(AllShardsPortionsMetadataRamBytes.Sub(portion->GetMetadataMemorySize()));
     PortionSizeHistograms.OnDropPortion(portion);
 }
@@ -94,7 +95,7 @@ const TDataStatsByStorage& TShardDataStats::GetGranuleStats(const TInternalPathI
 }
 
 bool TShardDataStats::HasSchemaVersion(const ui64 fromVersion, const ui64 version) const {
-    AFL_VERIFY(fromVersion <= version);
+    YDB_LOG_VERIFY(fromVersion <= version);
     auto it = SchemaVersionsInUse.lower_bound(fromVersion);
     return it != SchemaVersionsInUse.end() && it->first <= version;
 }

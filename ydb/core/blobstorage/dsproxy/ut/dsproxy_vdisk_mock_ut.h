@@ -492,7 +492,7 @@ public:
 
         TDataPartSet partSet;
         partSet.Parts.resize(totalParts);
-        Info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), encryptedData, partSet);
+        Info->Type.SplitData(id, encryptedData, partSet);
         for (ui32 i = 0; i < totalParts; ++i) {
             TLogoBlobID pId(id, i + 1);
             TRope pData = partSet.Parts[i].OwnedString;

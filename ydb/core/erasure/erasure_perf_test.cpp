@@ -1,4 +1,5 @@
 #include "erasure.h"
+#include "ut_util.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/ymath.h>
@@ -10,6 +11,7 @@
 #include <iostream>
 #include <numeric>
 #include <library/cpp/digest/crc32c/crc32c.h>
+#include <ydb/core/base/logoblob.h>
 
 #define SHORT_TEST
 //#define LONG_TEST
@@ -111,7 +113,8 @@ std::pair<double, double> MeasureTime(TErasureType &type, TVector<ui32> &missedP
             timer.Reset();
         }
         for (size_t i = 0; i < attempts; ++i) {
-            type.SplitData(TErasureType::CrcModeNone, testData[i], partSets[i]);
+            type.SplitData(MakeCrcNoneStubBlobId(testData[i].size()), testData[i],
+                            partSets[i]);
         }
 
         if (measureSplit) {
@@ -131,8 +134,9 @@ std::pair<double, double> MeasureTime(TErasureType &type, TVector<ui32> &missedP
                 timer.Reset();
             }
             for (size_t i = 0; i < attempts; ++i) {
-                type.RestoreData(TErasureType::CrcModeNone, partSets[i], restoredData[i],
-                        isRestoreParts, isRestoreFullData, isRestoreParts);
+                type.RestoreData(MakeCrcNoneStubBlobId(testData[i].size()),
+                                partSets[i], restoredData[i], isRestoreParts,
+                                isRestoreFullData, isRestoreParts);
             }
             if (measureRestore) {
                 time += timer.PassedReset() / attempts;
@@ -249,7 +253,7 @@ void RopeMeasureSplitTime(TErasureType &type, ui64 dataSize, const TString& buff
         timer.Reset();
 
         TDataPartSet partSet;
-        type.SplitData(TErasureType::CrcModeNone, rope, partSet);
+        type.SplitData(MakeCrcNoneStubBlobId(rope.size()), rope, partSet);
         if (convertToRope) {
             for (int i = 0; i < 6; ++i) {
                 ropes[i] = partSet.Parts[i].OwnedString;

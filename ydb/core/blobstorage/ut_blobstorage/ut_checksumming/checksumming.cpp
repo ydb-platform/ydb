@@ -374,7 +374,7 @@ void PutMirror3dcBlobOnAllDisks(TTestEnv& env, const TString& data) {
     Encrypt(buffer, buffer, 0, encryptedData.size(), env.LastBlobId, *env.GroupInfo);
 
     TDataPartSet partSet;
-    env.GroupInfo->Type.SplitData(env.CrcMode, encryptedData, partSet);
+    env.GroupInfo->Type.SplitData(env.LastBlobId, encryptedData, partSet);
     UNIT_ASSERT_VALUES_EQUAL(partSet.Parts.size(), 3);
 
     for (ui32 subgroupIdx = 0; subgroupIdx < 9; ++subgroupIdx) {

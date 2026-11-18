@@ -189,7 +189,7 @@ namespace NKikimr {
                 std::fill_n(data.mutable_data(), logoBlobId.BlobSize(), 'X');
                 TRope whole(MakeIntrusive<TRopeSharedDataBackend>(data));
                 TDataPartSet parts;
-                GType.SplitData((TErasureType::ECrcMode)logoBlobId.CrcMode(), whole, parts);
+                GType.SplitData(logoBlobId, whole, parts);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(logoBlobId,
                     parts.Parts[logoBlobId.PartId() - 1].OwnedString, VDiskId, true, &cookie, TInstant::Max(),
                     PutHandleClass, TWriteSource::GroupWriteLoadActor);

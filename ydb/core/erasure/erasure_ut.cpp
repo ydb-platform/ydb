@@ -1,6 +1,8 @@
 #include "erasure.h"
 #include "ut_util.h"
 
+#include <ydb/core/base/logoblob.h>
+
 
 namespace NKikimr {
 
@@ -21,7 +23,8 @@ void TestMissingPartWithRandomData(TErasureType &groupType, ui32 *missingPartIdx
 
     // Split the data into parts
     TDataPartSet partSet;
-    groupType.SplitData(TErasureType::CrcModeNone, testString, partSet);
+    const auto crcNoneBlob = MakeCrcNoneStubBlobId(testString.size());
+    groupType.SplitData(crcNoneBlob, testString, partSet);
     ui64 partSize = groupType.PartSize(TErasureType::CrcModeNone, dataSize);
     for (ui32 part = 0; part < groupType.TotalPartCount(); ++part) {
         UNIT_ASSERT_EQUAL(partSize, partSet.Parts[part].size());
@@ -37,8 +40,8 @@ void TestMissingPartWithRandomData(TErasureType &groupType, ui32 *missingPartIdx
     }
     // Restore the data
     TRope restoredString;
-    groupType.RestoreData(TErasureType::CrcModeNone, partSet, restoredString,
-            isRestoreParts, isRestoreFullData, isRestoreParts);
+    groupType.RestoreData(crcNoneBlob, partSet, restoredString, isRestoreParts,
+                          isRestoreFullData, isRestoreParts);
 
     // Make sure the restored data matches the original
     TString errorInfo = Sprintf("dataSize=%d partMask=0x%x", dataSize, partMask);
@@ -126,7 +129,8 @@ void PrintDiff(const TDiff &diff) {
 
 void RunTestDiff(TErasureType &groupType, ui32 dataSize, const TString &testString, const TVector<TDiff> &diffs) {
     TDataPartSet partSet;
-    groupType.SplitData(TErasureType::CrcModeNone, testString, partSet);
+    const auto crcNoneBlob = MakeCrcNoneStubBlobId(testString.size());;
+    groupType.SplitData(crcNoneBlob, testString, partSet);
     ui64 partSize = groupType.PartSize(TErasureType::CrcModeNone, dataSize);
     for (ui32 part = 0; part < groupType.TotalPartCount(); ++part) {
         UNIT_ASSERT_EQUAL(partSize, partSet.Parts[part].size());
@@ -139,7 +143,7 @@ void RunTestDiff(TErasureType &groupType, ui32 dataSize, const TString &testStri
     }
 
     TDataPartSet resultPartSet;
-    groupType.SplitData(TErasureType::CrcModeNone, result, resultPartSet);
+    groupType.SplitData(crcNoneBlob, result, resultPartSet);
 
     TPartDiffSet diffSet;
     groupType.SplitDiffs(TErasureType::CrcModeNone, dataSize, diffs, diffSet);
@@ -277,7 +281,8 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                 testString[i] = (char)data[i];
             }
             TDataPartSet partSet;
-            type.SplitData(TErasureType::CrcModeNone, testString, partSet);
+            type.SplitData(MakeCrcNoneStubBlobId(testString.size()), testString,
+                           partSet);
             for (ui32 i = 0; i < 6; ++i) {
                 UNIT_ASSERT_EQUAL_C(partSet.Parts[i].size(), expectedParts[i].size(), Sprintf("%lu == %lu",
                                                                 partSet.Parts[i].size(), expectedParts[i].size()));
@@ -330,8 +335,9 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                         ((char*)testString.data())[i] = val;
                     }
                     TDataPartSet partSet;
+                    const auto crcNoneBlob = MakeCrcNoneStubBlobId(testString.size());
                     try {
-                        groupType.SplitData(TErasureType::CrcModeNone, testString, partSet);
+                        groupType.SplitData(crcNoneBlob, testString, partSet);
                     } catch (yexception ex) {
                         ex << " [in SplitData while testing " << errorInfo << "]";
                         throw ex;
@@ -377,8 +383,10 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
 
                         TRope restoredString;
                         try {
-                            groupType.RestoreData(TErasureType::CrcModeNone, partSet, restoredString,
-                                    isRestoreParts, isRestoreFullData, isRestoreParts);
+                            groupType.RestoreData(crcNoneBlob, partSet,
+                                                    restoredString, isRestoreParts,
+                                                    isRestoreFullData,
+                                                    isRestoreParts);
                         } catch (yexception ex) {
                             ex << " [in RestoreData while testing " << errorInfo << mode << "]";
                             throw ex;
@@ -644,7 +652,8 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                 TDataPartSet partSet;
                 try {
                     VERBOSE_COUT("SplitData " << errorInfo << Endl);
-                    groupType.SplitData(crcMode, testString, partSet);
+                    const auto blobId = TLogoBlobID::Make(1, 1, 1, 0, testString.size(), 0, crcMode);
+                    groupType.SplitData(blobId, testString, partSet);
                 } catch (yexception ex) {
                     ex << " [in SplitData while testing " << errorInfo << "]";
                     throw ex;
@@ -706,8 +715,10 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                     VERBOSE_COUT("RestoreData " << errorInfo << Endl);
                     TRope restoredString;
                     try {
-                        groupType.RestoreData(crcMode, partSet, restoredString,
-                                isRestoreParts, isRestoreFullData, isRestoreParityParts);
+                        const auto blobId = TLogoBlobID::Make(1, 1, 1, 0, testString.size(), 0, crcMode);
+                        groupType.RestoreData(blobId, partSet, restoredString,
+                                              isRestoreParts, isRestoreFullData,
+                                              isRestoreParityParts);
                     } catch (yexception ex) {
                         ex << " [in RestoreData while testing " << errorInfo << mode << "]";
                         throw ex;
@@ -800,7 +811,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                 ((ui8*)testString.data())[i] = (ui8)i;
             }
             TDataPartSet partSet;
-            groupType.SplitData(TErasureType::CrcModeNone, testString, partSet);
+            groupType.SplitData(MakeCrcNoneStubBlobId(testString.size()), testString, partSet);
             for (ui32 p = 0; p < groupType.DataParts(); ++p) {
                 auto &part = partSet.Parts[p];
                 VERBOSE_COUT("Part# " << p << " Size# " << part.size() << " Data# ");
@@ -956,7 +967,8 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
 
             // Split the data into parts
             TDataPartSet partSet;
-            groupType.SplitData(TErasureType::CrcModeNone, testString, partSet);
+            groupType.SplitData(MakeCrcNoneStubBlobId(testString.size()),
+                                testString, partSet);
             ui64 partSize = groupType.PartSize(TErasureType::CrcModeNone, dataSize);
             for (ui32 part = 0; part < groupType.TotalPartCount(); ++part) {
                 UNIT_ASSERT_EQUAL(partSize, partSet.Parts[part].size());
@@ -1037,7 +1049,9 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
 
                     // Restore the data
                     TString restoredString;
-                    groupType.RestoreData(TErasureType::CrcModeNone, partSet, true, false, true);
+                    groupType.RestoreData(
+                        MakeCrcNoneStubBlobId(testString.size()), partSet, true,
+                        false, true);
 
                     TBlockSplitRange range;
                     groupType.BlockSplitRange(TErasureType::CrcModeNone, dataSize, shift, shift + size, &range);

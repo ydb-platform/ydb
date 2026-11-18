@@ -168,8 +168,8 @@ namespace NKikimr {
             }
             restoreMask &= ~item.PartsMask;
 
-            ErasureRestore((TErasureType::ECrcMode)item.BlobId.CrcMode(), Info->Type, item.BlobId.BlobSize(), nullptr,
-                item.Parts, restoreMask);
+            ErasureRestore(item.BlobId, Info->Type, nullptr, item.Parts,
+                           restoreMask);
             item.PartsMask |= restoreMask;
 
             // clear metadata parts in mirror erasures

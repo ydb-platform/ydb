@@ -17,6 +17,8 @@
 
 namespace NKikimr {
 
+struct TLogoBlobID;
+
 struct TDiff {
     TRcBuf Buffer;
     ui32 Offset = 0;
@@ -337,15 +339,15 @@ struct TErasureType {
     ui64 SuggestDataSize(ECrcMode crcMode, ui64 partSize, bool roundDown) const;
     ui32 Prime() const;
 
-    void SplitData(ECrcMode crcMode, TRope& buffer, TDataPartSet& outPartSet) const;
-    void SplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const {
+    void SplitData(const TLogoBlobID& id, TRope& buffer, TDataPartSet& outPartSet) const;
+    void SplitData(const TLogoBlobID& id, const TString& buffer, TDataPartSet& outPartSet) const {
         TRope rope(buffer);
-        SplitData(crcMode, rope, outPartSet);
+        SplitData(id, rope, outPartSet);
     }
-    void IncrementalSplitData(ECrcMode crcMode, TRope& buffer, TDataPartSet& outPartSet) const;
-    void IncrementalSplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const {
+    void IncrementalSplitData(const TLogoBlobID& id, TRope& buffer, TDataPartSet& outPartSet) const;
+    void IncrementalSplitData(const TLogoBlobID& id, const TString& buffer, TDataPartSet& outPartSet) const {
         TRope rope(buffer);
-        IncrementalSplitData(crcMode, rope, outPartSet);
+        IncrementalSplitData(id, rope, outPartSet);
     }
 
     void SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) const;
@@ -355,9 +357,9 @@ struct TErasureType {
     void ApplyXorDiff(ECrcMode crcMode, ui32 dataSize, ui8 *dst,
             const TVector<TDiff> &diffs, ui8 fromPart, ui8 toPart) const;
 
-    void RestoreData(ECrcMode crcMode, TDataPartSet& partSet, TRope& outBuffer, bool restoreParts,
+    void RestoreData(const TLogoBlobID& id, TDataPartSet& partSet, TRope& outBuffer, bool restoreParts,
             bool restoreFullData, bool restoreParityParts) const;
-    void RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool restoreParts, bool restoreFullData,
+    void RestoreData(const TLogoBlobID& id, TDataPartSet& partSet, bool restoreParts, bool restoreFullData,
             bool restoreParityParts) const;
 
     bool IsSinglePartRequest(ui32 fullDataSize, ui32 shift, ui32 size, ui32 &outPartIdx) const;
@@ -388,10 +390,11 @@ struct TErasureSplitContext {
     static TErasureSplitContext Init(ui32 maxSizeAtOnce) { return {maxSizeAtOnce, 0}; }
 };
 
-bool ErasureSplit(TErasureType::ECrcMode crcMode, TErasureType erasure, const TRope& whole, std::span<TRope> parts,
-    TErasureSplitContext *context, IRcBufAllocator* allocator);
+bool ErasureSplit(const TLogoBlobID &id, TErasureType erasure,
+                  const TRope &whole, std::span<TRope> parts,
+                  TErasureSplitContext *context, IRcBufAllocator *allocator);
 
-void ErasureRestore(TErasureType::ECrcMode crcMode, TErasureType erasure, ui32 fullSize, TRope *whole,
-    std::span<TRope> parts, ui32 restoreMask, ui32 offset = 0, bool isFragment = false);
-
+void ErasureRestore(const TLogoBlobID &id, TErasureType erasure, TRope *whole,
+                    std::span<TRope> parts, ui32 restoreMask, ui32 offset = 0,
+                    bool isFragment = false);
 }

@@ -34,7 +34,7 @@ namespace NKikimr {
                 info->PickSubgroup(id.Hash(), &varray, &services);
 
                 TDataPartSet parts;
-                info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), data, parts);
+                info->Type.SplitData(id, data, parts);
 
                 TVector<TString> diskvec(vdisks.size());
 

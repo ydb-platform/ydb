@@ -98,10 +98,11 @@ void RunStrategyTest(TBlobStorageGroupType type) {
     std::unordered_map<TString, std::tuple<EStrategyOutcome, TString>> transitions;
 
     TString data(1000, 'x');
-    TLogoBlobID id(1'000'000'000, 1, 1, 0, data.size(), 0);
+    TLogoBlobID id(1'000'000'000, 1, 1, 0, data.size(), 0,
+                   0, TErasureType::CrcModeNone);
     std::vector<TRope> parts(type.TotalPartCount());
-    ErasureSplit(TBlobStorageGroupType::CrcModeNone, type, TRope(data), parts,
-        nullptr, GetDefaultRcBufAllocator());
+    ErasureSplit(id, type, TRope(data), parts, nullptr,
+                 GetDefaultRcBufAllocator());
 
     for (ui32 iter = 0; iter < 100'000; ++iter) {
         Ctest << "iteration# " << iter << Endl;

@@ -1,4 +1,7 @@
+#include "ut_util.h"
+
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/base/logoblob.h>
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/util/lz4_data_generator.h>
 #include <util/system/hp_timer.h>
@@ -11,10 +14,14 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
         TErasureType erasure(TErasureType::Erasure4Plus2Block);
 
         std::vector<TString> buffers;
+        std::vector<TLogoBlobID> blobs;
         ui64 totalSize = 0;
         for (ui32 iter = 0; iter < 10000; ++iter) {
             const ui32 length = 1 + RandomNumber(100000u);
             buffers.push_back(FastGenDataForLZ4(length, iter));
+            blobs.push_back(TLogoBlobID::Make(iter, 1, 1, 0,
+                                              buffers.back().size(), 0,
+                                              TErasureType::CrcModeNone));
             totalSize += length;
         }
 
@@ -24,14 +31,15 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
         parts2.reserve(buffers.size());
 
         THPTimer timer;
-        for (const auto& buffer : buffers) {
-            erasure.SplitData(TErasureType::CrcModeNone, buffer, parts1.emplace_back());
+        for (ui32 iter = 0; iter < 10000; ++iter) {
+            erasure.SplitData(blobs[iter], buffers[iter], parts1.emplace_back());
         }
         TDuration period1 = TDuration::Seconds(timer.PassedReset());
 
-        for (const auto& buffer : buffers) {
-            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, TRope(buffer), parts2.emplace_back(),
-                nullptr, GetDefaultRcBufAllocator());
+        for (ui32 iter = 0; iter < 10000; ++iter) {
+            ErasureSplit(blobs[iter], TErasureType::Erasure4Plus2Block,
+                        TRope(buffers[iter]), parts2.emplace_back(), nullptr,
+                        GetDefaultRcBufAllocator());
         }
         TDuration period2 = TDuration::Seconds(timer.PassedReset());
 
@@ -76,15 +84,16 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
             UNIT_ASSERT_EQUAL(rope.ConvertToString(), buffer);
 
             TDataPartSet p1;
-            erasure.SplitData(TErasureType::CrcModeNone, buffer, p1);
+            const auto crcNoneBlob = MakeCrcNoneStubBlobId(buffer.size());
+            erasure.SplitData(crcNoneBlob, buffer, p1);
 
             std::array<TRope, 6> p2;
-            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, rope, p2,
-                nullptr, GetDefaultRcBufAllocator());
+            ErasureSplit(crcNoneBlob, TErasureType::Erasure4Plus2Block, rope,
+                         p2, nullptr, GetDefaultRcBufAllocator());
 
             std::array<TRope, 6> p3;
             TErasureSplitContext ctx = TErasureSplitContext::Init(32 * (1 + RandomNumber(1000u)));
-            while (!ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, rope, p3, &ctx, GetDefaultRcBufAllocator())) {}
+            while (!ErasureSplit(crcNoneBlob, TErasureType::Erasure4Plus2Block, rope, p3, &ctx, GetDefaultRcBufAllocator())) {}
 
             for (ui32 i = 0; i < 6; ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(p1.Parts[i].OwnedString.size(), p2[i].size());
@@ -99,9 +108,10 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
 
         for (ui32 length = 1; length < 4096; ++length) {
             TString buffer = FastGenDataForLZ4(length, length);
-            
+
             std::array<TRope, 6> parts;
-            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, TRope(buffer), parts,
+            const auto crcNoneBlob = MakeCrcNoneStubBlobId(buffer.size());
+            ErasureSplit(crcNoneBlob, TErasureType::Erasure4Plus2Block, TRope(buffer), parts,
                 nullptr, GetDefaultRcBufAllocator());
 
             for (i32 i = -1; i < 6; ++i) {
@@ -144,8 +154,10 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
                                 }
 
                                 TRope whole;
-                                ErasureRestore(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, buffer.size(),
-                                    needWhole ? &whole : nullptr, copy, restoreMask, 0, false);
+                                ErasureRestore(crcNoneBlob,
+                                               TErasureType::Erasure4Plus2Block,
+                                               needWhole ? &whole : nullptr,
+                                               copy, restoreMask, 0, false);
                                 for (ui32 k = 0; k < 6; ++k) {
                                     TString restored = copy[k].ConvertToString();
                                     TString reference = parts[k].ConvertToString();
@@ -183,8 +195,11 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
                                                     UNIT_ASSERT_VALUES_EQUAL_C(copy[k].size(), len, xiter << " k# " << k);
                                                 }
                                             }
-                                            ErasureRestore(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block,
-                                                buffer.size(), nullptr, copy, restoreMask, offset, true);
+                                            ErasureRestore(
+                                                crcNoneBlob,
+                                                TErasureType::Erasure4Plus2Block,
+                                                nullptr, copy, restoreMask, offset,
+                                                true);
                                             for (ui32 k = 0; k < 6; ++k) {
                                                 TString restored = copy[k].ConvertToString();
                                                 TString reference = parts[k].ConvertToString().substr(offset, len);
@@ -227,8 +242,9 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
             const ui32 length = 1 + RandomNumber(100000u);
             TString buffer = FastGenDataForLZ4(length, iter);
             std::array<TRope, 6> p;
-            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, TRope(buffer), p,
-                nullptr, GetDefaultRcBufAllocator());
+            ErasureSplit(MakeCrcNoneStubBlobId(buffer.size()),
+                         TErasureType::Erasure4Plus2Block, TRope(buffer), p,
+                         nullptr, GetDefaultRcBufAllocator());
             for (TRope& r : p) {
                 r.Compact();
             }
@@ -240,7 +256,9 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
         restored2.reserve(parts.size());
 
         THPTimer timer;
-        for (const auto& [rope, p, i, j] : parts) {
+        for (ui32 iter = 0; iter < 10000; ++iter) {
+            const auto& [rope, p, i, j] = parts[iter];
+
             TDataPartSet& parts = restored1.emplace_back();
             parts.PartsMask = 63 & ~(1 << i) & ~(1 << j);
             parts.FullDataSize = rope.size();
@@ -250,18 +268,22 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
                     parts.Parts[k].ReferenceTo(p[k]);
                 }
             }
-            erasure.RestoreData(TErasureType::CrcModeNone, parts, true, false, true);
+            erasure.RestoreData(MakeCrcNoneStubBlobId(rope.size()), parts, true,
+                                false, true);
         }
         TDuration period1 = TDuration::Seconds(timer.PassedReset());
 
-        for (const auto& [rope, p, i, j] : parts) {
+        for (ui32 iter = 0; iter < 10000; ++iter) {
+            const auto& [rope, p, i, j] = parts[iter];
+
             std::array<TRope, 6>& copy = restored2.emplace_back();
             for (ui32 k = 0; k < 6; ++k) {
                 if (k != i && k != j) {
                     copy[k] = p[k];
                 }
             }
-            ErasureRestore(TErasureType::CrcModeNone, erasure, rope.size(), nullptr, copy, 1 << i | 1 << j, 0, false);
+            ErasureRestore(MakeCrcNoneStubBlobId(rope.size()), erasure, nullptr,
+                           copy, 1 << i | 1 << j, 0, false);
             UNIT_ASSERT_EQUAL(copy, p);
         }
         TDuration period2 = TDuration::Seconds(timer.PassedReset());

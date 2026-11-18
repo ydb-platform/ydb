@@ -754,9 +754,11 @@ namespace NKikimr {
             TDataPartSet partSet;
             TDataPartSet resultPartSet;
             TDataPartSet savedPartSet;
-            type.SplitData(TErasureType::CrcModeNone, data, partSet);
-            type.SplitData(TErasureType::CrcModeNone, savedData, savedPartSet);
-            type.SplitData(TErasureType::CrcModeNone, result, resultPartSet);
+            const auto crcNoneBlob = TLogoBlobID::Make(
+                2, 1, 1, 0, data.size(), 0, TErasureType::CrcModeNone);
+            type.SplitData(crcNoneBlob, data, partSet);
+            type.SplitData(crcNoneBlob, savedData, savedPartSet);
+            type.SplitData(crcNoneBlob, result, resultPartSet);
 
             TPartDiffSet diffSet;
             type.SplitDiffs(TErasureType::CrcModeNone, data.size(), diffs, diffSet);

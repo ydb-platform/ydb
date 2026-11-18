@@ -9,8 +9,10 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/actors/core
     ydb/library/actors/util
     library/cpp/containers/stack_vector
+    contrib/libs/protobuf
     contrib/libs/xxhash
     library/cpp/digest/old_crc
     ydb/core/debug

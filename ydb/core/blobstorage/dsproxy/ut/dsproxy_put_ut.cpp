@@ -111,8 +111,9 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies, 
 
     TBatchedVec<TStackVec<TRope, TypicalPartsInBlob>> partSetSingleton(1);
     partSetSingleton[0].resize(totalParts);
-    ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), group.GetInfo()->Type, TRope(encryptedData), partSetSingleton[0], nullptr,
-        zeroPages ? GetDefaultRcBufAllocator() : &rcBufAllocator);
+    ErasureSplit(blobId, group.GetInfo()->Type, TRope(encryptedData),
+                 partSetSingleton[0], nullptr,
+                 zeroPages ? GetDefaultRcBufAllocator() : &rcBufAllocator);
 
     TEvBlobStorage::TEvPut ev(blobId, std::move(data), TInstant::Max(), NKikimrBlobStorage::TabletLog,
             TEvBlobStorage::TEvPut::TacticDefault);
@@ -283,8 +284,9 @@ struct TTestPutAllOk {
             Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), blobId, *Group.GetInfo());
 
             PartSets[blobIdx].resize(totalParts);
-            ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), Group.GetInfo()->Type, TRope(encryptedData), PartSets[blobIdx],
-                nullptr, GetDefaultRcBufAllocator());
+            ErasureSplit(blobId, Group.GetInfo()->Type, TRope(encryptedData),
+                         PartSets[blobIdx], nullptr,
+                         GetDefaultRcBufAllocator());
         }
     }
 
@@ -445,8 +447,8 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
     TString encryptedData = data;
     char *dataBytes = encryptedData.Detach();
     Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), blobId, *env.Info);
-    ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), env.Info->Type, TRope(encryptedData), partSetSingleton[0],
-        nullptr, GetDefaultRcBufAllocator());
+    ErasureSplit(blobId, env.Info->Type, TRope(encryptedData),
+                 partSetSingleton[0], nullptr, GetDefaultRcBufAllocator());
     putImpl.GenerateInitialRequests(logCtx, partSetSingleton);
     TPutImpl::TPutResultVec putResults;
     putImpl.Step(logCtx, putResults, &env.Info->GetTopology(), false);

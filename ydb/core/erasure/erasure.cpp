@@ -1,5 +1,7 @@
 #include "erasure.h"
 
+#include <ydb/core/base/logoblob.h>
+
 #include <util/generic/yexception.h>
 #include <util/system/unaligned_mem.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -2623,14 +2625,16 @@ static void VerifyPartSizes(TDataPartSet& partSet, size_t definedPartEndIdx) {
     }
 }
 
-void TErasureType::SplitData(ECrcMode crcMode, TRope& buffer, TDataPartSet& outPartSet) const {
+void TErasureType::SplitData(const TLogoBlobID& id, TRope& buffer, TDataPartSet& outPartSet) const {
     outPartSet.ResetSplit();
     do {
-        IncrementalSplitData(crcMode, buffer, outPartSet);
+        IncrementalSplitData(id, buffer, outPartSet);
     } while (!outPartSet.IsSplitDone());
 }
 
-void TErasureType::IncrementalSplitData(ECrcMode crcMode, TRope& buffer, TDataPartSet& outPartSet) const {
+void TErasureType::IncrementalSplitData(const TLogoBlobID& id, TRope& buffer, TDataPartSet& outPartSet) const {
+    ECrcMode crcMode = static_cast<ECrcMode>(id.CrcMode());
+
     const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:
@@ -3007,15 +3011,17 @@ void TErasureType::ApplyXorDiff(ECrcMode crcMode, ui32 dataSize, ui8 *dst,
     }
 }
 
-void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, TRope& outBuffer, bool restoreParts,
+void TErasureType::RestoreData(const TLogoBlobID& id, TDataPartSet& partSet, TRope& outBuffer, bool restoreParts,
         bool restoreFullData, bool restoreParityParts) const {
     partSet.FullDataFragment.ReferenceTo(outBuffer);
-    RestoreData(crcMode, partSet, restoreParts, restoreFullData, restoreParityParts);
+    RestoreData(id, partSet, restoreParts, restoreFullData, restoreParityParts);
     outBuffer = partSet.FullDataFragment.OwnedString;
 }
 
-void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool restoreParts, bool restoreFullData,
+void TErasureType::RestoreData(const TLogoBlobID& id, TDataPartSet& partSet, bool restoreParts, bool restoreFullData,
         bool restoreParityParts) const {
+    const auto crcMode = static_cast<ECrcMode>(id.CrcMode());
+
     if (restoreParityParts) {
         restoreParts = true;
     }

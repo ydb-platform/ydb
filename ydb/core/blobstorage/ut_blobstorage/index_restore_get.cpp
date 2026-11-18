@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(IndexRestoreGet) {
         TString data = TString(id.BlobSize(), 'X');
 
         TDataPartSet parts;
-        info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), data, parts);
+        info->Type.SplitData(id, data, parts);
 
         TBlobStorageGroupInfo::TOrderNums nums{5, 6, 7, 0, 1, 2, 3, 4};
 

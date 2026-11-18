@@ -348,8 +348,9 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
         }
 
         TStackVec<TRope, TypicalPartsInBlob> partData(info.Type.TotalPartCount());
-        ErasureSplit((TErasureType::ECrcMode)state.Id.CrcMode(), info.Type,
-            state.Whole.Data.Read(0, state.Id.BlobSize()), partData, nullptr, allocator);
+        ErasureSplit(state.Id, info.Type,
+                     state.Whole.Data.Read(0, state.Id.BlobSize()), partData,
+                     nullptr, allocator);
 
         for (ui32 partIdx = 0; partIdx < info.Type.TotalPartCount(); ++partIdx) {
             auto& part = state.Parts[partIdx];

@@ -915,7 +915,8 @@ public:
         IsSecured = (Info->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE);
 
         IsGoodPatchedBlobId = result;
-        IsAllowedErasure = Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
+        IsAllowedErasure = (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
+                && Info->Type.GetErasure() != TErasureType::Erasure8Plus2Block)
                 || Info->Type.GetErasure() == TErasureType::ErasureNone
                 || Info->Type.GetErasure() == TErasureType::ErasureMirror3dc;
         if (false && IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch && OriginalGroupId == Info->GroupID && !IsSecured) {

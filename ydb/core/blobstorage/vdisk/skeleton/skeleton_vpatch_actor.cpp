@@ -190,6 +190,14 @@ namespace NKikimr::NPrivate {
                     (Deadline, Deadline));
             AddMark("TSkeletonVPatchActor bootstrapped");
 
+            if (GType.GetErasure() == TErasureType::Erasure8Plus2Block) {
+                ErrorReason = "Distributed VPatch is not supported for block-8-2";
+                SendVPatchFoundParts(NKikimrProto::ERROR);
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
+                return;
+            }
+
             TInstant now = TActivationContext::Now();
             if (Deadline != TInstant::Zero() && Deadline < now) {
                 ErrorReason = "DEADLINE";

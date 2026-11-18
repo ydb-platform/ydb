@@ -181,8 +181,8 @@ Y_UNIT_TEST_SUITE(SubgroupWideLayout) {
                 UNIT_ASSERT_VALUES_EQUAL(valid.CountEffectiveReplicas(type), MatchOracle(rows, type.TotalPartCount()));
             }
         };
-        for (const auto& [species, _] : TErasureType::ErasureNames) {
-            check(species);
+        for (ui32 species = 0; species < TErasureType::ErasureSpeciesCount; ++species) {
+            check(TErasureType::EErasureSpecies(species));
         }
         check(Species);
     }

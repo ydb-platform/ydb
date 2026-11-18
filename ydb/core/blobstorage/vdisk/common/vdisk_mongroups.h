@@ -1020,7 +1020,7 @@ public:                                                                         
             TDeepScrubbingSubgroups(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
                 for (bool isHuge : {true, false}) {
                     for (TErasureType::EErasureSpecies erasure :
-                            {TErasureType::ErasureNone, TErasureType::Erasure4Plus2Block,
+                            {TErasureType::ErasureNone, TErasureType::Erasure4Plus2Block, TErasureType::Erasure8Plus2Block,
                             TErasureType::ErasureMirror3of4, TErasureType::ErasureMirror3dc}) {
                         ::NMonitoring::TDynamicCounterPtr subgroup = counters
                                 ->GetSubgroup("blobSize", isHuge ? "huge" : "small")

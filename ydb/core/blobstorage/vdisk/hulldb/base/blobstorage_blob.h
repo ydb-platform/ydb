@@ -241,7 +241,7 @@ namespace NKikimr {
 
         static inline TRope Create(ui64 fullDataSize, ui8 partId, ui8 total, TRope&& data, TRopeArena& arena,
                 bool addHeader) {
-            Y_ABORT_UNLESS(partId > 0 && partId <= 8);
+            Y_ABORT_UNLESS(partId > 0 && partId <= total && total <= TErasureType::MaxTotalParts);
             return CreateFromDistinctParts(&data, &data + 1, NMatrix::TVectorType::MakeOneHot(partId - 1, total),
                 fullDataSize, arena, addHeader);
         }

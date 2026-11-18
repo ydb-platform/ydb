@@ -2,6 +2,7 @@ import os
 
 import pytest
 
+from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.compatibility.fixtures import (
     RestartToAnotherVersionFixture,
     RollingDowngradeAndUpgradeFixture,
@@ -114,6 +115,8 @@ class TestColumnTableNotNullRolling(NotNullChecks, RollingDowngradeAndUpgradeFix
     def base_setup(self):
         self.all_binary_paths = (CURRENT_BINARY, inter_stable_binary_path)
         yield from self.setup_cluster(
+            # Both versions serialize block-4-2 group metadata identically during a rolling downgrade.
+            erasure=Erasure.BLOCK_4_2,
             extra_feature_flags=list(FLAGS),
             table_service_config={"enable_olap_sink": True},
             column_shard_config={"disabled_on_scheme_shard": False},

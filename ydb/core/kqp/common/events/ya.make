@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/apache/arrow
     ydb/core/base
     ydb/core/formats/arrow
     ydb/core/grpc_services/base
@@ -20,6 +21,7 @@ PEERDIR(
     ydb/core/resource_pools
     ydb/core/scheme
     ydb/core/util
+    ydb/library/aclib
     ydb/library/actors/core
     ydb/library/formats/arrow/validation
     ydb/library/yql/dq/actors

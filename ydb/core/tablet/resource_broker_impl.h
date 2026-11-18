@@ -229,7 +229,8 @@ public:
     void EraseTask(TTaskPtr task, bool finished, TInstant now);
 
     TTaskPtr FrontTask();
-    void PopTask();
+    TTaskPtr FrontMemorylessTask();
+    void PopTask(TTaskPtr task);
 
     void UpdateRealResourceUsage(TInstant now);
 
@@ -251,7 +252,9 @@ private:
 public:
     TString Name;
     ui32 Weight;
+    bool StrictMemoryLimit;
     TSet<TTaskPtr, TTaskEarlier> Tasks;
+    TSet<TTaskPtr, TTaskEarlier> MemorylessTasks;
     TResourceLimit QueueLimit;
     TResourceLimitPtr TotalLimit;
     double RealResourceUsage;
@@ -325,6 +328,18 @@ public:
     /**
      * Create new task and queue it. Return true on success, and false if task with the same id already exists.
      */
+    bool FitsMemoryLimit(const TString& type, const TResourceValues& resources) const {
+        const auto& queue = TaskConfig(type).Queue;
+        const auto bytes = resources[NKikimrResourceBroker::MEMORY];
+        return !queue->StrictMemoryLimit ||
+            bytes <= GetMemoryLimit(type);
+    }
+
+    ui64 GetMemoryLimit(const TString& type) const {
+        return Min(TaskConfig(type).Queue->QueueLimit.Limit[NKikimrResourceBroker::MEMORY],
+            ResourceLimit->Limit[NKikimrResourceBroker::MEMORY]);
+    }
+
     bool SubmitTask(const TEvResourceBroker::TTask &task, const TActorId &client, const TActorSystem &as);
     /**
      * Update queued task. Return true on success and false if task not found.

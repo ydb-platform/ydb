@@ -78,13 +78,46 @@ semantics, including matching Decimal NaNs. JSON and YSON covering values are
 compared as stored bytes; specialized indexes are skipped.
 PostgreSQL values are compared and reported in their text representation.
 
-Async implementation tables require Stale Read-Only isolation in QueryService,
-so all checked async indexes are compared in a separate streaming SELECT in
-that mode. They are never included in or used to weaken the synchronous snapshot
-transaction. Normal replication may lag, and late changes can be applied with
-an older MVCC version. Async reads are not repeatable and do not share the
-synchronous snapshot. Their result is always `inconclusive`, even when observed
-values match. Async differences are observations, not confirmed corruption.
+Without `--writes-stopped`, async indexes are explicitly skipped and reported as
+`inconclusive`. Synchronous validation remains available during concurrent DML.
+
+To check eventual async consistency, stop all table mutations before invocation,
+wait for outstanding writes to commit, and keep writes stopped until exit.
+This includes inserts, updates, deletes, bulk imports, TTL expiration and other
+background mutations, not just new rows. Also exclude administrative writes to
+the physical indexes. The flag is the caller's assertion, not a write lock.
+Keep the external DDL exclusion described above held as well.
+
+```bash
+ydb/tools/validate_indexes/bin/validate-indexes \
+    --endpoint grpc://localhost:2135 --database /Root --table my_table \
+    --ddl-excluded --writes-stopped \
+    --async-retries 20 --async-retry-delay 30
+```
+
+Async implementation tables require Stale Read-Only isolation in QueryService.
+Each attempt executes one complete streaming SELECT comparing the unchanged
+main table with **all** checked async indexes. Success requires two consecutive
+attempts with zero differences across that entire set. Any difference resets
+the clean-pass count. The defaults allow 20 retries after the initial attempt,
+with 30 seconds between attempts: up to ten minutes of waits plus scan time.
+The retry count must be at least 1 and the delay must be finite and positive.
+Each retry starts a new complete query; it never resumes a partial stream.
+
+StaleRO can use arbitrarily stale read replicas, including an older main-table
+version that hides a committed change. If the main table or any checked async
+implementation table has nonzero read replicas configured, the script skips
+async confirmation and reports `inconclusive`, even with `--writes-stopped`.
+Disable those replicas before the DDL exclusion window to use this mode.
+
+Async attempts never weaken or repeat the synchronous snapshot query. They do
+not share its snapshot or provide a replication-completion barrier. Late async
+changes may carry older MVCC versions, and async reads are not repeatable.
+`consistent` in this mode means that two complete comparisons observed convergence
+under the stopped-writes and no-read-replicas preconditions; it does not promise
+that future writes or background replay cannot change an index again.
+If the retry budget expires, the result remains `inconclusive`: replication lag
+and permanent corruption cannot be distinguished by these reads alone.
 
 Only differences are streamed to the client. Client memory usage is bounded by
 a stream batch; the server scans and groups all indexed data. Indexes that are
@@ -95,6 +128,11 @@ a new snapshot. Detected schema changes also discard the validation result.
 Differences are printed as JSON lines with the index name, table primary key,
 index key, row values and a missing/extra reason. A changed value produces a
 missing expected row and an extra actual row. Each index gets a summary.
+For async validation, progress reports attempt/mismatch counts and the clean-pass
+count. Intermediate differences are spooled to a temporary disk file, replaced
+on each attempt. A successful convergence prints no obsolete async differences.
+On exhaustion, only the last complete attempt's differences are printed, with
+`status: inconclusive`. Client memory remains bounded by a stream batch.
 For floating-point differences, `row` retains readable values and signed zero;
 non-finite values are strings (`nan`, `inf`, `-inf`). `comparison_bytes` records
 the exact little-endian bytes as hex, preserving NaN distinctions in diagnostics.
@@ -107,12 +145,15 @@ be used as a successful whole-table verdict.
 
 Exit codes:
 
-- `0`: with external DDL exclusion held, all checked sync/unique indexes are consistent and no async indexes
-  require confirmation, or there are no supported indexes.
+- `0`: with external DDL exclusion held, all checked sync/unique indexes are
+  consistent and all async indexes, if present, converged with `--writes-stopped`,
+  or there are no supported indexes.
 - `1`: at least one confirmed sync/unique mismatch was found. This takes
   precedence over an inconclusive async result.
 - `2`: validation failed, for example because DDL exclusion was not asserted,
   a schema/creation identity changed, a table could not be read, or the scan
-  was interrupted or truncated. Any earlier output is partial.
+  was interrupted or truncated, or temporary diagnostic storage failed.
+  Any earlier output is partial.
 - `3`: async consistency could not be confirmed, with no confirmed sync/unique
-  mismatches. Observed async differences are included in the output.
+  mismatches: writes were not asserted stopped, read replicas prevent confirmation,
+  or retries were exhausted. Last-attempt async differences are included when read.

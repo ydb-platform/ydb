@@ -9,6 +9,8 @@ import os
 import posixpath
 import struct
 import sys
+import tempfile
+import time
 
 import ydb
 from ydb import _apis, issues
@@ -140,7 +142,74 @@ def _read_differences(driver, table, indexes, columns):
                     stream.cancel()
 
 
-def _validate(driver, session, path):
+def _difference(table, indexes, columns, position, result):
+    name, index, asynchronous = indexes[position]
+    row, comparison_bytes = {}, {}
+    for number, column in enumerate(columns):
+        value = result[f"c{number}"]
+        fmt = FLOAT_FORMATS.get(table.column_type(column).type_id)
+        if fmt and value is not None:
+            comparison_bytes[column] = value.hex()
+            value = struct.unpack(fmt, value)[0]
+            if not math.isfinite(value):
+                value = repr(value)
+        row[column] = value
+    details = {
+        "index": name,
+        "pk": table.key(row),
+        "index_key": index.key(row),
+        "reason": "missing index row" if result["balance"] > 0 else "extra index row",
+        "row": {column: row[column] for column in index.columns},
+    }
+    if asynchronous:
+        details["status"] = "inconclusive"
+    if comparison_bytes:
+        details["comparison_bytes"] = comparison_bytes
+    return json.dumps(details, ensure_ascii=True, default=repr)
+
+
+def _check_schema(driver, session, described):
+    for source in described:
+        source.check_schema(driver, session)
+
+
+def _check_async(driver, session, table, indexes, columns, described, retries, delay):
+    # StaleRO may read arbitrarily old follower state, including an old main
+    # table that hides a committed change. Do not confirm that observation.
+    for source in [table] + [index for _, index, _ in indexes]:
+        if any(value for _, value in source.description.read_replicas_settings.ListFields()):
+            print(f"Skipping async validation: read replicas on {source.path} prevent freshness confirmation")
+            return False, [None] * len(indexes)
+    clean_passes = 0
+    with tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as diagnostics:
+        for attempt in range(1, retries + 2):
+            _check_schema(driver, session, described)
+            diagnostics.seek(0)
+            diagnostics.truncate()
+            counts = [0] * len(indexes)
+            for position, result in _read_differences(driver, table, indexes, columns):
+                counts[position] += 1
+                diagnostics.write(_difference(table, indexes, columns, position, result) + "\n")
+            # No attempt, including a clean one, is valid without EOF and the
+            # schema checks. Transport failures propagate without retrying.
+            _check_schema(driver, session, described)
+            total = sum(counts)
+            clean_passes = 0 if total else clean_passes + 1
+            print(f"Async attempt {attempt}/{retries + 1}: mismatches: {total}; "
+                  f"consecutive clean passes: {clean_passes}/2", flush=True)
+            if clean_passes == 2:
+                return True, counts
+            if attempt <= retries:
+                print(f"Retrying async validation in {delay:g}s", flush=True)
+                time.sleep(delay)
+        diagnostics.seek(0)
+        for line in diagnostics:
+            print(line, end="")
+    print("Async retry budget exhausted; consistency could not be confirmed")
+    return False, counts
+
+
+def _validate(driver, session, path, writes_stopped, async_retries, async_retry_delay):
     table = Table(driver, session, path)
     indexes = []
     checked = []
@@ -153,69 +222,68 @@ def _validate(driver, session, path):
             raise ValueError(f"Index {description.name} is not ready")
         indexes.append((description.name, Table(driver, session, f"{path}/{description.name}/indexImplTable"),
                         kind == "global_async_index"))
-        checked.append(f"{description.name} ({kind})")
+        if kind == "global_async_index" and not writes_stopped:
+            print(f"Skipping {description.name} ({kind}): use --writes-stopped to check eventual consistency")
+        else:
+            checked.append(f"{description.name} ({kind})")
     print("Checked index set: " + (", ".join(checked) or "(none)"))
     print("DDL exclusion: supplied externally by the caller")
     described = [table] + [index for _, index, _ in indexes]
-    for source in described:
-        source.check_schema(driver, session)
+    _check_schema(driver, session, described)
     if not indexes:
         print("No supported indexes to validate")
         return True
     columns = sorted({name for _, index, _ in indexes for name in index.columns})
-    mismatches = [0] * len(indexes)
-    for position, result in _read_differences(driver, table, indexes, columns):
-        name, index, asynchronous = indexes[position]
-        row, comparison_bytes = {}, {}
-        for number, column in enumerate(columns):
-            value = result[f"c{number}"]
-            fmt = FLOAT_FORMATS.get(table.column_type(column).type_id)
-            if fmt and value is not None:
-                comparison_bytes[column] = value.hex()
-                value = struct.unpack(fmt, value)[0]
-                if not math.isfinite(value):
-                    value = repr(value)
-            row[column] = value
-        details = {
-            "index": name,
-            "pk": table.key(row),
-            "index_key": index.key(row),
-            "reason": "missing index row" if result["balance"] > 0 else "extra index row",
-            "row": {column: row[column] for column in index.columns},
-        }
-        if asynchronous:
-            details["status"] = "inconclusive"
-        if comparison_bytes:
-            details["comparison_bytes"] = comparison_bytes
-        print(json.dumps(details, ensure_ascii=True, default=repr))
-        mismatches[position] += 1
+    synchronous = [index for index in indexes if not index[2]]
+    asynchronous = [index for index in indexes if index[2]]
+    mismatches = {name: None for name, _, _ in indexes}
+    for name, _, _ in synchronous:
+        mismatches[name] = 0
+    if synchronous:
+        for position, result in _read_differences(driver, table, synchronous, columns):
+            name = synchronous[position][0]
+            print(_difference(table, synchronous, columns, position, result))
+            mismatches[name] += 1
+    async_confirmed = False
+    if asynchronous and writes_stopped:
+        print("Writes stopped: asserted by the caller; checking async convergence", flush=True)
+        async_confirmed, counts = _check_async(driver, session, table, asynchronous, columns, described,
+                                              async_retries, async_retry_delay)
+        mismatches.update((name, count) for (name, _, _), count in zip(asynchronous, counts))
     # Describes cannot prove the absence of transient DDL. External exclusion
     # is mandatory; these checks additionally reject observed schema changes.
-    for source in described:
-        source.check_schema(driver, session)
+    _check_schema(driver, session, described)
     consistent = True
     inconclusive = False
-    for (name, _, asynchronous), count in zip(indexes, mismatches):
-        if asynchronous:
+    for name, _, is_async in indexes:
+        count = mismatches[name]
+        if is_async and not async_confirmed:
             inconclusive = True
-            print(f"{name}: async replication may lag; consistency could not be confirmed")
+            status = "inconclusive"
         elif count:
             consistent = False
-        status = "inconclusive" if asynchronous else ("inconsistent" if count else "consistent")
-        print(f"{name}: {status} (mismatches: {count})")
+            status = "inconsistent"
+        else:
+            status = "consistent"
+        print(f"{name}: {status} (mismatches: {count if count is not None else 'not checked'})")
     status = "inconsistent" if not consistent else ("inconclusive" if inconclusive else "consistent")
     print(f"{path}: {status}")
     return False if not consistent else (None if inconclusive else True)
 
 
-def validate(driver, session, path, *, ddl_excluded=False):
+def validate(driver, session, path, *, ddl_excluded=False, writes_stopped=False,
+             async_retries=20, async_retry_delay=30):
     if not ddl_excluded:
         raise ValueError("DDL exclusion is required from before discovery until validation completes")
+    if not isinstance(async_retries, int) or async_retries < 1:
+        raise ValueError("async_retries must be an integer of at least 1")
+    if not math.isfinite(async_retry_delay) or async_retry_delay <= 0:
+        raise ValueError("async_retry_delay must be a finite positive number")
     # SDK Decimal decoding divides by the scale using Python's current precision.
     # YDB supports up to 35 digits, exceeding Python's default precision of 28.
     with decimal.localcontext() as context:
         context.prec = max(context.prec, 35)
-        return _validate(driver, session, path)
+        return _validate(driver, session, path, writes_stopped, async_retries, async_retry_delay)
 
 
 def main(argv=None):
@@ -224,9 +292,16 @@ def main(argv=None):
     parser.add_argument("-d", "--database", required=True, help="Database path")
     parser.add_argument("-t", "--table", required=True, help="Absolute table path or path relative to the database")
     parser.add_argument("--ddl-excluded", action="store_true", help="Assert an external DDL exclusion mechanism is held")
+    parser.add_argument("--writes-stopped", action="store_true",
+                        help="Assert all writes have stopped until exit; wait for async index convergence")
+    parser.add_argument("--async-retries", type=int, default=20, help="Async retries after the first pass (default: 20)")
+    parser.add_argument("--async-retry-delay", type=float, default=30,
+                        help="Seconds between complete async passes (default: 30)")
     args = parser.parse_args(argv)
     if not args.ddl_excluded:
         parser.error("DDL exclusion is required; use --ddl-excluded only while an external DDL exclusion mechanism is held")
+    if args.async_retries < 1 or not math.isfinite(args.async_retry_delay) or args.async_retry_delay <= 0:
+        parser.error("async retries must be at least 1 and async retry delay must be finite and positive")
     path = posixpath.normpath(posixpath.join(args.database, args.table))
     try:
         # Use anonymous auth locally; otherwise follow the SDK credential environment.
@@ -239,9 +314,11 @@ def main(argv=None):
             driver.wait(timeout=30, fail_fast=True)
             with ydb.SessionPool(driver) as pool:
                 with pool.checkout() as session:
-                    result = validate(driver, session, path, ddl_excluded=args.ddl_excluded)
+                    result = validate(driver, session, path, ddl_excluded=args.ddl_excluded,
+                                      writes_stopped=args.writes_stopped, async_retries=args.async_retries,
+                                      async_retry_delay=args.async_retry_delay)
                     return 3 if result is None else (0 if result else 1)
-    except (ydb.Error, ValueError, RuntimeError) as error:
+    except (ydb.Error, ValueError, RuntimeError, OSError) as error:
         print(f"Validation failed: {error}", file=sys.stderr)
         return 2
 

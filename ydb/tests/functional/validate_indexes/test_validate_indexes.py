@@ -66,11 +66,18 @@ class TestValidateIndexes(unittest.TestCase):
             f"SELECT COUNT(*) AS n FROM `{self.index}`;", commit_tx=True
         ))[0].rows[0]["n"]
 
-    def _run(self, table=None, ddl_excluded=True):
+    def _run(self, table=None, ddl_excluded=True, writes_stopped=False,
+             async_retries=None, async_retry_delay=None):
         command = [yatest.common.binary_path("ydb/tools/validate_indexes/bin/validate-indexes"),
                    "--endpoint", self.endpoint, "--database", "/Root", "--table", table or self.table]
         if ddl_excluded:
             command.append("--ddl-excluded")
+        if writes_stopped:
+            command.append("--writes-stopped")
+        if async_retries is not None:
+            command.extend(["--async-retries", str(async_retries)])
+        if async_retry_delay is not None:
+            command.extend(["--async-retry-delay", str(async_retry_delay)])
         result = subprocess.run(
             command,
             capture_output=True, text=True, timeout=90,
@@ -81,7 +88,7 @@ class TestValidateIndexes(unittest.TestCase):
         # StaleRO can still see the fixture before the administrative write.
         deadline = time.monotonic() + 10
         while True:
-            code, output, error = self._run()
+            code, output, error = self._run(writes_stopped=True, async_retries=1, async_retry_delay=0.1)
             self.assertEqual(code, 3, output + error)
             if reason in output:
                 return code, output, error
@@ -738,6 +745,221 @@ class TestValidateIndexes(unittest.TestCase):
         self.assertIn("inconclusive", output)
         self.assertNotIn("by_value: consistent", output)
 
+    def test_async_without_stopped_writes_is_not_read(self):
+        self._hot_table(asynchronous=True)
+        original_call = ydb.Driver.__call__
+        reads = []
+
+        def record_reads(driver, request, stub, method, *args, **kwargs):
+            if method == "ExecuteQuery":
+                reads.append(request)
+            return original_call(driver, request, stub, method, *args, **kwargs)
+
+        output = io.StringIO()
+        with self.pool.checkout() as session, mock.patch.object(ydb.Driver, "__call__", record_reads):
+            with contextlib.redirect_stdout(output):
+                self.assertIsNone(validator.validate(self.driver, session, self.table, ddl_excluded=True))
+        self.assertEqual(len(reads), 1)
+        self.assertNotIn("by_async/indexImplTable", reads[0].query_content.text)
+        self.assertIn("Skipping by_async", output.getvalue())
+        self.assertIn("--writes-stopped", output.getvalue())
+        self.assertIn("by_async: inconclusive", output.getvalue())
+
+    def _validate_async(self, retries=3, after_pass=None):
+        original_read = validator._read_differences
+        passes = []
+
+        def read(driver, table, indexes, columns):
+            yield from original_read(driver, table, indexes, columns)
+            if any(asynchronous for _, _, asynchronous in indexes):
+                passes.append(len(passes) + 1)
+                if after_pass:
+                    after_pass(len(passes))
+
+        output = io.StringIO()
+        with self.pool.checkout() as session, mock.patch.object(validator, "_read_differences", read):
+            with contextlib.redirect_stdout(output):
+                result = validator.validate(self.driver, session, self.table, ddl_excluded=True,
+                                            writes_stopped=True, async_retries=retries, async_retry_delay=0.05)
+        return result, output.getvalue(), len(passes)
+
+    def test_async_converges_with_stopped_writes(self):
+        self._create("ASYNC")
+        code, output, error = self._run(writes_stopped=True, async_retries=3, async_retry_delay=0.05)
+        self.assertEqual(code, 0, output + error)
+        self.assertIn("by_value: consistent (mismatches: 0)", output)
+        self.assertIn("Async attempt 2/4", output)
+        self.assertFalse(any(line.startswith("{") for line in output.splitlines()), output)
+
+    def test_async_both_empty_converges(self):
+        self._create("ASYNC", rows=False)
+        result, output, passes = self._validate_async(retries=1)
+        self.assertTrue(result, output)
+        self.assertEqual(passes, 2)
+        self.assertIn("by_value: consistent (mismatches: 0)", output)
+
+    def test_async_persistent_difference_exhausts_retries(self):
+        self._create("ASYNC")
+        self._erase_index()
+        result, output, passes = self._validate_async()
+        self.assertIsNone(result, output)
+        self.assertEqual(passes, 4)
+        differences = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+        self.assertEqual(len(differences), 1, output)
+        self.assertEqual(differences[0]["pk"], {"tenant": "a", "id": 1})
+        self.assertEqual(differences[0]["reason"], "missing index row")
+        self.assertEqual(differences[0]["status"], "inconclusive")
+        self.assertIn("by_value: inconclusive (mismatches: 1)", output)
+
+    def test_async_repair_between_attempts_converges(self):
+        self._create("ASYNC")
+        self._erase_index()
+
+        def repair_after_first(attempt):
+            if attempt == 1:
+                self._corrupt(self.index, """(UpdateRow '__user__indexImplTable
+                    '('('value (Utf8 'first)) '('tenant (Utf8 'a)) '('id (Uint64 '1)))
+                    '('('payload (Utf8 'one))))""")
+
+        result, output, passes = self._validate_async(after_pass=repair_after_first)
+        self.assertTrue(result, output)
+        self.assertEqual(passes, 3)
+        self.assertFalse(any(line.startswith("{") for line in output.splitlines()), output)
+        self.assertIn("by_value: consistent (mismatches: 0)", output)
+
+    def test_async_clean_streak_resets(self):
+        self._create("ASYNC")
+
+        def corrupt_after_first(attempt):
+            if attempt == 1:
+                self._erase_index()
+
+        result, output, passes = self._validate_async(after_pass=corrupt_after_first)
+        self.assertIsNone(result, output)
+        self.assertEqual(passes, 4)
+        self.assertIn("missing index row", output)
+        self.assertNotIn("by_value: consistent", output)
+
+    def test_async_indexes_must_converge_together(self):
+        self._create("ASYNC")
+        other = self.table + "/by_id/indexImplTable"
+        self.pool.retry_operation_sync(lambda session: session.execute_scheme(
+            f"ALTER TABLE `{self.table}` ADD INDEX by_id GLOBAL ASYNC ON (id) COVER (payload);"
+        ))
+        self._erase_index()
+
+        def alternate_corruption(attempt):
+            if attempt == 1:
+                self._corrupt(self.index, """(UpdateRow '__user__indexImplTable
+                    '('('value (Utf8 'first)) '('tenant (Utf8 'a)) '('id (Uint64 '1)))
+                    '('('payload (Utf8 'one))))""")
+                self._corrupt(other, """(EraseRow '__user__indexImplTable
+                    '('('id (Uint64 '1)) '('tenant (Utf8 'a))))""")
+            if attempt == 2:
+                self._erase_index()
+                self._corrupt(other, """(UpdateRow '__user__indexImplTable
+                    '('('id (Uint64 '1)) '('tenant (Utf8 'a))) '('('payload (Utf8 'one))))""")
+
+        result, output, passes = self._validate_async(retries=2, after_pass=alternate_corruption)
+        self.assertIsNone(result, output)
+        self.assertEqual(passes, 3)
+        self.assertIn("by_value: inconclusive", output)
+        self.assertIn("by_id: inconclusive", output)
+        self.assertNotIn(": consistent", output)
+
+    def test_async_later_stream_failure_is_not_retried(self):
+        for truncated in (False, True):
+            with self.subTest(truncated=truncated):
+                self._create("ASYNC")
+                original_read = validator._read_differences
+                original_next = ydb.query.base.SyncResponseContextIterator.__next__
+                attempts = []
+                responses = []
+
+                def fail_response(stream):
+                    response = original_next(stream)
+                    responses.append(response)
+                    if truncated:
+                        response.truncated = True
+                        return response
+                    raise ydb.Unavailable("Async validation stream was interrupted")
+
+                def read(driver, table, indexes, columns):
+                    attempts.append(True)
+                    if len(attempts) == 1:
+                        yield from original_read(driver, table, indexes, columns)
+                    else:
+                        with mock.patch.object(ydb.query.base.SyncResponseContextIterator, "__next__", fail_response):
+                            yield from original_read(driver, table, indexes, columns)
+
+                output, error = io.StringIO(), io.StringIO()
+                with mock.patch.object(validator, "_read_differences", read):
+                    with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
+                        code = validator.main(["--endpoint", self.endpoint, "--database", "/Root",
+                                               "--table", self.table, "--ddl-excluded", "--writes-stopped",
+                                               "--async-retries", "3", "--async-retry-delay", "0.05"])
+                self.assertEqual(code, 2, output.getvalue() + error.getvalue())
+                self.assertEqual(len(attempts), 2)
+                self.assertTrue(responses)
+                self.assertNotIn("by_value: consistent", output.getvalue())
+                self.assertNotIn(f"{self.table}: ", output.getvalue())
+
+    def test_async_diagnostics_storage_failure_is_error(self):
+        self._create("ASYNC")
+        self._erase_index()
+        original_file = validator.tempfile.TemporaryFile
+
+        @contextlib.contextmanager
+        def no_space_on_write(*args, **kwargs):
+            with original_file(*args, **kwargs) as diagnostics:
+                with mock.patch.object(diagnostics, "write", side_effect=OSError(28, "No space left on device")):
+                    yield diagnostics
+
+        for failure in (OSError(28, "No space left on device"), no_space_on_write):
+            with self.subTest(failure=type(failure).__name__):
+                output, error = io.StringIO(), io.StringIO()
+                with mock.patch.object(validator.tempfile, "TemporaryFile", side_effect=failure):
+                    with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
+                        code = validator.main(["--endpoint", self.endpoint, "--database", "/Root",
+                                               "--table", self.table, "--ddl-excluded", "--writes-stopped",
+                                               "--async-retries", "1", "--async-retry-delay", "0.05"])
+                self.assertEqual(code, 2, output.getvalue() + error.getvalue())
+                self.assertIn("Validation failed:", error.getvalue())
+                self.assertNotIn("by_value: consistent", output.getvalue())
+                self.assertNotIn(f"{self.table}: ", output.getvalue())
+
+    def test_async_schema_change_between_attempts_fails(self):
+        self._create("ASYNC")
+
+        def change_schema(attempt):
+            if attempt == 1:
+                self.pool.retry_operation_sync(lambda session: session.execute_scheme(
+                    f"ALTER TABLE `{self.table}` ADD INDEX by_payload GLOBAL ASYNC ON (payload);"
+                ))
+
+        with self.assertRaisesRegex(ValueError, "Schema changed"):
+            self._validate_async(after_pass=change_schema)
+
+    def test_async_read_replicas_are_inconclusive(self):
+        self._create("ASYNC")
+        self.pool.retry_operation_sync(lambda session: session.execute_scheme(
+            f'ALTER TABLE `{self.table}` SET (READ_REPLICAS_SETTINGS = "ANY_AZ:1");'
+        ))
+        result, output, passes = self._validate_async()
+        self.assertIsNone(result, output)
+        self.assertEqual(passes, 0)
+        self.assertIn("read replicas", output)
+        self.assertIn("by_value: inconclusive", output)
+
+    def test_async_invalid_retry_options(self):
+        self._create("ASYNC")
+        for retries, delay in ((0, 1), (-1, 1), (1, 0), (1, -1), (1, "nan"), (1, "inf")):
+            with self.subTest(retries=retries, delay=delay):
+                code, output, error = self._run(writes_stopped=True, async_retries=retries, async_retry_delay=delay)
+                self.assertEqual(code, 2, output + error)
+                self.assertIn("async", error.lower())
+                self.assertNotIn("consistent", output)
+
     def test_hot_table_async_is_inconclusive(self):
         self._hot_table(asynchronous=True)
         with self._writer() as writes:
@@ -795,12 +1017,13 @@ class TestValidateIndexes(unittest.TestCase):
         output = io.StringIO()
         with self.pool.checkout() as session, mock.patch.object(ydb.Driver, "__call__", record_reads):
             with contextlib.redirect_stdout(output):
-                self.assertIsNone(validator.validate(self.driver, session, self.table, ddl_excluded=True))
+                self.assertTrue(validator.validate(self.driver, session, self.table, ddl_excluded=True,
+                                                   writes_stopped=True, async_retries=1, async_retry_delay=0.05))
         self.assertIn("by_value: consistent", output.getvalue())
         self.assertIn("by_payload: consistent", output.getvalue())
-        self.assertIn("by_async: inconclusive", output.getvalue())
-        self.assertEqual(len(reads), 2)
-        for (stub, method, request), mode in zip(reads, ("snapshot_read_only", "stale_read_only")):
+        self.assertIn("by_async: consistent", output.getvalue())
+        self.assertEqual(len(reads), 3)
+        for (stub, method, request), mode in zip(reads, ("snapshot_read_only", "stale_read_only", "stale_read_only")):
             self.assertIs(stub, validator._apis.QueryService.Stub)
             self.assertEqual(method, "ExecuteQuery")
             self.assertEqual(request.tx_control.begin_tx.WhichOneof("tx_mode"), mode)

@@ -2078,8 +2078,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const auto board = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         ctx.Runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId), board);
         ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
-            if (event->GetTypeRewrite() != THealthUpdate::EventType) {
+            if (event->GetRecipientRewrite() != board) {
                 return true;
+            }
+            if (event->GetTypeRewrite() != THealthUpdate::EventType) {
+                return false;
             }
             const auto& update = *event->Get<THealthUpdate>();
             UNIT_ASSERT_VALUES_EQUAL(update.PDiskId, 121);

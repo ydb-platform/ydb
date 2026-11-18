@@ -691,7 +691,8 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
 }
 
 std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
-    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept {
+    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit,
+    NActualizer::EActualizationScope scope) noexcept {
     YDB_LOG_VERIFY(dataLocksManager);
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
         {"event", "StartTtl"},
@@ -709,7 +710,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
             }
             g->RefreshTiering(i.second);
             context.ResetActualInstantForTest();
-            g->BuildActualizationTasks(context, actualizationLag);
+            g->BuildActualizationTasks(context, actualizationLag, scope);
         }
     }
 
@@ -719,7 +720,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
             if (pathEviction.contains(i.first)) {
                 continue;
             }
-            i.second->BuildActualizationTasks(context, actualizationLag);
+            i.second->BuildActualizationTasks(context, actualizationLag, scope);
         }
     } else {
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",

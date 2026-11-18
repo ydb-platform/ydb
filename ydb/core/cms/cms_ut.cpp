@@ -3374,23 +3374,41 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Check that ACTIVE BSC request is sent
         env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::ACTIVE);
 
-        // Check that CMS returns ERROR when VDisks eviction is disabled
+        // A dry run must not remove the pending request.
+        env.CheckRequest("user", request.GetRequestId(), true, TStatus::ERROR, 0);
+        env.CheckListRequests("user", 1);
+
+        // A failed recheck removes the request and its host marker.
         env.CheckRequest("user", request.GetRequestId(), false, TStatus::ERROR, 0);
-        auto scheduled = env.CheckGetRequest("user", request.GetRequestId());
-        UNIT_ASSERT_VALUES_EQUAL(scheduled.GetRequests(0).ActionsSize(), 1);
+        env.CheckGetRequest("user", request.GetRequestId(), false, TStatus::WRONG_REQUEST);
+        env.CheckRequest("user", request.GetRequestId(), false, TStatus::WRONG_REQUEST, 0);
+        env.CheckListRequests("user", 0);
 
         env.RestartCms();
-        env.CheckRequest("user", request.GetRequestId(), false, TStatus::ERROR, 0);
-        scheduled = env.CheckGetRequest("user", request.GetRequestId());
-        UNIT_ASSERT_VALUES_EQUAL(scheduled.GetRequests(0).ActionsSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(scheduled.GetRequests(0).GetActions(0).GetType(), TAction::RESTART_SERVICES);
-        UNIT_ASSERT_VALUES_EQUAL(scheduled.GetRequests(0).GetActions(0).GetHost(), ToString(env.GetNodeId(0)));
+        env.CheckGetRequest("user", request.GetRequestId(), false, TStatus::WRONG_REQUEST);
+        env.CheckListRequests("user", 0);
+
+        // A new request while eviction is disabled must not be stored either.
+        auto rejected = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::ERROR
+        );
+        env.CheckGetRequest("user", rejected.GetRequestId(), false, TStatus::WRONG_REQUEST);
+        env.CheckListRequests("user", 0);
 
         // Enable VDisks eviction again
         cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
         env.SetCmsConfig(cmsConfig);
 
-        // Check that FAULTY BSC request is sent again
+        // A new evacuation on the same host must not be blocked by an old marker.
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::DISALLOW_TEMP
+        );
         env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::FAULTY);
     }
 

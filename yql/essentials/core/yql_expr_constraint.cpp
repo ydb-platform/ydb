@@ -25,6 +25,12 @@ using namespace NNodes;
 
 namespace {
 
+bool NeedMultiConstraintInferenceFix(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char Flag[] = "FixMultiConstraintInference";
+    return IsOptimizerEnabled<Flag>(*types) || !IsOptimizerDisabled<Flag>(*types);
+}
+
 template <size_t FromChild, class... Other>
 struct TApplyConstraintFromInput;
 
@@ -1192,6 +1198,7 @@ private:
             }
         }
 
+        const bool fixMultiInference = NeedMultiConstraintInferenceFix(&Types_);
         const auto inputMulti = input->Head().GetConstraint<TMultiConstraintNode>();
         if (lambdaMulti && !input->Head().GetConstraint<TEmptyConstraintNode>()) {
             TMultiConstraintNode::TMapType remappedItems;
@@ -1254,7 +1261,7 @@ private:
             if (remappedItems) {
                 input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(remappedItems)));
             }
-        } else if (inputMulti && lambdaVarIndex) { // Many to one
+        } else if (inputMulti && lambdaVarIndex && !fixMultiInference) { // Many to one
             const auto range = lambdaVarIndex->GetIndexMapping().equal_range(0);
             static const TConstraintSet DefConstr;
             std::vector<const TConstraintSet*> nonEmpty;
@@ -1609,6 +1616,11 @@ private:
         }
         if (const auto varIndex = TVarIndexConstraintNode::MakeCommon(structConstraints, ctx)) {
             input->AddConstraint(varIndex);
+        }
+        if (NeedMultiConstraintInferenceFix(&Types_)) {
+            if (const auto multi = TMultiConstraintNode::MakeCommon(structConstraints, ctx)) {
+                input->AddConstraint(multi);
+            }
         }
 
         return TStatus::Ok;

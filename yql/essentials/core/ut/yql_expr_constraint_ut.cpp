@@ -22,6 +22,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 struct TParseAndAnnotateSettings {
     bool EnableMatchRecognize = false;
     TStringBuf ExpectedError;
+    TStringBuf OptimizerFlag;
 };
 
 TExprNode::TPtr ParseAndAnnotate(const TStringBuf program, TExprContext& exprCtx, const TParseAndAnnotateSettings& settings = {}) {
@@ -34,6 +35,9 @@ TExprNode::TPtr ParseAndAnnotate(const TStringBuf program, TExprContext& exprCtx
     auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
     typeAnnotationContext->RandomProvider = CreateDeterministicRandomProvider(1);
     typeAnnotationContext->MatchRecognize = settings.EnableMatchRecognize;
+    if (settings.OptimizerFlag) {
+        typeAnnotationContext->OptimizerFlags.insert(to_lower(TString(settings.OptimizerFlag)));
+    }
 
     auto writerFactory = []() { return CreateYsonResultWriter(NYson::EYsonFormat::Binary); };
     auto resultProviderConfig = MakeIntrusive<TResultProviderConfig>(*typeAnnotationContext,
@@ -4193,6 +4197,41 @@ Y_UNIT_TEST(MultiWithEmpty) {
     CheckConstraint<TEmptyConstraintNode>(exprRoot, "Take", "Empty");
     CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Visit", "VarIndex(0:0,0:1)");
     CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Just", "VarIndex(0:0,0:1,1:1)");
+}
+
+Y_UNIT_TEST(MultiWithEmptyAndUnknownLambdaMulti) {
+    for (const TStringBuf map : {"Map", "FlatMap"}) {
+        const auto s = TStringBuilder() << R"((
+            (let res (DataSink 'result))
+            (let list (AsList (AsStruct '('key (String 'value)))))
+            (let empty (Take list (Uint64 '0)))
+            (let data (Mux '(empty list)))
+            (let data (LMap data (lambda '(stream)
+                ()" << map << R"( stream (lambda '(row)
+                    )" << (map == "FlatMap" ? "(Just " : "")
+                                        << R"((AsStruct '('original_row row) '('constant (String 'value))))"
+                                        << (map == "FlatMap" ? ")" : "") << R"(
+                ))
+            )))
+            (let world (Write! world res (Key) data '()))
+            (return (Commit! world res))
+        ))";
+
+        for (const TStringBuf flag : {"", "FixMultiConstraintInference", "DisableFixMultiConstraintInference"}) {
+            TExprContext exprCtx;
+            const auto exprRoot = ParseAndAnnotate(s, exprCtx, {.OptimizerFlag = flag});
+            const bool fixMultiInference = flag != "DisableFixMultiConstraintInference";
+            CheckConstraint<TEmptyConstraintNode>(exprRoot, "Take", "Empty");
+            CheckConstraint<TMultiConstraintNode>(exprRoot, "Mux", "Multi(1:{})");
+            // The constant field prevents MakeCommon from inferring Multi in either mode.
+            CheckConstraints<TMultiConstraintNode>(exprRoot, "AsStruct", {"", ""});
+            CheckConstraints<TVarIndexConstraintNode>(exprRoot, "AsStruct", {"", "VarIndex(0:0,1:1)"});
+            CheckConstraint<TEmptyConstraintNode>(exprRoot, map, fixMultiInference ? "" : "Empty");
+            CheckConstraint<TMultiConstraintNode>(exprRoot, map, "");
+            CheckConstraint<TEmptyConstraintNode>(exprRoot, "LMap", fixMultiInference ? "" : "Empty");
+            CheckConstraint<TMultiConstraintNode>(exprRoot, "LMap", "");
+        }
+    }
 }
 
 Y_UNIT_TEST(VisitWithoutRowUsageInOneBranch) {

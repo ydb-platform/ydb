@@ -37,6 +37,7 @@
 #include <library/cpp/testing/hook/hook.h>
 
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
 #include <arrow/api.h>
@@ -4899,7 +4900,7 @@ partitioning_settings {
         UNIT_ASSERT_VALUES_EQUAL(entry.GetUserSID(), userSID);
     }
 
-    Y_UNIT_TEST(TablePermissions) {
+    Y_UNIT_TEST_TWIN(TablePermissions, InterruptInheritance) {
         EnvOptions().EnablePermissionsExport(true);
         Env(); // Init test env
         ui64 txId = 100;
@@ -4914,6 +4915,9 @@ partitioning_settings {
 
         NACLib::TDiffACL diffACL;
         diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user@builtin", NACLib::InheritNone);
+        if (InterruptInheritance) {
+            diffACL.SetInterruptInheritance(true);
+        }
         TestModifyACL(Runtime(), ++txId, "/MyRoot", "Table", diffACL.SerializeAsString(), "user@builtin");
         Env().TestWaitNotification(Runtime(), txId);
 
@@ -4931,7 +4935,7 @@ partitioning_settings {
 
         auto* permissions = S3Mock().GetData().FindPtr("/permissions.pb");
         UNIT_ASSERT(permissions);
-        CheckPermissions(*permissions, CreateProtoComparator(R"(
+        CheckPermissions(*permissions, CreateProtoComparator(Sprintf(R"(
             actions {
               change_owner: "user@builtin"
             }
@@ -4941,7 +4945,8 @@ partitioning_settings {
                 permission_names: "ydb.generic.use"
               }
             }
-        )"));
+            %s
+        )", InterruptInheritance ? "interrupt_inheritance: true" : "")));
     }
 
     Y_UNIT_TEST(Checksums) {
@@ -5875,7 +5880,7 @@ state: STATE_ENABLED
       TestTopic(true, 5, 4);
     }
 
-    Y_UNIT_TEST(SystemViewWithPermissionsExport) {
+    Y_UNIT_TEST_TWIN(SystemViewWithPermissionsExport, InterruptInheritance) {
         Env();
         ui64 txId = 100;
 
@@ -5885,6 +5890,9 @@ state: STATE_ENABLED
 
         NACLib::TDiffACL diffACL;
         diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+        if (InterruptInheritance) {
+            diffACL.SetInterruptInheritance(true);
+        }
         TestModifyACL(Runtime(), ++txId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
         Env().TestWaitNotification(Runtime(), txId);
 
@@ -5913,7 +5921,7 @@ state: STATE_ENABLED
             TStringBuilder() << "\nExpected:\n\n" << sysviewDescExpected << "\n\nActual:\n\n" << sysviewDesc);
 
         const auto permissions = GetS3FileContent("/partition_stats/permissions.pb");
-        CheckPermissions(permissions, CreateProtoComparator(R"(
+        CheckPermissions(permissions, CreateProtoComparator(Sprintf(R"(
             actions {
               change_owner: "user0@builtin"
             }
@@ -5923,7 +5931,8 @@ state: STATE_ENABLED
                 permission_names: "ydb.generic.use"
               }
             }
-        )"));
+            %s
+        )", InterruptInheritance ? "interrupt_inheritance: true" : "")));
     }
 
     Y_UNIT_TEST(ExportTableWithUniqueIndex) {

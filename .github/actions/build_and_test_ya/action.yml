@@ -250,6 +250,8 @@ runs:
       id: build
       shell: bash
       env:
+        # Avoid standard service ports and the default Linux ephemeral port range.
+        VALID_PORT_RANGE: "10000:30000"
         GITHUB_TOKEN: ${{ github.token }}
         COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != 'false' }}
         PR_NUMBER: ${{ github.event.number || inputs.pull_number }}

@@ -1243,25 +1243,22 @@ class TestViewer(object):
             for _ in range(15):
                 result = cls.get_viewer("/viewer/tenantinfo", {'database': name, 'storage': 'true'})
                 tenants = [t for t in result.get('TenantInfo', []) if t.get('Name') == name]
-                if tenants and 'DiskSpaceQuota' in tenants[0]:
+                if tenants and 'DiskSpaceQuotaUsage' in tenants[0]:
                     break
                 time.sleep(1)
             assert tenants, "no TenantInfo for %s in /viewer/tenantinfo response" % name
             tenant = tenants[0]
-            quota = tenant.get('DiskSpaceQuota')
-            assert quota is not None, "no DiskSpaceQuota for %s: %s" % (name, tenant)
-            assert quota.get('DiskQuotaExceeded') is False, quota
-            assert quota.get('StorageSpaceExhausted') is False, quota
-            assert quota.get('SmallBlobsQuotaExceeded') is False, quota
-            usage = quota.get('DiskSpaceQuotaUsage')
-            assert usage is not None, quota
-            assert usage.get('Mode') == 'MODE_DATABASE', usage
-            assert usage.get('QuotaExceeded') is False, usage
+            usage = tenant.get('DiskSpaceQuotaUsage')
+            assert usage is not None, "no DiskSpaceQuotaUsage for %s: %s" % (name, tenant)
+            assert usage.get('Mode') == 'MODE_OVERALL', usage
             entries = usage.get('Entries', [])
             assert len(entries) == 1, usage
             assert 'Usage' in entries[0], usage
             assert int(entries[0].get('SoftQuota', 0)) == 0, usage
             assert int(entries[0].get('HardQuota', 0)) == 0, usage
+            # DomainState contains only the flags that are set, and nothing blocks writes here
+            for flag in ('DiskQuotaExceeded', 'StorageSpaceExhausted', 'SmallBlobsQuotaExceeded'):
+                assert not tenant.get('DomainState', {}).get(flag, False), tenant['DomainState']
             # no quotas configured, so there is no limit
             for tables_storage in tenant.get('TablesStorage', []):
                 for key in ('Limit', 'SoftQuota', 'HardQuota'):

@@ -136,7 +136,6 @@ ui64 GetTotalDiskUsage(const NKikimrSubDomains::TDiskSpaceUsage& usage) {
 NLs::TCheckFunc LsCheckDiskSpaceQuotaUsage(
     bool separateQuotas,
     bool topicsAccounted,
-    bool expectQuotaExceeded,
     const TString& debugHint = ""
 ) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -145,8 +144,6 @@ NLs::TCheckFunc LsCheckDiskSpaceQuotaUsage(
 
         UNIT_ASSERT_C(desc.HasDiskSpaceQuotaUsage(), hint);
         const auto& quotaUsage = desc.GetDiskSpaceQuotaUsage();
-        UNIT_ASSERT_C(quotaUsage.HasQuotaExceeded(), hint);
-        UNIT_ASSERT_VALUES_EQUAL_C(quotaUsage.GetQuotaExceeded(), expectQuotaExceeded, hint);
 
         const auto effective = [](ui64 hard, ui64 soft) {
             return TQuotasPair{.HardQuota = hard ? hard : soft, .SoftQuota = soft ? soft : hard};
@@ -160,7 +157,7 @@ NLs::TCheckFunc LsCheckDiskSpaceQuotaUsage(
         const auto& quotas = desc.GetDatabaseQuotas();
         if (!separateQuotas) {
             UNIT_ASSERT_VALUES_EQUAL_C(NKikimrSubDomains::TDiskSpaceQuotaUsage::EMode_Name(quotaUsage.GetMode()),
-                                       "MODE_DATABASE", hint);
+                                       "MODE_OVERALL", hint);
             expected[""] = TExpectedEntry{
                 .Usage = usage.GetTables().GetTotalSize() + (topicsAccounted ? usage.GetTopics().GetAccountSize() : 0),
                 .Quotas = effective(quotas.data_size_hard_quota(), quotas.data_size_soft_quota()),
@@ -192,14 +189,12 @@ NLs::TCheckFunc LsCheckDiskSpaceQuotaUsage(
 
 NLs::TCheckFunc LsCheckDiskSpaceQuotaUsage(
     TTestActorRuntime& runtime,
-    bool expectQuotaExceeded,
     const TString& debugHint = ""
 ) {
     const auto& flags = runtime.GetAppData().FeatureFlags;
     return LsCheckDiskSpaceQuotaUsage(
         flags.GetEnableSeparateDiskSpaceQuotas(),
         flags.GetEnableTopicDiskSubDomainQuota(),
-        expectQuotaExceeded,
         debugHint
     );
 }
@@ -294,7 +289,7 @@ void CheckQuotaExceedance(TTestActorRuntime& runtime,
 ) {
     TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), {
         LsCheckDiskQuotaExceeded(expectExceeded, debugHint),
-        LsCheckDiskSpaceQuotaUsage(runtime, expectExceeded, debugHint)
+        LsCheckDiskSpaceQuotaUsage(runtime, debugHint)
     });
     CheckNoQuotaUsageInParentDescription(runtime, schemeShard, pathToSubdomain, debugHint);
 }
@@ -311,7 +306,7 @@ void CheckQuotaExceedance(TTestActorRuntime& runtime,
             runtime.GetAppData().FeatureFlags.GetEnableSeparateDiskSpaceQuotas(),
             debugHint
         ),
-        LsCheckDiskSpaceQuotaUsage(runtime, !expectedExceeders.empty(), debugHint)
+        LsCheckDiskSpaceQuotaUsage(runtime, debugHint)
     });
     CheckNoQuotaUsageInParentDescription(runtime, schemeShard, pathToSubdomain, debugHint);
 }
@@ -3991,7 +3986,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         auto checkQuotaAndDropTable = [&]() {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
                 LsCheckDiskQuotaExceeded(true, "Table was created and data was written"),
-                LsCheckDiskSpaceQuotaUsage(runtime, true, "Table was created and data was written")
+                LsCheckDiskSpaceQuotaUsage(runtime, "Table was created and data was written")
             });
 
             TestDropTable(runtime, ++txId, "/MyRoot/USER_0", "Table1");
@@ -4000,7 +3995,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
                 LsCheckDiskQuotaExceeded(false, "Table dropped"),
-                LsCheckDiskSpaceQuotaUsage(runtime, false, "Table dropped")
+                LsCheckDiskSpaceQuotaUsage(runtime, "Table dropped")
             });
         };
 
@@ -4027,7 +4022,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {LsCheckDiskQuotaExceeded(false, "SubDomain created"),
-                            LsCheckDiskSpaceQuotaUsage(runtime, false, "SubDomain created")});
+                            LsCheckDiskSpaceQuotaUsage(runtime, "SubDomain created")});
 
         // UpdateRow
         {
@@ -4231,7 +4226,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
                            {LsCheckDiskQuotaExceeded(false, "SubDomain was created"),
-                            LsCheckDiskSpaceQuotaUsage(runtime, false, "SubDomain was created")});
+                            LsCheckDiskSpaceQuotaUsage(runtime, "SubDomain was created")});
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot/USER_1", R"(
             Name: "Topic1"
@@ -4248,7 +4243,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
                            {LsCheckDiskQuotaExceeded(false, "Topic was created"),
-                            LsCheckDiskSpaceQuotaUsage(runtime, false, "Topic was created")});
+                            LsCheckDiskSpaceQuotaUsage(runtime, "Topic was created")});
 
         ui64 balancerId = DescribePath(runtime, "/MyRoot/USER_1/Topic1").GetPathDescription().GetPersQueueGroup().GetBalancerTabletID();
 
@@ -4263,7 +4258,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
                            {LsCheckDiskQuotaExceeded(true, "Message 0 was written"),
-                            LsCheckDiskSpaceQuotaUsage(runtime, true, "Message 0 was written")});
+                            LsCheckDiskSpaceQuotaUsage(runtime, "Message 0 was written")});
 
         stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
         UNIT_ASSERT_EQUAL_C(true, stats->Record.GetSubDomainOutOfSpace(), "SubDomainOutOfSpace from ReadBalancer after write");
@@ -4274,7 +4269,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
                            {LsCheckDiskQuotaExceeded(false, "Topic1 was deleted"),
-                            LsCheckDiskSpaceQuotaUsage(runtime, false, "Topic1 was deleted")});
+                            LsCheckDiskSpaceQuotaUsage(runtime, "Topic1 was deleted")});
     }
 
     Y_UNIT_TEST(ConnectRightNotInheritedIntoSubDomain) {
@@ -4371,10 +4366,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                 const auto& state = record.GetPathDescription().GetDomainDescription().GetDomainState();
                 UNIT_ASSERT_VALUES_EQUAL(state.GetStorageSpaceExhausted(), exhausted);
                 UNIT_ASSERT_VALUES_EQUAL(state.GetDiskQuotaExceeded(), exhausted);
-                // exhausted storage blocks writes, but does not mean that the disk space quota is exceeded
-                const auto& quotaUsage = record.GetPathDescription().GetDomainDescription().GetDiskSpaceQuotaUsage();
-                UNIT_ASSERT(quotaUsage.HasQuotaExceeded());
-                UNIT_ASSERT_VALUES_EQUAL(quotaUsage.GetQuotaExceeded(), false);
             };
         };
         const TString counter = "SchemeShard/StorageSpaceExhausted";
@@ -4810,7 +4801,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
             const TString hint = TStringBuilder() << name << ", separate quotas: "
                 << runtime.GetAppData().FeatureFlags.GetEnableSeparateDiskSpaceQuotas();
             TestDescribeResult(DescribePath(runtime, "/MyRoot/" + name), {
-                LsCheckDiskSpaceQuotaUsage(runtime, false, hint),
+                LsCheckDiskSpaceQuotaUsage(runtime, hint),
                 [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& quotaUsage = record.GetPathDescription().GetDomainDescription().GetDiskSpaceQuotaUsage();
                     UNIT_ASSERT_VALUES_EQUAL_C(
@@ -4829,10 +4820,10 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 
         // the overall quota applies, a missing threshold is equal to the configured one, 0 means no limit
         runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(false);
-        check("SoftAndHard", "MODE_DATABASE", {{"", 100, 200}});
-        check("HardOnly", "MODE_DATABASE", {{"", 200, 200}});
-        check("SoftOnly", "MODE_DATABASE", {{"", 100, 100}});
-        check("NoQuotas", "MODE_DATABASE", {{"", 0, 0}});
+        check("SoftAndHard", "MODE_OVERALL", {{"", 100, 200}});
+        check("HardOnly", "MODE_OVERALL", {{"", 200, 200}});
+        check("SoftOnly", "MODE_OVERALL", {{"", 100, 100}});
+        check("NoQuotas", "MODE_OVERALL", {{"", 0, 0}});
 
         // storage pool kind quotas apply, the overall quota is ignored
         runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(true);

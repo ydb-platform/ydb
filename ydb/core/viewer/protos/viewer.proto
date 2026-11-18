@@ -418,28 +418,10 @@ message TStorageUsage {
     }
     EType Type = 1;
     optional uint64 Size = 2;
-    // Limits in bytes, set only when there is a limit.
-    // In TTenant.DatabaseStorage Limit is the capacity of the storage groups.
-    // In TTenant.TablesStorage Limit is equal to SoftQuota, and absent quotas mean no limit. When SchemeShard reports
-    // TTenant.DiskSpaceQuota.DiskSpaceQuotaUsage, these are the effective quotas it enforces: the database quota
-    // is attached to the main storage type (which also holds the topics size), and the quotas of pool kinds
-    // are summed up by storage type (no limit when any pool kind of the type has no limit).
-    optional uint64 Limit = 3;
-    optional uint64 SoftQuota = 4;
-    optional uint64 HardQuota = 5;
+    uint64 Limit = 3;
+    uint64 SoftQuota = 4;
+    uint64 HardQuota = 5;
     optional uint64 Groups = 6;
-}
-
-// Disk space quota state of a database as reported by its SchemeShard
-message TTenantDiskSpaceQuota {
-    // Quota mode, quota-accounted usage, effective soft/hard quotas (0 means no limit) and the persisted quota
-    // hysteresis state, exactly as SchemeShard enforces them. Absent when the SchemeShard is too old to report it.
-    optional NKikimrSubDomains.TDiskSpaceQuotaUsage DiskSpaceQuotaUsage = 1;
-    // Writes to the database are blocked: either a disk space quota is exceeded or StorageSpaceExhausted is set
-    optional bool DiskQuotaExceeded = 2;
-    // Storage pools of the database are running out of space (reported by BS_CONTROLLER)
-    optional bool StorageSpaceExhausted = 3;
-    optional bool SmallBlobsQuotaExceeded = 4;
 }
 
 message TTenant {
@@ -481,8 +463,11 @@ message TTenant {
     // Omitted when the database's storage mode is unavailable or mixed.
     optional bool BridgeMode = 56;
     optional NKikimrBridge.ESynchronizationStatus BridgeSyncStatus = 57;
-    // Set with storage=true when the SchemeShard describe of the database succeeded
-    optional TTenantDiskSpaceQuota DiskSpaceQuota = 58;
+    // Copied as is from the SchemeShard description of the database (with storage=true), when it has them.
+    // DomainState contains only the flags that are true; DiskQuotaExceeded means that writes are blocked.
+    // DiskSpaceQuotaUsage is absent when the SchemeShard is too old to report it.
+    optional NKikimrSubDomains.TDomainState DomainState = 58;
+    optional NKikimrSubDomains.TDiskSpaceQuotaUsage DiskSpaceQuotaUsage = 59;
 }
 
 message TTenants {

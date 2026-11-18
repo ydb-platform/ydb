@@ -33,16 +33,14 @@ namespace {
 using namespace NKikimr::NSchemeShard;
 using TDiskSpaceQuotas = TSubDomainInfo::TDiskSpaceQuotas;
 using TQuotasPair = TDiskSpaceQuotas::TQuotasPair;
-using TStoragePoolUsage = TSubDomainInfo::TDiskSpaceUsage::TStoragePoolUsage;
 using TSmallBlobsQuotas = TSubDomainInfo::TSmallBlobsQuotas;
 
-EQuotaUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsage>& storagePoolsUsage,
+EQuotaUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, ui64>& storagePoolsUsage,
                                          const THashMap<TString, TQuotasPair>& storagePoolsQuotas
 ) {
     bool softQuotaExceeded = false;
-    for (const auto& [poolKind, usage] : storagePoolsUsage) {
+    for (const auto& [poolKind, totalSize] : storagePoolsUsage) {
         if (const auto* quota = storagePoolsQuotas.FindPtr(poolKind)) {
-            const auto totalSize = usage.DataSize + usage.IndexSize;
             // If a quota is equal to zero, then it sets no limit on the disk space usage.
             if (quota->HardQuota && totalSize > quota->HardQuota) {
                 return EQuotaUsageStatus::AboveHardQuota;
@@ -57,11 +55,30 @@ EQuotaUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUs
             : EQuotaUsageStatus::BelowSoftQuota;
 }
 
+EQuotaUsageStatus CalcDiskSpaceQuotaStatus(const TSubDomainInfo::TDiskSpaceQuotaView& view) {
+    if (!view) {
+        return EQuotaUsageStatus::BelowSoftQuota;
+    }
+
+    if (view.Mode == TSubDomainInfo::TDiskSpaceQuotaView::EMode::Overall) {
+        // If a quota is equal to zero, then it sets no limit on the disk space usage.
+        if (view.OverallQuotas.HardQuota && view.OverallUsage > view.OverallQuotas.HardQuota) {
+            return EQuotaUsageStatus::AboveHardQuota;
+        }
+        if (!view.OverallQuotas.SoftQuota || view.OverallUsage < view.OverallQuotas.SoftQuota) {
+            return EQuotaUsageStatus::BelowSoftQuota;
+        }
+        return EQuotaUsageStatus::InBetween;
+    }
+
+    return CheckStoragePoolsQuotas(view.StoragePoolsUsage, view.StoragePoolsQuotas);
+}
+
 /*
 This is a workaround!
 It makes sense only in the specific case where:
     - there are no multiple storage pools of the same kind
-    - all storage pool kinds belong to the set {ssh*, hdd*, rot*, nvme*}
+    - all storage pool kinds belong to the set {ssd*, hdd*, rot*, nvme*}
 */
 EUserFacingStorageType GetUserFacingStorageType(const TString& poolKind) {
     if (poolKind.StartsWith("ssd") || poolKind.StartsWith("nvme")) {
@@ -146,6 +163,24 @@ TDiskSpaceQuotas TSubDomainInfo::GetDiskSpaceQuotas() const {
     return TDiskSpaceQuotas{hardQuota, softQuota, std::move(storagePoolsQuotas)};
 }
 
+TSubDomainInfo::TDiskSpaceQuotaView TSubDomainInfo::GetDiskSpaceQuotaView() const {
+    auto quotas = GetDiskSpaceQuotas();
+
+    TDiskSpaceQuotaView view;
+    // If the feature flag is turned off, then the storage pool quotas are ignored, otherwise the overall quota is ignored:
+    // the ignored quotas are not accounted for when we make a decision to change the state of the subdomain.
+    view.Mode = AppData()->FeatureFlags.GetEnableSeparateDiskSpaceQuotas()
+        ? TDiskSpaceQuotaView::EMode::StoragePoolKinds
+        : TDiskSpaceQuotaView::EMode::Overall;
+    view.OverallQuotas = {.HardQuota = quotas.HardQuota, .SoftQuota = quotas.SoftQuota};
+    view.OverallUsage = TotalDiskSpaceUsage();
+    view.StoragePoolsQuotas = std::move(quotas.StoragePoolsQuotas);
+    for (const auto& [poolKind, usage] : DiskSpaceUsage.StoragePoolsUsage) {
+        view.StoragePoolsUsage.emplace(poolKind, usage.DataSize + usage.IndexSize);
+    }
+    return view;
+}
+
 void TSubDomainInfo::RecomputeSmallBlobsStorageUnits() {
     SmallBlobsStorageUnits = 0;
     if (!DatabaseQuotas) {
@@ -201,83 +236,37 @@ bool TSubDomainInfo::ApplyQuotaExceededStatus(EQuotaUsageStatus status, bool& ex
 }
 
 bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
-    const auto changeSubdomainState = [&](EQuotaUsageStatus diskUsage) {
-        return ApplyQuotaExceededStatus(diskUsage, DiskQuotaExceeded, COUNTER_DISK_SPACE_QUOTA_EXCEEDED, counters);
-    };
-
-    auto quotas = GetDiskSpaceQuotas();
-    if (!quotas) {
-        return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
-    }
-
-    if (!AppData()->FeatureFlags.GetEnableSeparateDiskSpaceQuotas()) {
-        // If the feature flag is turned off, then the storage pool quotas are ignored:
-        // they are not accounted for when we make a decision to change the state of the subdomain.
-        ui64 totalUsage = TotalDiskSpaceUsage();
-
-        // If a quota is equal to zero, then it sets no limit on the disk space usage.
-        const bool isHardQuotaExceeded = quotas.HardQuota && totalUsage > quotas.HardQuota;
-        const bool isTotalUsageBelowSoftQuota = !quotas.SoftQuota || totalUsage < quotas.SoftQuota;
-
-        if (isHardQuotaExceeded) {
-            return changeSubdomainState(EQuotaUsageStatus::AboveHardQuota);
-        }
-        if (isTotalUsageBelowSoftQuota) {
-            return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
-        }
-    } else {
-        // If the feature flag is turned on, then the overall quota is ignored:
-        // it is not accounted for when we make a decision to change the state of the subdomain.
-        const auto storagePoolsUsageStatus = CheckStoragePoolsQuotas(DiskSpaceUsage.StoragePoolsUsage, quotas.StoragePoolsQuotas);
-
-        const bool isSomeStoragePoolHardQuotaExceeded = !quotas.StoragePoolsQuotas.empty()
-                                                            && storagePoolsUsageStatus == EQuotaUsageStatus::AboveHardQuota;
-        const bool isEachStoragePoolUsageBelowSoftQuota = quotas.StoragePoolsQuotas.empty()
-                                                            || storagePoolsUsageStatus == EQuotaUsageStatus::BelowSoftQuota;
-
-        if (isSomeStoragePoolHardQuotaExceeded) {
-            return changeSubdomainState(EQuotaUsageStatus::AboveHardQuota);
-        }
-        if (isEachStoragePoolUsageBelowSoftQuota) {
-            return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
-        }
-    }
-
-    // made no changes to the state of the subdomain
-    return false;
+    return ApplyQuotaExceededStatus(
+        CalcDiskSpaceQuotaStatus(GetDiskSpaceQuotaView()),
+        DiskQuotaExceeded, COUNTER_DISK_SPACE_QUOTA_EXCEEDED, counters
+    );
 }
 
 void TSubDomainInfo::FillDiskSpaceQuotaUsage(NKikimrSubDomains::TDiskSpaceQuotaUsage& out) const {
-    using TQuotaUsage = NKikimrSubDomains::TDiskSpaceQuotaUsage;
+    const auto view = GetDiskSpaceQuotaView();
 
-    out.Clear();
-    out.SetQuotaExceeded(DiskQuotaExceeded);
-
-    const auto quotas = GetDiskSpaceQuotas();
-
-    // must stay in sync with the branches of CheckDiskSpaceQuotas()
-    if (!AppData()->FeatureFlags.GetEnableSeparateDiskSpaceQuotas()) {
-        out.SetMode(TQuotaUsage::MODE_DATABASE);
+    if (view.Mode == TDiskSpaceQuotaView::EMode::Overall) {
+        out.SetMode(NKikimrSubDomains::TDiskSpaceQuotaUsage::MODE_OVERALL);
         auto* entry = out.AddEntries();
         entry->SetPoolKind("");
-        entry->SetUsage(TotalDiskSpaceUsage());
-        entry->SetSoftQuota(quotas.SoftQuota);
-        entry->SetHardQuota(quotas.HardQuota);
+        entry->SetUsage(view.OverallUsage);
+        entry->SetSoftQuota(view.OverallQuotas.SoftQuota);
+        entry->SetHardQuota(view.OverallQuotas.HardQuota);
         return;
     }
 
-    out.SetMode(TQuotaUsage::MODE_STORAGE_POOL_KINDS);
+    out.SetMode(NKikimrSubDomains::TDiskSpaceQuotaUsage::MODE_STORAGE_POOL_KINDS);
     struct TPoolKindEntry {
         ui64 Usage = 0;
         TQuotasPair Quotas{.HardQuota = 0, .SoftQuota = 0};
     };
     // sorted by pool kind to keep the output stable
     TMap<TString, TPoolKindEntry> entries;
-    for (const auto& [poolKind, usage] : DiskSpaceUsage.StoragePoolsUsage) {
-        entries[poolKind].Usage = usage.DataSize + usage.IndexSize;
+    for (const auto& [poolKind, usage] : view.StoragePoolsUsage) {
+        entries[poolKind].Usage = usage;
     }
-    for (const auto& [poolKind, quota] : quotas.StoragePoolsQuotas) {
-        entries[poolKind].Quotas = quota;
+    for (const auto& [poolKind, quotas] : view.StoragePoolsQuotas) {
+        entries[poolKind].Quotas = quotas;
     }
     for (const auto& [poolKind, e] : entries) {
         // zeros are set explicitly, so that clients can tell them from missing values

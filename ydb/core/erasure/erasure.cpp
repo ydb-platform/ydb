@@ -137,57 +137,6 @@ void PadAndChecksumAtTheEnd(const TLogoBlobID& id, char *data, ui64 dataSize, ui
     memcpy(data + bufferSize - sizeof(ui64), &hash, sizeof(ui64));
 }
 
-bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TContiguousSpan& buf) {
-    switch (crcMode) {
-    case TErasureType::CrcModeNone:
-        return true;
-    case TErasureType::CrcModeWholePart:
-        if (buf.size() == 0) {
-            return true;
-        } else {
-            Y_ABORT_UNLESS(buf.size() > sizeof(ui64), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
-                    " is less then checksumSize# %" PRIu64, (ui64)buf.size(), (ui64)sizeof(ui64));
-            ui64 checksum = XXH3_64bits(buf.data(), buf.size() - sizeof(ui64));
-            ui64 expectedChecksum = ReadUnaligned<ui64>(buf.data() + buf.size() - sizeof(ui64));
-            return checksum == expectedChecksum;
-        }
-    }
-    ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
-}
-
-bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TRope& rope) {
-    switch (crcMode) {
-        case TErasureType::CrcModeNone:
-            return true;
-        case TErasureType::CrcModeWholePart:
-            if (rope.IsEmpty()) {
-                return true;
-            } else {
-                Y_ABORT_UNLESS(rope.size() > sizeof(ui64), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
-                        " is less then checksumSize# %" PRIu64, (ui64)rope.size(), (ui64)sizeof(ui64));
-
-                size_t bytesRemain = rope.size() - sizeof(ui64);
-                XXH3_state_t state;
-                XXH3_64bits_reset(&state);
-
-                auto iter = rope.begin();
-                while (bytesRemain) {
-                    const char *data = iter.ContiguousData();
-                    const size_t size = std::min(bytesRemain, iter.ContiguousSize());
-                    XXH3_64bits_update(&state, data, size);
-                    iter += size;
-                    bytesRemain -= size;
-                }
-
-                ui64 expectedChecksum;
-                iter.ExtractPlainDataAndAdvance(&expectedChecksum, sizeof(expectedChecksum));
-
-                return XXH3_64bits_digest(&state) == expectedChecksum;
-            }
-    }
-    ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
-}
-
 class TBlockParams {
 public:
     ui64 DataSize;

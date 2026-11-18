@@ -238,6 +238,7 @@ namespace NKikimr {
                         struct TProcessor {
                             std::unique_ptr<TEvBlobStorage::TEvVGetResult>& Result;
                             TLogoBlobID Id;
+                            TErasureType Erasure;
                             ui64 Shift;
                             ui64 Size;
                             const ui64 *CookiePtr;
@@ -261,8 +262,7 @@ namespace NKikimr {
                                 this->operator()(std::move(dataCopy));
                             }
                             void operator()(TRope&& data) {
-                                if (ValidateChecksum && IsFullPartRead && !CheckCrcAtTheEnd(
-                                        static_cast<TErasureType::ECrcMode>(Id.CrcMode()), data)) {
+                                if (ValidateChecksum && IsFullPartRead && !TChecksum::IsValid(Id, Erasure, data)) {
                                     Result->AddResult(NKikimrProto::CORRUPTED, Id, Shift, static_cast<ui32>(Size), CookiePtr,
                                         IngrPtr, Keep, DoNotKeep);
                                     Success = false;
@@ -276,10 +276,18 @@ namespace NKikimr {
                         const ui32 partSize = GType.PartSize(it->Id);
                         const ui32 responseSize = static_cast<ui32>(query->Size ? query->Size : partSize - query->Shift);
                         const bool isFullPartRead = query->Shift == 0 && responseSize == partSize;
-                        TProcessor processor{Result, it->Id, query->Shift, query->Size, cookiePtr, pingr, keep,
-                            doNotKeep, isFullPartRead,
-                            TChecksum::IsRequired(it->Id)
-                                && static_cast<bool>(QueryCtx->HullCtx->VCfg->EnableChecksumReadValidationOnVDisk)};
+                        TProcessor processor{
+                            Result,
+                            it->Id,
+                            GType,
+                            query->Shift,
+                            query->Size,
+                            cookiePtr,
+                            pingr,
+                            keep,
+                            doNotKeep,
+                            isFullPartRead,
+                            static_cast<bool>(QueryCtx->HullCtx->VCfg->EnableChecksumReadValidationOnVDisk)};
                         rit.GetData(processor);
                         if (!processor.Success) {
                             NMatrix::TVectorType& v = neededParts[it->Id.FullID()];

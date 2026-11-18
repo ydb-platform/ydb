@@ -388,10 +388,8 @@ protected:
 class TChecksum final {
 public:
     static bool IsRequired(const TLogoBlobID& id) noexcept;
+    static bool IsValid(const TLogoBlobID& id, TErasureType erasure, const TRope& rope);
 };
-
-bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TContiguousSpan& buf);
-bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TRope& rope);
 
 struct TErasureSplitContext {
     ui32 MaxSizeAtOnce = 0;

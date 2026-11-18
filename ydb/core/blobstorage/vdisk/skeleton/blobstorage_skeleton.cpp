@@ -558,9 +558,8 @@ namespace NKikimr {
                 return {NKikimrProto::ERROR, "empty TabletID"};
             }
 
-            if (TChecksum::IsRequired(id)
-                    && static_cast<bool>(Config->EnableChecksumWriteValidationOnVDisk)
-                    && !CheckCrcAtTheEnd(static_cast<TErasureType::ECrcMode>(id.CrcMode()), buffer)) {
+            if (static_cast<bool>(Config->EnableChecksumWriteValidationOnVDisk)
+                    && !TChecksum::IsValid(id, GInfo->Type, buffer)) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix
                     << evPrefix << ": buffer checksum mismatch;"
                     << " id# " << id

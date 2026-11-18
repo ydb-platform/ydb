@@ -149,25 +149,29 @@ void CorruptVGetResultPayload(TEvBlobStorage::TEvVGetResult& vgetResult,
     vgetResult.SetBlobData(result, TRope(data));
 }
 
-void CorruptVGetResultChecksum(TEvBlobStorage::TEvVGetResult& vgetResult,
-        NKikimrBlobStorage::TQueryResult& result) {
+void CorruptVGetResultChecksum(const TTestEnv &env,
+                               TEvBlobStorage::TEvVGetResult &vgetResult,
+                               NKikimrBlobStorage::TQueryResult &result,
+                               const TLogoBlobID &blobId) {
     UNIT_ASSERT(vgetResult.HasBlob(result));
     TString data = vgetResult.GetBlobData(result).ConvertToString();
     UNIT_ASSERT(data.size() > sizeof(ui64));
     char* checksum = data.Detach() + data.size() - sizeof(ui64);
     std::memset(checksum, 0, sizeof(ui64));
-    if (CheckCrcAtTheEnd(TErasureType::CrcModeWholePart, TRope(data))) {
+    if (TChecksum::IsValid(blobId, env.Env.Settings.Erasure, TRope(data))) {
         std::memset(checksum, 0xff, sizeof(ui64));
     }
-    UNIT_ASSERT(!CheckCrcAtTheEnd(TErasureType::CrcModeWholePart, TRope(data)));
+    UNIT_ASSERT(!TChecksum::IsValid(blobId, env.Env.Settings.Erasure, TRope(data)));
     result.ClearBufferData();
     result.ClearPayloadId();
     vgetResult.SetBlobData(result, TRope(data));
 }
 
 void AssertWholePart(const TTestEnv& env, const TString& encryptedPart, const TString& data) {
+    const TLogoBlobID partId(env.LastBlobId, 1);
     const TString decryptedPart = env.DecryptPart(encryptedPart);
-    UNIT_ASSERT(CheckCrcAtTheEnd(TErasureType::CrcModeWholePart, TRope(decryptedPart)));
+    UNIT_ASSERT(TChecksum::IsValid(partId, env.Env.Settings.Erasure,
+                                   TRope(decryptedPart)));
     UNIT_ASSERT_VALUES_EQUAL(decryptedPart.substr(0, data.size()), data);
 }
 
@@ -245,7 +249,7 @@ std::shared_ptr<TPartErrorInjection> SetVPutErrorFilter(TTestEnv& env, ui32 brok
 std::shared_ptr<TPartErrorInjection> SetVGetErrorFilter(TTestEnv& env, ui32 brokenPartCount) {
     auto injection = MakePartErrorInjection(env, brokenPartCount, brokenPartCount);
     const ui32 dsProxyNodeId = env.Sender.NodeId();
-    env.Env.Runtime->FilterFunction = [injection, dsProxyNodeId](ui32 nodeId,
+    env.Env.Runtime->FilterFunction = [&env, injection, dsProxyNodeId](ui32 nodeId,
             std::unique_ptr<IEventHandle>& ev) {
         if (nodeId == dsProxyNodeId && ev->GetTypeRewrite() == TEvBlobStorage::EvVGetResult) {
             auto* vget = ev->Get<TEvBlobStorage::TEvVGetResult>();
@@ -259,7 +263,7 @@ std::shared_ptr<TPartErrorInjection> SetVGetErrorFilter(TTestEnv& env, ui32 brok
                 const TLogoBlobID partId = LogoBlobIDFromLogoBlobID(result.GetBlobID());
                 if (injection->IsTargetBlob(partId) && partId.PartId() == candidatePart->second &&
                         result.GetStatus() == NKikimrProto::OK && injection->ShouldBreakPart(partId.PartId())) {
-                    CorruptVGetResultChecksum(*vget, result);
+                    CorruptVGetResultChecksum(env, *vget, result, partId);
                 }
             }
         }
@@ -390,7 +394,7 @@ std::shared_ptr<TMirror3dcErrorInjection> SetMirror3dcVGetErrorFilter(TTestEnv& 
     auto injection = MakeMirror3dcErrorInjection(env, additionalErrorsInSecondDc);
     auto* runtime = env.Env.Runtime.get();
     const ui32 dsProxyNodeId = env.Sender.NodeId();
-    env.Env.Runtime->FilterFunction = [injection, runtime, dsProxyNodeId](ui32 nodeId,
+    env.Env.Runtime->FilterFunction = [&env, injection, runtime, dsProxyNodeId](ui32 nodeId,
             std::unique_ptr<IEventHandle>& ev) {
         if (nodeId != dsProxyNodeId || ev->GetTypeRewrite() != TEvBlobStorage::EvVGetResult) {
             return true;
@@ -426,7 +430,7 @@ std::shared_ptr<TMirror3dcErrorInjection> SetMirror3dcVGetErrorFilter(TTestEnv& 
                     result.ClearBufferData();
                     result.ClearPayloadId();
                 } else {
-                    CorruptVGetResultChecksum(*vget, result);
+                    CorruptVGetResultChecksum(env, *vget, result, partId);
                 }
                 failed = true;
             }
@@ -764,7 +768,7 @@ Y_UNIT_TEST(DsProxyRejectsInvalidVGetChecksum) {
             UNIT_ASSERT_VALUES_EQUAL(queryResult->GetStatus(), NKikimrProto::OK);
             const TLogoBlobID partId = LogoBlobIDFromLogoBlobID(queryResult->GetBlobID());
             UNIT_ASSERT_VALUES_EQUAL(vget->GetBlobData(*queryResult).size(), env.GroupInfo->Type.PartSize(partId));
-            CorruptVGetResultChecksum(*vget, *queryResult);
+            CorruptVGetResultChecksum(env, *vget, *queryResult, partId);
             corrupted = true;
         }
         return true;

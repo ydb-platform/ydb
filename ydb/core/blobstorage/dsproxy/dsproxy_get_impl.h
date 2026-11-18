@@ -210,9 +210,9 @@ public:
             // Currently CRC can be checked only if blob part is fully read
             const bool isFullPart = resultShift == 0 && resultBuffer.size() == Info->Type.PartSize(blobId);
             if (isFullPart) {
-                bool isCrcOk = CheckCrcAtTheEnd((TErasureType::ECrcMode)blobId.CrcMode(), resultBuffer);
+                bool isCrcOk = TChecksum::IsValid(blobId, Info->Type, resultBuffer);
                 if (!isCrcOk) {
-                    DSP_LOG_ERROR_SX(logCtx, "BPG66", "Error in CheckCrcAtTheEnd on TEvVGetResult, blobId# " << blobId
+                    DSP_LOG_ERROR_SX(logCtx, "BPG66", "Error in TChecksum::IsValid on TEvVGetResult, blobId# " << blobId
                             << " resultShift# " << resultShift << " resultBuffer.Size()# " << resultBuffer.size());
                     NKikimrBlobStorage::TQueryResult *mutableResult = ev.Record.MutableResult(i);
                     replyStatus = NKikimrProto::ERROR;

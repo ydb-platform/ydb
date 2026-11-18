@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/tx.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/base/tablet_pipecache.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
@@ -149,10 +150,52 @@ public:
 
     void RestartSchemeShard(const std::string& tablePath) {
         auto& runtime = *Kikimr.GetTestServer().GetRuntime();
-        runtime.Send(MakePipePerNodeCacheID(false), NActors::TActorId(),
-            new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), TTestTxConfig::SchemeShard, false));
-        Sleep(TDuration::Seconds(3));
-        NKikimr::Tests::TClient::RefreshPathCache(&runtime, TString(tablePath));
+        const auto sender = runtime.AllocateEdgeActor();
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+
+        auto connect = [&](TDuration timeout) {
+            const auto pipe = runtime.Register(
+                NTabletPipe::CreateClient(sender, Tests::SchemeRoot, pipeConfig));
+            auto connected = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(
+                sender, timeout);
+            UNIT_ASSERT_C(connected, "timed out connecting to SchemeShard");
+            UNIT_ASSERT_VALUES_EQUAL(connected->Get()->TabletId, Tests::SchemeRoot);
+            UNIT_ASSERT_VALUES_EQUAL(connected->Get()->ClientId, pipe);
+            UNIT_ASSERT_VALUES_EQUAL(connected->Get()->Status, NKikimrProto::OK);
+            return std::pair(pipe, connected->Get()->Generation);
+        };
+
+        const auto [oldPipe, oldGeneration] = connect(TDuration::Seconds(30));
+        runtime.Send(MakePipePerNodeCacheID(false), sender,
+            new TEvPipeCache::TEvForward(
+                new TEvents::TEvPoisonPill(), Tests::SchemeRoot, false));
+
+        auto destroyed = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(
+            sender, TDuration::Seconds(30));
+        UNIT_ASSERT_C(destroyed, "timed out waiting for SchemeShard shutdown");
+        UNIT_ASSERT_VALUES_EQUAL(destroyed->Get()->TabletId, Tests::SchemeRoot);
+        UNIT_ASSERT_VALUES_EQUAL(destroyed->Get()->ClientId, oldPipe);
+
+        const auto [newPipe, newGeneration] = connect(TDuration::Seconds(30));
+        UNIT_ASSERT_C(newGeneration > oldGeneration,
+            "SchemeShard generation did not change after restart: " << oldGeneration);
+        runtime.Send(new IEventHandle(newPipe, sender, new TEvents::TEvPoisonPill()));
+
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Path = SplitPath(TString(tablePath));
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+        entry.SyncVersion = true;
+        runtime.Send(MakeSchemeCacheID(), sender,
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+
+        auto response = runtime.GrabEdgeEventRethrow<
+            TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender, TDuration::Seconds(30));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Request->ResultSet.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Request->ResultSet.front().Status,
+            NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
     }
 
     TKikimrRunner& Runner() {
@@ -1259,12 +1302,10 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         const TString expression = DefaultExpr;
         fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Uint64 DEFAULT " << expression));
 
-
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.RestartSchemeShard("/Root/TestTable");
 
-        const auto afterRestart = fixture.ColumnDesc("/Root/TestTable", "v").GetDefaultFromExpression();
-        UNIT_ASSERT_VALUES_EQUAL(afterRestart.GetExprText(), expression);
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
         fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
         fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;[42u]]]");
     }

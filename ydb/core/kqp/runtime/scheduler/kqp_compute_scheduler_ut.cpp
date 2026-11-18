@@ -297,25 +297,38 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT(newPool->GetParent()->GetParent()->IsRoot());
     }
 
-    Y_UNIT_TEST(ReadQuotaFollowsCompleteConfiguration) {
+    Y_UNIT_TEST_TWIN(LiveReadZeroQuotaRetryPolicy, MemoryEnabled) {
         auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
-        NScheduler::TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
+        auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(counters,
+            TOptions{.DelayParams = kDefaultDelayParams, .MemoryEnabled = MemoryEnabled});
+        TSchedulableReadFactory factory(scheduler);
         NHdrf::NStatic::TRoot config(8);
-        config.GetOrCreateDatabase("db").GetOrCreatePool("pool").ReadLimit = TDuration::MilliSeconds(500);
-        scheduler.UpdateConfiguration(config.Clone());
-        TSchedulableRead read(scheduler.GetReadQuery("db", "pool"));
-        UNIT_ASSERT(read.IsValid());
-        UNIT_ASSERT(read.HasAvailableQuota());
-        config.GetOrCreateDatabase("db").GetOrCreatePool("pool").SetAttributes({.CpuLimit = 0, .ReadLimit = TDuration::Zero()});
-        scheduler.UpdateConfiguration(config.Clone());
-        UNIT_ASSERT(!read.IsValid());
-        UNIT_ASSERT(!read.HasAvailableQuota());
-        UNIT_ASSERT(!read.TryConsumeQuota(TDuration::MilliSeconds(1)));
-        UNIT_ASSERT_VALUES_EQUAL(read.EstimateQuotaDelay(TDuration::MilliSeconds(1)), TDuration::Minutes(1));
-        config.GetOrCreateDatabase("db").GetOrCreatePool("pool").SetAttributes({});
-        scheduler.UpdateConfiguration(config.Clone());
-        UNIT_ASSERT(read.IsValid());
-        UNIT_ASSERT(read.Query->GetAllowMinFairShare());
+        auto& pool = config.GetOrCreateDatabase("db").GetOrCreatePool("pool");
+        const NHdrf::TStaticAttributes enabled{.CpuLimit = 4, .ReadLimit = TDuration::MilliSeconds(500)};
+        pool.SetAttributes(enabled);
+        scheduler->UpdateConfiguration(config.Clone());
+        auto read = factory.Get("db", "pool");
+        UNIT_ASSERT(read && read->IsValid());
+        UNIT_ASSERT(read->HasAvailableQuota());
+
+        pool.SetAttributes({.CpuLimit = 0, .ReadLimit = TDuration::Zero()});
+        scheduler->UpdateConfiguration(config.Clone());
+        const auto slice = TDuration::MilliSeconds(10);
+        UNIT_ASSERT(!read->IsValid());
+        UNIT_ASSERT(!read->TryConsumeQuota(slice));
+        UNIT_ASSERT(!read->HasAvailableQuota());
+        const auto delay = read->EstimateQuotaDelay(slice);
+        if (MemoryEnabled) {
+            UNIT_ASSERT(!delay);
+        } else {
+            UNIT_ASSERT(delay);
+            UNIT_ASSERT_VALUES_EQUAL(*delay, TDuration::Minutes(1));
+        }
+
+        pool.SetAttributes(enabled);
+        scheduler->UpdateConfiguration(config.Clone());
+        UNIT_ASSERT(read->IsValid());
+        UNIT_ASSERT(read->Query->GetAllowMinFairShare());
     }
 
     Y_UNIT_TEST(FullConfigurationReplacesAllAttributesAndPreservesRuntime) {
@@ -2354,7 +2367,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             TSchedulableTask task(query);
             UNIT_ASSERT(task.TryIncreaseUsage());
             UNIT_ASSERT_VALUES_EQUAL(pool->CpuUsage.load(), 1);
-            TSchedulableRead read(readQuery);
+            TSchedulableRead read(readQuery, MemoryEnabled);
             UNIT_ASSERT_VALUES_EQUAL(read.TryConsumeQuota(TDuration::MilliSeconds(1)), !MemoryEnabled);
             UNIT_ASSERT_VALUES_EQUAL(pool->CpuUsage.load(), MemoryEnabled ? 1 : 2);
             if (!MemoryEnabled) {
@@ -2394,7 +2407,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
             auto query = scheduler.GetReadQuery("db", "pool");
             UNIT_ASSERT(!query->GetSnapshot());
-            TSchedulableRead read(query);
+            TSchedulableRead read(query, MemoryEnabled);
             for (ui32 attempt = 0; attempt < 2; ++attempt) {
                 UNIT_ASSERT(read.TryConsumeQuota(TDuration::MilliSeconds(1)));
                 read.ReturnQuota(0);

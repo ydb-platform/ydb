@@ -24,6 +24,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/logger/backend.h>
+#include <library/cpp/threading/future/async.h>
 
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
@@ -39,6 +40,12 @@
             << " got# " << Ydb::StatusIds::StatusCode_Name(got.status()) << " issues# "  << got.issues()) \
 
 namespace NKikimr::NGRpcService {
+
+static void Dispatched(NActors::TTestActorRuntime& runtime, std::function<void()> call) {
+    TThreadPool pool;
+    pool.Start(1);
+    runtime.WaitFuture(NThreading::Async(std::move(call), pool));
+}
 
 struct TKikimrTestSettings {
     static constexpr bool SSL = false;
@@ -59,7 +66,8 @@ class TBasicKikimrWithGrpcAndRootSchema {
 public:
     TBasicKikimrWithGrpcAndRootSchema(
             NKikimrConfig::TAppConfig appConfig = {},
-            TAutoPtr<TLogBackend> logBackend = {})
+            TAutoPtr<TLogBackend> logBackend = {},
+            bool useRealThreads = true)
     {
         ui16 port = PortManager.GetPort(2134);
         ui16 grpc = PortManager.GetPort(2135);
@@ -67,6 +75,7 @@ public:
         ServerSettings->SetGrpcPort(grpc);
         ServerSettings->SetLogBackend(logBackend);
         ServerSettings->SetDomainName("Root");
+        ServerSettings->SetUseRealThreads(useRealThreads);
         ServerSettings->SetDynamicNodeCount(1);
         if (TestSettings::PrecreatePools) {
             ServerSettings->AddStoragePool("ssd");
@@ -118,7 +127,11 @@ public:
         if (ServerSettings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
             annoyingClient.SetSecurityToken("root@builtin");
         }
-        annoyingClient.InitRootScheme("Root");
+        if (useRealThreads) {
+            annoyingClient.InitRootScheme("Root");
+        } else {
+            Dispatched(*Server_->GetRuntime(), [&] { annoyingClient.InitRootScheme("Root"); });
+        }
         GRpcPort_ = grpc;
 
         Channel_ = grpc::CreateChannel(TStringBuilder() << "localhost:" << GetPort(), grpc::InsecureChannelCredentials());

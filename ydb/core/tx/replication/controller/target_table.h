@@ -34,6 +34,8 @@ public:
     explicit TTargetIndexTable(TReplication* replication,
         ui64 id, const IConfig::TPtr& config);
 
+    TString GetSrcIndexPath() const override;
+
 protected:
     TString BuildStreamPath() const override;
 };

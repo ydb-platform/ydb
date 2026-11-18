@@ -499,7 +499,7 @@ void TController::StartIndexReady(const std::pair<ui64, ui64>& key, const TActor
     const TSchemaChangeDstAlterSettings settings{
         .TxId = build.GetReadyTxId(),
         .GlobalConsistency = true,
-        .IndexName = SplitPath(GetIndexTargetSrcIndexPath(*target)).back(),
+        .IndexName = SplitPath(target->GetSrcIndexPath()).back(),
         .SnapshotTxId = build.GetSnapshotTxId(),
         .CancelIndex = cancelling,
     };

@@ -509,7 +509,7 @@ class TController::TTxSchemaChangeReport: public TTxBase {
                 continue;
             }
 
-            const auto sourcePath = GetIndexTargetSrcIndexPath(*target);
+            const auto sourcePath = target->GetSrcIndexPath();
             const auto parentPath = CanonizePath(TString(ExtractParent(sourcePath)));
             if (parentPath != tablePath || retained.contains(sourcePath)) {
                 continue;
@@ -1052,7 +1052,7 @@ public:
                     for (const auto* target : replication->GetTargets()) {
                         exists |= target->GetKind() == TReplication::ETargetKind::IndexTable
                             && target->GetDstState() != TReplication::EDstState::Removing
-                            && GetIndexTargetSrcIndexPath(*target) == src;
+                            && target->GetSrcIndexPath() == src;
                     }
                     if (exists) {
                         continue;

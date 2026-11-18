@@ -301,11 +301,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
         }
 
-        // only async indexes are unsupported without the EnableAsyncIndexReplication feature flag
+        // async indexes are unsupported if the EnableAsyncIndexReplication feature flag is unset,
+        // others are always supported
         auto& indexes = *scheme.mutable_indexes();
         for (auto it = indexes.begin(); it != indexes.end();) {
             if (it->type_case() == Ydb::Table::TableIndex::kGlobalAsyncIndex &&
-                !AppData()->FeatureFlags.GetEnableAsyncIndexReplication()) {
+                !AppData()->FeatureFlags.GetEnableAsyncIndexReplication())
+            {
                 it = indexes.erase(it);
                 continue;
             }

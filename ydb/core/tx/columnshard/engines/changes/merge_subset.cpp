@@ -59,7 +59,7 @@ std::shared_ptr<NArrow::TColumnFilter> ISubsetToMerge::BuildPortionFilter(const 
     if (pInfo.GetMeta().GetDeletionsCount() && useDeletionFilter) {
         // A deletion marker has to be kept only while some portion outside of this task may still hold an older record with the
         // same key. Elsewhere the marker (together with the records it shadows inside the task) is dropped from the result.
-        AFL_VERIFY(HasDeletions && PortionsIndexSnapshot);
+        YDB_LOG_VERIFY(HasDeletions && PortionsIndexSnapshot);
         const std::vector<TKeyInterval> olderIntervals =
             NGranule::NPortionsIndex::TPortionsIndex::GetOlderIntervals(*PortionsIndexSnapshot, pInfo, portionsInUsage);
         const NArrow::TSimpleRow keyStart = pInfo.IndexKeyStart();

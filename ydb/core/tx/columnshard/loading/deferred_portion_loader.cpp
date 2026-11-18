@@ -20,8 +20,8 @@ bool TDeferredPortionLoader::DecideOnStart() {
 }
 
 bool TDeferredPortionLoader::Start() {
-    AFL_VERIFY(Enabled);
-    AFL_VERIFY(TablesToLoad.empty());
+    YDB_LOG_VERIFY(Enabled);
+    YDB_LOG_VERIFY(TablesToLoad.empty());
     for (const auto& [pathId, granule] : TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetTables()) {
         if (!granule->GetLoadedKeyRanges().CoversAll()) {
             TablesToLoad.emplace_back(pathId);
@@ -44,7 +44,7 @@ bool TDeferredPortionLoader::TryStartBatch() {
 
 bool TDeferredPortionLoader::ReadBatch(
     NTabletFlatExecutor::TTransactionContext& txc, const NOlap::IBlobGroupSelector& dsGroupSelector, TBatch& batch) const {
-    AFL_VERIFY(BatchInFlight);
+    YDB_LOG_VERIFY(BatchInFlight);
     const auto& engine = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
     batch.PathId = TablesToLoad.front();
     batch.Portions.clear();
@@ -67,10 +67,10 @@ bool TDeferredPortionLoader::ReadBatch(
     NOlap::TDbWrapper wrapper(txc.DB, &dsGroupSelector);
     const NOlap::TVersionedIndex& versionedIndex = engine.GetVersionedIndex();
     for (const ui64 portionId : portionIds) {
-        AFL_VERIFY(wrapper.LoadPortionVerified(NOlap::TPortionAddress(batch.PathId, portionId),
+        YDB_LOG_VERIFY(wrapper.LoadPortionVerified(NOlap::TPortionAddress(batch.PathId, portionId),
             [&](std::unique_ptr<NOlap::TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
                 const NOlap::TIndexInfo& indexInfo = portion->GetSchema(versionedIndex)->GetIndexInfo();
-                AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, dsGroupSelector));
+                YDB_LOG_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, dsGroupSelector));
                 batch.Portions.emplace_back(portion->Build());
             }));
     }
@@ -78,8 +78,9 @@ bool TDeferredPortionLoader::ReadBatch(
 }
 
 bool TDeferredPortionLoader::OnBatchLoaded(TBatch&& batch) {
-    AFL_VERIFY(BatchInFlight);
-    AFL_VERIFY(!TablesToLoad.empty() && TablesToLoad.front() == batch.PathId)("path_id", batch.PathId);
+    YDB_LOG_VERIFY(BatchInFlight);
+    YDB_LOG_VERIFY(!TablesToLoad.empty() && TablesToLoad.front() == batch.PathId,
+        {"pathId", batch.PathId});
     BatchInFlight = false;
     ++BatchesLoaded;
     TablesToLoad.pop_front();
@@ -89,7 +90,7 @@ bool TDeferredPortionLoader::OnBatchLoaded(TBatch&& batch) {
         NextBatchBelow.erase(batch.PathId);
     } else {
         // the batch ends with every portion whose last key is LastKey
-        AFL_VERIFY(!batch.Portions.empty());
+        YDB_LOG_VERIFY(!batch.Portions.empty());
         engine.AddPortionsLoadedInBatch(
             batch.PathId, batch.Portions, NOlap::TLoadedKeyRanges::BuildFrom(batch.Portions.back()->GetMeta().IndexKeyEnd()));
         NextBatchBelow.insert_or_assign(batch.PathId, std::move(*batch.LastKey));

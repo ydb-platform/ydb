@@ -1,4 +1,4 @@
-#include "kqp_types.h"
+#include "type_info.h"
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
@@ -55,7 +55,7 @@ TTypeInfo TypeInfoFromMiniKQLType(const NMiniKQL::TType* type) {
         AS_TYPE(NMiniKQL::TDataType, static_cast<const NKikimr::NMiniKQL::TOptionalType*>(type)->GetItemType()) :
         AS_TYPE(NMiniKQL::TDataType, type);
     Y_ENSURE(dataType->GetKind() == NMiniKQL::TType::EKind::Data, "data type is expected");
-    
+
     NScheme::TTypeId typeId = dataType->GetSchemeType();
     const NUdf::EDataSlot dataSlot = *dataType->GetDataSlot();
     if (dataSlot == NUdf::EDataSlot::Decimal) {

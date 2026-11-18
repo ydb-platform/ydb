@@ -456,6 +456,7 @@ message TFeatureFlags {
     // Show REPLICATING VDisks with only phantom-like blobs remaining as READY ones in node whiteboard and system views
     // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
     optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
+    optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
     // (LOGBROKER-10680). Default false is
     // the legacy zeroing behaviour that undercounted the consumed
     // write quota.

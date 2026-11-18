@@ -61,17 +61,14 @@ class TestValidateIndexes(unittest.TestCase):
     def _execute(self, query):
         return self.pool.retry_operation_sync(lambda session: session.transaction().execute(query, commit_tx=True))
 
-    def _index_count(self):
+    def _index_count(self, path=None):
         return self.pool.retry_operation_sync(lambda session: session.transaction(ydb.StaleReadOnly()).execute(
-            f"SELECT COUNT(*) AS n FROM `{self.index}`;", commit_tx=True
+            f"SELECT COUNT(*) AS n FROM `{path or self.index}`;", commit_tx=True
         ))[0].rows[0]["n"]
 
-    def _run(self, table=None, ddl_excluded=True, writes_stopped=False,
-             async_retries=None, async_retry_delay=None):
+    def _run(self, table=None, writes_stopped=False, async_retries=None, async_retry_delay=None):
         command = [yatest.common.binary_path("ydb/tools/validate_indexes/bin/validate-indexes"),
                    "--endpoint", self.endpoint, "--database", "/Root", "--table", table or self.table]
-        if ddl_excluded:
-            command.append("--ddl-excluded")
         if writes_stopped:
             command.append("--writes-stopped")
         if async_retries is not None:
@@ -119,14 +116,21 @@ class TestValidateIndexes(unittest.TestCase):
         self._corrupt(self.table, f"""(EraseRow '__user__{name}
             '('('tenant (Utf8 'a)) '('id (Uint64 '1))))""")
 
-    def test_ddl_exclusion_is_required(self):
+    def test_ddl_warning_does_not_block_validation(self):
         self._create()
-        code, output, error = self._run(ddl_excluded=False)
-        self.assertEqual(code, 2, output + error)
+        code, output, error = self._run()
+        self.assertEqual(code, 0, output + error)
+        self.assertIn("by_value: consistent", output)
+        self.assertIn("WARNING:", error)
         self.assertIn("DDL", error)
-        self.assertNotIn("consistent", output)
-        with self.pool.checkout() as session, self.assertRaisesRegex(ValueError, "DDL exclusion"):
-            validator.validate(self.driver, session, self.table)
+        self.assertNotIn("supplied externally", output)
+        output, error = io.StringIO(), io.StringIO()
+        with self.pool.checkout() as session:
+            with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
+                self.assertTrue(validator.validate(self.driver, session, self.table))
+        self.assertIn("by_value: consistent", output.getvalue())
+        self.assertIn("WARNING:", error.getvalue())
+        self.assertIn("DDL", error.getvalue())
 
     def test_changefeed_progress_is_not_schema(self):
         self._create()
@@ -168,7 +172,7 @@ class TestValidateIndexes(unittest.TestCase):
         with mock.patch.object(validator, "_describe", create_corrupt_index_then_repair_original):
             with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
                 code = validator.main(["--endpoint", self.endpoint, "--database", "/Root",
-                                       "--table", self.table, "--ddl-excluded"])
+                                       "--table", self.table])
         self.assertEqual(code, 2, output.getvalue() + error.getvalue())
         self.assertIn("Schema changed", error.getvalue())
         self.assertTrue(changed)
@@ -197,7 +201,7 @@ class TestValidateIndexes(unittest.TestCase):
         output = io.StringIO()
         with self.pool.checkout() as session, mock.patch.object(validator, "_describe", add_first_index):
             with contextlib.redirect_stdout(output), self.assertRaisesRegex(ValueError, "[Ss]chema changed"):
-                validator.validate(self.driver, session, self.table, ddl_excluded=True)
+                validator.validate(self.driver, session, self.table)
         self.assertTrue(changed)
         self.assertNotIn("No supported indexes", output.getvalue())
 
@@ -222,7 +226,7 @@ class TestValidateIndexes(unittest.TestCase):
         with self.pool.checkout() as session:
             with mock.patch.object(ydb.QueryTxContext, "execute", recreate_index):
                 with contextlib.redirect_stdout(output), self.assertRaisesRegex(ValueError, "[Ss]chema changed"):
-                    validator.validate(self.driver, session, self.table, ddl_excluded=True)
+                    validator.validate(self.driver, session, self.table)
         self.assertEqual(len(incarnations), 2)
         self.assertNotEqual(incarnations[0], incarnations[1], "Fixture must recreate the implementation table")
         self.assertNotIn("consistent", output.getvalue())
@@ -247,7 +251,7 @@ class TestValidateIndexes(unittest.TestCase):
         with self.pool.checkout() as session:
             with mock.patch.object(ydb.QueryTxContext, "execute", recreate_table):
                 with contextlib.redirect_stdout(output), self.assertRaisesRegex(ValueError, "[Ss]chema changed"):
-                    validator.validate(self.driver, session, self.table, ddl_excluded=True)
+                    validator.validate(self.driver, session, self.table)
         self.assertTrue(recreated)
         self.assertNotIn("consistent", output.getvalue())
 
@@ -721,7 +725,7 @@ class TestValidateIndexes(unittest.TestCase):
 
             with self.pool.checkout() as session, mock.patch.object(ydb.Driver, "__call__", record_query_start):
                 with contextlib.redirect_stdout(io.StringIO()):
-                    self.assertTrue(validator.validate(self.driver, session, self.table, ddl_excluded=True))
+                    self.assertTrue(validator.validate(self.driver, session, self.table))
             self.assertEqual(len(query_writes), 1)
             self.assertGreater(len(writes), query_writes[0] + 1, "Writes must commit during the query itself")
 
@@ -756,7 +760,7 @@ class TestValidateIndexes(unittest.TestCase):
         output = io.StringIO()
         with self.pool.checkout() as session, mock.patch.object(ydb.Driver, "__call__", record_reads):
             with contextlib.redirect_stdout(output):
-                self.assertIsNone(validator.validate(self.driver, session, self.table, ddl_excluded=True))
+                self.assertIsNone(validator.validate(self.driver, session, self.table))
         self.assertEqual(len(reads), 1)
         self.assertNotIn("by_async/indexImplTable", reads[0].query_content.text)
         self.assertIn("Skipping by_async", output.getvalue())
@@ -777,7 +781,7 @@ class TestValidateIndexes(unittest.TestCase):
         output = io.StringIO()
         with self.pool.checkout() as session, mock.patch.object(validator, "_read_differences", read):
             with contextlib.redirect_stdout(output):
-                result = validator.validate(self.driver, session, self.table, ddl_excluded=True,
+                result = validator.validate(self.driver, session, self.table,
                                             writes_stopped=True, async_retries=retries, async_retry_delay=0.05)
         return result, output.getvalue(), len(passes)
 
@@ -810,14 +814,15 @@ class TestValidateIndexes(unittest.TestCase):
         self.assertIn("by_value: inconclusive (mismatches: 1)", output)
 
     def test_async_repair_between_attempts_converges(self):
-        self._create("ASYNC")
-        self._erase_index()
+        self._create("ASYNC", rows=False)
+        self._corrupt(self.index, """(UpdateRow '__user__indexImplTable
+            '('('value (Utf8 'first)) '('tenant (Utf8 'a)) '('id (Uint64 '1)))
+            '('('payload (Utf8 'one))))""")
+        self.assertEqual(self._index_count(), 1)
 
         def repair_after_first(attempt):
             if attempt == 1:
-                self._corrupt(self.index, """(UpdateRow '__user__indexImplTable
-                    '('('value (Utf8 'first)) '('tenant (Utf8 'a)) '('id (Uint64 '1)))
-                    '('('payload (Utf8 'one))))""")
+                self._erase_index()
 
         result, output, passes = self._validate_async(after_pass=repair_after_first)
         self.assertTrue(result, output)
@@ -894,7 +899,7 @@ class TestValidateIndexes(unittest.TestCase):
                 with mock.patch.object(validator, "_read_differences", read):
                     with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
                         code = validator.main(["--endpoint", self.endpoint, "--database", "/Root",
-                                               "--table", self.table, "--ddl-excluded", "--writes-stopped",
+                                               "--table", self.table, "--writes-stopped",
                                                "--async-retries", "3", "--async-retry-delay", "0.05"])
                 self.assertEqual(code, 2, output.getvalue() + error.getvalue())
                 self.assertEqual(len(attempts), 2)
@@ -919,7 +924,7 @@ class TestValidateIndexes(unittest.TestCase):
                 with mock.patch.object(validator.tempfile, "TemporaryFile", side_effect=failure):
                     with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
                         code = validator.main(["--endpoint", self.endpoint, "--database", "/Root",
-                                               "--table", self.table, "--ddl-excluded", "--writes-stopped",
+                                               "--table", self.table, "--writes-stopped",
                                                "--async-retries", "1", "--async-retry-delay", "0.05"])
                 self.assertEqual(code, 2, output.getvalue() + error.getvalue())
                 self.assertIn("Validation failed:", error.getvalue())
@@ -992,7 +997,7 @@ class TestValidateIndexes(unittest.TestCase):
         output = io.StringIO()
         with self.pool.checkout() as session, mock.patch.object(ydb.Driver, "__call__", record_reads):
             with contextlib.redirect_stdout(output):
-                self.assertTrue(validator.validate(self.driver, session, self.table, ddl_excluded=True))
+                self.assertTrue(validator.validate(self.driver, session, self.table))
         self.assertIn("by_value: consistent", output.getvalue())
         self.assertIn("by_payload: consistent", output.getvalue())
         self.assertEqual(len(reads), 1, "All synchronous indexes must share one query")
@@ -1003,7 +1008,11 @@ class TestValidateIndexes(unittest.TestCase):
         self.assertTrue(request.tx_control.commit_tx)
 
     def test_async_uses_separate_stale_query(self):
-        self._hot_table(asynchronous=True)
+        self._hot_table(asynchronous=True, rows=130)
+        deadline = time.monotonic() + 30
+        while self._index_count(self.table + "/by_async/indexImplTable") != 130:
+            self.assertLess(time.monotonic(), deadline, "Async index did not catch up")
+            time.sleep(0.1)
         original_call = ydb.Driver.__call__
         reads = []
 
@@ -1015,8 +1024,9 @@ class TestValidateIndexes(unittest.TestCase):
         output = io.StringIO()
         with self.pool.checkout() as session, mock.patch.object(ydb.Driver, "__call__", record_reads):
             with contextlib.redirect_stdout(output):
-                self.assertTrue(validator.validate(self.driver, session, self.table, ddl_excluded=True,
-                                                   writes_stopped=True, async_retries=1, async_retry_delay=0.05))
+                result = validator.validate(self.driver, session, self.table,
+                                            writes_stopped=True, async_retries=1, async_retry_delay=0.05)
+        self.assertTrue(result, output.getvalue())
         self.assertIn("by_value: consistent", output.getvalue())
         self.assertIn("by_payload: consistent", output.getvalue())
         self.assertIn("by_async: consistent", output.getvalue())
@@ -1045,7 +1055,7 @@ class TestValidateIndexes(unittest.TestCase):
         with self.pool.checkout() as session:
             with mock.patch.object(ydb.query.base.SyncResponseContextIterator, "__next__", fail_after_response):
                 with contextlib.redirect_stdout(output), self.assertRaises(ydb.Unavailable):
-                    validator.validate(self.driver, session, self.table, ddl_excluded=True)
+                    validator.validate(self.driver, session, self.table)
         self.assertTrue(responses, "A real server response must precede the injected interruption")
         self.assertNotIn("consistent", output.getvalue())
 
@@ -1062,7 +1072,7 @@ class TestValidateIndexes(unittest.TestCase):
         with self.pool.checkout() as session:
             with mock.patch.object(ydb.query.base.SyncResponseContextIterator, "__next__", truncate_response):
                 with contextlib.redirect_stdout(output), self.assertRaises(ydb.TruncatedResponseError):
-                    validator.validate(self.driver, session, self.table, ddl_excluded=True)
+                    validator.validate(self.driver, session, self.table)
         self.assertNotIn("consistent", output.getvalue())
 
     def test_hot_partitioned_table(self):
@@ -1116,7 +1126,7 @@ class TestValidateIndexes(unittest.TestCase):
         with self.pool.checkout() as session:
             with mock.patch.object(ydb.query.base.SyncResponseContextIterator, "__next__", record_part):
                 with contextlib.redirect_stdout(output):
-                    self.assertFalse(validator.validate(self.driver, session, self.table, ddl_excluded=True))
+                    self.assertFalse(validator.validate(self.driver, session, self.table))
         differences = [json.loads(line) for line in output.getvalue().splitlines() if line.startswith("{")]
         self.assertEqual({row["pk"]["id"] for row in differences}, set(range(count)))
         self.assertTrue(all("extra" in row["reason"] for row in differences))

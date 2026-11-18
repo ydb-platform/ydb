@@ -18,6 +18,10 @@ from ydb import _apis, issues
 
 INDEX_TYPES = {"global_index", "global_async_index", "global_unique_index"}
 FLOAT_FORMATS = {_apis.ydb_value.Type.FLOAT: "<f", _apis.ydb_value.Type.DOUBLE: "<d"}
+DDL_WARNING = (
+    "Do not run DDL on the table, its ancestors or indexes during validation. "
+    "Wait for ongoing DDL to finish before starting."
+)
 
 
 def _quote(name):
@@ -219,7 +223,6 @@ def _validate(driver, session, path, writes_stopped, async_retries, async_retry_
         else:
             checked.append(f"{description.name} ({kind})")
     print("Checked index set: " + (", ".join(checked) or "(none)"))
-    print("DDL exclusion: supplied externally by the caller")
     described = [table] + [index for _, index, _ in indexes]
     _check_schema(driver, session, described)
     if not indexes:
@@ -261,14 +264,12 @@ def _validate(driver, session, path, writes_stopped, async_retries, async_retry_
     return False if not consistent else (None if inconclusive else True)
 
 
-def validate(driver, session, path, *, ddl_excluded=False, writes_stopped=False,
-             async_retries=20, async_retry_delay=30):
-    if not ddl_excluded:
-        raise ValueError("DDL exclusion is required from before discovery until validation completes")
+def validate(driver, session, path, *, writes_stopped=False, async_retries=20, async_retry_delay=30):
     if not isinstance(async_retries, int) or async_retries < 1:
         raise ValueError("async_retries must be an integer of at least 1")
     if not math.isfinite(async_retry_delay) or async_retry_delay <= 0:
         raise ValueError("async_retry_delay must be a finite positive number")
+    print(f"WARNING: {DDL_WARNING}", file=sys.stderr)
     # YDB Decimal precision exceeds Python's default.
     with decimal.localcontext() as context:
         context.prec = max(context.prec, 35)
@@ -276,19 +277,16 @@ def validate(driver, session, path, *, ddl_excluded=False, writes_stopped=False,
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, epilog=f"WARNING: {DDL_WARNING}")
     parser.add_argument("-e", "--endpoint", required=True, help="YDB gRPC endpoint")
     parser.add_argument("-d", "--database", required=True, help="Database path")
     parser.add_argument("-t", "--table", required=True, help="Absolute table path or path relative to the database")
-    parser.add_argument("--ddl-excluded", action="store_true", help="Assert an external DDL exclusion mechanism is held")
     parser.add_argument("--writes-stopped", action="store_true",
                         help="Assert all writes have stopped until exit; wait for async index convergence")
     parser.add_argument("--async-retries", type=int, default=20, help="Async retries after the first pass (default: 20)")
     parser.add_argument("--async-retry-delay", type=float, default=30,
                         help="Seconds between complete async passes (default: 30)")
     args = parser.parse_args(argv)
-    if not args.ddl_excluded:
-        parser.error("DDL exclusion is required; use --ddl-excluded only while an external DDL exclusion mechanism is held")
     if args.async_retries < 1 or not math.isfinite(args.async_retry_delay) or args.async_retry_delay <= 0:
         parser.error("async retries must be at least 1 and async retry delay must be finite and positive")
     path = posixpath.normpath(posixpath.join(args.database, args.table))
@@ -302,9 +300,8 @@ def main(argv=None):
             driver.wait(timeout=30, fail_fast=True)
             with ydb.SessionPool(driver) as pool:
                 with pool.checkout() as session:
-                    result = validate(driver, session, path, ddl_excluded=args.ddl_excluded,
-                                      writes_stopped=args.writes_stopped, async_retries=args.async_retries,
-                                      async_retry_delay=args.async_retry_delay)
+                    result = validate(driver, session, path, writes_stopped=args.writes_stopped,
+                                      async_retries=args.async_retries, async_retry_delay=args.async_retry_delay)
                     return 3 if result is None else (0 if result else 1)
     except (ydb.Error, ValueError, RuntimeError, OSError) as error:
         print(f"Validation failed: {error}", file=sys.stderr)

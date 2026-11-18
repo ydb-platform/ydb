@@ -2,22 +2,25 @@
 
 Check a row table against its ordinary global sync, async and unique indexes.
 Vector, full-text, JSON and local indexes are skipped.
-An external DDL exclusion mechanism must be held for the entire invocation;
-`--ddl-excluded` asserts this precondition. Concurrent DML is supported.
+Concurrent DML is supported for sync/unique indexes.
+
+> **Warning:** Do not run DDL operations on the table, its ancestors or indexes
+> during validation. Wait for ongoing DDL to finish before starting. The utility
+> prints this warning to stderr; schema stability is the caller's responsibility.
 
 ```bash
 ./ya make --build relwithdebinfo ydb/tools/validate_indexes/bin
 ydb/tools/validate_indexes/bin/validate-indexes \
     --endpoint grpc://localhost:2135 \
     --database /Root \
-    --table my_table --ddl-excluded
+    --table my_table
 ```
 
 Alternatively, install the Python `ydb` package and run the script directly:
 
 ```bash
 python3 ydb/tools/validate_indexes/validate_indexes.py \
-    --endpoint grpc://localhost:2135 --database /Root --table my_table --ddl-excluded
+    --endpoint grpc://localhost:2135 --database /Root --table my_table
 ```
 
 The table path can be absolute or relative to the database. Authentication uses
@@ -38,9 +41,7 @@ same name. Permission changes that could undermine exclusion are also excluded.
 For example, when every DDL job and validator runs on one host, wrap every
 such invocation with `flock --exclusive /path/to/ydb-schema.lock ...`. Across
 hosts, use a shared distributed lock honored by every DDL actor or an enforced
-DDL maintenance window. `--ddl-excluded` does not acquire or enforce a lock;
-it is the caller's assertion that this exclusion already exists. The CLI and
-Python `validate(..., ddl_excluded=True)` reject a missing assertion.
+DDL maintenance window. The utility does not acquire or enforce a schema lock.
 
 The script also compares column, primary-key and index definitions and table
 creation identities before and after the scan, including each physical
@@ -86,12 +87,12 @@ wait for outstanding writes to commit, and keep writes stopped until exit.
 This includes inserts, updates, deletes, bulk imports, TTL expiration and other
 background mutations, not just new rows. Also exclude administrative writes to
 the physical indexes. The flag is the caller's assertion, not a write lock.
-Keep the external DDL exclusion described above held as well.
+Do not run DDL during async retries either.
 
 ```bash
 ydb/tools/validate_indexes/bin/validate-indexes \
     --endpoint grpc://localhost:2135 --database /Root --table my_table \
-    --ddl-excluded --writes-stopped \
+    --writes-stopped \
     --async-retries 20 --async-retry-delay 30
 ```
 
@@ -145,14 +146,14 @@ be used as a successful whole-table verdict.
 
 Exit codes:
 
-- `0`: with external DDL exclusion held, all checked sync/unique indexes are
+- `0`: provided no DDL occurs during validation, all checked sync/unique indexes are
   consistent and all async indexes, if present, converged with `--writes-stopped`,
   or there are no supported indexes.
 - `1`: at least one confirmed sync/unique mismatch was found. This takes
   precedence over an inconclusive async result.
-- `2`: validation failed, for example because DDL exclusion was not asserted,
-  a schema/creation identity changed, a table could not be read, or the scan
-  was interrupted or truncated, or temporary diagnostic storage failed.
+- `2`: validation failed, for example because a schema/creation identity changed,
+  a table could not be read, the scan was interrupted or truncated, or temporary
+  diagnostic storage failed.
   Any earlier output is partial.
 - `3`: async consistency could not be confirmed, with no confirmed sync/unique
   mismatches: writes were not asserted stopped, read replicas prevent confirmation,

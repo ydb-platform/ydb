@@ -46,11 +46,11 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         auto* constructor =
             static_cast<NOlap::TWrittenPortionInfoConstructor*>(&portion.GetPortionInfoConstructor()->MutablePortionConstructor());
         constructor->SetInsertWriteId(index.BuildNextInsertWriteId(dbWrapper));
-        InsertWriteIds.emplace_back(constructor->GetInsertWriteIdVerified());
         portion.Finalize(Self, txc);
         if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
             granule.CommitImmediateOnExecute(txc, *CommitSnapshot, portion.GetPortionInfo(), firstPKColumnId);
         } else {
+            InsertWriteIds.emplace_back(constructor->GetInsertWriteIdVerified());
             PortionIds.emplace_back(portion.GetPortionInfo().GetPortionInfo().GetPortionId());
             granule.InsertPortionOnExecute(txc, portion.GetPortionInfoPtr(), firstPKColumnId);
         }
@@ -142,13 +142,10 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
     auto& granule = index.MutableGranuleVerified(Pack.GetPathId());
     for (auto&& portion : Pack.GetPortions()) {
-        // make the portions visible as uncommitted for reads
-        granule.InsertPortionOnComplete(portion.GetPortionInfoPtr(), index);
-    }
-    if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
-        // make the portions visible as committed for reads
-        for (auto&& i : InsertWriteIds) {
-            granule.CommitPortionOnComplete(i, index);
+        if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
+            index.AppendPortion(portion.GetPortionInfoPtr());
+        } else {
+            granule.InsertPortionOnComplete(portion.GetPortionInfoPtr(), index);
         }
     }
     for (auto&& writeResult : Pack.GetWriteResults()) {

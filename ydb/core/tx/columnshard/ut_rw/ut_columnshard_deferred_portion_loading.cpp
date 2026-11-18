@@ -292,6 +292,43 @@ Y_UNIT_TEST_SUITE(TColumnShardDeferredPortionLoading) {
         UNIT_ASSERT_VALUES_EQUAL(shard.ReadRows(*reader), 310);
     }
 
+    // the fixture's three committed portions are small blobs too
+    Y_UNIT_TEST(UncommittedPortionIsCountedFromWriteToCommit) {
+        TShardWithPortions shard;
+        const auto stats = [&]() -> const NColumnShard::TDataStatsByStorage& {
+            return shard.Engine().GetTables().begin()->second->GetDataStats();
+        };
+        std::vector<ui64> writeIds;
+        UNIT_ASSERT(WriteData(shard.Runtime, shard.Sender, shard.TxId, TableId, MakeTestBlob({ 1000, 1010 }, shard.Table.Schema),
+            shard.Table.Schema, true, &writeIds));
+        const ui64 txId = shard.TxId++;
+        const TPlanStep planStep = ProposeCommit(shard.Runtime, shard.Sender, txId, writeIds);
+        UNIT_ASSERT_VALUES_EQUAL(stats().GetUncommitted().GetCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats().GetSmallBlobs().Count, 4);
+
+        shard.Reboot();
+        shard.WaitBatchesLoaded(4);
+        UNIT_ASSERT_VALUES_EQUAL(stats().GetUncommitted().GetCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats().GetWritten().GetCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats().GetSmallBlobs().Count, 4);
+
+        PlanCommit(shard.Runtime, shard.Sender, planStep, txId);
+        UNIT_ASSERT_VALUES_EQUAL(stats().GetUncommitted().GetCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(stats().GetWritten().GetCount(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats().GetSmallBlobs().Count, 4);
+    }
+
+    // a write without a transaction is committed in Execute, before its portion becomes inserted in Complete
+    Y_UNIT_TEST(NoTxWritePortionIsCountedAsWritten) {
+        TShardWithPortions shard;
+        shard.StartWrite({ 1000, 1010 }, NEvWrite::EModificationType::Upsert, 0);
+        UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        const auto& stats = shard.Engine().GetTables().begin()->second->GetDataStats();
+        UNIT_ASSERT(stats.GetUncommitted().IsEmpty());
+        UNIT_ASSERT_VALUES_EQUAL(stats.GetWritten().GetCount(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.GetSmallBlobs().Count, 4);
+    }
+
     Y_UNIT_TEST(TablesLoadInTurn) {
         TShardWithPortions shard({ .TableCount = 2 });
         shard.AllowBatches(2);

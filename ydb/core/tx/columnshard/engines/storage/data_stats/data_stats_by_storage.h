@@ -11,8 +11,16 @@ class TPortionInfo;
 
 namespace NKikimr::NColumnShard {
 
+enum class EPortionGroup {
+    Uncommitted,
+    Written,
+    Compacted,
+    Removed
+};
+
 class TStorageStats {
 private:
+    NOlap::TSimplePortionsGroupInfo Uncommitted;
     NOlap::TSimplePortionsGroupInfo Written;
     NOlap::TSimplePortionsGroupInfo Compacted;
     // waiting for cleanup
@@ -22,14 +30,18 @@ private:
     i64 SmallBlobsBytes = 0;
     i64 SmallBlobsCount = 0;
 
-    NOlap::TSimplePortionsGroupInfo& GetGroup(const NOlap::TPortionInfo& portion);
+    NOlap::TSimplePortionsGroupInfo& GetGroup(const EPortionGroup group);
 
 public:
-    void AddPortion(const NOlap::TPortionInfo& portion);
-    void RemovePortion(const NOlap::TPortionInfo& portion);
+    void AddPortion(const NOlap::TPortionInfo& portion, const EPortionGroup group);
+    void RemovePortion(const NOlap::TPortionInfo& portion, const EPortionGroup group);
     void AddSmallBlob(ui64 bytes);
     void RemoveSmallBlob(ui64 bytes);
     bool IsEmpty() const;
+
+    const NOlap::TSimplePortionsGroupInfo& GetUncommitted() const {
+        return Uncommitted;
+    }
 
     const NOlap::TSimplePortionsGroupInfo& GetWritten() const {
         return Written;
@@ -44,7 +56,7 @@ public:
     }
 
     NOlap::TSimplePortionsGroupInfo GetAll() const {
-        return Written + Compacted + Removed;
+        return Uncommitted + Written + Compacted + Removed;
     }
 
     NOlap::TSmallBlobsStat GetSmallBlobs() const {
@@ -61,8 +73,8 @@ private:
 
 public:
     // blobStorageSmallBlobBytes: the portion's bytes in the blob storage if they are a small blob, otherwise 0
-    void AddPortion(const NOlap::TPortionInfo& portion, const ui64 blobStorageSmallBlobBytes);
-    void RemovePortion(const NOlap::TPortionInfo& portion, const ui64 blobStorageSmallBlobBytes);
+    void AddPortion(const NOlap::TPortionInfo& portion, const EPortionGroup group, const ui64 blobStorageSmallBlobBytes);
+    void RemovePortion(const NOlap::TPortionInfo& portion, const EPortionGroup group, const ui64 blobStorageSmallBlobBytes);
 
     bool IsEmpty() const {
         return Storages.empty();
@@ -75,6 +87,7 @@ public:
     const TStorageStats& GetStorageStats(const TString& storageId) const;
 
     // without a storage id: summed over every storage
+    NOlap::TSimplePortionsGroupInfo GetUncommitted(const std::optional<TString>& storageId = std::nullopt) const;
     NOlap::TSimplePortionsGroupInfo GetWritten(const std::optional<TString>& storageId = std::nullopt) const;
     NOlap::TSimplePortionsGroupInfo GetCompacted(const std::optional<TString>& storageId = std::nullopt) const;
     NOlap::TSimplePortionsGroupInfo GetRemoved(const std::optional<TString>& storageId = std::nullopt) const;

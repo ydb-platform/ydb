@@ -87,4 +87,13 @@ inline std::shared_ptr<TPortionInfo> MakeTestWrittenPortion(
     return constructor.Build();
 }
 
+inline std::shared_ptr<TWrittenPortionInfo> MakeTestUncommittedPortion(
+    const TInternalPathId pathId, const ui64 portionId, const ui32 recordsCount) {
+    TWrittenPortionInfoConstructor constructor(pathId, portionId);
+    constructor.SetSchemaVersion(1);
+    constructor.SetInsertWriteId(TInsertWriteId(portionId));
+    constructor.MutableMeta() = MakeTestPortionMeta(1, 2, recordsCount, TSnapshot(1, 1), {});
+    return std::static_pointer_cast<TWrittenPortionInfo>(constructor.Build());
+}
+
 }   // namespace NKikimr::NOlap::NTest

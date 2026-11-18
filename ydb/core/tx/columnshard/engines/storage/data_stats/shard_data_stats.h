@@ -53,8 +53,8 @@ public:
     TShardDataStats(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
     ~TShardDataStats();
 
-    void AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
-    void RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
+    void AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion, const EPortionGroup group);
+    void RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& portion, const EPortionGroup group);
 
     const TDataStatsByStorage& GetGranuleStats(const TInternalPathId pathId) const;
 

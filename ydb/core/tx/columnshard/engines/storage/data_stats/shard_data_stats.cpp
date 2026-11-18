@@ -47,27 +47,30 @@ TShardDataStats::~TShardDataStats() {
     AllShardsPortionsMetadataRamBytes.Sub(PortionsMetadataRamBytes);
 }
 
-void TShardDataStats::AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) {
+void TShardDataStats::AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion, const EPortionGroup group) {
     const ui64 smallBlobBytes = portion->GetSmallBlobBytesInBlobStorage(GetSmallBlobThreshold(GetBlobStorageId()));
-    Granules[portion->GetPathId()].AddPortion(*portion, smallBlobBytes);
-    Total.AddPortion(*portion, smallBlobBytes);
+    Granules[portion->GetPathId()].AddPortion(*portion, group, smallBlobBytes);
+    Total.AddPortion(*portion, group, smallBlobBytes);
 
     SchemaVersionsInUse[portion->GetSchemaVersionVerified()].Inc();
     PortionsMetadataRamBytes += portion->GetMetadataMemorySize();
     Counters.OnIndexMetadataUsageBytes(AllShardsPortionsMetadataRamBytes.Add(portion->GetMetadataMemorySize()));
-    PortionSizeHistograms.OnNewPortion(portion);
+    // bad portions slow down writes, and an uncommitted one is not up to compaction yet
+    if (group != EPortionGroup::Uncommitted) {
+        PortionSizeHistograms.OnNewPortion(portion);
+    }
 }
 
-void TShardDataStats::RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) {
+void TShardDataStats::RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& portion, const EPortionGroup group) {
     auto granule = Granules.find(portion->GetPathId());
     YDB_LOG_VERIFY(granule != Granules.end(),
         {"pathId", portion->GetPathId()});
     const ui64 smallBlobBytes = portion->GetSmallBlobBytesInBlobStorage(GetSmallBlobThreshold(GetBlobStorageId()));
-    granule->second.RemovePortion(*portion, smallBlobBytes);
+    granule->second.RemovePortion(*portion, group, smallBlobBytes);
     if (granule->second.IsEmpty()) {
         Granules.erase(granule);
     }
-    Total.RemovePortion(*portion, smallBlobBytes);
+    Total.RemovePortion(*portion, group, smallBlobBytes);
 
     auto schemaVersion = SchemaVersionsInUse.find(portion->GetSchemaVersionVerified());
     YDB_LOG_VERIFY(schemaVersion != SchemaVersionsInUse.end());
@@ -77,7 +80,9 @@ void TShardDataStats::RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& 
     PortionsMetadataRamBytes -= portion->GetMetadataMemorySize();
     YDB_LOG_VERIFY(PortionsMetadataRamBytes >= 0);
     Counters.OnIndexMetadataUsageBytes(AllShardsPortionsMetadataRamBytes.Sub(portion->GetMetadataMemorySize()));
-    PortionSizeHistograms.OnDropPortion(portion);
+    if (group != EPortionGroup::Uncommitted) {
+        PortionSizeHistograms.OnDropPortion(portion);
+    }
 }
 
 ui64 TShardDataStats::GetSmallBlobThreshold(const TString& storageId) {
@@ -179,7 +184,8 @@ void TShardDataStats::UpdateTabletCounters(const TTabletCountersHandle& counters
 
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Index",
         {"tablesCount", Granules.size()},
-        {"insertedStats", written.DebugString()},
+        {"uncommittedStats", Total.GetUncommitted(GetBlobStorageId()).DebugString()},
+        {"writtenStats", written.DebugString()},
         {"splitCompactedStats", compacted.DebugString()},
         {"inactiveStats", removed.DebugString()},
         {"evictedStats", evicted.DebugString()},

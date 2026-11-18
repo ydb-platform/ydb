@@ -222,6 +222,29 @@ void TestLegacyOptimizerWithStats(const TString& query, bool fallbackEnabled, bo
     UNIT_ASSERT_VALUES_EQUAL(countersAfter.second, countersBefore.second + (fallbackEnabled ? 1 : 0));
 }
 
+// Compiles `queryCount` distinct queries and returns how many of them the new RBO compiled.
+ui32 CountNewRBOCompilations(bool enableNewRbo, double newRboRolloutRatio, ui32 queryCount) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableNewRBO(enableNewRbo);
+    appConfig.MutableTableServiceConfig()->SetNewRBORolloutRatio(newRboRolloutRatio);
+    appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+    TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+    CreateSimpleTable(kikimr);
+
+    auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+    const auto countersBefore = GetNewRBOCompileCounters(kikimr);
+    for (ui32 i = 0; i < queryCount; ++i) {
+        // Each text misses the compile cache, so each query gets its own draw.
+        const TString query = Sprintf("SELECT a FROM `/Root/t1` WHERE a = %u;", i);
+        auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+    }
+
+    const auto countersAfter = GetNewRBOCompileCounters(kikimr);
+    UNIT_ASSERT_VALUES_EQUAL(countersAfter.second, countersBefore.second);
+    return countersAfter.first - countersBefore.first;
+}
+
 } // namespace
 
 using namespace NYdb;
@@ -457,6 +480,26 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestFallbackToYql(/*fallbackToYqlEnabled=*/false, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
                           expectedResult, NQuery::EExecMode::Execute);
     }
+
+    Y_UNIT_TEST(NewRBORolloutRatioOneAlwaysUsesNewRBO) {
+        UNIT_ASSERT_VALUES_EQUAL(CountNewRBOCompilations(/*enableNewRbo=*/true, /*newRboRolloutRatio=*/1.0, 8), 8);
+    }
+
+    Y_UNIT_TEST(NewRBORolloutRatioZeroNeverUsesNewRBO) {
+        UNIT_ASSERT_VALUES_EQUAL(CountNewRBOCompilations(/*enableNewRbo=*/true, /*newRboRolloutRatio=*/0.0, 8), 0);
+    }
+
+    Y_UNIT_TEST(NewRBORolloutRatioIgnoredWhenNewRBODisabled) {
+        UNIT_ASSERT_VALUES_EQUAL(CountNewRBOCompilations(/*enableNewRbo=*/false, /*newRboRolloutRatio=*/1.0, 8), 0);
+    }
+
+    // Disabled: non-deterministic. Ratio 0.5 makes each compilation a random draw, so the test
+    // fails when all 64 compilations land on one optimizer (probability 2^-63).
+    // Y_UNIT_TEST(NewRBORolloutRatioSplitsCompilations) {
+    //     constexpr ui32 queryCount = 64;
+    //     const ui32 newRbo = CountNewRBOCompilations(/*enableNewRbo=*/true, /*newRboRolloutRatio=*/0.5, queryCount);
+    //     UNIT_ASSERT_C(newRbo > 0 && newRbo < queryCount, "new RBO compiled " << newRbo << " of " << queryCount);
+    // }
 
 }
 

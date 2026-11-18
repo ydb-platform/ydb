@@ -1,5 +1,9 @@
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
+SUPPRESSIONS(
+    ${ARCADIA_ROOT}/ydb/tests/tsan.supp
+)
+
 DEPENDS(
     ydb/apps/ydbd
     ydb/public/tools/ydb_recipe

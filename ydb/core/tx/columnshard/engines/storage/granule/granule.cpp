@@ -18,7 +18,8 @@ namespace NKikimr::NOlap {
 namespace {
 
 NColumnShard::EPortionGroup GetCommittedPortionGroup(const TPortionInfo& portion) {
-    AFL_VERIFY(portion.IsCommitted())("portion", portion.DebugString());
+    YDB_LOG_VERIFY(portion.IsCommitted(),
+        {"portion", portion.DebugString()});
     if (portion.HasRemoveSnapshot()) {
         return NColumnShard::EPortionGroup::Removed;
     }
@@ -116,18 +117,19 @@ void TGranuleMeta::RefreshDataCounters() const {
 }
 
 void TGranuleMeta::AddInsertedPortion(const std::shared_ptr<TWrittenPortionInfo>& portion) {
-    AFL_VERIFY(!portion->IsCommitted())("portion", portion->DebugString());
-    AFL_VERIFY(InsertedPortions.emplace(portion->GetInsertWriteId(), portion).second);
-    AFL_VERIFY(InsertedPortionsById.emplace(portion->GetPortionId(), portion).second);
+    YDB_LOG_VERIFY(!portion->IsCommitted(),
+        {"portion", portion->DebugString()});
+    YDB_LOG_VERIFY(InsertedPortions.emplace(portion->GetInsertWriteId(), portion).second);
+    YDB_LOG_VERIFY(InsertedPortionsById.emplace(portion->GetPortionId(), portion).second);
     DataStats->AddPortion(portion, NColumnShard::EPortionGroup::Uncommitted);
 }
 
 std::shared_ptr<TWrittenPortionInfo> TGranuleMeta::ExtractInsertedPortion(const TInsertWriteId insertWriteId) {
     auto it = InsertedPortions.find(insertWriteId);
-    AFL_VERIFY(it != InsertedPortions.end());
+    YDB_LOG_VERIFY(it != InsertedPortions.end());
     std::shared_ptr<TWrittenPortionInfo> portion = it->second;
     InsertedPortions.erase(it);
-    AFL_VERIFY(InsertedPortionsById.erase(portion->GetPortionId()));
+    YDB_LOG_VERIFY(InsertedPortionsById.erase(portion->GetPortionId()));
     InsertedAccessors.erase(insertWriteId);
     DataStats->RemovePortion(portion, NColumnShard::EPortionGroup::Uncommitted);
     return portion;

@@ -2075,6 +2075,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         std::array<TVector<TStatus::EComponentStatus>, 2> statuses;
         TString brokenReason;
         TTestContext ctx;
+        const auto board = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId), board);
         ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
             if (event->GetTypeRewrite() != THealthUpdate::EventType) {
                 return true;
@@ -2091,7 +2093,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         };
 
         const auto disk = ctx.CreateDDisk(121, 1);
-        ctx.WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
+        AdvanceDDiskTestTime(ctx, TDuration::MilliSeconds(1));
         for (const auto& component : statuses) {
             UNIT_ASSERT(!component.empty());
             UNIT_ASSERT(component.front() == TStatus::Initializing);

@@ -33,7 +33,8 @@ struct TFixture {
         Ast = std::move(parsed.Ast);
         auto table = std::make_shared<TTableMetadata>();
         table->Columns = CatalogColumns;
-        auto names = ResolveNames(*Ast, {"local", "/Root", {}}, [&](const TString&, const TString&) { return table; });
+        auto names = ResolveNames(*Ast, {"local", "/Root", {}, Settings.Parameters},
+            [&](const TString&, const TString&) { return table; });
         UNIT_ASSERT_C(names.IsOk(), names.Issues.ToString());
         Names = std::move(names.Names);
         Result = AnnotateAst(*Ast, *Names, Ctx, Types, Settings);
@@ -64,6 +65,21 @@ struct TFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
+    Y_UNIT_TEST(AsTableSdkParameterTypes) {
+        TFixture f;
+        const auto* row = f.Ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+            f.Ctx.MakeType<TItemExprType>("id", f.Ctx.MakeType<TDataExprType>(EDataSlot::Int64)),
+            f.Ctx.MakeType<TItemExprType>("value", f.Ctx.MakeType<TOptionalExprType>(
+                f.Ctx.MakeType<TDataExprType>(EDataSlot::String)))});
+        f.Settings.Parameters["$rows"] = f.Ctx.MakeType<TListExprType>(row);
+        f.Ok("SELECT r.value, r.id FROM AS_TABLE($rows) AS r WHERE r.id > 0;");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(0), "Optional<String>");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(1), "Int64");
+
+        f.Ok("DECLARE $rows AS List<Struct<id:Uint32>>; SELECT id FROM AS_TABLE($rows);");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(0, 1), "Uint32");
+    }
+
     Y_UNIT_TEST(ScalarInputsContainOnlyReferencedColumns) {
         TFixture f;
         f.Ok("SELECT id + id, 42, value FROM t WHERE score > 0 ORDER BY id LIMIT 5;");

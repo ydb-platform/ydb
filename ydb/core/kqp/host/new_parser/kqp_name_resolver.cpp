@@ -3,6 +3,7 @@
 #include "kqp_ast_visit.h"
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/sql_types/normalize_name.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
@@ -628,23 +629,43 @@ private:
             if (!parameter || Result.BindingReferences.contains(expression->Expression.get())) {
                 Unsupported(source.Range, "AS_TABLE schema inference without DECLARE");
             }
-            const auto* declared = DeclaredTypes.FindPtr(ParameterName(*parameter, expression->Expression->Range));
-            if (!declared || !AsciiEqualsIgnoreCase((*declared)->Name.Spelling, "List")
-                || (*declared)->OptionalDepth || (*declared)->Arguments.size() != 1) {
+            const auto parameterName = ParameterName(*parameter, expression->Expression->Range);
+            if (const auto* declared = DeclaredTypes.FindPtr(parameterName)) {
+                if (!AsciiEqualsIgnoreCase((*declared)->Name.Spelling, "List")
+                    || (*declared)->OptionalDepth || (*declared)->Arguments.size() != 1) {
+                    Unsupported(source.Range, "AS_TABLE without a declared list type");
+                }
+                const auto& row = (*declared)->Arguments.front();
+                if (!AsciiEqualsIgnoreCase(row.Name.Spelling, "Struct") || row.OptionalDepth) {
+                    Error(source.Range, "AS_TABLE expects a list of structs");
+                }
+                for (const auto& member : row.Members) {
+                    Y_ENSURE(member.Name);
+                    const auto& tag = *member.Name;
+                    TString name;
+                    if (const auto* id = std::get_if<TIdentifier>(&tag.Value)) { name = Name(*id); }
+                    else if (const auto* literal = std::get_if<TLiteral>(&tag.Value)) { name = Decode(literal->Spelling, tag.Range); }
+                    else { Unsupported(tag.Range, "bound struct field names"); }
+                    inputs.push_back(AddColumn({name, &source, {}, {}, nullptr, {}}));
+                }
+            } else if (const auto* external = Settings.Parameters.FindPtr(parameterName)) {
+                // The SDK supplies a complete schema even for an empty list.
+                // Use it only when no SQL declaration or local binding overrides it.
+                const auto* type = *external;
+                if (type->GetKind() != NYql::ETypeAnnotationKind::List) {
+                    // The legacy ToList path also accepts optional and tuple
+                    // inputs. Keep its conversions and diagnostics on fallback.
+                    Unsupported(source.Range, "AS_TABLE with a non-list SDK parameter");
+                }
+                const auto* row = type->Cast<NYql::TListExprType>()->GetItemType();
+                if (row->GetKind() != NYql::ETypeAnnotationKind::Struct) {
+                    Error(source.Range, "AS_TABLE expects a list of structs");
+                }
+                for (const auto* member : row->Cast<NYql::TStructExprType>()->GetItems()) {
+                    inputs.push_back(AddColumn({TString(member->GetName()), &source, {}, {}, nullptr, {}}));
+                }
+            } else {
                 Unsupported(source.Range, "AS_TABLE without a declared list type");
-            }
-            const auto& row = (*declared)->Arguments.front();
-            if (!AsciiEqualsIgnoreCase(row.Name.Spelling, "Struct") || row.OptionalDepth) {
-                Error(source.Range, "AS_TABLE expects a list of structs");
-            }
-            for (const auto& member : row.Members) {
-                Y_ENSURE(member.Name);
-                const auto& tag = *member.Name;
-                TString name;
-                if (const auto* id = std::get_if<TIdentifier>(&tag.Value)) { name = Name(*id); }
-                else if (const auto* literal = std::get_if<TLiteral>(&tag.Value)) { name = Decode(literal->Spelling, tag.Range); }
-                else { Unsupported(tag.Range, "bound struct field names"); }
-                inputs.push_back(AddColumn({name, &source, {}, {}, nullptr, {}}));
             }
         } else {
             // Derived tables are not LATERAL: they inherit CTEs but no enclosing row

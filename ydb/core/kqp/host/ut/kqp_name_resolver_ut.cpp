@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/host/new_parser/kqp_name_resolver.h>
 #include <ydb/core/kqp/host/new_parser/kqp_new_parser.h>
 
+#include <yql/essentials/ast/yql_expr.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <algorithm>
@@ -67,6 +68,77 @@ struct TFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlNameResolution) {
+    Y_UNIT_TEST(AsTableSdkParameterSchema) {
+        NYql::TExprContext ctx;
+        const auto* row = ctx.MakeType<NYql::TStructExprType>(TVector<const NYql::TItemExprType*>{
+            ctx.MakeType<NYql::TItemExprType>("id", ctx.MakeType<NYql::TDataExprType>(NYql::EDataSlot::Int64)),
+            ctx.MakeType<NYql::TItemExprType>("value", ctx.MakeType<NYql::TOptionalExprType>(
+                ctx.MakeType<NYql::TDataExprType>(NYql::EDataSlot::String)))});
+        TNameResolutionSettings settings;
+        settings.Parameters["$rows"] = ctx.MakeType<NYql::TListExprType>(row);
+        TFixture f;
+        f.Resolve("SELECT r.value, r.id FROM AS_TABLE($rows) AS r WHERE r.id > 0;", settings);
+        UNIT_ASSERT_C(f.Result.IsOk(), f.Result.Issues.ToString());
+        UNIT_ASSERT(f.Lookups.empty());
+        UNIT_ASSERT_VALUES_EQUAL(f.Column(*f.Select().Columns[0].Expression).Name, "value");
+        UNIT_ASSERT_VALUES_EQUAL(f.Column(*f.Select().Columns[1].Expression).Name, "id");
+
+        f.Resolve("SELECT missing FROM AS_TABLE($rows);", settings);
+        UNIT_ASSERT(!f.Result.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(f.Result.Issues.ToString(), "Unknown column");
+
+        // A local binding must not accidentally acquire an SDK parameter's schema.
+        UNIT_ASSERT_EXCEPTION(f.Resolve("$rows = [<|other: 1|>]; SELECT id FROM AS_TABLE($rows);", settings),
+            TNewYqlParserFallback);
+        UNIT_ASSERT_EXCEPTION(f.Resolve("SELECT * FROM AS_TABLE($missing);", settings), TNewYqlParserFallback);
+    }
+
+    Y_UNIT_TEST(AsTableDeclareOverridesSdkSchema) {
+        NYql::TExprContext ctx;
+        TNameResolutionSettings settings;
+        settings.Parameters["$rows"] = ctx.MakeType<NYql::TDataExprType>(NYql::EDataSlot::String);
+        TFixture f;
+        f.Resolve("DECLARE $rows AS List<Struct<id:Int64>>; SELECT id FROM AS_TABLE($rows);", settings);
+        UNIT_ASSERT_C(f.Result.IsOk(), f.Result.Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(f.Column(*f.Select(1).Columns[0].Expression).Name, "id");
+
+        settings.Parameters["$rows"] = ctx.MakeType<NYql::TListExprType>(
+            ctx.MakeType<NYql::TStructExprType>(TVector<const NYql::TItemExprType*>{}));
+        f.Resolve("DECLARE $rows AS List<Int64>; SELECT * FROM AS_TABLE($rows);", settings);
+        UNIT_ASSERT(!f.Result.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(f.Result.Issues.ToString(), "AS_TABLE expects a list of structs");
+    }
+
+    Y_UNIT_TEST(AsTableInvalidSdkTypesAreErrors) {
+        NYql::TExprContext ctx;
+        const auto* scalar = ctx.MakeType<NYql::TDataExprType>(NYql::EDataSlot::Int64);
+        const auto* row = ctx.MakeType<NYql::TStructExprType>(TVector<const NYql::TItemExprType*>{});
+        for (const NYql::TTypeAnnotationNode* type : TVector<const NYql::TTypeAnnotationNode*>{
+            ctx.MakeType<NYql::TListExprType>(scalar),
+            ctx.MakeType<NYql::TListExprType>(ctx.MakeType<NYql::TOptionalExprType>(row))}) {
+            TNameResolutionSettings settings;
+            settings.Parameters["$rows"] = type;
+            TFixture f;
+            f.Resolve("SELECT * FROM AS_TABLE($rows);", settings);
+            UNIT_ASSERT(!f.Result.IsOk());
+            UNIT_ASSERT_STRING_CONTAINS(f.Result.Issues.ToString(), "AS_TABLE expects a list of structs");
+        }
+    }
+
+    Y_UNIT_TEST(AsTableNonListSdkTypesFallBack) {
+        NYql::TExprContext ctx;
+        const auto* row = ctx.MakeType<NYql::TStructExprType>(TVector<const NYql::TItemExprType*>{});
+        for (const NYql::TTypeAnnotationNode* type : TVector<const NYql::TTypeAnnotationNode*>{
+            ctx.MakeType<NYql::TOptionalExprType>(row),
+            ctx.MakeType<NYql::TTupleExprType>(TVector<const NYql::TTypeAnnotationNode*>{row}),
+            ctx.MakeType<NYql::TDataExprType>(NYql::EDataSlot::Int64)}) {
+            TNameResolutionSettings settings;
+            settings.Parameters["$rows"] = type;
+            TFixture f;
+            UNIT_ASSERT_EXCEPTION(f.Resolve("SELECT * FROM AS_TABLE($rows);", settings), TNewYqlParserFallback);
+        }
+    }
+
     Y_UNIT_TEST(CollectsPhysicalTablesBeforeColumnResolution) {
         TFixture f;
         f.Ok("$q = (SELECT id FROM t); "

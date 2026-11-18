@@ -18,6 +18,7 @@ REQUIREMENTS(cpu:2)
 SRCS(
     kqp_new_parser_fallback_ut.cpp
     kqp_optimizer_pragma_ut.cpp
+    kqp_parameter_table_ut.cpp
     kqp_rbo_lowering_ut.cpp
 )
 

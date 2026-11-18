@@ -8,6 +8,10 @@
 
 #include <functional>
 
+namespace NYql {
+class TTypeAnnotationNode;
+}
+
 namespace NKikimr::NKqp::NNewYql {
 
 // Catalog snapshots, independent of both the syntax tree and ExprNodes.
@@ -42,6 +46,9 @@ struct TNameResolutionSettings {
     TString DefaultCluster;
     TString TablePathPrefix;
     THashMap<TString, TString> ClusterPathPrefixes;
+    // External parameter types belong to the caller's expression context and
+    // names include '$'. SQL DECLARE takes precedence over these SDK types.
+    THashMap<TString, const NYql::TTypeAnnotationNode*> Parameters = {};
 };
 
 // These IDs identify logical column occurrences, not catalog column numbers.

@@ -1575,6 +1575,7 @@ private:
                         NewParserTypeSettings.Parameters[name.StartsWith('$') ? name : "$" + name] = type;
                     }
                 }
+                NewParserSettings.Parameters = NewParserTypeSettings.Parameters;
                 NewParserAst = std::move(parsed.Ast);
                 SessionCtx->Query().TranslationSettings = translationSettings;
                 YQL_CLOG(INFO, ProviderKqp) << "New YQL AST construction succeeded";
@@ -2639,6 +2640,7 @@ private:
         NewParserTypes.reset();
         NewParserTypeSettings = {};
         NewParserNames.reset();
+        NewParserSettings = {};
         NewParserTablesCollected = false;
         NewParserAst.reset();
         SessionCtx->Reset(KeepConfigChanges);

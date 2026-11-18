@@ -1060,7 +1060,7 @@ public:
 
                     const auto dst = CanonizePath(ChildPath(SplitPath(base->GetDstPath()),
                         {index.GetName(), "indexImplTable"}));
-                    auto config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(src, dst);
+                    auto config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(src, dst, false);
                     const auto tid = replication->AddTarget(TReplication::ETargetKind::IndexTable, config);
                     replication->FindTarget(tid)->SetIndexBuild(true);
                     auto& build = Self->IndexBuilds[{key.first, tid}];

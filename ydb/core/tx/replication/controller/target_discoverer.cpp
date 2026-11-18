@@ -197,7 +197,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                             TReplication::ETargetKind::IndexTable,
                             std::make_shared<TTargetIndexTable::TIndexTableConfig>(
                                 indexSrcPath,
-                                CanonizePath(TStringBuilder() << indexDstPath << '/' << NTableIndex::ImplTable)));
+                                CanonizePath(TStringBuilder() << indexDstPath << '/' << NTableIndex::ImplTable),
+                                false));
                         YDB_LOG_INFO("Add target",
                             {"srcPath", target.Config->GetSrcPath()},
                             {"dstPath", target.Config->GetDstPath()},
@@ -210,7 +211,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                             TReplication::ETargetKind::IndexTable,
                             std::make_shared<TTargetIndexTable::TIndexTableConfig>(
                                 CanonizePath(TStringBuilder() << indexSrcPath << '/' << implTable),
-                                CanonizePath(TStringBuilder() << indexDstPath << '/' << implTable)));
+                                CanonizePath(TStringBuilder() << indexDstPath << '/' << implTable),
+                                true));
                         YDB_LOG_INFO("Add target",
                             {"srcPath", target.Config->GetSrcPath()},
                             {"dstPath", target.Config->GetDstPath()},

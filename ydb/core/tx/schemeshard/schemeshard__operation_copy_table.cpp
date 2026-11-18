@@ -739,6 +739,11 @@ public:
         TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
         alterData.Reset();
 
+        const auto& copyConfig = Transaction.GetCreateTable().GetPartitionConfig();
+        if (isBackup && copyConfig.HasBackupSourceReadReplicas()) {
+            *tableInfo->MutablePartitionConfig().MutableBackupSourceReadReplicas() = copyConfig.GetBackupSourceReadReplicas();
+        }
+
         // Preserve table partitions storage format from source table.
         tableInfo->PartitionsInShardIdxFormat = srcTableInfo->PartitionsInShardIdxFormat;
 

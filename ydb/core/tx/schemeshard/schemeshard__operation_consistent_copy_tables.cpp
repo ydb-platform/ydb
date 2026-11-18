@@ -5,6 +5,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/ydb_convert/table_description.h>
 
 #include <util/generic/algorithm.h>
 
@@ -398,8 +399,15 @@ bool CreateConsistentCopyTables(
                     indexDescr.MutableDropSrcCdcStream()->CopyFrom(itDrop->second);
                 }
 
+                auto copyImpl = CopyAnyTableTask(srcImplTable, dstImplTable, indexDescr);
+                if (descr.GetCaptureIndexReadReplicas()) {
+                    Ydb::Table::GlobalIndexSettings sourceSettings;
+                    FillReadReplicasSettings(sourceSettings, context.SS->Tables.at(srcImplTablePathId)->TableDescription);
+                    *copyImpl.MutableCreateTable()->MutablePartitionConfig()->MutableBackupSourceReadReplicas() =
+                        sourceSettings.read_replicas_settings();
+                }
                 result.push_back(CreateCopyAnyTable(srcImplTable, NextPartId(nextId, result),
-                    CopyAnyTableTask(srcImplTable, dstImplTable, indexDescr), GetLocalSequences(context, srcImplTable)));
+                    copyImpl, GetLocalSequences(context, srcImplTable)));
                 AddCopySequences(nextId, tx, context, result, srcImplTable, dstImplTable.PathString());
             }
         }

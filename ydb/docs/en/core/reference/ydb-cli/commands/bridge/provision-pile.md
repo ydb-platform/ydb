@@ -30,7 +30,6 @@ View command help:
 ## Requirements {#requirements}
 
 - Cluster conversion must be complete.
-- After conversion with support for offline static nodes, hosts in the original pile can remain offline during provisioning if the available nodes provide the configuration and static-storage quorums.
 - The pile and its hosts must be present in the configuration, its static nodes must be running, and [list](list.md) must show it as `INACTIVE`.
 - The pile must have enough drives and failure domains for static groups, State Storage, and all bridged pools.
 - No other pile addition or removal can be in progress.

@@ -1191,12 +1191,6 @@ message TActivity {
         IAM_OPERATION_SERVICE_ACTOR = 700;
         WASM_COMPILE_CONTROLLER_TABLET = 701;
         INTERCONNECT_CONFIGURATOR = 702;
-<<<<<<< HEAD
-=======
-        CDC_AGGREGATOR_TABLET = 703;
-        CDC_AGGREGATOR_SERVICE = 704;
-        DELTA_KMEANS_SCAN_ACTOR = 705;
         SCHEMESHARD_INDEX_SHADOW_DATA_REPAIRER = 706;
->>>>>>> 6b0fea88245 (Automatically repair existing unique indexes whose implementation tables retain stale `ShadowData` and `KeepEraseMarkers` settings (#59376))
     };
 };

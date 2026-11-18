@@ -457,11 +457,5 @@ message TFeatureFlags {
     // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
     optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
-<<<<<<< HEAD
-=======
-    optional bool EnableCsDefaultValues = 390 [default = false];
-    optional bool EnableTopicWriteSessionsInitQuoting = 391 [default = false];
-    optional bool EnableAsyncReplicationChecksumCheck = 392 [default = false];
     optional bool EnableIndexShadowDataRepair = 393 [default = false];
->>>>>>> 6b0fea88245 (Automatically repair existing unique indexes whose implementation tables retain stale `ShadowData` and `KeepEraseMarkers` settings (#59376))
 }

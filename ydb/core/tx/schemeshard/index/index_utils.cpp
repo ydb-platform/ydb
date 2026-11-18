@@ -176,9 +176,11 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     if (baseTablePartitionConfig.HasPipelineConfig()) {
         result.MutablePipelineConfig()->CopyFrom(baseTablePartitionConfig.GetPipelineConfig());
     }
-    if (baseTablePartitionConfig.ColumnFamiliesSize()) {
+    const auto& familyConfig = indexTableDesc.GetPartitionConfig().ColumnFamiliesSize()
+        ? indexTableDesc.GetPartitionConfig() : baseTablePartitionConfig;
+    if (familyConfig.ColumnFamiliesSize()) {
         // Indexes don't need column families unless it's the default column family
-        for (const auto& family : baseTablePartitionConfig.GetColumnFamilies()) {
+        for (const auto& family : familyConfig.GetColumnFamilies()) {
             const bool isDefaultFamily = (
                 (!family.HasId() && !family.HasName()) ||
                 (family.HasId() && family.GetId() == 0) ||

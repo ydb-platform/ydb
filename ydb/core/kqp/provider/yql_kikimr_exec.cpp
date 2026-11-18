@@ -3386,15 +3386,38 @@ public:
                         return SyncError();
                     }
 
-                    // Only vector_kmeans_tree is supported for rebuild
-                    if (existingIndex->Type != NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
-                            TStringBuilder() << "REBUILD INDEX is only supported for vector_kmeans_tree indexes"));
-                        return SyncError();
+                    Ydb::Table::FulltextIndexSettings* fulltextSettings = nullptr;
+                    // Resolve the type from metadata; REBUILD does not change the index kind.
+                    switch (existingIndex->Type) {
+                        case NYql::TIndexDescription::EType::GlobalSync:
+                            add_index->mutable_global_index();
+                            break;
+                        case NYql::TIndexDescription::EType::GlobalAsync:
+                            add_index->mutable_global_async_index();
+                            break;
+                        case NYql::TIndexDescription::EType::GlobalSyncUnique:
+                            add_index->mutable_global_unique_index();
+                            break;
+                        case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                            add_index->mutable_global_vector_kmeans_tree_index();
+                            break;
+                        case NYql::TIndexDescription::EType::GlobalFulltextPlain:
+                        case NYql::TIndexDescription::EType::GlobalFulltextCompact:
+                            fulltextSettings = add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings();
+                            break;
+                        case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
+                        case NYql::TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                            fulltextSettings = add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings();
+                            break;
+                        case NYql::TIndexDescription::EType::GlobalJson:
+                        case NYql::TIndexDescription::EType::GlobalJsonCompact:
+                            add_index->mutable_global_json_index();
+                            break;
+                        default:
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                "REBUILD INDEX is only supported for global indexes"));
+                            return SyncError();
                     }
-
-                    // Set the index type
-                    add_index->mutable_global_vector_kmeans_tree_index();
 
                     // If user didn't provide ON columns, inherit from existing index
                     if (!hasUserColumns) {
@@ -3409,9 +3432,9 @@ public:
                         }
                     }
 
-                    // Parse user-provided index settings (don't pre-populate with existing;
-                    // schemeshard will merge with existing settings in Prepare)
-                    auto* vectorSettings = add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+                    Ydb::Table::FulltextIndexSettings fulltextOverrides;
+
+                    // Vector settings are merged with existing settings by SchemeShard.
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();
@@ -3440,16 +3463,51 @@ public:
                                     } else {
                                         error = TStringBuilder() << "Invalid " << settingName << ": " << value.StringValue();
                                     }
-                                } else {
+                                } else if (add_index->has_global_vector_kmeans_tree_index()) {
                                     NKikimr::NKMeans::FillSetting(
-                                        *vectorSettings,
+                                        *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings(),
                                         settingName, value.StringValue(), error);
+                                } else if (fulltextSettings) {
+                                    NKikimr::NFulltext::FillSetting(fulltextOverrides, settingName, value.StringValue(), error);
+                                } else {
+                                    error = TStringBuilder() << "Unknown index setting: " << settingName;
                                 }
                                 if (error) {
                                     ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
                                     return SyncError();
                                 }
                             }
+                        }
+                    }
+
+                    if (!fulltextOverrides.columns().empty()) {
+                        *fulltextSettings = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(
+                            existingIndex->SpecializedIndexDescription).GetSettings();
+                        const auto& overrides = fulltextOverrides.columns(0).analyzers();
+                        auto& analyzers = *fulltextSettings->mutable_columns(0)->mutable_analyzers();
+                        analyzers.MergeFrom(overrides);
+
+                        // Disabled filters must not retain inherited options. Keep explicit
+                        // options so validation still rejects contradictory user settings.
+                        if (!analyzers.use_filter_length()) {
+                            if (!overrides.has_filter_length_min()) {
+                                analyzers.clear_filter_length_min();
+                            }
+                            if (!overrides.has_filter_length_max()) {
+                                analyzers.clear_filter_length_max();
+                            }
+                        }
+                        if (!analyzers.use_filter_ngram() && !analyzers.use_filter_edge_ngram()) {
+                            if (!overrides.has_filter_ngram_min_length()) {
+                                analyzers.clear_filter_ngram_min_length();
+                            }
+                            if (!overrides.has_filter_ngram_max_length()) {
+                                analyzers.clear_filter_ngram_max_length();
+                            }
+                        }
+                        if (!analyzers.use_filter_snowball() && !analyzers.use_filter_superlemmer()
+                            && !overrides.has_language()) {
+                            analyzers.clear_language();
                         }
                     }
 

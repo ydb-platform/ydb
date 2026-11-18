@@ -1,3 +1,5 @@
+#include "index_build_info.h"
+
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_cdc_stream_common.h>
@@ -519,6 +521,21 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
                     << "Index " << dstIndex
                     << "exists, but overwrite flag has not been set";
                 return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, errStr)};
+            }
+            if (const auto* buildId = context.SS->TxIdToIndexBuilds.FindPtr(TTxId(tx.GetLockGuard().GetOwnerTxId()))) {
+                const auto& build = context.SS->IndexBuilds.at(*buildId);
+                if (build->IsRebuild && build->SubState == TIndexBuildInfo::ESubState::RebuildReplacing
+                    && build->TablePathId == mainTablePath.Base()->PathId
+                    && build->RebuildIndexName == srcIndex && build->IndexName == dstIndex) {
+                    // A continuous-backup feed can attach after the initial rebuild checks.
+                    for (const auto& child : dstIndexPath.Base()->GetChildren()) {
+                        const auto& impl = context.SS->PathsById.at(child.second);
+                        if (!impl->Dropped() && context.SS->GetAliveChildren(impl, NKikimrSchemeOp::EPathTypeCdcStream)) {
+                            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
+                                "REBUILD INDEX cannot replace an index with active changefeeds")};
+                        }
+                    }
+                }
             }
             AddDropIndex(result, nextId, dstIndexPath);
         }

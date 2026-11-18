@@ -6861,37 +6861,198 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(RebuildNonVectorIndexSql) {
-        // REBUILD INDEX is only supported for vector_kmeans_tree indexes; rebuilding a
-        // plain secondary index must be rejected at the KQP exec layer.
+    Y_UNIT_TEST_TWIN(RebuildGlobalIndexesSql, OnlineUnique) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
-        TKikimrRunner kikimr(settings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        {
-            auto status = session.ExecuteSchemeQuery(R"(
-                --!syntax_v1
+        featureFlags.SetEnableAddUniqueIndex(true);
+        featureFlags.SetEnableOnlineAddUniqueIndex(OnlineUnique);
+        TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(featureFlags));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        for (const auto& [type, expectedType] : {
+                std::pair{"GLOBAL SYNC", EIndexType::GlobalSync},
+                std::pair{"GLOBAL ASYNC", EIndexType::GlobalAsync},
+                std::pair{"GLOBAL UNIQUE", EIndexType::GlobalUnique}}) {
+            auto status = session.ExecuteSchemeQuery(TStringBuilder() << R"(
                 CREATE TABLE `/Root/TestTable` (
                     Key Uint64,
                     Data String,
-                    Embedding String,
+                    Value String,
                     PRIMARY KEY (Key),
-                    INDEX secondary_idx GLOBAL ON (Data)
+                    INDEX secondary_idx )" << type << R"( ON (Data) COVER (Value)
                 );
             )").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-        }
-        {
-            auto status = session.ExecuteSchemeQuery(R"(
-                --!syntax_v1
-                ALTER TABLE `/Root/TestTable`
-                    REBUILD INDEX secondary_idx;
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            // A rebuild must populate a replacement, preserve covering columns and support reuse.
+            for (const TString& value : {TString("before"), TString("after")}) {
+                auto write = session.ExecuteDataQuery(TStringBuilder() << R"(
+                    UPSERT INTO `/Root/TestTable` (Key, Data, Value)
+                    VALUES (1u, "indexed", ")" << value << R"(");
+                )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+
+                status = session.ExecuteSchemeQuery(R"(
+                    ALTER TABLE `/Root/TestTable` REBUILD INDEX secondary_idx WITH (parallel=2);
+                )").ExtractValueSync();
+                UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+                auto describe = session.DescribeTable("/Root/TestTable").GetValueSync();
+                UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+                const auto indexes = describe.GetTableDescription().GetIndexDescriptions();
+                UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetIndexName(), "secondary_idx");
+                UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetIndexType(), expectedType);
+                UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"Data"});
+                UNIT_ASSERT_VALUES_EQUAL(indexes[0].GetDataColumns(), std::vector<std::string>{"Value"});
+
+                auto read = session.ExecuteDataQuery(R"(
+                    SELECT Key, Value FROM `/Root/TestTable` VIEW secondary_idx WHERE Data = "indexed";
+                )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+                CompareYson(TStringBuilder() << "[[[1u];[\"" << value << "\"]]]",
+                    FormatResultSetYson(read.GetResultSet(0)));
+            }
+
+            auto update = session.ExecuteDataQuery(R"(
+                UPDATE `/Root/TestTable` SET Value = "maintained" WHERE Key = 1u;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(update.IsSuccess(), update.GetIssues().ToString());
+            const TString expected = R"([[[1u];["maintained"]]])";
+            TString actual;
+            const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+            do {
+                auto read = session.ExecuteDataQuery(R"(
+                    SELECT Key, Value FROM `/Root/TestTable` VIEW secondary_idx WHERE Data = "indexed";
+                )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+                actual = FormatResultSetYson(read.GetResultSet(0));
+                if (actual == expected) {
+                    break;
+                }
+                Sleep(TDuration::MilliSeconds(10));
+            } while (TInstant::Now() < deadline);
+            CompareYson(expected, actual);
+
+            // Vector settings must not silently turn an ordinary index into a vector index.
+            status = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/TestTable` REBUILD INDEX secondary_idx WITH (clusters=3);
             )").ExtractValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
-                "only supported for vector_kmeans_tree");
+            UNIT_ASSERT_C(!status.IsSuccess(), "Vector settings must be rejected for a secondary index");
+
+            if (expectedType == EIndexType::GlobalUnique) {
+                auto duplicate = session.ExecuteDataQuery(R"(
+                    UPSERT INTO `/Root/TestTable` (Key, Data) VALUES (2u, "indexed");
+                )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(duplicate.GetStatus(), EStatus::PRECONDITION_FAILED,
+                    duplicate.GetIssues().ToString());
+            }
+
+            status = session.ExecuteSchemeQuery("DROP TABLE `/Root/TestTable`;").ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST_TWIN(RebuildSearchIndexesSql, Compact) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableFulltextIndex(true);
+        featureFlags.SetEnableJsonIndex(true);
+        featureFlags.SetEnableJsonIndexAutoSelect(true);
+        featureFlags.SetEnableCompactFulltextIndex(Compact);
+        featureFlags.SetEnableFulltextIndexRowId(true);
+        featureFlags.SetEnableAddUniqueIndex(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(
+            NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+        auto execute = [&](const TString& query) {
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
+        // A non-integer primary key also exercises reuse of the shared row-id infrastructure.
+        execute(R"(
+            CREATE TABLE `/Root/TestTable` (
+                Key Utf8 NOT NULL,
+                Text String,
+                Payload JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX ft_plain GLOBAL USING fulltext_plain ON (Text)
+                    WITH (tokenizer=standard, use_filter_lowercase=true),
+                INDEX ft_relevance GLOBAL USING fulltext_relevance ON (Text)
+                    WITH (tokenizer=standard, use_filter_lowercase=true),
+                INDEX json_idx GLOBAL USING json ON (Payload)
+            );
+        )");
+        execute(R"(
+            UPSERT INTO `/Root/TestTable` (Key, Text, Payload) VALUES
+                ("a"u, "ALPHA cats", JsonDocument('{"tag":"pet"}')),
+                ("b"u, "beta dogs", JsonDocument('{"tag":"pet"}')),
+                ("c"u, "ALPHA birds", JsonDocument('{"tag":"sky"}'));
+        )");
+        const auto rowIds = execute("SELECT Key, __ydb_row_id FROM `/Root/TestTable` ORDER BY Key;");
+
+        // Rebuilding must retain the stored format even after the creation default changes.
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        auto config = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto* flags = config->Record.MutableConfig()->MutableFeatureFlags();
+        *flags = featureFlags;
+        flags->SetEnableCompactFulltextIndex(!Compact);
+        runtime.SendToPipe(Tests::SchemeRoot, sender, config.Release());
+        auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
+            sender, TDuration::Seconds(10));
+        UNIT_ASSERT(response);
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        for (const TString& name : {TString("ft_plain"), TString("ft_relevance"), TString("json_idx")}) {
+            execute(TStringBuilder() << "ALTER TABLE `/Root/TestTable` REBUILD INDEX " << name << ";");
+            auto impl = session.DescribeTable(TStringBuilder() << "/Root/TestTable/" << name << "/indexImplTable")
+                .GetValueSync();
+            UNIT_ASSERT_C(impl.IsSuccess(), impl.GetIssues().ToString());
+            bool hasGeneration = false;
+            for (const auto& column : impl.GetTableDescription().GetPrimaryKeyColumns()) {
+                hasGeneration |= column == "__ydb_generation";
+            }
+            UNIT_ASSERT_VALUES_EQUAL(hasGeneration, Compact);
+        }
+
+        auto checkSearch = [&](const TString& expectedFulltext, const TString& expectedJson) {
+            auto plain = execute(R"(
+                SELECT Key FROM `/Root/TestTable` VIEW ft_plain
+                WHERE FulltextMatch(Text, "alpha") ORDER BY Key;
+            )");
+            CompareYson(expectedFulltext, FormatResultSetYson(plain.GetResultSet(0)));
+            auto relevance = execute(R"(
+                SELECT Key FROM `/Root/TestTable` VIEW ft_relevance
+                WHERE FulltextScore(Text, "alpha") > 0 ORDER BY Key;
+            )");
+            CompareYson(expectedFulltext, FormatResultSetYson(relevance.GetResultSet(0)));
+            auto json = execute(R"(
+                SELECT Key FROM `/Root/TestTable` VIEW json_idx
+                WHERE JSON_VALUE(Payload, '$.tag' RETURNING Utf8) == "pet"u ORDER BY Key;
+            )");
+            CompareYson(expectedJson, FormatResultSetYson(json.GetResultSet(0)));
+        };
+        checkSearch(R"([["a"];["c"]])", R"([["a"];["b"]])");
+        const auto rebuiltRowIds = execute("SELECT Key, __ydb_row_id FROM `/Root/TestTable` ORDER BY Key;");
+        CompareYson(FormatResultSetYson(rowIds.GetResultSet(0)), FormatResultSetYson(rebuiltRowIds.GetResultSet(0)));
+
+        execute(R"(
+            UPSERT INTO `/Root/TestTable` (Key, Text, Payload)
+                VALUES ("d"u, "ALPHA whales", JsonDocument('{"tag":"pet"}'));
+            UPDATE `/Root/TestTable` SET Text = "ALPHA dogs", Payload = JsonDocument('{"tag":"sky"}')
+                WHERE Key = "b"u;
+            DELETE FROM `/Root/TestTable` WHERE Key = "c"u;
+        )");
+        checkSearch(R"([["a"];["b"];["d"]])", R"([["a"];["d"]])");
+
+        auto describe = session.DescribeTable("/Root/TestTable").GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        // Three rebuilt search indexes and the shared row-id unique index; no temporary indexes.
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTableDescription().GetIndexDescriptions().size(), 4);
     }
 
     Y_UNIT_TEST(RenameTableWithVectorIndex) {

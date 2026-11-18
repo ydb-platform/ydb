@@ -681,9 +681,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         UNIT_ASSERT_STRING_CONTAINS((TStringBuilder() << event->Record.GetIssues()), "REBUILD INDEX");
     }
 
-    Y_UNIT_TEST(RebuildNonVectorIndex) {
-        // REBUILD INDEX is only supported for vector_kmeans_tree indexes; rebuilding a
-        // plain secondary index must be rejected on the schemeshard side too.
+    Y_UNIT_TEST_TWIN(RebuildCannotChangeIndexType, VectorIndex) {
+        // A direct rebuild request must preserve the type, even between secondary index kinds.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -713,13 +712,17 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
         TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
 
-        // Attempt to rebuild the secondary index as a vector index
+        // Attempt to rebuild the synchronous index with a different type.
         ui64 rebuildTx = ++txId;
 
         Ydb::Table::TableIndex index;
         index.set_name("secondary_idx");
         index.add_index_columns("data");
-        index.mutable_global_vector_kmeans_tree_index();
+        if (VectorIndex) {
+            index.mutable_global_vector_kmeans_tree_index();
+        } else {
+            index.mutable_global_async_index();
+        }
 
         NKikimrIndexBuilder::TIndexBuildSettings settings;
         settings.set_source_path("/MyRoot/ServerLessDB/Table");
@@ -734,10 +737,10 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         TAutoPtr<IEventHandle> handle;
         auto* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
         UNIT_ASSERT(event);
-        UNIT_ASSERT_VALUES_UNEQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
-            "rebuild of a non-vector index must fail");
+        UNIT_ASSERT_VALUES_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST,
+            "rebuild must preserve the index type");
         UNIT_ASSERT_STRING_CONTAINS((TStringBuilder() << event->Record.GetIssues()),
-            "only supported for vector_kmeans_tree");
+            "REBUILD INDEX cannot change index type");
     }
 
     Y_UNIT_TEST(VectorIndexAutodetect) {

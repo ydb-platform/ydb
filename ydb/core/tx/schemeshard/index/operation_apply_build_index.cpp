@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path_element.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -160,6 +161,8 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
     // IsBuildIndex()
     if (!indexName.empty()) {
         TPath index = table.Child(indexName);
+        const auto* build = context.SS->IndexBuilds.FindPtr(TIndexBuildId(config.GetBuildIndexId()));
+        const bool isOnlineRebuild = build && !(*build)->RebuildIndexName.empty();
         Y_ABORT_UNLESS(index.Base()->GetChildren().size() >= 1);
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto& indexImplTableName = indexChildItems.first;
@@ -183,6 +186,16 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
                 result.push_back(CreateFinalizeBuildIndexMainTable(partId, finalize));
             } else {
                 result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard(), tx.GetInternal()));
+            }
+            // Replacement moves implementation tables to new paths. Release their build locks
+            // with finalization while the source table remains locked until replacement finishes.
+            if (isOnlineRebuild && !NTableIndex::IsBuildImplTable(indexImplTableName)
+                && index.Child(indexImplTableName).IsLocked()) {
+                auto unlock = TransactionTemplate(index.PathString(), NKikimrSchemeOp::ESchemeOpDropLock);
+                unlock.SetInternal(tx.GetInternal());
+                *unlock.MutableLockGuard() = tx.GetLockGuard();
+                unlock.MutableLockConfig()->SetName(indexImplTableName);
+                result.push_back(DropLock(NextPartId(nextId, result), unlock));
             }
         }
     }

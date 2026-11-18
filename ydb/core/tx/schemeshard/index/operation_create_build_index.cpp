@@ -96,8 +96,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
-    if (op.GetIsRebuild() && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "REBUILD INDEX is only supported for vector_kmeans_tree indexes")};
+    if (isRebuild && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "In-place rebuild is only supported for vector_kmeans_tree indexes")};
     }
 
     auto counts = GetIndexObjectCounts(indexDesc);

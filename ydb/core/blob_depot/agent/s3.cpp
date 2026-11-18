@@ -1,6 +1,7 @@
 #include "agent_impl.h"
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
+#include <ydb/core/blob_depot/config.h>
 #include <ydb/core/blob_depot/s3_error.h>
 #include <ydb/core/blob_depot/s3_router_events.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -20,39 +21,79 @@ namespace NKikimr::NBlobDepot {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(TabletId, *S3BackendSettings));
             S3WrapperId = MakeBlobDepotS3RouterID(TabletId);
-            S3BasePath = TStringBuilder() << settings.GetObjectKeyPattern() << '/' << name;
+            S3BasePath = MakeS3BasePath(settings, name);
+        }
+    }
+
+    struct TBlobDepotAgent::TEvS3Result : TEventLocal<TEvS3Result, TEvPrivate::EvS3Result> {
+        ES3Operation Operation;
+        std::unique_ptr<IEventHandle> Response;
+
+        TEvS3Result(ES3Operation operation, std::unique_ptr<IEventHandle> response)
+            : Operation(operation)
+            , Response(std::move(response))
+        {}
+    };
+
+    // S3 wrappers address the original sender, without echoing the request cookie.
+    class TBlobDepotAgent::TS3ReplyActor : public TActor<TS3ReplyActor> {
+        const TActorId AgentId;
+        const ui64 RequestId;
+        const ES3Operation Operation;
+
+        void Finish(TAutoPtr<IEventHandle> ev) {
+            Send(AgentId, new TEvS3Result(Operation, std::unique_ptr<IEventHandle>(ev.Release())), 0, RequestId);
+            PassAway();
+        }
+
+        STRICT_STFUNC(StateFunc,
+            fFunc(NWrappers::NExternalStorage::EvGetObjectResponse, Finish)
+            fFunc(NWrappers::NExternalStorage::EvPutObjectResponse, Finish)
+            fFunc(TEvents::TSystem::Undelivered, Finish)
+        )
+
+    public:
+        TS3ReplyActor(TActorId agentId, ui64 requestId, ES3Operation operation)
+            : TActor(&TThis::StateFunc)
+            , AgentId(agentId)
+            , RequestId(requestId)
+            , Operation(operation)
+        {}
+    };
+
+    void TBlobDepotAgent::HandleS3Result(TAutoPtr<IEventHandle> ev) {
+        auto& result = *ev->Get<TEvS3Result>();
+        switch (result.Operation) {
+            case ES3Operation::Read:  HandleS3ReadResult(ev->Cookie, *result.Response); break;
+            case ES3Operation::Write: HandleS3WriteResult(ev->Cookie, *result.Response); break;
         }
     }
 
     void TBlobDepotAgent::TQuery::IssueReadS3(const TString& key, ui32 offset, ui32 len, TFinishCallback finish, ui64 readId) {
-        if (!LifetimeToken) {
-            LifetimeToken = std::make_shared<TLifetimeToken>();
+        auto read = std::make_shared<TS3Read>();
+        read->RequestId = Agent.NextOtherRequestId++;
+        read->Deadline = DeadlineMonotonic;
+        read->Key = key;
+        read->Offset = offset;
+        read->Len = len;
+        read->Finish = std::move(finish);
+        read->ReadId = readId;
+        read->Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+            "BlobDepotAgent.ReadS3", NWilson::EFlags::AUTO_END);
+        if (read->Span) {
+            read->Span.Attribute("size", static_cast<i64>(len));
         }
 
-        TPendingS3Read read{
-            .Key = key,
-            .Offset = offset,
-            .Len = len,
-            // the query may end (and go away) while the read is still queued or in flight
-            .Finish = [lifetimeToken = std::weak_ptr<TLifetimeToken>(LifetimeToken), finish = std::move(finish)](
-                    std::optional<TString> data, const char *error) {
-                if (!lifetimeToken.expired()) {
-                    finish(std::move(data), error);
-                }
-            },
-            .ReadId = readId,
-            .Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
-                "BlobDepotAgent.ReadS3", NWilson::EFlags::AUTO_END),
-        };
-
-        if (read.Span) {
-            read.Span.Attribute("size", static_cast<i64>(len));
-        }
-
-        Agent.IssueOrEnqueueS3Read(std::move(read));
+        Agent.RegisterRequest(read->RequestId, this, read, [agent = &Agent, read] {
+            if (read->Queued) {
+                agent->PendingS3Reads.erase(*read->Queued);
+                *agent->S3GetsPendingQueueSizeCounter = agent->PendingS3Reads.size();
+            }
+        }, false);
+        Agent.IssueOrEnqueueS3Read(*read);
     }
 
-    void TBlobDepotAgent::IssueOrEnqueueS3Read(TPendingS3Read&& read) {
+    void TBlobDepotAgent::IssueOrEnqueueS3Read(TS3Read& read) {
         ApplyMaxS3GetsInFlight();
 
         const TMonotonic now = TActivationContext::Monotonic();
@@ -70,7 +111,7 @@ namespace NKikimr::NBlobDepot {
                 {"S3GetsInFlight", S3GetsInFlight},
                 {"currentMaxS3GetsInFlight", CurrentMaxS3GetsInFlight},
                 {"queueSize", PendingS3Reads.size()});
-            PendingS3Reads.push_back(std::move(read));
+            read.Queued = PendingS3Reads.insert(PendingS3Reads.end(), read.RequestId);
             *S3GetsPendingQueueSizeCounter = PendingS3Reads.size();
             if (timeThrottled && !S3GetWakeupScheduled) {
                 TActivationContext::Schedule(S3GetThrottleUntil, new IEventHandle(TEvPrivate::EvS3GetThrottleWakeup,
@@ -80,103 +121,13 @@ namespace NKikimr::NBlobDepot {
             return;
         }
 
-        DispatchS3Read(std::move(read));
+        DispatchS3Read(read);
     }
 
-    void TBlobDepotAgent::DispatchS3Read(TPendingS3Read&& read) {
-        class TGetActor : public TActor<TGetActor> {
-            TBlobDepotAgent& Agent;
-            TPendingS3Read Read;
-
-        public:
-            TGetActor(TBlobDepotAgent& agent, TPendingS3Read&& read)
-                : TActor(&TThis::StateFunc)
-                , Agent(agent)
-                , Read(std::move(read))
-            {}
-
-            // the read completes in the context of the agent, which owns the queries waiting for it
-            void Handle(NWrappers::TEvExternalStorage::TEvGetObjectResponse::TPtr ev) {
-                InvokeOtherActor(Agent, &TBlobDepotAgent::Invoke, [&] { Process(*ev->Get()); });
-                PassAway();
-            }
-
-            void HandleUndelivered() {
-                InvokeOtherActor(Agent, &TBlobDepotAgent::Invoke, [&] { ProcessUndelivered(); });
-                PassAway();
-            }
-
-            void Process(NWrappers::TEvExternalStorage::TEvGetObjectResponse& msg) {
-                YDB_LOG_DEBUG("Received TEvGetObjectResponse",
-                    {"marker", "BDA55"},
-                    {"agentId", Agent.LogId},
-                    {"readId", Read.ReadId},
-                    {"response", msg.Result},
-                    {"bodyLen", std::size(msg.Body)});
-
-                if (msg.IsSuccess()) {
-                    ++*Agent.S3GetsOk;
-                    *Agent.S3GetBytesOk += msg.Body.size();
-                    const ui64 bytes = msg.Body.size();
-                    Read.Complete(std::move(msg.Body), "");
-                    Agent.OnS3GetCompleted(/*success=*/true, bytes);
-                    return;
-                }
-
-                ++*Agent.S3GetsError;
-                const auto& error = msg.GetError();
-                Agent.IncS3HttpErrorCounter("Gets", static_cast<int>(error.GetResponseCode()));
-
-                if (IsS3SlowDown(error)) {
-                    ++*Agent.S3GetsSlowDown;
-                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_get_slow_down",
-                        {"marker", "BDEV43"},
-                        {"VG", Agent.VirtualGroupId},
-                        {"BDT", Agent.TabletId},
-                        {"G", Agent.BlobDepotGeneration},
-                        {"readId", Read.ReadId},
-                        {"key", Read.Key},
-                        {"retry", Read.SlowDownRetries});
-
-                    Agent.NotifyS3GetSlowDown();
-                    Agent.OnS3GetCompleted(/*success=*/false, 0);
-
-                    if (Read.SlowDownRetries >= MaxS3GetSlowDownRetries) {
-                        const TString reason = TStringBuilder()
-                            << "too many S3 SlowDown retries: " << error.GetMessage();
-                        Read.Complete(std::nullopt, reason.c_str());
-                    } else {
-                        ++Read.SlowDownRetries;
-                        Agent.IssueOrEnqueueS3Read(std::move(Read));
-                    }
-                    return;
-                }
-
-                if (error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY) {
-                    Read.Complete(std::nullopt, "data has disappeared from S3");
-                } else {
-                    Read.Complete(std::nullopt, error.GetMessage().c_str());
-                }
-                Agent.OnS3GetCompleted(/*success=*/false, 0);
-            }
-
-            void ProcessUndelivered() {
-                YDB_LOG_DEBUG("Received TEvUndelivered",
-                    {"marker", "BDA56"},
-                    {"agentId", Agent.LogId},
-                    {"readId", Read.ReadId});
-                ++*Agent.S3GetsError;
-                Read.Complete(std::nullopt, "wrapper actor terminated");
-                Agent.OnS3GetCompleted(/*success=*/false, 0);
-            }
-
-            STRICT_STFUNC(StateFunc,
-                hFunc(NWrappers::TEvExternalStorage::TEvGetObjectResponse, Handle)
-                cFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
-                cFunc(TEvents::TSystem::Poison, PassAway)
-            )
-        };
-
+    void TBlobDepotAgent::DispatchS3Read(const TS3Read& read) {
+        if (TActivationContext::Monotonic() >= read.Deadline) {
+            return; // The watchdog will complete the query with TIMEOUT.
+        }
         ++S3GetsInFlight;
         *S3GetsInFlightCounter = S3GetsInFlight;
 
@@ -191,19 +142,69 @@ namespace NKikimr::NBlobDepot {
             {"S3GetsInFlight", S3GetsInFlight},
             {"currentMaxS3GetsInFlight", CurrentMaxS3GetsInFlight});
 
-        const TString key = read.Key;
-        const ui32 offset = read.Offset;
-        const ui32 len = read.Len;
-
-        const TActorId actorId = RegisterWithSameMailbox(new TGetActor(*this, std::move(read)));
-
+        const TActorId actorId = RegisterWithSameMailbox(new TS3ReplyActor(SelfId(), read.RequestId, ES3Operation::Read));
         auto request = std::make_unique<NWrappers::TEvExternalStorage::TEvGetObjectRequest>(
             Aws::S3::Model::GetObjectRequest()
                 .WithBucket(S3BackendSettings->GetSettings().GetBucket())
-                .WithKey(key)
-                .WithRange(TStringBuilder() << "bytes=" << offset << '-' << offset + len - 1)
+                .WithKey(read.Key)
+                .WithRange(TStringBuilder() << "bytes=" << read.Offset << '-' << ui64(read.Offset) + read.Len - 1)
         );
         TActivationContext::Send(new IEventHandle(S3WrapperId, actorId, request.release(), IEventHandle::FlagTrackDelivery));
+    }
+
+    void TBlobDepotAgent::HandleS3ReadResult(ui64 id, IEventHandle& result) {
+        auto it = OtherRequestInFlight.find(id);
+        if (it == OtherRequestInFlight.end()) {
+            OnS3GetCompleted(false);
+            return;
+        }
+        auto read = std::static_pointer_cast<TS3Read>(it->Context);
+        if (TActivationContext::Monotonic() >= read->Deadline) {
+            ExtractRequest(id, OtherRequestInFlight);
+            OnS3GetCompleted(false);
+            return;
+        }
+        auto* msg = result.Type == TEvents::TSystem::Undelivered ? nullptr
+            : result.Get<NWrappers::TEvExternalStorage::TEvGetObjectResponse>();
+        if (msg && msg->IsSuccess() && msg->Body.size() == read->Len) {
+            ++*S3GetsOk;
+            *S3GetBytesOk += msg->Body.size();
+            ExtractRequest(id, OtherRequestInFlight);
+            read->Complete(NKikimrProto::OK, std::move(msg->Body), "");
+            OnS3GetCompleted(true);
+            return;
+        }
+
+        ++*S3GetsError;
+        NKikimrProto::EReplyStatus status = NKikimrProto::ERROR;
+        TString reason;
+        if (!msg) {
+            reason = "wrapper actor terminated";
+        } else if (msg->IsSuccess()) {
+            reason = TStringBuilder() << "S3 read returned " << msg->Body.size() << " bytes instead of " << read->Len;
+        } else {
+            const auto& error = msg->GetError();
+            IncS3HttpErrorCounter("Gets", static_cast<int>(error.GetResponseCode()));
+            if (IsS3SlowDown(error)) {
+                ++*S3GetsSlowDown;
+                NotifyS3GetSlowDown();
+                if (read->SlowDownRetries < MaxS3GetSlowDownRetries) {
+                    ++read->SlowDownRetries;
+                    IssueOrEnqueueS3Read(*read);
+                    OnS3GetCompleted(false);
+                    return;
+                }
+                reason = TStringBuilder() << "too many S3 SlowDown retries: " << error.GetMessage();
+            } else if (IsS3MissingObject(error)) {
+                status = NKikimrProto::NODATA;
+                reason = "data has disappeared from S3";
+            } else {
+                reason = error.GetMessage();
+            }
+        }
+        ExtractRequest(id, OtherRequestInFlight);
+        read->Complete(status, {}, reason.c_str());
+        OnS3GetCompleted(false);
     }
 
     void TBlobDepotAgent::NotifyS3GetSlowDown() {
@@ -236,8 +237,7 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TBlobDepotAgent::OnS3GetCompleted(bool success, ui64 bytes) {
-        Y_UNUSED(bytes);
+    void TBlobDepotAgent::OnS3GetCompleted(bool success) {
         Y_ABORT_UNLESS(S3GetsInFlight);
         --S3GetsInFlight;
         *S3GetsInFlightCounter = S3GetsInFlight;
@@ -273,9 +273,12 @@ namespace NKikimr::NBlobDepot {
         ApplyMaxS3GetsInFlight();
 
         while (!PendingS3Reads.empty() && S3GetsInFlight < CurrentMaxS3GetsInFlight) {
-            auto read = std::move(PendingS3Reads.front());
+            const auto it = OtherRequestInFlight.find(PendingS3Reads.front());
+            Y_ABORT_UNLESS(it != OtherRequestInFlight.end());
+            auto& read = it->Context->Obtain<TS3Read>();
+            read.Queued.reset();
             PendingS3Reads.pop_front();
-            DispatchS3Read(std::move(read));
+            DispatchS3Read(read);
         }
         *S3GetsPendingQueueSizeCounter = PendingS3Reads.size();
     }
@@ -285,78 +288,33 @@ namespace NKikimr::NBlobDepot {
         RunPendingS3ReadsIfPossible();
     }
 
-    TActorId TBlobDepotAgent::TQuery::IssueWriteS3(TString&& key, TRope&& buffer, TLogoBlobID id, TS3Locator locator) {
-        class TWriteActor : public TActor<TWriteActor> {
-            std::weak_ptr<TLifetimeToken> LifetimeToken;
-            TBlobDepotAgent& Agent;
-            TQuery* const Query; // valid only while LifetimeToken is not expired
-            const ui64 QueryId;
-            TLogoBlobID Id;
-            TS3Locator Locator;
-
-        public:
-            TWriteActor(std::weak_ptr<TLifetimeToken> lifetimeToken, TQuery *query, TLogoBlobID id, TS3Locator locator)
-                : TActor(&TThis::StateFunc)
-                , LifetimeToken(std::move(lifetimeToken))
-                , Agent(query->Agent)
-                , Query(query)
-                , QueryId(query->QueryId)
-                , Id(id)
-                , Locator(locator)
-            {}
-
-            void Handle(NWrappers::TEvExternalStorage::TEvPutObjectResponse::TPtr ev) {
-                auto& msg = *ev->Get();
-                if (msg.IsSuccess()) {
-                    Finish(std::nullopt, false);
-                } else {
-                    const auto& error = msg.GetError();
-                    Finish(std::make_optional<TString>(error.GetMessage()), IsS3SlowDown(error),
-                        static_cast<int>(error.GetResponseCode()));
-                }
-            }
-
-            void HandleUndelivered() {
-                Finish("event undelivered", false);
-            }
-
-            void Finish(std::optional<TString>&& error, bool slowDown, int httpCode = 0) {
-                InvokeOtherActor(Agent, &TBlobDepotAgent::Invoke, [&] {
-                    if (!LifetimeToken.expired()) {
-                        Agent.IncS3HttpErrorCounter("Puts", httpCode);
-
-                        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Written_to_S3",
-                            {"marker", "BDEV37"},
-                            {"VG", Agent.VirtualGroupId},
-                            {"BDT", Agent.TabletId},
-                            {"G", Agent.BlobDepotGeneration},
-                            {"Q", QueryId},
-                            {"blobId", Id},
-                            {"locator", Locator});
-                        Query->OnPutS3ObjectResponse(std::move(error), slowDown);
-                    }
-                    Y_ABORT_UNLESS(Agent.S3PutsInFlight);
-                    --Agent.S3PutsInFlight;
-                    *Agent.S3PutsInFlightCounter = Agent.S3PutsInFlight;
-                });
-                PassAway();
-            }
-
-            STRICT_STFUNC(StateFunc,
-                hFunc(NWrappers::TEvExternalStorage::TEvPutObjectResponse, Handle)
-                cFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
-                cFunc(TEvents::TSystem::Poison, PassAway)
-            )
-        };
-
-        if (!LifetimeToken) {
-            LifetimeToken = std::make_shared<TLifetimeToken>();
+    void TBlobDepotAgent::HandleS3WriteResult(ui64 id, IEventHandle& result) {
+        Y_ABORT_UNLESS(S3PutsInFlight);
+        *S3PutsInFlightCounter = --S3PutsInFlight;
+        if (!OtherRequestInFlight.contains(id)) {
+            return;
         }
+        TS3PutResult outcome;
+        if (result.Type == TEvents::TSystem::Undelivered) {
+            outcome.Error = "event undelivered";
+        } else {
+            const auto& msg = *result.Get<NWrappers::TEvExternalStorage::TEvPutObjectResponse>();
+            if (!msg.IsSuccess()) {
+                outcome.Error.emplace(msg.GetError().GetMessage());
+                outcome.SlowDown = IsS3SlowDown(msg.GetError());
+                IncS3HttpErrorCounter("Puts", static_cast<int>(msg.GetError().GetResponseCode()));
+            }
+        }
+        OnRequestComplete(id, std::move(outcome), OtherRequestInFlight);
+    }
 
+    void TBlobDepotAgent::TQuery::IssueWriteS3(TString&& key, TRope&& buffer, TLogoBlobID id, TS3Locator locator) {
         ++Agent.S3PutsInFlight;
         *Agent.S3PutsInFlightCounter = Agent.S3PutsInFlight;
 
-        const TActorId writerActorId = Agent.RegisterWithSameMailbox(new TWriteActor(LifetimeToken, this, id, locator));
+        const ui64 requestId = Agent.NextOtherRequestId++;
+        Agent.RegisterRequest(requestId, this, nullptr, {}, false);
+        const auto writerActorId = Agent.RegisterWithSameMailbox(new TS3ReplyActor(Agent.SelfId(), requestId, ES3Operation::Write));
 
         YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Issue_S3_write",
             {"marker", "BDEV38"},
@@ -376,7 +334,6 @@ namespace NKikimr::NBlobDepot {
                 buffer.ExtractUnderlyingContainerOrCopy<TString>()),
             IEventHandle::FlagTrackDelivery));
 
-        return writerActorId;
     }
 
 } // NKikimr::NBlobDepot

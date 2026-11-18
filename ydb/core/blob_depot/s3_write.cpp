@@ -129,6 +129,17 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TS3Manager::HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev) {
+        if (Self->IsDataCoolingEnabled()) {
+            auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev);
+            for (size_t i = 0; i < ev->Get()->Record.ItemsSize(); ++i) {
+                auto *item = record->AddItems();
+                item->SetStatus(NKikimrProto::ERROR);
+                item->SetErrorReason("Async S3 uses tablet-side uploads");
+            }
+            TActivationContext::Send(response.release());
+            return;
+        }
+
         ApplyMaxWritesInFlight();
 
         const TMonotonic now = TActivationContext::Monotonic();

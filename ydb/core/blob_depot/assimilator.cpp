@@ -47,6 +47,7 @@ namespace NKikimr::NBlobDepot {
                     [&](TAssimilatedBlobInfo::TUpdate& update) {
                         Y_ABORT_UNLESS(!Self->Data->CanBeCollected(update.BlobSeqId));
                         Self->Data->BindToBlob(blob.Key, update.BlobSeqId, update.Keep, update.DoNotKeep, txc, this);
+                        Self->ReleaseInternalHotWrite(update.BlobSeqId);
                     },
                 }, blob.Action);
             }
@@ -56,15 +57,7 @@ namespace NKikimr::NBlobDepot {
         void Complete(const TActorContext&) override {
             for (const auto& blob : Blobs) {
                 if (auto *update = std::get_if<TAssimilatedBlobInfo::TUpdate>(&blob.Action)) {
-                    const auto& blobSeqId = update->BlobSeqId;
-                    TChannelInfo& channel = Self->Channels[blobSeqId.Channel];
-                    const ui32 generation = Self->Executor()->Generation();
-                    const TBlobSeqId leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
-                    const size_t numErased = channel.AssimilatedBlobsInFlight.erase(blobSeqId.ToSequentialNumber());
-                    Y_ABORT_UNLESS(numErased == 1);
-                    if (leastExpectedBlobIdBefore != channel.GetLeastExpectedBlobId(generation)) {
-                        Self->Data->OnLeastExpectedBlobIdChange(channel.Index); // allow garbage collection
-                    }
+                    Self->ReleaseInternalBlobSeqId(update->BlobSeqId);
                 }
             }
             Self->Data->CommitTrash(this);
@@ -149,6 +142,9 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::PassAway() {
         if (!Token.expired()) {
+            if (HotWriteBlockedBlob) {
+                Self->CancelInternalHotWriteWait(HotWriteBlockedBlob->BlobSize(), SelfId());
+            }
             YDB_LOG_DEBUG("TAssimilator::PassAway",
                 {"marker", "BDT52"},
                 {"id", Self->GetLogId()});
@@ -452,6 +448,14 @@ namespace NKikimr::NBlobDepot {
         if (ResumeScanDataForCopyingInFlight) {
             return;
         }
+        if (HotWriteBlockedBlob) {
+            // Drain earlier GET batches and commit their successful copies before waiting for capacity.
+            if (Gets.empty()) {
+                Self->WaitForInternalHotWrite(HotWriteBlockedBlob->BlobSize(), SelfId(),
+                    TEvPrivate::EvRestartScanDataForCopying);
+            }
+            return;
+        }
 
         YDB_LOG_DEBUG("TAssimilator::ScanDataForCopying",
             {"marker", "BDT54"},
@@ -477,6 +481,10 @@ namespace NKikimr::NBlobDepot {
                 if (!value.GoingToAssimilate) {
                     LastScannedKey.emplace(id);
                     return true; // keep scanning
+                } else if (Self->IsInternalWriteTooLarge(id.BlobSize())) {
+                    LastScannedKey = id;
+                    OversizedBlob = id;
+                    return true;
                 } else if (ScanQ.empty() || ScanQ.front().TabletID() == id.TabletID()) {
                     LastScannedKey.emplace(id);
                     ScanQ.push_back(id);
@@ -523,6 +531,10 @@ namespace NKikimr::NBlobDepot {
                 continue;
             } else if (!Gets.empty()) {
                 // there are some unprocessed get queries, still have to wait
+            } else if (!EntriesToProcess && OversizedBlob) {
+                WaitingForOversizedBlob = true;
+                YDB_LOG_WARN("Assimilation waiting for a larger hot data limit or blob removal",
+                    {"id", Self->GetLogId()}, {"blob", *OversizedBlob});
             } else if (!EntriesToProcess) { // we have finished scanning the whole table without any entries, copying is done
                 OnCopyDone();
             } else if (std::exchange(CopyRetryNeeded, false)) { // some blobs couldn't be copied, try them again later
@@ -539,6 +551,11 @@ namespace NKikimr::NBlobDepot {
     void TAssimilator::RestartScanDataForCopying() {
         LastScannedKey.reset();
         LastPlanScannedKey.reset();
+        HotWriteBlockedBlob.reset();
+        ScanQ.clear();
+        TotalSize = 0;
+        OversizedBlob.reset();
+        WaitingForOversizedBlob = false;
         EntriesToProcess = PlanningComplete = ActionInProgress = false;
         LeastBlobQueue.clear();
         Action();
@@ -575,9 +592,16 @@ namespace NKikimr::NBlobDepot {
 
                     if (std::vector<ui8> channels(1); Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels)) {
                         TChannelInfo& channel = Self->Channels[channels.front()];
-                        const ui64 value = channel.NextBlobSeqId++;
-                        const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
-                        const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, resp.Id.BlobSize());
+                        const auto allocation = Self->TryAllocateInternalBlobSeqId(channel, resp.Id.BlobSize());
+                        if (auto* error = std::get_if<TBlobDepot::EInternalWriteError>(&allocation)) {
+                            if (*error == TBlobDepot::EInternalWriteError::TooLarge) {
+                                OversizedBlob = resp.Id;
+                            } else if (!HotWriteBlockedBlob) {
+                                HotWriteBlockedBlob = resp.Id;
+                            }
+                            break;
+                        }
+                        const TLogoBlobID id = std::get<TBlobSeqId>(allocation).MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, resp.Id.BlobSize());
                         const ui64 putId = NextPutId++;
                         // DataKind is deliberately left at USER: this copies user payload out of the
                         // group being decommitted, and stalling that while the destination is short
@@ -588,10 +612,8 @@ namespace NKikimr::NBlobDepot {
                             .Deadline = TInstant::Max(),
                             .WriteSource = TWriteSource::BlobDepotPut,
                         }), putId);
-                        const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
+                        const bool inserted = Puts.try_emplace(putId, TData::TKey(resp.Id), it->first).second;
                         Y_ABORT_UNLESS(inserted);
-                        const bool inserted1 = Puts.try_emplace(putId, TData::TKey(resp.Id), it->first).second;
-                        Y_ABORT_UNLESS(inserted1);
                         ++get.PutsPending;
                     } else {
                         CopyRetryNeeded = true;
@@ -708,7 +730,7 @@ namespace NKikimr::NBlobDepot {
         } else {
             // this copy won't ever get its blob bound to the key, the retry writes another one, so it doesn't hold
             // garbage collection back anymore
-            Self->ReleaseMoveDataBlobSeqId(TBlobSeqId::FromLogoBlobId(msg.Id));
+            Self->ReleaseInternalBlobSeqId(TBlobSeqId::FromLogoBlobId(msg.Id));
         }
         if (!--get.PutsPending) {
             Self->Data->ExecuteTxCommitAssimilatedBlob(std::move(get.AssimilatedBlobs), TEvPrivate::EvTxComplete,
@@ -894,6 +916,19 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TAssimilator::UpdateBytesCopiedQ() {
+        if (HotWriteBlockedBlob) {
+            const auto* value = Self->Data->FindKey(TData::TKey(*HotWriteBlockedBlob));
+            if ((!value || !value->GoingToAssimilate) &&
+                    Self->CancelInternalHotWriteWait(HotWriteBlockedBlob->BlobSize(), SelfId())) {
+                RestartScanDataForCopying();
+            }
+        }
+        if (WaitingForOversizedBlob) {
+            const auto* value = Self->Data->FindKey(TData::TKey(*OversizedBlob));
+            if (!value || !value->GoingToAssimilate) {
+                RestartScanDataForCopying();
+            }
+        }
         while (BytesCopiedQ.size() >= 3) {
             BytesCopiedQ.pop_front();
         }

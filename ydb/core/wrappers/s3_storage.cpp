@@ -181,6 +181,8 @@ protected:
 
 template <typename TEvRequest, typename TEvResponse>
 class TOutputStreamContext: public TGenericContext<TEvRequest, TEvResponse> {
+    using TBase = TGenericContext<TEvRequest, TEvResponse>;
+
     class TOutputStreamBuf: public PreallocatedStreamBuf {
         TOutputStreamBuf(char* data, size_t size)
             : PreallocatedStreamBuf(reinterpret_cast<unsigned char*>(data), size)
@@ -195,7 +197,7 @@ class TOutputStreamContext: public TGenericContext<TEvRequest, TEvResponse> {
     };
 
 public:
-    using TGenericContext<TEvRequest, TEvResponse>::TGenericContext;
+    using TBase::TBase;
 
     const typename TEvRequest::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
         auto& request = ev->Get()->Request;
@@ -213,6 +215,21 @@ public:
         );
 
         return request;
+    }
+
+    void Reply(const typename TEvRequest::TRequest& request, const typename TEvResponse::TOutcome& outcome) const {
+        if (outcome.IsSuccess()) {
+            // The backing buffer is allocated to the requested size, regardless of the response length.
+            // tellp() also fails when the response overflows that buffer.
+            const auto written = static_cast<std::streamoff>(outcome.GetResult().GetBody().tellp());
+            if (written != static_cast<std::streamoff>(Buffer.size())) {
+                const TString reason = TStringBuilder() << "Invalid S3 range response length. Expected " << Buffer.size()
+                    << " bytes, stream position " << written;
+                auto error = AWSError<S3Errors>(S3Errors::NETWORK_CONNECTION, "InvalidRangeResponse", reason.c_str(), true);
+                return TBase::Reply(request, typename TEvResponse::TOutcome(S3Error(std::move(error))));
+            }
+        }
+        TBase::Reply(request, outcome);
     }
 
 protected:

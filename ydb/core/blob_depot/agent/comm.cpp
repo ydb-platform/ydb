@@ -47,6 +47,7 @@ namespace NKikimr::NBlobDepot {
             {"requestId", id});
         auto registerEv = std::make_unique<TEvBlobDepot::TEvRegisterAgent>(VirtualGroupId, AgentInstanceId);
         registerEv->Record.SetSupportsIdRangeExpiry(true);
+        registerEv->Record.SetSupportsHotWriteCredits(true);
         NTabletPipe::SendData(SelfId(), PipeId, registerEv.release(), id);
         RegisterRequest(id, this, nullptr, {}, true);
         SwitchMode(EMode::ConnectPending);
@@ -62,6 +63,8 @@ namespace NKikimr::NBlobDepot {
             ExpiredSteps.clear();
         }
         BlobDepotGeneration = msg.GetGeneration();
+        HotWriteCreditEpoch = msg.GetHotWriteCreditEpoch();
+        MaxHotWriteBytes = msg.GetMaxHotWriteBytes();
         DecommitGroupId = msg.HasDecommitGroupId() ? std::make_optional(msg.GetDecommitGroupId()) : std::nullopt;
 
         THashSet<NKikimrBlobDepot::TChannelKind::E> vanishedKinds;
@@ -204,13 +207,125 @@ namespace NKikimr::NBlobDepot {
         HandlePendingEvent();
     }
 
+    bool TBlobDepotAgent::EnsureHotWriteCredit(TQuery *query, ui64 bytes, bool failOnSlowDown) {
+        if (!HotWriteCreditEpoch || bytes <= HotWriteCreditAvailable) {
+            RemoveHotWriteCreditWaiter(query);
+            return true;
+        }
+        if (bytes > MaxHotWriteBytes) {
+            query->EndWithError(NKikimrProto::ERROR, "write exceeds the hot data byte limit");
+        } else if (failOnSlowDown && (HotWriteCreditInFlight || !QueriesWaitingForHotWriteCredit.Empty())) {
+            query->EndWithError(NKikimrProto::ERROR, "SlowDown");
+        } else {
+            if (!query->HotWriteCreditNeeded) {
+                const ui64 waiterBytes = bytes + HotWriteCreditWaiterOverhead;
+                if (waiterBytes > MaxPendingEventBytes - HotWriteCreditQueueBytes) {
+                    query->EndWithError(NKikimrProto::TRYLATER_SIZE, "hot write credit queue size limit exceeded");
+                    return false;
+                }
+                query->HotWriteCreditNeeded = bytes;
+                query->HotWriteCreditFailOnSlowDown = failOnSlowDown;
+                HotWriteCreditQueueBytes += waiterBytes;
+                QueriesWaitingForHotWriteCredit.PushBack(query);
+            }
+            ProcessHotWriteCreditQueue();
+        }
+        return false;
+    }
+
+    bool TBlobDepotAgent::RemoveHotWriteCreditWaiter(TQuery *query) {
+        const ui64 bytes = std::exchange(query->HotWriteCreditNeeded, 0);
+        if (!bytes) {
+            return false;
+        }
+        const ui64 waiterBytes = bytes + HotWriteCreditWaiterOverhead;
+        Y_DEBUG_ABORT_UNLESS(waiterBytes <= HotWriteCreditQueueBytes);
+        HotWriteCreditQueueBytes -= waiterBytes;
+        static_cast<TIntrusiveListItem<TQuery, TPendingHotWriteCredit>&>(*query).Unlink();
+        return true;
+    }
+
+    void TBlobDepotAgent::ProcessHotWriteCreditQueue() {
+        if (!IsConnected) {
+            return;
+        }
+        while (!QueriesWaitingForHotWriteCredit.Empty()) {
+            auto *query = QueriesWaitingForHotWriteCredit.Front();
+            if (query->HotWriteCreditNeeded <= HotWriteCreditAvailable) {
+                RemoveHotWriteCreditWaiter(query);
+                query->OnHotWriteCredit();
+            } else {
+                if (!HotWriteCreditInFlight) {
+                    auto ev = std::make_unique<TEvBlobDepot::TEvHotWriteCredit>();
+                    ev->Record.SetEpoch(HotWriteCreditEpoch);
+                    ev->Record.SetReturnBytes(std::exchange(HotWriteCreditAvailable, 0));
+                    ev->Record.SetMinBytes(query->HotWriteCreditNeeded);
+                    if (const TInstant deadline = query->GetDeadline(); deadline != TInstant::Max()) {
+                        ev->Record.SetDeadlineUs(deadline.MicroSeconds());
+                    }
+                    ev->Record.SetFailOnSlowDown(query->HotWriteCreditFailOnSlowDown);
+                    HotWriteCreditInFlight = true;
+                    Issue(std::move(ev), this, std::make_shared<THotWriteCreditContext>(query->GetQueryNumber()));
+                }
+                return;
+            }
+        }
+        ScheduleReturnIdleHotWriteCredits();
+    }
+
+    void TBlobDepotAgent::Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvHotWriteCreditResult& msg) {
+        Y_ABORT_UNLESS(HotWriteCreditInFlight);
+        HotWriteCreditInFlight = false;
+        if (msg.GetStatus() == NKikimrProto::OK) {
+            Y_ABORT_UNLESS(msg.GetEpoch() == HotWriteCreditEpoch);
+            HotWriteCreditAvailable += msg.GetGrantedBytes();
+        } else if (!QueriesWaitingForHotWriteCredit.Empty()) {
+            auto *query = QueriesWaitingForHotWriteCredit.Front();
+            if (query->GetQueryNumber() == context->Obtain<THotWriteCreditContext>().QueryId) {
+                RemoveHotWriteCreditWaiter(query);
+                const auto status = msg.GetStatus() == NKikimrProto::DEADLINE ? NKikimrProto::TIMEOUT : msg.GetStatus();
+                query->EndWithError(status, msg.GetErrorReason());
+            }
+        }
+        ProcessHotWriteCreditQueue();
+    }
+
+    void TBlobDepotAgent::ScheduleReturnIdleHotWriteCredits() {
+        if (HotWriteCreditAvailable && !std::exchange(HotWriteCreditReturnScheduled, true)) {
+            TActivationContext::Schedule(TDuration::Seconds(1),
+                new IEventHandle(TEvPrivate::EvReturnIdleHotWriteCredits, 0, SelfId(), {}, nullptr, 0));
+        }
+    }
+
+    void TBlobDepotAgent::ReturnIdleHotWriteCredits() {
+        HotWriteCreditReturnScheduled = false;
+        ReturnHotWriteCredits();
+    }
+
+    void TBlobDepotAgent::ReturnHotWriteCredits() {
+        if (IsConnected && HotWriteCreditAvailable) {
+            auto ev = std::make_unique<TEvBlobDepot::TEvHotWriteCredit>();
+            ev->Record.SetEpoch(HotWriteCreditEpoch);
+            ev->Record.SetReturnBytes(std::exchange(HotWriteCreditAvailable, 0));
+            NTabletPipe::SendData(SelfId(), PipeId, ev.release(), NextTabletRequestId++);
+        }
+    }
+
     void TBlobDepotAgent::OnDisconnect() {
         ++ConnectionInstance;
+        IsConnected = false;
+        HotWriteCreditEpoch = 0;
+        HotWriteCreditAvailable = 0;
+        HotWriteCreditInFlight = false;
+
+        while (!QueriesWaitingForHotWriteCredit.Empty()) {
+            auto *query = QueriesWaitingForHotWriteCredit.Front();
+            RemoveHotWriteCreditWaiter(query);
+            query->EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected while waiting for hot write capacity");
+        }
 
         while (!TabletRequestInFlight.empty()) {
-            auto node = TabletRequestInFlight.extract(TabletRequestInFlight.begin());
-            auto& requestInFlight = node.value();
-            requestInFlight.Sender->OnRequestComplete(requestInFlight, TTabletDisconnected{}, nullptr);
+            OnRequestComplete(TabletRequestInFlight.begin()->Id, TTabletDisconnected{}, TabletRequestInFlight);
         }
 
         for (auto& [_, kind] : ChannelKinds) {
@@ -222,14 +337,14 @@ namespace NKikimr::NBlobDepot {
         ClearPendingEventQueue("BlobDepot tablet disconnected");
 
         SwitchMode(EMode::None);
-        IsConnected = false;
     }
 
     void TBlobDepotAgent::ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) {
         std::visit([&](auto&& response) {
             using T = std::decay_t<decltype(response)>;
             if constexpr (std::is_same_v<T, TEvBlobDepot::TEvRegisterAgentResult*>
-                    || std::is_same_v<T, TEvBlobDepot::TEvAllocateIdsResult*>) {
+                    || std::is_same_v<T, TEvBlobDepot::TEvAllocateIdsResult*>
+                    || std::is_same_v<T, TEvBlobDepot::TEvHotWriteCreditResult*>) {
                 Handle(std::move(context), response->Record);
             } else if constexpr (!std::is_same_v<T, TTabletDisconnected>) {
                 Y_FAIL_S("unexpected response received Type# " << TypeName<T>());
@@ -322,6 +437,10 @@ namespace NKikimr::NBlobDepot {
             {"agentId", LogId},
             {"requestId", NextTabletRequestId});
         NTabletPipe::SendData(SelfId(), PipeId, response.release(), NextTabletRequestId++);
+
+        if (msg.GetRecallHotWriteCredits()) {
+            ReturnHotWriteCredits();
+        }
 
         for (auto& [_, kind] : ChannelKinds) {
             IssueAllocateIdsIfNeeded(kind);

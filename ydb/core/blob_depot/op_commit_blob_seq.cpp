@@ -83,18 +83,41 @@ namespace NKikimr::NBlobDepot {
 
                 for (const auto& item : Request->Get()->Record.GetItems()) {
                     auto *responseItem = responseRecord->AddItems();
+                    ui64 hotWriteCharge = 0;
+                    Y_DEFER {
+                        if (hotWriteCharge) {
+                            agent.HotWriteCreditBytes -= hotWriteCharge;
+                            Self->ReleaseHotWriteCredits(hotWriteCharge);
+                        }
+                    };
 
                     auto finishWithError = [&](NKikimrProto::EReplyStatus status, const TString& errorReason) {
                         responseItem->SetStatus(status);
                         responseItem->SetErrorReason(errorReason);
                         if (item.HasS3Locator()) {
                             const auto& locator = TS3Locator::FromProto(item.GetS3Locator());
-                            const size_t numErased = agent.S3WritesInFlight.erase(locator);
-                            Y_ABORT_UNLESS(numErased);
-                            Self->S3Manager->AddTrashToCollect(locator);
-                            Self->S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
+                            if (agent.S3WritesInFlight.erase(locator)) {
+                                Self->S3Manager->AddTrashToCollect(locator);
+                                Self->S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
+                            }
                         }
                     };
+
+                    if (Self->IsHotWriteAdmissionEnabled() && !item.GetCommitNotify()) {
+                        const auto& locator = item.GetBlobLocator();
+                        const ui64 dataBytes = locator.GetTotalDataLen();
+                        const ui64 footerBytes = locator.GetFooterLen();
+                        if (!item.HasBlobLocator() || item.HasS3Locator() || !dataBytes || dataBytes > MaxBlobSize ||
+                                footerBytes > sizeof(TVirtualGroupBlobFooter) || !agent.SupportsHotWriteCredits ||
+                                item.GetHotWriteCreditEpoch() != agent.LastConnectionSequence ||
+                                dataBytes + footerBytes > agent.HotWriteCreditBytes) {
+                            finishWithError(NKikimrProto::ERROR, "invalid hot write credit");
+                            continue;
+                        }
+                        // The agent has transferred these bytes to this commit. Even a rejected commit consumes
+                        // its credit. A successful commit transfers the credit to the live-byte count.
+                        hotWriteCharge = dataBytes + footerBytes;
+                    }
 
                     if (!TData::TValue::Validate(item)) {
                         finishWithError(NKikimrProto::ERROR, "TEvCommitBlobSeq item protobuf is not valid");

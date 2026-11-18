@@ -171,6 +171,7 @@ namespace NKikimr::NBlobDepot {
             const TData::TKey key = TData::TKey::FromBinaryKey(*state.Key, Self->Config);
             Result = Self->Data->ReplaceLocatorForMoveData(key, state.ValueChainIndex, state.ValueVersion,
                 state.BlobLocator, state.NewBlobLocator, txc, this);
+            Self->ReleaseInternalHotWrite(state.NewBlobSeqId);
             return true;
         }
 
@@ -180,21 +181,10 @@ namespace NKikimr::NBlobDepot {
 
             const auto blobSeqId = TBlobSeqId::FromProto(state.NewBlobLocator.GetBlobSeqId());
             if (state.ProtectedBlobSeqIds.erase(blobSeqId)) {
-                Self->ReleaseMoveDataBlobSeqId(blobSeqId);
+                Self->ReleaseInternalBlobSeqId(blobSeqId);
             }
 
-            if (Result == TData::EMoveDataReplaceResult::Replaced) {
-                ++state.ValueChainIndex;
-            } else {
-                state.ValueChainIndex = 0;
-            }
-
-            state.RecordTouched = false;
-            state.BlobId = {};
-            state.BlobLocator.Clear();
-            state.NewBlobLocator.Clear();
-            state.NewBlobSeqId = {};
-            state.Phase = TMoveDataState::EPhase::ScanningIndex;
+            state.ScanFromCurrentKey(Result == TData::EMoveDataReplaceResult::Replaced ? state.ValueChainIndex + 1 : 0);
             ctx.Send(Self->SelfId(), new TEvMoveDataContinue);
         }
     };
@@ -531,7 +521,11 @@ namespace NKikimr::NBlobDepot {
                 break;
 
             case TMoveDataState::EPhase::CopyingBlob:
-                if (!StartMoveDataBlobCopy()) {
+                if (MoveData.RecordTouched) {
+                    // Cooling or GC changed this key while we waited for admission.
+                    MoveData.ScanFromCurrentKey();
+                    Execute(std::make_unique<TTxMoveDataScan>(this));
+                } else if (!StartMoveDataBlobCopy()) {
                     YDB_LOG_CRIT("Move data failed to allocate target channel for blob copy",
                         {"marker", "BDM22"},
                         {"id", GetLogId()});
@@ -601,11 +595,16 @@ namespace NKikimr::NBlobDepot {
         }
 
         TChannelInfo& channel = Channels[channels.front()];
-        const ui64 value = channel.NextBlobSeqId++;
-        const TBlobSeqId blobSeqId = TBlobSeqId::FromSequentalNumber(
-            channel.Index, Executor()->Generation(), value);
-        const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second;
-        Y_ABORT_UNLESS(inserted);
+        const ui64 bytes = MoveData.GetCopyBytes();
+        const auto allocation = TryAllocateInternalBlobSeqId(channel, bytes);
+        if (auto* error = std::get_if<EInternalWriteError>(&allocation)) {
+            if (*error == EInternalWriteError::TooLarge) {
+                return false;
+            }
+            WaitForInternalHotWrite(bytes, SelfId(), TEvPrivate::EvMoveDataContinue);
+            return true;
+        }
+        const auto& blobSeqId = std::get<TBlobSeqId>(allocation);
         const bool protectedInserted = MoveData.ProtectedBlobSeqIds.insert(blobSeqId).second;
         Y_ABORT_UNLESS(protectedInserted);
 
@@ -679,16 +678,10 @@ namespace NKikimr::NBlobDepot {
         if (MoveData.RecordTouched) {
             const auto blobSeqId = TBlobSeqId::FromProto(newLocator.GetBlobSeqId());
             if (MoveData.ProtectedBlobSeqIds.erase(blobSeqId)) {
-                ReleaseMoveDataBlobSeqId(blobSeqId);
+                ReleaseInternalBlobSeqId(blobSeqId);
             }
 
-            MoveData.RecordTouched = false;
-            MoveData.ValueChainIndex = 0;
-            MoveData.BlobId = {};
-            MoveData.BlobLocator.Clear();
-            MoveData.NewBlobLocator.Clear();
-            MoveData.NewBlobSeqId = {};
-            MoveData.Phase = TMoveDataState::EPhase::ScanningIndex;
+            MoveData.ScanFromCurrentKey();
             ContinueMoveData();
             return;
         }
@@ -705,29 +698,22 @@ namespace NKikimr::NBlobDepot {
         ContinueMoveData();
     }
 
-    void TBlobDepot::ReleaseMoveDataBlobSeqId(const TBlobSeqId& blobSeqId) {
-        TChannelInfo& channel = Channels[blobSeqId.Channel];
-        const ui32 generation = Executor()->Generation();
-        const TBlobSeqId leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
-        const size_t numErased = channel.AssimilatedBlobsInFlight.erase(blobSeqId.ToSequentialNumber());
-        Y_ABORT_UNLESS(numErased == 1);
-        if (leastExpectedBlobIdBefore != channel.GetLeastExpectedBlobId(generation)) {
-            Data->OnLeastExpectedBlobIdChange(channel.Index);
-        }
+    void TBlobDepot::TMoveDataState::ScanFromCurrentKey(ui32 valueChainIndex) {
+        ValueChainIndex = valueChainIndex;
+        ValueVersion = 0;
+        RecordTouched = false;
+        BlobId = {};
+        BlobLocator.Clear();
+        NewBlobLocator.Clear();
+        NewBlobSeqId = {};
+        Phase = EPhase::ScanningIndex;
     }
 
     void TBlobDepot::RestartMoveDataScan() {
         MoveData.Key.reset();
-        MoveData.ValueChainIndex = 0;
-        MoveData.ValueVersion = 0;
-        MoveData.RecordTouched = false;
         MoveData.NeedsAnotherPass = false;
-        MoveData.BlobId = {};
-        MoveData.BlobLocator.Clear();
-        MoveData.NewBlobLocator.Clear();
-        MoveData.NewBlobSeqId = {};
         MoveData.RecordsScanned = 0;
-        MoveData.Phase = TMoveDataState::EPhase::ScanningIndex;
+        MoveData.ScanFromCurrentKey();
     }
 
     void TBlobDepot::FinishMoveData(const TActorContext& ctx) {
@@ -753,7 +739,7 @@ namespace NKikimr::NBlobDepot {
             {"operationId", MoveDataOperationId});
 
         for (const TBlobSeqId& blobSeqId : MoveData.ProtectedBlobSeqIds) {
-            ReleaseMoveDataBlobSeqId(blobSeqId);
+            ReleaseInternalBlobSeqId(blobSeqId);
         }
         MoveData.ProtectedBlobSeqIds.clear();
 

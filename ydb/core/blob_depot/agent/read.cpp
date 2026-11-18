@@ -1,4 +1,5 @@
 #include "agent_impl.h"
+#include "blob_mapping_cache.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
@@ -14,7 +15,7 @@ namespace NKikimr::NBlobDepot {
         bool Terminated = false;
         bool StopProcessingParts = false;
         ui32 NumPartsPending = 0;
-        TLogoBlobID BlobWithoutData;
+        TString MissingLocator;
 
         TReadContext(TReadArg&& readArg, ui64 size)
             : ReadArg(std::move(readArg))
@@ -66,6 +67,7 @@ namespace NKikimr::NBlobDepot {
     {
         TReadArg ReadArg;
         ui32 NumPartsPending = 0;
+        bool HasMissingPart = false;
         std::unique_ptr<TEvBlobStorage::TEvCheckIntegrityResult> Result;
 
         TCheckContext(TReadArg&& readArg)
@@ -75,6 +77,18 @@ namespace NKikimr::NBlobDepot {
 
         void End(TQuery *query) {
             query->OnCheckIntegrity(TCheckOutcome{std::move(Result)});
+        }
+
+        void AddPartStatus(NKikimrProto::EReplyStatus status) {
+            if (status == NKikimrProto::NODATA) {
+                HasMissingPart = true;
+                if (Result->Status != NKikimrProto::OK) {
+                    return;
+                }
+            }
+            if (status != NKikimrProto::OK) {
+                Result->Status = status;
+            }
         }
 
         void AddErrorReason(const TString& part, const TString& errorReason) {
@@ -128,31 +142,8 @@ namespace NKikimr::NBlobDepot {
             const ui32 begin = value.SubrangeBegin;
             const ui32 end = value.SubrangeEnd;
 
-            // calculate the whole length of current part
-            ui64 partLen = end - begin;
-            if (offset >= partLen) {
-                // just skip this part
-                offset -= partLen;
-                continue;
-            }
-
-            // adjust it to fit size and offset
-            partLen = Min(size ? size : Max<ui64>(), partLen - offset);
-            Y_ABORT_UNLESS(partLen);
-
-            ui32 itemLen = 0;
-            ui32 partOffset = offset + begin;
-
-            if (value.Blob) {
-                const auto& [blobId, groupId] = *value.Blob;
-                items.push_back(TReadItem{groupId, blobId, partOffset, ui32(partLen), outputOffset});
-                itemLen = blobId.BlobSize();
-            } else if (const auto& locator = value.S3Locator) {
-                TString key = locator->MakeObjectName(Agent.S3BasePath);
-                s3items.push_back(TS3ReadItem{std::move(key), partOffset, ui32(partLen), outputOffset});
-                itemLen = locator->Len;
-            }
-
+            const ui32 itemLen = value.Blob ? std::get<0>(*value.Blob).BlobSize() :
+                value.S3Locator ? value.S3Locator->Len : 0;
             if (end <= begin || itemLen < end) {
                 error = "incorrect SubrangeBegin/SubrangeEnd pair";
                 YDB_LOG_CRIT(error,
@@ -165,6 +156,23 @@ namespace NKikimr::NBlobDepot {
                     {"size", arg.Size},
                     {"value", arg.Value});
                 return false;
+            }
+
+            ui64 partLen = end - begin;
+            if (offset >= partLen) {
+                offset -= partLen;
+                continue;
+            }
+
+            partLen = Min(size ? size : Max<ui64>(), partLen - offset);
+            const ui32 partOffset = offset + begin;
+
+            if (value.Blob) {
+                const auto& [blobId, groupId] = *value.Blob;
+                items.push_back(TReadItem{groupId, blobId, partOffset, ui32(partLen), outputOffset});
+            } else {
+                TString key = value.S3Locator->MakeObjectName(Agent.S3BasePath);
+                s3items.push_back(TS3ReadItem{std::move(key), partOffset, ui32(partLen), outputOffset});
             }
 
             outputOffset += partLen;
@@ -242,16 +250,19 @@ namespace NKikimr::NBlobDepot {
                 {"offset", item.Offset},
                 {"size", item.Size},
                 {"outputOffset", item.OutputOffset});
-            auto finish = [contextPtr = context, outputOffset = item.OutputOffset, this](std::optional<TString> data, const char *error) {
+            auto finish = [contextPtr = context, outputOffset = item.OutputOffset, key = item.Key, this](
+                    NKikimrProto::EReplyStatus status, TString data, const char *error) {
                 auto& context = *contextPtr;
                 if (!context.Terminated && !context.StopProcessingParts) {
-                    if (data) {
-                        context.Buffer.Write(outputOffset, TRope(std::move(*data)));
+                    if (status == NKikimrProto::OK) {
+                        context.Buffer.Write(outputOffset, TRope(std::move(data)));
                         if (!--context.NumPartsPending) {
                             context.EndWithSuccess(this);
                         }
+                    } else if (status == NKikimrProto::NODATA) {
+                        RetryReadAfterMissing(context, key);
                     } else {
-                        context.EndWithError(this, NKikimrProto::ERROR, TStringBuilder()
+                        context.EndWithError(this, status, TStringBuilder()
                             << "failed to fetch data from S3: " << error);
                     }
                 }
@@ -266,6 +277,31 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(context->NumPartsPending);
 
         return true;
+    }
+
+    NKikimrBlobDepot::TEvResolve TBlobDepotAgent::TQuery::MakeMissingDataResolve(const TReadArg& arg) const {
+        NKikimrBlobDepot::TEvResolve resolve;
+        auto *item = resolve.AddItems();
+        item->SetExactKey(arg.Key);
+        item->SetMustRestoreFirst(arg.MustRestoreFirst);
+        resolve.SetDataKind(arg.DataKind);
+        SetResolveDeadline(resolve);
+        return resolve;
+    }
+
+    void TBlobDepotAgent::TQuery::RetryReadAfterMissing(TReadContext& context, TString locator) {
+        auto resolve = MakeMissingDataResolve(context.ReadArg);
+        YDB_LOG_DEBUG("Issuing extra resolve",
+            {"marker", "BDA48"},
+            {"agent", Agent.LogId},
+            {"queryId", GetQueryId()},
+            {"readId", context.GetTag()},
+            {"key", Agent.PrettyKey(context.ReadArg.Key)},
+            {"locator", locator},
+            {"msg", resolve});
+        context.MissingLocator = std::move(locator);
+        context.StopProcessingParts = true;
+        Agent.Issue(std::move(resolve), this, context.shared_from_this());
     }
 
     void TBlobDepotAgent::TQuery::HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg) {
@@ -288,23 +324,7 @@ namespace NKikimr::NBlobDepot {
         for (ui32 i = 0; i < msg.ResponseSz; ++i) {
             auto& blob = msg.Responses[i];
             if (blob.Status == NKikimrProto::NODATA) {
-                NKikimrBlobDepot::TEvResolve resolve;
-                auto *item = resolve.AddItems();
-                item->SetExactKey(readContext.ReadArg.Key);
-                item->SetMustRestoreFirst(readContext.ReadArg.MustRestoreFirst);
-                resolve.SetDataKind(readContext.ReadArg.DataKind);
-                SetResolveDeadline(resolve);
-                YDB_LOG_DEBUG("Issuing extra resolve",
-                    {"marker", "BDA48"},
-                    {"agent", Agent.LogId},
-                    {"queryId", GetQueryId()},
-                    {"readId", readContext.GetTag()},
-                    {"key", Agent.PrettyKey(readContext.ReadArg.Key)},
-                    {"msg", resolve});
-                Agent.Issue(std::move(resolve), this, readContext.shared_from_this());
-                readContext.StopProcessingParts = true;
-                readContext.BlobWithoutData = blob.Id;
-                return;
+                return RetryReadAfterMissing(readContext, blob.Id.ToString());
             } else if (blob.Status != NKikimrProto::OK) {
                 return readContext.EndWithError(this, blob.Status, TStringBuilder() << "failed to read BlobId# " << blob.Id
                     << " Status# " << blob.Status << " ErrorReason# '" << msg.ErrorReason << "'");
@@ -320,6 +340,28 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
+    auto TBlobDepotAgent::TQuery::RefreshMissingMapping(TReadArg& arg, const NKikimrBlobDepot::TEvResolveResult& record)
+            -> TMissingMappingResult {
+        if (record.GetStatus() != NKikimrProto::OK) {
+            return TReadOutcome::TError{record.GetStatus(), record.GetErrorReason()};
+        }
+        if (!record.ResolvedKeysSize()) {
+            Agent.BlobMappingCache.RefreshAfterMissing(arg.Key, arg.Value, {});
+            return EMissingMapping::KeyGone;
+        }
+        Y_ABORT_UNLESS(record.ResolvedKeysSize() == 1);
+        const auto& item = record.GetResolvedKeys(0);
+        if (item.HasErrorReason()) {
+            return TReadOutcome::TError{NKikimrProto::ERROR, item.GetErrorReason()};
+        }
+        if (TResolvedValue value(item); value.Supersedes(arg.Value)) {
+            Agent.BlobMappingCache.RefreshAfterMissing(arg.Key, arg.Value, value);
+            arg.Value = std::move(value);
+            return EMissingMapping::Changed;
+        }
+        return item.GetReliablyWritten() ? EMissingMapping::Current : EMissingMapping::Unreliable;
+    }
+
     void TBlobDepotAgent::TQuery::HandleResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg) {
         auto& readContext = context->Obtain<TReadContext>();
         if (readContext.Terminated) {
@@ -332,34 +374,31 @@ namespace NKikimr::NBlobDepot {
             {"readId", readContext.GetTag()},
             {"key", Agent.PrettyKey(readContext.ReadArg.Key)},
             {"msg", msg.Record});
-        if (msg.Record.GetStatus() != NKikimrProto::OK) {
-            readContext.EndWithError(this, msg.Record.GetStatus(), msg.Record.GetErrorReason());
-        } else if (msg.Record.ResolvedKeysSize() == 1) {
-            const auto& item = msg.Record.GetResolvedKeys(0);
-            if (TResolvedValue value(item); value.Supersedes(readContext.ReadArg.Value)) { // value chain has changed, we have to try again
-                readContext.ReadArg.Value = std::move(value);
+        auto mapping = RefreshMissingMapping(readContext.ReadArg, msg.Record);
+        if (auto* error = std::get_if<TReadOutcome::TError>(&mapping)) {
+            return readContext.EndWithError(this, error->Status, std::move(error->ErrorReason));
+        }
+        switch (std::get<EMissingMapping>(mapping)) {
+            case EMissingMapping::Changed: {
                 TString error;
                 if (!IssueRead(std::move(readContext.ReadArg), error)) {
                     readContext.EndWithError(this, NKikimrProto::ERROR, TStringBuilder() << "failed to restart read Error# " << error);
                 }
-            } else if (!item.GetReliablyWritten()) { // this was unassimilated value and we got NODATA for it
-                readContext.EndWithNoData(this);
-            } else {
+                break;
+            }
+            case EMissingMapping::KeyGone:
+            case EMissingMapping::Unreliable:
+                return readContext.EndWithNoData(this);
+            case EMissingMapping::Current:
                 YDB_LOG_CRIT("Failed to read blob: data seems to be lost",
                     {"marker", "BDA40"},
                     {"agentId", Agent.LogId},
                     {"queryId", GetQueryId()},
                     {"readId", readContext.GetTag()},
                     {"key", Agent.PrettyKey(readContext.ReadArg.Key)},
-                    {"blobId", readContext.BlobWithoutData});
-                Y_VERIFY_DEBUG_S(false, "data seems to be lost AgentId# " << Agent.LogId << " QueryId# " << GetQueryId()
-                    << " ReadId# " << readContext.GetTag() << " BlobId# " << readContext.BlobWithoutData);
-                readContext.EndWithError(this, NKikimrProto::ERROR, TStringBuilder() << "failed to read BlobId# "
-                    << readContext.BlobWithoutData << ": data seems to be lost");
-            }
-        } else {
-            Y_ABORT_UNLESS(!msg.Record.ResolvedKeysSize());
-            readContext.EndWithNoData(this);
+                    {"locator", readContext.MissingLocator});
+                return readContext.EndWithError(this, NKikimrProto::ERROR, TStringBuilder() << "current mapping references missing data: "
+                    << readContext.MissingLocator);
         }
     }
 
@@ -377,7 +416,7 @@ namespace NKikimr::NBlobDepot {
             {"readId", readContext.GetTag()},
             {"key", Agent.PrettyKey(readContext.ReadArg.Key)});
         readContext.EndWithError(this, NKikimrProto::ERROR, TStringBuilder() << "BlobDepot tablet disconnected while"
-            " resolving BlobId# " << readContext.BlobWithoutData << " after NODATA");
+            " resolving after missing data at " << readContext.MissingLocator);
     }
 
     void TBlobDepotAgent::TQuery::IssueCheckIntegrity(TReadArg&& arg) {
@@ -414,6 +453,11 @@ namespace NKikimr::NBlobDepot {
                 // the object is checked by reading the range the value refers to: this is all the agent can tell about
                 // the data stored in S3
                 TString key = locator->MakeObjectName(Agent.S3BasePath);
+                if (value.SubrangeBegin >= value.SubrangeEnd || value.SubrangeEnd > locator->Len) {
+                    checkContext->Result->Status = NKikimrProto::ERROR;
+                    checkContext->AddErrorReason(key, "invalid S3 value chain range");
+                    continue;
+                }
                 const ui32 len = value.SubrangeEnd - value.SubrangeBegin;
 
                 YDB_LOG_DEBUG("Issuing S3 read to check integrity",
@@ -425,8 +469,8 @@ namespace NKikimr::NBlobDepot {
                     {"offset", value.SubrangeBegin},
                     {"len", len});
 
-                auto finish = [checkContext, key, len, this](std::optional<TString> data, const char *error) {
-                    HandleCheckIntegrityS3Result(*checkContext, key, len, std::move(data), error);
+                auto finish = [checkContext, key, this](NKikimrProto::EReplyStatus status, TString, const char *error) {
+                    HandleCheckIntegrityS3Result(*checkContext, key, status, error);
                 };
                 IssueReadS3(key, value.SubrangeBegin, len, finish, 0);
                 ++checkContext->NumPartsPending;
@@ -439,26 +483,22 @@ namespace NKikimr::NBlobDepot {
         OnCheckIntegrityPartDone(*checkContext);
     }
 
-    void TBlobDepotAgent::TQuery::HandleCheckIntegrityS3Result(TCheckContext& checkContext, const TString& key, ui32 len,
-            std::optional<TString> data, const char *error) {
+    void TBlobDepotAgent::TQuery::HandleCheckIntegrityS3Result(TCheckContext& checkContext, const TString& key,
+            NKikimrProto::EReplyStatus status, const char *error) {
         YDB_LOG_DEBUG("HandleCheckIntegrityS3Result",
             {"marker", "BDA70"},
             {"agentId", Agent.LogId},
             {"queryId", GetQueryId()},
             {"key", Agent.PrettyKey(checkContext.ReadArg.Key)},
             {"s3key", key},
-            {"size", data ? data->size() : 0},
+            {"status", status},
             {"error", error});
 
-        if (!data) {
-            checkContext.Result->Status = NKikimrProto::ERROR;
-            checkContext.AddErrorReason(key, TStringBuilder() << "failed to read from S3: " << error);
-        } else if (data->size() != len) {
-            checkContext.Result->Status = NKikimrProto::ERROR;
-            checkContext.AddErrorReason(key, TStringBuilder() << "S3 read returned " << data->size() << " bytes instead"
-                " of " << len);
-        } else {
+        if (status == NKikimrProto::OK) {
             checkContext.AddDataInfo(key, "S3 range is readable");
+        } else {
+            checkContext.AddPartStatus(status);
+            checkContext.AddErrorReason(key, TStringBuilder() << "failed to read from S3: " << error);
         }
 
         OnCheckIntegrityPartDone(checkContext);
@@ -469,14 +509,9 @@ namespace NKikimr::NBlobDepot {
             return;
         }
 
-        if (checkContext.Result->Status == NKikimrProto::NODATA) {
-            // the mapping may have changed while the parts were being checked (e.g. the value was assimilated), so
-            // NODATA is reported only after the key is resolved again and still points to the same value, as reads do
-            NKikimrBlobDepot::TEvResolve resolve;
-            auto *item = resolve.AddItems();
-            item->SetExactKey(checkContext.ReadArg.Key);
-            resolve.SetDataKind(checkContext.ReadArg.DataKind);
-            SetResolveDeadline(resolve);
+        if (checkContext.HasMissingPart) {
+            // The mapping may have changed while the parts were being checked.
+            auto resolve = MakeMissingDataResolve(checkContext.ReadArg);
             YDB_LOG_DEBUG("Issuing extra resolve to check integrity",
                 {"marker", "BDA71"},
                 {"agentId", Agent.LogId},
@@ -500,16 +535,24 @@ namespace NKikimr::NBlobDepot {
             {"key", Agent.PrettyKey(checkContext.ReadArg.Key)},
             {"msg", msg.Record});
 
-        if (msg.Record.GetStatus() != NKikimrProto::OK) {
+        const auto mapping = RefreshMissingMapping(checkContext.ReadArg, msg.Record);
+        if (const auto* error = std::get_if<TReadOutcome::TError>(&mapping)) {
             checkContext.Result->Status = NKikimrProto::ERROR;
-            checkContext.AddErrorReason("resolve", msg.Record.GetErrorReason());
-        } else if (msg.Record.ResolvedKeysSize() == 1) {
-            if (TResolvedValue value(msg.Record.GetResolvedKeys(0)); value.Supersedes(checkContext.ReadArg.Value)) {
-                checkContext.ReadArg.Value = std::move(value);
-                return IssueCheckIntegrity(std::move(checkContext.ReadArg)); // value chain has changed, check it again
-            }
+            checkContext.AddErrorReason("resolve", error->ErrorReason);
         } else {
-            Y_ABORT_UNLESS(!msg.Record.ResolvedKeysSize());
+            switch (std::get<EMissingMapping>(mapping)) {
+                case EMissingMapping::Changed:
+                    return IssueCheckIntegrity(std::move(checkContext.ReadArg));
+                case EMissingMapping::KeyGone:
+                    checkContext.Result->Status = NKikimrProto::NODATA;
+                    break;
+                case EMissingMapping::Unreliable:
+                    break;
+                case EMissingMapping::Current:
+                    checkContext.Result->Status = NKikimrProto::ERROR;
+                    checkContext.AddErrorReason("resolve", "current mapping references missing data");
+                    break;
+            }
         }
 
         checkContext.End(this);
@@ -527,18 +570,7 @@ namespace NKikimr::NBlobDepot {
             {"msg", msg});
 
         auto& result = checkContext.Result;
-        switch (msg.Status) {
-        case NKikimrProto::NODATA:
-            if (result->Status == NKikimrProto::OK) {
-                result->Status = NKikimrProto::NODATA;
-            }
-            break;
-        case NKikimrProto::OK:
-            break;
-        default:
-            result->Status = msg.Status;
-            break;
-        }
+        checkContext.AddPartStatus(msg.Status);
 
         if (msg.ErrorReason) {
             checkContext.AddErrorReason(msg.Id.ToString(), msg.ErrorReason);

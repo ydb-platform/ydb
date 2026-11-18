@@ -41,6 +41,8 @@ public:
         return Data.size();
     }
 
+    TEvListObjectsResponse::TAwsResult ListObjects(TStringBuf prefix, TStringBuf marker, int maxKeys) const;
+
     TVector<TString> GetObjectKeys() const {
         TGuard<TMutex> g(Mutex);
         TVector<TString> keys;

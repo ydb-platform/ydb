@@ -121,6 +121,17 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
+    void TBlobDepotAgent::TBlobMappingCache::RefreshAfterMissing(const TString& key, const TResolvedValue& stale,
+            const TResolvedValue& current) {
+        if (const auto it = Cache.find(key); it != Cache.end()) {
+            auto& cached = it->second.Value;
+            if (cached.Defined && cached.Version == stale.Version && cached.Chain == stale.Chain &&
+                    cached.ReliablyWritten == stale.ReliablyWritten) {
+                cached = current;
+            }
+        }
+    }
+
     const TResolvedValue *TBlobDepotAgent::TBlobMappingCache::ResolveKey(TString key, TQuery *query,
             TRequestContext::TPtr context, bool mustRestoreFirst, NKikimrBlobStorage::TDataKind::E dataKind) {
         // obtain entry in the cache

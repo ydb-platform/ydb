@@ -52,6 +52,7 @@ namespace NKikimr::NBlobDepot {
         // it before releasing the write slots below, because that release runs the pending-write drain and it must
         // not dispatch a request bound to the connection we are tearing down.
         S3Manager->DropPendingPrepareWrites(agent.Connection->PipeServerId);
+        DropHotWriteCredits(agent);
 
         agent.InvalidateStepRequests.clear();
         agent.PushCallbacks.clear();
@@ -113,12 +114,17 @@ namespace NKikimr::NBlobDepot {
         }
         agent.AgentInstanceId = req.GetAgentInstanceId();
         agent.SupportsIdRangeExpiry = req.GetSupportsIdRangeExpiry();
+        agent.SupportsHotWriteCredits = req.GetSupportsHotWriteCredits();
 
         OnAgentConnect(agent);
 
         auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, Executor()->Generation());
         record->SetSpaceColor(agent.LastPushedSpaceColor);
         record->SetApproximateFreeSpaceShare(agent.LastPushedApproximateFreeSpaceShare);
+        if (IsHotWriteAdmissionEnabled()) {
+            record->SetHotWriteCreditEpoch(agent.LastConnectionSequence);
+            record->SetMaxHotWriteBytes(Config.GetS3BackendSettings().GetAsyncMode().GetMaxPendingBytes());
+        }
 
         for (const auto& [k, v] : ChannelKinds) {
             auto *proto = record->AddChannelKinds();
@@ -222,6 +228,9 @@ namespace NKikimr::NBlobDepot {
                 {"id", GetLogId()},
                 {"channelKind", int(channelKind)},
                 {"pipeServerId", ev->Recipient});
+        } else if (channelKind == NKikimrBlobDepot::TChannelKind::Data && IsHotWriteAdmissionEnabled() &&
+                !GetAgent(ev->Recipient).SupportsHotWriteCredits) {
+            // Legacy agents cannot honor the byte limit. They can still read existing values.
         } else if (PickChannels(channelKind, channels)) {
             auto *givenIdRange = record->MutableGivenIdRange();
 

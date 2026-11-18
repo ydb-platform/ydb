@@ -21,6 +21,9 @@ namespace NKikimr::NBlobDepot {
             struct DecommitState : Column<3, NScheme::NTypeIds::Uint32> { using Type = EDecommitState; static constexpr Type Default = EDecommitState::Default; };
             struct AssimilatorState : Column<4, NScheme::NTypeIds::String> {};
             struct PerGenerationCounter : Column<5, NScheme::NTypeIds::Uint32> {};
+            struct NumPutWatches : Column<6, NScheme::NTypeIds::Uint64> {};
+            struct NextOrphanScan : Column<7, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
+            struct OrphanScanMarker : Column<8, NScheme::NTypeIds::String> {};
 
             using TKey = TableKey<Key>;
             using TColumns = TableColumns<
@@ -28,7 +31,10 @@ namespace NKikimr::NBlobDepot {
                 ConfigProtobuf,
                 DecommitState,
                 AssimilatorState,
-                PerGenerationCounter
+                PerGenerationCounter,
+                NumPutWatches,
+                NextOrphanScan,
+                OrphanScanMarker
             >;
         };
 
@@ -114,10 +120,41 @@ namespace NKikimr::NBlobDepot {
             struct Generation : Column<1, NScheme::NTypeIds::Uint32> {};
             struct KeyId : Column<2, NScheme::NTypeIds::Uint64> {};
             struct Len : Column<3, NScheme::NTypeIds::Uint32> {};
+            struct CheckReferences : Column<4, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
 
             using TKey = TableKey<Generation, KeyId>;
-            using TColumns = TableColumns<Generation, KeyId, Len>;
+            using TColumns = TableColumns<Generation, KeyId, Len, CheckReferences>;
 
+            using Precharge = NoAutoPrecharge;
+        };
+
+        // Written before a cooling PUT. If the SDK retried a published PUT, keep this row until
+        // its final reference disappears, then resume checking this key for late attempts.
+        struct CoolingS3Puts : Table<8> {
+            struct Generation : Column<1, NScheme::NTypeIds::Uint32> {};
+            struct KeyId : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct Len : Column<3, NScheme::NTypeIds::Uint32> {};
+            struct Published : Column<4, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+
+            struct RetireAt : Column<5, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
+
+            using TKey = TableKey<Generation, KeyId>;
+            using TColumns = TableColumns<Generation, KeyId, Len, Published, RetireAt>;
+            using Precharge = NoAutoPrecharge;
+        };
+
+        // Only unreferenced immutable objects enter this queue. The key order lets the
+        // probe worker read one due page without loading future watches during recovery.
+        struct S3PutWatches : Table<9> {
+            struct Due : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct Generation : Column<2, NScheme::NTypeIds::Uint32> {};
+            struct KeyId : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct Len : Column<4, NScheme::NTypeIds::Uint32> {};
+            struct RetireAt : Column<5, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
+            struct Interval : Column<6, NScheme::NTypeIds::Uint64> { using Type = TDuration; };
+
+            using TKey = TableKey<Due, Generation, KeyId>;
+            using TColumns = TableColumns<Due, Generation, KeyId, Len, RetireAt, Interval>;
             using Precharge = NoAutoPrecharge;
         };
 
@@ -128,7 +165,9 @@ namespace NKikimr::NBlobDepot {
             Data,
             Trash,
             GC,
-            TrashS3
+            TrashS3,
+            CoolingS3Puts,
+            S3PutWatches
         >;
 
         using TSettings = SchemaSettings<

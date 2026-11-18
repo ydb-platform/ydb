@@ -25,25 +25,31 @@ using namespace Aws::S3;
 using namespace Aws::S3::Model;
 using namespace Aws::Utils::Stream;
 
-TEvListObjectsResponse::TResult TFakeExternalStorage::BuildListObjectsResult(const TEvListObjectsRequest::TRequest& request) const {
-    auto& bucket = GetBucket(AwsToString(request.GetBucket()));
-    auto& awsPrefix = request.GetPrefix();
-    const TString prefix(awsPrefix.data(), awsPrefix.size());
-    THolder<TEvListObjectsResponse> result;
+TEvListObjectsResponse::TAwsResult TFakeBucketStorage::ListObjects(TStringBuf prefix, TStringBuf marker, int maxKeys) const {
     TGuard<TMutex> g(Mutex);
-    TEvListObjectsResponse::TAwsResult awsResult;
-    for (auto&& i : bucket) {
-        if (!!prefix && !i.first.StartsWith(prefix)) {
-            continue;
-        }
-        Aws::S3::Model::Object objectMeta;
-        objectMeta.SetKey(i.first);
-        objectMeta.SetSize(i.second.size());
-        awsResult.AddContents(std::move(objectMeta));
-        break;
+    TEvListObjectsResponse::TAwsResult result;
+    if (maxKeys <= 0) {
+        return result;
     }
-    awsResult.SetIsTruncated(bucket.GetSize() > 1);
-    return awsResult;
+
+    auto it = marker.empty() || marker < prefix ? Data.lower_bound(TString(prefix)) : Data.upper_bound(TString(marker));
+    for (; it != Data.end() && it->first.StartsWith(prefix) && maxKeys; ++it, --maxKeys) {
+        result.AddContents(Aws::S3::Model::Object().WithKey(it->first).WithSize(it->second.size()));
+    }
+    if (it != Data.end() && it->first.StartsWith(prefix)) {
+        result.SetIsTruncated(true);
+        result.SetNextMarker(result.GetContents().back().GetKey());
+    }
+    return result;
+}
+
+TEvListObjectsResponse::TResult TFakeExternalStorage::BuildListObjectsResult(const TEvListObjectsRequest::TRequest& request) const {
+    TGuard<TMutex> g(Mutex);
+    const auto& bucket = GetBucket(AwsToString(request.GetBucket()));
+    const auto& prefix = request.GetPrefix();
+    const auto& marker = request.GetMarker();
+    return bucket.ListObjects(TStringBuf(prefix.data(), prefix.size()), TStringBuf(marker.data(), marker.size()),
+        request.MaxKeysHasBeenSet() ? request.GetMaxKeys() : 1000);
 }
 
 void TFakeExternalStorage::Execute(TEvListObjectsRequest::TPtr& ev, const TReplyAdapterContainer& adapter) const {
@@ -85,8 +91,12 @@ void TFakeExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev, const TReplyAd
             {"id", key},
             {"range", strRange},
             {"objectExists", false});
-        Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> awsOutcome;
-        std::unique_ptr<TEvGetObjectResponse> result(new TEvGetObjectResponse(key, range, std::move(awsOutcome), std::move(data)));
+        Aws::Client::AWSError<Aws::S3::S3Errors> error(
+            Aws::S3::S3Errors::NO_SUCH_KEY, "NoSuchKey", "Object not found", false);
+        error.SetResponseCode(Aws::Http::HttpResponseCode::NOT_FOUND);
+        Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> awsOutcome(
+            Aws::S3::S3Error(std::move(error)));
+        auto result = std::make_unique<TEvGetObjectResponse>(key, range, awsOutcome);
         adapter.Reply(ev->Sender, std::move(result));
     }
 }
@@ -104,7 +114,10 @@ void TFakeExternalStorage::Execute(TEvHeadObjectRequest::TPtr& ev, const TReplyA
         std::unique_ptr<TEvHeadObjectResponse> result(new TEvHeadObjectResponse(key, std::move(awsOutcome)));
         adapter.Reply(ev->Sender, std::move(result));
     } else {
-        Aws::Utils::Outcome<Aws::S3::Model::HeadObjectResult, Aws::S3::S3Error> awsOutcome;
+        Aws::Client::AWSError<Aws::S3::S3Errors> error(Aws::S3::S3Errors::NO_SUCH_KEY, "NoSuchKey", "key is missing", false);
+        error.SetResponseCode(Aws::Http::HttpResponseCode::NOT_FOUND);
+        Aws::Utils::Outcome<Aws::S3::Model::HeadObjectResult, Aws::S3::S3Error> awsOutcome(
+            Aws::S3::S3Error(std::move(error)));
         std::unique_ptr<TEvHeadObjectResponse> result(new TEvHeadObjectResponse(key, std::move(awsOutcome)));
         adapter.Reply(ev->Sender, std::move(result));
     }

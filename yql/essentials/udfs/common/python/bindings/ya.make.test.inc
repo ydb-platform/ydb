@@ -1,4 +1,5 @@
 SRCS(
+    py_test_engine.cpp
     py_callable_ut.cpp
     py_cast_ut.cpp
     py_dict_ut.cpp

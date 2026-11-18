@@ -41,14 +41,14 @@ public:
     }
 
     TString GetBlobDataVerified() const {
-        AFL_VERIFY(!!BlobData);
+        YDB_LOG_VERIFY(!!BlobData);
         return *BlobData;
     }
 
     void SetBlobData(const TString& data) {
-        AFL_VERIFY(!!BlobRange);
+        YDB_LOG_VERIFY(!!BlobRange);
         BlobRange = std::nullopt;
-        AFL_VERIFY(!BlobData);
+        YDB_LOG_VERIFY(!BlobData);
         BlobData = data;
     }
 };
@@ -69,7 +69,7 @@ private:
 
 public:
     void SetOthersBlob(const TString& blob) {
-        AFL_VERIFY(!!OthersReadData);
+        YDB_LOG_VERIFY(!!OthersReadData);
         OthersReadData = std::nullopt;
         OthersBlobs = blob;
     }
@@ -128,12 +128,12 @@ public:
             OthersBlobs.reset();
         }
 
-        AFL_VERIFY(PartialArray);
-        AFL_VERIFY(!HeaderRange);
-        AFL_VERIFY(!OthersReadData);
+        YDB_LOG_VERIFY(PartialArray);
+        YDB_LOG_VERIFY(!HeaderRange);
+        YDB_LOG_VERIFY(!OthersReadData);
         if (Chunks.size() == 1 && Chunks.begin()->second.GetDictionaryOnly()) {
-            AFL_VERIFY(!applyFilter);
-            AFL_VERIFY(!PartialArray->HasOthers());
+            YDB_LOG_VERIFY(!applyFilter);
+            YDB_LOG_VERIFY(!PartialArray->HasOthers());
             auto conclusion = FinishDictionaryOnly(Chunks.begin()->second, source);
             if (conclusion.IsFail()) {
                 return conclusion;
@@ -141,7 +141,7 @@ public:
             return true;
         }
         for (auto&& i : Chunks) {
-            AFL_VERIFY(!i.second.GetDictionaryOnly());
+            YDB_LOG_VERIFY(!i.second.GetDictionaryOnly());
             std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(ChunkExternalInfo.GetDefaultSerializer(),
                 PartialArray->GetHeader().GetAccessorConstructor(i.second.GetColumnIdx(), PartialArray->GetSettings().GetEncodingParams()),
                 PartialArray->GetHeader().GetField(i.second.GetColumnIdx()), nullptr, 0);
@@ -184,7 +184,7 @@ public:
     // True when this chunk stores `subColumnName` as a dedicated dictionary-encoded key column whose prefix we can
     // restore without the row-aligned index. Chunks that keep the key in "others" or as a plain/sparsed column cannot.
     bool CanRestoreDictionaryOnly(const TString& subColumnName, const NArrow::NAccessor::NSubColumns::TParsedJsonPath& parsedPath) const {
-        AFL_VERIFY(PartialArray);
+        YDB_LOG_VERIFY(PartialArray);
         if (PartialArray->HasSubColumnData(subColumnName)) {
             return false;
         }
@@ -210,14 +210,16 @@ public:
     // (plain/sparsed column, or in "others") fall back to the regular row-aligned read.
     void InitReading(const std::shared_ptr<IBlobsReadingAction>& reading, const std::vector<TString>& subColumns,
         const std::vector<NArrow::NAccessor::NSubColumns::TParsedJsonPath>& parsedPaths, const bool dictionaryOnly) {
-        AFL_VERIFY(!HeaderRange);
+        YDB_LOG_VERIFY(!HeaderRange);
         if (!!PartialArray) {
             ReadingInitialized = true;
             for (size_t i = 0; i < subColumns.size(); ++i) {
                 const auto& subColumnName = subColumns[i];
                 auto pathResult = NArrow::NAccessor::NSubColumns::ResolveBestPath(
                     PartialArray->GetHeader().GetColumnStats(), PartialArray->GetHeader().GetOtherStats(), parsedPaths[i]);
-                AFL_VERIFY(pathResult.IsSuccess())("subColumnName", subColumnName)("error", pathResult.GetErrorMessage());
+                YDB_LOG_VERIFY(pathResult.IsSuccess(),
+                    {"subColumnName", subColumnName},
+                    {"error", pathResult.GetErrorMessage()});
                 const auto path = pathResult.DetachResult();
                 if (path && path->IsColumn) {
                     if (Chunks.contains(path->Path.ColumnIndex)) {
@@ -250,13 +252,13 @@ public:
     }
 
     const std::shared_ptr<NArrow::NAccessor::TSubColumnsPartialArray>& GetPartialArray() const {
-        AFL_VERIFY(PartialArray);
+        YDB_LOG_VERIFY(PartialArray);
         return PartialArray;
     }
 
     TConclusionStatus InitPartialReader(const TString& blob) {
-        AFL_VERIFY(!!HeaderRange);
-        AFL_VERIFY(!PartialArray);
+        YDB_LOG_VERIFY(!!HeaderRange);
+        YDB_LOG_VERIFY(!PartialArray);
         HeaderRange = std::nullopt;
         auto conclusion = NArrow::NAccessor::NSubColumns::TConstructor::BuildPartialReader(blob, ChunkExternalInfo, Settings);
         if (conclusion.IsFail()) {
@@ -269,10 +271,11 @@ public:
     }
 
     void InitPartialReader(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor) {
-        AFL_VERIFY(!HeaderRange);
-        AFL_VERIFY(!PartialArray);
-        AFL_VERIFY(accessor);
-        AFL_VERIFY(accessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray)("type", accessor->GetType());
+        YDB_LOG_VERIFY(!HeaderRange);
+        YDB_LOG_VERIFY(!PartialArray);
+        YDB_LOG_VERIFY(accessor);
+        YDB_LOG_VERIFY(accessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray,
+            {"type", accessor->GetType()});
         PartialArray = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsPartialArray>(accessor);
     }
 
@@ -302,7 +305,7 @@ public:
 
     void AddFetchData(const TBlobRange& subRange, const ui32 colIndex, const bool dictionaryOnly = false) {
         const auto insertResult = Chunks.try_emplace(colIndex, subRange, colIndex, dictionaryOnly);
-        AFL_VERIFY(insertResult.second);
+        YDB_LOG_VERIFY(insertResult.second);
     }
 };
 
@@ -328,7 +331,7 @@ private:
 
     static const NArrow::NAccessor::NSubColumns::TSettings& GetSettings(const NArrow::NAccessor::TConstructorContainer& accessor) {
         const auto* subColumnsAccessor = dynamic_cast<const NArrow::NAccessor::NSubColumns::TConstructor*>(accessor.GetObjectPtr().get());
-        AFL_VERIFY(subColumnsAccessor);
+        YDB_LOG_VERIFY(subColumnsAccessor);
         return subColumnsAccessor->GetSettings();
     }
 
@@ -366,23 +369,27 @@ private:
                     return conclusion;
                 }
                 if (!i.GetFullChunkRange().GetSize()) {
-                    AFL_VERIFY(!*conclusion)("entity", GetEntityId());
+                    YDB_LOG_VERIFY(!*conclusion,
+                        {"entity", GetEntityId()});
                 } else if (usedDictionaryOnly) {
-                    AFL_VERIFY(*conclusion)("entity", GetEntityId());
+                    YDB_LOG_VERIFY(*conclusion,
+                        {"entity", GetEntityId()});
                 } else {
-                    AFL_VERIFY(!*conclusion)("entity", GetEntityId());
+                    YDB_LOG_VERIFY(!*conclusion,
+                        {"entity", GetEntityId()});
                 }
                 compositeBuilder.AddChunk(i.GetPartialArray());
             }
             context.GetAccessors().AddVerified(GetEntityId(), compositeBuilder.Finish(), true);
             if (usedDictionaryOnly) {
                 const NArrow::TColumnFilter& filter = context.GetAccessors().GetFilter();
-                AFL_VERIFY(NCommon::IsDictionaryOnlyFetchCompatible(filter))("filter", filter.DebugString());
+                YDB_LOG_VERIFY(NCommon::IsDictionaryOnlyFetchCompatible(filter),
+                    {"filter", filter.DebugString()});
                 context.GetSource().MutableStageData().MarkDictionaryOnlyFetch(GetEntityId());
                 context.GetSource().GetContext()->GetCommonContext()->GetCounters().OnDictionaryOnlyOptimization();
             }
         } else {
-            AFL_VERIFY(!DictionaryOnly);
+            YDB_LOG_VERIFY(!DictionaryOnly);
             ui32 pos = 0;
             for (auto&& i : ColumnChunks) {
                 const auto& appliedFilter = context.GetAccessors().GetAppliedFilter();
@@ -396,7 +403,7 @@ private:
                 if (conclusion.IsFail()) {
                     return conclusion;
                 }
-                AFL_VERIFY(!*conclusion);
+                YDB_LOG_VERIFY(!*conclusion);
                 pos += i.GetRecordsCount();
             }
         }
@@ -404,8 +411,8 @@ private:
     }
 
     virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
-        AFL_VERIFY(ColumnChunks.size());
-        AFL_VERIFY(!!StorageId);
+        YDB_LOG_VERIFY(ColumnChunks.size());
+        YDB_LOG_VERIFY(!!StorageId);
         TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
         reading->SetIsBackgroundProcess(false);
@@ -439,7 +446,9 @@ private:
                     } else {
                         size = *fullHeader;
                     }
-                    AFL_VERIFY(blob.size() < size)("blob", blob.size())("size", size);
+                    YDB_LOG_VERIFY(blob.size() < size,
+                        {"blob", blob.size()},
+                        {"size", size});
                     const TBlobRange headerRange = i.GetFullChunkRange().BuildSubset(blob.size(), size - blob.size());
                     reading->AddRange(headerRange);
                     i.SetHeaderRange(headerRange);
@@ -499,7 +508,7 @@ private:
     virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) override {
         auto& source = context.GetSource();
         auto columnChunks = source.GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
-        AFL_VERIFY(columnChunks.size());
+        YDB_LOG_VERIFY(columnChunks.size());
         StorageId = source.GetColumnStorageId(GetEntityId());
         TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
@@ -527,12 +536,15 @@ private:
         ui32 resChunkIdx = 0;
         for (ui32 chunkIdx = 0; chunkIdx < columnChunks.size(); ++chunkIdx) {
             auto& meta = columnChunks[chunkIdx]->GetMeta();
-            AFL_VERIFY(!itFinished);
+            YDB_LOG_VERIFY(!itFinished);
             if (!itFilter.IsBatchForSkip(meta.GetRecordsCount())) {
                 const TBlobRange range = source.RestoreBlobRange(columnChunks[chunkIdx]->BlobRange);
                 ColumnChunks.emplace_back(range, ChunkExternalInfo.GetSubset(meta.GetRecordsCount()), Settings);
                 if (!NeedToAddResource) {
-                    AFL_VERIFY(resChunkIdx < chunks.size())("chunks", chunks.size())("meta", columnChunks.size())("need", NeedToAddResource);
+                    YDB_LOG_VERIFY(resChunkIdx < chunks.size(),
+                        {"chunks", chunks.size()},
+                        {"meta", columnChunks.size()},
+                        {"need", NeedToAddResource});
                     ColumnChunks.back().InitPartialReader(chunks[resChunkIdx]);
                     ++resChunkIdx;
                 }
@@ -542,8 +554,10 @@ private:
             }
             itFinished = !itFilter.Next(meta.GetRecordsCount());
         }
-        AFL_VERIFY(NeedToAddResource || (resChunkIdx == chunks.size()));
-        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", context.GetRecordsCount());
+        YDB_LOG_VERIFY(NeedToAddResource || (resChunkIdx == chunks.size()));
+        YDB_LOG_VERIFY(itFinished,
+            {"filter", itFilter.DebugString()},
+            {"count", context.GetRecordsCount()});
         for (auto&& i : blobsAction.GetReadingActions()) {
             nextRead.Add(i);
         }
@@ -567,12 +581,14 @@ public:
         }
         for (const auto& jsonPath : JsonPaths) {
             auto parsedPath = NArrow::NAccessor::NSubColumns::ParseJsonPath(jsonPath);
-            AFL_VERIFY(parsedPath.IsSuccess())("path", jsonPath)("error", parsedPath.GetErrorMessage());
+            YDB_LOG_VERIFY(parsedPath.IsSuccess(),
+                {"path", jsonPath},
+                {"error", parsedPath.GetErrorMessage()});
             ParsedPaths.emplace_back(parsedPath.DetachResult());
         }
         const auto loader = sourceSchema->GetColumnLoaderVerified(GetEntityId());
-        AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)(
-            "type", loader->GetAccessorConstructor()->GetType());
+        YDB_LOG_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray,
+            {"type", loader->GetAccessorConstructor()->GetType()});
     }
 
     TSubColumnsFetchLogic(const ui32 columnId, IDataSource& source, const std::vector<TString>& subColumns, const bool dictionaryOnly = false)

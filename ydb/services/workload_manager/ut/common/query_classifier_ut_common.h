@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 
 #include <ydb/library/aclib/aclib.h>

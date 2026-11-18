@@ -37,6 +37,7 @@
 #include <library/cpp/testing/hook/hook.h>
 
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
 #include <arrow/api.h>
@@ -4899,7 +4900,7 @@ partitioning_settings {
         UNIT_ASSERT_VALUES_EQUAL(entry.GetUserSID(), userSID);
     }
 
-    Y_UNIT_TEST(TablePermissions) {
+    Y_UNIT_TEST_TWIN(TablePermissions, InterruptInheritance) {
         EnvOptions().EnablePermissionsExport(true);
         Env(); // Init test env
         ui64 txId = 100;
@@ -4914,6 +4915,9 @@ partitioning_settings {
 
         NACLib::TDiffACL diffACL;
         diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user@builtin", NACLib::InheritNone);
+        if (InterruptInheritance) {
+            diffACL.SetInterruptInheritance(true);
+        }
         TestModifyACL(Runtime(), ++txId, "/MyRoot", "Table", diffACL.SerializeAsString(), "user@builtin");
         Env().TestWaitNotification(Runtime(), txId);
 
@@ -4931,7 +4935,7 @@ partitioning_settings {
 
         auto* permissions = S3Mock().GetData().FindPtr("/permissions.pb");
         UNIT_ASSERT(permissions);
-        CheckPermissions(*permissions, CreateProtoComparator(R"(
+        CheckPermissions(*permissions, CreateProtoComparator(Sprintf(R"(
             actions {
               change_owner: "user@builtin"
             }
@@ -4941,7 +4945,8 @@ partitioning_settings {
                 permission_names: "ydb.generic.use"
               }
             }
-        )"));
+            %s
+        )", InterruptInheritance ? "interrupt_inheritance: true" : "")));
     }
 
     Y_UNIT_TEST(Checksums) {
@@ -5875,7 +5880,7 @@ state: STATE_ENABLED
       TestTopic(true, 5, 4);
     }
 
-    Y_UNIT_TEST(SystemViewWithPermissionsExport) {
+    Y_UNIT_TEST_TWIN(SystemViewWithPermissionsExport, InterruptInheritance) {
         Env();
         ui64 txId = 100;
 
@@ -5885,6 +5890,9 @@ state: STATE_ENABLED
 
         NACLib::TDiffACL diffACL;
         diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+        if (InterruptInheritance) {
+            diffACL.SetInterruptInheritance(true);
+        }
         TestModifyACL(Runtime(), ++txId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
         Env().TestWaitNotification(Runtime(), txId);
 
@@ -5913,7 +5921,7 @@ state: STATE_ENABLED
             TStringBuilder() << "\nExpected:\n\n" << sysviewDescExpected << "\n\nActual:\n\n" << sysviewDesc);
 
         const auto permissions = GetS3FileContent("/partition_stats/permissions.pb");
-        CheckPermissions(permissions, CreateProtoComparator(R"(
+        CheckPermissions(permissions, CreateProtoComparator(Sprintf(R"(
             actions {
               change_owner: "user0@builtin"
             }
@@ -5923,7 +5931,8 @@ state: STATE_ENABLED
                 permission_names: "ydb.generic.use"
               }
             }
-        )"));
+            %s
+        )", InterruptInheritance ? "interrupt_inheritance: true" : "")));
     }
 
     Y_UNIT_TEST(ExportTableWithUniqueIndex) {
@@ -6133,9 +6142,20 @@ state: STATE_ENABLED
         };
         checkMarker("/data_complete.json");
         checkMarker("/export_complete.json");
+        const bool materialized = indexType != NKikimrSchemeOp::EIndexTypeGlobalAsync;
+        const auto metadata = NBackup::TMetadata::Deserialize(s3Mock.GetData().at("/metadata.json"));
+        UNIT_ASSERT(metadata.GetIndexes());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->empty(), !materialized);
         for (const auto implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
-            UNIT_ASSERT(s3Mock.GetData().FindPtr(TStringBuilder() << "/index/" << implTable << "/scheme.pb"));
-            checkMarker(TStringBuilder() << "/index/" << implTable << "/data_complete.json");
+            const TString prefix = TStringBuilder() << "/index/" << implTable << "/";
+            if (materialized) {
+                UNIT_ASSERT(s3Mock.GetData().FindPtr(prefix + "scheme.pb"));
+                checkMarker(prefix + "data_complete.json");
+            } else {
+                for (const auto& [key, value] : s3Mock.GetData()) {
+                    UNIT_ASSERT_C(!key.StartsWith(prefix), key);
+                }
+            }
         }
 
         // Round-trip: import back and verify impl tables exist on the imported table.
@@ -6239,6 +6259,119 @@ state: STATE_ENABLED
               Type: EIndexTypeGlobalAsync
             }
         )");
+    }
+
+    void AsyncIndexExport(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 port, bool encrypted, bool syncIndex) {
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        const TString syncIndexDesc = syncIndex ? R"(
+            IndexDescription {
+              Name: "z_sync"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobal
+            }
+        )" : "";
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "a_async"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalAsync
+            }
+            %s
+        )", syncIndexDesc.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        const TString encryptionSettings = encrypted ? R"(
+            encryption_settings {
+              encryption_algorithm: "AES-128-GCM"
+              symmetric_key { key: "0123456789012345" }
+            }
+        )" : "";
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              source_path: "/MyRoot"
+              destination_prefix: "Backup"
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "Table"
+              }
+              %s
+            }
+        )", port, encryptionSettings.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const auto readFile = [&](const TString& name) {
+            const auto& content = s3Mock.GetData().at("/Backup/Table/" + name + (encrypted ? ".enc" : ""));
+            if (!encrypted) {
+                return content;
+            }
+            const auto [data, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                NBackup::TEncryptionKey("0123456789012345"), TBuffer(content.data(), content.size()));
+            return TString(data.Data(), data.Size());
+        };
+
+        // Keep index definitions, but only list and upload the synchronous index data.
+        Ydb::Table::CreateTableRequest scheme;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(readFile("scheme.pb"), &scheme));
+        UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), syncIndex ? 2 : 1);
+        const auto metadata = NBackup::TMetadata::Deserialize(readFile("metadata.json"));
+        UNIT_ASSERT(metadata.GetIndexes());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->size(), syncIndex ? 1 : 0);
+        if (syncIndex) {
+            const auto& index = metadata.GetIndexes()->front();
+            UNIT_ASSERT_VALUES_EQUAL(index.ImplTablePrefix, "z_sync/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(index.ExportPrefix, encrypted ? "001" : "z_sync/indexImplTable");
+            readFile(index.ExportPrefix + "/scheme.pb");
+        }
+        for (const auto& [key, value] : s3Mock.GetData()) {
+            UNIT_ASSERT_C(!key.StartsWith("/Backup/Table/a_async/") && !key.StartsWith("/Backup/Table/002/"), key);
+            if (!syncIndex) {
+                UNIT_ASSERT_C(!key.StartsWith("/Backup/Table/001/"), key);
+            }
+        }
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              index_population_mode: INDEX_POPULATION_MODE_IMPORT
+              source_prefix: "Backup"
+              destination_path: "/MyRoot/Restored"
+              %s
+            }
+        )", port, encryptionSettings.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Restored/Table/a_async"), {
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+        });
+        if (syncIndex) {
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Restored/Table/z_sync"), {
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+            });
+        }
+    }
+
+    Y_UNIT_TEST(IndexMaterializationMixed) {
+        EnvOptions().EnableIndexMaterialization(true);
+        AsyncIndexExport(Env(), Runtime(), S3Mock(), S3Port(), false, true);
+    }
+
+    Y_UNIT_TEST(IndexMaterializationAsyncEncrypted) {
+        EnvOptions().EnableIndexMaterialization(true);
+        AsyncIndexExport(Env(), Runtime(), S3Mock(), S3Port(), true, false);
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalVectorKmeansTree) {

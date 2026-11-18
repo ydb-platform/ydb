@@ -262,6 +262,7 @@ protected:
     TMaybe<TTableHints> TableHintsImpl(const TRule_table_hints& node, const TString& provider, const TString& keyFunc = "");
     bool TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& provider, const TString& keyFunc = "");
     bool SimpleTableRefImpl(const TRule_simple_table_ref& node, TTableRef& result);
+    bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
     TSQLResult<TWindowSpecificationPtr> WindowSpecification(const TRule_window_specification_details& rule);
     TSQLStatus OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy);
     TSQLStatus SortSpecificationList(const TRule_sort_specification_list& node, TVector<TSortSpecificationPtr>& sortSpecs);
@@ -283,7 +284,6 @@ protected:
     bool ParseViewQuery(std::map<TString, TDeferredAtom>& features,
                         const TRule_define_action_or_subquery_body& body,
                         const NSQLv1Generated::TToken& beforeToken,
-                        const NSQLv1Generated::TToken& afterToken,
                         const TString& service,
                         const TDeferredAtom& cluster);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
@@ -310,7 +310,6 @@ protected:
 
 private:
     TMaybe<TDeferredAtom> DoParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context, bool ignoreAt, bool useTablePrefix);
-    bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
     static bool IsValidFrameSettings(TContext& ctx, const TFrameSpecification& frameSpec, size_t sortSpecSize);
     static TString FrameSettingsToString(EFrameSettings settings, bool isUnbounded);
 
@@ -326,7 +325,6 @@ protected:
     NSQLTranslation::ESqlMode Mode_;
     bool IsYqlSelectProduced_ = false;
     bool IsPure_ = false;
-    THashSet<TString>* YqlSelectSourceAliases_ = nullptr;
     TYqlNamespace<TReadyCTE>::TPtr CTEs_ = TYqlNamespace<TReadyCTE>::Fork();
 };
 
@@ -388,7 +386,5 @@ TVector<TPatternComponent<TChar>> SplitPattern(const TBasicString<TChar>& patter
 }
 
 bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& suffix);
-
-std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token);
 
 } // namespace NSQLTranslationV1

@@ -230,20 +230,32 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     // Put to init queue
 
     // The request was sent to the group's service id before the bridge proxy of the inline pile was put in front of us
-    // (requests of the bridge proxy have ForceGroupGeneration set); it has to be routed through the bridge proxy whatever
-    // state we are in, as the inline pile may stay unreachable while other piles serve the group.
+    // (requests of the bridge proxy have ForceGroupGeneration set); it has to be routed by the actor in front of the
+    // group whatever state we are in, as the inline pile may stay unreachable while other piles serve the group. It is
+    // sent to the service id again, not to the bridge proxy: the BlobDepot agent of the group being decommitted is in
+    // front of the bridge proxy then, and the bridge proxy may be gone already (e.g. the group is being deleted), so that
+    // node warden answers the request.
     template<typename TPtr>
-    bool ForwardToInlinePileBridgeProxy(TPtr& ev) {
-        if (InlinePileBridgeProxyId && !ev->Get()->ForceGroupGeneration) {
-            TActivationContext::Send(ev->Forward(InlinePileBridgeProxyId));
-            return true;
+    bool ResendToGroupService(TPtr& ev) {
+        if (!InlinePileBridgeProxyId || ev->Get()->ForceGroupGeneration) {
+            return false;
         }
-        return false;
+        const TActorId serviceId = MakeBlobStorageProxyID(GroupId);
+        if (TActivationContext::ActorSystem()->LookupLocalService(serviceId) == SelfId()) {
+            Y_DEBUG_ABORT("DS proxy of the inline pile still owns the service id of GroupId# %" PRIu32, GroupId.GetRawId());
+            return false; // it would come back to us
+        }
+        const TActorId sender = ev->Sender;
+        const ui64 cookie = ev->Cookie;
+        NWilson::TTraceId traceId = std::move(ev->TraceId);
+        TActivationContext::Send(CreateEventForBSProxy(sender, serviceId, ev->Release().Release(), cookie,
+            std::move(traceId)));
+        return true;
     }
 
     template<typename TEvent>
     void HandleEnqueue(TAutoPtr<TEventHandle<TEvent>> ev) {
-        if (ForwardToInlinePileBridgeProxy(ev)) {
+        if (ResendToGroupService(ev)) {
             return;
         }
         YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PROXY, "Dump group, handleEnqueue, marker",
@@ -351,7 +363,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
 
     template<typename TEvent>
     void HandleError(TAutoPtr<TEventHandle<TEvent>> ev) {
-        if (ForwardToInlinePileBridgeProxy(ev)) {
+        if (ResendToGroupService(ev)) {
             return; // other piles may serve it
         }
         bool full = false;
@@ -493,7 +505,7 @@ public:
 
     template<typename TPtr>
     void HandleWork(TPtr& ev) {
-        if (ForwardToInlinePileBridgeProxy(ev)) {
+        if (ResendToGroupService(ev)) {
             return;
         }
         HandleNormal(ev);

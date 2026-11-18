@@ -15,7 +15,7 @@ private:
     TString SubColumnName;
 
     virtual void DoSerializeToProto(TProto& proto) const override {
-        AFL_VERIFY(!!SubColumnName);
+        YDB_LOG_VERIFY(!!SubColumnName);
         proto.MutableSubColumn()->SetSubColumnName(SubColumnName);
     }
 

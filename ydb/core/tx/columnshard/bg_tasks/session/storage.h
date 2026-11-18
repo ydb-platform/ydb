@@ -17,7 +17,7 @@ public:
     }
 
     TConclusionStatus AddSession(const std::shared_ptr<TSession>& session) {
-        AFL_VERIFY(!!session);
+        YDB_LOG_VERIFY(!!session);
         if (!Sessions.emplace(session->GetIdentifier(), session).second) {
             return TConclusionStatus::Fail("task emplaced already");
         }
@@ -25,7 +25,7 @@ public:
     }
 
     bool RemoveSession(const TString& identifier) {
-        AFL_VERIFY(!!identifier);
+        YDB_LOG_VERIFY(!!identifier);
         auto it = Sessions.find(identifier);
         if (it == Sessions.end()) {
             return false;
@@ -104,7 +104,7 @@ public:
     }
 
     TConclusionStatus AddSession(const std::shared_ptr<TSession>& session) {
-        AFL_VERIFY(!!session);
+        YDB_LOG_VERIFY(!!session);
         TSessionsContainer& sessions = GetContainerOrCreateNew(session->GetLogicContainer().GetClassName());
         return sessions.AddSession(session);
     }

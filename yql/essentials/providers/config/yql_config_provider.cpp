@@ -146,6 +146,14 @@ public:
         }
     }
 
+    bool AcceptsProjectSetting(const TProjectSettings::TPragma& pragma) const override {
+        if (pragma.Name != "config.flags" || pragma.Value.empty()) {
+            return false;
+        }
+        const auto flagIt = Flags_.find(pragma.Value.front());
+        return flagIt != Flags_.end() && flagIt->second.AllowInProjectSettings && (!Policy_ || Policy_(pragma.Value.front()));
+    }
+
     TStringBuf GetName() const override {
         return ConfigProviderName;
     }
@@ -186,7 +194,7 @@ public:
                     RecordActivation(RuntimeSettingsActivationLabel, name);
                 });
         }
-        return true;
+        return ApplyProjectSettings(ctx);
     }
 
     bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) override {

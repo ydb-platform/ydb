@@ -77,7 +77,7 @@ THashMap<TString, NKikimr::NScheme::TTypeInfo> TTestColumn::ConvertToHash(const 
 }
 
 std::vector<NKikimr::NArrow::NTest::TTestColumn> TTestColumn::CropSchema(const std::vector<TTestColumn>& input, const ui32 size) {
-    AFL_VERIFY(input.size() >= size);
+    YDB_LOG_VERIFY(input.size() >= size);
     return std::vector<TTestColumn>(input.begin(), input.begin() + size);
 }
 

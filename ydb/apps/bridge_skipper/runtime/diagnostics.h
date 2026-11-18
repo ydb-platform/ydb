@@ -1,8 +1,11 @@
 #pragma once
 
 #include "commands.h"
+#include <library/cpp/logger/backend.h>
+#include <util/generic/ptr.h>
 #include <util/datetime/base.h>
 #include <deque>
+#include <memory>
 #include <mutex>
 #include <optional>
 
@@ -49,5 +52,13 @@ private:
     std::map<TString, NJson::TJsonValue> Operations;
     std::deque<TString> Completed;
 };
+
+class TTokenSource;
+
+// Retain redacted diagnostics and tee the same bytes to the owned output sink.
+TAutoPtr<TLogBackend> CreateCaptureBackend(
+    std::shared_ptr<TDiagnosticStore> store,
+    std::shared_ptr<const TTokenSource> tokens,
+    TAutoPtr<TLogBackend> output);
 
 } // namespace NBridgeSkipper

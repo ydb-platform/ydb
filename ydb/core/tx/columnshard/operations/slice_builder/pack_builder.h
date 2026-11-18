@@ -22,7 +22,7 @@ public:
         , Batch(batch)
     {
         Data->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::WaitFlush);
-        AFL_VERIFY(Batch.HasContainer());
+        YDB_LOG_VERIFY(Batch.HasContainer());
     }
 };
 
@@ -51,7 +51,7 @@ public:
         , WriteUnits(std::move(writeUnits))
         , Context(context)
     {
-        AFL_VERIFY(WriteUnits.size());
+        YDB_LOG_VERIFY(WriteUnits.size());
         for (auto&& i : WriteUnits) {
             i.GetData()->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::PackSlicesConstruction);
         }

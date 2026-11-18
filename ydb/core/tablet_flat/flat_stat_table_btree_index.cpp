@@ -121,34 +121,42 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
     }
 
     auto logAddingGroup = [&](TGroupId groupId){
-        LOG_BUILD_STATS("adding group " << groupId << " " << part->IndexPages.GetBTree(groupId).ToString());
+        LOG_BUILD_STATS("Adding group",
+            {"groupId", groupId},
+            {"indexPages", part->IndexPages.GetBTree(groupId).ToString()});
     };
 
     if (part->GroupsCount) { // main group
         TGroupId groupId{};
         auto channel = part->GetDataChannel(groupId);
         logAddingGroup(groupId);
-        
+
         for (const auto& slice : *part.Slices) {
             yieldHandler();
 
             stats.RowCount += slice.EndRowId() - slice.BeginRowId();
-            
+
             ui64 beginDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, ready);
             ui64 endDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.EndRowId(), env, ready);
             if (ready && endDataSize > beginDataSize) {
                 stats.DataSize.Add(endDataSize - beginDataSize, channel);
             }
-            LOG_BUILD_STATS("added slice [" << slice.BeginRowId() << ", " << slice.EndRowId() << ") data size "
-                << "(" << HumanReadableSize(endDataSize, SF_BYTES) << " - " << HumanReadableSize(beginDataSize, SF_BYTES) << ") => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+            LOG_BUILD_STATS("Added slice",
+                {"beginRowId", slice.BeginRowId()},
+                {"endRowId", slice.EndRowId()},
+                {"beginDataSize", HumanReadableSize(beginDataSize, SF_BYTES)},
+                {"endDataSize", HumanReadableSize(endDataSize, SF_BYTES)},
+                {"dataSize", HumanReadableSize(stats.DataSize.Size, SF_BYTES)});
 
             if (part->Small) {
                 AddBlobsSize(part.Part.Get(), stats.DataSize, part->Small.Get(), ELargeObj::Outer, slice.BeginRowId(), slice.EndRowId());
-                LOG_BUILD_STATS("added small blobs data size => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+                LOG_BUILD_STATS("Added small blobs data size",
+                    {"dataSize", HumanReadableSize(stats.DataSize.Size, SF_BYTES)});
             }
             if (part->Large) {
                 AddBlobsSize(part.Part.Get(), stats.DataSize, part->Large.Get(), ELargeObj::Extern, slice.BeginRowId(), slice.EndRowId());
-                LOG_BUILD_STATS("added large blobs data size => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+                LOG_BUILD_STATS("Added large blobs data size",
+                    {"dataSize", HumanReadableSize(stats.DataSize.Size, SF_BYTES)});
             }
         }
     }
@@ -160,14 +168,18 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
         for (const auto& slice : *part.Slices) {
             yieldHandler();
-            
+
             ui64 beginDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, ready);
             ui64 endDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.EndRowId(), env, ready);
             if (ready && endDataSize > beginDataSize) {
                 stats.DataSize.Add(endDataSize - beginDataSize, channel);
             }
-            LOG_BUILD_STATS("added slice [" << slice.BeginRowId() << ", " << slice.EndRowId() << ") data size "
-                << "(" << HumanReadableSize(endDataSize, SF_BYTES) << " - " << HumanReadableSize(beginDataSize, SF_BYTES) << ") => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+            LOG_BUILD_STATS("Added slice",
+                {"beginRowId", slice.BeginRowId()},
+                {"endRowId", slice.EndRowId()},
+                {"beginDataSize", HumanReadableSize(beginDataSize, SF_BYTES)},
+                {"endDataSize", HumanReadableSize(endDataSize, SF_BYTES)},
+                {"dataSize", HumanReadableSize(stats.DataSize.Size, SF_BYTES)});
         }
     }
 
@@ -180,7 +192,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
         for (const auto& slice : *part.Slices) {
             yieldHandler();
-            
+
             TRowId beginRowId, endRowId;
             bool readySlice = true;
             ui64 beginDataSize = GetPrevHistoricDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, beginRowId, readySlice);
@@ -189,8 +201,12 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
             if (ready && endDataSize > beginDataSize) {
                 stats.DataSize.Add(endDataSize - beginDataSize, channel);
             }
-            LOG_BUILD_STATS("added slice [" << slice.BeginRowId() << ", " << slice.EndRowId() << ") data size "
-                << "(" << HumanReadableSize(endDataSize, SF_BYTES) << " - " << HumanReadableSize(beginDataSize, SF_BYTES) << ") => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+            LOG_BUILD_STATS("Added slice",
+                {"beginRowId", slice.BeginRowId()},
+                {"endRowId", slice.EndRowId()},
+                {"beginDataSize", HumanReadableSize(beginDataSize, SF_BYTES)},
+                {"endDataSize", HumanReadableSize(endDataSize, SF_BYTES)},
+                {"dataSize", HumanReadableSize(stats.DataSize.Size, SF_BYTES)});
             if (readySlice && endRowId > beginRowId) {
                 historicSlices.emplace_back(beginRowId, endRowId);
             }
@@ -204,14 +220,18 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
         for (const auto& slice : historicSlices) {
             yieldHandler();
-            
+
             ui64 beginDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.first, env, ready);
             ui64 endDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.second, env, ready);
             if (ready && endDataSize > beginDataSize) {
                 stats.DataSize.Add(endDataSize - beginDataSize, channel);
             }
-            LOG_BUILD_STATS("added slice [" << slice.first << ", " << slice.second << ") data size "
-                << "(" << HumanReadableSize(endDataSize, SF_BYTES) << " - " << HumanReadableSize(beginDataSize, SF_BYTES) << ") => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+            LOG_BUILD_STATS("Added slice",
+                {"beginRowId", slice.first},
+                {"endRowId", slice.second},
+                {"beginDataSize", HumanReadableSize(beginDataSize, SF_BYTES)},
+                {"endDataSize", HumanReadableSize(endDataSize, SF_BYTES)},
+                {"dataSize", HumanReadableSize(stats.DataSize.Size, SF_BYTES)});
         }
     }
 
@@ -225,7 +245,10 @@ bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBu
 
     bool ready = true;
     for (const auto& part : subset.Flatten) {
-        LOG_BUILD_STATS("adding part " << part->Label.ToString() << " data size (" << HumanReadableSize(part->DataSize(), SF_BYTES) << " in total)");
+        LOG_BUILD_STATS("Adding part",
+            {"label", part->Label.ToString()},
+            {"dataSize", HumanReadableSize(part->DataSize(), SF_BYTES)});
+
         AddIndexSize(stats.IndexSize, *part);
         for (const auto& [_, bloom] : part->ByKeyPrefixes) {
             if (bloom) stats.ByKeyFilterSize += bloom->Raw.size();
@@ -237,8 +260,8 @@ bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBu
         return false;
     }
 
-    ready &= BuildStatsHistogramsBTreeIndex(subset, stats, 
-        stats.RowCount / histogramBucketsCount, stats.DataSize.Size / histogramBucketsCount, 
+    ready &= BuildStatsHistogramsBTreeIndex(subset, stats,
+        stats.RowCount / histogramBucketsCount, stats.DataSize.Size / histogramBucketsCount,
         env, yieldHandler, logPrefix);
 
     return ready;

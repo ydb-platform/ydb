@@ -19,7 +19,6 @@ SRCS(
     proc_ut.cpp
     sort_ut.cpp
     type_cache_ut.cpp
-    yql/essentials/minikql/comp_nodes/ut/mkql_test_factory.cpp
 )
 
 ADDINCL(
@@ -30,7 +29,7 @@ PEERDIR(
     yql/essentials/minikql/arrow
     yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy
-    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/comp_nodes/test_support/llvm16
     yql/essentials/parser/pg_catalog
     yql/essentials/minikql/codegen/llvm16
     library/cpp/resource

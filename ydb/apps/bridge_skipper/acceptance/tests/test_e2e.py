@@ -13,7 +13,8 @@ import yatest.common
 
 from ydb.apps.bridge_skipper.acceptance.lib.harness import (
     BRIDGE_UPDATE, Environment, assert_mutation, http_request, wait)
-from ydb.apps.bridge_skipper.ydbd_mock.lib import model
+from ydb.apps.bridge_skipper.ydbd_mock.lib import model, operations
+from ydb.public.api.protos.draft import ydb_bridge_pb2 as B
 
 
 BINARY = "ydb/apps/bridge_skipper/bridge_skipper"
@@ -346,9 +347,21 @@ class ExecutableTest(ExecutableCase):
         await e.quiet(3)
         self.assertEqual(len(e.mutations()), 1)
         state = await e.controller.until(
-            lambda state: int(state["generation_high_water"]) > generation, "committed high-water")
-        self.assertEqual({endpoint["state_generation"] for endpoint in state["endpoints"]
-                          if endpoint["pile"] == "b"}, {str(generation)})
+            lambda state: state["view"] and int(state["view"]["generation"]) > generation,
+            "committed view")
+        self.assertGreater(int(state["generation_high_water"]), generation)
+        self.assertEqual({pile["name"]: pile["state"] for pile in state["view"]["piles"]},
+                         {"a": "PRIMARY", "b": "DISCONNECTED"})
+        self.assertFalse(any(endpoint["pile"] == "b" for endpoint in state["endpoints"]))
+        # Skipper hides the disconnected pile's addresses. Query its public API
+        # directly to prove that the isolated side still has its original view.
+        response = await e.cluster.bridge(e.cluster.label("b")).GetClusterState(
+            B.GetClusterStateRequest(), timeout=5)
+        self.assertEqual(response.operation.status, model.SUCCESS, response)
+        isolated = operations.unpack(response.operation, B.GetClusterStateResult)
+        self.assertEqual(isolated.generation, generation)
+        self.assertEqual({pile.pile_name: pile.state for pile in isolated.pile_states},
+                         {"a": model.public_value("PRIMARY"), "b": model.public_value("SYNCHRONIZED")})
 
     async def test_e18_staggered_failures_batch_at_same_generation(self):
         # B2: c fails while {b}@G is unresolved; the same-primary superset

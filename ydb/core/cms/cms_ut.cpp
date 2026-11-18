@@ -2559,6 +2559,51 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
     }
 
+    Y_UNIT_TEST(StateStorageTwoReadWriteRingGroups)
+    {
+        TTestEnvOpts opts(5, 0);
+        opts.NRings = 3;
+        opts.RingSize = 1;
+        opts.NToSelect = 3;
+        TCmsTestEnv env(opts);
+
+        constexpr ui32 sharedNodeIndex = 2;
+        NKikimrConfig::TStateStorageConfig config;
+        config.SetSSId(1);
+        for (ui32 firstNodeIndex : {0u, sharedNodeIndex}) {
+            auto* group = config.AddRingGroups();
+            group->SetNToSelect(3);
+            for (ui32 i = 0; i < 3; ++i) {
+                group->AddNode(env.GetNodeId(firstNodeIndex + i));
+            }
+        }
+        auto info = BuildStateStorageInfo(config);
+        auto observer = env.AddObserver<TEvStateStorage::TEvListStateStorageResult>([&](auto& ev) {
+            ev->Get()->Info = info;
+        });
+
+        auto checkRestart = [&](ui32 nodeIndex, TStatus::ECode expectedStatus) {
+            return env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, expectedStatus,
+                                              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(nodeIndex), 60000000, "storage"));
+        };
+        auto checkDenied = [&](ui32 nodeIndex) {
+            const auto response = checkRestart(nodeIndex, TStatus::DISALLOW_TEMP);
+            UNIT_ASSERT_STRING_CONTAINS(response.GetStatus().GetReason(), "Too many unavailable state storage rings");
+        };
+
+        const auto firstPermission = checkRestart(0, TStatus::ALLOW);
+        checkDenied(sharedNodeIndex);
+        env.CheckDonePermission("user", firstPermission.GetPermissions(0).GetId());
+
+        checkRestart(3, TStatus::ALLOW);
+        checkDenied(sharedNodeIndex);
+        checkDenied(4);
+
+        config.MutableRingGroups(1)->SetWriteOnly(true);
+        info = BuildStateStorageInfo(config);
+        checkRestart(sharedNodeIndex, TStatus::ALLOW);
+    }
+
     Y_UNIT_TEST(StateStorageNodesFromOneRing)
     {
         TTestEnvOpts options(5);
@@ -3751,6 +3796,35 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Pile #0: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings — the limit has been exhausted => it is not possible to lock.
         env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(BridgeModeStateStorageAfterRemovePile)
+    {
+        TTestEnvOpts opts(16, 0);
+        opts.NToSelect = 5;
+        TCmsTestEnv env(opts.WithBridgeMode());
+
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto* nodesInfo = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(nodesInfo);
+            } else if (ev->GetTypeRewrite() == TEvStateStorage::EvListStateStorageResult) {
+                auto* reply = ev->Get<TEvStateStorage::TEvListStateStorageResult>();
+                auto info = MakeIntrusive<TStateStorageInfo>();
+                // Removing pile 0 leaves pile 1 at its original index and moves its ring group to position 0.
+                auto& group = info->RingGroups.emplace_back(reply->Info->RingGroups.at(1));
+                group.State = ERingGroupState::PRIMARY;
+                group.BridgePileId = TBridgePileId::FromPileIndex(1);
+                reply->Info = std::move(info);
+            }
+            return prev(ev);
+        });
+
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        const auto denied = env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        UNIT_ASSERT_STRING_CONTAINS(denied.GetStatus().GetReason(), "Too many unavailable state storage rings");
     }
 
     Y_UNIT_TEST(BridgeModeNodeLimit)

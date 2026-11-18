@@ -28,7 +28,7 @@ For a description of supported predicates, see the [{#T}](../../../../dev/json-i
 If the `WHERE` predicate contains `JSON_EXISTS` / `JSON_VALUE` calls on an indexed JSON column, the [optimizer](../../../../concepts/glossary.md#optimizer) may use the JSON index without an explicit `VIEW`. Automatic selection follows these rules:
 
 * The JSON index is considered by the optimizer with the lowest priority — it is a fallback option that is selected only after other access methods have been ruled out.
-* The JSON index is not selected if the query can already be served by a [primary key](../../../../concepts/glossary.md#primary-index) or another, more specific [secondary index](../../../../concepts/glossary.md#secondary-index).
+* The JSON index is not selected if the query can already be served by a [primary key](../../../../concepts/glossary.md#primary-key) or another, more specific [secondary index](../../../../concepts/glossary.md#secondary-index).
 * Explicit specification of `VIEW` overrides the optimizer's decision and forces index usage.
 * All indexed subexpressions in a single query must refer to the same indexed JSON column. If predicates on different indexed columns are combined via `AND` / `OR`, automatic selection is not applied.
 

@@ -3,6 +3,8 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
     SIZE(MEDIUM)
 
     FORK_SUBTESTS()
+    # the chunks of the default split come close to the timeout of MEDIUM tests
+    SPLIT_FACTOR(20)
 
     SRCS(
         bridge_cluster_state.cpp
@@ -17,6 +19,8 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
         bridge_decommit.cpp
         bridge_failover.cpp
         bridge_get.cpp
+        bridge_group_deletion.cpp
+        bridge_hot_standby.cpp
         bridge_keep_flags.cpp
         bridge_mixed_storage.cpp
         bridge_piles.cpp
@@ -24,6 +28,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
         bridge_pool_mode.cpp
         bridge_remove_pile.cpp
         bridge_restart.cpp
+        bridge_rollback.cpp
         bridge_routing.cpp
         bridge_stale_parts.cpp
         bridge_syncer.cpp
@@ -32,7 +37,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
     )
 
     PEERDIR(
-        ydb/core/blobstorage/bridge/syncer
+        ydb/core/blobstorage/syncer
         ydb/core/blobstorage/ut_blobstorage/lib
     )
 

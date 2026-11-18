@@ -1,0 +1,4 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT Median()
+FROM (VALUES (1.0)) AS x(value);

@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-Команды управления кластером в режиме [bridge](../../../../concepts/bridge.md) позволяют просматривать состояние [pile](../../../../concepts/glossary.md#pile), выполнять плановую и аварийную смену PRIMARY, временно выводить pile на обслуживание и возвращать его в кластер.
+Команды управления кластером в режиме [bridge](../../../../concepts/bridge.md) позволяют преобразовывать обычный кластер, просматривать состояние [pile](../../../../concepts/glossary.md#pile), добавлять и удалять pile, переключать режим хранения баз данных, а также выполнять плановые и аварийные операции с pile.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -26,8 +26,12 @@
 
 Команда / подкоманда | Краткое описание
 --- | ---
-[admin cluster bridge list](./list.md) | Вывод состояния pile
+[admin cluster bridge convert](./convert.md) | Преобразование обычного кластера в bridge с одним pile
+[admin cluster bridge list](./list.md) | Вывод состояния pile и хода операций
+[admin cluster bridge provision-pile](./provision-pile.md) | Подготовка хранилища нового pile
+[admin cluster bridge join-pile (rejoin)](./rejoin.md) | Подключение подготовленного pile или возврат после обслуживания
 [admin cluster bridge switchover](./switchover.md) | Плановая смена `PRIMARY`
 [admin cluster bridge failover](./failover.md) | Аварийное переключение
 [admin cluster bridge takedown](./takedown.md) | Вывод pile из кластера
-[admin cluster bridge rejoin](./rejoin.md) | Возвращение pile в кластер
+[admin cluster bridge destroy-pile](./destroy-pile.md) | Удаление хранилища и данных отключённого pile
+[admin cluster bridge set-database-mode](./set-database-mode.md) | Переключение базы данных между режимом bridge и обычным хранилищем

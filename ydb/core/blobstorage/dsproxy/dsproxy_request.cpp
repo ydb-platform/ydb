@@ -708,15 +708,15 @@ namespace NKikimr {
                 };
 
                 if (InlinePileBridgeProxyId) {
-                    // requests batched before the bridge proxy was put in front of us have to go through it, just like
-                    // the ones handled by HandleWork
+                    // requests batched before the bridge proxy was put in front of us go to the actor in front of the
+                    // group, just like the ones handled by HandleWork
                     auto& queue = batchedPuts.Queue;
                     const auto newEnd = std::remove_if(queue.begin(), queue.end(), [&](auto& ev) {
-                        if (ev->Get()->ForceGroupGeneration) {
+                        const ui64 partSize = Info->Type.PartSize(ev->Get()->Id);
+                        if (!ResendToGroupService(ev)) {
                             return false;
                         }
-                        batchedPuts.Bytes -= Info->Type.PartSize(ev->Get()->Id);
-                        TActivationContext::Send(ev->Forward(InlinePileBridgeProxyId));
+                        batchedPuts.Bytes -= partSize;
                         return true;
                     });
                     queue.erase(newEnd, queue.end());

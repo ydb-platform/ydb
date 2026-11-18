@@ -11,7 +11,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/mkql/type_info.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <util/system/unaligned_mem.h>
 

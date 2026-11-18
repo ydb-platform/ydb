@@ -1,6 +1,7 @@
 #pragma once
 
 #include "appdata.h"
+#include "core/helpers.h"
 #include "runtime.h"
 
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
@@ -32,32 +33,13 @@ namespace NFake {
 }
 
     const TBlobStorageGroupType::EErasureSpecies BootGroupErasure = TBlobStorageGroupType::ErasureNone;
-    using TStateStorageSetupper = std::function<void(TTestActorRuntime&, ui32)>;
 
-    TTabletStorageInfo* CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType,
-        TBlobStorageGroupType::EErasureSpecies erasure = BootGroupErasure, ui32 groupId = 0);
-    TActorId CreateTestBootstrapper(TTestActorRuntime &runtime, TTabletStorageInfo *info,
-        std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex = 0);
-    TActorId StartTestTablet(TTestActorRuntime &runtime, TTabletStorageInfo *info,
-        std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex = 0);
-    NTabletPipe::TClientConfig GetPipeConfigWithRetries();
 
-    void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex,
-                           bool replicasOnFirstNode = false);
-    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize, ui32 ringGroups = 1);
-    TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups, int replicasInRingGroup);
-    TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups,
-                                                           const THashMap<ui32, TVector<ui32>>& pileIdToNodeIds);
-    TStateStorageSetupper CreateDefaultStateStorageSetupper();
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig);
-    void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
-    void SetupTabletPipePerNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers = false);
-    void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig);
-    void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, const NSharedCache::TSharedCacheConfig& sharedCacheConfig);
-    void SetupNodeWhiteboard(TTestActorRuntime& runtime, ui32 nodeIndex);
-    void SetupMonitoringProxy(TTestActorRuntime& runtime, ui32 nodeIndex);
+    // Configure before Initialize; models may outlive the runtime. Does not create NodeWarden.
+    void SetupMockBlobStorage(TTestActorRuntime& runtime, ui32 nodeIndex,
+                             TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies);
     void SetupGRpcProxyStatus(TTestActorRuntime& runtime, ui32 nodeIndex);
-    void SetupNodeTabletMonitor(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupSchemeCache(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& root);
     void SetupQuoterService(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupSysViewService(TTestActorRuntime& runtime, ui32 nodeIndex);
@@ -84,6 +66,5 @@ namespace NFake {
     // Configure before runtime initialization; replace any earlier PDisk subsystem registration.
     void SetupPDiskSubsystem(TTestActorRuntime* runtime, bool stranded = true);
 
-    TActorId MakeBoardReplicaID(ui32 node, ui32 replicaIndex);
 
 }

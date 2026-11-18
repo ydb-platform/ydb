@@ -1,4 +1,4 @@
-PROGRAM()
+G_BENCHMARK()
 
 SRCS(
     parse.cpp

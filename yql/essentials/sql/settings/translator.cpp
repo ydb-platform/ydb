@@ -8,6 +8,10 @@ namespace {
 
 class TDummyTranslator: public ITranslator {
 public:
+    bool AcceptsProjectSetting(const NYql::TProjectSettings::TPragma&) const final {
+        return false;
+    }
+
     explicit TDummyTranslator(TString name)
         : Name_(std::move(name))
     {
@@ -38,10 +42,10 @@ public:
     }
 
     NYql::TAstParseResult TextAndMessageToAst(const TString& query, const google::protobuf::Message& protoAst,
-                                              const TSQLHints& hints, const TTranslationSettings& settings) final {
+                                              const TParsedTokenList& tokens, const TTranslationSettings& settings) final {
         Y_UNUSED(query);
         Y_UNUSED(protoAst);
-        Y_UNUSED(hints);
+        Y_UNUSED(tokens);
         Y_UNUSED(settings);
         ThrowNotSupported();
     }

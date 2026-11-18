@@ -1,6 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/columnshard)
 
-FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 PEERDIR(

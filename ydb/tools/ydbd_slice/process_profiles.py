@@ -14,9 +14,8 @@ import copy
 import os
 import re
 
-import yaml
-
 from ydb.tools.cfg.utils import write_to_file
+from ydb.tools.ydbd_slice import config_yaml
 
 ROOT_SLICE_ONLY_KEYS = (
     'process_profiles',
@@ -51,10 +50,6 @@ def profile_yaml_filename(profile_id):
     if not safe or safe in ('.', '..'):
         raise ValueError('invalid process profile id: %r' % (profile_id,))
     return 'config.p_%s.yaml' % safe
-
-
-def dump_yaml(data):
-    return yaml.dump(data, sort_keys=False, default_flow_style=False, allow_unicode=True)
 
 
 def deep_merge(base, overlay):
@@ -250,10 +245,10 @@ def merge_profile(base_cfg, overlay, convert_sys=True):
 def emit_profile_yaml_files(config_yaml_path, template, convert_sys=True):
     """Rewrite stripped base config.yaml and write config.p_<id>.yaml next to it."""
     with open(config_yaml_path, 'r') as f:
-        base_cfg = yaml.safe_load(f) or {}
+        base_cfg = config_yaml.load(f) or {}
 
     stripped_base = strip_slice_only_fields(base_cfg)
-    write_to_file(config_yaml_path, dump_yaml(stripped_base))
+    write_to_file(config_yaml_path, config_yaml.dump(stripped_base))
 
     catalog = parse_process_profiles(template)
     cfg_dir = os.path.dirname(config_yaml_path)
@@ -262,6 +257,6 @@ def emit_profile_yaml_files(config_yaml_path, template, convert_sys=True):
         merged = merge_profile(stripped_base, overlay, convert_sys=convert_sys)
         filename = profile_yaml_filename(profile_id)
         path = os.path.join(cfg_dir, filename)
-        write_to_file(path, dump_yaml(merged))
+        write_to_file(path, config_yaml.dump(merged))
         written[profile_id] = path
     return written

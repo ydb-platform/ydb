@@ -290,6 +290,37 @@ class TimingsAndPoliciesTest(ApiCase):
         await self.post("pile1", "/policies", {"issue_style": "weird"}, expect=400)
         await self.post("pile1", "/policies", {"anti_entropy": "maybe"}, expect=400)
 
+    async def test_rejected_timings_leave_all_values_and_side_effects_unchanged(self):
+        inst = self.c.inst("pile1")
+        before = inst.timings.to_dict()
+        events = inst.events.query(kind="timings")
+        for invalid in (("oops", 1), ("peer_timeout", 0), ("promote_delay", "invalid")):
+            for reverse in (False, True):
+                items = [("heartbeat_interval", 0.1), invalid]
+                if reverse:
+                    items.reverse()
+                with self.subTest(items=items), mock.patch.object(inst, "on_nodes_changed") as changed:
+                    await self.post("pile1", "/timings", dict(items), expect=400)
+                    self.assertEqual((await self.get("pile1", "/state"))["timings"], before)
+                    self.assertEqual(inst.events.query(kind="timings"), events)
+                    changed.assert_not_called()
+
+    async def test_rejected_policies_leave_all_values_and_side_effects_unchanged(self):
+        inst = self.c.inst("pile1")
+        before = inst.policies.to_dict()
+        events = inst.events.query(kind="policies")
+        for invalid in (("oops", True), ("enforce_config_quorum", "invalid"),
+                        ("admin_certificate_cn", [""]), ("issue_style", "invalid")):
+            for reverse in (False, True):
+                items = [("anti_entropy", False), ("admin_token", "replacement"), invalid]
+                if reverse:
+                    items.reverse()
+                with self.subTest(items=items), mock.patch.object(inst, "on_nodes_changed") as changed:
+                    await self.post("pile1", "/policies", dict(items), expect=400)
+                    self.assertEqual(inst.policies.to_dict(), before)
+                    self.assertEqual(inst.events.query(kind="policies"), events)
+                    changed.assert_not_called()
+
 
 class ResetAndScenarioTest(ApiCase):
     async def test_reset_local_restores_a_clean_node(self):

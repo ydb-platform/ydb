@@ -1,0 +1,48 @@
+PRAGMA YqlSelect = 'force';
+
+$rows = AsList(
+    AsStruct(1 AS key, Just(1.0) AS value),
+    AsStruct(1 AS key, Just(1.0) AS value),
+    AsStruct(1 AS key, Just(1.0) AS value),
+    AsStruct(2 AS key, Just(9.0) AS value),
+    AsStruct(2 AS key, Just(11.0) AS value),
+    AsStruct(2 AS key, Nothing(Double?) AS value)
+);
+
+SELECT
+    EnsureType(Median(value), Double?) AS median,
+    Percentile(value) AS default_percentile,
+    Percentile(value, 0.0) AS minimum,
+    Percentile(value, 1.0) AS maximum,
+    Percentile(value, (0.0, 0.5, 1.0)) AS tuple_quantiles,
+    Percentile(value, [0.0, 0.5, 1.0]) AS list_quantiles,
+    Percentile(value, AsStruct(0.0 AS low, 1.0 AS high)) AS struct_quantiles,
+    Median(DISTINCT value) AS distinct_median,
+    Percentile(DISTINCT value, 0.5) AS distinct_percentile
+FROM AS_TABLE($rows);
+
+SELECT key, Median(value) AS median, Percentile(value + 1.0, 0.5) AS percentile
+FROM AS_TABLE($rows)
+GROUP BY key
+HAVING Median(value) > 0.0
+ORDER BY Percentile(value, 0.5);
+
+SELECT Median(value) AS median, Percentile(value, 0.5) AS percentile
+FROM AS_TABLE($rows)
+WHERE FALSE;
+
+SELECT Median(value) AS median, Percentile(value, 0.5) AS percentile
+FROM AS_TABLE($rows)
+WHERE value IS NULL;
+
+SELECT
+    EnsureType(Median(value), Interval64?) AS median,
+    EnsureType(Percentile(value, 0.5), Interval64?) AS percentile
+FROM (VALUES (Interval64('P1D')), (Interval64('P3D'))) AS source(value);
+
+SELECT key, value,
+    Median(value) OVER w AS median,
+    Percentile(value, 0.5) OVER w AS percentile
+FROM AS_TABLE($rows)
+WINDOW w AS (PARTITION BY key ORDER BY value ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+ORDER BY key, value;

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.4.0)
+VERSION(2.15.1)
 
 LICENSE(MIT)
 
@@ -25,8 +25,11 @@ PY_SRCS(
     jwt/api_jwt.py
     jwt/exceptions.py
     jwt/help.py
+    jwt/jwk_set_cache.py
     jwt/jwks_client.py
+    jwt/types.py
     jwt/utils.py
+    jwt/warnings.py
 )
 
 RESOURCE_FILES(

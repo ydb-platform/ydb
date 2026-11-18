@@ -45,7 +45,7 @@ public:
 
     const TBlobRangeLink16& GetBlobRangeVerified() const {
         const auto* result = std::get_if<TBlobRangeLink16>(&Data);
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 
@@ -59,7 +59,7 @@ public:
 
     const TString& GetBlobDataVerified() const {
         const auto* result = std::get_if<TString>(&Data);
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 
@@ -91,7 +91,7 @@ public:
 
     void RegisterBlobIdx(const TBlobRangeLink16::TLinkId blobLinkId) {
         auto* result = std::get_if<TBlobRangeLink16>(&Data);
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         result->BlobIdx = blobLinkId;
     }
 

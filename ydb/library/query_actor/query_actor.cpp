@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/service_table.h>
+#include <ydb/core/kqp/common/simple/mvcc_version.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -272,8 +273,12 @@ void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxCont
         token = NACLib::TSystemUsers::Metadata().SerializeAsString();
     }
 
-    Subscribe<Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(
-        DoLocalRpc<TExecuteDataQueryRequest>(std::move(request), Database, token, RequestType, TActivationContext::ActorSystem(), true));
+    TMap<TString, TString> peerMeta;
+    if (MvccVersion) {
+        peerMeta.emplace(NKqp::YDB_MVCC_VERSION_HEADER, NKqp::FormatMvccVersion(*MvccVersion));
+    }
+    Subscribe<Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(DoLocalRpc<TExecuteDataQueryRequest>(
+        std::move(request), Database, token, RequestType, TActivationContext::ActorSystem(), peerMeta, true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
@@ -317,6 +322,10 @@ void TQueryBase::RunStreamQuery(TString sql, NYdb::TParamsBuilder* params, ui64 
     using TExecuteStreamQueryRequest = TGrpcRequestNoOperationCall<Table::ExecuteScanQueryRequest, Table::ExecuteScanQueryPartialResponse>;
 
     Y_ABORT_UNLESS(!RunningQuery);
+    if (MvccVersion) {
+        Finish(StatusIds::BAD_REQUEST, "RunStreamQuery does not support an explicit MVCC snapshot version");
+        return;
+    }
     YDB_LOG_DEBUG("RunStreamQuery",
         {"logPrefix", LogPrefix()},
         {"text", sql});

@@ -83,6 +83,7 @@ namespace NKikimr {
             switch (state) {                                               //  DQ     CQ     AC     ACWP
                 case NKikimrBridge::TClusterState::SYNCHRONIZED:       return {true,  true,  true,  true };
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1: return {false, false, true,  true };
+                case NKikimrBridge::TClusterState::HOT_STANDBY:        return {false, false, true,  true };
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2: return {true,  true,  true,  true };
                 case NKikimrBridge::TClusterState::DISCONNECTED:       return {false, false, false, true };
                 case NKikimrBridge::TClusterState::SUSPENDED:          return {false, true,  true,  true };
@@ -93,6 +94,27 @@ namespace NKikimr {
                     Y_ABORT();
                     return {};
             }
+        }
+
+        // Does the part of the bridged group at this stage take TEvPut of the requests coming to the group (the part of
+        // the pile in data quorum, that is); the one being synced or dropped doesn't yet/already. Bridge proxy routes
+        // writes by this rule, and BS_CONTROLLER counts the space of the group by it.
+        constexpr bool GroupPartTakesPuts(NKikimrBridge::TGroupState::EStage stage) {
+            switch (stage) {
+                case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA:
+                case NKikimrBridge::TGroupState::SYNCED:
+                    return true;
+
+                case NKikimrBridge::TGroupState::BLOCKS:
+                case NKikimrBridge::TGroupState::WRITE_KEEP:
+                case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
+                    return false;
+
+                case NKikimrBridge::TGroupState_EStage_TGroupState_EStage_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case NKikimrBridge::TGroupState_EStage_TGroupState_EStage_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    break;
+            }
+            Y_ABORT();
         }
 
         bool IsSameClusterState(const NKikimrBridge::TClusterState& x, const NKikimrBridge::TClusterState& y);
@@ -177,6 +199,12 @@ namespace NKikimr {
                 ? TBridgePileId::FromProto(&details.GetPendingPileOperation(),
                     &NKikimrBridge::TClusterStateDetails::TPendingPileOperation::GetBridgePileId)
                 : TBridgePileId();
+        }
+
+        // The bridged cluster is being rolled back to ordinary one (see TPendingPileOperation.ROLLBACK).
+        inline bool IsRollbackPending(const NKikimrBridge::TClusterStateDetails& details) {
+            return details.HasPendingPileOperation() && details.GetPendingPileOperation().GetKind() ==
+                NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ROLLBACK;
         }
 
         // Make an entry for the part of the bridged group in the designated pile, which the group has no part in yet

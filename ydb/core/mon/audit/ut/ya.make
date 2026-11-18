@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/mon/audit)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(

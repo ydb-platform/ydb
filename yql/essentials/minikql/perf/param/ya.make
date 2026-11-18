@@ -1,4 +1,4 @@
-PROGRAM()
+G_BENCHMARK()
 
 PEERDIR(
     yql/essentials/minikql/comp_nodes/llvm16

@@ -1,4 +1,14 @@
-/* syntax version 1 */
+$rows = [
+    <|fdate32: Just(Date32("-144169-01-01")), fdatetime64: Just(Datetime64("-144169-01-01T00:00:00Z")), ftimestamp64: Just(Timestamp64("-144169-01-01T00:00:00.000000Z")), ftzdate32: Just(TzDate32("-144169-01-02,Europe/Moscow")), ftzdatetime64: Just(TzDatetime64("-144169-01-01T02:30:17,Europe/Moscow")), ftztimestamp64: Just(TzTimestamp64("-144169-01-01T02:30:17.000000,Europe/Moscow")), finterval64: Just(Interval64("-PT9223339708799S"))|>,
+    <|fdate32: Just(Date32("-1-01-01")), fdatetime64: Just(Datetime64("-1-01-01T23:59:59Z")), ftimestamp64: Just(Timestamp64("-1-01-01T23:59:59.999999Z")), ftzdate32: Just(TzDate32("-1-01-01,Europe/Moscow")), ftzdatetime64: Just(TzDatetime64("-1-01-01T23:59:59,Europe/Moscow")), ftztimestamp64: Just(TzTimestamp64("-1-01-01T23:59:59.999999,Europe/Moscow")), finterval64: Just(Interval64("-PT4611669897600S"))|>,
+    <|fdate32: Just(Date32("1-01-01")), fdatetime64: Just(Datetime64("1-01-01T00:00:00Z")), ftimestamp64: Just(Timestamp64("1-01-01T00:00:00.000000Z")), ftzdate32: Just(TzDate32("1-01-01,Europe/Moscow")), ftzdatetime64: Just(TzDatetime64("1-01-01T00:00:00,Europe/Moscow")), ftztimestamp64: Just(TzTimestamp64("1-01-01T00:00:00.000000,Europe/Moscow")), finterval64: Just(Interval64("-P1D"))|>,
+    <|fdate32: Just(Date32("1969-12-31")), fdatetime64: Just(Datetime64("1969-12-31T23:59:59Z")), ftimestamp64: Just(Timestamp64("1969-12-31T23:59:59.999999Z")), ftzdate32: Just(TzDate32("1969-12-31,Europe/Moscow")), ftzdatetime64: Just(TzDatetime64("1969-12-31T23:59:59,Europe/Moscow")), ftztimestamp64: Just(TzTimestamp64("1969-12-31T23:59:59.999999,Europe/Moscow")), finterval64: Just(Interval64("P1W1DT1H1M1.000001S"))|>,
+    <|fdate32: Just(Date32("1970-01-01")), fdatetime64: Just(Datetime64("1970-01-01T00:00:00Z")), ftimestamp64: Just(Timestamp64("1970-01-01T00:00:00.000000Z")), ftzdate32: Just(TzDate32("1970-01-01,Europe/Moscow")), ftzdatetime64: Just(TzDatetime64("1970-01-01T00:00:00,Europe/Moscow")), ftztimestamp64: Just(TzTimestamp64("1970-01-01T00:00:00.000000,Europe/Moscow")), finterval64: Just(Interval64("P1D"))|>,
+    <|fdate32: Just(Date32("2025-01-01")), fdatetime64: Just(Datetime64("2025-01-01T01:02:03Z")), ftimestamp64: Just(Timestamp64("2025-01-01T01:02:03.456789Z")), ftzdate32: Just(TzDate32("2025-01-01,Europe/Moscow")), ftzdatetime64: Just(TzDatetime64("2025-01-01T04:02:03,Europe/Moscow")), ftztimestamp64: Just(TzTimestamp64("2025-01-01T04:02:03.456789,Europe/Moscow")), finterval64: Just(Interval64("P1W2DT3H4M5.678912S"))|>,
+    <|fdate32: Just(Date32("2106-01-01")), fdatetime64: Just(Datetime64("2106-01-01T00:00:00Z")), ftimestamp64: Just(Timestamp64("2106-01-01T00:00:00.000000Z")), ftzdate32: Just(TzDate32("2106-01-01,Europe/Moscow")), ftzdatetime64: Just(TzDatetime64("2106-01-01T03:00:00,Europe/Moscow")), ftztimestamp64: Just(TzTimestamp64("2106-01-01T03:00:00.000000,Europe/Moscow")), finterval64: Just(Interval64("PT4611669811199S"))|>,
+    <|fdate32: Just(Date32("148107-12-31")), fdatetime64: Just(Datetime64("148107-12-31T23:59:59Z")), ftimestamp64: Just(Timestamp64("148107-12-31T23:59:59.999999Z")), ftzdate32: Just(TzDate32("148107-12-31,Europe/Moscow")), ftzdatetime64: Just(TzDatetime64("148108-01-01T02:59:59,Europe/Moscow")), ftztimestamp64: Just(TzTimestamp64("148108-01-01T02:59:59.999999,Europe/Moscow")), finterval64: Just(Interval64("PT9223339708799S"))|>,
+];
+
 SELECT
     DateTime::ToDays(finterval64) as interval64_to_days,
     DateTime::ToHours(finterval64) as interval64_to_hours,
@@ -27,14 +37,4 @@ SELECT
     DateTime::ToMicroseconds(ftzdate32) as tzdate32_to_usec,
     DateTime::ToMicroseconds(ftzdatetime64) as tzdatetime64_to_usec,
     DateTime::ToMicroseconds(ftztimestamp64) as tztimestamp64_to_usec,
-FROM (
-    SELECT
-        CAST(fdate32 as Date32) as fdate32,
-        CAST(fdatetime64 as Datetime64) as fdatetime64,
-        CAST(ftimestamp64 as Timestamp64) as ftimestamp64,
-        CAST(finterval64 as Interval64) as finterval64,
-        CAST(ftzdate32 as TzDate32) as ftzdate32,
-        CAST(ftzdatetime64 as TzDatetime64) as ftzdatetime64,
-        CAST(ftztimestamp64 as TzTimestamp64) as ftztimestamp64,
-    from Input
-);
+FROM AS_TABLE($rows);

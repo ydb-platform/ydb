@@ -101,6 +101,7 @@ struct TEvPrivate {
 
         EvBackupExportReset,
 
+        EvPassWriteGate,
         EvEnd
     };
 
@@ -122,7 +123,7 @@ struct TEvPrivate {
         }
 
         NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult> ExtractResult() {
-            AFL_VERIFY(Result);
+            YDB_LOG_VERIFY(Result);
             auto result = std::move(*Result);
             Result.reset();
             return result;
@@ -193,8 +194,8 @@ struct TEvPrivate {
             : Requests(std::move(requests))
             , Callback(callback)
         {
-            AFL_VERIFY(Callback);
-            AFL_VERIFY(Requests.size());
+            YDB_LOG_VERIFY(Callback);
+            YDB_LOG_VERIFY(Requests.size());
         }
     };
 

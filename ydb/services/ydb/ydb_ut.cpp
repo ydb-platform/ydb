@@ -3649,7 +3649,8 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSetting(const TString& 
     return subdomain;
 }
 
-void InitConfigs(TKikimrWithGrpcAndRootSchema &server) {
+void InitConfigs(TKikimrWithGrpcAndRootSchema &server,
+                 NKikimrSchemeOp::EColumnCodec storageCodec = NKikimrSchemeOp::ColumnCodecLZ4) {
     {
         TString tenant_name = "ydb_ut_tenant";
         TString tenant = Sprintf("/Root/%s", tenant_name.c_str());
@@ -3782,7 +3783,7 @@ void InitConfigs(TKikimrWithGrpcAndRootSchema &server) {
         STORAGE_POLICY1.Clear();
         auto &family = *STORAGE_POLICY1.AddColumnFamilies();
         family.SetId(0);
-        family.SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+        family.SetColumnCodec(storageCodec);
         family.MutableStorageConfig()->CopyFrom(STORAGE_CONFIG1);
     }
 
@@ -4979,9 +4980,9 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
         }
     }
 
-    Y_UNIT_TEST(DescribeTableOptions) {
+    Y_UNIT_TEST_TWIN(DescribeTableOptions, Zstd) {
         TKikimrWithGrpcAndRootSchema server;
-        InitConfigs(server);
+        InitConfigs(server, Zstd ? NKikimrSchemeOp::ColumnCodecZSTD : NKikimrSchemeOp::ColumnCodecLZ4);
 
 
         std::shared_ptr<grpc::Channel> Channel_;
@@ -5044,7 +5045,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
                                {TString("data"), TString("hdd")},
                                {TString("external"), TString("hdd")},
                                {TString("external_threshold"), ToString(Max<ui32>())},
-                               {TString("codec"), TString("lz4")},
+                               {TString("codec"), TString(Zstd ? "zstd" : "lz4")},
                                {TString("in_memory"), TString("false")} }});
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(description.name(), "storage2");

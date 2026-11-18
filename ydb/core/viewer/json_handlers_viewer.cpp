@@ -105,7 +105,8 @@ TBSGroupState GetBSGroupOverallStateWithoutLatency(
         } else if (failedRings.size() > 0) {
             groupState.Overall = Min(groupState.Overall, NKikimrViewer::EFlag::Yellow);
         }
-    } else if (erasure == TErasureType::ErasureSpeciesName(TErasureType::Erasure4Plus2Block)) {
+    } else if (erasure == TErasureType::ErasureSpeciesName(TErasureType::Erasure4Plus2Block)
+            || erasure == TErasureType::ErasureSpeciesName(TErasureType::Erasure8Plus2Block)) {
         if (failedDomains.size() > 2) {
             groupState.Overall = NKikimrViewer::EFlag::Red;
         } else if (failedDomains.size() > 1) {

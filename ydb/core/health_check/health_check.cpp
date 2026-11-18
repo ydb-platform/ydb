@@ -74,6 +74,7 @@ using NNodeWhiteboard::TTabletId;
 
 const TString NONE = "none";
 const TString BLOCK_4_2 = "block-4-2";
+const TString BLOCK_8_2 = "block-8-2";
 const TString MIRROR_3_DC = "mirror-3-dc";
 
 void RemoveUnrequestedEntries(Ydb::Monitoring::SelfCheckResult& result, const Ydb::Monitoring::SelfCheckRequest& request) {
@@ -2987,7 +2988,7 @@ public:
                 if (failedDisks > 0) {
                     return {Ydb::Monitoring::StatusFlag::RED, "Group failed"};
                 }
-            } else if (ErasureSpecies == BLOCK_4_2) {
+            } else if (ErasureSpecies == BLOCK_4_2 || ErasureSpecies == BLOCK_8_2) {
                 if (failedDisks > 2) {
                     return {Ydb::Monitoring::StatusFlag::RED, "Group failed"};
                 } else if (failedDisks > 1) {
@@ -3003,6 +3004,8 @@ public:
                 } else if (failedDisks > 0) {
                     return degraded();
                 }
+            } else {
+                return {Ydb::Monitoring::StatusFlag::GREY, "Group erasure species is unknown"};
             }
             return {};
         }

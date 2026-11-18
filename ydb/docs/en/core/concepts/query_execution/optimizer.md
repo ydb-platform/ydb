@@ -71,6 +71,7 @@ The cost-based optimizer relies on table statistics and individual column statis
 The current set of table statistics includes:
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 * Number of records
 * Table size in bytes
 =======
@@ -82,6 +83,8 @@ This feature is under development and is disabled by default by the [`enable_col
 {% endnote %}
 {% endif %}
 
+=======
+>>>>>>> 125f02365b3 (Remove unnecessary notes)
 For more accurate estimates, collect column statistics: which values occur in each column and how often. For example, the optimizer can use them to estimate how many rows match a `WHERE` condition.
 >>>>>>> 6f22a4d5a17 (add description about feature flag enable_column_statistics)
 

@@ -1445,7 +1445,12 @@ class BaseCallData : public Activity, private Wakeable {
     // work.
     void WakeInsideCombiner(Flusher* flusher, bool allow_push_to_pipe);
     // Call is completed, we have trailing metadata. Close things out.
-    void Done(const ServerMetadata& metadata, Flusher* flusher);
+    // Discard buffered messages only for cancellation, a short-circuiting
+    // filter, or server-side non-OK termination. Transport trailers alone
+    // must not let a message bypass the remaining filters.
+    void Done(const ServerMetadata& metadata, Flusher* flusher,
+              bool discard_buffered_message = false);
+    bool IsIdle() const;
 
    private:
     enum class State : uint8_t {
@@ -1599,6 +1604,9 @@ class ClientCallData : public BaseCallData {
     kQueued,
     // We've forwarded the op to the next filter.
     kForwarded,
+    // Trailing metadata arrived while a received message is still being
+    // processed by the filters.
+    kCompletedQueuedBehindReceiveMessage,
     // The op has completed from below, but we haven't yet forwarded it up
     // (the promise gets to interject and mutate it).
     kComplete,

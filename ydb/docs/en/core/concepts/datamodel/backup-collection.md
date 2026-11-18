@@ -1,5 +1,13 @@
 # Backup collection
 
+{% if feature_flags.enable_backup_service == false %}
+{% note warning "Experimental feature" %}
+
+This feature is under development and is disabled by default by the [`enable_backup_service`](../../reference/configuration/feature_flags.md) flag. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the flag may cause errors, cluster instability, or make it impossible to change the YDB version. Do not enable this flag in production clusters. [Learn more](../../reference/configuration/feature_flags.md#experimental).
+
+{% endnote %}
+{% endif %}
+
 A backup collection organizes full and incremental backups of selected [row tables](table.md#row-oriented-tables) into manageable chains. It allows you to **restore data to the state of the latest backup in the chain**, providing protection against accidental data loss — erroneous deletions or modifications.
 
 {% note info %}

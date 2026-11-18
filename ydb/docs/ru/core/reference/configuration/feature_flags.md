@@ -75,6 +75,7 @@ feature_flags:
 | `enable_topic_autopartitioning_for_cdc`                  | [Автопартиционирование топиков](../../concepts/cdc.md#topic-partitions) в CDC для строковых таблиц |
 | `enable_online_add_unique_index` | [Построение уникального вторичного индекса](../../concepts/query_execution/secondary_indexes.md#index-add) в существующей таблице без блокировки записи на время построения |
 | `enable_access_to_index_impl_tables`                     | Возможность [указания числа реплик](../../yql/reference/syntax/alter_table/indexes.md) для вторичного индекса |
+| `enable_backup_service` | [Коллекции резервных копий](../../concepts/datamodel/backup-collection.md): полные и инкрементальные резервные копии строковых таблиц |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Поддержка потоков изменений (changefeed) в операциях резервного копирования и восстановления |
 | `enable_view_export`                                     | Поддержка представлений (`VIEW`) в операциях резервного копирования и восстановления |
 | `enable_export_auto_dropping`                            | Автоудаление временных директорий и таблиц при экспорте в S3 |

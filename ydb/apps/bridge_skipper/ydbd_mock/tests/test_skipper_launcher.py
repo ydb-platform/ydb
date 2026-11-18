@@ -34,6 +34,22 @@ class SkipperLauncherTest(unittest.TestCase):
             for pile in self.cluster.topology.piles})
         self.assertTrue(argv[argv.index("--state-dir") + 1].endswith("/bridge_skipper/mock-session"))
 
+    def test_ipv6_endpoints_are_written_to_the_map_and_skipper_config(self):
+        source = self.cluster.path("ipv6.yaml")
+        Topology(["a"], 1, host="::1").save(source)
+        args = supervisor.build_parser().parse_args(["up", "--topology", source])
+        with mock.patch.object(self.cluster, "alive", return_value=False), mock.patch.object(
+                self.cluster, "spawn", return_value=mock.Mock(pid=123)), mock.patch.object(
+                self.cluster, "wait_responsive"), mock.patch.object(supervisor, "_print"):
+            supervisor.cmd_up(self.cluster, args)
+        endpoint_map = json.loads(Path(self.cluster.path("endpoint_map.json")).read_text())
+        self.assertEqual(endpoint_map, {"mock-a-1": "[::1]:22100"})
+        with mock.patch.object(supervisor.os, "execv") as execute:
+            supervisor.cmd_skipper(self.cluster, self.args())
+        argv = execute.call_args.args[1]
+        config = json.loads(Path(argv[argv.index("--config") + 1]).read_text())
+        self.assertEqual(config["endpoints"], {"a": ["grpc://[::1]:22100"]})
+
     def test_listener_is_explicit_and_mode_has_no_config_override(self):
         with mock.patch.object(supervisor.os, "execv") as execute:
             supervisor.cmd_skipper(self.cluster, self.args("--listen", "127.0.0.1:18080"))

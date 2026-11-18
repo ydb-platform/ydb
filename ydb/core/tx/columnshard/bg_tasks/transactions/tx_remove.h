@@ -23,10 +23,10 @@ public:
         , Sessions(sessions)
         , Adapter(adapter)
     {
-        AFL_VERIFY(!!Adapter);
-        AFL_VERIFY(!!Sessions);
-        AFL_VERIFY(!!ClassName);
-        AFL_VERIFY(!!Identifier);
+        YDB_LOG_VERIFY(!!Adapter);
+        YDB_LOG_VERIFY(!!Sessions);
+        YDB_LOG_VERIFY(!!ClassName);
+        YDB_LOG_VERIFY(!!Identifier);
     }
 
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;

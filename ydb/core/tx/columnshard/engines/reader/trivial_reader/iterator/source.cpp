@@ -29,14 +29,14 @@ namespace NKikimr::NOlap::NReader::NTrivial {
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching) {
-    AFL_VERIFY(fetching);
-    //    AFL_VERIFY(!FetchingPlan);
+    YDB_LOG_VERIFY(fetching);
+    //    YDB_LOG_VERIFY(!FetchingPlan);
     FetchingPlan = fetching;
 }
 
 void IDataSource::StartProcessing(std::unique_ptr<NCommon::TDataSourceLease> sourceLease) {
     auto& self = *sourceLease->GetSource().MutableAs<IDataSource>();
-    AFL_VERIFY(self.FetchingPlan);
+    YDB_LOG_VERIFY(self.FetchingPlan);
     TFetchingScriptCursor cursor(self.FetchingPlan, 0);
     const auto& commonContext = *self.GetContext()->GetCommonContext();
     auto task = std::make_shared<TStepAction>(std::move(sourceLease), std::move(cursor), commonContext.GetScanActorId(), true);
@@ -45,7 +45,7 @@ void IDataSource::StartProcessing(std::unique_ptr<NCommon::TDataSourceLease> sou
 
 void IDataSource::InitializeProcessing() {
     if (!ProcessingStarted) {
-        AFL_VERIFY(FetchingPlan);
+        YDB_LOG_VERIFY(FetchingPlan);
         InitStageData(std::make_unique<TFetchedData>(
             GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
                 GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), GetRecordsCountOptional()));
@@ -64,7 +64,8 @@ void IDataSource::InitializeProcessing() {
 
 void IDataSource::ContinueCursor(std::unique_ptr<NCommon::TDataSourceLease> sourceLease) {
     auto& self = *sourceLease->GetSource().MutableAs<IDataSource>();
-    AFL_VERIFY(!!self.ScriptCursor)("source_idx", self.GetSourceIdx());
+    YDB_LOG_VERIFY(!!self.ScriptCursor,
+        {"sourceIdx", self.GetSourceIdx()});
     if (self.ScriptCursor->Next()) {
         YDB_LOG_DEBUG("",
             {"sourceIdx", self.GetSourceIdx()},
@@ -107,7 +108,7 @@ void IDataSource::DoBuildStageResult() {
 
 void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-    AFL_VERIFY(!GetStageData().IsEmptyWithData());
+    YDB_LOG_VERIFY(!GetStageData().IsEmptyWithData());
     if (memoryLimit && !IsSourceInMemory()) {
         const auto accessor = ExtractPortionAccessor();
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
@@ -137,7 +138,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         auto itFilter = cFilter.GetBegin(false, Portion->GetRecordsCount());
         bool itFinished = false;
         for (auto&& c : columnChunks) {
-            AFL_VERIFY(!itFinished);
+            YDB_LOG_VERIFY(!itFinished);
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
                 reading->SetIsBackgroundProcess(false);
@@ -150,7 +151,9 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             }
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
         }
-        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->GetRecordsCount());
+        YDB_LOG_VERIFY(itFinished,
+            {"filter", itFilter.DebugString()},
+            {"count", Portion->GetRecordsCount()});
     }
     YDB_LOG_DEBUG("",
         {"event", "chunks_stats"},
@@ -163,8 +166,8 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
 NCommon::TExecutionResult TPortionDataSource::DoStartFetchingColumns(const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
     YDB_LOG_DEBUG("",
         {"event", step.GetName()});
-    AFL_VERIFY(columns.GetColumnsCount());
-    AFL_VERIFY(!GetStageData().GetAppliedFilter() || !GetStageData().GetAppliedFilter()->IsTotalDenyFilter());
+    YDB_LOG_VERIFY(columns.GetColumnsCount());
+    YDB_LOG_VERIFY(!GetStageData().GetAppliedFilter() || !GetStageData().GetAppliedFilter()->IsTotalDenyFilter());
     auto& columnIds = columns.GetColumnIds();
     YDB_LOG_DEBUG("",
         {"event", step.GetName()},
@@ -210,13 +213,13 @@ TConclusion<NCommon::TExecutionResult> TPortionDataSource::DoStartFetchImpl(
             NBlobOperations::NRead::TCompositeReadBlobs blobs;
             i->OnDataReceived(readActions, blobs);
             MutableStageData().AddFetcher(i);
-            AFL_VERIFY(readActions.IsEmpty());
+            YDB_LOG_VERIFY(readActions.IsEmpty());
         }
         return NCommon::TExecutionResult::Done();
     }
     THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
     for (auto&& i : fetchersExt) {
-        AFL_VERIFY(fetchers.emplace(i->GetEntityId(), i).second);
+        YDB_LOG_VERIFY(fetchers.emplace(i->GetEntityId(), i).second);
     }
     return NCommon::TExecutionResult::Pending(std::make_shared<NCommon::TColumnsFetcherTask::TStartJob>(
         std::move(readActions), fetchers, GetExecutionContext().GetCursorStep(), "fetcher"));
@@ -233,7 +236,7 @@ THashMap<IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>>
             if (!indexMeta) {
                 indexMeta = SelectOptimalIndex(GetSourceSchema()->GetIndexInfo().FindSkipIndexes(addr, op), op);
             }
-            AFL_VERIFY(result.emplace(checkAddr, indexMeta).second);
+            YDB_LOG_VERIFY(result.emplace(checkAddr, indexMeta).second);
         }
     }
     return result;
@@ -265,8 +268,8 @@ ui64 TPortionDataSource::GetIndexesDataSizeForFetch(const THashMap<ui32, TFetchI
     }
     ui64 result = 0;
     for (auto&& [indexId, item] : selected) {
-        AFL_VERIFY(item.Meta);
-        AFL_VERIFY(!item.Addresses.empty());
+        YDB_LOG_VERIFY(item.Meta);
+        YDB_LOG_VERIFY(!item.Addresses.empty());
         for (const auto* chunk : GetPortionAccessor().GetIndexChunksPointers(indexId)) {
             if (!chunk->HasBlobData()) {
                 result += chunk->GetDataSize();
@@ -315,7 +318,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
         GetContext()->GetCommonContext()->GetCounters().OnNoIndex(GetRecordsCount());
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
-    AFL_VERIFY(meta->IsSkipIndex());
+    YDB_LOG_VERIFY(meta->IsSkipIndex());
 
     if (auto fetcher = MutableStageData().ExtractFetcherOptional(meta->GetIndexId())) {
         auto& source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
@@ -400,7 +403,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
             const auto* data = static_cast<const NArrow::NAccessor::TSubColumnsArray*>(arrData.get());
             isAllowed = data->HasSubColumn(fetchContext.GetSubColumnName().GetValue());
         } else {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
         result.Add(isAllowed, arrData->GetRecordsCount());
         NYDBTest::TControllers::GetColumnShardController()->OnHeaderSelectProcessed(isAllowed);
@@ -488,7 +491,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
 }
 
 NCommon::TExecutionResult TPortionDataSource::DoStartFetchingAccessor(const TFetchingScriptCursor& step) {
-    AFL_VERIFY(!HasPortionAccessor());
+    YDB_LOG_VERIFY(!HasPortionAccessor());
     YDB_LOG_DEBUG("",
         {"event", step.GetName()},
         {"fetchingInfo", step.DebugString()});
@@ -511,7 +514,9 @@ TPortionDataSource::TPortionDataSource(const ui32 sourceIdx, const std::shared_p
     , Start(TReplaceKeyAdapter::BuildStart(*portion, context->GetReadMetadata()->GetRequestSorting()))
     , Finish(TReplaceKeyAdapter::BuildFinish(*portion, context->GetReadMetadata()->GetRequestSorting()))
 {
-    AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater)("start", Start.DebugString())("finish", Finish.DebugString());
+    YDB_LOG_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater,
+        {"start", Start.DebugString()},
+        {"finish", Finish.DebugString()});
     if (context->GetReadMetadata()->IsDescSorted()) {
         UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(
             Finish.GetValue().BuildSortablePosition(), Start.GetValue().BuildSortablePosition());
@@ -519,7 +524,7 @@ TPortionDataSource::TPortionDataSource(const ui32 sourceIdx, const std::shared_p
         UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(
             Start.GetValue().BuildSortablePosition(), Finish.GetValue().BuildSortablePosition());
     }
-    AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
+    YDB_LOG_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
     YDB_LOG_DEBUG("",
         {"event", "portions_for_merge"},
         {"start", Start.DebugString()},

@@ -461,7 +461,7 @@ struct TLevel {
             portions.reserve(selected.size());
             for (ui64 id : selected) {
                 auto it = Portions.find(id);
-                AFL_VERIFY(it != Portions.end());
+                YDB_LOG_VERIFY(it != Portions.end());
                 auto p = RemoveForCompaction(it);
                 portions.push_back(p);
                 if (compactNextLevelEdges) {

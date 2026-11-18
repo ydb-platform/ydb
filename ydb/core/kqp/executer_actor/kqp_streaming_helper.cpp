@@ -39,6 +39,14 @@ public:
             QueryGroup->RemoveCounter("max_read_lag");
             MaxReadLag.Reset();
         }
+        if (stats.HopInputEventsCount || HopInputEventsCount) {
+            if (!HopInputEventsCount) {
+                HopInputEventsCount = QueryGroup->GetCounter("streaming.query.hop.input_events.rate", true);
+                HopLateEventsCount = QueryGroup->GetCounter("streaming.query.hop.late_events.rate", true);
+            }
+            HopInputEventsCount->Set(stats.HopInputEventsCount);
+            HopLateEventsCount->Set(stats.HopLateEventsCount);
+        }
     }
 
 private:
@@ -66,6 +74,8 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr MaxReadLag; // milliseconds
+    ::NMonitoring::TDynamicCounters::TCounterPtr HopInputEventsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr HopLateEventsCount;
     const ::NMonitoring::TDynamicCounterPtr Counters;
 };
 

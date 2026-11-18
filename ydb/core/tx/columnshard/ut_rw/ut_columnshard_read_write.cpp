@@ -2301,7 +2301,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
 
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
-        AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        YDB_LOG_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         planStep = writer.StartCommit(txId);
 
         {
@@ -2339,8 +2339,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
-        AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        AFL_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        YDB_LOG_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        YDB_LOG_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
         PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId + 1), false);
 
@@ -2371,7 +2371,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         UNIT_ASSERT(blobData.size() > TLimits::GetMaxBlobSize());
 
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
-        AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        YDB_LOG_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         planStep = writer.StartCommit(txId);
 
         PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId));
@@ -2402,7 +2402,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
                 std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
                     "field", NConstruction::TStringPoolFiller(8, 100));
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
-            AFL_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            YDB_LOG_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             {
                 auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
                 UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
@@ -2415,7 +2415,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
                 std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
                     "field", NConstruction::TStringPoolFiller(8, 100));
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
-            AFL_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            YDB_LOG_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
             {
                 auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
@@ -2429,6 +2429,35 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2 * 2048);
+    }
+
+    Y_UNIT_TEST(UncommittedPortionsAreLoadedOnStart) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto controller = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)) };
+        Y_UNUSED(PrepareTablet(runtime, tableId, schema));
+        const ui64 txId = 111;
+
+        NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
+        YDB_LOG_VERIFY(writer.Write(MakeTestBatch<arrow::UInt64Type>({ "key" }, std::vector<ui64>{ 1, 2, 3 }), { 1 }, txId) ==
+                   NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        // a transaction that is not proposed is aborted on start
+        Y_UNUSED(writer.StartCommit(txId));
+
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, runtime.AllocateEdgeActor());
+
+        const TColumnShard& shard = *controller->GetTheOnlyShard();
+        const auto& index = shard.GetIndexAs<NOlap::TColumnEngineForLogs>();
+        const auto uncommittedPortions = shard.GetOperationsManager().GetUncommittedPortionAddresses();
+        UNIT_ASSERT(!uncommittedPortions.empty());
+        for (const auto& address : uncommittedPortions) {
+            const auto portion = index.GetGranuleVerified(address.GetPathId()).GetPortionOptional(address.GetPortionId(), false);
+            UNIT_ASSERT_C(portion, address.DebugString());
+            UNIT_ASSERT(!portion->IsCommitted());
+        }
     }
 
     Y_UNIT_TEST(WriteIntoReadOnlyTableFails) {
@@ -2458,8 +2487,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         {
             const ui64 lockId = 111;
             NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, srcPathId, lockId);
-            AFL_VERIFY(writer.Write(batch, columnIds, lockId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            AFL_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            YDB_LOG_VERIFY(writer.Write(batch, columnIds, lockId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            YDB_LOG_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         }
 
         // Create a read-only copy of the source table at dstPathId.
@@ -2503,8 +2532,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         {
             const ui64 lockId = 333;
             NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, srcPathId, lockId);
-            AFL_VERIFY(writer.Write(batch, columnIds, lockId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            AFL_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            YDB_LOG_VERIFY(writer.Write(batch, columnIds, lockId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            YDB_LOG_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         }
     }
 }
@@ -2743,7 +2772,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
-            AFL_VERIFY(!rb || rb->num_rows() == 0)("count", rb->num_rows());
+            YDB_LOG_VERIFY(!rb || rb->num_rows() == 0,
+                {"count", rb->num_rows()});
             UNIT_ASSERT_VALUES_EQUAL(getTableStats().GetRowDeletes(), numRows);
         }
         {
@@ -3472,7 +3502,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 runtime.Send(new IEventHandle(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit, 0, 1)));
                 auto scan = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanData>(handle);
                 if (scan->Finished) {
-                    AFL_VERIFY(!scan->ArrowBatch || !scan->ArrowBatch->num_rows());
+                    YDB_LOG_VERIFY(!scan->ArrowBatch || !scan->ArrowBatch->num_rows());
                     break;
                 }
                 UNIT_ASSERT(scan->ArrowBatch);
@@ -3484,7 +3514,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     auto bytes = batchStats->GetColumnByName("ColumnBlobBytes");
                     auto rawBytes = batchStats->GetColumnByName("ColumnRawBytes");
                     auto activities = batchStats->GetColumnByName("Activity");
-                    AFL_VERIFY(activities);
+                    YDB_LOG_VERIFY(activities);
 
                     const auto pathId = TInternalPathId::FromRawValue(static_cast<arrow::UInt64Array&>(*paths).Value(i));
                     auto kind = static_cast<arrow::StringArray&>(*kinds).Value(i);
@@ -3527,7 +3557,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
             }
         }
-        AFL_VERIFY(success);
+        YDB_LOG_VERIFY(success);
     }
 
     void TestCompactionSplitGranule(const TTypeId typeId) {
@@ -3880,8 +3910,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {
             writeAndCommit(triggerData);
         }
-        AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val() == 1);
-        AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val() == 1);
+        YDB_LOG_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val() == 1);
+        YDB_LOG_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val() == 1);
         // With the registry guard (delay = 1+1+1+10 = 13s per phase), cleanup requires two
         // plan-step advances of 13s each (phase-1 marking, then phase-2 deletion). In this test
         // runtime plan step follows simulated time, so advance it explicitly to avoid relying on

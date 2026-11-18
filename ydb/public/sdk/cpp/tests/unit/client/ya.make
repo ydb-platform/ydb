@@ -18,6 +18,7 @@ RECURSE(
     row_ranges
     retry
     retry_range
+    scheme
     table
     value
 )

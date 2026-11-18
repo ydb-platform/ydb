@@ -141,7 +141,7 @@ public:
         if (Portions.empty()) {
             return 0;
         }
-        AFL_VERIFY(from <= to);
+        YDB_LOG_VERIFY(from <= to);
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"from", from.DebugString()},
             {"to", to.DebugString()});

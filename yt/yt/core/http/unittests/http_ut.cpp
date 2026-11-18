@@ -1477,7 +1477,7 @@ INSTANTIATE_TEST_SUITE_P(WithTls, THttpServerTest, ::testing::Values(true));
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(THttpServerTest, TestOwnPoller)
+TEST(THttpServerTest, OwnPoller)
 {
     auto port = NTesting::GetFreePort();
     auto url = Format("http://localhost:%v", port);
@@ -1547,7 +1547,7 @@ TEST(THttpHandlerMatchingTest, Simple)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TRangeHeadersTest, Test)
+TEST(TRangeHeadersTest, ParseBytesRange)
 {
     auto headers = New<THeaders>();
     EXPECT_EQ(FindBytesRange(headers), std::nullopt);

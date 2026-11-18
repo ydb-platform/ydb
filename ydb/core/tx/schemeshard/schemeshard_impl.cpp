@@ -433,6 +433,8 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
         CollectLocalIndexMigrations(ctx);
     }
 
+    StartIndexShadowDataRepair(ctx, std::move(opts.TablesWithShadowData));
+
     InitializeStatistics(ctx);
 
     SubscribeToTempTableOwners();
@@ -5875,6 +5877,9 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     }
     if (LocalIndexMigratorId) {
         ctx.Send(LocalIndexMigratorId, new TEvents::TEvPoisonPill());
+    }
+    if (IndexShadowDataRepairerId) {
+        ctx.Send(IndexShadowDataRepairerId, new TEvents::TEvPoisonPill());
     }
     for (TActorId schemeUploader : RunningExportSchemeUploaders) {
         ctx.Send(schemeUploader, new TEvents::TEvPoisonPill());

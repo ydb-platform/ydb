@@ -61,12 +61,12 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
 
         while (!rowset.EndOfSet()) {
             TPortionLoadContext portion(rowset);
-            AFL_VERIFY(portion.GetMetaProto().BlobIdsSize());
+            YDB_LOG_VERIFY(portion.GetMetaProto().BlobIdsSize());
             std::vector<TString> blobIds;
             for (auto&& i : portion.GetMetaProto().GetBlobIds()) {
                 blobIds.emplace_back(i);
             }
-            AFL_VERIFY(portions0.emplace(portion.GetPortionId(), std::move(blobIds)).second);
+            YDB_LOG_VERIFY(portions0.emplace(portion.GetPortionId(), std::move(blobIds)).second);
 
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");
@@ -85,7 +85,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         while (!rowset.EndOfSet()) {
             TColumnChunkLoadContextV2 chunk(rowset, DsGroupSelector);
             auto it = portions0.find(chunk.GetPortionId());
-            AFL_VERIFY(it != portions0.end());
+            YDB_LOG_VERIFY(it != portions0.end());
             if (chunk.GetBlobIds().empty()) {
                 blobsByPortion.emplace(chunk.GetPortionAddress(), std::move(it->second));
                 if (blobsByPortion.size() == 10000) {
@@ -93,9 +93,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
                     blobsByPortion.clear();
                 }
             } else {
-                AFL_VERIFY(it->second.size() == chunk.GetBlobIds().size());
+                YDB_LOG_VERIFY(it->second.size() == chunk.GetBlobIds().size());
                 for (ui32 idx = 0; idx < it->second.size(); ++idx) {
-                    AFL_VERIFY(it->second[idx] == chunk.GetBlobIds()[idx].GetLogoBlobId().AsBinaryString());
+                    YDB_LOG_VERIFY(it->second[idx] == chunk.GetBlobIds()[idx].GetLogoBlobId().AsBinaryString());
                 }
             }
             portions0.erase(it);
@@ -107,7 +107,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         if (blobsByPortion.size()) {
             tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TBlobsWriting>(std::move(blobsByPortion))));
         }
-        AFL_VERIFY(portions0.empty());
+        YDB_LOG_VERIFY(portions0.empty());
     }
 
     return tasks;

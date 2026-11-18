@@ -1123,6 +1123,35 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
         UNIT_ASSERT_VALUES_EQUAL(update.Request.Endpoint, B);
     }
 
+    Y_UNIT_TEST(DelayedFallbackWithLiveQuorumsNeverDisconnectsAndRewarms) {
+        THarness h(EMode::Auto, {}, 3, "{}");
+        h.Failed.clear();
+        h.Run(35);
+        UNIT_ASSERT(h.Store->Read()->Decision.Kind == EDecisionKind::Stable);
+
+        // A busy BSC may miss its half-budget while node quorums remain live.
+        h.SelfCheckDelay = TDuration::MilliSeconds(1500);
+        h.Fallback = true;
+        h.Run(6);
+        const auto fallback = h.Store->Read();
+        for (const TString pile : {"a", "b"}) {
+            const auto& verdict = fallback->Piles.at(pile).Verdict;
+            UNIT_ASSERT(verdict.SelfQuorum);
+            UNIT_ASSERT(verdict.OwnFallback);
+            UNIT_ASSERT(verdict.Verdict == EPileVerdict::Unknown);
+        }
+        UNIT_ASSERT(h.Clients->Updates.empty());
+
+        h.Fallback = false;
+        h.Run(20);
+        UNIT_ASSERT(h.Store->Read()->Piles.at("a").Verdict.Verdict == EPileVerdict::Unknown);
+        UNIT_ASSERT(h.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Unknown);
+        UNIT_ASSERT(h.Clients->Updates.empty());
+        h.Run(20);
+        UNIT_ASSERT(h.Store->Read()->Decision.Kind == EDecisionKind::Stable);
+        UNIT_ASSERT(h.Clients->Updates.empty());
+    }
+
     Y_UNIT_TEST(DefaultTimingConfirmsBscFailureWithinAFewSeconds) {
         THarness fixture(EMode::Auto, {}, 1, "{}");
         fixture.Failed.clear();

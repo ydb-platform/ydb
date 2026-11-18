@@ -29,7 +29,7 @@ private:
 
 public:
     void AddRequest(const ui32 cookie, const std::optional<TInternalPathId> pathId) {
-        AFL_VERIFY(Requests.emplace(cookie, pathId).second);
+        YDB_LOG_VERIFY(Requests.emplace(cookie, pathId).second);
     }
 
     const THashMap<ui32, std::optional<TInternalPathId>>& GetRequests() const {
@@ -37,7 +37,7 @@ public:
     }
 
     [[nodiscard]] bool DelRequest(const ui32 cookie, const TInstant now) {
-        AFL_VERIFY(Requests.erase(cookie));
+        YDB_LOG_VERIFY(Requests.erase(cookie));
         if (Requests.empty()) {
             LastRequestFinishedInstant = now;
         }
@@ -62,7 +62,7 @@ public:
         if (Requests.size()) {
             return false;
         }
-        AFL_VERIFY(LastRequestFinishedInstant);
+        YDB_LOG_VERIFY(LastRequestFinishedInstant);
         return critDuration < now - *LastRequestFinishedInstant;
     }
 
@@ -77,7 +77,7 @@ public:
                 return true;
             }
         } else {
-            AFL_VERIFY(LastRequestFinishedInstant);
+            YDB_LOG_VERIFY(LastRequestFinishedInstant);
             if (*LastRequestFinishedInstant + usedSnapshotGuaranteeLivetime > Snapshot.GetPlanInstant() + snapshotLivetime) {
                 IsLock = true;
                 return true;
@@ -135,7 +135,7 @@ public:
         NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index, const std::optional<TInternalPathId> pathId);
 
     void AddScanActorId(const ui64 cookie, const NActors::TActorId& actorId) {
-        AFL_VERIFY(ActorIds.emplace(cookie, actorId).second);
+        YDB_LOG_VERIFY(ActorIds.emplace(cookie, actorId).second);
     }
 
     [[nodiscard]] NOlap::NReader::TReadMetadataBase::TConstPtr ExtractInFlightRequest(

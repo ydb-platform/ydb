@@ -33,6 +33,8 @@ namespace NYdb::NConsoleClient {
                     return "SUSPENDED";
                 case NBridge::EPileState::INACTIVE:
                     return "INACTIVE";
+                case NBridge::EPileState::HOT_STANDBY:
+                    return "HOT_STANDBY";
             }
             return "UNKNOWN";
         }

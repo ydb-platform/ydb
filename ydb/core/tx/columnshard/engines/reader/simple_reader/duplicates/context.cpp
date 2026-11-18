@@ -5,7 +5,7 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 TFilterAccumulator::TFilterAccumulator(const TEvRequestFilter::TPtr& request)
     : OriginalRequest(request)
 {
-    AFL_VERIFY(!!OriginalRequest);
+    YDB_LOG_VERIFY(!!OriginalRequest);
 }
 
 TFilterBuildingGuard::TFilterBuildingGuard()

@@ -1,4 +1,4 @@
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_memory_quota.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>

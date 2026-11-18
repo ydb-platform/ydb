@@ -34,11 +34,13 @@ PEERDIR(
     ydb/core/kqp/executer_actor/shards_resolver
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/gateway/local_rpc
+    ydb/core/kqp/predictor
     ydb/core/kqp/query_compiler
     ydb/core/kqp/rm_service
     ydb/core/kqp/topics
     ydb/core/kqp/tracing
     ydb/core/protos
+    ydb/core/scheme/mkql
     ydb/core/sys_view/common
     ydb/core/tx/long_tx_service/public
     ydb/core/ydb_convert

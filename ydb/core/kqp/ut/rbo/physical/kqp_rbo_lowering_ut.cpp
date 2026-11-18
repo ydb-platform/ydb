@@ -459,6 +459,8 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         for (const auto storage : {NYql::EStorageType::RowStorage, NYql::EStorageType::ColumnStorage}) {
             TOpRead read("t", {z, a, anotherZ}, storage, table, nullptr, nullptr,
                 std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, pos);
+            // The plan uses every column of the read.
+            read.Props.Analysis.LiveOut = TUnorderedIUs{z, a, anotherZ};
             if (storage == NYql::EStorageType::ColumnStorage) {
                 auto row = ctx.NewArgument(pos, "row");
                 row->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TStructExprType>(
@@ -517,6 +519,8 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         const auto table = f.Read({})->TableCallable;
         TOpRead read("t", {}, NYql::EStorageType::ColumnStorage, table, nullptr, nullptr,
             std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, f.Pos);
+        // The plan uses no column, only the row count.
+        read.Props.Analysis.LiveOut = TUnorderedIUs{};
         const TPhysicalNames names(f.Props.InfoUnitRegistry);
         const auto ast = TPhysicalSourceBuilder(read, f.ExprCtx, f.Pos, names,
             f.Props.InfoUnitRegistry, /*isSysView=*/false, "key").BuildPhysicalOp().AsNarrow(f.ExprCtx);

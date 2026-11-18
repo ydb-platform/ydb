@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 import yaml
 
@@ -42,6 +43,12 @@ class DefaultsTest(unittest.TestCase):
         with self.assertRaises(TopologyError):
             t.pile_index("zzz")
 
+    def test_ipv6_addresses_have_bracketed_authorities(self):
+        t = Topology(["a", "b"], 1, host="::1")
+        self.assertEqual(t.pile("a").control_endpoint, "[::1]:22000")
+        self.assertEqual(t.control_url("b"), "http://[::1]:22001")
+        self.assertEqual(t.endpoint_map()["mock-a-1"], "[::1]:22100")
+
     def test_per_pile_node_counts_and_warning_for_small_piles(self):
         t = Topology(["a", "b"], {"a": 3, "b": 1})
         self.assertEqual([len(p.nodes) for p in t.piles], [3, 1])
@@ -58,6 +65,25 @@ class FreePortsTest(unittest.TestCase):
         ports = [p.control_port for p in t.piles] + [n.grpc_port for n in t.all_nodes()]
         self.assertEqual(len(ports), 12)
         self.assertEqual(len(set(ports)), 12)
+
+    def test_ipv6_socket_allocation_failure_names_the_host(self):
+        with mock.patch("ydb.apps.bridge_skipper.ydbd_mock.lib.topology.socket.socket",
+                        side_effect=OSError("IPv6 unavailable")):
+            with self.assertRaisesRegex(TopologyError, "::1.*IPv6 unavailable"):
+                Topology.with_free_ports(["a"], 1, host="::1")
+
+    def test_failed_socket_setup_closes_every_allocated_socket(self):
+        for stage in ("setsockopt", "bind"):
+            with self.subTest(stage=stage):
+                first, failed = mock.Mock(), mock.Mock()
+                first.getsockname.return_value = ("::1", 12345, 0, 0)
+                getattr(failed, stage).side_effect = OSError("injected setup failure")
+                with mock.patch("ydb.apps.bridge_skipper.ydbd_mock.lib.topology.socket.socket",
+                                side_effect=[first, failed]):
+                    with self.assertRaisesRegex(TopologyError, "::1.*injected setup failure"):
+                        Topology.with_free_ports(["a"], 1, host="::1")
+                first.close.assert_called_once_with()
+                failed.close.assert_called_once_with()
 
 
 class ValidationTest(unittest.TestCase):
@@ -118,6 +144,13 @@ class ReviewHardeningTest(unittest.TestCase):
                 with self.assertRaises(TopologyError):
                     Topology(["a", "b"], 3, host=host)
         Topology(["a", "b"], 3, host="0.0.0.0", allow_remote=True)
+
+    def test_colon_hosts_must_be_ipv6_literals_even_when_remote_hosts_are_allowed(self):
+        for host in ("foo:bar", "localhost:2135", "[::1]", "grpc://::1"):
+            with self.subTest(host=host), self.assertRaisesRegex(TopologyError, "IPv6 literal"):
+                Topology(["a"], 1, host=host, allow_remote=True)
+        Topology(["a"], 1, host="example.com", allow_remote=True)
+        Topology(["a"], 1, host="2001:db8::1", allow_remote=True)
 
     def test_allow_remote_survives_a_round_trip(self):
         t = Topology(["a", "b"], 3, host="0.0.0.0", allow_remote=True)

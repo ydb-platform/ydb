@@ -126,6 +126,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, QueryCacheUseForCalc);
     REGISTER_SETTING(*this, QueryCacheUseExpirationTimeout);
     REGISTER_SETTING(*this, QueryCacheReportProgress);
+    REGISTER_SETTING(*this, EnableProgressDataStatistics);
 
     REGISTER_SETTING(*this, DefaultMemoryLimit);
     REGISTER_SETTING(*this, DefaultMemoryReserveFactor).Lower(0.0).Upper(1.0);
@@ -379,6 +380,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, MaxOutputTables).Lower(1).Upper(100); // https://ml.yandex-team.ru/thread/yt/166633186212752141/
     REGISTER_SETTING(*this, MaxInputTablesForSortedMerge).Lower(2).Upper(1000); // https://st.yandex-team.ru/YTADMINREQ-16742
     REGISTER_SETTING(*this, DisableFuseOperations);
+    REGISTER_SETTING(*this, LateFuseOperations);
     REGISTER_SETTING(*this, EnableFuseMapToMapReduce)
         .ValueSetter([](TYtSettings& settings, const TString& arg, bool value) {
             Y_UNUSED(arg);

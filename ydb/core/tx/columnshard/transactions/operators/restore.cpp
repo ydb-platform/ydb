@@ -51,7 +51,7 @@ TRestoreTransactionOperator::TProposeResult TRestoreTransactionOperator::DoStart
                 {"event", "cannot_add_task"});
             return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, "Cannot add restore task");
         }
-        AFL_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
+        YDB_LOG_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
     } else {
         TaskExists = true;
     }
@@ -86,7 +86,7 @@ bool TRestoreTransactionOperator::ProgressOnExecute(
     if (AlreadyCompleted) {
         return true;
     }
-    AFL_VERIFY(!TxRemove);
+    YDB_LOG_VERIFY(!TxRemove);
     const auto schemeShardLocalPathId = ImportTask->GetSchemeShardLocalPathId();
     auto status = owner.GetBackgroundSessionsManager()->GetStatus(ImportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
 
@@ -128,7 +128,7 @@ bool TRestoreTransactionOperator::ProgressOnComplete(TColumnShard& owner, const 
         opResult.SetExplain(status.ErrorMessage);
         ctx.Send(subscriber, event.Release(), 0, 0);
     }
-    AFL_VERIFY(!!TxRemove);
+    YDB_LOG_VERIFY(!!TxRemove);
     TxRemove->Complete(NActors::TActivationContext::AsActorContext());
     return true;
 }

@@ -65,6 +65,7 @@ private:
         TRACE_EVENT(NKikimrServices::PQ_MIRRORER);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
+            HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvPQ::TEvRequestPartitionStatus, RequestSourcePartitionStatus);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
@@ -81,8 +82,8 @@ private:
 
 private:
     template<class TEvent>
-    void ScheduleWithIncreasingTimeout(const TActorId& recipient, TDuration& timeout, const TDuration& maxTimeout, const TActorContext &ctx) {
-        ctx.Schedule(timeout, std::make_unique<IEventHandle>(recipient, SelfId(), new TEvent()));
+    void ScheduleWithIncreasingTimeout(const TActorId& recipient, TDuration& timeout, const TDuration& maxTimeout, const TActorContext &ctx, ui64 cookie = 0) {
+        ctx.Schedule(timeout, std::make_unique<IEventHandle>(recipient, SelfId(), new TEvent(), 0, cookie));
         timeout = Min(timeout * 2, maxTimeout);
     }
 
@@ -146,7 +147,7 @@ public:
 
 private:
     const TActorId PartitionActor;
-    const NPersQueue::TTopicConverterPtr TopicConverter;
+    NPersQueue::TTopicConverterPtr TopicConverter;
     const ui32 Partition;
     const bool IsLocalDC;
     ui64 EndOffset;
@@ -164,6 +165,8 @@ private:
     TInstant WriteRequestTimestamp;
     TInstant LastRewindCommitTimestamp;
     NYdb::TCredentialsProviderFactoryPtr CredentialsProvider;
+    TActorId CredentialsInitializer;
+    ui64 CredentialsGeneration = 0;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     ui64 ReaderGeneration = 0;
     NYdb::NTopic::TPartitionSession::TPtr PartitionStream;

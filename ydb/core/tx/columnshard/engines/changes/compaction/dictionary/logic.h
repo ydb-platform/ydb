@@ -20,7 +20,7 @@ private:
 
 public:
     arrow::Type::type GetCurrentRecordsType() const {
-        AFL_VERIFY(!!CurrentRecordsType);
+        YDB_LOG_VERIFY(!!CurrentRecordsType);
         return *CurrentRecordsType;
     }
 

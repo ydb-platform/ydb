@@ -83,7 +83,10 @@ void TReplicationSourceOffsetsServer::ProcessRead(const TReadId& readId, TReadSt
     ui64 resSize = 0;
 
     auto itTable = Self->ReplicatedTables.find(state.PathId);
-    if (itTable != Self->ReplicatedTables.end()) {
+    const auto userTable = Self->FindUserTable(state.PathId);
+    const bool active = userTable && (userTable->IsIncrementalRestore()
+        || userTable->IsReplicated());
+    if (active && itTable != Self->ReplicatedTables.end()) {
         auto& table = itTable->second;
         auto itSource = table.SourceById.lower_bound(state.NextSourceId);
         while (itSource != table.SourceById.end()) {

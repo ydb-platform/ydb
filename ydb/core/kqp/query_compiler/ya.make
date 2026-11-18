@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/core/formats
     ydb/core/kqp/common
+    ydb/core/kqp/predictor
     ydb/core/kqp/runtime/common
     ydb/core/kqp/tracing
     ydb/core/protos

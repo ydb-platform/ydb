@@ -64,7 +64,7 @@ public:
     }
 
     void SetPortionId(const ui64 value) {
-        AFL_VERIFY(value);
+        YDB_LOG_VERIFY(value);
         PortionId = value;
     }
 
@@ -74,8 +74,8 @@ public:
     }
 
     ui64 GetPortionIdVerified() const {
-        AFL_VERIFY(PortionId);
-        AFL_VERIFY(*PortionId);
+        YDB_LOG_VERIFY(PortionId);
+        YDB_LOG_VERIFY(*PortionId);
         return *PortionId;
     }
 
@@ -99,35 +99,35 @@ public:
         : PathId(pathId)
         , PortionId(portionId)
     {
-        AFL_VERIFY(PathId);
-        AFL_VERIFY(PortionId);
+        YDB_LOG_VERIFY(PathId);
+        YDB_LOG_VERIFY(PortionId);
     }
 
     TPortionInfoConstructor(const TInternalPathId pathId)
         : PathId(pathId)
     {
-        AFL_VERIFY(PathId);
+        YDB_LOG_VERIFY(PathId);
     }
 
     std::shared_ptr<ISnapshotSchema> GetSchema(const TVersionedIndex& index) const;
 
     void SetSchemaVersion(const ui64 version) {
-        AFL_VERIFY(version);
+        YDB_LOG_VERIFY(version);
         SchemaVersion = version;
     }
 
     ui64 GetSchemaVersionVerified() const {
-        AFL_VERIFY(SchemaVersion);
+        YDB_LOG_VERIFY(SchemaVersion);
         return *SchemaVersion;
     }
 
     void SetShardingVersion(const ui64 version) {
-        //        AFL_VERIFY(version);
+        //        YDB_LOG_VERIFY(version);
         ShardingVersion = version;
     }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
-        AFL_VERIFY(!RemoveSnapshot);
+        YDB_LOG_VERIFY(!RemoveSnapshot);
         if (snap.Valid()) {
             RemoveSnapshot = snap;
         }
@@ -155,7 +155,7 @@ public:
     using TBase::TBase;
 
     void SetAppearanceSnapshot(const TSnapshot snapshot) {
-        AFL_VERIFY(!AppearanceSnapshot);
+        YDB_LOG_VERIFY(!AppearanceSnapshot);
         AppearanceSnapshot = snapshot;
     }
 
@@ -195,20 +195,20 @@ public:
     }
 
     TInsertWriteId GetInsertWriteIdVerified() const {
-        AFL_VERIFY(InsertWriteId);
+        YDB_LOG_VERIFY(InsertWriteId);
         return *InsertWriteId;
     }
 
     void SetCommitSnapshot(const TSnapshot& snap) {
-        AFL_VERIFY(!!InsertWriteId);
-        AFL_VERIFY(!CommitSnapshot);
-        AFL_VERIFY(snap.Valid());
+        YDB_LOG_VERIFY(!!InsertWriteId);
+        YDB_LOG_VERIFY(!CommitSnapshot);
+        YDB_LOG_VERIFY(snap.Valid());
         CommitSnapshot = snap;
     }
 
     void SetInsertWriteId(const TInsertWriteId value) {
-        AFL_VERIFY(!InsertWriteId);
-        AFL_VERIFY((ui64)value);
+        YDB_LOG_VERIFY(!InsertWriteId);
+        YDB_LOG_VERIFY((ui64)value);
         InsertWriteId = value;
     }
 };

@@ -1,5 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -11,6 +12,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/generic/array_ref.h>
+#include <cmath>
 #include <util/generic/strbuf.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
@@ -662,15 +664,23 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     RequestPoolsInformation();
     Schedule(TDuration::Minutes(5), new TEvPrivate::TEvLogHangingRequests);
     std::vector<TNodeInfo*> unimportantNodes; // ping nodes with tablets first
+    std::vector<std::pair<TNodeId, TActorId>> nodesToKill;
     unimportantNodes.reserve(Nodes.size());
     for (auto& [id, node] : Nodes) {
         if (node.IsUnknown() && node.Local) {
-            if (node.GetTabletsTotal() > 0) {
+            const auto* pile = BridgeInfo ? BridgeInfo->FindPile(node.BridgePileId) : nullptr;
+            if (pile && !NBridge::PileStateTraits(pile->State).AllowsConnection) {
+                nodesToKill.emplace_back(id, node.Local);
+            } else if (node.GetTabletsTotal() > 0) {
                 node.Ping();
             } else {
                 unimportantNodes.push_back(&node);
             }
         }
+    }
+    // KillNode may erase the node, so finish collecting nodes before calling it.
+    for (const auto& [nodeId, local] : nodesToKill) {
+        KillNode(nodeId, local, EHiveEventReason::PileUpdate);
     }
     for (auto* node : unimportantNodes) {
         node->Ping();
@@ -835,10 +845,16 @@ void THive::BuildLocalConfig() {
 
 void THive::BuildCurrentConfig() {
     const bool previousLockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
+    const auto previousCountersExportMode = CurrentConfig.GetCountersExportMode();
     CurrentConfig = ClusterConfig;
     CurrentConfig.MergeFrom(DatabaseConfig);
     CurrentConfig.SetTabletEventHistorySize(std::min(CurrentConfig.GetTabletEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
     CurrentConfig.SetNodeEventHistorySize(std::min(CurrentConfig.GetNodeEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
+    bool broadcastLocalSettings = false;
+    if (CurrentConfig.GetCountersExportMode() != previousCountersExportMode) {
+        UpdateCountersExportMode();
+        broadcastLocalSettings = true;
+    }
     TabletLimit.clear();
     for (const auto& tabletLimit : CurrentConfig.GetDefaultTabletLimit()) {
         TabletLimit.insert_or_assign(tabletLimit.GetType(), tabletLimit);
@@ -872,6 +888,7 @@ void THive::BuildCurrentConfig() {
             TabletTypeAllowedMetricsDefaults.insert_or_assign(tabletType, std::move(metricIds));
         }
     }
+    NamedResourceRegistry.Configure(CurrentConfig.GetNamedResources());
     BalancerIgnoreTabletTypes.clear();
     for (auto i : CurrentConfig.GetBalancerIgnoreTabletTypes()) {
         const auto type = TTabletTypes::EType(i);
@@ -920,6 +937,10 @@ void THive::BuildCurrentConfig() {
                 }
             }
         }
+    }
+
+    if (broadcastLocalSettings) {
+        UpdateLocalSettings();
     }
 }
 
@@ -1658,7 +1679,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
             if (nodeInfo.IsAllowedToRunTablet(tablet, &debugState)) {
                 if (nodeInfo.IsAbleToScheduleTablet()) {
                     if (nodeInfo.IsAbleToRunTablet(tablet, &debugState)) {
-                        double usage = nodeInfo.GetNodeUsageForTablet(tablet);
+                        double usage = nodeInfo.GetNodeUsageForTablet(tablet, true, true);
                         selectedNodes.emplace_back(usage, &nodeInfo);
                         YDB_LOG_TRACE("[FBN] selected node usage",
                             {"logPrefix", GetLogPrefix()},
@@ -2003,6 +2024,9 @@ void THive::DeleteTablet(TTabletId tabletId) {
 void THive::DeleteNode(TNodeId nodeId) {
     TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Sub(1);
     RemoveNodeFromSegments(nodeId);
+    if (TNodeInfo* node = FindNode(nodeId)) {
+        node->DropCounters();
+    }
     Nodes.erase(nodeId);
 }
 
@@ -2207,13 +2231,18 @@ void THive::OnShrinkMoveDataFinished() {
     }
 }
 
-void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo, EHiveEventReason reason, TString details) {
-    if (const TTabletInfo* tablet = FindTablet(moveInfo.Tablet)) {
-        RecordTabletEvent(*tablet, EHiveEventType::Moved, reason,
-            TStringBuilder() << "from=" << moveInfo.From << " to=" << moveInfo.To << (details.empty() ? "" : " ") << details);
-    }
+void THive::RecordTabletMove(TInstant timestamp, const TTabletInfo& tablet, const TNodeInfo& from, const TNodeInfo& to, EHiveEventReason reason, TString details) {
+    const TTabletMoveInfo moveInfo(timestamp, tablet, from.Id, to.Id);
+    RecordTabletEvent(tablet, EHiveEventType::Moved, reason,
+        TStringBuilder() << "from=" << moveInfo.From << " to=" << moveInfo.To << (details.empty() ? "" : " ") << details);
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
+    if (from.Counters) {
+        from.Counters->TabletsMovedFromNode->Inc();
+    }
+    if (to.Counters) {
+        to.Counters->TabletsMovedToNode->Inc();
+    }
     if (TabletMoveSamplesForLog.size() < MOVE_SAMPLES_PER_LOG_ENTRY) {
         TabletMoveSamplesForLog.push_back(moveInfo);
         std::push_heap(TabletMoveSamplesForLog.begin(), TabletMoveSamplesForLog.end(), std::greater<TTabletMoveInfo>{});
@@ -2351,25 +2380,230 @@ THive::TMoveExpediency THive::CheckTabletMoveExpediency(const TTabletInfo& table
     tablet.FilterRawValues(afterStDev);
     double before = max(beforeStDev);
     double after = max(afterStDev);
-    bool result = after < before;
-    if (result) {
-        YDB_LOG_TRACE("[TME] move is expedient based on resource stdev",
-            {"logPrefix", GetLogPrefix()},
-            {"tablet", tablet},
-            {"tabletNodeId", tablet.NodeId},
-            {"nodeId", node.Id},
-            {"beforeStDev", beforeStDev},
-            {"afterStDev", afterStDev});
-    } else {
-        YDB_LOG_TRACE("[TME] move is not expedient based on resource stdev",
-            {"logPrefix", GetLogPrefix()},
-            {"tablet", tablet},
-            {"tabletNodeId", tablet.NodeId},
-            {"nodeId", node.Id},
-            {"beforeStDev", beforeStDev},
-            {"afterStDev", afterStDev});
+    const TNamedResourcesMoveEffect named = CheckNamedResourcesMoveEffect(tablet, node);
+    const bool improved = after < before || named.Improved;
+    // built-in stdev may shift by noise (e.g. default memory of a moved tablet), only a noticeable growth counts
+    const bool worsened = after > before + BUILTIN_STDEV_WORSENING_TOLERANCE || named.Worsened;
+    const bool result = improved && !worsened;
+    YDB_LOG_TRACE("[TME] move expediency based on resource stdev and named resources",
+        {"logPrefix", GetLogPrefix()},
+        {"tablet", tablet},
+        {"tabletNodeId", tablet.NodeId},
+        {"nodeId", node.Id},
+        {"beforeStDev", beforeStDev},
+        {"afterStDev", afterStDev},
+        {"namedResource", named.Resource},
+        {"namedBefore", named.Before},
+        {"namedAfter", named.After},
+        {"namedImproved", named.Improved},
+        {"namedWorsened", named.Worsened},
+        {"expedient", result});
+    return {
+        .Expedient = result,
+        .Reason = after < before ? EHiveEventReason::ResourceStDevImproved : EHiveEventReason::NamedResourceImproved,
+        .StDevBefore = before,
+        .StDevAfter = after,
+        .NamedResource = named.Resource,
+        .NamedBefore = named.Before,
+        .NamedAfter = named.After,
+    };
+}
+
+THive::TNamedResourcesMoveEffect THive::CheckNamedResourcesMoveEffect(const TTabletInfo& tablet, const TNodeInfo& node) const {
+    TNamedResourcesMoveEffect effect;
+    const TNodeInfo* source = tablet.Node;
+    if (source == nullptr) {
+        return effect;
     }
-    return {.Expedient = result, .Reason = EHiveEventReason::ResourceStDevImproved, .StDevBefore = before, .StDevAfter = after};
+
+    auto overCapacity = [](ui64 value, ui64 maximum) -> ui64 {
+        return value > maximum ? value - maximum : 0;
+    };
+
+    // usage stdev over the nodes which have the resource, with the tablet moved by delta between them
+    auto usageStDev = [&](const TString& name, ui64 value, bool moved) -> double {
+        double sum = 0;
+        double sumSquares = 0;
+        size_t count = 0;
+        for (const auto& [nodeId, ni] : Nodes) {
+            if (!ni.IsAlive() || ni.Down) {
+                continue;
+            }
+            auto maximum = ni.GetNamedResourceMaximum(name);
+            if (!maximum) {
+                continue;
+            }
+
+            double nodeValue = ni.NamedResourceValues.GetValue(name);
+            if (moved && nodeId == source->Id) {
+                nodeValue -= std::min<double>(nodeValue, value);
+            }
+            if (moved && nodeId == node.Id) {
+                nodeValue += value;
+            }
+
+            const double usage = nodeValue / std::max<ui64>(*maximum, 1);
+            sum += usage;
+            sumSquares += usage * usage;
+            ++count;
+        }
+        if (count == 0) {
+            return 0;
+        }
+        const double mean = sum / count;
+        return std::sqrt(std::max(0.0, sumSquares / count - mean * mean));
+    };
+
+    for (const auto& v : tablet.GetResourceValues().NamedResources) {
+        const auto& settings = GetNamedResourceSettings(v.Name);
+        if (!settings.IsBalanced()) {
+            continue;
+        }
+
+        const auto sourceMaximum = source->GetNamedResourceMaximum(v.Name);
+        const auto targetMaximum = node.GetNamedResourceMaximum(v.Name);
+        if (!sourceMaximum || !targetMaximum) {
+            continue; // capacity unknown, the resource does not tell anything about the move
+        }
+
+        double before = 0;
+        double after = 0;
+        switch (settings.BalanceMode) {
+            case NKikimrConfig::THiveConfig::TNamedResourceSettings::SATURATION: {
+                const ui64 sourceValue = source->NamedResourceValues.GetValue(v.Name);
+                const ui64 targetValue = node.NamedResourceValues.GetValue(v.Name);
+                before = overCapacity(sourceValue, *sourceMaximum) + overCapacity(targetValue, *targetMaximum);
+                after = overCapacity(sourceValue - std::min(sourceValue, v.Value), *sourceMaximum) + overCapacity(targetValue + v.Value, *targetMaximum);
+                break;
+            }
+            case NKikimrConfig::THiveConfig::TNamedResourceSettings::SCATTER:
+                before = usageStDev(v.Name, v.Value, false);
+                after = usageStDev(v.Name, v.Value, true);
+                break;
+            default:
+                continue;
+        }
+
+        if (after < before && !effect.Improved && !effect.Worsened) {
+            effect.Resource = v.Name;
+            effect.Before = before;
+            effect.After = after;
+        } else if (after > before && !effect.Worsened) {
+            effect.Resource = v.Name;
+            effect.Before = before;
+            effect.After = after;
+        }
+
+        effect.Improved |= after < before;
+        effect.Worsened |= after > before;
+    }
+
+    return effect;
+}
+
+template<std::forward_iterator TIter>
+std::optional<TBalancerSettings> THive::CheckNamedResources(TIter begin, TIter end) {
+    const auto& names = NamedResourceRegistry.GetKnownNames();
+    struct TNodeUsage {
+        TNodeId NodeId;
+        double Usage;
+        ui64 Transferable;
+    };
+    std::vector<TNodeUsage> usages;
+    for (size_t i = 0; i < names.size(); ++i) {
+        const size_t index = (NextNamedResourceToCheck + i) % names.size();
+        const TString& name = names[index];
+        const auto& settings = GetNamedResourceSettings(name);
+        if (!settings.IsBalanced()) {
+            continue;
+        }
+        usages.clear();
+        for (auto it = begin; it != end; ++it) {
+            const TNodeInfo& node = *it;
+            if (!node.IsAlive() || node.Down) {
+                continue;
+            }
+            auto usage = node.GetNamedResourceUsage(name);
+            if (!usage) {
+                continue; // capacity unknown
+            }
+            usages.push_back({node.Id, *usage, node.NamedResourceValues.GetTransferableValue(name)});
+        }
+        if (usages.size() < 2) {
+            continue;
+        }
+        std::vector<TNodeId> sources;
+        switch (settings.BalanceMode) {
+            case NKikimrConfig::THiveConfig::TNamedResourceSettings::SATURATION: {
+                bool hasSpareCapacity = false;
+                for (const auto& usage : usages) {
+                    hasSpareCapacity |= usage.Usage < 1;
+                }
+                if (!hasSpareCapacity) {
+                    break;
+                }
+                for (const auto& usage : usages) {
+                    if (usage.Usage > 1 && usage.Transferable > 0) {
+                        sources.push_back(usage.NodeId);
+                    }
+                }
+                break;
+            }
+            case NKikimrConfig::THiveConfig::TNamedResourceSettings::SCATTER: {
+                const double minScatter = settings.MinScatterToBalance;
+                if (!(minScatter >= 0.0 && minScatter < 1.0)) {
+                    break;
+                }
+                auto [minIt, maxIt] = std::minmax_element(usages.begin(), usages.end(), [](const TNodeUsage& a, const TNodeUsage& b) {
+                    return a.Usage < b.Usage;
+                });
+                if (maxIt->Usage <= 0 || (maxIt->Usage - minIt->Usage) / maxIt->Usage <= minScatter) {
+                    break;
+                }
+                const double threshold = minIt->Usage / (1.0 - minScatter);
+                for (const auto& usage : usages) {
+                    if (usage.Usage > threshold && usage.Transferable > 0) {
+                        sources.push_back(usage.NodeId);
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+        }
+        if (sources.empty()) {
+            continue;
+        }
+        YDB_LOG_DEBUG("ProcessTabletBalancer: named resource triggered balancer",
+            {"logPrefix", GetLogPrefix()},
+            {"resource", name},
+            {"sourceNodes", sources});
+        NextNamedResourceToCheck = (index + 1) % names.size();
+        auto [minIt, maxIt] = std::minmax_element(usages.begin(), usages.end(), [](const TNodeUsage& a, const TNodeUsage& b) {
+            return a.Usage < b.Usage;
+        });
+        const bool saturation = settings.BalanceMode == NKikimrConfig::THiveConfig::TNamedResourceSettings::SATURATION;
+        TStringBuilder triggerDetails;
+        triggerDetails << "resource=" << name
+            << " maxUsage=" << Sprintf("%.3f", maxIt->Usage) << " maxUsageNode=" << maxIt->NodeId
+            << " minUsage=" << Sprintf("%.3f", minIt->Usage) << " minUsageNode=" << minIt->NodeId;
+        if (!saturation) {
+            triggerDetails << " scatter=" << Sprintf("%.3f", (maxIt->Usage - minIt->Usage) / maxIt->Usage)
+                << " minScatterToBalance=" << Sprintf("%.3f", settings.MinScatterToBalance);
+        }
+        triggerDetails << " sourceNodes=" << sources;
+        return TBalancerSettings{
+            .Type = EBalancerType::ScatterNamed,
+            .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
+            .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
+            .MaxInFlight = GetBalancerInflight(),
+            .FilterNodeIds = std::move(sources),
+            .NamedResource = name,
+            .Trigger = saturation ? "named resource saturation" : "named resource scatter",
+            .TriggerDetails = triggerDetails,
+        };
+    }
+    return std::nullopt;
 }
 
 void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo *info, const NKikimrHive::TEvRequestHiveInfo &req) {
@@ -2871,6 +3105,7 @@ THive::THiveStats THive::GetStats(TIter begin, TIter end) const {
     maxValues = piecewise_max(maxValues, minValuesToBalance);
     minValues = piecewise_max(minValues, minValuesToBalance);
     stats.MinResourceNormValues = minValues;
+    stats.MaxResourceNormValues = maxValues;
     auto discrepancy = maxValues - minValues;
     auto& counterDiscrepancy = std::get<NMetrics::EResource::Counter>(discrepancy);
     if (counterDiscrepancy * CurrentConfig.GetMaxResourceCounter() <= 1.5) {
@@ -2949,6 +3184,21 @@ void THive::EnqueueUpdateMetrics(TTabletInfo* tablet) {
     if (!std::exchange(ProcessTabletMetricsScheduled, true)) {
         Send(SelfId(), new TEvPrivate::TEvProcessTabletMetrics);
     }
+}
+
+void THive::ScheduleNamedResourceEstimatesCheck(TFullTabletId tabletId, TInstant deadline) {
+    TInstant now = TActivationContext::Now();
+    Schedule(deadline > now ? deadline - now : TDuration::Zero(), new TEvPrivate::TEvCheckNamedResourceEstimates(tabletId));
+}
+
+void THive::Handle(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev) {
+    if (TTabletInfo* tablet = FindTablet(ev->Get()->TabletId)) {
+        tablet->DropExpiredNamedResourceEstimates();
+    }
+}
+
+void THive::HandleInit(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev) {
+    Schedule(TDuration::Seconds(1), new TEvPrivate::TEvCheckNamedResourceEstimates(ev->Get()->TabletId));
 }
 
 void THive::HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
@@ -3063,6 +3313,15 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
 
         if (settings && maybeStartBalancer()) {
             continue;
+        }
+
+        // Work waiting for a saturated resource on one node while other nodes have spare capacity
+        // is a more concrete problem than general scatter, so it goes first.
+        if (auto namedSettings = CheckNamedResources(nodes.begin(), nodes.end())) {
+            settings.emplace(std::move(*namedSettings));
+            if (maybeStartBalancer()) {
+                continue;
+            }
         }
 
         auto scatteredResource = CheckScatter(stats.ScatterByResource);
@@ -3444,17 +3703,16 @@ void THive::ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local) {
     Execute(CreateStartTablet(tabletId, local, 0));
 }
 
-void THive::QueuePing(const TActorId& local) {
-    NodePingQueue.push(local);
+void THive::QueuePing(TNodePing ping) {
+    NodePingQueue.push(std::move(ping));
 }
 
 void THive::ProcessNodePingQueue() {
     while (!NodePingQueue.empty() && NodePingsInProgress.size() < GetMaxPingsInFlight()) {
-        TActorId local = NodePingQueue.front();
-        TNodeId node = local.NodeId();
+        TNodePing ping = NodePingQueue.front();
         NodePingQueue.pop();
-        NodePingsInProgress.insert(node);
-        SendPing(local, node);
+        NodePingsInProgress.insert(ping.Local.NodeId());
+        SendPing(ping);
     }
 }
 
@@ -3463,14 +3721,32 @@ void THive::RemoveFromPingInProgress(TNodeId node) {
     ProcessNodePingQueue();
 }
 
-void THive::SendPing(const TActorId& local, TNodeId id) {
-    Send(local,
-         new TEvLocal::TEvPing(HiveId,
-                               HiveGeneration,
-                               false,
-                               GetLocalConfig()),
+void THive::FillLocalSettings(NKikimrLocal::THiveSettings* settings) const {
+    settings->SetCountersExportMode(CurrentConfig.GetCountersExportMode());
+}
+
+void THive::SendPing(const TNodePing& nodePing) {
+    auto ping = MakeHolder<TEvLocal::TEvPing>(HiveId, HiveGeneration, false, GetLocalConfig());
+    if (nodePing.SendSettings) {
+        FillLocalSettings(ping->Record.MutableHiveSettings());
+    }
+    if (nodePing.SendCapabilities) {
+        ping->Record.MutableCapabilities();
+    }
+    Send(nodePing.Local,
+         ping.Release(),
          IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-         id);
+         nodePing.Local.NodeId());
+}
+
+void THive::UpdateLocalSettings() {
+    for (auto& [nodeId, node] : Nodes) {
+        // Include connecting nodes: their initial snapshot may already be in flight.
+        if (node.IsRegistered() && node.Local) {
+            node.Ping(true);
+        }
+    }
+    ProcessNodePingQueue();
 }
 
 void THive::SendReconnect(const TActorId& local) {
@@ -3596,6 +3872,7 @@ TDuration THive::GetBalancerCooldown(EBalancerType balancerType) const {
         case EBalancerType::ScatterNetwork:
         case EBalancerType::SpreadNeighbours:
         case EBalancerType::Storage:
+        case EBalancerType::ScatterNamed:
             return GetMinPeriodBetweenBalance();
         case EBalancerType::Emergency:
             return GetMinPeriodBetweenEmergencyBalance();
@@ -3909,6 +4186,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvSetDown, Handle);
         hFunc(TEvHive::TEvRequestDrainInfo, Handle);
         hFunc(TEvPrivate::TEvProcessTabletMetrics, Handle);
+        hFunc(TEvPrivate::TEvCheckNamedResourceEstimates, Handle);
         hFunc(TEvHive::TEvShrinkStoragePool, Handle);
         hFunc(TEvHive::TEvShrinkStoragePoolReply, Handle);
         hFunc(TEvHive::TEvShrinkStoragePoolDone, Handle);
@@ -3928,6 +4206,7 @@ STFUNC(THive::StateInit) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvPrivate::TEvProcessBootQueue, HandleInit);
         hFunc(TEvPrivate::TEvProcessTabletBalancer, HandleInit);
+        hFunc(TEvPrivate::TEvCheckNamedResourceEstimates, HandleInit);
         hFunc(TEvNodeWardenStorageConfig, HandleInit);
         hFunc(TEvPrivate::TEvUpdateDataCenterFollowers, HandleInit);
         // We subscribe to config updates before hive is fully loaded
@@ -4034,6 +4313,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvRequestDrainInfo::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvSetDown::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessTabletMetrics::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvCheckNamedResourceEstimates::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvShrinkStoragePool::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvShrinkStoragePoolReply::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvShrinkStoragePoolDone::EventType, EnqueueIncomingEvent);
@@ -4448,6 +4728,29 @@ void THive::Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr&) {
     TabletCounters->Simple()[NHive::COUNTER_BALANCE_SCATTER].Set(stats.Scatter * 100);
     TabletCounters->Simple()[NHive::COUNTER_BALANCE_USAGE_MIN].Set(stats.MinUsage * 100);
     TabletCounters->Simple()[NHive::COUNTER_BALANCE_USAGE_MAX].Set(stats.MaxUsage * 100);
+
+    if (BalanceCounters) {
+        auto setPerResource = [&](auto resource) {
+            auto& counters = BalanceCounters->ByResource[resource()];
+            const double usageScale = resource() == NMetrics::EResource::Counter ? CurrentConfig.GetMaxResourceCounter() : 100;
+            counters.Scatter->Set(std::get<resource>(stats.ScatterByResource) * 100);
+            counters.UsageMin->Set(std::llround(std::get<resource>(stats.MinResourceNormValues) * usageScale));
+            counters.UsageMax->Set(std::llround(std::get<resource>(stats.MaxResourceNormValues) * usageScale));
+        };
+        setPerResource(std::integral_constant<size_t, NMetrics::EResource::CPU>());
+        setPerResource(std::integral_constant<size_t, NMetrics::EResource::Memory>());
+        setPerResource(std::integral_constant<size_t, NMetrics::EResource::Network>());
+        setPerResource(std::integral_constant<size_t, NMetrics::EResource::Counter>());
+
+        // counted as Handle(TEvProcessTabletBalancer) counts it
+        ui64 nodesOverloaded = 0;
+        for (const auto& [nodeId, nodeInfo] : Nodes) {
+            if (nodeInfo.IsAlive() && !nodeInfo.Down && nodeInfo.IsOverloaded()) {
+                ++nodesOverloaded;
+            }
+        }
+        BalanceCounters->NodesOverloaded->Set(nodesOverloaded);
+    }
 
     auto& nodeUsageHistogram = TabletCounters->Percentile()[NHive::COUNTER_NODE_USAGE];
     nodeUsageHistogram.Clear();
@@ -4933,6 +5236,83 @@ bool THive::IsItPossibleToStartBalancer(EBalancerType balancerType) {
         }
     }
     return true;
+}
+
+void THive::UpdateNodeCounters(TNodeInfo& node) {
+    if (!ExportHivePerNodeCounters()) {
+        return;
+    }
+    if (!PerNodeCountersGroup) {
+        PerNodeCountersGroup = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("type", "HIVE");
+    }
+    // nodes get their counters as they report, so switching the export on spreads the work over the metrics messages
+    node.CreateCounters(PerNodeCountersGroup);
+    node.UpdateCounters();
+}
+
+void THive::UpdateCountersExportMode() {
+    if (!ExportPerResourceCounters()) {
+        BalanceCounters.reset();
+    } else if (!BalanceCounters) {
+        BalanceCounters = std::make_unique<TBalanceCounters>(GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("type", "HIVE"));
+    }
+    if (!ExportHivePerNodeCounters() && PerNodeCountersGroup) {
+        for (auto& [_, node] : Nodes) {
+            node.DropCounters();
+        }
+        PerNodeCountersGroup.Reset();
+    }
+}
+
+namespace {
+
+// metric name suffix per EBalancerType; Storage has none, see TBalanceCounters
+consteval std::array<TStringBuf, EBalancerTypeSize> BalancerTypeCounterSuffixes() {
+    std::array<TStringBuf, EBalancerTypeSize> suffixes = {};
+    suffixes[static_cast<size_t>(EBalancerType::Manual)] = "Manual";
+    suffixes[static_cast<size_t>(EBalancerType::Scatter)] = "Scatter";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterCounter)] = "ScatterCtr";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterCPU)] = "ScatterCpu";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterMemory)] = "ScatterMem";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterNetwork)] = "ScatterNet";
+    suffixes[static_cast<size_t>(EBalancerType::Emergency)] = "Emergency";
+    suffixes[static_cast<size_t>(EBalancerType::SpreadNeighbours)] = "Spread";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterNamed)] = "ScatterNamed";
+    return suffixes;
+}
+
+consteval bool OnlyStorageHasNoSuffix(const std::array<TStringBuf, EBalancerTypeSize>& suffixes) {
+    for (size_t i = 0; i < suffixes.size(); ++i) {
+        if ((suffixes[i] == nullptr) != (i == static_cast<size_t>(EBalancerType::Storage))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static_assert(OnlyStorageHasNoSuffix(BalancerTypeCounterSuffixes()));
+
+constexpr std::array<TStringBuf, NMetrics::EResource::Counter + 1> RESOURCE_COUNTER_SUFFIXES = {"Cpu", "Mem", "Net", "Ctr"};
+static_assert(NMetrics::EResource::CPU == 0 && NMetrics::EResource::Memory == 1 && NMetrics::EResource::Network == 2 && NMetrics::EResource::Counter == 3);
+
+} // anonymous namespace
+
+THive::TBalanceCounters::TBalanceCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group) {
+    for (size_t resource = 0; resource < ByResource.size(); ++resource) {
+        TStringBuf suffix = RESOURCE_COUNTER_SUFFIXES[resource];
+        ByResource[resource].Scatter = group->GetExpiringCounter(TStringBuilder() << "BalanceScatter" << suffix);
+        ByResource[resource].UsageMin = group->GetExpiringCounter(TStringBuilder() << "BalanceUsageMin" << suffix);
+        ByResource[resource].UsageMax = group->GetExpiringCounter(TStringBuilder() << "BalanceUsageMax" << suffix);
+    }
+    NodesOverloaded = group->GetExpiringCounter("NodesOverloaded");
+    static constexpr auto typeSuffixes = BalancerTypeCounterSuffixes();
+    for (size_t type = 0; type < typeSuffixes.size(); ++type) {
+        if (TStringBuf suffix = typeSuffixes[type]) {
+            BalancerExecuted[type] = group->GetExpiringCounter(TStringBuilder() << "BalancerExecuted" << suffix, true);
+            BalancerFailed[type] = group->GetExpiringCounter(TStringBuilder() << "BalancerFailed" << suffix, true);
+            TabletsMoved[type] = group->GetExpiringCounter(TStringBuilder() << "TabletsMoved" << suffix, true);
+        }
+    }
 }
 
 void THive::LogBalancerNotStarted(const TString& balancerType, EBalancerSuppressReason reason) {

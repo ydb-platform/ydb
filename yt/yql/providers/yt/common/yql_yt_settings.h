@@ -165,6 +165,7 @@ public:
     NCommon::TConfSetting<bool, Static> QueryCacheUseExpirationTimeout;
     NCommon::TConfSetting<bool, Static> QueryCacheUseForCalc;
     NCommon::TConfSetting<bool, Static> QueryCacheReportProgress;
+    NCommon::TConfSetting<bool, Static> EnableProgressDataStatistics;
     NCommon::TConfSetting<ui32, Static> DefaultMaxJobFails;
     NCommon::TConfSetting<TString, Static> DefaultCluster;
     NCommon::TConfSetting<TDuration, Static> BinaryExpirationInterval;
@@ -329,6 +330,7 @@ public:
     NCommon::TConfSetting<ui32, Static> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, Static> MaxOutputTables;
     NCommon::TConfSetting<bool, Static> DisableFuseOperations;
+    NCommon::TConfSetting<bool, Static> LateFuseOperations;
     NCommon::TConfSetting<bool, Static> EnableFuseMapToMapReduce; // Deprecated. Use FuseMapToMapReduceMode
     NCommon::TConfSetting<EFuseMapToMapReduceMode, Static> FuseMapToMapReduce;
     NCommon::TConfSetting<NSize::TSize, Static> MaxExtraJobMemoryToFuseOperations;

@@ -503,7 +503,7 @@ TEST(TYsonPullParserTest, Complex1)
             " { 'path' '/home/sandello' 'mode' 755 }");
 }
 
-TEST(TYsonPullParserTest, TestBadYson)
+TEST(TYsonPullParserTest, BadYson)
 {
     EXPECT_ANY_THROW(GetYsonPullSignature("foo bar "));
     EXPECT_ANY_THROW(GetYsonPullSignature("foo bar ", EYsonType::ListFragment));
@@ -778,7 +778,7 @@ TEST(TYsonPullParserTest, TypedParsingBasicErrors)
     }
 }
 
-TEST(TYsonPullParserTest, TestTransferValueViaTokenWriterBasicCases)
+TEST(TYsonPullParserTest, TransferValueViaTokenWriterBasicCases)
 {
     TStringBuf inputString = "[ [ {foo=<attr=value;>bar; qux=[-1; 2u; %false; 3.14; lol; # ; ] ; }; ] ; 6; ]";
 
@@ -885,7 +885,7 @@ TEST(TYsonPullParserTest, TestTransferValueViaTokenWriterBasicCases)
     }
 }
 
-TEST(TYsonPullParserTest, TestSkipValueBasicCases)
+TEST(TYsonPullParserTest, SkipValueBasicCases)
 {
     {
         TStringBufVectorReader input({
@@ -961,7 +961,7 @@ TEST(TYsonPullParserTest, TestSkipValueBasicCases)
     }
 }
 
-TEST(TYsonPullParserCursorTest, TestTransferValueBasicCases)
+TEST(TYsonPullParserCursorTest, TransferValueBasicCases)
 {
     TStringBuf input = "[ [ {foo=<attr=value>bar; qux=[-1; 2u; %false; 3.14; lol; # ]} ] ; 6 ]";
     auto cursor = TStringBufCursor(input);
@@ -1004,7 +1004,7 @@ TEST(TYsonPullParserCursorTest, TestTransferValueBasicCases)
 }
 
 
-TEST(TYsonPullParserCursorTest, TestTransferAttributesBasicCases)
+TEST(TYsonPullParserCursorTest, TransferAttributesBasicCases)
 {
     TStringBuf input = "[<attr=value>bar; qux; 2]";
     auto cursor = TStringBufCursor(input);
@@ -1032,7 +1032,7 @@ TEST(TYsonPullParserCursorTest, TestTransferAttributesBasicCases)
     EXPECT_EQ(cursor.GetCurrent(), TYsonItem::Simple(EYsonItemType::EndOfStream));
 }
 
-TEST(TYsonPullParserCursorTest, TestTransferValueViaTokenWriterBasicCases)
+TEST(TYsonPullParserCursorTest, TransferValueViaTokenWriterBasicCases)
 {
     TStringBuf input = "[ [ {foo=<attr=value;>bar; qux=[-1; 2u; %false; 3.14; lol; # ; ] ; }; ] ; 6; ]";
     auto output1 = TString();
@@ -1088,7 +1088,7 @@ TEST(TYsonPullParserCursorTest, TestTransferValueViaTokenWriterBasicCases)
     EXPECT_EQ(output1, output2);
 }
 
-TEST(TYsonPullParserCursorTest, TestTransferAttributesViaTokenWriterBasicCases)
+TEST(TYsonPullParserCursorTest, TransferAttributesViaTokenWriterBasicCases)
 {
     TStringBuf input = "[<attr=value;>bar; qux; 2;]";
     auto cursor = TStringBufCursor(input);
@@ -1125,7 +1125,7 @@ TEST(TYsonPullParserCursorTest, TestTransferAttributesViaTokenWriterBasicCases)
     EXPECT_EQ(cursor.GetCurrent(), TYsonItem::Simple(EYsonItemType::EndOfStream));
 }
 
-TEST(TYsonPullParserCursorTest, TestSkipValueBasicCases)
+TEST(TYsonPullParserCursorTest, SkipValueBasicCases)
 {
     {
         TStringBuf input = "[<a=b;c=d;>12; qux;]";
@@ -1159,7 +1159,7 @@ TEST(TYsonPullParserCursorTest, TestSkipValueBasicCases)
     }
 }
 
-TEST(TYsonPullParserCursorTest, TestParseCompoundBasicCases)
+TEST(TYsonPullParserCursorTest, ParseCompoundBasicCases)
 {
     {
         TStringBuf input = "[[1;2]; <x=1;y=2>%true; #]";
@@ -1279,7 +1279,7 @@ TEST(TYsonPullParserCursorTest, TestParseCompoundBasicCases)
     }
 }
 
-TEST(TYsonPullParserCursorTest, TestParseBoolAndNan)
+TEST(TYsonPullParserCursorTest, ParseBoolAndNan)
 {
     {
         TStringBuf input = "%nan";

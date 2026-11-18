@@ -1,6 +1,6 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_block_dynamic_variant.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_block_test_helper.h>
 
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_block_test_helper.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/utils/random_data_generator/random_data_generator.h>

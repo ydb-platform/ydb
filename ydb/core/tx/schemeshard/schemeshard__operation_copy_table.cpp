@@ -363,6 +363,7 @@ public:
                         streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                         streamPath->DropTxId == OperationId.GetTxId()) {
 
+                        context.OnComplete.DeleteShard(context.SS->CdcStreams.at(id)->AggregatorShardIdx);
                         context.SS->PersistRemoveCdcStream(db, id);
                         context.SS->CdcStreams.erase(id);
 

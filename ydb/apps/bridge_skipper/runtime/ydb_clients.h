@@ -11,6 +11,7 @@
 #include <library/cpp/time_provider/monotonic.h>
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -105,9 +106,14 @@ public:
     bool IsValid() const override;
 
 private:
+    friend class TRedactor;
+    struct TTokenVersion;
+    std::shared_ptr<TTokenVersion> Capture() const;
+    std::vector<TString> RedactionTokens(const std::shared_ptr<TTokenVersion>& first) const;
     TMaybe<TString> File;
     mutable std::mutex Mutex;
-    TString Current;
+    std::shared_ptr<TTokenVersion> Current;
+    mutable std::map<const TTokenVersion*, std::weak_ptr<TTokenVersion>> Active;
     TTokenLoader Loader;
 };
 
@@ -118,11 +124,14 @@ public:
     explicit TRedactor(std::shared_ptr<const TTokenSource> tokens);
     // A fixed token, for callers without a token file.
     explicit TRedactor(const TLoadedCredentials& credentials);
+    // Covers credentials the SDK may read any time until this request settles.
+    TRedactor ForRequest() const;
     TString Redact(TStringBuf text, size_t limit = 4096) const;
     TString Issues(const NYdb::TStatus& status) const;
 
 private:
     std::shared_ptr<const TTokenSource> Tokens;
+    std::shared_ptr<TTokenSource::TTokenVersion> First;
 };
 
 NYdb::TCommonClientSettings MakePinnedClientSettings(const TEndpoint& endpoint);
@@ -171,12 +180,15 @@ using TYdbClock = std::function<TMonotonic()>;
 // Call methods from the owning actor. Completions may run on foreign SDK threads;
 // they own their payload and must marshal it to the actor without accessing it.
 // Completion functions must not throw.
+// When tokens is supplied, that shared source owns credential loading and
+// tokenLoader is ignored. Otherwise tokenLoader belongs to a new private source.
 std::shared_ptr<IYdbClients> CreateYdbClients(
     const TConfig& config,
     const TLoadedCredentials& credentials,
     TYdbClock clock = [] {
         return TMonotonic::Now();
     },
-    TTokenLoader tokenLoader = LoadToken);
+    TTokenLoader tokenLoader = LoadToken,
+    std::shared_ptr<TTokenSource> tokens = {});
 
 } // namespace NBridgeSkipper

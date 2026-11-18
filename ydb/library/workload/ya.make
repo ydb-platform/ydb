@@ -22,6 +22,7 @@ RECURSE(
     benchmark_base
     clickbench
     fulltext
+    imdb
     kv
     log
     mixed

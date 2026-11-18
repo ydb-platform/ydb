@@ -7,8 +7,8 @@
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/base/memory_controller_iface.h_serialized.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/mon_alloc/stats.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
@@ -17,7 +17,6 @@
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
-#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>

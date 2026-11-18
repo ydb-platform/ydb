@@ -80,11 +80,31 @@ THashSet<std::string> TYsonStructBase::GetRegisteredKeys() const
 
 void TYsonStructBase::Load(
     INodePtr node,
+    const TYsonStructLoadOptions& options)
+{
+    Meta_->LoadStruct(this, std::move(node), options);
+}
+
+void TYsonStructBase::Load(
+    TYsonPullParserCursor* cursor,
+    const TYsonStructLoadOptions& options)
+{
+    Meta_->LoadStruct(this, cursor, options);
+}
+
+void TYsonStructBase::Load(
+    INodePtr node,
     bool postprocess,
     bool setDefaults,
     const std::function<NYPath::TYPath()>& pathGetter)
 {
-    Meta_->LoadStruct(this, std::move(node), postprocess, setDefaults, pathGetter);
+    Load(
+        std::move(node),
+        TYsonStructLoadOptions{
+            .Postprocess = postprocess,
+            .SetDefaults = setDefaults,
+            .PathGetter = pathGetter,
+        });
 }
 
 void TYsonStructBase::Load(
@@ -93,7 +113,13 @@ void TYsonStructBase::Load(
     bool setDefaults,
     const std::function<NYPath::TYPath()>& pathGetter)
 {
-    Meta_->LoadStruct(this, cursor, postprocess, setDefaults, pathGetter);
+    Load(
+        cursor,
+        TYsonStructLoadOptions{
+            .Postprocess = postprocess,
+            .SetDefaults = setDefaults,
+            .PathGetter = pathGetter,
+        });
 }
 
 void TYsonStructBase::Load(

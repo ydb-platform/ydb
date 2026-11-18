@@ -1,6 +1,7 @@
 #include "partition.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/persqueue/public/config.h>
 #include "partition_util.h"
 #include <util/string/escape.h>
 #include <ydb/library/actors/core/log.h>
@@ -797,14 +798,8 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKeyImpl(const bool headCl
                                 CompactionBlobEncoder.Head.PartNo,
                                 CompactionBlobEncoder.NewHead.GetCount() + CompactionBlobEncoder.Head.GetCount(),
                                 CompactionBlobEncoder.Head.GetInternalPartsCount() +  CompactionBlobEncoder.NewHead.GetInternalPartsCount());
-            if (HasAppData() && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()) {
-                ui64 offsetDelta = 0;
-                if (!CompactionBlobEncoder.Head.GetBatches().empty()) {
-                    offsetDelta += CompactionBlobEncoder.Head.GetOffsetDelta();
-                }
-                if (!CompactionBlobEncoder.NewHead.GetBatches().empty()) {
-                    offsetDelta += CompactionBlobEncoder.NewHead.GetOffsetDelta();
-                }
+            if (CanWriteOffsetDeltaInKeys()) {
+                ui64 offsetDelta = CompactionBlobEncoder.NewHead.Offset - CompactionBlobEncoder.Head.Offset + CompactionBlobEncoder.NewHead.GetOffsetDelta();
                 if (offsetDelta > 0) {
                     key.SetOffsetDelta(offsetDelta);
                 }
@@ -944,16 +939,6 @@ void TPartition::CheckTimestampsOrderInZones(TStringBuf validateReason) const {
     check(CompactionBlobEncoder.DataKeysBody, "compacted_body");
     check(CompactionBlobEncoder.HeadKeys, "compacted_head");
     check(BlobEncoder.DataKeysBody, "fastwrite_body");
-}
-
-void TPartition::InitFirstCompactionPart()
-{
-    if (CompactionBlobEncoder.HeadKeys.empty()) {
-        return;
-    }
-    TBatch batch = CompactionBlobEncoder.Head.GetLastBatch();
-    batch.Unpack();
-    FirstCompactionPart = std::make_pair(batch.GetOffset(), batch.Blobs.back().GetPartNo());
 }
 
 }

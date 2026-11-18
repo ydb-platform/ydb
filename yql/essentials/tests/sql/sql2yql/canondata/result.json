@@ -22174,9 +22174,7 @@
     ],
     "test_sql_negative.test[expr-as_table_cluster-]": [
         {
-            "checksum": "a456d6a0613c25028fbf379d7e9277f6",
-            "size": 142,
-            "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql_negative.test_expr-as_table_cluster-_/err_file.out"
+            "uri": "file://test_sql_negative.test_expr-as_table_cluster-_/err_file.out"
         }
     ],
     "test_sql_negative.test[expr-as_table_hints-]": [

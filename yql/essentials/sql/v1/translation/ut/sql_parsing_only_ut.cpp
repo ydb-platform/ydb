@@ -4622,7 +4622,7 @@ Y_UNIT_TEST(AlterTableAddIndexWithIsSupported) {
 
 Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
     ExpectFailWithError("USE ydb;   ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
-                        "<main>:1:40: Error: local index must specify subtype with USING\n");
+                        "<main>:1:44: Error: local index must specify subtype with USING\n");
 }
 
 Y_UNIT_TEST(AlterTableAddIndexLocalBloomFilter) {
@@ -4896,7 +4896,7 @@ Y_UNIT_TEST(AlterTableAddIndexGlobalMinMaxIsNotSupported) {
 
 Y_UNIT_TEST(AlterTableAddIndexLocalMinMaxCoverIsNotSupported) {
     ExpectFailWithError("USE ydb; ALTER TABLE table ADD INDEX idx LOCAL USING min_max ON (col) COVER (payload)",
-                        "<main>:1:66: Error: COVER is not supported for local MIN_MAX index\n");
+                        "<main>:1:71: Error: COVER is not supported for local MIN_MAX index\n");
 }
 
 Y_UNIT_TEST(MinMaxIndexAddDrop) {
@@ -5064,7 +5064,7 @@ Y_UNIT_TEST(AlterTableAddIndexDuplicatedSetting) {
                 ON (col) COVER (col)
                 WITH (distance=cosine, distance=42)
                 )sql",
-                        "<main>:5:49: Error: Duplicated distance\n");
+                        "<main>:5:40: Error: Duplicated distance\n");
 }
 
 Y_UNIT_TEST(AlterTableAddIndexUnknownSubtype) {
@@ -5112,7 +5112,7 @@ Y_UNIT_TEST(AlterTableRebuildIndexDuplicatedSettingFails) {
         R"sql(USE ydb;
             ALTER TABLE table REBUILD INDEX idx WITH (levels = 2, levels = 3)
         )sql",
-        "<main>:2:76: Error: Duplicated levels\n");
+        "<main>:2:67: Error: Duplicated levels\n");
 }
 
 Y_UNIT_TEST(AlterTableRebuildIndexWithColumnsIsNotSupported) {
@@ -6828,7 +6828,7 @@ Y_UNIT_TEST(CreateSecretIncorrect) {
             CREATE SECRET @tmp WITH (VALUE = "abc");
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:28: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:27: Error: '@' is not allowed prefix for secret name\n");
     }
     { // empty secret name
         NYql::TAstParseResult res = SqlToYql(R"sql(
@@ -6960,7 +6960,7 @@ Y_UNIT_TEST(AlterSecretIncorrect) {
             ALTER SECRET @tmp WITH (VALUE = "abc");
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:27: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:26: Error: '@' is not allowed prefix for secret name\n");
     }
 }
 
@@ -7022,7 +7022,7 @@ Y_UNIT_TEST(DropSecretIncorrect) {
             DROP SECRET @tmp;
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:26: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:25: Error: '@' is not allowed prefix for secret name\n");
     }
 }
 
@@ -7272,7 +7272,7 @@ Y_UNIT_TEST(CreateSecretIfNotExistsIncorrect) {
             CREATE SECRET IF NOT EXISTS @tmp WITH (VALUE = "abc");
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:42: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:41: Error: '@' is not allowed prefix for secret name\n");
     }
     { // empty secret name
         NYql::TAstParseResult res = SqlToYql(R"sql(
@@ -7307,7 +7307,7 @@ Y_UNIT_TEST(CreateSecretOrReplaceIncorrect) {
             CREATE OR REPLACE SECRET @tmp WITH (VALUE = "abc");
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:39: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:38: Error: '@' is not allowed prefix for secret name\n");
     }
 }
 
@@ -7338,7 +7338,7 @@ Y_UNIT_TEST(AlterSecretIfExistsIncorrect) {
             ALTER SECRET IF EXISTS @tmp WITH (VALUE = "abc");
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:37: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:36: Error: '@' is not allowed prefix for secret name\n");
     }
 }
 
@@ -7349,7 +7349,7 @@ Y_UNIT_TEST(DropSecretIfExistsIncorrect) {
             DROP SECRET IF EXISTS @tmp;
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:36: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:35: Error: '@' is not allowed prefix for secret name\n");
     }
     { // WITH is not allowed for drop
         NYql::TAstParseResult res = SqlToYql(R"sql(

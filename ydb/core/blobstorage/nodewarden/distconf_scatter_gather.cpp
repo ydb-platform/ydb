@@ -62,12 +62,11 @@ namespace NKikimr::NStorage {
                 }
             }
         }
-        StartScatterTask(cookie, targetedNodes);
+        StartScatterTask(it, targetedNodes);
     }
 
-    void TDistributedConfigKeeper::StartScatterTask(ui64 cookie, std::span<const TNodeIdentifier> targetedNodes) {
-        const auto it = ScatterTasks.find(cookie);
-        Y_ABORT_UNLESS(it != ScatterTasks.end());
+    void TDistributedConfigKeeper::StartScatterTask(TScatterTasks::iterator it, std::span<const TNodeIdentifier> targetedNodes) {
+        const ui64 cookie = it->first;
         TScatterTask& task = it->second;
         PrepareScatterTask(cookie, task);
         if (!std::holds_alternative<TScatterTaskOriginTargeted>(task.Origin)) { // issue scatter task downward unless this one is targeted

@@ -126,11 +126,11 @@ namespace NKikimr::NStorage {
 
             struct TEvStartBridgeStartupRecovery
                 : TEventLocal<TEvStartBridgeStartupRecovery, EvStartBridgeStartupRecovery> {
-                TStorageConfigPtr StaleConfig;
+                ui64 StaleGeneration;
                 std::vector<ui32> PeerNodeIds;
 
-                TEvStartBridgeStartupRecovery(TStorageConfigPtr staleConfig, std::vector<ui32> peerNodeIds)
-                    : StaleConfig(std::move(staleConfig))
+                TEvStartBridgeStartupRecovery(ui64 staleGeneration, std::vector<ui32> peerNodeIds)
+                    : StaleGeneration(staleGeneration)
                     , PeerNodeIds(std::move(peerNodeIds))
                 {}
             };
@@ -198,14 +198,7 @@ namespace NKikimr::NStorage {
                 , Cookie(cookie)
             {}
 
-            TBinding(const TBinding& origin)
-                : NodeId(origin.NodeId)
-                , RootNodeId(origin.RootNodeId)
-                , Cookie(origin.Cookie)
-                , SessionId(origin.SessionId)
-                , SupportsDirectRootQueries(origin.SupportsDirectRootQueries)
-                , BridgeFeatureLevel(origin.BridgeFeatureLevel)
-            {}
+            TBinding(const TBinding&) = default;
 
             bool Expected(IEventHandle& ev) const {
                 return NodeId == ev.Sender.NodeId()
@@ -781,7 +774,7 @@ namespace NKikimr::NStorage {
         // Scatter/gather logic
 
         void IssueScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, std::span<const TNodeIdentifier> targetedNodes = {});
-        void StartScatterTask(ui64 cookie, std::span<const TNodeIdentifier> targetedNodes);
+        void StartScatterTask(TScatterTasks::iterator it, std::span<const TNodeIdentifier> targetedNodes);
         void PrepareScatterTaskRequest(ui64 cookie, const TScatterTask& task, ui32 subtreeHeight, TEvScatter& request);
         void IssueAddedNodeScatterTask(ui32 nodeId, ui64 cookie, TScatterTask& task);
         void CheckCompleteScatterTask(TScatterTasks::iterator it);
@@ -1062,6 +1055,45 @@ namespace NKikimr::NStorage {
 
     // bridge feature level of this version; every node has to support it to change the list of piles, add and remove them
     constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelSessionAdmission;
+
+    // Handshakes for one peer may overlap. Until the proxy acknowledges retirement, any observed level can be live.
+    class TBridgePeerAdmissionLevels {
+        const ui32 SupportedLevel;
+        THashMap<ui32, ui32> LowestLevel;
+    public:
+        explicit TBridgePeerAdmissionLevels(ui32 supportedLevel)
+            : SupportedLevel(supportedLevel)
+        {}
+
+        void Track(ui32 peerId, ui32 level) {
+            if (level < SupportedLevel) {
+                auto [it, inserted] = LowestLevel.try_emplace(peerId, level);
+                if (!inserted) {
+                    it->second = Min(it->second, level);
+                }
+            }
+        }
+
+        std::vector<ui32> PeersBelow(ui32 required) const {
+            std::vector<ui32> peers;
+            for (const auto& [peerId, level] : LowestLevel) {
+                if (level < required) {
+                    peers.push_back(peerId);
+                }
+            }
+            return peers;
+        }
+
+        void ConfirmRetirement(ui32 required) {
+            if (required >= SupportedLevel) {
+                LowestLevel.clear();
+            } else {
+                for (auto& [_, level] : LowestLevel) {
+                    level = Max(level, required);
+                }
+            }
+        }
+    };
 
     inline ui32 GetRequiredBridgeFeatureLevel(const NKikimrBlobStorage::TStorageConfig& config) {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();

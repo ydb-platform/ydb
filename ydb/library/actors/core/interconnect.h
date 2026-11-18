@@ -352,55 +352,60 @@ namespace NActors {
         struct TEvCheckIncomingConnection : TEventLocal<TEvCheckIncomingConnection, EvCheckIncomingConnection> {
             const ui32 PeerNodeId;
             THashMap<TString, TString> Params; // incoming key-value pairs from the other peer
-            const bool SupportsConfigOnly;
+            const bool SupportsParamsExchange;
 
             TEvCheckIncomingConnection(ui32 peerNodeId, THashMap<TString, TString>&& params,
-                    bool supportsConfigOnly = false)
+                    bool supportsParamsExchange = false)
                 : PeerNodeId(peerNodeId)
                 , Params(std::move(params))
-                , SupportsConfigOnly(supportsConfigOnly)
+                , SupportsParamsExchange(supportsParamsExchange)
             {}
         };
 
+        static constexpr ui32 MaxExtendedHandshakeSize = 1024 * 1024;
+
+        // A checker may request another exchange on the negotiated channel before publishing a session.
+        enum class EConnectionParamsExchange { None, ConfigOnly, Validate };
         struct TEvCheckIncomingConnectionResult : TEventLocal<TEvCheckIncomingConnectionResult, EvCheckIncomingConnectionResult> {
             std::optional<TString> ErrorReason;
             THashMap<TString, TString> ParamsToSend;
             const ui32 AdmissionLevel;
-            const bool ConfigOnly;
-            THashMap<TString, TString> ConfigOnlyParams;
+            const EConnectionParamsExchange Exchange;
+            THashMap<TString, TString> ExchangeParams;
 
             TEvCheckIncomingConnectionResult(std::optional<TString>&& errorReason, THashMap<TString, TString>&& paramsToSend,
-                    ui32 admissionLevel = 0, bool configOnly = false, THashMap<TString, TString> configOnlyParams = {})
+                    ui32 admissionLevel = 0, EConnectionParamsExchange exchange = EConnectionParamsExchange::None,
+                    THashMap<TString, TString> exchangeParams = {})
                 : ErrorReason(std::move(errorReason))
                 , ParamsToSend(std::move(paramsToSend))
                 , AdmissionLevel(admissionLevel)
-                , ConfigOnly(configOnly)
-                , ConfigOnlyParams(std::move(configOnlyParams))
+                , Exchange(exchange)
+                , ExchangeParams(std::move(exchangeParams))
             {}
         };
 
         struct TEvCheckOutgoingConnection : TEventLocal<TEvCheckOutgoingConnection, EvCheckOutgoingConnection> {
             const ui32 PeerNodeId;
             THashMap<TString, TString> Params;
-            const bool ConfigOnly;
+            const EConnectionParamsExchange Exchange;
 
-            TEvCheckOutgoingConnection(ui32 peerNodeId, THashMap<TString, TString> params, bool configOnly)
+            TEvCheckOutgoingConnection(ui32 peerNodeId, THashMap<TString, TString> params, EConnectionParamsExchange exchange)
                 : PeerNodeId(peerNodeId)
                 , Params(std::move(params))
-                , ConfigOnly(configOnly)
+                , Exchange(exchange)
             {}
         };
 
         struct TEvCheckOutgoingConnectionResult : TEventLocal<TEvCheckOutgoingConnectionResult, EvCheckOutgoingConnectionResult> {
             std::optional<TString> ErrorReason;
             const ui32 AdmissionLevel;
-            THashMap<TString, TString> ConfigOnlyParams;
+            THashMap<TString, TString> ExchangeParams;
 
             TEvCheckOutgoingConnectionResult(std::optional<TString> errorReason = {}, ui32 admissionLevel = 0,
-                    THashMap<TString, TString> configOnlyParams = {})
+                    THashMap<TString, TString> exchangeParams = {})
                 : ErrorReason(std::move(errorReason))
                 , AdmissionLevel(admissionLevel)
-                , ConfigOnlyParams(std::move(configOnlyParams))
+                , ExchangeParams(std::move(exchangeParams))
             {}
         };
 

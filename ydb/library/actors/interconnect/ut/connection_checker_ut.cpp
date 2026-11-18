@@ -85,11 +85,12 @@ namespace {
         const bool Reject;
         const bool CheckReply;
         TManualEvent* const ConfigReceived;
+        TManualEvent* const ReplyRejected;
 
     public:
         TCheckerActor(ui32 nodeId, std::atomic_uint32_t *numIncoming, std::atomic_uint32_t *numOutgoing,
                 std::atomic_uint32_t *numNotify, std::atomic_uint32_t *numNotifySuccess, bool reject = false,
-                bool checkReply = false, TManualEvent* configReceived = nullptr)
+                bool checkReply = false, TManualEvent* configReceived = nullptr, TManualEvent* replyRejected = nullptr)
             : TActor(&TThis::StateFunc)
             , NodeId(nodeId)
             , NumIncoming(numIncoming)
@@ -99,6 +100,7 @@ namespace {
             , Reject(reject)
             , CheckReply(checkReply)
             , ConfigReceived(configReceived)
+            , ReplyRejected(replyRejected)
         {}
 
         void Handle(TEvInterconnect::TEvPrepareOutgoingConnection::TPtr ev) {
@@ -126,14 +128,14 @@ namespace {
                 params.emplace("hello", "world");
                 const bool configOnly = ConfigReceived && NodeId == 1;
                 if (configOnly) {
-                    UNIT_ASSERT(msg.SupportsConfigOnly);
+                    UNIT_ASSERT(msg.SupportsParamsExchange);
                 }
                 THashMap<TString, TString> protectedParams;
                 if (configOnly) {
                     protectedParams.emplace("committed", TString(ConfigPayloadSize, 'c'));
                 }
                 Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::nullopt, std::move(params),
-                    0, configOnly, std::move(protectedParams)), 0, ev->Cookie);
+                    0, configOnly ? TEvInterconnect::EConnectionParamsExchange::ConfigOnly : TEvInterconnect::EConnectionParamsExchange::None, std::move(protectedParams)), 0, ev->Cookie);
             }
 
             ++*NumIncoming;
@@ -150,11 +152,14 @@ namespace {
 
         void Handle(TEvInterconnect::TEvCheckOutgoingConnection::TPtr ev) {
             UNIT_ASSERT(CheckReply);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->ConfigOnly, ConfigReceived != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL((ev->Get()->Exchange == TEvInterconnect::EConnectionParamsExchange::ConfigOnly), ConfigReceived != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Params.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Params.at("hello"), "world");
-            const auto error = ev->Get()->ConfigOnly ? std::nullopt : std::optional<TString>("outgoing check rejected");
+            const auto error = (ev->Get()->Exchange == TEvInterconnect::EConnectionParamsExchange::ConfigOnly) ? std::nullopt : std::optional<TString>("outgoing check rejected");
             Send(ev->Sender, new TEvInterconnect::TEvCheckOutgoingConnectionResult(error), 0, ev->Cookie);
+            if (error && ReplyRejected) {
+                ReplyRejected->Signal();
+            }
         }
 
         void Handle(TEvInterconnect::TEvNotifyConfigOnlyConnection::TPtr ev) {
@@ -172,6 +177,56 @@ namespace {
             hFunc(TEvInterconnect::TEvCheckOutgoingConnection, Handle)
             hFunc(TEvInterconnect::TEvNotifyConfigOnlyConnection, Handle)
         )
+    };
+
+    class TDeferredChecker : public TActor<TDeferredChecker> {
+        using EExchange = TEvInterconnect::EConnectionParamsExchange;
+        const bool Reject;
+        TManualEvent& Checked;
+
+        void Handle(TEvInterconnect::TEvPrepareOutgoingConnection::TPtr ev) {
+            Send(ev->Sender, new TEvInterconnect::TEvPrepareOutgoingConnectionResult(THashMap<TString, TString>{}, true));
+        }
+
+        void Handle(TEvInterconnect::TEvCheckIncomingConnection::TPtr ev) {
+            if (ev->Get()->SupportsParamsExchange) {
+                Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult({}, {}, 1, EExchange::Validate));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Params.at("request").size(), ConfigPayloadSize);
+                std::optional<TString> error = Reject ? std::make_optional(TString("stale configuration")) : std::nullopt;
+                Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::move(error),
+                    {{"reply", TString(ConfigPayloadSize, 'r')}}, 1));
+            }
+        }
+
+        void Handle(TEvInterconnect::TEvCheckOutgoingConnection::TPtr ev) {
+            THashMap<TString, TString> params;
+            if (ev->Get()->Exchange == EExchange::Validate) {
+                params.emplace("request", TString(ConfigPayloadSize, 'q'));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Params.at("reply").size(), ConfigPayloadSize);
+            }
+            Send(ev->Sender, new TEvInterconnect::TEvCheckOutgoingConnectionResult({}, 1, std::move(params)));
+        }
+
+        void Handle(TEvInterconnect::TEvNotifyOutgoingConnectionEstablished::TPtr ev) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Success, !Reject);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Params.at("reply").size(), ConfigPayloadSize);
+            Checked.Signal();
+        }
+
+        STRICT_STFUNC(StateFunc,
+            hFunc(TEvInterconnect::TEvPrepareOutgoingConnection, Handle)
+            hFunc(TEvInterconnect::TEvCheckIncomingConnection, Handle)
+            hFunc(TEvInterconnect::TEvCheckOutgoingConnection, Handle)
+            hFunc(TEvInterconnect::TEvNotifyOutgoingConnectionEstablished, Handle)
+        )
+    public:
+        TDeferredChecker(bool reject, TManualEvent& checked)
+            : TActor(&TThis::StateFunc)
+            , Reject(reject)
+            , Checked(checked)
+        {}
     };
 
     class TConnectionAdmissionProbe : public TActorBootstrapped<TConnectionAdmissionProbe> {
@@ -275,10 +330,11 @@ Y_UNIT_TEST_SUITE(ConnectionChecker) {
         std::atomic_uint32_t numNotify = 0;
         std::atomic_uint32_t numNotifySuccess = 0;
         TManualEvent configReceived;
+        TManualEvent replyRejected;
         TManualEvent done;
         auto checkerFactory = [&](ui32 nodeId) {
             return new TCheckerActor(nodeId, &numIncoming, &numOutgoing, &numNotify, &numNotifySuccess, false,
-                nodeId == 2, configOnly ? &configReceived : nullptr);
+                nodeId == 2, configOnly ? &configReceived : nullptr, &replyRejected);
         };
         TTestICCluster testCluster(2, {}, nullptr, nullptr,
             TTestICCluster::Flags(TTestICCluster::USE_TLS | TTestICCluster::DISABLE_RDMA), checkerFactory);
@@ -291,6 +347,8 @@ Y_UNIT_TEST_SUITE(ConnectionChecker) {
         UNIT_ASSERT_VALUES_EQUAL(numNotifySuccess.load(), 0);
         if (configOnly) {
             UNIT_ASSERT(configReceived.WaitT(TDuration::Seconds(10)));
+        } else {
+            UNIT_ASSERT(replyRejected.WaitT(TDuration::Seconds(10)));
         }
     }
 
@@ -302,9 +360,28 @@ Y_UNIT_TEST_SUITE(ConnectionChecker) {
         CheckOutgoingReplyWithoutPublishingSession(true);
     }
 
+    Y_UNIT_TEST(FullParametersCheckedBeforeOpeningSession) {
+        for (const bool reject : {false, true}) {
+            std::atomic_uint32_t connected = 0;
+            std::atomic_uint32_t disconnected = 0;
+            TManualEvent checked;
+            TManualEvent done;
+            auto checker = [&](ui32) { return new TDeferredChecker(reject, checked); };
+            TTestICCluster cluster(2, {}, nullptr, nullptr,
+                TTestICCluster::Flags(TTestICCluster::USE_TLS | TTestICCluster::DISABLE_RDMA), checker);
+            auto ponger = cluster.RegisterActor(new TPonger, 1);
+            cluster.RegisterActor(new TPinger(ponger, &done, &connected, &disconnected, 1), 2);
+            UNIT_ASSERT(checked.WaitT(TDuration::Seconds(30)));
+            UNIT_ASSERT(done.WaitT(TDuration::Seconds(30)));
+            UNIT_ASSERT_VALUES_EQUAL(connected.load(), reject ? 0 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(disconnected.load(), reject ? 1 : 0);
+        }
+    }
+
     Y_UNIT_TEST(AdmissionRecheckDisconnectsAndFencesReconnect) {
         TManualEvent done;
-        TTestICCluster testCluster(2, {}, nullptr, nullptr, TTestICCluster::DISABLE_RDMA);
+        TTestICCluster testCluster(2, {}, nullptr, nullptr,
+            TTestICCluster::Flags(TTestICCluster::DISABLE_RDMA | TTestICCluster::TRACK_ADMISSION));
         testCluster.RegisterActor(new TConnectionAdmissionProbe(testCluster.InterconnectProxy(1, 2),
             testCluster.GetNode(2)->GetConnectionAdmissionLevel(), done), 2);
         UNIT_ASSERT(done.WaitT(TDuration::Seconds(30)));

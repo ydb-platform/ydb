@@ -56,9 +56,9 @@ namespace NActors {
         // Put a message into outgoing queue. Thread-safe.
         virtual void Send(ui64 conn, std::unique_ptr<IEventHandle> ev, TIntrusivePtr<IReceiveCallback> callback = nullptr) = 0;
 
-        // Stops event delivery and tears down the connection. The worker calls onQuiesced after it has
+        // Stops event delivery and tears down the connection. The worker sends the notification after it has
         // disabled event delivery, while outstanding kernel operations may still be draining. Thread-safe.
-        virtual void Unregister(ui64 conn, std::function<void()> onQuiesced = {}) = 0;
+        virtual void Unregister(ui64 conn, std::unique_ptr<IEventHandle> onQuiesced = {}) = 0;
 
         // Register receive callback (for IDirectSession). Null callback deregisters it.
         virtual void RegisterReceiveCallback(ui64 conn, TActorId localActorId, TIntrusivePtr<IReceiveCallback> callback) = 0;

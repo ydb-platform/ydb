@@ -204,7 +204,7 @@ namespace NKikimr::NStorage {
             if (const auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()) {
                 it->second.WaitingForBridgeFeatureRequirement = false;
                 const auto targetedNodes = std::move(it->second.TargetedNodes);
-                StartScatterTask(cookie, targetedNodes);
+                StartScatterTask(it, targetedNodes);
             }
         }
         RefreshBridgeFeatureRequirement();
@@ -586,9 +586,17 @@ namespace NKikimr::NStorage {
     bool TDistributedConfigKeeper::TryStartBridgeStartupRecovery() {
         if (!BaseConfig->GetSelfManagementConfig().GetEnabled() || !Cfg->BridgeConfig ||
                 Cfg->BridgeConfig->PilesSize() < 2 || !LocalCommittedStorageConfig ||
-                !LocalCommittedStorageConfig->GetGeneration() || LocalCommittedStorageConfig->HasClusterState() ||
-                LocalCommittedStorageConfig->HasBridgeRollback()) {
+                !LocalCommittedStorageConfig->GetGeneration() || LocalCommittedStorageConfig->HasClusterState()) {
             return false;
+        }
+
+        // A process finishing a rollback can still be running with the old multi-pile YAML.
+        // After a later conversion the disk can have the same rollback record but the YAML names different piles.
+        if (LocalCommittedStorageConfig->HasBridgeRollback()) {
+            const auto registry = GetPileRegistry(*LocalCommittedStorageConfig, Cfg->BridgeConfig.get());
+            if (registry && registry->PilesSize() == 1) {
+                return false;
+            }
         }
 
         const ui32 selfNodeId = SelfId().NodeId();
@@ -611,7 +619,7 @@ namespace NKikimr::NStorage {
             {"nodeId", selfNodeId}, {"pileName", *StartupRecoveryPileName},
             {"localGeneration", LocalCommittedStorageConfig->GetGeneration()}, {"peerNodeIds", peerNodeIds});
         Send(MakeDistconfBridgeConnectionCheckerActorId(), new TEvPrivate::TEvStartBridgeStartupRecovery(
-            LocalCommittedStorageConfig, std::move(peerNodeIds)));
+            LocalCommittedStorageConfig->GetGeneration(), std::move(peerNodeIds)));
         return true;
     }
 

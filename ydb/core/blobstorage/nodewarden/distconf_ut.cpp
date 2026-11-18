@@ -1011,6 +1011,22 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT(NStorage::ValidateConfig(proposed));
     }
 
+    Y_UNIT_TEST(BridgeSessionAdmissionRetiresSuccessiveFeatureLevels) {
+        NStorage::TBridgePeerAdmissionLevels levels(8);
+        levels.Track(1, 0);
+        levels.Track(1, 8); // a later handshake cannot retire an overlapping session
+        levels.Track(2, 7);
+        UNIT_ASSERT_VALUES_EQUAL(levels.PeersBelow(7), std::vector<ui32>{1});
+        levels.Track(3, 7); // admitted while the first proxy is still retiring its session
+        levels.ConfirmRetirement(7);
+        UNIT_ASSERT(levels.PeersBelow(7).empty());
+        auto peers = levels.PeersBelow(8);
+        std::ranges::sort(peers);
+        UNIT_ASSERT_VALUES_EQUAL(peers, (std::vector<ui32>{1, 2, 3}));
+        levels.ConfirmRetirement(8);
+        UNIT_ASSERT(levels.PeersBelow(8).empty());
+    }
+
     Y_UNIT_TEST(BridgeSessionAdmissionFeatureLevelCannotBeLowered) {
         auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
         config.MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(
@@ -1543,13 +1559,9 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         auto sendRecoveryConfig = [&](ui32 peerNodeId, const NKikimrBlobStorage::TStorageConfig& config) {
             NKikimrBlobStorage::TConnectivityPayload payload;
             payload.SetStartupRecoveryAccepted(true);
-            payload.SetBridgeFeatureLevel(NStorage::BridgeFeatureLevel);
-            payload.SetBridgePileName(peerNodeId == 4 ? "added" : "original");
-            TBridgePileId::FromPileIndex(peerNodeId == 4 ? 1 : 0).CopyToProto(&payload,
-                &NKikimrBlobStorage::TConnectivityPayload::SetBridgePileId);
             payload.MutableCommittedStorageConfig()->CopyFrom(config);
             THashMap<TString, TString> params;
-            UNIT_ASSERT(payload.SerializeToString(&params["distconf"]));
+            UNIT_ASSERT(payload.SerializeToString(&params["distconf-session-admission"]));
             runtime.Send(new IEventHandle(checker, edge, new TEvInterconnect::TEvNotifyConfigOnlyConnection(
                 peerNodeId, std::move(params))), 1);
             runtime.Sim([&] { return runtime.HasImmediateEvents(); });

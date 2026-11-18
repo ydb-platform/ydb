@@ -95,9 +95,9 @@ namespace NActors {
     }
 
     struct TEvUnregisterSession : TEventLocal<TEvUnregisterSession, static_cast<ui32>(ENetwork::EvUnregisterSession)> {
-        std::function<void()> OnQuiesced;
+        std::unique_ptr<IEventHandle> OnQuiesced;
 
-        explicit TEvUnregisterSession(std::function<void()> onQuiesced)
+        explicit TEvUnregisterSession(std::unique_ptr<IEventHandle> onQuiesced)
             : OnQuiesced(std::move(onQuiesced))
         {}
     };
@@ -1127,7 +1127,7 @@ namespace NActors {
                 SendImpl(conn, std::move(ev), std::move(replyCallback), true);
             }
 
-            void Unregister(ui64 conn, std::function<void()> onQuiesced) {
+            void Unregister(ui64 conn, std::unique_ptr<IEventHandle> onQuiesced) {
                 ++*SessionsUnregistered;
 
                 // this event is sequenced too
@@ -1472,7 +1472,7 @@ namespace NActors {
                             CancelOp(session, kOpXdcRead, session.XdcReadPendingRingIdx);
                         }
                         if (record->Ev->HasEvent()) {
-                            record->Ev->Get<TEvUnregisterSession>()->OnQuiesced();
+                            Engine.Client->Send(std::move(record->Ev->Get<TEvUnregisterSession>()->OnQuiesced));
                         }
                         TouchedSessions.PushBack(&session);
                         break;
@@ -2100,7 +2100,7 @@ namespace NActors {
             GetShard(conn).Send(conn, std::move(ev), std::move(replyCallback));
         }
 
-        void Unregister(ui64 conn, std::function<void()> onQuiesced) override {
+        void Unregister(ui64 conn, std::unique_ptr<IEventHandle> onQuiesced) override {
             if (Stopping) {
                 return;
             }

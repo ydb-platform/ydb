@@ -556,6 +556,8 @@ message TConnectivityPayload {
     uint32 BridgeFeatureLevel = 6; // bridge features supported by the sender (absent for older versions)
     bool StartupRecoveryRequest = 7;
     bool StartupRecoveryAccepted = 8;
+    TStorageConfigMeta StorageConfigMeta = 9; // identifies a full config already held by the recipient
+    bool StorageConfigIsCommitted = 10; // the attached StorageConfig is also the committed one
 }
 
 // Ask CMS/Sentinel for a fresh SelfHealNodesStateUpdate. Sentinel replies only

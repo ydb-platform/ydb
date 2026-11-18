@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
+import base64
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import os
+import random
 import subprocess
 import tempfile
 
@@ -110,10 +112,11 @@ class TestBridgePileOps(BridgeKiKiMRTest):
         cfg["metadata"]["version"] += 1
         return cfg
 
-    def replace_config(self, cfg, node_ids):
+    def replace_config(self, cfg, node_ids, comment=""):
         logger.info("Replacing config with version %d", cfg["metadata"]["version"])
+        text = yaml.dump(cfg) + comment
         self.retry_config_rpc(
-            lambda: self.config_client.replace_config(yaml.dump(cfg)),
+            lambda: self.config_client.replace_config(text),
             "Some static nodes did not report their BridgeConfig",
         )
 
@@ -165,10 +168,10 @@ class TestBridgePileOps(BridgeKiKiMRTest):
     def update(self, updates):
         self.update_cluster_state(self.bridge_client, [PileState(pile_name=name, state=state) for name, state in updates])
 
-    def convert(self, original_node_ids, skip_storage_pool_conversion=False):
+    def convert(self, original_node_ids, skip_storage_pool_conversion=False, pile_name=ORIGINAL_PILE):
         # The running nodes pick up the single-pile bridge config when restarted.
         cfg = self.fetch_config()
-        cfg["config"]["bridge_config"] = {"piles": [{"name": ORIGINAL_PILE}]}
+        cfg["config"]["bridge_config"] = {"piles": [{"name": pile_name}]}
         if skip_storage_pool_conversion:
             cfg["config"]["bridge_config"]["enable_non_uniform_storage"] = True
         self.replace_config(cfg, original_node_ids)
@@ -184,12 +187,12 @@ class TestBridgePileOps(BridgeKiKiMRTest):
             response = self.bridge_client.get_cluster_state_result()
             return response is not None and not response.conversion_in_progress
         assert_that(wait_for(conversion_finished, timeout_seconds=120), "conversion is not finished")
-        assert_that(self.states(), is_({ORIGINAL_PILE: PRIMARY}))
+        assert_that(self.states(), is_({pile_name: PRIMARY}))
 
         # nodes of the converted cluster get the name of their pile before other piles are listed in the config
         cfg = self.fetch_config()
         for host in cfg["config"]["hosts"]:
-            host.setdefault("location", {})["bridge_pile_name"] = ORIGINAL_PILE
+            host.setdefault("location", {})["bridge_pile_name"] = pile_name
         self.replace_config(cfg, original_node_ids)
         self.restart(original_node_ids, "named")
 
@@ -229,8 +232,12 @@ class TestBridgePileOps(BridgeKiKiMRTest):
             self.cluster.nodes[node_id].start()
         return node_ids
 
-    @pytest.mark.parametrize("skip_storage_pool_conversion", [False, True])
-    def test_convert_and_provision_while_storage_node_is_offline(self, skip_storage_pool_conversion):
+    @pytest.mark.parametrize(("skip_storage_pool_conversion", "previous_rollback"), [
+        pytest.param(False, False, id="converted-pools"),
+        pytest.param(True, False, id="ordinary-pools-large-config"),
+        pytest.param(False, True, id="reconverted-after-rollback"),
+    ])
+    def test_convert_and_provision_while_storage_node_is_offline(self, skip_storage_pool_conversion, previous_rollback):
         self.table_path = '/Root/mydb/bridge_offline_conversion'
         self.tablet_ids = create_kv_tablets_and_wait_for_start(
             self.cluster.client,
@@ -241,6 +248,28 @@ class TestBridgePileOps(BridgeKiKiMRTest):
             timeout_seconds=60,
         )
         self.wait_kv_works("before")
+
+        if previous_rollback:
+            original_ids = sorted(self.cluster.nodes)
+            self.convert(original_ids, pile_name="previous")
+            operation = self.bridge_client.rollback().operation
+            assert_that(operation.status, is_(StatusIds.SUCCESS), str(operation))
+
+            def rolled_back():
+                status = self.bridge_client.get_rollback_status_result()
+                return status is not None and not status.bridged
+            assert_that(wait_for(rolled_back, timeout_seconds=120), "rollback did not finish")
+            cfg = self.fetch_config()
+            del cfg["config"]["bridge_config"]
+            for host in cfg["config"]["hosts"]:
+                host.get("location", {}).pop("bridge_pile_name", None)
+            self.replace_config(cfg, original_ids)
+            self.restart(original_ids, "ordinary_after_rollback")
+
+            def rollback_complete():
+                status = self.bridge_client.get_rollback_status_result()
+                return status is not None and status.complete
+            assert_that(wait_for(rollback_complete, timeout_seconds=60), "nodes still report the previous bridge config")
 
         base_config = self.cluster.client.query_base_config().BaseConfig
         offline_id = max(slot.VSlotId.NodeId for slot in base_config.VSlot if slot.VSlotId.NodeId != self.node.node_id)
@@ -256,6 +285,14 @@ class TestBridgePileOps(BridgeKiKiMRTest):
         assert_that(self.states(), is_({ORIGINAL_PILE: PRIMARY, ADDED_PILE: DISCONNECTED}))
         self.wait_kv_works("while_offline")
 
+        if skip_storage_pool_conversion:
+            # The stored YAML is compressed inside TStorageConfig. Keep it above the 1 MiB inline handshake limit.
+            padding = base64.b64encode(random.Random(42).randbytes(1100 * 1024)).decode("ascii")
+            self.replace_config(self.fetch_config(), live_ids, comment="# " + padding + "\n")
+            response = self.retry_config_rpc(self.config_client.fetch_all_configs, "No scepter")
+            fetched = config.FetchConfigResult()
+            response.operation.result.Unpack(fetched)
+            assert padding in fetched.config[0].config, "large YAML was not stored"
         config_dir = os.path.join(self.cluster.config_path, f"node_{offline_id}")
         code, output = self.ydb_cli([
             '-y', 'admin', 'node', 'config', 'init', '--config-dir', config_dir,

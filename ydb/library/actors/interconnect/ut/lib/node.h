@@ -45,7 +45,7 @@ public:
           bool withRdma = true,
           std::function<void(ui32, TInterconnectSettings&)> settingsCustomizer = {},
           TLogBackendFactory logBackendFactory = {},
-          TVector<ui32> interconnectSessionPoolIds = {0}) {
+          TVector<ui32> interconnectSessionPoolIds = {0}, bool trackAdmission = false) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 2;
@@ -59,7 +59,9 @@ public:
 
         Common = MakeIntrusive<TInterconnectProxyCommon>();
         auto& common = Common;
-        common->ConnectionAdmissionLevel = std::make_shared<std::atomic<ui32>>(0);
+        if (trackAdmission) {
+            common->ConnectionAdmissionLevel = std::make_shared<std::atomic<ui32>>(0);
+        }
         common->NameserviceId = GetNameserviceActorId();
         common->MonCounters = counters->GetSubgroup("nodeId", ToString(nodeId));
         common->ChannelsConfig = channelsSettings;

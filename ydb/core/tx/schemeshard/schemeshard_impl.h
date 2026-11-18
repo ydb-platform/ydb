@@ -462,6 +462,7 @@ public:
     bool SysViewsRosterUpdateStarted = false;
     bool LocalIndexMigrationStarted = false;
     TActorId LocalIndexMigratorId;
+    TActorId IndexShadowDataRepairerId;
 
     TSet<TPathId> CleanDroppedPathsCandidates;
     TSet<TPathId> CleanDroppedSubDomainsCandidates;
@@ -1086,6 +1087,7 @@ public:
         TVector<ui64> ImportsIds;
         TVector<TPathId> CdcStreamScans;
         TVector<TPathId> TablesToClean;
+        TVector<TPathId> TablesWithShadowData;
         TDeque<TPathId> BlockStoreVolumesToClean;
         TVector<TPathId> RestoreTablesToUnmark;
         TVector<ui64> IncrementalBackupIds;
@@ -1097,6 +1099,8 @@ public:
     void CollectSysViewUpdates(const TActorContext& ctx);
 
     void CollectLocalIndexMigrations(const TActorContext& ctx);
+
+    void StartIndexShadowDataRepair(const TActorContext& ctx, TVector<TPathId>&& paths);
 
     void ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts);
 

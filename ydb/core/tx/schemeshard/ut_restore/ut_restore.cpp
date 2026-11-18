@@ -13987,6 +13987,94 @@ void ExportGlobalIndexWithLocalBloom(bool isFs) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
+    Y_UNIT_TEST_QUAD(ImportWithoutIndexData, IsFs, Encrypted) {
+        TBackupStorage storage(IsFs);
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(IsFs);
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        for (ui32 row = 1; row <= 3; ++row) {
+            const TString value = Sprintf("value%u", row);
+            UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(row)}, {TCell(value.data(), value.size())});
+        }
+        Ydb::Table::TableIndex index;
+        index.set_name("by_value");
+        index.add_index_columns("value");
+        index.mutable_global_index();
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", index);
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table/by_value/indexImplTable"), 3);
+
+        const TString encryptionSettings = Encrypted ? R"(
+            encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key { key: "0123456789012345" }
+            }
+        )" : "";
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            %s {
+                %s
+                %s
+                %s
+                include_index_data: false
+                items { source_path: "/MyRoot/Table" %s: "backup" }
+            }
+        )", IsFs ? "ExportToFsSettings" : "ExportToS3Settings", storage.Settings().c_str(),
+            IsFs ? "" : "destination_prefix: \"export\"", encryptionSettings.c_str(),
+            IsFs ? "destination_path" : "destination_prefix"));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        using TSettings = Ydb::Import::ImportFromS3Settings;
+        for (const auto mode : {TSettings::INDEX_POPULATION_MODE_IMPORT,
+                TSettings::INDEX_POPULATION_MODE_AUTO, TSettings::INDEX_POPULATION_MODE_BUILD}) {
+            const TString restoredPath = TStringBuilder() << "/MyRoot/Restored" << static_cast<int>(mode);
+            ui32 indexBuilds = 0;
+            auto observer = runtime.AddObserver<TEvIndexBuilder::TEvCreateRequest>([&](auto&) { ++indexBuilds; });
+            TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                %s {
+                    %s
+                    %s
+                    %s
+                    index_population_mode: %s
+                    items { %s: "backup" destination_path: "%s" }
+                }
+            )", IsFs ? "ImportFromFsSettings" : "ImportFromS3Settings", storage.Settings().c_str(),
+                IsFs ? "" : "source_prefix: \"export\"", encryptionSettings.c_str(),
+                TSettings::IndexPopulationMode_Name(mode).c_str(),
+                IsFs ? "source_path" : "source_prefix", restoredPath.c_str()));
+            env.TestWaitNotification(runtime, txId);
+            if (mode == TSettings::INDEX_POPULATION_MODE_IMPORT) {
+                const auto result = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+                const TString issues = NYql::IssuesFromMessageAsString(result.GetResponse().GetEntry().GetIssues());
+                UNIT_ASSERT_STRING_CONTAINS(issues, "materialized index data is missing from the backup");
+                UNIT_ASSERT_STRING_CONTAINS(issues, "IMPORT mode requires exported index data");
+                UNIT_ASSERT_STRING_CONTAINS(issues, "BUILD or AUTO");
+                UNIT_ASSERT_STRING_CONTAINS(issues, "include_index_data=true");
+                UNIT_ASSERT_STRING_CONTAINS(issues, "scheme.pb");
+                UNIT_ASSERT_VALUES_EQUAL(indexBuilds, 0);
+                continue;
+            }
+            TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(indexBuilds, 1);
+            for (const TString suffix : {"", "/by_value/indexImplTable"}) {
+                UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, restoredPath + suffix), 3);
+                UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table" + suffix),
+                    ReadShards(runtime, TTestTxConfig::SchemeShard, restoredPath + suffix));
+            }
+        }
+    }
+
     Y_UNIT_TEST_QUAD(RejectHnswIndex, IsFs, Prefixed) {
         TBackupStorage storage(IsFs);
         TTestBasicRuntime runtime;

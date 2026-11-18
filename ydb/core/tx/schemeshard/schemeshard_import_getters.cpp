@@ -556,8 +556,14 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             StartDownloadingChangefeeds();
         };
 
-        if (canSkip && NoObjectFound(result.GetError().GetErrorType())) {
-            return skipMaterializedIndexes();
+        if (NoObjectFound(result.GetError().GetErrorType())) {
+            if (canSkip) {
+                return skipMaterializedIndexes();
+            }
+            return Reply(Ydb::StatusIds::BAD_REQUEST,
+                TStringBuilder() << CurrentMaterializedIndexSchemeKey()
+                    << ": materialized index data is missing from the backup. IMPORT mode requires exported index data. "
+                    << "Use BUILD or AUTO to rebuild indexes from table data, or export with include_index_data=true");
         } else if (!CheckResult(result, "HeadObject")) {
             return;
         }

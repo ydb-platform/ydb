@@ -60,8 +60,7 @@ TIndexShadowDataRepairCheck CheckIndexShadowDataRepair(TSchemeShard* ss, TPathId
         if (ss->LockedPaths.contains(currentId)) {
             return {EStatus::Deferred, "Path is locked"};
         }
-        const auto snapshots = ss->TablesWithSnapshots.find(currentId);
-        if (snapshots != ss->TablesWithSnapshots.end() && !snapshots->second.empty()) {
+        if (ss->TablesWithSnapshots.contains(currentId)) {
             return {EStatus::Deferred, "Table has an active snapshot"};
         }
         const auto currentTable = ss->Tables.find(currentId);

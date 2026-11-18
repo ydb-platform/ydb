@@ -1557,6 +1557,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
         return {CreatePrepareIndexValidation(op.NextPartId(), tx)};
 
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRepairIndexShadowData:
+        return {CreateRepairIndexShadowData(op.NextPartId(), tx, context)};
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild:
         return CancelBuildIndex(op.NextPartId(), tx, context);
 

@@ -1183,18 +1183,6 @@ message TActivity {
         BLOB_CHECKER_WORKER_ACTOR = 694;
         BS_PERSISTENT_BUFFER_RA = 695;
         SCHEMESHARD_LOCAL_INDEX_MIGRATOR = 696;
-<<<<<<< HEAD
-=======
-        BS_LEVEL_INDEX_STAT_STREAM_QUERY = 697;
-        SCHEMESHARD_STATS_PARSER = 698;
-        SERVICE_CONTROL_SERVICE_ACTOR = 699;
-        IAM_OPERATION_SERVICE_ACTOR = 700;
-        WASM_COMPILE_CONTROLLER_TABLET = 701;
-        INTERCONNECT_CONFIGURATOR = 702;
-        CDC_AGGREGATOR_TABLET = 703;
-        CDC_AGGREGATOR_SERVICE = 704;
-        DELTA_KMEANS_SCAN_ACTOR = 705;
         SCHEMESHARD_INDEX_SHADOW_DATA_REPAIRER = 706;
->>>>>>> 6b0fea88245 (Automatically repair existing unique indexes whose implementation tables retain stale `ShadowData` and `KeepEraseMarkers` settings (#59376))
     };
 };

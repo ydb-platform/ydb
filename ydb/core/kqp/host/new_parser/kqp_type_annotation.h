@@ -97,6 +97,7 @@ struct TAstTypeAnnotationSettings {
 // result. Neither syntax nor name bindings are changed. The caller supplies
 // effective SQL expression settings; TablePathPrefix and the legacy translator's
 // YqlSelect control pragma are accepted.
+// Provider pragmas must already have been applied to the destination context.
 // Returns null on a type error, with diagnostics in ctx. Unsupported constructs
 // throw TNewYqlParserFallback. No partial annotation result escapes either case.
 // Does not run provider IO stages or reset ctx.Step.

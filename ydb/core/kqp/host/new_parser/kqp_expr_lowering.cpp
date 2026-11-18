@@ -479,6 +479,9 @@ private:
         }
         if (name->Module) {
             auto module = Identifier(*name->Module);
+            // The Yql namespace exposes core callables directly, retaining
+            // their case-sensitive names and shared annotation rules.
+            if (AsciiEqualsIgnoreCase(module, "Yql")) { return Call(pos, spelling, std::move(args)); }
             if (AsciiEqualsIgnoreCase(module, "DateTime")) { module = "DateTime2"; }
             if (AsciiEqualsIgnoreCase(module, "Re2")
                 && !AsciiEqualsIgnoreCase(spelling, "Options") && !AsciiEqualsIgnoreCase(spelling, "IsValidRegexp")) {

@@ -22,7 +22,7 @@ void CheckNative(const TCapturedLog& logs, size_t start, const TString& traceId,
             if (line.Contains(tag)) { evidence += line + "\n"; }
         }
         UNIT_ASSERT_C(!evidence.Contains(" fallback:") && !evidence.Contains("Legacy YQL graph compilation started"), evidence);
-        if (evidence.Contains(success ? "New YQL RBO lowering succeeded" : "New YQL type annotation succeeded")) {
+        if (evidence.Contains(success ? "New YQL RBO lowering succeeded" : "New YQL pragma configuration started")) {
             return;
         }
         Sleep(TDuration::MilliSeconds(10));
@@ -32,12 +32,12 @@ void CheckNative(const TCapturedLog& logs, size_t start, const TString& traceId,
 
 const TString Join = "SELECT a.id, b.value FROM `/Root/a` AS a JOIN `/Root/b` AS b ON a.id = b.id;";
 
-TKikimrSettings Settings(bool native, ui32 defaultLevel, TCapturedLog& logs) {
+TKikimrSettings Settings(bool native, ui32 defaultLevel, TCapturedLog& logs, bool allowFallback = false) {
     NKikimrConfig::TAppConfig app;
     auto* config = app.MutableTableServiceConfig();
     config->SetEnableNewYqlParser(native);
     config->SetEnableNewRBO(true);
-    config->SetEnableFallbackToYqlOptimizer(false);
+    config->SetEnableFallbackToYqlOptimizer(allowFallback);
     config->SetEnableFallbackOnMultipleStatements(false);
     config->SetDefaultCostBasedOptimizationLevel(defaultLevel);
     config->SetEnableAstCache(false);
@@ -94,6 +94,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlOptimizerPragma) {
                 {"--!ansi_lexer\nPRAGMA \"ydb\".\"CostBasedOptimizationLevel\" = '4';", true},
                 {"PRAGMA ydb.CostBasedOptimizationLevel = '4'; PRAGMA ydb.CostBasedOptimizationLevel = '0';", false},
                 {"PRAGMA ydb.CostBasedOptimizationLevel = '0'; PRAGMA ydb.CostBasedOptimizationLevel = '4';", true},
+                {"PRAGMA ydb.CostBasedOptimization = 'off';", false},
+                {"PRAGMA kikimr.CostBasedOptimization = 'on';", true},
             };
             for (const auto& [pragma, cbo] : cases) {
                 check(pragma + Join, cbo);
@@ -118,6 +120,97 @@ Y_UNIT_TEST_SUITE(KqpNewYqlOptimizerPragma) {
             TString issues = result.GetIssues().ToString();
             issues.to_lower();
             UNIT_ASSERT_STRING_CONTAINS(issues, "costbasedoptimizationlevel");
+            if (Native) { CheckNative(logs, start, traceId, false); }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(GenericProviderPragmas, Native) {
+        TCapturedLog logs(true);
+        TKikimrRunner kikimr(Settings(Native, 4, logs));
+        CreateTables(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const TVector<TString> pragmas = {
+            "PRAGMA config.flags(\"DecimalCommonTypeConversionMode\", \"with_common_type_fixup\");",
+            "PRAGMA config.flags('OptimizerFlags', 'FilterPushdown', 'AnotherFlag');",
+            "PRAGMA config.flags('BlockEngine', 'disable');",
+            "PRAGMA ydb.OptDisableTopSort = 'true'; PRAGMA kikimr.UseLlvm = 'false';",
+            "PRAGMA ydb.HashJoinMode = 'grace';",
+        };
+        ui32 request = 0;
+        for (const auto& pragma : pragmas) {
+            const TString traceId = TStringBuilder() << "generic-pragma-" << ++request;
+            const auto start = logs.Snapshot().size();
+            const auto result = session.ExecuteQuery(pragma + Join, NQuery::TTxControl::NoTx(),
+                NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+                    .TraceId(std::string(traceId))).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), pragma << "\n" << result.GetIssues().ToString());
+            if (Native) { CheckNative(logs, start, traceId, true); }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ForcedOptimizerFallbackPragma, Native) {
+        TCapturedLog logs(true);
+        TKikimrRunner kikimr(Settings(Native, 4, logs, true));
+        CreateTables(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const auto start = logs.Snapshot().size();
+        const auto result = session.ExecuteQuery("PRAGMA ydb.OptFallbackToLegacyOptimizer = 'true'; " + Join,
+            NQuery::TTxControl::NoTx(), NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        if (Native) {
+            const auto evidence = logs.Snapshot().substr(start);
+            UNIT_ASSERT_STRING_CONTAINS(evidence, "New YQL frontend fallback:");
+            UNIT_ASSERT_STRING_CONTAINS(evidence, "Forced fallback to legacy optimizer");
+            UNIT_ASSERT_STRING_CONTAINS(evidence, "Legacy YQL graph compilation started");
+            UNIT_ASSERT_C(!evidence.Contains("New YQL RBO lowering succeeded"), evidence);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ProviderPragmasSurviveLateFallback, Native) {
+        TCapturedLog logs(true);
+        TKikimrRunner kikimr(Settings(Native, 4, logs));
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const auto start = logs.Snapshot().size();
+        // Shared scalar calls request fallback during annotation, after the
+        // native configuration pass has already applied all provider pragmas.
+        const auto result = session.ExecuteQuery(
+            "PRAGMA config.flags('DecimalCommonTypeConversionMode', 'without_common_type_fixup'); "
+            "PRAGMA config.flags('DecimalCommonTypeConversionMode', 'with_common_type_fixup'); "
+            "PRAGMA ydb.OptDisableTopSort = 'true'; "
+            "$x = Abs(-1); SELECT $x;", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[1]]");
+        if (Native) {
+            const auto evidence = logs.Snapshot().substr(start);
+            UNIT_ASSERT_STRING_CONTAINS(evidence, "New YQL pragma configuration started");
+            UNIT_ASSERT_STRING_CONTAINS(evidence, "Legacy YQL graph compilation started");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(InvalidProviderPragmas, Native) {
+        TCapturedLog logs(true);
+        TKikimrRunner kikimr(Settings(Native, 4, logs));
+        CreateTables(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const TVector<std::pair<TString, TString>> cases = {
+            {"PRAGMA ydb.OptDisableTopSort = 'invalid';", "optdisabletopsort"},
+            {"PRAGMA ydb.NoSuchSetting = 'true';", "nosuchsetting"},
+            {"PRAGMA ydb.UseLlvm = 'true'; PRAGMA ydb.UseLlvm = default;", "cannot be reset to default"},
+            {"PRAGMA config.flags('DecimalCommonTypeConversionMode', 'invalid');", "with_common_type_fixup"},
+            {"PRAGMA config.flags('DecimalCommonTypeConversionMode');", "argument"},
+            {"PRAGMA config.flags('Diagnostics');", "not allowed"},
+        };
+        ui32 request = 0;
+        for (const auto& [pragma, error] : cases) {
+            const TString traceId = TStringBuilder() << "invalid-provider-pragma-" << ++request;
+            const auto start = logs.Snapshot().size();
+            const auto result = session.ExecuteQuery(pragma + Join, NQuery::TTxControl::NoTx(),
+                NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+                    .TraceId(std::string(traceId))).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), pragma);
+            TString issues = result.GetIssues().ToString();
+            issues.to_lower();
+            UNIT_ASSERT_STRING_CONTAINS(issues, error);
             if (Native) { CheckNative(logs, start, traceId, false); }
         }
     }

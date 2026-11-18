@@ -7,6 +7,7 @@ SRCS(
     kqp_ast_builder.cpp
     kqp_new_parser.cpp
     kqp_name_resolver.cpp
+    kqp_pragma.cpp
     kqp_expr_lowering.cpp
     kqp_type_annotation.cpp
 )

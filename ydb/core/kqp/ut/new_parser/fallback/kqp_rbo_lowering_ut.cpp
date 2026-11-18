@@ -79,6 +79,56 @@ struct TFixture : NTests::TIdTestContext {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
+    Y_UNIT_TEST(SearchedUpdatesDoNotRepeatExistenceLookup) {
+        TFixture f;
+        auto root = f.Run("UPDATE t SET value = 'changed' WHERE id = 1;");
+        auto* effect = static_cast<TOpTableEffect*>(f.Find(*root, EOperator::TableEffect).at(0));
+        UNIT_ASSERT(effect->EffectType == EEffectType::UpsertRows);
+        UNIT_ASSERT_VALUES_EQUAL(f.Find(*root, EOperator::Source).size(), 1);
+        UNIT_ASSERT(effect->Options.Settings);
+        UNIT_ASSERT_VALUES_EQUAL(effect->Options.Settings->at(0)->Tail().Content(), "update_conditional");
+
+        // UPDATE ON may supply a missing key; it must still check existence.
+        root = f.Run("UPDATE t ON SELECT 42l AS id, 'changed' AS value;");
+        effect = static_cast<TOpTableEffect*>(f.Find(*root, EOperator::TableEffect).at(0));
+        UNIT_ASSERT(effect->EffectType == EEffectType::UpdateRows);
+    }
+
+    Y_UNIT_TEST(SubqueryOrderOnlySelectsRowsForItsOwnLimit) {
+        for (const auto& [sql, sorts] : TVector<std::pair<TString, size_t>>{
+            {"SELECT id FROM (SELECT id FROM t ORDER BY a)", 0},
+            {"SELECT id FROM (SELECT id FROM t ORDER BY a) LIMIT 2", 0},
+            {"SELECT id FROM (SELECT id FROM t ORDER BY a) ORDER BY id", 1},
+            {"SELECT id FROM (SELECT id FROM t ORDER BY a LIMIT 2)", 1},
+            {"SELECT id FROM (SELECT id FROM t ORDER BY a LIMIT 2 OFFSET 1)", 1},
+            {"SELECT id FROM (SELECT id FROM t UNION ALL SELECT id FROM t ORDER BY id)", 0},
+            {"SELECT id FROM (SELECT id FROM t UNION ALL SELECT id FROM t ORDER BY id LIMIT 2)", 1},
+            {"SELECT id FROM t UNION ALL SELECT id FROM t ORDER BY id", 1},
+        }) {
+            TFixture f;
+            auto root = f.Run(sql);
+            UNIT_ASSERT_VALUES_EQUAL_C(f.Find(*root, EOperator::Sort).size(), sorts, sql);
+        }
+    }
+
+    Y_UNIT_TEST(IntegerJoinKeysKeepSourceBindings) {
+        TFixture f;
+        auto root = f.Run("SELECT l.id, r.id FROM t AS l JOIN t AS r ON l.a = r.id;");
+        auto* join = static_cast<TOpJoin*>(f.Find(*root, EOperator::Join).at(0));
+        UNIT_ASSERT_VALUES_EQUAL(join->JoinKeys.Items().size(), 1);
+        const auto& key = join->JoinKeys.Items().front();
+        const auto& registry = root->PlanProps.InfoUnitRegistry;
+        UNIT_ASSERT_VALUES_EQUAL(registry.Get(key.first).GetFullName(), "l.a");
+        UNIT_ASSERT_VALUES_EQUAL(registry.Get(key.second).GetFullName(), "r.id");
+        UNIT_ASSERT(join->GetLeftInput()->Kind == EOperator::Source);
+        UNIT_ASSERT(join->GetRightInput()->Kind == EOperator::Source);
+        UNIT_ASSERT(join->GetLeftInput()->GetOutputIUs().Contains(key.first));
+        UNIT_ASSERT(join->GetRightInput()->GetOutputIUs().Contains(key.second));
+        auto annotator = CreateTypeAnnotationTransformer(CreateExtCallableTypeAnnotationTransformer(f.TypeCtx, true), f.TypeCtx);
+        TRBOContext ctx(f.KqpCtx, f.ExprCtx, f.TypeCtx, *annotator, *f.FuncRegistry);
+        UNIT_ASSERT_C(root->ComputeTypes(ctx) == IGraphTransformer::TStatus::Ok, f.ExprCtx.IssueManager.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(InSubplansRetainAnnotatedNullability) {
         TFixture f;
         auto root = f.Run("SELECT value IN (SELECT value FROM t), id IN (SELECT id FROM t) FROM t;");

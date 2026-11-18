@@ -91,7 +91,7 @@ public:
         return std::make_unique<TResolvedNames>(std::move(Result));
     }
 
-    TVector<std::pair<TString, TString>> CollectTables() {
+    TVector<std::pair<TString, TString>> CollectTables(TProviderPragmas& pragmas) {
         for (const auto& statement : Script.Statements) {
             if (const auto* pragma = std::get_if<TPragmaStatement>(&statement.Value)) {
                 Pragma(*pragma);
@@ -111,6 +111,7 @@ public:
                 CollectQuery(*std::get<TQueryStatement>(statement.Value).Query, {});
             }
         }
+        pragmas = std::move(Result.ProviderPragmas);
         return std::move(TableReferences);
     }
 
@@ -274,39 +275,46 @@ private:
         return Decode(identifier.Spelling, identifier.Range);
     }
 
-    // Only pragmas whose binding effects are understood may pass this stage.
-    // An unknown setting could change table paths or name visibility, so ignoring
-    // it would be less safe than falling back to the existing translator.
+    // Provider pragmas are decoded here and validated by the existing providers.
+    // Translator pragmas still need explicit binding and typing support.
     void Pragma(const TPragmaStatement& pragma) {
         if (pragma.Namespace && (AsciiEqualsIgnoreCase(Name(*pragma.Namespace), "ydb")
-            || AsciiEqualsIgnoreCase(Name(*pragma.Namespace), "kikimr"))) {
+            || AsciiEqualsIgnoreCase(Name(*pragma.Namespace), "kikimr")
+            || AsciiEqualsIgnoreCase(Name(*pragma.Namespace), "config"))) {
             TString name = Name(pragma.Name);
             if (const auto error = NYql::NormalizeName(
                 NYql::TPosition(pragma.Name.Range.Column + 1, pragma.Name.Range.Line, Script.File), name)) {
                 Error(pragma.Name.Range, error->GetMessage());
             }
-            if (name == "costbasedoptimizationlevel") {
-                if (pragma.Values.size() > 1) {
-                    Error(pragma.Name.Range, "Expected at most one value in the pragma");
-                }
-                TMaybe<TString> value = TString(); // A bare pragma passes an empty string, not DEFAULT.
-                if (!pragma.Values.empty()) {
-                    const auto& argument = pragma.Values.front();
-                    if (std::holds_alternative<TParameter>(argument.Value)) {
-                        Unsupported(argument.Range, "dynamic CostBasedOptimizationLevel values");
-                    } else if (const auto* literal = std::get_if<TLiteral>(&argument.Value);
-                        literal && literal->Kind == ELiteralKind::String) {
-                        value = Decode(literal->Spelling, argument.Range);
-                    } else if (const auto* identifier = std::get_if<TIdentifier>(&argument.Value);
-                        identifier && AsciiEqualsIgnoreCase(identifier->Spelling, "default")) {
-                        value.Clear();
-                    } else {
-                        Error(argument.Range, "Expected string, named parameter or 'default' keyword as pragma value for pragma: " + Name(pragma.Name));
-                    }
-                }
-                Result.CostBasedOptimizationPragmas.emplace(&pragma, std::move(value));
-                return;
+            const bool config = AsciiEqualsIgnoreCase(Name(*pragma.Namespace), "config");
+            if ((config && name != "flags") || (!config && (name == "flags" || name == "auth"))) {
+                Unsupported(pragma.Name.Range, "this provider configuration command");
             }
+            TProviderPragma decoded{config ? "config" : "kikimr", name, {}, false};
+            for (const auto& argument : pragma.Values) {
+                if (std::holds_alternative<TParameter>(argument.Value)) {
+                    Unsupported(argument.Range, "dynamic provider pragma values");
+                } else if (const auto* literal = std::get_if<TLiteral>(&argument.Value);
+                    literal && literal->Kind == ELiteralKind::String) {
+                    decoded.Values.push_back(Decode(literal->Spelling, argument.Range));
+                } else if (const auto* identifier = std::get_if<TIdentifier>(&argument.Value);
+                    identifier && AsciiEqualsIgnoreCase(identifier->Spelling, "default")) {
+                    decoded.Default = true;
+                } else {
+                    Error(argument.Range, "Expected string, named parameter or 'default' keyword as pragma value for pragma: " + Name(pragma.Name));
+                }
+            }
+            if (config && (decoded.Default || decoded.Values.empty())) {
+                Error(pragma.Name.Range, "Expected at least one value in the pragma");
+            }
+            if (!config && decoded.Values.size() > 1) {
+                Error(pragma.Name.Range, "Expected at most one value in the pragma");
+            }
+            if (!config && !decoded.Default && decoded.Values.empty()) {
+                decoded.Values.emplace_back();
+            }
+            Result.ProviderPragmas.emplace(&pragma, std::move(decoded));
+            return;
         }
         if (!pragma.Namespace && AsciiEqualsIgnoreCase(Name(pragma.Name), "YqlSelect")) {
             const auto* value = pragma.Values.size() == 1 ? std::get_if<TLiteral>(&pragma.Values[0].Value) : nullptr;
@@ -849,7 +857,7 @@ TTableReferencesResult CollectTableReferences(const TScript& script, TNameResolu
     TTableReferencesResult result;
     const TTableLookup lookup;
     try {
-        result.Tables = TResolver(script, std::move(settings), lookup).CollectTables();
+        result.Tables = TResolver(script, std::move(settings), lookup).CollectTables(result.ProviderPragmas);
     } catch (const TResolutionError& error) {
         result.Issues.AddIssue(error.Issue);
     }

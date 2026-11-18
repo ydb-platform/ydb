@@ -232,6 +232,9 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
             "SELECT g, MAX_BY(value, id), COUNT(DISTINCT value) FROM `/Root/t` GROUP BY g ORDER BY g;",
             "SELECT g, GROUPING(g) AS grouping, MIN_BY(value, id), MAX_BY(id, value) FROM `/Root/t` "
                 "GROUP BY ROLLUP(g) ORDER BY grouping, g;",
+            "SELECT l.id, r.id FROM `/Root/t` AS l LEFT JOIN `/Root/t` AS r ON l.g = r.id ORDER BY l.id, r.id;",
+            "SELECT l.id, r.id FROM `/Root/t` AS l JOIN `/Root/t` AS r "
+                "ON CAST(l.id - 3 AS Int32) = r.id - 3 ORDER BY l.id, r.id;",
             "SELECT l.id AS a, r.id AS b, s.id AS c FROM `/Root/t` AS l "
                 "LEFT JOIN `/Root/t` AS r ON CAST(l.id AS Decimal(10, 0)) = CAST(r.id AS Decimal(22, 9)) "
                 "LEFT JOIN `/Root/t` AS s ON CAST(l.id + 2 AS Decimal(10, 0)) = CAST(s.id AS Decimal(22, 9)) ORDER BY a;",

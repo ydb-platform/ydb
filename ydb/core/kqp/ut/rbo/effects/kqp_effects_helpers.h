@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <util/system/env.h>
@@ -31,6 +32,15 @@ namespace NKikimr::NKqp {
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
             const auto edge = runtime.AllocateEdgeActor(nodeIndex);
             for (const auto service : {MakeKqpCompileServiceID(runtime.GetNodeId(nodeIndex)), MakeKqpProxyID(runtime.GetNodeId(nodeIndex))}) {
+                // These tests pin the configuration after fixture setup. A
+                // delayed startup notification can otherwise overwrite the
+                // direct update even after the service has acknowledged it.
+                const auto subscriber = runtime.GetLocalServiceId(service, nodeIndex);
+                runtime.Send(new IEventHandle(NConsole::MakeConfigsDispatcherID(runtime.GetNodeId(nodeIndex)), edge,
+                    new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(subscriber)), nodeIndex);
+                UNIT_ASSERT(runtime.GrabEdgeEvent<NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse>(
+                    edge, TDuration::Seconds(30)));
+
                 auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
                 *notification->Record.MutableConfig() = *kikimr.GetTestServer().GetSettings().AppConfig;
                 *notification->Record.MutableConfig()->MutableTableServiceConfig() = config;

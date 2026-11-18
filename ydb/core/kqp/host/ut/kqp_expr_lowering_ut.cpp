@@ -63,6 +63,14 @@ void CheckType(const TString& expression, TStringBuf expected) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlExpressionLowering) {
+    Y_UNIT_TEST(YqlNamespaceUsesCoreCallables) {
+        CheckType("Yql::SqlIn([1, 2], 1, AsTuple())", "Bool");
+        CheckType("yQl::Just(1)", "Optional<Int32>");
+        TFixture f;
+        f.Parse("SELECT Yql::SqlIn([1, 2], 1, AsTuple());");
+        UNIT_ASSERT(f.Lower()->IsCallable("SqlIn"));
+    }
+
     // Run literal callables through the shared annotator to cover suffixes,
     // bases and inferred widths instead of checking callable text alone.
     Y_UNIT_TEST(LiteralsUseExistingTypeAnnotation) {

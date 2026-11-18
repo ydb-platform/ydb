@@ -26,8 +26,13 @@ TIntrusivePtr<TOpRoot> LowerToRbo(const TQuery& query, const TScript& script,
     const TResolvedNames& names, const TAnnotatedAst& annotations,
     NYql::TExprContext& ctx, const TRboTableLookup& tables, bool orderedColumns = false, TCompileTrace* trace = nullptr);
 
+struct TRboWriteSettings {
+    bool OrderedColumns = false;
+    bool EnableIndexStreamWrite = true;
+};
+
 TIntrusivePtr<TOpRoot> LowerWriteToRbo(const TWriteStatement& write, const TScript& script,
     const TResolvedNames& names, const TAnnotatedAst& annotations,
-    NYql::TExprContext& ctx, const TRboTableLookup& tables, bool orderedColumns = false, TCompileTrace* trace = nullptr);
+    NYql::TExprContext& ctx, const TRboTableLookup& tables, const TRboWriteSettings& settings = {}, TCompileTrace* trace = nullptr);
 
 } // namespace NKikimr::NKqp::NNewYql

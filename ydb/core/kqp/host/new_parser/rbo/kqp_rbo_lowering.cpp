@@ -53,7 +53,7 @@ public:
     // Subqueries return relations so their IUs live in the same registry as the
     // parent plan, even when their producer is shared.
     TIntrusivePtr<TOpRoot> Run(const TQuery& query, bool orderedColumns) {
-        auto relation = Query(query);
+        auto relation = Query(query, {}, true);
         auto outputIds = Names.QueryOutputs.at(&query);
         const auto* select = std::get_if<TSelect>(&query.Body);
         // Match RewriteSelect's presentation order for a plain SELECT *.
@@ -72,7 +72,7 @@ public:
         return Finish(std::move(root));
     }
 
-    TIntrusivePtr<TOpRoot> RunWrite(const TWriteStatement& write, bool orderedColumns) {
+    TIntrusivePtr<TOpRoot> RunWrite(const TWriteStatement& write, const TRboWriteSettings& settings) {
         const auto pos = Pos(write.Target->Range);
         const auto& metadata = *Names.Tables.at(write.Target.get());
         const auto table = Tables(metadata);
@@ -120,13 +120,24 @@ public:
                 break;
             case EWriteKind::Update:
                 kind = metadata.HasWriteIndexes ? EEffectType::UpdateRowsIndex : EEffectType::UpdateRows;
+                if (!metadata.HasWriteIndexes && !write.Input && write.Rows.empty()) {
+                    // Searched UPDATE already reads the matching rows. Match
+                    // BuildUpdateTable: UPDATE ON still needs UpdateRows to
+                    // check existence, and indexed updates retain index upkeep.
+                    kind = EEffectType::UpsertRows;
+                    options.Settings = TVector<TExprNode::TPtr>{
+                        Ctx.NewList(pos, {Ctx.NewAtom(pos, "Mode"),
+                            Ctx.NewAtom(pos, settings.EnableIndexStreamWrite ? "update_conditional" : "upsert")}),
+                        Ctx.NewList(pos, {Ctx.NewAtom(pos, "IsUpdate")}),
+                        Ctx.NewList(pos, {Ctx.NewAtom(pos, "IsConditionalUpdate")})};
+                }
                 break;
             case EWriteKind::Delete:
                 kind = metadata.HasWriteIndexes ? EEffectType::DeleteRowsIndex : EEffectType::DeleteRows;
                 break;
         }
         auto returning = Names.ReturningColumns.at(&write);
-        if (write.ReturningAll && !orderedColumns) { std::sort(returning.begin(), returning.end()); }
+        if (write.ReturningAll && !settings.OrderedColumns) { std::sort(returning.begin(), returning.end()); }
         for (const auto& name : returning) {
             options.ReturningColumns.Append(Props.InfoUnitRegistry.Add(TInfoUnit("", name)), name);
         }
@@ -669,7 +680,7 @@ private:
         }
     }
 
-    TRelation SetOperation(const TQuery& query, const TSetOperation& set, const TBindings& outer) {
+    TRelation SetOperation(const TQuery& query, const TSetOperation& set, const TBindings& outer, bool orderedResult) {
         if (set.Op != ESetOperation::Union && set.Quantifier == ESetQuantifier::All) {
             Unsupported(query.Range, "INTERSECT/EXCEPT ALL multiplicities");
         }
@@ -735,7 +746,7 @@ private:
             });
             Distinct(distinctColumns, pos, result);
         }
-        Sort(query.OrderBy, pos, result);
+        if (orderedResult || query.Limit || query.Offset) { Sort(query.OrderBy, pos, result); }
         Limit(query, result);
         return result;
     }
@@ -743,9 +754,9 @@ private:
     // Build logical operators in SQL evaluation order: input, WHERE, projection,
     // DISTINCT, sorting, then count/offset. A source-free SELECT uses EmptySource
     // as the singleton input on which constant projections are evaluated.
-    TRelation Query(const TQuery& query, const TBindings& outer = {}) {
+    TRelation Query(const TQuery& query, const TBindings& outer = {}, bool orderedResult = false) {
         const auto* select = std::get_if<TSelect>(&query.Body);
-        if (!select) { return SetOperation(query, std::get<TSetOperation>(query.Body), outer); }
+        if (!select) { return SetOperation(query, std::get<TSetOperation>(query.Body), outer, orderedResult); }
         if (select->AssumeOrderBy) { Unsupported(query.Range, "ASSUME ORDER BY"); }
         const auto pos = Pos(query.Range);
         TRelation relation = select->From ? Source(*select->From) : TRelation{MakeIntrusive<TOpEmptySource>(pos), {}};
@@ -797,7 +808,9 @@ private:
             Distinct(outputIds, pos, relation);
             outputs = relation.Bindings;
         }
-        Sort(select->OrderBy, pos, relation);
+        // A subquery's order is not an output contract. Retain it only when
+        // it determines which rows the same query's LIMIT/OFFSET selects.
+        if (orderedResult || query.Limit || query.Offset) { Sort(select->OrderBy, pos, relation); }
         Limit(query, relation);
         relation.Bindings = std::move(outputs);
         return relation;
@@ -826,9 +839,9 @@ TIntrusivePtr<TOpRoot> LowerToRbo(const TQuery& query, const TScript& script,
 
 TIntrusivePtr<TOpRoot> LowerWriteToRbo(const TWriteStatement& write, const TScript& script,
     const TResolvedNames& names, const TAnnotatedAst& annotations, TExprContext& ctx,
-    const TRboTableLookup& tables, bool orderedColumns, TCompileTrace* trace)
+    const TRboTableLookup& tables, const TRboWriteSettings& settings, TCompileTrace* trace)
 {
-    return TLowerer(script, names, annotations, ctx, tables, trace).RunWrite(write, orderedColumns);
+    return TLowerer(script, names, annotations, ctx, tables, trace).RunWrite(write, settings);
 }
 
 } // namespace NKikimr::NKqp::NNewYql

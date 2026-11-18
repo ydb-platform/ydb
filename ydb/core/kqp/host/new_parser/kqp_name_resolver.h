@@ -61,15 +61,24 @@ struct TResolvedColumn {
     std::optional<TColumnId> Input; // Projection or derived-table column.
 };
 
+// Provider configuration is applied before metadata loading and scalar typing.
+// DEFAULT is distinct from a bare pragma, which supplies an empty string.
+struct TProviderPragma {
+    TString Provider;
+    TString Name;
+    TVector<TString> Values;
+    bool Default = false;
+};
+
+using TProviderPragmas = THashMap<const TPragmaStatement*, TProviderPragma>;
+
 // Pointer keys refer to the unchanged input AST, which must outlive this result.
 // Column IDs are local to this result; RBO lowering can allocate IUs for them.
 struct TResolvedNames {
     THashMap<const TDeclareStatement*, TString> DeclarationNames;
     THashMap<const TWriteStatement*, TVector<TString>> WriteColumns;
     THashMap<const TWriteStatement*, TVector<TString>> ReturningColumns;
-    // Decoded static optimizer pragmas. The host dispatches these in statement
-    // order after native lowering succeeds; an empty value means DEFAULT.
-    THashMap<const TPragmaStatement*, TMaybe<TString>> CostBasedOptimizationPragmas;
+    TProviderPragmas ProviderPragmas;
     TVector<TResolvedColumn> Columns;
     THashMap<const TSource*, TTableMetadataPtr> Tables;
     THashMap<const TExpression*, TColumnId> ColumnReferences;
@@ -96,6 +105,7 @@ struct TNameResolutionResult {
 
 struct TTableReferencesResult {
     TVector<std::pair<TString, TString>> Tables; // Unique (cluster, path), in first-use order.
+    TProviderPragmas ProviderPragmas;
     NYql::TIssues Issues;
 
     bool IsOk() const { return Issues.Empty(); }

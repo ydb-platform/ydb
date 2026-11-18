@@ -4,6 +4,7 @@
 #include "lazy_provider/kqp_lazy_provider.h"
 #include "new_parser/kqp_new_parser.h"
 #include "new_parser/kqp_name_resolver.h"
+#include "new_parser/kqp_pragma.h"
 #include "new_parser/kqp_type_annotation.h"
 #include "new_parser/rbo/kqp_rbo_lowering.h"
 #include <ydb/core/kqp/tracing/kqp_compile_trace_transformer.h>
@@ -2687,6 +2688,21 @@ private:
                     ctx.IssueManager.AddIssues(references.Issues);
                     return false;
                 }
+                for (const auto& [pragma, setting] : references.ProviderPragmas) {
+                    Y_UNUSED(pragma);
+                    if (setting.Provider == "kikimr" && SessionCtx->Config().IsRuntime(setting.Name)) {
+                        ythrow TNewYqlParserFallback() << "Native runtime pragma: " << setting.Name;
+                    }
+                }
+                YQL_CLOG(INFO, ProviderKqp) << "New YQL pragma configuration started";
+                if (!NNewYql::ApplyProviderPragmas(*NewParserAst, references.ProviderPragmas, ctx, *TypesCtx)) {
+                    return false;
+                }
+                // Native plans bypass RewriteSelect, where this setting
+                // normally requests a retry through the legacy optimizer.
+                if (SessionCtx->Config().OptFallbackToLegacyOptimizer.Get()) {
+                    ythrow TNewYqlParserFallback() << "Forced fallback to legacy optimizer";
+                }
                 for (const auto& [cluster, path] : references.Tables) {
                     const auto* description = SessionCtx->Tables().GetTables().FindPtr(std::make_pair(cluster, path));
                     if (description && description->Metadata) { continue; }
@@ -2855,7 +2871,8 @@ private:
             if (const auto* write = std::get_if<NNewYql::TWriteStatement>(&statement.Value)) {
                 TCompileTraceScope lowerTrace(trace, TCompileTraceLevels::Step, "Lower native AST to RBO");
                 auto root = NNewYql::LowerWriteToRbo(*write, *NewParserAst, *NewParserNames, *NewParserTypes, ctx, lookup,
-                    TypesCtx->OrderedColumns, trace);
+                    {.OrderedColumns = TypesCtx->OrderedColumns,
+                     .EnableIndexStreamWrite = SessionCtx->Config().GetEnableIndexStreamWrite()}, trace);
                 root->PlanProps.PhysicalTxGroup = 0;
                 root->PlanProps.EffectPriority = 0;
                 if (root->PlanProps.WithReturning) {
@@ -2918,21 +2935,6 @@ private:
         if (TCollectParametersTransformer(SessionCtx->QueryPtr())(parameters, output, ctx) == IGraphTransformer::TStatus::Error) {
             return false;
         }
-        // Static KQP settings apply to the whole compilation, as in the legacy
-        // configuration transformer. Defer mutation until all native fallback
-        // points have passed, so a retry through legacy starts unmodified.
-        for (const auto& statement : NewParserAst->Statements) {
-            const auto* pragma = std::get_if<NNewYql::TPragmaStatement>(&statement.Value);
-            if (!pragma) { continue; }
-            const auto* value = NewParserNames->CostBasedOptimizationPragmas.FindPtr(pragma);
-            if (!value) { continue; }
-            const auto pos = ctx.AppendPosition(TPosition(pragma->Name.Range.Column + 1,
-                pragma->Name.Range.Line, NewParserAst->File));
-            if (!SessionCtx->Config().Dispatch(NCommon::ALL_CLUSTERS, "CostBasedOptimizationLevel", *value,
-                NCommon::ISettingDispatcher::EStage::STATIC, NCommon::GetErrorCallback(pos, ctx))) {
-                return false;
-            }
-        }
         TransformCtx->NativeQuery = std::move(native);
         YQL_CLOG(INFO, ProviderKqp) << "New YQL native execution contract built";
         for (size_t i = 0; i < TransformCtx->NativeQuery->Roots.size(); ++i) {
@@ -2978,6 +2980,9 @@ private:
                 TransformCtx->NativeQuery.reset();
                 NewParserTypes.reset();
                 NewParserNames.reset();
+                // Literal provider settings apply to the whole compilation.
+                // The legacy configuration pass replays them in source order,
+                // including any configuration emitted by SQL translation.
                 input = LegacyCompile(ctx);
                 if (!input) { return {nullptr, false}; }
                 return {&GetYqlTransformer(SessionCtx->Config().GetEnableNewRBO()), false};

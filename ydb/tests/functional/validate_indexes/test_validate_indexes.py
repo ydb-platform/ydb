@@ -85,7 +85,7 @@ class TestValidateIndexes(unittest.TestCase):
         return result.returncode, result.stdout, result.stderr
 
     def _run_until_async_difference(self, reason):
-        # StaleRO can still see the fixture before the administrative write.
+        # Wait for the administrative write to become visible.
         deadline = time.monotonic() + 10
         while True:
             code, output, error = self._run(writes_stopped=True, async_retries=1, async_retry_delay=0.1)
@@ -96,7 +96,7 @@ class TestValidateIndexes(unittest.TestCase):
             time.sleep(0.1)
 
     def _corrupt(self, path, operation):
-        # Administrative writes bypass index maintenance, only on this fixture's tablets.
+        # Bypass index maintenance.
         request = msgbus_pb2.TSchemeDescribe(Path=path)
         request.Options.ReturnPartitioningInfo = True
         description = self.cluster.client.send(request, "SchemeDescribe").PathDescription
@@ -137,7 +137,6 @@ class TestValidateIndexes(unittest.TestCase):
         feed.initial_scan_progress.parts_total = 2
         feed.initial_scan_progress.parts_completed = 0
         expected = validator.Table._schema(description)
-        # Initial scanning progresses and becomes enabled without user DDL.
         feed.initial_scan_progress.parts_completed = 1
         self.assertEqual(validator.Table._schema(description), expected)
         feed.state = feed_type.STATE_ENABLED
@@ -550,7 +549,6 @@ class TestValidateIndexes(unittest.TestCase):
             UPSERT INTO `{self.table}` (id, value, amount) VALUES
                 (1u, 2u, Decimal('12345678901234567890123456789012345', 35, 0));
         """)
-        # The last digit differs; default Python Decimal precision would hide it.
         self._corrupt(self.table + "/by_value/indexImplTable", """(UpdateRow '__user__indexImplTable
             '('('value (Uint64 '2)) '('id (Uint64 '1)))
             '('('amount (Decimal '12345678901234567890123456789012346 '35 '0))))""")
@@ -677,7 +675,7 @@ class TestValidateIndexes(unittest.TestCase):
             generation = 0
             try:
                 while not stop.is_set():
-                    # Preserve id=0 so corruption there remains present during the load.
+                    # Leave id=0 unchanged for corruption checks.
                     values = ",".join(f"({key}u, {generation % 3}u, 'generation-{generation}')" for key in range(1, 24))
                     self._execute(f"""
                         DELETE FROM `{table_path}` WHERE id >= 24u AND id < 40u;

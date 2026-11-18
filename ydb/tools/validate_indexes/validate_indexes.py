@@ -25,7 +25,7 @@ def _quote(name):
 
 
 def _describe(driver, session, path):
-    # The SDK's TableSchemeEntry drops index types and covering columns.
+    # Preserve index types and covering columns omitted by the SDK.
     def unwrap(_, response):
         issues._process_response(response.operation)
         result = _apis.ydb_table.DescribeTableResult()
@@ -55,8 +55,7 @@ class Table:
         if not created.plan_step or not created.tx_id:
             raise ValueError("Table incarnation is unavailable in DescribeTable")
         schema = _apis.ydb_table.DescribeTableResult()
-        # Keep comparison-relevant definitions, excluding live statistics,
-        # partitioning and changefeed scan progress/state.
+        # Exclude runtime metadata from schema comparison.
         schema.columns.extend(description.columns)
         schema.primary_key.extend(description.primary_key)
         schema.indexes.extend(description.indexes)
@@ -89,17 +88,15 @@ def _query(table, indexes, columns):
                 expression = _quote(name)
                 kind = table.column_type(name)
                 if kind.HasField("pg_type"):
-                    # The Python SDK cannot decode PostgreSQL result columns.
                     if kind.pg_type.type_name in ("pgbpchar", "bpchar"):
-                        # Casting char(n) to text would trim stored trailing spaces.
+                        # Text casts trim bpchar trailing spaces.
                         expression = f"FromPg(Pg::bpcharout({expression}))"
                     else:
                         expression = f"FromPg(PgCast({expression}, PgText))"
                 elif kind.type_id in FLOAT_FORMATS or kind.type_id in (
                     _apis.ydb_value.Type.JSON, _apis.ydb_value.Type.JSON_DOCUMENT, _apis.ydb_value.Type.YSON,
                 ):
-                    # Float grouping merges signed zeros and NaNs. Compare their
-                    # exact bits; non-comparable payload types also need bytes.
+                    # Preserve signed zeros and NaN payloads.
                     expression = f"ToBytes({expression})"
             projection.append(f"{expression} AS c{number}")
         for source, delta in ((table, 1), (index, -1)):
@@ -115,7 +112,7 @@ def _query(table, indexes, columns):
 
 
 def _read_differences(driver, table, indexes, columns):
-    # Python datetime cannot represent the full range of YDB temporal types.
+    # Avoid Python datetime range limits.
     settings = (ydb.QueryClientSettings()
                 .with_native_date_in_result_sets(False)
                 .with_native_datetime_in_result_sets(False)
@@ -123,8 +120,7 @@ def _read_differences(driver, table, indexes, columns):
                 .with_native_interval_in_result_sets(False))
     with ydb.QuerySessionPool(driver, query_client_settings=settings) as pool:
         with pool.checkout() as session:
-            # Async implementation tables only support StaleRO. Keep them out
-            # of the one shared snapshot used for every synchronous index.
+            # Async index tables require StaleRO.
             for asynchronous, mode in ((False, ydb.QuerySnapshotReadOnly()), (True, ydb.QueryStaleReadOnly())):
                 positions = [position for position, (_, _, is_async) in enumerate(indexes) if is_async == asynchronous]
                 if not positions:
@@ -138,7 +134,6 @@ def _read_differences(driver, table, indexes, columns):
                         for row in result_set.rows:
                             yield positions[row["index_id"]], row
                 finally:
-                    # Never resume an interrupted query on a different snapshot.
                     stream.cancel()
 
 
@@ -174,8 +169,7 @@ def _check_schema(driver, session, described):
 
 
 def _check_async(driver, session, table, indexes, columns, described, retries, delay):
-    # StaleRO may read arbitrarily old follower state, including an old main
-    # table that hides a committed change. Do not confirm that observation.
+    # Stale main-table reads can hide index corruption.
     for source in [table] + [index for _, index, _ in indexes]:
         if any(value for _, value in source.description.read_replicas_settings.ListFields()):
             print(f"Skipping async validation: read replicas on {source.path} prevent freshness confirmation")
@@ -190,8 +184,6 @@ def _check_async(driver, session, table, indexes, columns, described, retries, d
             for position, result in _read_differences(driver, table, indexes, columns):
                 counts[position] += 1
                 diagnostics.write(_difference(table, indexes, columns, position, result) + "\n")
-            # No attempt, including a clean one, is valid without EOF and the
-            # schema checks. Transport failures propagate without retrying.
             _check_schema(driver, session, described)
             total = sum(counts)
             clean_passes = 0 if total else clean_passes + 1
@@ -250,8 +242,6 @@ def _validate(driver, session, path, writes_stopped, async_retries, async_retry_
         async_confirmed, counts = _check_async(driver, session, table, asynchronous, columns, described,
                                               async_retries, async_retry_delay)
         mismatches.update((name, count) for (name, _, _), count in zip(asynchronous, counts))
-    # Describes cannot prove the absence of transient DDL. External exclusion
-    # is mandatory; these checks additionally reject observed schema changes.
     _check_schema(driver, session, described)
     consistent = True
     inconclusive = False
@@ -279,8 +269,7 @@ def validate(driver, session, path, *, ddl_excluded=False, writes_stopped=False,
         raise ValueError("async_retries must be an integer of at least 1")
     if not math.isfinite(async_retry_delay) or async_retry_delay <= 0:
         raise ValueError("async_retry_delay must be a finite positive number")
-    # SDK Decimal decoding divides by the scale using Python's current precision.
-    # YDB supports up to 35 digits, exceeding Python's default precision of 28.
+    # YDB Decimal precision exceeds Python's default.
     with decimal.localcontext() as context:
         context.prec = max(context.prec, 35)
         return _validate(driver, session, path, writes_stopped, async_retries, async_retry_delay)
@@ -304,7 +293,6 @@ def main(argv=None):
         parser.error("async retries must be at least 1 and async retry delay must be finite and positive")
     path = posixpath.normpath(posixpath.join(args.database, args.table))
     try:
-        # Use anonymous auth locally; otherwise follow the SDK credential environment.
         credential_vars = (
             "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS", "YDB_USER", "YDB_ANONYMOUS_CREDENTIALS",
             "YDB_METADATA_CREDENTIALS", "YDB_ACCESS_TOKEN_CREDENTIALS", "YDB_OAUTH2_KEY_FILE",

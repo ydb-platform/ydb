@@ -991,10 +991,11 @@ TCmsTestEnv::RequestDDiskInfoList()
 }
 
 NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult
-TCmsTestEnv::RequestDDiskInfo(ui64 tabletId)
+TCmsTestEnv::RequestDDiskInfo(ui64 tabletId, bool includeHealth)
 {
     auto event = MakeHolder<TEvCms::TEvDDiskInfoGetRequest>();
     event->Record.SetTabletId(tabletId);
+    event->Record.SetIncludeHealth(includeHealth);
     SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
 
     TAutoPtr<IEventHandle> handle;

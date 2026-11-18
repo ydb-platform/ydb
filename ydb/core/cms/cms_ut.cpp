@@ -522,7 +522,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                 }
             }
             // Exercise the HTTP parameter mapping through the actual proxy and CMS.
-            auto checkHttpOrder = [&](const TString& params, std::initializer_list<ui64> expectedIds) {
+            auto checkHttpOrder = [&](const TString& params, std::initializer_list<ui64> expectedIds,
+                    bool checkProjection = false) {
                 TFakeMonHttpRequest httpRequest(HTTP_METHOD_GET,
                     "/api/json/ddisk/tablets?" + params, {}, "");
                 const auto edge = env.AllocateEdgeActor();
@@ -543,6 +544,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                 for (ui64 tabletId : expectedIds) {
                     UNIT_ASSERT_VALUES_EQUAL(tablets[i++]["TabletId"].GetUInteger(), tabletId);
                 }
+                if (checkProjection) {
+                    const auto& fields = json["FieldsAvailable"].GetArray();
+                    UNIT_ASSERT_VALUES_EQUAL(fields.size(), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(fields[0].GetString(), "TabletId");
+                    UNIT_ASSERT_VALUES_EQUAL(fields[1].GetString(), "Degrade");
+                    UNIT_ASSERT(tablets[0].Has("Degrade"));
+                    UNIT_ASSERT(!tablets[0].Has("GroupsCount"));
+                }
             };
             checkHttpOrder("sort_by=degrade&sort_desc=0", {2003, 2001, 2002});
             checkHttpOrder("sort_by=degrade&sort_desc=1", {2002, 2001, 2003});
@@ -550,6 +559,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             checkHttpOrder("group_by_degrade=1&sort_desc=1", {2002, 2001, 2003});
             checkHttpOrder("group_by_degrade=0", {2001, 2002, 2003});
             checkHttpOrder("group_by_degrade=1&offset=1&limit=1&only_problems=1", {2001});
+            checkHttpOrder("fields_required=Degrade&limit=1&timeout=30000", {2001}, true);
 
             // Counts must also be populated when parsing is deferred until after paging.
             for (auto sortBy : {NKikimrCms::DDISK_TABLET_SORT_BY_TABLET_ID,
@@ -575,6 +585,49 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                 }
             }
 
+            {
+                NKikimrCms::TDDiskTabletListRequest summary;
+                summary.SetGroupBy(NKikimrCms::DDISK_TABLET_GROUP_BY_DEGRADE);
+                summary.SetGroupsOnly(true);
+                summary.SetOnlyProblems(true);
+                const auto response = env.RequestDDiskTabletList(summary);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetUnfilteredCount(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTotalCount(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(response.TabletsSize(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(response.GroupsSize(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetGroups(0).GetName(), "2");
+                UNIT_ASSERT_VALUES_EQUAL(response.GetGroups(1).GetName(), "1");
+                UNIT_ASSERT_VALUES_EQUAL(response.GetGroups(0).GetCount(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetGroups(1).GetCount(), 1);
+
+                const auto detail = env.RequestDDiskInfo(2002, true);
+                UNIT_ASSERT_VALUES_EQUAL(detail.GetStatus(), NKikimrProto::OK);
+                const auto& group = detail.GetGroups(0);
+                UNIT_ASSERT_VALUES_EQUAL(group.DDiskHealthSize(), group.DDiskIdSize());
+                UNIT_ASSERT_VALUES_EQUAL(group.PersistentBufferHealthSize(), group.PersistentBufferDDiskIdSize());
+                UNIT_ASSERT(group.GetDDiskHealth(0).GetStatus() == NKikimrWhiteboard::TDDiskStateInfo::Broken);
+                UNIT_ASSERT_VALUES_EQUAL(group.GetDDiskHealth(0).GetReason(), "DeviceIoError");
+                UNIT_ASSERT(!group.GetDDiskHealth(group.DDiskHealthSize() - 1).HasStatus());
+                UNIT_ASSERT_VALUES_EQUAL(group.GetUnavailableDDiskCount(), swapRoles ? 1 : 2);
+                UNIT_ASSERT_VALUES_EQUAL(group.GetUnavailablePersistentBufferCount(), swapRoles ? 2 : 1);
+                UNIT_ASSERT(group.GetMonitoredQuorum() ==
+                    NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult::NoQuorum);
+                UNIT_ASSERT_VALUES_EQUAL(detail.SlotsSize(), 4);
+                const auto& slot = detail.GetSlots(0);
+                UNIT_ASSERT_VALUES_EQUAL(slot.GetNodeId(), env.GetNodeId(0));
+                UNIT_ASSERT_VALUES_EQUAL(slot.GetPDiskId(), pdiskIds.at(slot.GetNodeId()));
+                UNIT_ASSERT_VALUES_EQUAL(slot.GetDDiskSlotId(), 1);
+                UNIT_ASSERT(slot.GetDDiskPath().StartsWith("actors/ddisks/ddisk_p"));
+                UNIT_ASSERT(!slot.GetPersistentBufferId().empty());
+                UNIT_ASSERT(!slot.GetHasWhiteboardData());
+                UNIT_ASSERT(slot.GetDDiskStatus() == NKikimrWhiteboard::TDDiskStateInfo::Broken);
+                UNIT_ASSERT(slot.GetPersistentBufferStatus() == NKikimrWhiteboard::TDDiskStateInfo::Broken);
+                const auto legacy = env.RequestDDiskInfo(2002);
+                UNIT_ASSERT_VALUES_EQUAL(legacy.GetGroups(0).DDiskHealthSize(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(legacy.SlotsSize(), 0);
+            }
+
             NKikimrCms::TDDiskTabletListRequest request;
             request.SetGroupByDegrade(true);
             request.SetLimit(0);
@@ -585,6 +638,15 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                 UNIT_ASSERT_VALUES_EQUAL(response.TabletsSize(), 3);
                 UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(0).GetTabletId(), 2002);
                 UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(0).GetDegrade(), 2);
+                const auto& tablet = response.GetTablets(0);
+                UNIT_ASSERT_VALUES_EQUAL(tablet.UnavailableDDiskGroupsSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(tablet.UnavailablePersistentBufferGroupsSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailableDDiskGroups(0).GetMissing(), swapRoles ? 1 : 2);
+                UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailablePersistentBufferGroups(0).GetMissing(), swapRoles ? 2 : 1);
+                UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailableDDiskGroups(0).GetCount(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailablePersistentBufferGroups(0).GetCount(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(tablet.GetGroupsWithUnknownDDiskStatus(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(tablet.GetGroupsWithUnknownPersistentBufferStatus(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(1).GetTabletId(), 2001);
                 UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(1).GetDegrade(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(1).GetUnavailableDDiskCount(), 3);
@@ -986,6 +1048,107 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             UNIT_ASSERT(!disk.HasDDiskOccupancy());
             UNIT_ASSERT(!disk.HasPersistentBufferOccupancy());
         }
+    }
+
+    Y_UNIT_TEST(DDiskConfiguredInventoryAndFilters)
+    {
+        TCmsTestEnv env(8);
+        NKikimrCms::TDDiskDiskListRequest request;
+        request.SetInventory(true);
+        request.SetLimit(0);
+        request.SetIncludeTabletIds(false);
+        const auto oldController = env.RequestDDiskDiskList(request);
+        UNIT_ASSERT_VALUES_EQUAL(oldController.GetStatus().GetCode(), NKikimrCms::TStatus::ERROR_TEMP);
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            auto& config = *TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig();
+            config.SetHasDDiskPools(false);
+        }
+        const auto ordinary = env.RequestDDiskDiskList(request);
+        UNIT_ASSERT_VALUES_EQUAL(ordinary.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(ordinary.GetTotalCount(), 0);
+
+        const auto first = env.PDiskId(0, 0);
+        const auto second = env.PDiskId(1, 0);
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            auto& config = *TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig();
+            config.SetHasDDiskPools(true);
+            auto addSlot = [&](bool ddisk, const TPDiskID& pdisk, ui32 slotId) {
+                auto* group = config.AddGroup();
+                group->SetIsProxyGroup(true); // storage identity only, independent of mock VDisks
+                group->SetDDisk(ddisk);
+                group->SetStoragePoolName("typed-inventory");
+                auto* slot = group->AddVSlotId();
+                slot->SetNodeId(pdisk.NodeId);
+                slot->SetPDiskId(pdisk.DiskId);
+                slot->SetVSlotId(slotId);
+            };
+            addSlot(true, first, 1000);
+            addSlot(true, second, 1001);
+            addSlot(false, first, 1002);
+            auto& info = TFakeNodeWhiteboardService::Info.at(first.NodeId);
+            info.PDiskStateInfo.at(first.DiskId).SetState(NKikimrBlobStorage::TPDiskState::Normal);
+            auto& sample = info.DDiskStateInfo.emplace_back();
+            sample.SetPDiskId(first.DiskId);
+            sample.SetDDiskSlotId(1000);
+            sample.SetDDiskStatus(NKikimrWhiteboard::TDDiskStateInfo::Ready);
+            sample.SetPersistentBufferStatus(NKikimrWhiteboard::TDDiskStateInfo::Broken);
+            sample.SetPersistentBufferStatusReason("buffer failure");
+            sample.SetAllocatedSize(100);
+            sample.SetAvailableSize(200);
+            sample.SetTotalSize(300);
+            TFakeNodeWhiteboardService::Info.at(second.NodeId).PDiskStateInfo.at(second.DiskId)
+                .SetState(NKikimrBlobStorage::TPDiskState::DeviceIoError);
+        }
+        const auto inventory = env.RequestDDiskDiskList(request);
+        UNIT_ASSERT_VALUES_EQUAL(inventory.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(inventory.GetUnfilteredCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(inventory.DisksSize(), 2);
+        const auto& healthyPDisk = inventory.GetDisks(0);
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetDiskId().GetDDiskSlotId(), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetStoragePoolName(), "typed-inventory");
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetDDiskTabletCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetPersistentBufferTabletCount(), 0);
+        UNIT_ASSERT(healthyPDisk.GetAvailable());
+        UNIT_ASSERT(healthyPDisk.GetDDiskStatus() == NKikimrWhiteboard::TDDiskStateInfo::Ready);
+        UNIT_ASSERT(healthyPDisk.GetPersistentBufferStatus() == NKikimrWhiteboard::TDDiskStateInfo::Broken);
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetPersistentBufferStatusReason(), "buffer failure");
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetTotalSize(), 300);
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetAvailableSize(), 200);
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetAllocatedSize(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(inventory.GetDisks(1).GetDDiskStatusReason(), "DeviceIoError");
+        UNIT_ASSERT_VALUES_EQUAL(inventory.GetDisks(1).GetPersistentBufferStatusReason(), "DeviceIoError");
+        UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskDiskList().GetTotalCount(), 0);
+
+        request.SetGroupBy(NKikimrCms::DDISK_DISK_GROUP_BY_STATE);
+        request.SetGroupsOnly(true);
+        request.SetOnlyProblems(true);
+        request.SetOffset(1);
+        request.SetLimit(1);
+        const auto grouped = env.RequestDDiskDiskList(request);
+        UNIT_ASSERT_VALUES_EQUAL(grouped.GetTotalCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(grouped.GroupsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(grouped.GetGroups(0).GetName(), "DeviceIoError");
+        UNIT_ASSERT_VALUES_EQUAL(grouped.GetGroups(1).GetName(), "Normal");
+        UNIT_ASSERT_VALUES_EQUAL(grouped.DisksSize(), 0);
+
+        request.SetGroupsOnly(false);
+        request.SetOffset(0);
+        request.SetFilterGroup("Normal");
+        const auto expanded = env.RequestDDiskDiskList(request);
+        UNIT_ASSERT_VALUES_EQUAL(expanded.GetUnfilteredCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(expanded.GetTotalCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(expanded.GetDisks(0).GetDiskId().GetNodeId(), first.NodeId);
+
+        request.ClearFilterGroup();
+        request.SetNodeId(first.NodeId);
+        request.SetPDiskId(second.DiskId);
+        UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskDiskList(request).GetTotalCount(), 0);
+        request.SetPDiskId(first.DiskId);
+        UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskDiskList(request).GetTotalCount(), 1);
+        request.SetTabletId(1); // inventory narrowed to an unknown exact tablet
+        UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskDiskList(request).GetTotalCount(), 0);
     }
 
     Y_UNIT_TEST(DDiskDiskListAggregationFilterSortAndPage)

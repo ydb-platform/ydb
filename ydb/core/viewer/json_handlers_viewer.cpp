@@ -300,6 +300,9 @@ void InitViewerGroupsJsonHandler(TJsonHandlers& jsonHandlers) {
             "A controller request timeout returns HTTP 504.",
     });
     jsonHandlers.AddHandler("/storage/nbs", new THttpHandler<TStorageNbsDiscovery>(yaml));
+    jsonHandlers.Capabilities["/cms/api/json/ddisk/tablets"] = 1;
+    jsonHandlers.Capabilities["/cms/api/json/ddisk/tablet"] = 1;
+    jsonHandlers.Capabilities["/cms/api/json/ddisk/disks"] = 1;
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {

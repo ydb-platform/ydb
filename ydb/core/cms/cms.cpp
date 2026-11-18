@@ -37,6 +37,7 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
+#include <util/str_stl.h>
 #include <util/system/hostname.h>
 
 #include <algorithm>
@@ -2064,6 +2065,7 @@ void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev)
         HFuncTraced(TEvCms::TEvResetMarkerRequest, Handle);
         HFuncTraced(TEvCms::TEvSetMarkerRequest, Handle);
         HFuncTraced(TEvCms::TEvGetClusterInfoRequest, Handle);
+        HFuncTraced(TEvCms::TEvDDiskInfoGetRequest, Handle);
         HFuncTraced(TEvCms::TEvDDiskTabletListRequest, Handle);
         HFuncTraced(TEvCms::TEvDDiskDiskListRequest, Handle);
 
@@ -2143,6 +2145,87 @@ void TCms::Handle(TEvCms::TEvDDiskInfoListRequest::TPtr& ev, const TActorContext
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
+namespace {
+
+using TDDiskSample = NKikimrWhiteboard::TDDiskStateInfo;
+using TDDiskComponentStatus = TDDiskSample::EComponentStatus;
+using TDDiskTabletLayout = NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult;
+
+auto DDiskKey(const NKikimrBlobStorage::NDDisk::TDDiskId& id) {
+    return std::tuple(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
+}
+
+void FillDDiskLocation(auto& disk, const TClusterInfo& cluster, const NKikimrBlobStorage::NDDisk::TDDiskId& id) {
+    const auto [nodeId, pdiskId, slotId] = DDiskKey(id);
+    const auto poolName = cluster.GetDDiskPoolName(nodeId, pdiskId, slotId);
+    if (!poolName.empty()) {
+        disk.SetStoragePoolName(poolName);
+    }
+    disk.SetDDiskPath(Sprintf("actors/ddisks/ddisk_p%09" PRIu32 "_s%09" PRIu32, pdiskId, slotId));
+    disk.SetPersistentBufferId(MakeBlobStoragePersistentBufferId(nodeId, pdiskId, slotId).ToString());
+}
+
+std::optional<TDDiskComponentStatus> GetComponentStatus(const TDDiskSample* sample, bool pdiskAvailable, bool buffer) {
+    if (!pdiskAvailable) {
+        return TDDiskSample::Broken;
+    }
+    if (sample && buffer && sample->HasPersistentBufferStatus()) {
+        return sample->GetPersistentBufferStatus();
+    }
+    if (sample && !buffer && sample->HasDDiskStatus()) {
+        return sample->GetDDiskStatus();
+    }
+    return std::nullopt;
+}
+
+void SetMemberHealth(TDDiskTabletLayout::TMemberHealth& health,
+        std::optional<TDDiskComponentStatus> status, TStringBuf reason) {
+    if (status) {
+        health.SetStatus(*status);
+    }
+    if (!reason.empty()) {
+        health.SetReason(reason.data(), reason.size());
+    }
+}
+
+struct TDDiskHealthCounts {
+    ui32 Ready = 0;
+    ui32 Unavailable = 0;
+    ui32 Unknown = 0;
+
+    void Add(std::optional<TDDiskComponentStatus> status) {
+        if (!status) {
+            ++Unknown;
+        } else if (*status == TDDiskSample::Ready) {
+            ++Ready;
+        } else {
+            ++Unavailable;
+        }
+    }
+};
+
+TDDiskTabletLayout::EMonitoredQuorum EstimateMonitoredQuorum(const TDDiskHealthCounts& disks,
+        const TDDiskHealthCounts& buffers) {
+    constexpr ui32 requiredReady = 3;
+    if (disks.Ready + disks.Unknown < requiredReady || buffers.Ready + buffers.Unknown < requiredReady) {
+        return TDDiskTabletLayout::NoQuorum;
+    }
+    if (disks.Ready >= requiredReady && buffers.Ready >= requiredReady) {
+        return TDDiskTabletLayout::Quorum;
+    }
+    return TDDiskTabletLayout::Unknown;
+}
+
+} // anonymous namespace
+
+void TCms::HandleDDiskInfoGet(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Get()->Record.GetIncludeHealth()) {
+        EnqueueRequest(ev.Release(), ctx);
+    } else {
+        Handle(ev, ctx);
+    }
+}
+
 void TCms::Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext& ctx) {
     auto response = MakeHolder<TEvCms::TEvDDiskInfoGetResponse>();
     const auto it = State->DDiskInfo.find(ev->Get()->Record.GetTabletId());
@@ -2155,6 +2238,62 @@ void TCms::Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext&
         response->Record.SetStatus(NKikimrProto::ERROR);
         response->Record.SetTabletId(ev->Get()->Record.GetTabletId());
         response->Record.SetErrorReason("failed to parse persisted DDisk snapshot");
+    } else if (ev->Get()->Record.GetIncludeHealth()) {
+        if (!ClusterInfo || ClusterInfo->IsOutdated()) {
+            response->Record.Clear();
+            response->Record.SetStatus(NKikimrProto::NOTREADY);
+            response->Record.SetTabletId(ev->Get()->Record.GetTabletId());
+            response->Record.SetErrorReason("Cannot collect cluster state");
+        } else {
+            THashSet<std::tuple<ui32, ui32, ui32>> slots;
+            auto fillHealth = [&](const auto& ids, auto& health, bool buffer) {
+                TDDiskHealthCounts counts;
+                for (const auto& id : ids) {
+                    auto& member = *health.Add();
+                    if (!id.GetNodeId() && !id.GetPDiskId()) {
+                        continue; // retain an aligned entry for the unallocated member
+                    }
+                    const auto [nodeId, pdiskId, slotId] = DDiskKey(id);
+                    const auto* sample = ClusterInfo->FindDDiskState(nodeId, pdiskId, slotId);
+                    const bool pdiskAvailable = IsDDiskAvailable(id);
+                    const auto status = GetComponentStatus(sample, pdiskAvailable, buffer);
+                    const TString pdiskFailure = pdiskAvailable ? TString{} : GetDDiskStateName(id);
+                    const TString reason = !pdiskAvailable ? pdiskFailure : sample
+                        ? (buffer ? sample->GetPersistentBufferStatusReason() : sample->GetDDiskStatusReason()) : TString{};
+                    SetMemberHealth(member, status, reason);
+                    counts.Add(status);
+
+                    if (slots.emplace(nodeId, pdiskId, slotId).second) {
+                        auto& disk = *response->Record.AddSlots();
+                        if (sample) {
+                            disk.CopyFrom(*sample);
+                        } else {
+                            disk.SetHasWhiteboardData(false);
+                        }
+                        disk.SetNodeId(nodeId);
+                        disk.SetPDiskId(pdiskId);
+                        disk.SetDDiskSlotId(slotId);
+                        FillDDiskLocation(disk, *ClusterInfo, id);
+                        if (!pdiskAvailable) {
+                            disk.SetDDiskStatus(TDDiskSample::Broken);
+                            disk.SetPersistentBufferStatus(TDDiskSample::Broken);
+                            disk.SetDDiskStatusReason(pdiskFailure);
+                            disk.SetPersistentBufferStatusReason(pdiskFailure);
+                        }
+                    }
+                }
+                return counts;
+            };
+            for (auto& group : *response->Record.MutableGroups()) {
+                const auto disks = fillHealth(group.GetDDiskId(), *group.MutableDDiskHealth(), false);
+                const auto buffers = fillHealth(group.GetPersistentBufferDDiskId(), *group.MutablePersistentBufferHealth(), true);
+                group.SetUnavailableDDiskCount(disks.Unavailable);
+                group.SetUnavailablePersistentBufferCount(buffers.Unavailable);
+                group.SetUnknownDDiskCount(disks.Unknown);
+                group.SetUnknownPersistentBufferCount(buffers.Unknown);
+                group.SetMonitoredQuorum(EstimateMonitoredQuorum(disks, buffers));
+            }
+        }
     }
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
@@ -2242,6 +2381,7 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
     const auto sortBy = request.GetSortBy();
     const bool sortDescending = request.GetSortDescending();
     const bool onlyProblems = request.GetOnlyProblems();
+    const bool groupsOnly = request.GetGroupsOnly();
 
     struct TItem {
         ui64 TabletId;
@@ -2258,40 +2398,71 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
         || sortBy == NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT
         || sortBy == NKikimrCms::DDISK_TABLET_SORT_BY_DISK_USAGE
         || request.GetGroupBy() != NKikimrCms::DDISK_TABLET_GROUP_BY_NONE;
-    auto fillCounts = [&](TItem& item) {
-        NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
+    using TTabletRevision = NKikimrCms::TDDiskTabletListResponse::TTabletRevision;
+    auto fillCounts = [&](TItem& item, TTabletRevision* tablet = nullptr) {
+        TDDiskTabletLayout state;
         if (state.ParseFromString(item.Info->State)) {
             item.GroupsCount = state.GroupsSize();
+            item.UnavailableDDisk = 0;
+            item.UnavailablePersistentBuffer = 0;
+            item.Degrade = 0;
+            item.DiskUsage.reset();
+            TMap<ui32, ui32> unavailableDDiskGroups;
+            TMap<ui32, ui32> unavailablePersistentBufferGroups;
+            ui32 groupsWithUnknownDDiskStatus = 0;
+            ui32 groupsWithUnknownPersistentBufferStatus = 0;
             bool completeUsage = true;
             for (const auto& group : state.GetGroups()) {
-                auto countUnavailable = [&](const auto& ids) {
-                    ui32 count = 0;
+                auto countHealth = [&](const auto& ids, bool buffer) {
+                    TDDiskHealthCounts counts;
                     for (const auto& id : ids) {
-                        // Empty ids represent unallocated slots, not failed disks.
-                        if ((id.GetNodeId() || id.GetPDiskId()) && !IsDDiskAvailable(id)) {
-                            ++count;
+                        // Empty ids represent unallocated slots.
+                        if (!id.GetNodeId() && !id.GetPDiskId()) {
+                            continue;
+                        }
+                        const auto* sample = ClusterInfo->FindDDiskState(
+                            id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
+                        const bool pdiskAvailable = IsDDiskAvailable(id);
+                        counts.Add(GetComponentStatus(sample, pdiskAvailable, buffer));
+                        if (!buffer) {
+                            if (!pdiskAvailable || !sample || !sample->HasDDiskOccupancy()
+                                    || !std::isfinite(sample->GetDDiskOccupancy()) || sample->GetDDiskOccupancy() < 0) {
+                                completeUsage = false;
+                            } else {
+                                item.DiskUsage = Max(item.DiskUsage.value_or(0), sample->GetDDiskOccupancy());
+                            }
                         }
                     }
-                    return count;
+                    return counts;
                 };
-                for (const auto& id : group.GetDDiskId()) {
-                    if (!id.GetNodeId() && !id.GetPDiskId()) {
-                        continue;
+                const auto disks = countHealth(group.GetDDiskId(), false);
+                const auto buffers = countHealth(group.GetPersistentBufferDDiskId(), true);
+                item.UnavailableDDisk += disks.Unavailable;
+                item.UnavailablePersistentBuffer += buffers.Unavailable;
+                item.Degrade = Max(item.Degrade, Max(disks.Unavailable, buffers.Unavailable));
+                if (tablet) {
+                    if (disks.Unavailable) {
+                        ++unavailableDDiskGroups[disks.Unavailable];
                     }
-                    const auto* sample = ClusterInfo->FindDDiskState(
-                        id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
-                    if (!IsDDiskAvailable(id) || !sample || !sample->HasDDiskOccupancy()
-                            || !std::isfinite(sample->GetDDiskOccupancy()) || sample->GetDDiskOccupancy() < 0) {
-                        completeUsage = false;
-                    } else {
-                        item.DiskUsage = Max(item.DiskUsage.value_or(0), sample->GetDDiskOccupancy());
+                    if (buffers.Unavailable) {
+                        ++unavailablePersistentBufferGroups[buffers.Unavailable];
                     }
+                    groupsWithUnknownDDiskStatus += disks.Unknown != 0;
+                    groupsWithUnknownPersistentBufferStatus += buffers.Unknown != 0;
                 }
-                const ui32 ddisks = countUnavailable(group.GetDDiskId());
-                const ui32 buffers = countUnavailable(group.GetPersistentBufferDDiskId());
-                item.UnavailableDDisk += ddisks;
-                item.UnavailablePersistentBuffer += buffers;
-                item.Degrade = Max(item.Degrade, Max(ddisks, buffers));
+            }
+            if (tablet) {
+                tablet->SetGroupsWithUnknownDDiskStatus(groupsWithUnknownDDiskStatus);
+                tablet->SetGroupsWithUnknownPersistentBufferStatus(groupsWithUnknownPersistentBufferStatus);
+                auto copyCounts = [](const auto& counts, auto& groups) {
+                    for (const auto& [missing, count] : counts) {
+                        auto* group = groups.Add();
+                        group->SetMissing(missing);
+                        group->SetCount(count);
+                    }
+                };
+                copyCounts(unavailableDDiskGroups, *tablet->MutableUnavailableDDiskGroups());
+                copyCounts(unavailablePersistentBufferGroups, *tablet->MutableUnavailablePersistentBufferGroups());
             }
             if (!completeUsage) {
                 item.DiskUsage.reset();
@@ -2304,7 +2475,10 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
         return key ? ToString(key - 1) : TString("unknown");
     };
     TVector<TItem> items;
-    items.reserve(State->DDiskInfo.size());
+    if (!groupsOnly) {
+        items.reserve(State->DDiskInfo.size());
+    }
+    ui32 foundCount = 0;
     for (const auto& [tabletId, info] : State->DDiskInfo) {
         if (!filter.empty() && !ToString(tabletId).Contains(filter)) {
             continue;
@@ -2328,7 +2502,24 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
                 continue;
             }
         }
-        items.push_back(item);
+        ++foundCount;
+        if (!groupsOnly) {
+            items.push_back(item);
+        }
+    }
+
+    auto response = MakeHolder<TEvCms::TEvDDiskTabletListResponse>();
+    response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
+    response->Record.SetTotalCount(foundCount);
+    response->Record.SetUnfilteredCount(State->DDiskInfo.size());
+    for (const auto& [key, count] : groupCounts) {
+        auto* group = response->Record.AddGroups();
+        group->SetName(groupName(key));
+        group->SetCount(count);
+    }
+    if (groupsOnly) {
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        return;
     }
 
     // Keep unsigned keys so tablet ids with the high bit set retain their natural ordering.
@@ -2370,15 +2561,6 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
         }
         return sortDescending ? keys[b] < keys[a] : keys[a] < keys[b];
     });
-    auto response = MakeHolder<TEvCms::TEvDDiskTabletListResponse>();
-    response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
-    response->Record.SetTotalCount(items.size());
-    for (const auto& [key, count] : groupCounts) {
-        auto* group = response->Record.AddGroups();
-        group->SetName(groupName(key));
-        group->SetCount(count);
-    }
-
     const ui32 offset = Min<ui32>(request.GetOffset(), items.size());
     const ui32 limit = request.GetLimit();
     // Compute in ui64 to avoid ui32 overflow when offset + limit would exceed
@@ -2386,10 +2568,9 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
     const ui32 end = limit == 0 ? items.size() : Min<ui64>(static_cast<ui64>(offset) + limit, items.size());
     for (ui32 i = offset; i < end; ++i) {
         auto& item = items[order[i]];
-        if (!needsCountsBeforePaging) {
-            fillCounts(item);
-        }
         auto* tablet = response->Record.AddTablets();
+        // Only returned tablets need the full per-group health distribution.
+        fillCounts(item, tablet);
         tablet->SetTabletId(item.TabletId);
         if (ClusterInfo->HasTablet(item.TabletId)) {
             const auto& diskId = ClusterInfo->Tablet(item.TabletId).NbsDiskId;
@@ -2426,46 +2607,87 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
     const auto sortBy = request.GetSortBy();
     const bool sortDescending = request.GetSortDescending();
     const bool onlyProblems = request.GetOnlyProblems();
+    const bool inventory = request.GetInventory();
+    const bool groupsOnly = request.GetGroupsOnly();
+    const bool includeTabletIds = request.GetIncludeTabletIds() && !groupsOnly;
+    const bool groupByState = request.GetGroupBy() == NKikimrCms::DDISK_DISK_GROUP_BY_STATE;
+    const bool filterByTablet = request.HasTabletId() || !tabletFilter.empty();
+    if (inventory && !ClusterInfo->GetHasDDiskPools().has_value()) {
+        return ReplyWithError<TEvCms::TEvDDiskDiskListResponse>(
+            ev, TStatus::ERROR_TEMP, "Controller did not report DDisk inventory", ctx);
+    }
 
+    struct TTabletUsage {
+        std::optional<ui64> LastTablet;
+        ui32 Count = 0;
+        TVector<ui64> TabletIds;
+
+        void AddTablet(ui64 tabletId, bool includeIds) {
+            // A tablet is processed at once, even if several of its groups use this slot.
+            if (LastTablet != tabletId) {
+                LastTablet = tabletId;
+                ++Count;
+                if (includeIds) {
+                    TabletIds.push_back(tabletId);
+                }
+            }
+        }
+    };
     struct TDiskUsage {
         NKikimrBlobStorage::NDDisk::TDDiskId DiskId;
-        TVector<ui64> DDiskTabletIds;
-        TVector<ui64> PersistentBufferTabletIds;
+        TTabletUsage DDisk;
+        TTabletUsage PersistentBuffer;
+        ui32 TabletCount = 0;
+        bool Available = true;
+        TString State;
+        const TDDiskSample* Sample = nullptr;
+        std::optional<TDDiskComponentStatus> DDiskStatus;
+        std::optional<TDDiskComponentStatus> PersistentBufferStatus;
         std::optional<double> DDiskOccupancy;
         std::optional<double> PersistentBufferOccupancy;
     };
 
-    auto diskKey = [](const NKikimrBlobStorage::NDDisk::TDDiskId& id) {
-        return TStringBuilder() << id.GetNodeId() << ":" << id.GetPDiskId() << ":" << id.GetDDiskSlotId();
+    auto matchesLocation = [&](ui32 nodeId, ui32 pdiskId) {
+        return (!request.HasNodeId() || request.GetNodeId() == nodeId)
+            && (!request.HasPDiskId() || request.GetPDiskId() == pdiskId);
     };
-
-    THashMap<TString, TDiskUsage> disks;
+    THashMap<std::tuple<ui32, ui32, ui32>, TDiskUsage> disks;
+    if (inventory) {
+        for (const auto& slot : ClusterInfo->GetDDiskSlots()) {
+            if (!matchesLocation(slot.GetNodeId(), slot.GetPDiskId())) {
+                continue;
+            }
+            auto& id = disks[{slot.GetNodeId(), slot.GetPDiskId(), slot.GetVSlotId()}].DiskId;
+            id.SetNodeId(slot.GetNodeId());
+            id.SetPDiskId(slot.GetPDiskId());
+            id.SetDDiskSlotId(slot.GetVSlotId());
+        }
+    }
     auto addUsage = [&](const NKikimrBlobStorage::NDDisk::TDDiskId& id, ui64 tabletId, bool isPersistentBuffer) {
-        // An unallocated DDisk/PersistentBuffer slot is represented by an
-        // empty TDDiskId (NodeId == 0 && PDiskId == 0, see ddisk_info.cpp's
-        // AddDDiskId() fallback for items without HasDDiskId()); it does not
-        // correspond to a real disk. Without this check, every tablet with an
-        // unallocated slot would be aggregated into a single phantom "0:0:0"
-        // disk row, inflating/corrupting its reported Tablets count.
-        if (id.GetNodeId() == 0 && id.GetPDiskId() == 0) {
+        // An empty TDDiskId represents an unallocated slot in a persisted DBG layout.
+        if ((!id.GetNodeId() && !id.GetPDiskId()) || !matchesLocation(id.GetNodeId(), id.GetPDiskId())) {
             return;
         }
-        const TString key = diskKey(id);
-        auto& usage = disks[key];
-        usage.DiskId = id;
-        auto& target = isPersistentBuffer ? usage.PersistentBufferTabletIds : usage.DDiskTabletIds;
-        if (Find(target, tabletId) == target.end()) {
-            target.push_back(tabletId);
+        const auto key = DDiskKey(id);
+        const auto it = inventory ? disks.find(key) : disks.try_emplace(key).first;
+        if (it == disks.end()) {
+            return;
         }
+        auto& usage = it->second;
+        usage.DiskId = id;
+        if (usage.DDisk.LastTablet != tabletId && usage.PersistentBuffer.LastTablet != tabletId) {
+            ++usage.TabletCount;
+        }
+        auto& target = isPersistentBuffer ? usage.PersistentBuffer : usage.DDisk;
+        target.AddTablet(tabletId, includeTabletIds);
     };
-
-    for (const auto& [tabletId, info] : State->DDiskInfo) {
+    auto collectUsage = [&](ui64 tabletId, const TCmsDDiskInfo& info) {
         if (!tabletFilter.empty() && !ToString(tabletId).Contains(tabletFilter)) {
-            continue;
+            return;
         }
         NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
         if (!state.ParseFromString(info.State)) {
-            continue;
+            return;
         }
         for (const auto& group : state.GetGroups()) {
             for (const auto& id : group.GetDDiskId()) {
@@ -2475,29 +2697,66 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
                 addUsage(id, tabletId, true);
             }
         }
+    };
+    if (request.HasTabletId()) {
+        if (const auto it = State->DDiskInfo.find(request.GetTabletId()); it != State->DDiskInfo.end()) {
+            collectUsage(it->first, it->second);
+        }
+    } else if (!inventory || filterByTablet || !groupsOnly) {
+        for (const auto& [tabletId, info] : State->DDiskInfo) {
+            collectUsage(tabletId, info);
+        }
     }
 
     TVector<const TDiskUsage*> items;
-    items.reserve(disks.size());
-    for (auto& [key, usage] : disks) {
-        if (!diskFilter.empty() && !key.Contains(diskFilter)) {
+    if (!groupsOnly) {
+        items.reserve(disks.size());
+    }
+    TMap<TString, ui32> groupCounts;
+    ui32 unfilteredCount = 0;
+    ui32 foundCount = 0;
+    for (auto& entry : disks) {
+        auto& usage = entry.second;
+        if (filterByTablet && !usage.TabletCount) {
             continue;
         }
-        if (onlyProblems && IsDDiskAvailable(usage.DiskId)) {
-            continue;
-        }
+        ++unfilteredCount;
         const auto& id = usage.DiskId;
-        const auto* space = ClusterInfo->FindDDiskState(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
-        if (IsDDiskAvailable(id) && space) {
+        if (!diskFilter.empty() && !(TStringBuilder() << id.GetNodeId() << ":" << id.GetPDiskId()
+                << ":" << id.GetDDiskSlotId()).Contains(diskFilter)) {
+            continue;
+        }
+        usage.Available = IsDDiskAvailable(id);
+        usage.Sample = ClusterInfo->FindDDiskState(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
+        usage.DDiskStatus = GetComponentStatus(usage.Sample, usage.Available, false);
+        usage.PersistentBufferStatus = GetComponentStatus(usage.Sample, usage.Available, true);
+        const auto knownUnavailable = [](std::optional<TDDiskComponentStatus> status) {
+            return status && status != TDDiskSample::Ready;
+        };
+        const bool unavailableRole = knownUnavailable(usage.DDiskStatus) || knownUnavailable(usage.PersistentBufferStatus);
+        if (onlyProblems && usage.Available && !(inventory && unavailableRole)) {
+            continue;
+        }
+        usage.State = GetDDiskStateName(id);
+        if (groupByState) {
+            ++groupCounts[usage.State];
+            if (request.HasFilterGroup() && request.GetFilterGroup() != usage.State) {
+                continue;
+            }
+        }
+        ++foundCount;
+        if (groupsOnly) {
+            continue;
+        }
+        if (const auto* space = usage.Sample; usage.Available && space) {
             // PDisk quota reductions can make normalized occupancy exceed 100%.
-            // Preserve that information instead of hiding an overfull owner.
             const double ddiskOccupancy = space->GetDDiskOccupancy();
-            if (!usage.DDiskTabletIds.empty() && space->HasDDiskOccupancy()
+            if ((inventory || usage.DDisk.Count) && space->HasDDiskOccupancy()
                     && std::isfinite(ddiskOccupancy) && ddiskOccupancy >= 0) {
                 usage.DDiskOccupancy = ddiskOccupancy;
             }
             const double bufferOccupancy = space->GetPersistentBufferOccupancy();
-            if (!usage.PersistentBufferTabletIds.empty() && space->HasPersistentBufferOccupancy()
+            if ((inventory || usage.PersistentBuffer.Count) && space->HasPersistentBufferOccupancy()
                     && std::isfinite(bufferOccupancy) && bufferOccupancy >= 0 && bufferOccupancy <= 1) {
                 usage.PersistentBufferOccupancy = bufferOccupancy;
             }
@@ -2505,50 +2764,31 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
         items.push_back(&usage);
     }
 
+    auto response = MakeHolder<TEvCms::TEvDDiskDiskListResponse>();
+    response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
+    response->Record.SetTotalCount(foundCount);
+    response->Record.SetUnfilteredCount(unfilteredCount);
+    for (const auto& [name, count] : groupCounts) {
+        auto* group = response->Record.AddGroups();
+        group->SetName(name);
+        group->SetCount(count);
+    }
+    if (groupsOnly) {
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        return;
+    }
+
     const bool occupancySort = sortBy == NKikimrCms::DDISK_DISK_SORT_BY_DDISK_OCCUPANCY
         || sortBy == NKikimrCms::DDISK_DISK_SORT_BY_PERSISTENT_BUFFER_OCCUPANCY;
     if (!occupancySort) {
-        auto idKey = [](const TDiskUsage* usage) -> std::tuple<ui32, ui32, ui32> {
-            return std::make_tuple(usage->DiskId.GetNodeId(), usage->DiskId.GetPDiskId(), usage->DiskId.GetDDiskSlotId());
-        };
-        // Precompute the unique-tablet count for each disk exactly once: computing
-        // it inside the comparator would build a THashSet and scan both tablet-id
-        // vectors O(N log N) times, which is expensive for large clusters.
-        TVector<size_t> tabletsCounts;
-        tabletsCounts.reserve(items.size());
-        for (const auto* usage : items) {
-            THashSet<ui64> unique;
-            for (auto id : usage->DDiskTabletIds) unique.insert(id);
-            for (auto id : usage->PersistentBufferTabletIds) unique.insert(id);
-            tabletsCounts.push_back(unique.size());
-        }
-        TVector<ui32> order(items.size());
-        std::iota(order.begin(), order.end(), 0);
-        std::stable_sort(order.begin(), order.end(), [&](ui32 a, ui32 b) -> bool {
-            bool less;
-            if (sortBy == NKikimrCms::DDISK_DISK_SORT_BY_TABLETS_COUNT) {
-                const size_t ca = tabletsCounts[a];
-                const size_t cb = tabletsCounts[b];
-                less = ca != cb ? ca < cb : idKey(items[a]) < idKey(items[b]);
-            } else {
-                less = idKey(items[a]) < idKey(items[b]);
+        std::sort(items.begin(), items.end(), [&](const TDiskUsage* left, const TDiskUsage* right) {
+            if (sortBy == NKikimrCms::DDISK_DISK_SORT_BY_TABLETS_COUNT && left->TabletCount != right->TabletCount) {
+                return sortDescending ? left->TabletCount > right->TabletCount : left->TabletCount < right->TabletCount;
             }
-            if (!sortDescending) {
-                return less;
-            }
-            return idKey(items[a]) != idKey(items[b]) && !less;
+            return sortDescending ? DDiskKey(right->DiskId) < DDiskKey(left->DiskId)
+                : DDiskKey(left->DiskId) < DDiskKey(right->DiskId);
         });
-        TVector<const TDiskUsage*> sortedItems;
-        sortedItems.reserve(items.size());
-        for (ui32 i : order) {
-            sortedItems.push_back(items[i]);
-        }
-        items = std::move(sortedItems);
     }
-
-    auto response = MakeHolder<TEvCms::TEvDDiskDiskListResponse>();
-    response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
-    response->Record.SetTotalCount(items.size());
 
     TVector<ui32> page;
     if (occupancySort) {
@@ -2573,27 +2813,46 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
         const auto* usage = items[i];
         auto* disk = response->Record.AddDisks();
         disk->MutableDiskId()->CopyFrom(usage->DiskId);
-        const auto& id = usage->DiskId;
-        const TString poolName = ClusterInfo->GetDDiskPoolName(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
-        if (!poolName.empty()) {
-            disk->SetStoragePoolName(poolName);
-        }
-        disk->SetDDiskPath(Sprintf("actors/ddisks/ddisk_p%09" PRIu32 "_s%09" PRIu32,
-            id.GetPDiskId(), id.GetDDiskSlotId()));
-        disk->SetPersistentBufferId(MakeBlobStoragePersistentBufferId(
-            id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId()).ToString());
-        disk->SetDDiskTabletCount(usage->DDiskTabletIds.size());
-        disk->SetPersistentBufferTabletCount(usage->PersistentBufferTabletIds.size());
-        if (request.GetIncludeTabletIds()) {
-            for (auto id : usage->DDiskTabletIds) {
+        FillDDiskLocation(*disk, *ClusterInfo, usage->DiskId);
+        disk->SetDDiskTabletCount(usage->DDisk.Count);
+        disk->SetPersistentBufferTabletCount(usage->PersistentBuffer.Count);
+        if (includeTabletIds) {
+            for (auto id : usage->DDisk.TabletIds) {
                 disk->AddDDiskTabletIds(id);
             }
-            for (auto id : usage->PersistentBufferTabletIds) {
+            for (auto id : usage->PersistentBuffer.TabletIds) {
                 disk->AddPersistentBufferTabletIds(id);
             }
         }
-        disk->SetAvailable(IsDDiskAvailable(usage->DiskId));
-        disk->SetState(GetDDiskStateName(usage->DiskId));
+        disk->SetAvailable(usage->Available);
+        disk->SetState(usage->State);
+        if (usage->DDiskStatus) {
+            disk->SetDDiskStatus(*usage->DDiskStatus);
+            if (!usage->Available) {
+                disk->SetDDiskStatusReason(usage->State);
+            } else if (usage->Sample && usage->Sample->HasDDiskStatusReason()) {
+                disk->SetDDiskStatusReason(usage->Sample->GetDDiskStatusReason());
+            }
+        }
+        if (usage->PersistentBufferStatus) {
+            disk->SetPersistentBufferStatus(*usage->PersistentBufferStatus);
+            if (!usage->Available) {
+                disk->SetPersistentBufferStatusReason(usage->State);
+            } else if (usage->Sample && usage->Sample->HasPersistentBufferStatusReason()) {
+                disk->SetPersistentBufferStatusReason(usage->Sample->GetPersistentBufferStatusReason());
+            }
+        }
+        if (const auto* sample = usage->Sample; usage->Available && sample) {
+            if (sample->HasAllocatedSize()) {
+                disk->SetAllocatedSize(sample->GetAllocatedSize());
+            }
+            if (sample->HasAvailableSize()) {
+                disk->SetAvailableSize(sample->GetAvailableSize());
+            }
+            if (sample->HasTotalSize()) {
+                disk->SetTotalSize(sample->GetTotalSize());
+            }
+        }
         if (usage->DDiskOccupancy) {
             disk->SetDDiskOccupancy(*usage->DDiskOccupancy);
         }

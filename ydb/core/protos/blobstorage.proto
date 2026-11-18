@@ -1791,14 +1791,35 @@ message TEvControllerDDiskInfoListTabletsResult {
 message TEvControllerDDiskInfoGetTablet {
     optional uint64 TabletId = 1;
     optional uint64 KnownRevision = 2;
+    optional bool IncludeHealth = 3; // enrich in CMS; BSC only supplies layout
 }
 
 message TEvControllerDDiskInfoGetTabletResult {
+    message TMemberHealth {
+        optional NKikimrWhiteboard.TDDiskStateInfo.EComponentStatus Status = 1;
+        optional string Reason = 2;
+    }
+
+    enum EMonitoredQuorum {
+        Unknown = 0;
+        Quorum = 1;
+        NoQuorum = 2;
+    }
+
     message TDirectBlockGroup {
         optional uint64 DirectBlockGroupId = 1;
         optional uint32 NumVChunksClaimed = 2;
         repeated NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 3;
         repeated NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 4;
+        // Role health entries align with DDiskId and PersistentBufferDDiskId respectively.
+        repeated TMemberHealth DDiskHealth = 5;
+        repeated TMemberHealth PersistentBufferHealth = 6;
+        optional uint32 UnavailableDDiskCount = 7;
+        optional uint32 UnavailablePersistentBufferCount = 8;
+        optional uint32 UnknownDDiskCount = 9;
+        optional uint32 UnknownPersistentBufferCount = 10;
+        // Estimate from observed members only. It does not describe volume availability.
+        optional EMonitoredQuorum MonitoredQuorum = 11;
     }
 
     optional NKikimrProto.EReplyStatus Status = 1;
@@ -1806,6 +1827,9 @@ message TEvControllerDDiskInfoGetTabletResult {
     optional uint64 TabletId = 3;
     optional uint64 Revision = 4;
     repeated TDirectBlockGroup Groups = 5;
+    // Allocated slots referenced by either role, keyed by node, PDisk, and slot.
+    // Included with health so a consumer can display the layout from one snapshot.
+    repeated NKikimrWhiteboard.TDDiskStateInfo Slots = 6;
 }
 
 message TEvControllerDDiskInfoTabletRevisionChanged {

@@ -338,19 +338,22 @@ void FillEncryptionSettings(
                 const auto& snapshot = mapping.GetIndexExportSnapshot();
                 auto& table = *task.MutableTable()->MutableTable();
                 // A KMeans build can publish its detected settings after index prefixes have been frozen.
+                THashMap<TPathId, const NKikimrSchemeOp::TVectorIndexKmeansTreeDescription*> readyKMeans;
+                for (const auto& current : table.GetTableIndexes()) {
+                    if (current.HasVectorIndexKmeansTreeDescription() && current.GetState() == NKikimrSchemeOp::EIndexStateReady) {
+                        readyKMeans.emplace(TPathId(current.GetPathOwnerId(), current.GetLocalPathId()),
+                            &current.GetVectorIndexKmeansTreeDescription());
+                    }
+                }
+
                 auto indexes = snapshot.GetTable().GetTable().GetTableIndexes();
                 for (auto& saved : indexes) {
                     if (!saved.HasVectorIndexKmeansTreeDescription()) {
                         continue;
                     }
-                    for (const auto& current : table.GetTableIndexes()) {
-                        if (current.GetPathOwnerId() == saved.GetPathOwnerId()
-                            && current.GetLocalPathId() == saved.GetLocalPathId()
-                            && current.GetState() == NKikimrSchemeOp::EIndexStateReady
-                            && current.HasVectorIndexKmeansTreeDescription()) {
-                            *saved.MutableVectorIndexKmeansTreeDescription() = current.GetVectorIndexKmeansTreeDescription();
-                            break;
-                        }
+                    const auto it = readyKMeans.find(TPathId(saved.GetPathOwnerId(), saved.GetLocalPathId()));
+                    if (it != readyKMeans.end()) {
+                        *saved.MutableVectorIndexKmeansTreeDescription() = *it->second;
                     }
                 }
                 table.MutableTableIndexes()->Swap(&indexes);

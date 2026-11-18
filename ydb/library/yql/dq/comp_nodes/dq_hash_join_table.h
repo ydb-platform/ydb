@@ -4,6 +4,10 @@
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/neumann_hash_table.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 
+#include <cstring>
+#include <unordered_set>
+#include <utility>
+
 namespace NKikimr::NMiniKQL::NJoinTable {
 
 using TTuple = const NYql::NUdf::TUnboxedValue*;
@@ -86,10 +90,16 @@ class TStdJoinTable {
 class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
   public:
 
-    TNeumannJoinTable(const NPackedTuple::TTupleLayout* layout, bool trackUsed = false)
+    // ANY on the build side keeps one build row per key. ANY on the probe side matches only the
+    // first probe row of a key.
+    TNeumannJoinTable(const NPackedTuple::TTupleLayout* layout, bool trackUsed = false,
+                      bool uniqueBuildKeys = false, bool firstProbeOnly = false)
         : Table_(layout)
+        , Layout_(layout)
         , RowWidth_(layout->TotalRowSize)
         , TrackUsed_(trackUsed)
+        , UniqueBuildKeys_(uniqueBuildKeys)
+        , FirstProbeOnly_(firstProbeOnly)
     {
         MKQL_ENSURE(Empty(), "table should be empty by default");
     }
@@ -102,10 +112,16 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
             BuildData_.PackedTuples.size() >= static_cast<size_t>(BuildData_.NTuples) * RowWidth_,
             TStringBuilder() << "NTuples (" << BuildData_.NTuples << ") exceeds PackedTuples capacity ("
                              << BuildData_.PackedTuples.size() << " bytes, row width " << RowWidth_ << ")");
+        if (UniqueBuildKeys_) {
+            DropDuplicateKeys();
+        }
         Table_.Build(BuildData_.PackedTuples.data(), BuildData_.Overflow.data(),
                      BuildData_.NTuples);
         if (TrackUsed_ && BuildData_.NTuples > 0) {
             Used_.resize(BuildData_.NTuples, 0);
+        }
+        if (FirstProbeOnly_ && BuildData_.NTuples > 0) {
+            Probed_.resize(BuildData_.NTuples, 0);
         }
     }
 
@@ -141,6 +157,9 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
                 std::predicate auto isFull) {
         if (Empty()) {
             resumeIndex = 0;
+            return true;
+        }
+        if (FirstProbeOnly_ && resumeIndex == 0 && !MarkProbed(row)) {
             return true;
         }
         bool full = false;
@@ -221,11 +240,50 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
     }
 
   private:
+    // All rows of a key are in the same table, so the table alone decides which row is kept.
+    void DropDuplicateKeys() {
+        ui8* rows = BuildData_.PackedTuples.data();
+        const ui8* overflow = BuildData_.Overflow.data();
+        const auto row = [&](size_t index) { return rows + index * RowWidth_; };
+        const auto hash = [&](size_t index) -> size_t { return NPackedTuple::Hash(row(index)); };
+        const auto equal = [&](size_t lhs, size_t rhs) {
+            return Layout_->KeysEqual(row(lhs), overflow, row(rhs), overflow);
+        };
+        std::unordered_set<size_t, decltype(hash), decltype(equal), TMKQLAllocator<size_t>> kept(
+            BuildData_.NTuples, hash, equal);
+        size_t size = 0;
+        for (size_t index = 0; index < static_cast<size_t>(BuildData_.NTuples); ++index) {
+            if (size != index) {
+                std::memcpy(row(size), row(index), RowWidth_);
+            }
+            // A NULL key is not equal to itself and never matches, so every such row is kept.
+            if (!equal(size, size) || kept.insert(size).second) {
+                ++size;
+            }
+        }
+        BuildData_.PackedTuples.resize(size * RowWidth_);
+        BuildData_.NTuples = size;
+    }
+
+    // The mark is kept on the first build row of the key.
+    bool MarkProbed(TSingleTuple row) {
+        bool first = true;
+        Table_.Apply(row.PackedData, row.OverflowBegin, [&](const ui8* packed) {
+            first = !std::exchange(Probed_[Table_.IndexOfPackedRow(packed)], 1);
+            return false;
+        });
+        return first;
+    }
+
     IBlockLayoutConverter::TPackResult BuildData_;
     NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;
+    const NPackedTuple::TTupleLayout* Layout_ = nullptr;
     size_t RowWidth_ = 0;
     bool TrackUsed_ = false;
+    bool UniqueBuildKeys_ = false;
+    bool FirstProbeOnly_ = false;
     TMKQLVector<ui8> Used_;
+    TMKQLVector<ui8> Probed_;
 };
 
 } // namespace NKikimr::NMiniKQL::NJoinTable

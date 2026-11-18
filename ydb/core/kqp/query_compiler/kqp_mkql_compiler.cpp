@@ -242,6 +242,10 @@ NMiniKQL::TBlockHashJoinSettings ParseHashJoinSettings(const TExprNode& settings
             if (setting->Child(1)->Content() == "Left") {
                 settings.BuildSide = NMiniKQL::EBuildSide::Left;
             }
+        } else if (name == "LeftAny") {
+            settings.LeftAny = true;
+        } else if (name == "RightAny") {
+            settings.RightAny = true;
         } else if (name == NMiniKQL::EqualNullsSettingName) {
             const auto& value = *setting->Child(1);
             YQL_ENSURE(value.IsCallable("Uint32"), "EqualNulls setting value must be Uint32");

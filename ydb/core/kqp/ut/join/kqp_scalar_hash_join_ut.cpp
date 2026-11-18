@@ -205,6 +205,64 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(AnyJoinImplementations, UseScalarHashJoin) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        CreateSampleTables(client);
+
+        const std::vector<std::pair<TStringBuf, TStringBuf>> cases = {
+            {"k", "k"},
+            {"AsList(k, k)", "k"},
+            {"k", "AsDict(AsTuple(k, k))"},
+        };
+        for (const auto& [key, payload] : cases) {
+            for (const TStringBuf joinType : {"INNER", "LEFT"}) {
+                for (const TStringBuf side : {"Left", "Right", "Both"}) {
+                    const auto makeQuery = [&](bool blocks, bool any = false) {
+                        return TStringBuilder() << R"(
+                            PRAGMA TablePathPrefix='/Root';
+                            PRAGMA ydb.OptimizerHints='JoinType(L R Shuffle)';
+                            PRAGMA ydb.UseScalarHashJoin=')" << (UseScalarHashJoin ? "true" : "false") << R"(';
+                            PRAGMA ydb.UseBlockHashJoin=')" << (blocks ? "true" : "false") << R"(';
+                            PRAGMA ydb.UseHashJoinForAny=')" << (any ? "true" : "false") << R"(';
+                            $l = SELECT id, SOME()" << key << R"() AS key, SOME()" << payload << R"() AS p
+                                FROM L WHERE k IS NOT NULL GROUP BY id;
+                            $r = SELECT id, SOME()" << key << R"() AS key, SOME()" << payload << R"() AS p
+                                FROM (SELECT id, CAST(k AS Int32) AS k FROM R)
+                                WHERE k IS NOT NULL GROUP BY id;
+                            SELECT L.key AS lk, R.key AS rk, L.p AS lp, R.p AS rp
+                            FROM )" << (side != "Right" ? "ANY " : "") << R"($l AS L
+                            )" << joinType << " JOIN " << (side != "Left" ? "ANY " : "") << R"($r AS R ON L.key = R.key;
+                        )";
+                    };
+                    // Payloads are identical for duplicate keys, so either ANY representative gives the same result.
+                    const auto expected = RunQuerySortedRows(client, makeQuery(false));
+                    UNIT_ASSERT(!expected.empty());
+                    for (const bool enableAny : {false, true}) {
+                        for (const bool blocks : {false, true}) {
+                            const TString query = makeQuery(blocks, enableAny);
+                            auto explain = client.ExecuteQuery(query, TTxControl::NoTx(),
+                                TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
+                            UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+                            const TString ast(*explain.GetStats()->GetAst());
+                            if (!blocks || !enableAny) {
+                                UNIT_ASSERT_C(ast.Contains("GraceJoinCore"), ast);
+                            } else if (key == "k" && payload == "k") {
+                                UNIT_ASSERT_C(ast.Contains("ScalarHashJoin") || ast.Contains("BlockHashJoin"), ast);
+                                if (joinType == "LEFT" && side != "Right") {
+                                    UNIT_ASSERT_C(ast.Contains("BuildSide"), ast);
+                                }
+                            }
+                            UNIT_ASSERT_VALUES_EQUAL(RunQuerySortedRows(client, query), expected);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(ComplexKeys) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetQueryClient();

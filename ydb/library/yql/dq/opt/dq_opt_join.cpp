@@ -1568,7 +1568,8 @@ TExprBase DqBuildHashJoin(
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
     bool blockHashJoinBuildSideLeft,
-    bool useScalarHashJoin
+    bool useScalarHashJoin,
+    bool useHashJoinForAny
 ) {
 
     Y_UNUSED(blockHashJoinBuildSideLeft);
@@ -1577,6 +1578,12 @@ TExprBase DqBuildHashJoin(
     const auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
     YQL_ENSURE(joinType != "Cross"sv);
 
+    if (const auto flags = join.Flags()) {
+        for (const auto flag : flags.Cast()) {
+            useBlockHashJoin = useBlockHashJoin
+                && (useHashJoinForAny || (flag.Value() != "LeftAny"sv && flag.Value() != "RightAny"sv));
+        }
+    }
     useBlockHashJoin = useBlockHashJoin
         && (joinType == "Inner"sv || joinType == "Left"sv || joinType == "LeftSemi"sv || joinType == "LeftOnly"sv);
 
@@ -1915,7 +1922,7 @@ TExprBase DqBuildHashJoin(
     TString callableName = "GraceJoinCore";
     int shift = 2;
     bool selfJoin = false;
-    if (mode == EHashJoinMode::GraceAndSelf && leftIn.Stage().Ptr() == rightIn.Stage().Ptr()) {
+    if (!useBlockHashJoin && mode == EHashJoinMode::GraceAndSelf && leftIn.Stage().Ptr() == rightIn.Stage().Ptr()) {
         callableName = "GraceSelfJoinCore";
         shift = 1;
         selfJoin = true;
@@ -1947,7 +1954,18 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                const auto joinSettings = BuildBlockHashJoinSettings(join.Pos(), joinAlgo, ctx);
+                const bool leftAny = std::any_of(flags.begin(), flags.end(),
+                    [](const auto& flag) { return flag->IsAtom("LeftAny"); });
+                // ANY is applied only to rows in the hash table and to probe rows that match it, so
+                // the preserved left side with ANY has to be the build side.
+                const bool buildLeft = joinAlgo == EJoinAlgoType::ReverseBlockJoin || (leftAny && joinType != "Inner"sv);
+                auto joinSettings = BuildBlockHashJoinSettings(
+                    join.Pos(), buildLeft ? EJoinAlgoType::ReverseBlockJoin : joinAlgo, ctx);
+                for (const auto& flag : flags) {
+                    joinSettings.push_back(Build<TCoNameValueTuple>(ctx, join.Pos())
+                        .Name(flag)
+                        .Done());
+                }
 
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
                     .LeftInput(leftInputArg)

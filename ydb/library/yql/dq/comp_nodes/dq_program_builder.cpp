@@ -207,8 +207,13 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
     TRuntimeNode::TList settingsNodes = {NewDataLiteral(static_cast<ui32>(settings.BuildSide))};
-    if (!settings.EqualNullsKeys.empty()) {
+    if (!settings.EqualNullsKeys.empty() || settings.LeftAny || settings.RightAny) {
         settingsNodes.push_back(AsTuple(settings.EqualNullsKeys));
+    }
+    if (settings.LeftAny || settings.RightAny) {
+        const ui32 any = (settings.LeftAny ? static_cast<ui32>(EAnyJoinSettings::Left) : 0)
+            | (settings.RightAny ? static_cast<ui32>(EAnyJoinSettings::Right) : 0);
+        settingsNodes.push_back(NewDataLiteral(any));
     }
     callableBuilder.Add(NewTuple(settingsNodes));
     AddJoinFilters(callableBuilder, leftStream, rightStream, joinKind, leftFilter, rightFilter, commonFilter);
@@ -237,8 +242,13 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
     TRuntimeNode::TList settingsNodes = {NewDataLiteral(static_cast<ui32>(settings.BuildSide))};
-    if (!settings.EqualNullsKeys.empty()) {
+    if (!settings.EqualNullsKeys.empty() || settings.LeftAny || settings.RightAny) {
         settingsNodes.push_back(AsTuple(settings.EqualNullsKeys));
+    }
+    if (settings.LeftAny || settings.RightAny) {
+        const ui32 any = (settings.LeftAny ? static_cast<ui32>(EAnyJoinSettings::Left) : 0)
+            | (settings.RightAny ? static_cast<ui32>(EAnyJoinSettings::Right) : 0);
+        settingsNodes.push_back(NewDataLiteral(any));
     }
     callableBuilder.Add(NewTuple(settingsNodes));
     AddJoinFilters(callableBuilder, leftFlow, rightFlow, joinKind, leftFilter, rightFilter, commonFilter);

@@ -12,6 +12,8 @@
 #include <util/generic/maybe.h>
 #include <util/system/type_name.h>
 #include <util/generic/variant.h>
+#include <functional>
+#include <memory>
 
 ////////////////////////////////////////////
 namespace NKikimr {
@@ -418,6 +420,7 @@ struct TScanOptions {
     struct TResourceBrokerOptions {
         TString Type;
         ui32 Prio;
+        ui64 Memory = 0;
     };
 
     struct TResourceBrokerDisabled {
@@ -444,6 +447,21 @@ struct TScanOptions {
         ui32 PoolId;
     };
 
+    // Only lightweight state is retained until the broker grants resources.
+    // The factory runs on the owning tablet's mailbox, before snapshot capture.
+    std::shared_ptr<void> PendingReservation;
+    std::function<TAutoPtr<NTable::IScan>(TScanOptions&)> Factory;
+    // A false result defers construction and returns the granted resources.
+    // Delivering the supplied event rechecks readiness and readmits the same task.
+    std::function<bool(TScanOptions&, std::unique_ptr<NActors::IEventHandle>)> OnAdmissionReady;
+    // Discard expired readiness state while retaining the queued broker task.
+    std::function<void()> OnReadinessExpired;
+    std::function<void(const TString&, bool)> OnAdmissionFailure;
+    std::function<void(ui64)> OnMemoryLimitExceeded;
+    // True keeps a queued task in place; false requests cancellation and retry.
+    std::function<bool()> OnAdmissionTimeout;
+    TDuration QueueTimeout;
+
     EReadPrio ReadPrio = EReadPrio::Default;
     std::variant<TReadAheadDefaults, TReadAheadOptions> ReadAhead;
     std::variant<TResourceBrokerDefaults, TResourceBrokerOptions, TResourceBrokerDisabled> ResourceBroker;
@@ -460,8 +478,8 @@ struct TScanOptions {
         return *this;
     }
 
-    TScanOptions& SetResourceBroker(TString type, ui32 prio) {
-        ResourceBroker = TResourceBrokerOptions{ std::move(type), prio };
+    TScanOptions& SetResourceBroker(TString type, ui32 prio, ui64 memory = 0) {
+        ResourceBroker = TResourceBrokerOptions{ std::move(type), prio, memory };
         return *this;
     }
 

@@ -11,16 +11,16 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/kqp/common/compile_cache
-    ydb/library/yql/providers/ydb_external/common
     ydb/core/base
     ydb/core/kqp/common
-    ydb/core/kqp/query_data
+    ydb/core/kqp/common/compile_cache
+    ydb/core/kqp/common/simple
     ydb/core/kqp/federated_query
     ydb/core/kqp/gateway/utils
     ydb/core/kqp/opt
     ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/provider
+    ydb/core/kqp/query_data
     ydb/core/kqp/tracing
     ydb/core/local_indexes/bloom
     ydb/core/path_aliasing
@@ -30,10 +30,11 @@ PEERDIR(
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/dq/helper
     ydb/library/yql/providers/generic/provider
-    ydb/library/yql/providers/ydb_external/provider
     ydb/library/yql/providers/pq/provider
-    ydb/library/yql/providers/yt/provider
     ydb/library/yql/providers/s3/expr_nodes
+    ydb/library/yql/providers/ydb_external/common
+    ydb/library/yql/providers/ydb_external/provider
+    ydb/library/yql/providers/yt/provider
     yql/essentials/core
     yql/essentials/core/services
     yql/essentials/minikql/invoke_builtins
@@ -43,11 +44,11 @@ PEERDIR(
     yql/essentials/providers/pg/provider
     yql/essentials/providers/result/provider
     yql/essentials/sql
-    yql/essentials/sql/v1/translation
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
+    yql/essentials/sql/v1/translation
 )
 
 YQL_LAST_ABI_VERSION()

@@ -8,7 +8,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/kqp/common/dynamic_function_registry.h>
+#include <ydb/core/kqp/common/dynamic_function_registry/dynamic_function_registry.h>
 
 #include <ydb/services/metadata/service.h>
 

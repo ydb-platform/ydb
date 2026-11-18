@@ -58,6 +58,7 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/common/buffer
     ydb/core/kqp/common/result_set_format
+    ydb/core/kqp/common/result_set_format/settings
     ydb/core/kqp/runtime/common
     ydb/core/kqp/runtime/streaming
     ydb/core/kqp/tracing

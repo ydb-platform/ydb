@@ -385,11 +385,18 @@ bool ExprNodesEquals(const TExprNode& left, const TExprNode& leftArgument, const
 void ScanSublinks(TExprNode::TPtr root, TNodeSet& sublinks, bool& isUniversal) {
     isUniversal = false;
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
+        // Lambda bodies may not be annotated yet, so a deferred column name has no type either.
+        if ((node->IsCallable({"YqlColumnRef", "YqlColumnRefOrType"}) && node->ChildrenSize() && node->Tail().IsCallable("EvaluateAtom")) ||
+            (node->IsCallable("YqlColumnOrAccess") && node->ChildrenSize() > 2 && node->Child(2)->IsCallable("EvaluateAtom"))) {
+            isUniversal = true;
+            return false;
+        }
+        if (node->IsCallable({"PgSubLink", "YqlSubLink", "YqlColumnRef", "YqlColumnRefOrType", "YqlColumnOrAccess"}) &&
+            node->GetTypeAnn() && node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            isUniversal = true;
+            return false;
+        }
         if (node->IsCallable({"PgSubLink", "YqlSubLink"})) {
-            if (node->GetTypeAnn() && node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
-                isUniversal = true;
-                return false;
-            }
             sublinks.insert(node.Get());
             return false;
         }
@@ -559,7 +566,15 @@ bool ScanColumns(
     bool allowProjection)
 {
     bool isError = false;
-    VisitExpr(root, [&](const TExprNode::TPtr& node) {
+    VisitExpr(root, [&](const TExprNode::TPtr& input) {
+        const auto node = input->IsCallable("YqlColumnOrAccess")
+            ? BuildYqlColumnOrAccessRef(input, possibleAliases, ctx.Expr)
+            : input;
+        if (!node) {
+            isError = true;
+            return false;
+        }
+
         if (node->IsCallable({"PgSubLink", "YqlSubLink"})) {
             return false;
         } else if (allowProjection && node->IsCallable({"YqlAgg", "PgAgg", "YqlGrouping", "PgGrouping"})) {
@@ -1556,34 +1571,52 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
             return argNode;
         }
 
-        if (node->IsCallable({"YqlColumnRef", "YqlColumnRefOrType", "YqlColumnRefOrDefault", "PgColumnRef"})) {
+        if (node->IsCallable({"YqlColumnRef", "YqlColumnRefOrType", "YqlColumnRefOrDefault", "YqlColumnOrAccess", "PgColumnRef"})) {
             const bool hasDefault = node->IsCallable("YqlColumnRefOrDefault");
-            const auto reference = hasDefault
-                                       ? ctx.Expr.NewCallable(node->Pos(), "YqlColumnRef", {node->TailPtr()})
-                                       : node;
-            const bool columnOrType = reference->IsCallable("YqlColumnRefOrType");
+            auto columnRef = hasDefault
+                                 ? ctx.Expr.NewCallable(node->Pos(), "YqlColumnRef", {node->TailPtr()})
+                                 : node;
+            TExprNode::TPtr columnAccess;
+            if (node->IsCallable("YqlColumnOrAccess")) {
+                if (!node->Head().IsCallable("Void")) {
+                    return node;
+                }
+                auto reference = BuildYqlColumnOrAccessRef(node, possibleAliases, ctx.Expr);
+                if (!reference) {
+                    return nullptr;
+                }
+                if (reference->ChildrenSize() == 1) {
+                    columnAccess = node;
+                }
+                columnRef = std::move(reference);
+            }
+
+            const bool columnOrType = columnRef->IsCallable("YqlColumnRefOrType");
             const auto wrapColumn = [&](TExprNode::TPtr column) {
+                if (columnAccess) {
+                    return ctx.Expr.ChangeChild(*columnAccess, 0, std::move(column));
+                }
                 return columnOrType
-                           ? ctx.Expr.NewCallable(reference->Pos(), "YqlColumnOrType", {std::move(column), reference->TailPtr()})
+                           ? ctx.Expr.NewCallable(columnRef->Pos(), "YqlColumnOrType", {std::move(column), columnRef->TailPtr()})
                            : column;
             };
             const auto columnError = [&](const TString& message) {
-                const auto* type = ctx.Expr.MakeType<TErrorExprType>(TIssue(ctx.Expr.GetPosition(reference->Pos()), message));
-                return wrapColumn(ctx.Expr.NewCallable(reference->Pos(), "Error", {ExpandType(reference->Pos(), *type, ctx.Expr)}));
+                const auto* type = ctx.Expr.MakeType<TErrorExprType>(TIssue(ctx.Expr.GetPosition(columnRef->Pos()), message));
+                return wrapColumn(ctx.Expr.NewCallable(columnRef->Pos(), "Error", {ExpandType(columnRef->Pos(), *type, ctx.Expr)}));
             };
-            const auto match = ResolveSqlColumnRef(*reference, inputs, possibleAliases, /*scanColumnsOnly=*/false, projectionRefsResolved);
+            const auto match = ResolveSqlColumnRef(*columnRef, inputs, possibleAliases, /*scanColumnsOnly=*/false, projectionRefsResolved);
             if (hasDefault && (match.Status == ESqlColumnRefStatus::Missing || match.Status == ESqlColumnRefStatus::NoFrom)) {
                 return node->HeadPtr();
             }
-            if (const auto* column = FindUniqueUsingColumn(usedInUsing, reference->Tail().Content());
-                reference->ChildrenSize() == 1 && column &&
-                (column->Type || usedInUsing.contains(reference->Tail().Content())) &&
+            if (const auto* column = FindUniqueUsingColumn(usedInUsing, columnRef->Tail().Content());
+                columnRef->ChildrenSize() == 1 && column &&
+                (column->Type || usedInUsing.contains(columnRef->Tail().Content())) &&
                 IsUsingColumnMatch(match, *column)) {
                 // clang-format off
-                return wrapColumn(ctx.Expr.Builder(reference->Pos())
+                return wrapColumn(ctx.Expr.Builder(columnRef->Pos())
                             .Callable("Member")
                                 .Add(0, argNode)
-                                .Atom(1, column->Type ? column->PhysicalName : TString(reference->Tail().Content()))
+                                .Atom(1, column->Type ? column->PhysicalName : TString(columnRef->Tail().Content()))
                             .Seal()
                             .Build());
                 // clang-format on
@@ -1592,7 +1625,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
                 const auto& input = *match.Input;
                 const auto& item = input.Type->GetItems()[*match.Position];
                 // clang-format off
-                auto column = ctx.Expr.Builder(reference->Pos())
+                auto column = ctx.Expr.Builder(columnRef->Pos())
                     .Callable("Member")
                         .Add(0, argNode)
                         .Atom(1, MakeAliasedColumn(input.Alias, item->GetName()))
@@ -1605,7 +1638,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
             if (match.Status == ESqlColumnRefStatus::Row) {
                 const auto& rowInput = *match.RowInput;
                 // clang-format off
-                return wrapColumn(ctx.Expr.Builder(reference->Pos())
+                return wrapColumn(ctx.Expr.Builder(columnRef->Pos())
                     .Callable("PgToRecord")
                         .Callable(0, "DivePrefixMembers")
                             .Add(0, argNode)
@@ -1635,7 +1668,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
                 // clang-format on
             }
 
-            return columnError(ColumnRefErrorMessage(*reference, match.Status));
+            return columnError(ColumnRefErrorMessage(*columnRef, match.Status));
         }
 
         if (node->IsCallable({"YqlQualifiedStar", "PgQualifiedStar"})) {

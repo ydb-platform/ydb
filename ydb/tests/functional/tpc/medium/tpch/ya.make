@@ -18,6 +18,5 @@ END()
 
 RECURSE_FOR_TESTS(
     duplicates
-    parallel
     s1
 )

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/common/result_set_format/kqp_result_set_format_settings.h>
+#include <ydb/core/kqp/common/result_set_format/settings/settings.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/public/udf/udf_data_type.h>

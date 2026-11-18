@@ -1,5 +1,6 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
@@ -38,11 +39,21 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             Name: "ColumnTable"
             AlterSchema { AddColumns { Name: "extra" Type: "Utf8" FilterNullsOnRead: true } }
         )", {NKikimrScheme::StatusSchemeError});
+
+        // TTestEnv uses a fake coordinator with its own plan steps and no LongTx service.
+        const auto snapshotService = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NLongTxService::MakeLongTxServiceID(runtime.GetNodeId()), snapshotService);
         auto response = TestSetColumnConstraint(runtime, 101, TTestTxConfig::SchemeShard,
             "/MyRoot", "/MyRoot/ColumnTable", {"value"});
         UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), Enabled ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNSUPPORTED,
             response.ShortDebugString());
         if constexpr (Enabled) {
+            using TEvents = NLongTxService::TEvLongTxService;
+            auto request = runtime.GrabEdgeEventRethrow<TEvents::TEvAcquireReadSnapshot>(snapshotService);
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->DatabaseName, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->TableIds.size(), 1);
+            runtime.Send(new IEventHandle(request->Sender, snapshotService, new TEvents::TEvAcquireReadSnapshotResult(
+                request->Get()->DatabaseName, TRowVersion(env.GetCoordinatorStep(), Max<ui64>()), {}, std::move(request->Get()->Orbit))));
             env.TestWaitNotification(runtime, 101);
         }
 

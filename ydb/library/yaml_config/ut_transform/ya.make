@@ -21,8 +21,6 @@ DATA(
 
 PEERDIR(
     contrib/python/pytest
-    ydb/public/sdk/python/enable_v3_new_behavior
-    ydb/tests/library
     ydb/tests/oss/canonical
 )
 

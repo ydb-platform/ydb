@@ -2238,7 +2238,7 @@ namespace NKikimr {
         void TryRepeatRecovery(const TActorContext& ctx) {
             if (CurrentStateFunc() != &TThis::StateNormal
                     || !RepeatRecoveryPending || RepeatOsirisId || !Db->ReplID || !DurabilityReplDone
-                    || Config->BaseInfo.ReadOnly || GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)) {
+                    || Config->BaseInfo.ReadOnly || GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
                 return;
             }
             RepeatRecoveryPending = false;
@@ -3199,12 +3199,8 @@ namespace NKikimr {
             if (info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
                 return std::nullopt;
             }
-            const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(
-                info.GetFailRealmState(0), info.GetFailRealmState(1), info.GetFailRealmState(2));
-            if (!state) {
-                return std::nullopt;
-            }
-            return GetMirror3dcGroupLayouts(*state)->Durability;
+            std::optional<TMirror3dcGroupLayouts> layouts = GetMirror3dcGroupLayouts(info.GetMirror3dcState().State);
+            return layouts ? std::optional(layouts->Durability) : std::nullopt;
         }
 
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
@@ -3313,7 +3309,7 @@ namespace NKikimr {
                 {"marker", "BSVS37"});
             Become(&TThis::StateLocalRecovery);
             Db->SkeletonID.Set(ctx.SelfID);
-            if (GInfo->GetFailRealmState(SelfVDiskId.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+            if (GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
                 // An excluded realm must answer requests, but must not start recovery or background work.
                 SkeletonErrorState(ctx, TEvFrontRecoveryStatus::LocalRecoveryDone,
                     NKikimrWhiteboard::EVDiskState::LocalRecoveryError);

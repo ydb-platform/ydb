@@ -90,13 +90,13 @@
                   },
                   {
                     "op_name":"TableFullScan",
-                    "table":"reason"
+                    "table":"date_dim"
                   }
                 ]
             },
             {
               "op_name":"TableFullScan",
-              "table":"date_dim"
+              "table":"reason"
             }
           ]
       }

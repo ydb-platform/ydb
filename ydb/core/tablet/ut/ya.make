@@ -1,10 +1,9 @@
 UNITTEST_FOR(ydb/core/tablet)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(10)
 
 SIZE(MEDIUM)
-
-SPLIT_FACTOR(50)
 
 PEERDIR(
     library/cpp/getopt
@@ -25,6 +24,7 @@ SRCS(
     tablet_pipe_ut.cpp
     tablet_pipecache_ut.cpp
     tablet_req_blockbs_ut.cpp
+    tablet_req_rebuildhistory_ut.cpp
     tablet_resolver_ut.cpp
     tablet_state_ut.cpp
     detailed_metrics/ut_helpers.cpp

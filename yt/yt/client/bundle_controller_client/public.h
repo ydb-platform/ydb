@@ -29,6 +29,7 @@ namespace NYT::NBundleControllerClient {
 
 DECLARE_REFCOUNTED_STRUCT(TCpuLimits)
 DECLARE_REFCOUNTED_STRUCT(TMemoryLimits)
+DECLARE_REFCOUNTED_STRUCT(TMemoryLimitBounds)
 DECLARE_REFCOUNTED_STRUCT(TInstanceResources)
 DECLARE_REFCOUNTED_STRUCT(TDefaultInstanceConfig)
 DECLARE_REFCOUNTED_STRUCT(TInstanceSize)
@@ -41,6 +42,7 @@ struct TBundleConfigDescriptor;
 
 struct TCpuLimits;
 struct TMemoryLimits;
+struct TMemoryLimitRange;
 struct TInstanceResources;
 struct TDefaultInstanceConfig;
 struct TInstanceSize;

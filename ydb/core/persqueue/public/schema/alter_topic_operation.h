@@ -30,6 +30,7 @@ struct TAlterTopicOperationSettings {
     bool IfExists = false;
     bool PrepareOnly = false;
     ui64 Cookie = 0;
+    bool EnableRelativePaths = false;
 };
 
 

@@ -17,6 +17,13 @@ namespace NKikimrConfig {
     class TTableProfile;
 }
 
+namespace NKikimrSchemeOp {
+    class TFamilyDescription;
+    class TPartitionConfig;
+    class TStorageConfig;
+    class TTableDescription;
+}
+
 namespace NKikimr {
 
 class TTableProfiles {

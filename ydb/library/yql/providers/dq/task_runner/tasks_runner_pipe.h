@@ -2,6 +2,7 @@
 
 #include "tasks_runner_proxy.h"
 #include "file_cache.h"
+#include "local_job_proxy.h"
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -14,9 +15,11 @@ struct TPipeFactoryOptions {
     TString ExecPath;
     IFileCache::TPtr FileCache;
     THashMap<TString, TString> Env;
+    TMaybe<TLocalJobProxySettings> LocalJobProxy;
     bool EnablePorto = false;
     bool EnablePortoAnonLimitRaiseBeforeDestroy = true;
     TString PortoLayer;
+    bool UseJobRoot = false;
     int MaxProcesses = 1;
     TString ContainerName;
     TString PortoCtlPath = "/usr/bin/porto";

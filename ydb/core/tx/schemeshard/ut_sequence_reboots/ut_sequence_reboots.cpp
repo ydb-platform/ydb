@@ -8,6 +8,8 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSequenceReboots) {
     Y_UNIT_TEST_WITH_REBOOTS(CreateSequence) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
@@ -30,6 +32,8 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
     }
 
     void DoCreateMultipleSequences(TTestWithReboots& t, bool withInitialSequenceShard) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
@@ -84,6 +88,8 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDropRecreate, 2, 1, false) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
@@ -228,6 +234,8 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(AlterSequence) {
+        t.CreateDefaultDirectory = false;
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);

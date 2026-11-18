@@ -5,12 +5,14 @@ TEST_SRCS(
     test_serverless.py
 )
 
-SPLIT_FACTOR(50)
-FORK_SUBTESTS()
-
 IF (SANITIZER_TYPE)
+    SPLIT_FACTOR(50)
+    FORK_SUBTESTS()
     REQUIREMENTS(ram:32 cpu:4)
 ELSE()
+    # Reuse module-scoped clusters and hostels within each configuration.
+    SPLIT_FACTOR(8)
+    FORK_SUBTESTS(MODULO)
     REQUIREMENTS(cpu:1)
 ENDIF()
 

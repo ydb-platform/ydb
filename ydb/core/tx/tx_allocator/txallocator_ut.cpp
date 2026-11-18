@@ -11,6 +11,15 @@ Y_UNIT_TEST_SUITE(TTxLocatorTest) {
     Y_UNIT_TEST(Boot) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+
+        auto txCompleted = [&](const TString& txName) {
+            return GetTabletTxCompleted(runtime, TTestEnv::TxAllocatorTablet, txName);
+        };
+        UNIT_ASSERT_VALUES_EQUAL(txCompleted("TxAllocator/TxInit"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(txCompleted("TxAllocator/TxReserve"), 0);
+
+        AllocateAndCheck(runtime, 1, NKikimrTx::TEvTxAllocateResult::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(txCompleted("TxAllocator/TxReserve"), 1);
     }
 
     Y_UNIT_TEST(TestZeroRange) {

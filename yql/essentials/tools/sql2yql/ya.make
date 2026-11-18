@@ -18,6 +18,7 @@ PEERDIR(
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
+    yql/essentials/sql/v1/proto_parser/check
     yql/essentials/sql/v1/translation
     yql/essentials/utils
     yql/essentials/core/pg_ext

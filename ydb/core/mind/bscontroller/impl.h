@@ -11,6 +11,7 @@
 #include "resources.h"
 #include "stat_processor.h"
 #include "bridge_sync_counters.h"
+#include "bridge_storage.h"
 #include "indir.h"
 #include "self_heal.h"
 #include "group_state.h"
@@ -22,11 +23,14 @@
 #include <ydb/core/base/feature_flags_service.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/bridge_events.h>
 #include <ydb/core/blobstorage/base/pdisk_filter.h>
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/mind/table_adapter.h>
@@ -90,6 +94,7 @@ public:
     class TTxMonEvent_SetDown;
     class TTxMonEvent_GetDown;
     class TTxUpdateDiskMetrics;
+    class TTxUpdateDatabaseSpace;
     class TTxGroupMetricsExchange;
     class TTxNodeReport;
     class TTxUpdateSeenOperational;
@@ -114,6 +119,8 @@ public:
     class TTxBridgePileOperation;
     class TTxAddBridgePile;
     class TTxRemoveBridgePile;
+    class TTxBridgeRollback;
+    class TTxUpdatePileOverrides;
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
@@ -726,7 +733,8 @@ public:
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
         // Persisted with the group generation by CommitConfigUpdates.
-        std::optional<std::array<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState, 3>> FailRealmStates;
+        std::optional<std::array<NKikimrBlobStorage::TDataCenterState::EState, 3>> FailRealmStates;
+        std::optional<EMirror3dcGroupState> Mirror3dcState;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
 
@@ -776,8 +784,7 @@ public:
         // group layout status: whether it is positioned correctly
         bool LayoutCorrect = false;
 
-        void CalculateLayoutStatus(TBlobStorageController *self, TBlobStorageGroupInfo::TTopology *topology,
-            const std::function<TGroupGeometryInfo()>& getGeom);
+        void CalculateLayoutStatus(TBlobStorageController* self, const std::function<TGroupGeometryInfo()>& getGeom);
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -967,6 +974,13 @@ public:
 
         bool IsPhysicalGroup() const {
             return !BlobDepotId && DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE;
+        }
+
+        // Do the writes to this group (to its parts, for a bridged one) go to VDisks? The group to be decommitted keeps
+        // taking them until it is switched to BlobDepot (see TBlobStorageGroupInfo::DecommitBlocksWrites).
+        bool WritesGoToVDisks() const {
+            return !BlobDepotId && (DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE ||
+                DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING);
         }
 
         // is this group a pile of its own (a group converted from non-bridged one); such group has both its own VDisks
@@ -1706,8 +1720,7 @@ private:
     TActorId ResponsivenessActorID;
     TActorId CmsPipe;
     TTabletResponsivenessPinger* ResponsivenessPinger;
-    using TDataCenterStates = std::unordered_map<TString,
-        NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter::EDataCenterState>;
+    using TDataCenterStates = std::unordered_map<TString, NKikimrBlobStorage::TDataCenterState::EState>;
     TDataCenterStates DataCenterStates;
     TMap<THostConfigId, THostConfigInfo> HostConfigs;
     TMap<TBoxId, TBoxInfo> Boxes;
@@ -1724,6 +1737,14 @@ private:
     std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
     TBridgeInfo::TPtr BridgeInfo;
     bool SelfManagementEnabled = false;
+
+    // Storage pool pile overrides BSC follows for its groups. StorageConfig is committed by distconf regardless of the
+    // groups BSC has, so its overrides are adopted by TTxUpdatePileOverrides, which checks them against the groups the
+    // same way any other transaction creating or changing groups does. Unset until the first adoption (the tablet that
+    // has never done it follows StorageConfig, as it used to).
+    std::optional<NKikimrBlobStorage::TStoragePoolPileOverrides> AppliedPileOverrides;
+    // why the overrides of the current StorageConfig are not adopted (when they are not)
+    std::optional<TString> PileOverridesError;
     std::optional<TYamlConfig> YamlConfig;
     ui64 YamlConfigHash = 0;
     std::optional<TString> StorageYamlConfig; // if separate config is in effect
@@ -1844,6 +1865,7 @@ private:
         bool TreatPhantomsOnlyVDisksAsWorking = false;
     };
 
+    void PropagateGroupContentChanged(TConfigState& state);
     bool ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
             TString* errorDescription, NKikimrBlobStorage::TConfigResponse* response = nullptr);
 
@@ -2062,6 +2084,8 @@ private:
     THostRecordMap HostRecords;
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void SetHostRecords(THostRecordMap hostRecords);
+    void UpdateGroupLayoutStatus();
+    TGroupGeometryInfo GetStaticGroupGeometry(TBlobStorageGroupType type, TBridgePileId pileId) const;
 
 public:
     // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move
@@ -2213,6 +2237,7 @@ private:
         std::unique_ptr<IEventHandle> response);
     // validate removal of the pile, then send the response
     ITransaction* CreateTxValidateRemoveBridgePile(TBridgePileId pileId, std::unique_ptr<IEventHandle> response);
+    ITransaction* CreateTxValidateBridgeRollback(TBridgePileId pileId, std::unique_ptr<IEventHandle> response);
 
     struct TAuditLogInfo {
         TString PeerName;
@@ -2259,6 +2284,8 @@ private:
     // Bridge operation
 
     static constexpr TDuration DisconnectedSyncerReactionTime = TDuration::Seconds(10);
+    // the time given to nodes to report their syncers to the new BSC instance, until then their number is not known
+    static constexpr TDuration SyncerReportingTime = TDuration::Seconds(10);
 
     struct TSyncerProgress {
         ui64 BytesDone = 0;
@@ -2267,16 +2294,46 @@ private:
         ui64 BlobsDone = 0;
         ui64 BlobsTotal = 0;
         ui64 BlobsError = 0;
+        ui64 BytesToCopy = 0;
+        ui64 BytesCopied = 0;
+        bool ScanFinished = false;
+        ui64 ScannedItems = 0;
     };
 
     struct TSyncersRequiringAction;
+
+    enum class EStandbyDirty {
+        None,
+        Garbage, // garbage collection only: barriers and do-not-keep flags are not forwarded, keep flags may be lost
+        Data, // a blob write may have been lost as well, so the data of every blob is checked
+    };
+
+    enum class ESyncerMode {
+        Sync, // the syncer moves the part to its next stage
+        Reconcile, // the pass reconciling the part of HOT_STANDBY pile, its stage stays as it is
+        Promote, // the reconciliation of the part promoted from HOT_STANDBY, synced by the seal following it
+    };
 
     struct TSyncerState
         : TIntrusiveListItem<TSyncerState, TSyncersRequiringAction>
     {
         struct TPerNodeInfo {
+            struct TProgressBaseline {
+                ui64 BytesDone = 0;
+                ui64 BlobsDone = 0;
+                ui64 BytesCopied = 0;
+                ui64 ScannedItems = 0;
+            };
             TGroupId SourceGroupId;
             TSyncerProgress Progress;
+            std::optional<NKikimrBridge::TGroupState::EStage> ProgressStage;
+            ui64 ProgressRound = 0;
+            ui32 ProgressGeneration = 0;
+            ui32 ProgressBaselineFields = 0;
+            TProgressBaseline ProgressBaseline;
+            ui64 AssignmentId = 0; // the attempt the node reports the result of, zero for the one adopted from the node
+            ESyncerMode Mode = ESyncerMode::Sync;
+            EStandbyDirty Repairs = EStandbyDirty::None; // what the reconciliation repairs, every blob's data for Data
         };
         const TGroupId BridgeProxyGroupId;
         const TGroupId TargetGroupId;
@@ -2287,6 +2344,42 @@ private:
         TBackoffTimer RetryBackoff{100, 30000};
         TMonotonic NotBefore;
 
+        // what is left to copy into the target, see GetBridgeSyncRemaining; it outlives the syncers of the stage, as
+        // each of them starts from zero
+        std::optional<NKikimrBridge::TGroupState::EStage> CopyStage; // the stage the two fields below belong to
+        std::optional<TSyncerProgress> LastProgress; // the latest report of a syncer in CopyStage
+        std::optional<ui64> KnownRemaining; // what was left at the latest report with a finished scan in CopyStage
+        // bytes copied into the target by all of its syncers, and its samples over BridgeSyncRateWindow for the rate
+        ui64 CopiedTotal = 0;
+        std::deque<std::tuple<TMonotonic, ui64>> CopiedSamples;
+        ui64 CopyRate = 0; // bytes per second
+        // What the part of HOT_STANDBY pile may have missed since the last reconciliation pass started; nothing is
+        // known about the part when the entry gets created (BSC has started, or the part has been reset).
+        EStandbyDirty StandbyDirty = EStandbyDirty::Data;
+        // the passes are this far apart at least, and the failed ones are retried with backoff; the sync of the part of
+        // the pile rejoining doesn't wait for them
+        TMonotonic StandbyNotBefore;
+        TBackoffTimer StandbyRetryBackoff{100, 30000};
+
+        // The writers BSC can't learn the misses of: the nodes lost since the part entered standby (that haven't
+        // registered again), and the ones of the time before BSC started, unless the part has been reset since.
+        THashSet<TNodeId> StandbyLostWriters;
+        bool StandbyWritersUnknown = true;
+
+        // When the pile goes NOT_SYNCHRONIZED_2 right from HOT_STANDBY, the part has to have missed nothing written before
+        // its fence to be taken for synced: every node reports when its bridge proxies have resolved their background
+        // writes to it and the client writes they copy, and every miss with them. Every reconciliation pass of the part
+        // is followed by a seal, and the part is synced when a seal finds nothing missed since the last pass started.
+        ui64 StandbySealId = 0; // zero when the next step of the promotion starts a seal
+        ui32 StandbySealGeneration = 0; // the generation of the bridge proxy group sealed
+        bool StandbySealDone = false;
+        THashSet<TNodeId> StandbySealPendingNodes;
+        THashSet<TNodeId> StandbySealSentNodes; // the pending nodes asked over their current registration
+        THashSet<TNodeId> StandbySealFlushSentNodes; // and asked to flush
+        bool StandbySealFlushing = false; // the background writes of client writes over are not waited for
+        THashSet<TNodeId> StandbySealExcludedNodes; // the unregistered ones given up are not waited for again
+        TMonotonic StandbySealStarted;
+
         TSyncerState(TGroupId bridgeProxyGroupId, TGroupId targetGroupId)
             : BridgeProxyGroupId(bridgeProxyGroupId)
             , TargetGroupId(targetGroupId)
@@ -2296,8 +2389,11 @@ private:
     THashMap<TGroupId, TSyncerState> TargetGroupToSyncerState;
     ui64 NextStaticSyncerCommitCookie = 0;
     std::set<std::tuple<TNodeId, TSyncerState*>> NodeToSyncerState;
-    TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
+    TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction; // filled by EnqueueSyncer only
     TMonotonic SyncersRetryAt = TMonotonic::Max(); // when ProcessSyncers is scheduled to start the syncers that failed
+    // syncers beyond this number wait for their turn, which comes after each stage; those of static groups only count, as
+    // there are few of them and they matter the most; 0 means no limit
+    Schema::State::BridgeSyncMaxSyncers::Type BridgeSyncMaxSyncers = Schema::State::BridgeSyncMaxSyncers::Default;
 
     // the limit for the whole cluster gets divided equally between the nodes hosting syncers; the nodes get a new share
     // only when one of them starts hosting or stops doing so, or when the limit changes
@@ -2381,16 +2477,62 @@ private:
     // groups that have lost their part
     size_t RemoveBridgePileGroups(TConfigState& state, TBridgePileId pileId);
 
+    // make bridged pools and groups ordinary ones when the bridged cluster is being rolled back: the pile is the only one
+    // left (the implicit one), and every bridged group has to be the inline pile in it; pools get the settings the pile
+    // has for them (pile overrides included); returns the number of groups made ordinary, throws TExError naming the
+    // groups that can't be made such
+    size_t RollbackBridgedGroups(TConfigState& state, TBridgePileId pileId);
+
     // delete the part of the bridged group in the pile along with its data; the group serves as bridge proxy only when
     // its inline pile goes away
     void DropBridgeGroupPart(TConfigState& state, TGroupId proxyGroupId, TBridgePileId pileId);
 
-    // the parts of the groups being made fully bridged ones are synced in synchronized piles by this many syncers at
-    // most, so that the traffic between piles doesn't hamper them
-    static constexpr size_t MaxBridgeUpgradeSyncers = 16;
+    // the parts of HOT_STANDBY piles are reconciled with their sources by this many syncers at most, and a part not more
+    // often than this
+    static constexpr size_t MaxStandbyReconcilers = 16;
+    static constexpr TDuration StandbyReconcileInterval = TDuration::Minutes(1);
 
-    // syncer of the part in the synchronized pile of the group being made fully bridged one
-    bool IsBridgeUpgradeSyncer(const TSyncerState& syncerState);
+    static void MarkStandbyDirty(TSyncerState& syncerState, EStandbyDirty dirty) {
+        syncerState.StandbyDirty = Max(syncerState.StandbyDirty, dirty);
+    }
+
+    // the node has registered anew: the reports of the parts it has found missing a write may have got lost with its
+    // pipe, and its bridge proxies may have restarted with background writes in flight
+    void MarkAllStandbyDirty();
+
+    // the node can't tell BSC what it misses until it registers again
+    void OnStandbyWriterLost(TNodeId nodeId);
+
+    // the node has registered, and it gets the seals in progress in its response
+    void OnStandbyWriterRegistered(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *response);
+
+    // The seal of the part promoted from HOT_STANDBY waits for every registered node, as it answers when its client
+    // writes are over; after this time, the nodes don't wait for the background writes of the client writes that are
+    // over, as one may hang with no event to tell, and report them lost. The node that is not registered is given up when
+    // it is still not there this long after the seal has started and the node has disconnected (or after the seal has
+    // started, for the writers unknown since BSC start), and the part gets thoroughly reconciled after the fence then: a
+    // node may be gone for good, with no event to tell either.
+    static constexpr TDuration StandbySealTimeout = TDuration::Seconds(30);
+    ui64 NextStandbySealId = 0;
+    THashSet<TGroupId> StandbySealingTargets; // the parts with seals in progress, some may have gone
+
+    void StartStandbySeal(TSyncerState& syncerState, const TGroupInfo& proxyGroup, TMonotonic now,
+        THashSet<TNodeId>& nodesToUpdate);
+    // flush the seal and give up the pending nodes that are not registered, when it is time; returns when it is next
+    TMonotonic AdvanceStandbySeal(TSyncerState& syncerState, TMonotonic now, THashSet<TNodeId>& nodesToUpdate);
+    // add the seals the node is to answer and hasn't been asked for
+    void AddStandbySeals(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update);
+
+    // switch the part promoted from HOT_STANDBY to SYNCED, as it has missed nothing
+    void CommitStandbyPromotion(TSyncerState& syncerState, TGroupId groupId, const TGroupInfo& group);
+
+    // commit the new stage of the part in the group state, along with the stage update of its sync state made by caller
+    void CommitBridgeGroupStage(TSyncerState& syncerState, TGroupId groupId, ui32 generation,
+        NKikimrBlobStorage::TGroupInfo bridgeGroupInfo, bool staticGroup);
+
+    // syncer attempts are told apart across BSC restarts
+    ui64 NextSyncerAssignmentId = 0;
+    ui64 MakeSyncerAssignmentId();
 
     // pile with pending operation, which BSC has not finished yet; such pile is not synced in any case
     TBridgePileId GetPendingOperationPileId() const;
@@ -2400,12 +2542,42 @@ private:
 
     // the pile is being removed, so new groups get no parts there
     bool IsBridgePileBeingRemoved(TBridgePileId pileId) const;
+    // the bridged cluster is being rolled back: new pools and groups are ordinary ones, bridged groups stay as they are
+    bool IsBeingRolledBack() const;
     // the pile is being added, while this BSC hasn't added parts in it to its groups yet; the groups created meanwhile get
     // no part in the pile, the addition gives it to them
     bool IsBridgePileAwaitingParts(TBridgePileId pileId) const;
     ui64 BridgePileAddedOperationId = 0; // ADD operation BSC has done its part of (in memory, it is repeated on restart)
 
     void UpdateBridgeSyncCounters();
+    NBridgeStorage::TCopyObservation ObserveBridgeStorageCopy(const NBridgeStorage::TGroupContext& group,
+        const TBridgeInfo::TPile& pile, const NKikimrBridge::TClusterStateDetails::TPileSyncState* syncState,
+        bool bridged) const;
+    NKikimrBridge::ESynchronizationStatus GetBridgeSyncStatus(TGroupId groupId);
+    void Handle(TEvBlobStorage::TEvControllerQueryBridgeStorage::TPtr& ev);
+    Ydb::StatusIds::StatusCode SelectBridgeStoragePools(const NKikimrBridge::TStorageQuery& query,
+        std::set<TBoxStoragePoolId>& selected, NBridgeStorage::TReportBudget& budget, TString& error) const;
+
+    // bytes left to copy into the target group of a pile in the given sync stage; Complete is set when the number
+    // comes from a scan that has gone over all the blobs, otherwise it's a lower bound; nothing is known before any
+    // scan
+    struct TBridgeSyncRemaining {
+        ui64 Bytes = 0;
+        bool Complete = false;
+    };
+    std::optional<TBridgeSyncRemaining> GetBridgeSyncRemaining(TGroupId targetGroupId,
+        NKikimrBridge::TGroupState::EStage stage) const;
+    const NKikimrBridge::TGroupState::TPile* FindBridgeSyncPile(TGroupId targetGroupId, ui64* currentRound = nullptr);
+    std::optional<TInstant> GetBridgeSyncLastProgressTimestamp(TGroupId targetGroupId);
+    void RecordBridgeSyncProgress(TGroupId targetGroupId, ui64 round, TInstant timestamp);
+    void ForgetBridgeSyncProgress(TGroupId targetGroupId, ui64 round);
+    // the stage of the target group of a pile, if it is one
+    std::optional<NKikimrBridge::TGroupState::EStage> GetBridgeSyncStage(TGroupId targetGroupId);
+    // returns the bytes copied since the previous report
+    ui64 UpdateBridgeSyncCopyProgress(TSyncerState& syncerState, NKikimrBridge::TGroupState::EStage stage,
+        const TSyncerProgress& progress, bool comprehensive);
+    void UpdateBridgeSyncCopyRates();
+    static constexpr TDuration BridgeSyncRateWindow = TDuration::Minutes(1);
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);
@@ -2415,6 +2587,7 @@ private:
 
     void CheckSyncerDisconnectedNodes();
 
+    void EnqueueSyncer(TSyncerState& syncerState);
     void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});
     void SendSyncersToNodes(const THashSet<TNodeId>& nodeIds);
     bool IsNodeHostingSyncers(TNodeId nodeId) const;
@@ -2439,8 +2612,13 @@ private:
     // the same inside a transaction that persists the state the changes follow from
     void CommitDatabaseSpaceChanges(NIceDb::TNiceDb& db);
     void PersistDatabaseSpaceLatches(NIceDb::TNiceDb& db, const std::map<TBoxStoragePoolId, bool>& latches);
+    // for the latches published outside of the transaction persisting them: writes their current values
+    void PersistChangedDatabaseSpaceLatches(NIceDb::TNiceDb& db, const std::map<TBoxStoragePoolId, bool>& changed);
     void SendDatabaseSpaceState(TNodeId nodeId, TDatabaseSpaceTracker::TScope scope);
+    void UpdateDatabaseSpaceOnPileChanges();
     void UpdateDatabaseSpaceGroup(const TGroupInfo& group);
+    void UpdateDatabaseSpaceGroup(const TGroupInfo& group, const TGroupInfo::TGroupFinder& finder,
+        const TBridgeInfo *bridgeInfo);
     void UpdateDatabaseSpacePool(const TBoxStoragePoolId& poolId, const TStoragePoolInfo& pool);
     void RenderDatabaseSpace(IOutputStream& out);
 
@@ -2452,8 +2630,18 @@ private:
         TInstant LastErrorTimestamp;
         TInstant FirstErrorTimestamp;
         ui32 ErrorCount = 0;
+        // what the blob scan of the stage before Stage has found missing from the target, in blob bytes; there is a row
+        // with this field and no errors, so that BSC restarts don't lose it
+        std::optional<ui64> EstimatedBytesToCopy;
     };
     THashMap<TGroupId, TBridgeSyncState> BridgeSyncState;
+
+    // Progress belongs to a whole synchronization round and survives stage/error cleanup.
+    struct TBridgeSyncProgress {
+        ui64 BecameUnsyncedGeneration = 0;
+        TInstant LastConfirmedProgressAt;
+    };
+    THashMap<TGroupId, TBridgeSyncProgress> BridgeSyncProgress;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Node warden interoperation
@@ -2592,6 +2780,7 @@ public:
         switch (type) {
             hFunc(TEvBlobStorage::TEvControllerRegisterNode, Handle);
             hFunc(TEvBlobStorage::TEvControllerGetGroup, Handle);
+            hFunc(TEvBlobStorage::TEvControllerQueryBridgeStorage, Handle);
             hFunc(TEvBlobStorage::TEvControllerSelectGroups, Handle);
             hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
             hFunc(TEvBlobStorage::TEvControllerUpdateGroupStat, Handle);
@@ -2646,6 +2835,7 @@ public:
         }
         Loaded = true;
         LoadedAt = TActivationContext::Monotonic();
+        UpdatePileOverrides();
         ApplyStorageConfig();
 
         // configs handled while loading (the first one at least) didn't make BSC check parts of its groups in unsynced
@@ -3036,9 +3226,14 @@ public:
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
     static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);
     static TStoragePoolInfo ResolveStoragePoolForPile(const TBoxStoragePoolId& id, const TStoragePoolInfo& pool,
-        TBridgePileId pileId, const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config);
+        TBridgePileId pileId, const TBridgeInfo *bridgeInfo, const TStoragePoolPileOverrideRules *rules);
     TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const;
+    const TStoragePoolPileOverrideRules *GetPileOverrideRules() const; // the rules BSC follows, if any
+    // the rules BSC would follow having got this StorageConfig: its ones, unless the groups don't fit them
+    const TStoragePoolPileOverrideRules *GetPileOverrideRulesWith(const NKikimrBlobStorage::TStorageConfig& config) const;
+    std::optional<TString> CheckGroupsAgainstPileOverrides(const TStoragePoolPileOverrideRules& rules) const;
     std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrBlobStorage::TStorageConfig& config) const;
+    void UpdatePileOverrides(); // adopt the overrides of StorageConfig, if they differ and fit the groups
 
     static void Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TStoragePoolSettings *pb, const TStoragePoolInfo &pool);

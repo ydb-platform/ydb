@@ -2,6 +2,11 @@ UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
 REQUIREMENTS(ram:32 cpu:1)
 
+IF (CLANG_COVERAGE AND OS_LINUX)
+    # Large coverage binaries can exceed the DWARF32 section-size limit.
+    LDFLAGS(-Wl,--strip-debug)
+ENDIF()
+
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -13,6 +18,7 @@ FORK_SUBTESTS()
 
 PEERDIR(
     ydb/library/persqueue
+    ydb/public/sdk/cpp/adapters/executor
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
     ydb/public/sdk/cpp/src/library/kafka
 )
@@ -32,6 +38,7 @@ SRCS(
     read_session_kafka_timestamps_ut.cpp
     reset_offset_ut.cpp
     topic_deferred_publish_ut.cpp
+    topic_path_ut.cpp
     topic_to_table_ut.cpp
     topic_tx_skip_conflict_ut.cpp
     write_session_connect_ut.cpp

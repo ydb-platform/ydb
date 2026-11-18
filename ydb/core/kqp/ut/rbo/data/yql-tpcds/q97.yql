@@ -9,9 +9,9 @@ $ssci = (
         ss_customer_sk AS customer_sk,
         ss_item_sk AS item_sk
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         ss_sold_date_sk == d_date_sk
         AND d_month_seq BETWEEN 1212 AND 1212 + 11
@@ -25,9 +25,9 @@ $csci = (
         cs_bill_customer_sk AS customer_sk,
         cs_item_sk AS item_sk
     FROM
-        `/Root/test/ds/catalog_sales`
+        `catalog_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         cs_sold_date_sk == d_date_sk
         AND d_month_seq BETWEEN 1212 AND 1212 + 11

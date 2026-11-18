@@ -20,7 +20,6 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr ReplyBytes;
 
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TValueAggregationClient>, BytesAllocated);
-    YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TValueAggregationClient>, CountAllocated);
 
 public:
     TSubscriberTypeCounters(const TSubscriberCounters& owner, const TString& resourceType);

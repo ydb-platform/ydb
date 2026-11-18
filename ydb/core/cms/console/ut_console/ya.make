@@ -20,6 +20,9 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     console_ut_tenants.cpp
     console_ut_configs.cpp
+    console_configs_provider_ut.cpp
+    console_configs_delivery_ut.cpp
+    ut_configs_subscriber.cpp
     console_handshake_ut.cpp
     feature_flags_configurator_ut.cpp
     immediate_controls_configurator_ut.cpp

@@ -9,20 +9,16 @@ ENDIF()
 INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/rseq/supported_arch.inc)
 
 SRCS(
-    cpu_id.cpp
     per_cpu.cpp
     rseq.cpp
 )
 
 PEERDIR(
     library/cpp/yt/misc
+    library/cpp/yt/system
 )
 
 END()
-
-RECURSE(
-    benchmarks
-)
 
 RECURSE_FOR_TESTS(
     unittests

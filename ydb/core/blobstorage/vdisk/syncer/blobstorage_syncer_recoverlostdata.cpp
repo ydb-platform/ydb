@@ -159,7 +159,7 @@ namespace NKikimr {
             // run full sync proxy for every VDisk in the group
             auto runProxyForVDisk = [this, &ctx] (TVDiskInfo<TPeerState>& x) {
                 auto vd = GInfo->GetVDiskId(x.OrderNumber);
-                if (GInfo->IsFailedFailRealm(vd.FailRealm)) {
+                if (GInfo->IsFailRealmExcluded(vd.FailRealm)) {
                     return;
                 }
                 auto aid = GInfo->GetActorId(x.OrderNumber);

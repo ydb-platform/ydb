@@ -52,17 +52,17 @@ public:
     }
 
     NArrow::ECompareType GetCompareType() const {
-        AFL_VERIFY(Object);
+        YDB_LOG_VERIFY(Object);
         return Object->GetCompareType();
     }
 
     std::partial_ordering ComparePartial(const NArrow::NMerger::TSortableBatchPosition& pk) const {
-        AFL_VERIFY(Object);
+        YDB_LOG_VERIFY(Object);
         return Object->Batch.ComparePartial(pk);
     }
 
     void AppendPointTo(std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders) const {
-        AFL_VERIFY(Object);
+        YDB_LOG_VERIFY(Object);
         Object->Batch.BuildSortingCursor().AppendPositionTo(builders, nullptr);
     }
 
@@ -71,7 +71,7 @@ public:
     }
 
     const NArrow::NMerger::TSortableBatchPosition& GetSortableBatchPosition() const {
-        AFL_VERIFY(Object);
+        YDB_LOG_VERIFY(Object);
         return Object->Batch;
     }
 

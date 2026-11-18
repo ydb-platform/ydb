@@ -53,9 +53,10 @@ class LiveCluster:
         root_certificates: typing.Optional[bytes] = None,
         initial: typing.Optional[dict] = None,
         pile_names: typing.Optional[typing.Sequence[str]] = None,
+        topology: typing.Optional[Topology] = None,
     ) -> None:
         names = list(pile_names) if pile_names is not None else ["pile%d" % (i + 1) for i in range(piles)]
-        self.topo = Topology.with_free_ports(
+        self.topo = topology if topology is not None else Topology.with_free_ports(
             names, nodes, timings=timings or tiny_timings(), policies=policies or Policies(), tls=tls, initial=initial)
         self.root_certificates = root_certificates
         self.state_root = state_root
@@ -64,7 +65,7 @@ class LiveCluster:
         self._http: typing.Optional[aiohttp.ClientSession] = None
 
     def _new_process(self, pile: str) -> MockProcess:
-        state_dir = os.path.join(self.state_root, pile) if self.state_root else None
+        state_dir = os.path.join(self.state_root, self.topo.pile_file_name(pile)) if self.state_root else None
         return MockProcess(self.topo, pile, state_dir=state_dir)
 
     async def start(self) -> "LiveCluster":

@@ -8,6 +8,7 @@ import traceback
 import ydb
 import ydb.tests.olap.lib.remote_execution as re
 
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.olap.load.lib import tpch
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
 from ydb.tests.olap.load.lib.clickbench import ClickbenchParallelBase
@@ -91,9 +92,10 @@ class WorkloadManagerBase(LoadSuiteBase):
 
     @staticmethod
     @allure.step('Execute query and return the used resource pool')
-    def execute_query_in_pool(query: str, pool_id: Optional[str] = None) -> Optional[str]:
-        driver = YdbCluster.get_ydb_driver()
-        with ydb.QuerySessionPool(driver) as session_pool:
+    def execute_query_in_pool(
+        query: str, pool_id: Optional[str] = None, *, driver: Optional[ydb.Driver] = None
+    ) -> Optional[str]:
+        with ydb.QuerySessionPool(driver or YdbCluster.get_ydb_driver()) as session_pool:
             with session_pool.checkout() as session:
                 it = session.execute(
                     query,
@@ -144,6 +146,10 @@ class WorkloadManagerBase(LoadSuiteBase):
         pass
 
     @classmethod
+    def before_stop_checking(cls):
+        pass
+
+    @classmethod
     def after_workload(cls, result: WorkloadRunResult):
         pass
 
@@ -179,12 +185,11 @@ class WorkloadManagerBase(LoadSuiteBase):
                         pass
             else:
                 results = {}
-            self.stop_checking.set()
-            check_thread.join()
-            self.after_workload(overall_result)
+            self.before_stop_checking()
         finally:
             self.stop_checking.set()
             check_thread.join()
+        self.after_workload(overall_result)
         if len(results) > 0:
             overall_result.merge(*results.values())
         overall_result.iterations.clear()
@@ -244,6 +249,23 @@ class WorkloadManagerConcurrentQueryLimit(WorkloadManagerBase):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [ResourcePool('test_pool', ['testuser'], concurrent_query_limit=cls.query_limit)]
+
+    @classmethod
+    def do_setup_class(cls) -> None:
+        super().do_setup_class()
+        pool = cls.get_resource_pools()[0]
+        user = pool.users[0]
+        with ydb.Driver(
+            endpoint=YdbCluster.ydb_endpoint,
+            database=f'/{YdbCluster.ydb_database}',
+            credentials=ydb.StaticCredentials.from_user_password(user, ''),
+        ) as driver:
+            driver.wait(timeout=10)
+            # The classifier becomes visible to query processing asynchronously after CREATE.
+            assert wait_for(
+                lambda: cls.execute_query_in_pool('SELECT 1', driver=driver) == pool.name,
+                timeout_seconds=60,
+            ), f'Queries from {user} did not reach resource pool {pool.name}'
 
     @classmethod
     def before_workload(cls, result: WorkloadRunResult):
@@ -496,6 +518,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
     threads = 1
     tpcc_warehouses: int = 4500
     tpcc_threads: int = 0
+    tpcc_warmup: float = 0
     verify_data: bool = False
     _tpcc_executions: list[tuple[str, re.LongRemoteExecution]] = []
     _tpcc_thread: Thread = None
@@ -525,6 +548,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
             warehouses=cls.tpcc_warehouses,
             users=[user],
             threads=cls.tpcc_threads,
+            warmup=cls.tpcc_warmup,
         )
         cls._tpcc_thread = Thread(target=cls._tpcc_thread_func)
         cls._tpcc_thread.start()

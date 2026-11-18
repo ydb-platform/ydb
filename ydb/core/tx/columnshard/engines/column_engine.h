@@ -98,8 +98,8 @@ public:
         : Request(request)
         , Processor(processor)
     {
-        AFL_VERIFY(Request);
-        AFL_VERIFY(Processor);
+        YDB_LOG_VERIFY(Request);
+        YDB_LOG_VERIFY(Processor);
     }
 };
 
@@ -140,7 +140,7 @@ public:
         }
 
         const NKikimrSchemeOp::TColumnTableSchema& GetSchemaVerified() const {
-            AFL_VERIFY(Schema);
+            YDB_LOG_VERIFY(Schema);
             return *Schema;
         }
 
@@ -149,7 +149,7 @@ public:
         }
 
         const NKikimrSchemeOp::TColumnTableSchemaDiff& GetDiffVerified() const {
-            AFL_VERIFY(Diff);
+            YDB_LOG_VERIFY(Diff);
             return *Diff;
         }
 
@@ -157,7 +157,7 @@ public:
             if (Schema) {
                 return Schema->GetVersion();
             }
-            AFL_VERIFY(Diff);
+            YDB_LOG_VERIFY(Diff);
             return Diff->GetVersion();
         }
     };
@@ -212,6 +212,7 @@ public:
     virtual std::vector<TSelectedPortionInfo> Select(TInternalPathId pathId, const NReader::TReadDescription& readDescription,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual bool ArePortionsLoaded(const TInternalPathId pathId, const TPKRangesFilter& ranges) const = 0;
+    virtual bool ArePortionsLoadedFrom(const TInternalPathId pathId, const NArrow::TSimpleRow& key) const = 0;
     // nullopt: every table of the shard
     virtual bool AreAllPortionsLoaded(const std::optional<TInternalPathId> pathId) const = 0;
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(

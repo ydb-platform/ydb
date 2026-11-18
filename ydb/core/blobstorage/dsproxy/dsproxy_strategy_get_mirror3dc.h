@@ -12,10 +12,6 @@
 namespace NKikimr {
 
 class TMirror3dcGetStrategy : public IStrategy {
-    using S = TBlobState::ESituation;
-    using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-    using G = TBlobStorageGroupInfo;
-
     const TNodeLayoutInfoPtr NodeLayout;
     const bool PhantomCheck;
     const bool MustRestoreFirst;
@@ -26,13 +22,13 @@ class TMirror3dcGetStrategy : public IStrategy {
         TIntervalSet<i32> Missing;
         std::array<bool, 3> Included;
         TSubgroupPartLayout Parts;
-        G::TSubgroupVDisks Failed;
-        G::TSubgroupVDisks Uncertain;
-        G::TSubgroupVDisks Unknown;
+        TBlobStorageGroupInfo::TSubgroupVDisks Failed;
+        TBlobStorageGroupInfo::TSubgroupVDisks Uncertain;
+        TBlobStorageGroupInfo::TSubgroupVDisks Unknown;
         bool HasErrors = false;
-        G::EBlobState BlobState = G::EBS_DISINTEGRATED;
+        TBlobStorageGroupInfo::EBlobState BlobState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
 
-        TReadState(const G::TTopology& topology, const TIntervalSet<i32>& needed)
+        TReadState(const TBlobStorageGroupInfo::TTopology& topology, const TIntervalSet<i32>& needed)
             : Needed(needed)
             , Failed(&topology)
             , Uncertain(&topology)
@@ -75,7 +71,7 @@ class TMirror3dcGetStrategy : public IStrategy {
             auto& disk = state->Disks[diskIdx];
             const ui32 part = diskIdx % 3;
             auto& diskPart = disk.DiskParts[part];
-            if (diskPart.Situation != S::Unknown && diskPart.Situation != S::Present) {
+            if (diskPart.Situation != TBlobState::ESituation::Unknown && diskPart.Situation != TBlobState::ESituation::Present) {
                 continue;
             }
             if (const auto request = readState.Missing - diskPart.Requested) {
@@ -90,12 +86,12 @@ class TMirror3dcGetStrategy : public IStrategy {
             readState.HasErrors ? readState.Uncertain : readState.Failed);
         if (PhantomCheck) {
             // A likely phantom is still an error until every disk confirms missing data.
-            state->LooksLikePhantom = absenceState != G::EBS_DISINTEGRATED;
+            state->LooksLikePhantom = absenceState != TBlobStorageGroupInfo::EBS_DISINTEGRATED;
         }
-        if (absenceState == G::EBS_DISINTEGRATED || (PhantomCheck && readState.HasErrors)) {
-            state->WholeSituation = S::Error;
+        if (absenceState == TBlobStorageGroupInfo::EBS_DISINTEGRATED || (PhantomCheck && readState.HasErrors)) {
+            state->WholeSituation = TBlobState::ESituation::Error;
         } else {
-            state->WholeSituation = S::Absent;
+            state->WholeSituation = TBlobState::ESituation::Absent;
         }
         return EStrategyOutcome::DONE;
     }
@@ -117,22 +113,22 @@ class TMirror3dcGetStrategy : public IStrategy {
             }
         }
         if (!readState.Missing) {
-            if (readState.BlobState == G::EBS_DISINTEGRATED) {
+            if (readState.BlobState == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
                 return EStrategyOutcome::Error("Mirror-3-dc read exceeds the ensured failure model");
             }
             if (checker.CheckQuorumForLayout(readState.Parts)) {
-                state->WholeSituation = S::Present;
+                state->WholeSituation = TBlobState::ESituation::Present;
                 return EStrategyOutcome::DONE;
             }
             // Pending reads are provisional failures only for deciding when restoration may start.
-            if (checker.GetBlobState(readState.Parts, readState.Unknown) == G::EBS_DISINTEGRATED) {
+            if (checker.GetBlobState(readState.Parts, readState.Unknown) == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
                 return EStrategyOutcome::IN_PROGRESS;
             }
             const auto outcome = TMirror3dcPutStrategy(TEvBlobStorage::TEvPut::TacticMaxThroughput,
                 false, AcceleratePut).Process(*logCtx, *state, info, *blackboard, *groupDiskRequests,
                     accelerationParams);
             if (outcome == EStrategyOutcome::DONE) {
-                state->WholeSituation = S::Present;
+                state->WholeSituation = TBlobState::ESituation::Present;
             }
             return outcome;
         }
@@ -141,12 +137,12 @@ class TMirror3dcGetStrategy : public IStrategy {
         }
         const auto absenceState = checker.GetBlobState(readState.Parts, readState.Uncertain);
         if (PhantomCheck) {
-            state->LooksLikePhantom = absenceState != G::EBS_DISINTEGRATED;
+            state->LooksLikePhantom = absenceState != TBlobStorageGroupInfo::EBS_DISINTEGRATED;
         }
-        if (absenceState == G::EBS_DISINTEGRATED || (PhantomCheck && readState.HasErrors)) {
-            state->WholeSituation = S::Error;
+        if (absenceState == TBlobStorageGroupInfo::EBS_DISINTEGRATED || (PhantomCheck && readState.HasErrors)) {
+            state->WholeSituation = TBlobState::ESituation::Error;
         } else {
-            state->WholeSituation = S::Absent;
+            state->WholeSituation = TBlobState::ESituation::Absent;
         }
         return EStrategyOutcome::DONE;
     }
@@ -163,7 +159,7 @@ public:
     EStrategyOutcome Process(TLogContext& logCtx, TBlobState& state, const TBlobStorageGroupInfo& info,
             TBlackboard& blackboard, TGroupDiskRequests& groupDiskRequests,
             const TAccelerationParams& accelerationParams) override {
-        if (state.WholeSituation == S::Present) {
+        if (state.WholeSituation == TBlobState::ESituation::Present) {
             return EStrategyOutcome::DONE;
         }
         const auto checker = TMirror3dcWriteQuorumChecker::TryCreate(info, state.Id.Hash());
@@ -176,7 +172,7 @@ public:
         for (ui32 part = 0; part < 3; ++part) {
             const ui32 realm = info.GetVDiskId(state.Disks[part].OrderNumber).FailRealm;
             const auto realmState = info.GetFailRealmState(realm);
-            readState.Included[part] = realmState != R::F;
+            readState.Included[part] = !IsExcluded(realmState);
             if (readState.Included[part]) {
                 const auto& data = state.Parts[part];
                 state.Whole.Data.CopyFrom(data.Data, data.Here() & (readState.Needed - state.Whole.Here()));
@@ -185,7 +181,7 @@ public:
 
         readState.Missing = readState.Needed - state.Whole.Here();
         if (!MustRestoreFirst && !readState.Missing) {
-            state.WholeSituation = S::Present;
+            state.WholeSituation = TBlobState::ESituation::Present;
             return EStrategyOutcome::DONE;
         }
 
@@ -196,22 +192,22 @@ public:
             }
             auto& diskPart = state.Disks[disk].DiskParts[part];
             switch (diskPart.Situation) {
-                case S::Present:
+                case TBlobState::ESituation::Present:
                     readState.Parts.AddItem(disk, part, info.Type);
                     break;
-                case S::Error:
+                case TBlobState::ESituation::Error:
                     readState.HasErrors = true;
-                    readState.Failed += G::TSubgroupVDisks(&info.GetTopology(), disk);
+                    readState.Failed += TBlobStorageGroupInfo::TSubgroupVDisks(&info.GetTopology(), disk);
                     [[fallthrough]];
-                case S::Lost:
-                    readState.Uncertain += G::TSubgroupVDisks(&info.GetTopology(), disk);
+                case TBlobState::ESituation::Lost:
+                    readState.Uncertain += TBlobStorageGroupInfo::TSubgroupVDisks(&info.GetTopology(), disk);
                     break;
-                case S::Unknown:
-                    readState.Unknown += G::TSubgroupVDisks(&info.GetTopology(), disk);
+                case TBlobState::ESituation::Unknown:
+                    readState.Unknown += TBlobStorageGroupInfo::TSubgroupVDisks(&info.GetTopology(), disk);
                     break;
-                case S::Absent:
+                case TBlobState::ESituation::Absent:
                     break;
-                case S::Sent:
+                case TBlobState::ESituation::Sent:
                     if (!MustRestoreFirst) {
                         return EStrategyOutcome::Error("Unexpected pending write in mirror-3-dc read");
                     }
@@ -223,7 +219,7 @@ public:
         // Return ERROR when failed disks exceed the current ensured failure model.
         // E=0 provides no failure bound, so continue reading to look for a copy.
         // Phantom checks collect replies and report each blob's verdict without aborting the batch.
-        if (!PhantomCheck && readState.BlobState == G::EBS_DISINTEGRATED
+        if (!PhantomCheck && readState.BlobState == TBlobStorageGroupInfo::EBS_DISINTEGRATED
                 && checker->GetEnsuredLayout() != EMirror3dcLayout::LAYOUT_0) {
             return EStrategyOutcome::Error("Mirror-3-dc read exceeds the ensured failure model");
         }

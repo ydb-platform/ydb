@@ -15,6 +15,7 @@
 - [Транзакции](transactions.md)
 - [Change Data Capture (CDC)](cdc.md)
 - [Time to Live (TTL) и вытеснение данных во внешнее хранилище](ttl.md)
+- [Сжатие данных в таблицах](compression.md)
 - [Ограничения базы данных](limits-ydb.md)
 - [Асинхронная репликация](async-replication.md)
 - [Режим bridge](./bridge.md)

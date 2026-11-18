@@ -12,22 +12,23 @@ namespace NKikimr {
 Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
 
     Y_UNIT_TEST(FailRealmStateDefaults) {
-        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        using TDataCenterState = NKikimrBlobStorage::TDataCenterState;
         const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
         TBlobStorageGroupInfo info(type, 1, 3, 3);
         TBlobStorageGroupInfo fromTopology(TBlobStorageGroupInfo::TTopology(type, 3, 3, 1),
             TBlobStorageGroupInfo::TDynamicInfo(info.GroupID, 1), "");
         for (ui32 realm = 0; realm < 3; ++realm) {
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(info.GetFailRealmState(realm)), static_cast<ui32>(R::N0));
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(fromTopology.GetFailRealmState(realm)), static_cast<ui32>(R::N0));
-            UNIT_ASSERT(!info.IsFailedFailRealm(realm));
-            UNIT_ASSERT(!info.IsRecoveringFailRealm(realm));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(info.GetFailRealmState(realm)), static_cast<ui32>(TDataCenterState::INCLUDED));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(fromTopology.GetFailRealmState(realm)), static_cast<ui32>(TDataCenterState::INCLUDED));
+            UNIT_ASSERT(info.IsFailRealmIncluded(realm));
+            UNIT_ASSERT(!info.IsFailRealmExcluded(realm));
+            UNIT_ASSERT(!info.IsFailRealmRecovering(realm));
         }
     }
 
     Y_UNIT_TEST(FailRealmStatesFromProtoAndGenerationUpdate) {
-        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        constexpr R::EState states[] = {R::N0, R::N1, R::N2, R::F, R::R};
+        using TDataCenterState = NKikimrBlobStorage::TDataCenterState;
+        constexpr TDataCenterState::EState states[] = {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::RECOVERING};
         NKikimrBlobStorage::TGroupInfo group;
         group.SetGroupID(1);
         group.SetGroupGeneration(1);
@@ -44,12 +45,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         auto previous = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
         UNIT_ASSERT(previous);
         for (ui32 realm = 0; realm < 3; ++realm) {
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(previous->GetFailRealmState(realm)), static_cast<ui32>(R::N0));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(previous->GetFailRealmState(realm)), static_cast<ui32>(TDataCenterState::INCLUDED));
         }
-        for (ui32 offset = 0; offset < 5; ++offset) {
+        for (ui32 offset = 0; offset < 3; ++offset) {
             group.SetGroupGeneration(offset + 2);
             for (ui32 realm = 0; realm < 3; ++realm) {
-                group.MutableRings(realm)->SetState(states[(realm + offset) % 5]);
+                group.MutableRings(realm)->SetState(states[(realm + offset) % 3]);
             }
             // Exercise the wire representation before NodeWarden's Parse entry point.
             NKikimrBlobStorage::TGroupInfo received;
@@ -60,20 +61,22 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             UNIT_ASSERT(previous->PickTopology()->EqualityCheck(current->GetTopology()));
             auto localVDisk = MakeIntrusive<TBlobStorageGroupInfo>(current, current->GetVDiskId(0),
                 current->GetActorId(0));
+            UNIT_ASSERT(localVDisk->GetMirror3dcState() == current->GetMirror3dcState());
             for (ui32 realm = 0; realm < 3; ++realm) {
-                const auto expected = states[(realm + offset) % 5];
+                const auto expected = states[(realm + offset) % 3];
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->GetFailRealmState(realm)), static_cast<ui32>(expected));
-                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->GetDynamicInfo().FailRealmStates[realm]), static_cast<ui32>(expected));
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->GetDynamicInfo().Mirror3dcState.FailRealmStates[realm]), static_cast<ui32>(expected));
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(localVDisk->GetFailRealmState(realm)), static_cast<ui32>(expected));
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->Group->GetRings(realm).GetState()), static_cast<ui32>(expected));
-                UNIT_ASSERT_VALUES_EQUAL(current->IsFailedFailRealm(realm), expected == R::F);
-                UNIT_ASSERT_VALUES_EQUAL(current->IsRecoveringFailRealm(realm), expected == R::R);
-                UNIT_ASSERT_VALUES_EQUAL(localVDisk->IsFailedFailRealm(realm), expected == R::F);
-                UNIT_ASSERT_VALUES_EQUAL(localVDisk->IsRecoveringFailRealm(realm), expected == R::R);
-                const auto old = offset ? states[(realm + offset - 1) % 5] : R::N0;
+                UNIT_ASSERT_VALUES_EQUAL(current->IsFailRealmIncluded(realm), expected == TDataCenterState::INCLUDED);
+                UNIT_ASSERT_VALUES_EQUAL(current->IsFailRealmExcluded(realm), expected == TDataCenterState::EXCLUDED);
+                UNIT_ASSERT_VALUES_EQUAL(current->IsFailRealmRecovering(realm), expected == TDataCenterState::RECOVERING);
+                UNIT_ASSERT_VALUES_EQUAL(localVDisk->IsFailRealmExcluded(realm), expected == TDataCenterState::EXCLUDED);
+                UNIT_ASSERT_VALUES_EQUAL(localVDisk->IsFailRealmRecovering(realm), expected == TDataCenterState::RECOVERING);
+                const auto old = offset ? states[(realm + offset - 1) % 3] : TDataCenterState::INCLUDED;
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(previous->GetFailRealmState(realm)), static_cast<ui32>(old));
-                UNIT_ASSERT_VALUES_EQUAL(previous->IsFailedFailRealm(realm), old == R::F);
-                UNIT_ASSERT_VALUES_EQUAL(previous->IsRecoveringFailRealm(realm), old == R::R);
+                UNIT_ASSERT_VALUES_EQUAL(previous->IsFailRealmExcluded(realm), old == TDataCenterState::EXCLUDED);
+                UNIT_ASSERT_VALUES_EQUAL(previous->IsFailRealmRecovering(realm), old == TDataCenterState::RECOVERING);
             }
             previous = std::move(current);
         }

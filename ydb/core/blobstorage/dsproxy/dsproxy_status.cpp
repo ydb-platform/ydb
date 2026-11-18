@@ -102,7 +102,7 @@ public:
             const ui64 cookie = TVDiskIdShort(Info->GetVDiskId(vdisk.OrderNumber)).GetRaw();
 
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-            if (Info->GetFailRealmState(vd.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+            if (Info->IsFailRealmExcluded(vd.FailRealm)) {
                 continue;
             }
             DSP_LOG_DEBUG_S("DSPS04", "Sending TEvVStatus"

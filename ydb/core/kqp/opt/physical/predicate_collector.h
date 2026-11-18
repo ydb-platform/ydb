@@ -68,6 +68,10 @@ extern THashMap<TString, TString> IgnoreCaseSubstringMatchFunctions;
 // and with default `NULL ON EMPTY` / `NULL ON ERROR`.
 bool CanBePushedAsOlapJsonValue(const NNodes::TCoJsonValue& jsonValue, const TExprNode* lambdaArg);
 
+// Whether `JsonExists` can be computed by the column shard as `KqpOlapJsonExists`: JSON_EXISTS over a column
+// of the row (`lambdaArg`) with a constant path.
+bool CanBePushedAsOlapJsonExists(const NNodes::TCoJsonExists& jsonExists, const TExprNode* lambdaArg);
+
 void CollectPredicates(const NNodes::TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType,
                        const TPushdownOptions& options);
 

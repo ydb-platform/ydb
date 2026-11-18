@@ -3,7 +3,9 @@
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/protos/bridge_storage.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 
 #include <map>
@@ -16,7 +18,121 @@ using NBridgeTest::GetBridgedLocation;
 using NBridgeTest::QueryStorageConfig;
 using NBridgeTest::SwitchBridgePileState;
 
+// a missing reply fails the test at the place it was expected at, rather than by the timeout of the whole test
+template<typename TEvent>
+TAutoPtr<TEventHandle<TEvent>> WaitReply(TEnvironmentSetup& env, const TActorId& edge, const TString& what) {
+    auto ev = env.WaitForEdgeActorEvent<TEvent>(edge, false, env.Runtime->GetClock() + TDuration::Minutes(1));
+    UNIT_ASSERT_C(ev, "no reply: " << what);
+    return ev;
+}
+
 Y_UNIT_TEST_SUITE(BridgeRejoin) {
+    Y_UNIT_TEST(PileRestartsBeforeStage2CommitIsStored) {
+        using namespace NBridgeTest;
+        using TState = NKikimrBridge::TClusterState;
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        SwitchPileState(env, 1, TState::DISCONNECTED);
+        checker.Write(groupId);
+
+        bool holdCommit = true;
+        bool restarted = false;
+        std::set<ui32> blockedNodes;
+        std::set<ui32> recoveredProposals;
+        std::optional<NKikimrBlobStorage::TStorageConfig> lastCommittedConfig;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId < 9 || nodeId > 16) {
+                return true;
+            }
+            if (holdCommit && ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record;
+                if (record.HasCommittedStorageConfig() && record.HasProposedStorageConfig()
+                        && record.GetCommittedStorageConfig().GetClusterState().GetPerPileState(1) == TState::NOT_SYNCHRONIZED_1
+                        && record.GetProposedStorageConfig().GetClusterState().GetPerPileState(1) == TState::NOT_SYNCHRONIZED_2) {
+                    lastCommittedConfig = record.GetCommittedStorageConfig();
+                }
+                if (record.HasCommittedStorageConfig() && record.GetCommittedStorageConfig()
+                        .GetClusterState().GetPerPileState(1) == TState::NOT_SYNCHRONIZED_2) {
+                    blockedNodes.insert(nodeId);
+                    return false;
+                }
+            }
+            if (restarted && ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadataResult::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeWardenReadMetadataResult>()->Record;
+                if (record.HasCommittedStorageConfig() && record.HasProposedStorageConfig()
+                        && record.GetCommittedStorageConfig().GetClusterState().GetPerPileState(1) == TState::NOT_SYNCHRONIZED_1
+                        && record.GetProposedStorageConfig().GetClusterState().GetPerPileState(1) == TState::NOT_SYNCHRONIZED_2) {
+                    recoveredProposals.insert(nodeId);
+                }
+            }
+            return true;
+        };
+        SwitchPileState(env, 1, TState::NOT_SYNCHRONIZED_1);
+        const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+        while (blockedNodes.size() != 8 && env.Runtime->GetClock() < deadline) {
+            env.Sim(TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(blockedNodes.size(), 8, "not all nodes reached the stage-2 commit write");
+        for (ui32 nodeId = 9; nodeId <= 16; ++nodeId) {
+            env.StopNode(nodeId);
+        }
+
+        UNIT_ASSERT(lastCommittedConfig);
+        const TActorId connectionChecker = env.Runtime->Register(CreateDistconfBridgeConnectionCheckerActor(
+            TBridgePileId::FromPileIndex(0), "pile_1"), 1);
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        auto checkConnection = [&](const NKikimrBlobStorage::TStorageConfig& peerConfig) {
+            NKikimrBlobStorage::TConnectivityPayload payload;
+            TBridgePileId::FromPileIndex(1).CopyToProto(&payload,
+                &NKikimrBlobStorage::TConnectivityPayload::SetBridgePileId);
+            payload.SetBridgePileName("pile_2");
+            payload.SetPileListChangeCapable(true);
+            payload.SetBridgeFeatureLevel(NStorage::BridgeFeatureLevel);
+            payload.MutableStorageConfig()->CopyFrom(peerConfig);
+            THashMap<TString, TString> params;
+            UNIT_ASSERT(payload.SerializeToString(&params["distconf"]));
+            env.Runtime->Send(new IEventHandle(connectionChecker, edge,
+                new TEvInterconnect::TEvCheckIncomingConnection(9, std::move(params))), 1);
+            return WaitReply<TEvInterconnect::TEvCheckIncomingConnectionResult>(env, edge, "bridge handshake after a pile crash");
+        };
+        const auto response = checkConnection(*lastCommittedConfig);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->ErrorReason.value_or(TString()), "peer cluster state is obsolete");
+        bool sentConfig = false;
+        for (const auto& [key, value] : response->Get()->ParamsToSend) {
+            NKikimrBlobStorage::TConnectivityPayload reply;
+            UNIT_ASSERT(reply.ParseFromString(value));
+            sentConfig |= reply.HasStorageConfig()
+                && reply.GetStorageConfig().GetClusterState().GetPerPileState(1) == TState::NOT_SYNCHRONIZED_2;
+        }
+        UNIT_ASSERT_C(sentConfig, "the returning pile did not receive the current configuration");
+
+        auto diverged = *lastCommittedConfig;
+        diverged.MutableClusterState()->SetGuid(diverged.GetClusterState().GetGuid() + 1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&diverged);
+        const auto rejected = checkConnection(diverged);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->ErrorReason.value_or(TString()), "cluster state history has been diverged");
+
+        holdCommit = false;
+        restarted = true;
+        for (ui32 nodeId = 9; nodeId <= 16; ++nodeId) {
+            env.StartNode(nodeId);
+        }
+        WaitForPileState(env, 1, TState::SYNCHRONIZED);
+        UNIT_ASSERT_C(!recoveredProposals.empty(), "restart did not exercise a stored proposal without its commit");
+        checker.CheckAll();
+        checker.Write(groupId);
+        env.Runtime->FilterFunction = {};
+    }
+
     Y_UNIT_TEST(TwoDisconnectedPilesRecoverData) {
         TEnvironmentSetup env{{
             .NodeCount = 24,
@@ -291,10 +407,30 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             .AutomaticBootstrap = true,
         }};
         const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
+        const auto pileGroups = NBridgeTest::GetPileGroups(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(pileGroups.size(), 2);
+        const ui32 targetGroupId = pileGroups[1];
+        auto groupMetrics = [&](const TString& phase) {
+            Cerr << "*** querying fault metrics " << phase << Endl;
+            const auto info = NBridgeTest::QueryGroupSystemView(env, targetGroupId);
+            UNIT_ASSERT_C(info.HasBridgeSyncStatus(), phase);
+            Cerr << "*** fault metrics " << phase << " at " << env.Runtime->GetClock()
+                << " stage=" << info.GetBridgeSyncStage()
+                << " running=" << info.GetBridgeSyncRunning()
+                << " bytes_per_second=" << info.GetBridgeSyncCopyBytesPerSecond()
+                << " last_progress=" << (info.HasBridgeSyncLastProgressTimestamp()
+                    ? ToString(info.GetBridgeSyncLastProgressTimestamp()) : "unknown")
+                << " error_count=" << info.GetBridgeSyncErrorCount()
+                << " last_error_at=" << info.GetBridgeSyncLastErrorTimestamp()
+                << " last_error=" << info.GetBridgeSyncLastError() << Endl;
+            return info;
+        };
+        UNIT_ASSERT(groupMetrics("initial").GetBridgeSyncStatus() == NKikimrBridge::SYNCED);
         NBridgeTest::TDataChecker checker(env);
         checker.Write(groupId);
         NBridgeTest::SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
         env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT(groupMetrics("disconnected").GetBridgeSyncStatus() == NKikimrBridge::UNKNOWN);
         checker.Write(groupId);
 
         // every assimilation the syncers make fails, and so do the syncers
@@ -320,12 +456,345 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             // the backoff from 100 ms to 30 s allows about ten attempts a minute
             UNIT_ASSERT_C(num <= 15, "TargetGroupId# " << targetGroupId << " failures# " << num);
         }
+        auto failed = groupMetrics("failing");
+        NBridgeTest::WaitUntil(env, [&] {
+            if (failed.GetBridgeSyncRunning()) {
+                failed = groupMetrics("waiting for retry backoff");
+            }
+            return !failed.GetBridgeSyncRunning();
+        }, "failed syncer waiting for retry");
+        UNIT_ASSERT(failed.GetBridgeSyncStatus() == NKikimrBridge::PENDING);
+        UNIT_ASSERT_VALUES_EQUAL(failed.GetBridgeSyncStage(), "BLOCKS");
+        UNIT_ASSERT(failed.GetBridgeSyncLastError().Contains("TEvAssimilate failed"));
+        UNIT_ASSERT_GT(failed.GetBridgeSyncErrorCount(), 0);
+        UNIT_ASSERT_GT(failed.GetBridgeSyncLastErrorTimestamp(), 0);
+        UNIT_ASSERT(!failed.HasBridgeSyncLastProgressTimestamp());
+        UNIT_ASSERT_VALUES_EQUAL(failed.GetBridgeSyncCopyBytesPerSecond(), 0);
+
+        env.Sim(TDuration::Seconds(30));
+        const auto retried = groupMetrics("retrying");
+        UNIT_ASSERT_GT(retried.GetBridgeSyncErrorCount(), failed.GetBridgeSyncErrorCount());
+        UNIT_ASSERT_GT(retried.GetBridgeSyncLastErrorTimestamp(), failed.GetBridgeSyncLastErrorTimestamp());
+        UNIT_ASSERT(!retried.HasBridgeSyncLastProgressTimestamp());
+        UNIT_ASSERT_VALUES_EQUAL(retried.GetBridgeSyncCopyBytesPerSecond(), 0);
 
         failing = false;
         NBridgeTest::WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        const auto recovered = groupMetrics("recovered");
+        UNIT_ASSERT(recovered.GetBridgeSyncStatus() == NKikimrBridge::SYNCED);
+        UNIT_ASSERT_VALUES_EQUAL(recovered.GetBridgeSyncStage(), "SYNCED");
+        UNIT_ASSERT(recovered.GetBridgeSyncLastError().empty());
+        UNIT_ASSERT_VALUES_EQUAL(recovered.GetBridgeSyncErrorCount(), 0);
+        UNIT_ASSERT(recovered.HasBridgeSyncLastProgressTimestamp());
+        UNIT_ASSERT_GT(recovered.GetBridgeSyncLastProgressTimestamp(), retried.GetBridgeSyncLastErrorTimestamp());
         env.Runtime->FilterFunction = {};
         checker.CheckAll();
         NBridgeTest::CheckPileData(env, checker, 1, 9);
+    }
+
+    // BSC tells how much is left to copy into the pile getting back: before the data stage, from the scan of the
+    // stage before it, which is kept over BSC restarts; then from the scan of the data stage itself; and the copy
+    // rate once the data has been copied
+    Y_UNIT_TEST(RemainingBytesToCopy) {
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        auto& runtime = env.Runtime;
+        const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
+        const auto pileGroups = NBridgeTest::GetPileGroups(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(pileGroups.size(), 2);
+        const TGroupId target = TGroupId::FromValue(pileGroups[1]);
+        constexpr ui64 tabletId = 100500;
+
+        auto mark = [&](const TString& what) {
+            Cerr << "*** " << runtime->GetClock() << ' ' << what << Endl;
+        };
+
+        const auto sender = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        ui32 step = 0;
+        auto put = [&](ui32 size) {
+            const TLogoBlobID id(tabletId, 1, ++step, 0, size, 0);
+            runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvPut(id, TString(size, 'x'), TInstant::Max()));
+            });
+            const auto res = WaitReply<TEvBlobStorage::TEvPutResult>(env, sender, TStringBuilder() << "put " << id);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            return id;
+        };
+        put(1000);
+        put(100_KB);
+        mark("disconnecting");
+        NBridgeTest::SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        NBridgeTest::WaitForPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(10)); // let the bridge proxy learn the state
+        mark("writing while disconnected");
+        ui64 expected = 0;
+        for (ui32 size : {ui32(200_KB), 3000u}) {
+            expected += put(size).BlobSize();
+        }
+        const TLogoBlobID keptId = put(10_KB); // it is going to get a Keep flag in the target before its data
+        expected += keptId.BlobSize();
+
+        auto targetStage = [&] {
+            const auto info = NBridgeTest::GetGroupInfo(env, groupId);
+            return std::make_tuple(info.GetBridgeGroupState().GetPile(1).GetStage(), info.GetGroupGeneration());
+        };
+        auto groupSysView = [&] {
+            const auto info = NBridgeTest::QueryGroupSystemView(env, target.GetRawId());
+            mark(TStringBuilder() << "metrics stage=" << info.GetBridgeSyncStage()
+                << " remaining=" << (info.HasBridgeSyncRemainingBytes() ? ToString(info.GetBridgeSyncRemainingBytes()) : "unknown")
+                << " complete=" << info.GetBridgeSyncRemainingBytesComplete()
+                << " bytes_per_second=" << info.GetBridgeSyncCopyBytesPerSecond()
+                << " running=" << info.GetBridgeSyncRunning()
+                << " last_progress_us=" << info.GetBridgeSyncLastProgressTimestamp());
+            return info;
+        };
+        auto poolCounter = [&](const TString& name) {
+            env.Sim(TDuration::Seconds(6)); // BSC refreshes the counters every 5 s
+            auto counters = GetServiceCounters(runtime->GetNode(env.Settings.ControllerNodeId)->AppData->Counters,
+                "bridge")->GetSubgroup("subsystem", "bsc")->FindSubgroup("pile", "pile_2");
+            counters = counters ? counters->FindSubgroup("database", env.StoragePoolName) : nullptr;
+            counters = counters ? counters->FindSubgroup("storagePool", env.StoragePoolName) : nullptr;
+            UNIT_ASSERT(counters);
+            return counters->GetCounter(name, name == "SyncBytesCopied")->Val();
+        };
+        auto checkRemaining = [&](ui64 bytes) {
+            const auto info = groupSysView();
+            UNIT_ASSERT(info.HasBridgeSyncStatus());
+            UNIT_ASSERT(info.GetBridgeSyncStatus() == NKikimrBridge::SYNCING);
+            UNIT_ASSERT_VALUES_EQUAL(info.GetBridgeSyncStage(), "WRITE_KEEP_BARRIER_DONOTKEEP_DATA");
+            UNIT_ASSERT_C(info.HasBridgeSyncRemainingBytes(), info.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(info.GetBridgeSyncRemainingBytes(), bytes);
+            UNIT_ASSERT(info.GetBridgeSyncRemainingBytesComplete());
+            UNIT_ASSERT_VALUES_EQUAL(poolCounter("SyncBytesRemaining"), bytes);
+            UNIT_ASSERT_VALUES_EQUAL(poolCounter("SyncGroupsNotEstimated"), 0);
+            return info;
+        };
+
+        // syncers of the target finishing their stages successfully are held, so that stages advance one at a time;
+        // the syncer of the data stage can't read the target, so the estimate is all BSC has; the data copied is held
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldFinishes;
+        const TActorId targetProxyId = MakeBlobStorageProxyID(target);
+        bool holdAssimilation = false;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldAssimilation;
+        bool holdPuts = true;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldPuts;
+        std::optional<NKikimrBlobStorage::TEvControllerUpdateSyncerState::TSyncer> lastTargetProgress;
+        TActorId progressSender;
+        TActorId progressRecipient;
+        THashSet<const IEventHandle*> released; // the events released pass the filter once more
+        auto filter = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (released.erase(ev.get())) {
+                return true;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerUpdateSyncerState) {
+                // Remote reports may still be serialized; Get() loads the typed protobuf event.
+                for (const auto& progress : ev->Get<TEvBlobStorage::TEvControllerUpdateSyncerState>()->Record.GetSyncers()) {
+                    if (progress.GetTargetGroupId() == target.GetRawId() && !progress.GetFinished()) {
+                        if (!lastTargetProgress || lastTargetProgress->GetBridgeProxyGroupGeneration() !=
+                                progress.GetBridgeProxyGroupGeneration()) {
+                            lastTargetProgress = progress;
+                        } else {
+                            lastTargetProgress->MergeFrom(progress);
+                        }
+                        progressSender = ev->Sender;
+                        progressRecipient = ev->GetRecipientRewrite();
+                    }
+                }
+            } else if (!ev->HasEvent()) {
+                return true;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenNotifySyncerFinished) {
+                if (const auto *msg = ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>();
+                        msg->TargetGroupId == target && !msg->ErrorReason) {
+                    heldFinishes.emplace_back(nodeId, std::move(ev));
+                    return false;
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilate && holdAssimilation &&
+                    ev->Recipient == targetProxyId) {
+                heldAssimilation.emplace_back(nodeId, std::move(ev));
+                return false;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut && holdPuts) {
+                if (const auto *msg = ev->Get<TEvBlobStorage::TEvPut>();
+                        msg->WriteSource == TWriteSource::SyncerMergePut && msg->Id.TabletID() == tabletId) {
+                    heldPuts.emplace_back(nodeId, std::move(ev));
+                    return false;
+                }
+            }
+            return true;
+        };
+        runtime->FilterFunction = filter;
+        auto release = [&](auto& held) {
+            for (auto& [nodeId, ev] : std::exchange(held, {})) {
+                released.insert(ev.get());
+                runtime->Send(ev.release(), nodeId);
+            }
+        };
+
+        mark("rejoining");
+        NBridgeTest::SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        bool keepIssued = false;
+        for (;;) {
+            NBridgeTest::WaitUntil(env, [&] { return !heldFinishes.empty(); }, "a stage of the target finished",
+                TDuration::Seconds(1), 120);
+            const auto [stage, generation] = targetStage();
+            mark(TStringBuilder() << "stage finished " << NKikimrBridge::TGroupState::EStage_Name(stage)
+                << " generation " << generation);
+            if (stage == NKikimrBridge::TGroupState::WRITE_KEEP) {
+                // the target gets the Keep flag now, while the data stays in the source only: the scan of the next
+                // stage finds a record of the blob in the target, but with no data in it
+                runtime->WrapInActorContext(sender, [&] {
+                    SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvCollectGarbage(tabletId, 1, 1, 0, false, 0, 0,
+                        new TVector<TLogoBlobID>(1, keptId), nullptr, TInstant::Max(), false));
+                });
+                const auto res = WaitReply<TEvBlobStorage::TEvCollectGarbageResult>(env, sender, "keep");
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+
+                // blobs only, nothing of blocks and barriers
+                auto *request = new TEvBlobStorage::TEvAssimilate(ui64(0), std::make_tuple(ui64(0), ui8(0)),
+                    std::nullopt, true, true);
+                request->ForceGroupGeneration = NBridgeTest::GetNodeGroupGeneration(env, target.GetRawId(), 9);
+                const TActorId edge = runtime->AllocateEdgeActor(9, __FILE__, __LINE__);
+                runtime->WrapInActorContext(edge, [&] {
+                    SendToBSProxy(edge, target.GetRawId(), request);
+                });
+                const auto assimilatedEv = WaitReply<TEvBlobStorage::TEvAssimilateResult>(env, edge,
+                    "assimilation of the target");
+                const auto *assimilated = assimilatedEv->Get();
+                UNIT_ASSERT_VALUES_EQUAL(assimilated->Status, NKikimrProto::OK);
+                std::map<TLogoBlobID, bool> hasData;
+                for (const auto& blob : assimilated->Blobs) {
+                    hasData.emplace(blob.Id, blob.HasData);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(hasData.size(), 3); // the two blobs written before the pile went away
+                UNIT_ASSERT(hasData.contains(keptId));
+                for (const auto& [id, data] : hasData) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(data, id != keptId, id);
+                }
+                keepIssued = true;
+            } else if (stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP) {
+                holdAssimilation = true;
+                release(heldFinishes);
+                break;
+            }
+            release(heldFinishes);
+        }
+        UNIT_ASSERT(keepIssued);
+        mark("waiting for the data stage");
+        NBridgeTest::WaitUntil(env, [&] {
+            return std::get<0>(targetStage()) == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA;
+        }, "the data stage", TDuration::Seconds(1), 60);
+
+        // the syncer of the data stage hasn't scanned anything, so this is the estimate from the scan of the previous
+        // stage
+        NBridgeTest::WaitUntil(env, [&] { return !heldAssimilation.empty(); }, "the syncer of the data stage",
+            TDuration::Seconds(1), 60);
+        mark("checking the estimate");
+        const auto beforeRestart = checkRemaining(expected);
+        UNIT_ASSERT(beforeRestart.HasBridgeSyncLastProgressTimestamp());
+        const ui64 stageProgress = beforeRestart.GetBridgeSyncLastProgressTimestamp();
+        env.Sim(TDuration::Seconds(20));
+        UNIT_ASSERT_VALUES_EQUAL(checkRemaining(expected).GetBridgeSyncLastProgressTimestamp(), stageProgress);
+        mark("restarting BSC");
+        env.RebootTablet(env.TabletId);
+        env.Sim(TDuration::Seconds(15));
+        UNIT_ASSERT(!checkRemaining(expected).HasBridgeSyncLastProgressTimestamp());
+        UNIT_ASSERT(heldPuts.empty());
+
+        // the syncer of the data stage finds the same with its own scan
+        mark("scanning");
+        holdAssimilation = false;
+        release(heldAssimilation);
+        NBridgeTest::WaitUntil(env, [&] { return heldPuts.size() == 3; }, "copies of the missing blobs",
+            TDuration::Seconds(1), 120);
+        env.Sim(TDuration::Seconds(11)); // NodeWarden reports the progress every 10 s
+        const auto scanned = checkRemaining(expected);
+        UNIT_ASSERT_VALUES_EQUAL(scanned.GetBridgeSyncCopyBytesPerSecond(), 0);
+        UNIT_ASSERT(scanned.HasBridgeSyncLastProgressTimestamp());
+        const ui64 scanProgress = scanned.GetBridgeSyncLastProgressTimestamp();
+        UNIT_ASSERT_GT(scanProgress, stageProgress);
+
+        UNIT_ASSERT(lastTargetProgress);
+        UNIT_ASSERT_GT(lastTargetProgress->GetScannedItems(), 0);
+        const auto scanReport = *lastTargetProgress;
+        auto sendProgress = [&](const auto& progress) {
+            auto update = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
+            update->Record.AddSyncers()->CopyFrom(progress);
+            runtime->Send(new IEventHandle(progressRecipient, progressSender, update.release()),
+                env.Settings.ControllerNodeId);
+        };
+        env.Sim(TDuration::Seconds(11));
+        sendProgress(scanReport);
+        UNIT_ASSERT_VALUES_EQUAL(checkRemaining(expected).GetBridgeSyncLastProgressTimestamp(), scanProgress);
+        auto regressed = scanReport;
+        regressed.SetScannedItems(0);
+        regressed.SetBytesDone(0);
+        regressed.SetBlobsDone(0);
+        regressed.SetBytesCopied(0);
+        sendProgress(regressed);
+        UNIT_ASSERT_VALUES_EQUAL(checkRemaining(expected).GetBridgeSyncLastProgressTimestamp(), scanProgress);
+        sendProgress(scanReport);
+        UNIT_ASSERT_VALUES_EQUAL(checkRemaining(expected).GetBridgeSyncLastProgressTimestamp(), scanProgress);
+
+        // the data has been copied, but the stage hasn't finished yet
+        mark("copying");
+        holdPuts = false;
+        release(heldPuts);
+        NBridgeTest::WaitUntil(env, [&] { return !heldFinishes.empty(); }, "the data stage finished",
+            TDuration::Seconds(1), 60);
+        env.Sim(TDuration::Seconds(11)); // NodeWarden reports the progress every 10 s
+        const auto info = checkRemaining(0);
+        UNIT_ASSERT_GT(info.GetBridgeSyncLastProgressTimestamp(), scanProgress);
+        UNIT_ASSERT_GT(info.GetBridgeSyncCopyBytesPerSecond(), 0);
+        UNIT_ASSERT_LE(info.GetBridgeSyncCopyBytesPerSecond(), expected);
+        UNIT_ASSERT_GT(poolCounter("SyncBytesPerSecond"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(poolCounter("SyncBytesCopied"), expected);
+
+        mark("waiting without new progress");
+        env.Sim(TDuration::Seconds(75)); // let the one-minute copy-rate window expire
+        const auto idle = checkRemaining(0);
+        UNIT_ASSERT_VALUES_EQUAL(idle.GetBridgeSyncCopyBytesPerSecond(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(idle.GetBridgeSyncLastProgressTimestamp(), info.GetBridgeSyncLastProgressTimestamp());
+
+        mark("restarting without new copies");
+        env.RebootTablet(env.TabletId);
+        env.Sim(TDuration::Seconds(15));
+        const auto replayed = checkRemaining(0);
+        UNIT_ASSERT_VALUES_EQUAL(replayed.GetBridgeSyncCopyBytesPerSecond(), 0);
+        UNIT_ASSERT(!replayed.HasBridgeSyncLastProgressTimestamp());
+        UNIT_ASSERT_VALUES_EQUAL(poolCounter("SyncBytesCopied"), 0);
+
+        mark("finishing");
+        runtime->FilterFunction = {};
+        release(heldFinishes);
+        NBridgeTest::WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        const auto synced = groupSysView();
+        UNIT_ASSERT(synced.GetBridgeSyncStatus() == NKikimrBridge::SYNCED);
+        UNIT_ASSERT_VALUES_EQUAL(synced.GetBridgeSyncStage(), "SYNCED");
+        const ui64 finishedProgress = synced.GetBridgeSyncLastProgressTimestamp();
+        UNIT_ASSERT_GT(finishedProgress, info.GetBridgeSyncLastProgressTimestamp());
+        UNIT_ASSERT(!synced.HasBridgeSyncRemainingBytes());
+        UNIT_ASSERT_VALUES_EQUAL(poolCounter("SyncBytesRemaining"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(poolCounter("SyncGroupsNotEstimated"), 0);
+
+        mark("restarting after synchronization");
+        env.RebootTablet(env.TabletId);
+        env.Sim(TDuration::Seconds(15));
+        UNIT_ASSERT(!groupSysView().HasBridgeSyncLastProgressTimestamp());
+
+        mark("starting a new round");
+        holdAssimilation = true;
+        runtime->FilterFunction = filter;
+        NBridgeTest::SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        NBridgeTest::WaitForPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        NBridgeTest::SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        NBridgeTest::WaitUntil(env, [&] { return !heldAssimilation.empty(); }, "a new round's syncer",
+            TDuration::Seconds(1), 120);
+        UNIT_ASSERT(!groupSysView().HasBridgeSyncLastProgressTimestamp());
+        runtime->FilterFunction = {};
     }
 
 }

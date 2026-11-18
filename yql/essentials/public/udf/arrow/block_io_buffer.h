@@ -2,6 +2,7 @@
 
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
+#include <util/generic/yexception.h>
 #include <util/system/unaligned_mem.h>
 
 namespace NYql::NUdf {

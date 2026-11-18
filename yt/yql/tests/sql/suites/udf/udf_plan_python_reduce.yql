@@ -1,0 +1,18 @@
+USE plato;
+PRAGMA config.flags("ShowLinksInPlan");
+
+$script = @@
+def JoinValues(key, values):
+    return {"key": key, "value": b"|".join(sorted(values))}
+@@;
+
+$join = Python3::JoinValues(
+    Callable<(String, Stream<String>)->Struct<key:String, value:String>>,
+    $script
+);
+
+-- The input metadata declares ordering by key, so no mapper is needed.
+$reduced = (REDUCE SortedInput ON key USING $join(value));
+
+INSERT INTO Output WITH TRUNCATE
+SELECT * FROM $reduced;

@@ -43,7 +43,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/helpers
+    library/cpp/deprecated/atomic
     library/cpp/json
     library/cpp/messagebus
     library/cpp/messagebus/protobuf
@@ -59,27 +59,28 @@ PEERDIR(
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/grpc_services
-    ydb/core/security/certificate_check
     ydb/core/grpc_services/base
     ydb/core/keyvalue
-    ydb/core/kqp/common
     ydb/core/node_whiteboard
-    ydb/core/persqueue
+    ydb/core/persqueue/events
+    ydb/core/persqueue/public
+    ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/security/certificate_check
     ydb/core/ydb_convert
     ydb/core/ymq/actor
     ydb/library/aclib
+    ydb/library/actors/helpers
     ydb/library/persqueue/topic_parser
-    ydb/public/api/protos
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
+    ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/client
     ydb/public/lib/deprecated/kicli
     ydb/services/persqueue_v1
-    library/cpp/deprecated/atomic
 )
 
 YQL_LAST_ABI_VERSION()

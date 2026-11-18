@@ -1,0 +1,8 @@
+{
+  "elf_names": 180,
+  "missing_non_glibc_versions": [],
+  "host_glibc_supported_baseline": "2.31",
+  "highest_required_glibc": "2.30",
+  "browser_highest_required_glibc": "2.25",
+  "runtime_launch": "not performed"
+}

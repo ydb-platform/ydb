@@ -35,5 +35,6 @@ RECURSE(
     state
     tasks_packer
     test_connection
+    wasm_services
     ydb
 )

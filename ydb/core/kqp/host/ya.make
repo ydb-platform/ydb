@@ -11,6 +11,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/common/compile_cache
     ydb/library/yql/providers/ydb_external/common
     ydb/core/base
     ydb/core/kqp/common
@@ -36,7 +37,6 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/services
     yql/essentials/minikql/invoke_builtins
-    yql/essentials/parser/pg_wrapper/interface
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/udf_resolve
     yql/essentials/providers/config

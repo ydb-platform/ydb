@@ -13,9 +13,31 @@ except ImportError:
 T0_SETTINGS_PATH = "devtools/frontend_build_platform/nots/constants/src/tier0-settings.yaml"
 
 
+def load_local_config(pj):
+    """Prefer the explicit module config; never silently combine both formats."""
+    filename = os.path.join(os.path.dirname(pj.path), "nots.yaml")
+    try:
+        with open(filename) as stream:
+            data = yaml.load(stream, Loader=yaml.CSafeLoader)
+    except FileNotFoundError:
+        return {"nots": pj.data.get("nots", {}), **(pj.data.get("pnpm") or {})}
+    if "pnpm" in pj.data or "nots" in pj.data:
+        raise ValueError(f"{pj.path}: move package.json#pnpm and package.json#nots settings to nots.yaml")
+    if not isinstance(data, dict):
+        raise ValueError(f"{filename}: nots.yaml must contain a mapping")
+    if "nots" in data and not isinstance(data["nots"], dict):
+        raise ValueError(f"{filename}: nots must be a mapping")
+    if "catalogs" in data:
+        raise ValueError(
+            f"{filename}: catalogs are only allowed in a common config referenced by nots.commonConfigPath"
+        )
+    return data
+
+
 def load_common_config(pj, sources_root, include_settings=False):
     """Read graph inputs; semantic validation is performed by CLI prepare."""
-    config_path = pj.data.get("nots", {}).get("commonConfigPath")
+    local = load_local_config(pj)
+    config_path = local.get("nots", {}).get("commonConfigPath")
     catalogs = {}
     settings = {}
     relative_path = None
@@ -24,6 +46,8 @@ def load_common_config(pj, sources_root, include_settings=False):
         relative_path = os.path.relpath(absolute_path, sources_root)
         with open(absolute_path) as stream:
             data = yaml.load(stream, Loader=yaml.CSafeLoader)
+        if "nots" in data:
+            raise ValueError(f"{absolute_path}: nots is only allowed in the module nots.yaml, not in a common config")
         settings = select_pnpm_settings(data)
         catalogs = data.get("catalogs", {})
     return (relative_path, catalogs, settings) if include_settings else (relative_path, catalogs)
@@ -99,6 +123,17 @@ def rebase_pnpm_settings(settings, source_dir, target_dir):
     return result
 
 
+def load_effective_pnpm_config(pj, sources_root, target_dir=None):
+    """Load common/local settings and express paths relative to target_dir."""
+    directory = os.path.dirname(pj.path)
+    target_dir = target_dir or directory
+    filename, catalogs, settings = load_common_config(pj, sources_root, include_settings=True)
+    if filename:
+        settings = rebase_pnpm_settings(settings, os.path.join(sources_root, os.path.dirname(filename)), target_dir)
+    local = rebase_pnpm_settings(select_pnpm_settings(load_local_config(pj)), directory, target_dir)
+    return filename, catalogs, join_pnpm_settings(settings, local)
+
+
 def workspace_settings_paths(settings):
     overrides = list(settings.get("overrides", {}).values())
     specs = list(overrides)
@@ -113,15 +148,18 @@ def workspace_settings_paths(settings):
     return paths
 
 
-def common_config_inputs(pj, sources_root):
+def common_config_inputs(pj, sources_root, effective_config=None):
     """Only the target's explicit config and effective patches are build inputs."""
     inputs = set()
-    filename, _, settings = load_common_config(pj, sources_root, include_settings=True)
+    if effective_config is None:
+        effective_config = load_effective_pnpm_config(pj, sources_root)
+    filename, _, settings = effective_config
     directory = os.path.dirname(pj.path)
     if filename:
         inputs.add(filename)
-        settings = rebase_pnpm_settings(settings, os.path.join(sources_root, os.path.dirname(filename)), directory)
-    settings = join_pnpm_settings(settings, select_pnpm_settings(pj.data.get("pnpm")))
+    local_path = os.path.join(directory, "nots.yaml")
+    if os.path.isfile(local_path):
+        inputs.add(os.path.relpath(local_path, sources_root))
     inputs.update(
         os.path.relpath(os.path.normpath(os.path.join(directory, p)), sources_root)
         for p in settings.get("patchedDependencies", {}).values()

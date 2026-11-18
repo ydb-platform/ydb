@@ -26,7 +26,6 @@ SET(TIDY_HEADER_FILTER "${ARCADIA_ROOT}/yql/essentials/minikql/comp_nodes/ut/")
 SET(ORIG_SRC_DIR yql/essentials/minikql/comp_nodes/ut)
 
 SET(ORIG_SOURCES
-    mkql_test_factory.cpp
     mkql_bit_utils_ut.cpp
     mkql_block_agg_ut.cpp
     mkql_block_compress_ut.cpp
@@ -35,9 +34,7 @@ SET(ORIG_SOURCES
     mkql_block_logical_ut.cpp
     mkql_block_skiptake_ut.cpp
     mkql_block_map_join_ut.cpp
-    mkql_block_test_helper.cpp
     mkql_block_serializer_test_utils.cpp
-    mkql_block_fuzzer.cpp
     mkql_block_getelem_ut.cpp
     mkql_block_guess_ut.cpp
     mkql_block_way_ut.cpp

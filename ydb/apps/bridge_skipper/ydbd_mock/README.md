@@ -6,6 +6,39 @@ tests in [`../acceptance`](../acceptance/README.md). It tests
 client-visible behavior; it does not simulate real storage durability or
 distconf consensus, and it cannot certify production failover.
 
+## Open bridge_skipper and the mock-control UI together
+
+After building `ydb/apps/bridge_skipper` and
+`ydb/apps/bridge_skipper/ydbd_mock` using this checkout's build instructions:
+
+```bash
+YDBD_MOCK_IMPL=ya ydb/apps/bridge_skipper/ydbd_mock/scripts/lab.sh --fresh
+```
+
+The single foreground command starts two piles with three hosts each and prints
+all endpoints. Open **bridge_skipper** at <http://127.0.0.1:8080/> and
+**ydbd_mocks_control** at <http://127.0.0.1:21999/> side by side. The control UI
+has a simple pile/host table with **Crash** and **Start** buttons and refreshes
+every second. Each host button closes or restores that node's gRPC listener;
+the pile buttons kill or restart the shared mock process for all its hosts.
+
+Switch bridge_skipper from Observe to Auto in its UI, allow the initial healthy
+evidence to settle, then crash `pile2` or several of its hosts. Watch the evidence,
+plan and eventual failover in bridge_skipper; confirmation takes several health
+rounds. Start the hosts again to restore availability. If skipper disconnected
+the pile, use its Rejoin action as well; Start does not change bridge pile state.
+
+Ctrl-C stops the controller, control UI and mock processes started by this lab.
+An already running mock cluster in the selected run directory is refused.
+Use `YDBD_MOCK_RUN_DIR` for a separate session and `--skipper-port`,
+`--control-port`, `--control-base-port`, and `--grpc-base-port` for different
+ports. `--piles a,b,c`, `--nodes-per-pile N`, and `--topology FILE` customize
+the mock topology. The launcher prints its run directory and skipper log path;
+mock logs are under the run directory's `logs/`.
+
+The default `YDBD_MOCK_IMPL=venv` also works after `scripts/setup_venv.sh`.
+`BRIDGE_SKIPPER_BINARY` overrides the built C++ executable.
+
 ## Start a standalone mock cluster
 
 Build `ydb/apps/bridge_skipper` and `ydb/apps/bridge_skipper/ydbd_mock` using
@@ -36,9 +69,11 @@ $S/skipper.sh
 ```
 
 The launcher writes a JSON config (valid YAML) containing every direct node
-endpoint grouped by pile. It runs the built `bridge_skipper` in `manual` mode
-and serves its UI/API at <http://127.0.0.1:8080>. Use `--mode auto` to enable
-mutations or `--listen 127.0.0.1:18080` to change the HTTP address.
+endpoint grouped by pile. A fresh state directory starts the built
+`bridge_skipper` in Observe and serves its UI/API at <http://127.0.0.1:8080>.
+Enable Manual or Auto through that UI/API; mode is persisted, so restarts restore
+it. The launcher has no `--mode` configuration override. Use
+`--listen 127.0.0.1:18080` to change the HTTP address.
 `BRIDGE_SKIPPER_BINARY` overrides the executable path.
 
 The config and controller state live in `run/bridge_skipper/<cluster_id>/`.

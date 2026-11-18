@@ -9,6 +9,9 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
+#include <contrib/libs/zstd/include/zstd.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -100,8 +103,219 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         UNIT_ASSERT(!replicatedDesc.GetReplicationConfig().HasImportState());
     }
 
+    // The destination of a table with a serial column has to get the sequence as well: the column
+    // default references it, and the sequence position is then advanced by replication.
+    void WithSerialColumn(bool withLiteralDefault) {
+        TEnv env;
+
+        NKikimrSchemeOp::TIndexedTableCreationConfig config;
+        auto& tableDesc = *config.MutableTableDescription();
+        tableDesc.SetName("Table");
+        {
+            auto* column = tableDesc.AddColumns();
+            column->SetName("id");
+            column->SetType("Int64");
+            column->SetDefaultFromSequence("_serial_column_id");
+        }
+        {
+            auto* column = tableDesc.AddColumns();
+            column->SetName("value");
+            column->SetType("Utf8");
+            if (withLiteralDefault) {
+                auto* literal = column->MutableDefaultFromLiteral();
+                literal->mutable_type()->set_type_id(Ydb::Type::UTF8);
+                literal->mutable_value()->set_text_value("default message");
+            }
+        }
+        tableDesc.AddKeyColumnNames("id");
+        {
+            auto* sequence = config.AddSequenceDescription();
+            sequence->SetName("_serial_column_id");
+            sequence->SetMinValue(1);
+            sequence->SetDataType("Int64");
+            sequence->MutableSetVal()->SetNextValue(42);
+            sequence->MutableSetVal()->SetNextUsed(true);
+        }
+
+        env.CreateIndexedTable("/Root", config);
+        UNIT_ASSERT(env.GetDescription("/Root/Table").GetPathDescription().HasTable());
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Table_replica",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row
+        ));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
+
+        auto desc = env.GetDescription("/Root/Table_replica");
+        const auto& replicatedDesc = desc.GetPathDescription().GetTable();
+
+        const auto* idColumn = FindIfPtr(replicatedDesc.GetColumns(), [](const auto& column) {
+            return column.GetName() == "id";
+        });
+        UNIT_ASSERT(idColumn);
+        UNIT_ASSERT_VALUES_EQUAL(idColumn->GetDefaultFromSequence(), "_serial_column_id");
+
+        UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.SequencesSize(), 1);
+        const auto& sequence = replicatedDesc.GetSequences(0);
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetName(), "_serial_column_id");
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetDataType(), "Int64");
+
+        if (withLiteralDefault) {
+            const auto* valueColumn = FindIfPtr(replicatedDesc.GetColumns(), [](const auto& column) {
+                return column.GetName() == "value";
+            });
+            UNIT_ASSERT(valueColumn);
+            UNIT_ASSERT(valueColumn->HasDefaultFromLiteral());
+            UNIT_ASSERT_VALUES_EQUAL(valueColumn->GetDefaultFromLiteral().SerializeAsString(),
+                tableDesc.GetColumns(1).GetDefaultFromLiteral().SerializeAsString());
+        }
+
+        // The sequence position is only returned by a table describe asked for it, the scheme
+        // description above never has it.
+        env.RunCall([&] {
+            NYdb::NTable::TTableClient client(env.GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.DescribeTable("/Root/Table_replica",
+                NYdb::NTable::TDescribeTableSettings().WithSetVal(true)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            const auto columns = result.GetTableDescription().GetTableColumns();
+            const auto* column = FindIfPtr(columns, [](const auto& column) {
+                return column.Name == "id";
+            });
+            UNIT_ASSERT(column);
+            UNIT_ASSERT(column->SequenceDescription);
+            UNIT_ASSERT(column->SequenceDescription->SetVal);
+            UNIT_ASSERT_VALUES_EQUAL(column->SequenceDescription->SetVal->NextValue, 42);
+            UNIT_ASSERT(column->SequenceDescription->SetVal->NextUsed);
+        });
+    }
+
+    Y_UNIT_TEST(CreateTableWithSerialColumn) {
+        WithSerialColumn(false);
+    }
+
+    Y_UNIT_TEST(CreateTableWithSerialColumnAndLiteralDefault) {
+        WithSerialColumn(true);
+    }
+
     Y_UNIT_TEST(Basic) {
         Basic("/Root/Replicated");
+    }
+
+    Y_UNIT_TEST(CreateTableWithLiteralDefaults) {
+        TEnv env;
+        auto source = MakeTableDescription(TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint64"},
+                {.Name = "count", .Type = "Uint64"},
+                {.Name = "message", .Type = "Utf8"},
+                {.Name = "bytes", .Type = "String"},
+                {.Name = "value", .Type = "Int32"},
+            },
+            .ReplicationConfig = Nothing(),
+        });
+        auto* count = source->MutableColumns(1);
+        count->SetNotNull(true);
+        count->MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+        count->MutableDefaultFromLiteral()->mutable_value()->set_uint64_value(0);
+        auto* message = source->MutableColumns(2)->MutableDefaultFromLiteral();
+        message->mutable_type()->set_type_id(Ydb::Type::UTF8);
+        message->mutable_value()->set_text_value("default message");
+        auto* bytes = source->MutableColumns(3)->MutableDefaultFromLiteral();
+        bytes->mutable_type()->set_type_id(Ydb::Type::STRING);
+        bytes->mutable_value()->set_bytes_value(std::string("\0\xff", 2));
+        auto* value = source->MutableColumns(4)->MutableDefaultFromLiteral();
+        value->mutable_type()->set_type_id(Ydb::Type::INT32);
+        value->mutable_value()->set_int32_value(-42);
+        env.CreateTable("/Root", *source);
+
+        for (const auto consistency : {EConsistencyLevel::Row, EConsistencyLevel::Global}) {
+            const TString dstPath = consistency == EConsistencyLevel::Row ? "/Root/Row" : "/Root/Global";
+            // Repeating creation also exercises validation of an existing destination.
+            for (ui32 attempt = 0; attempt < 2; ++attempt) {
+                env.GetRuntime().Register(CreateDstCreator(
+                    env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+                    "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                    "/Root/Source", dstPath, EReplicationMode::ReadOnly, consistency));
+                auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+                UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+
+                const auto description = env.GetDescription(dstPath);
+                const auto& destination = description.GetPathDescription().GetTable();
+                for (const auto& expected : source->GetColumns()) {
+                    const auto* actual = FindIfPtr(destination.GetColumns(), [&](const auto& column) {
+                        return column.GetName() == expected.GetName();
+                    });
+                    UNIT_ASSERT(actual);
+                    UNIT_ASSERT_VALUES_EQUAL(actual->GetNotNull(), expected.GetNotNull());
+                    UNIT_ASSERT_VALUES_EQUAL(actual->HasDefaultFromLiteral(), expected.HasDefaultFromLiteral());
+                    UNIT_ASSERT_VALUES_EQUAL(actual->GetDefaultFromLiteral().SerializeAsString(),
+                        expected.GetDefaultFromLiteral().SerializeAsString());
+                }
+            }
+        }
+    }
+
+    void ExistingDstLiteralDefault(const TMaybe<ui64>& sourceDefault, const TMaybe<ui64>& destinationDefault) {
+        for (const auto consistency : {EConsistencyLevel::Row, EConsistencyLevel::Global}) {
+            for (const bool notNull : {false, true}) {
+                TEnv env;
+                auto source = MakeTableDescription({
+                    .Name = "Src",
+                    .KeyColumns = {"key"},
+                    .Columns = {
+                        {.Name = "key", .Type = "Uint64"},
+                        {.Name = "count", .Type = "Uint64"},
+                    },
+                    .ReplicationConfig = Nothing(),
+                });
+                auto* column = source->MutableColumns(1);
+                column->SetNotNull(notNull);
+                if (sourceDefault) {
+                    column->MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+                    column->MutableDefaultFromLiteral()->mutable_value()->set_uint64_value(*sourceDefault);
+                }
+                env.CreateTable("/Root", *source);
+
+                auto destination = *source;
+                destination.SetName("Dst");
+                FillReplicationConfig(*destination.MutableReplicationConfig(), EReplicationMode::ReadOnly, consistency);
+                column = destination.MutableColumns(1);
+                column->ClearDefaultFromLiteral();
+                if (destinationDefault) {
+                    column->MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+                    column->MutableDefaultFromLiteral()->mutable_value()->set_uint64_value(*destinationDefault);
+                }
+                env.CreateTable("/Root", destination);
+
+                env.GetRuntime().Register(CreateDstCreator(
+                    env.GetSender(), env.GetSchemeshardId("/Root/Src"), env.GetYdbProxy(),
+                    "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                    "/Root/Src", "/Root/Dst", EReplicationMode::ReadOnly, consistency));
+                const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusSchemeError, result->Get()->Error);
+                UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "Column literal default mismatch: name: count");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ColumnLiteralDefaultMissing) {
+        ExistingDstLiteralDefault(ui64(0), Nothing());
+    }
+
+    Y_UNIT_TEST(ColumnLiteralDefaultMismatch) {
+        ExistingDstLiteralDefault(ui64(0), ui64(1));
+    }
+
+    Y_UNIT_TEST(ColumnLiteralDefaultUnexpected) {
+        ExistingDstLiteralDefault(Nothing(), ui64(0));
     }
 
     Y_UNIT_TEST(CreateWaitingImportTable) {
@@ -150,6 +364,55 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
             UNIT_ASSERT(!result->Get()->IsSuccess());
             UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "expected IMPORTED");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ReplicaOwnership, TableOwnership) {
+        enum class EOwner { Fresh, Legacy, Current, Foreign };
+        struct TCase { EOwner Owner; bool InitialScan; };
+        UNIT_ASSERT(!NKikimrConfig::TFeatureFlags().GetEnableAsyncReplicationTableOwnership());
+        const TCase cases[] = {
+            {EOwner::Fresh, true}, {EOwner::Fresh, false},
+            {EOwner::Legacy, true}, {EOwner::Legacy, false},
+            {EOwner::Current, true}, {EOwner::Current, false},
+            {EOwner::Foreign, true}, {EOwner::Foreign, false},
+        };
+        for (const auto& test : cases) {
+            TFeatureFlags flags;
+            flags.FeatureFlags.SetEnableAsyncReplicationTableOwnership(TableOwnership);
+            TEnv env(flags);
+            const auto owner = env.GetPathId("/Root");
+            auto table = MakeTableDescription({.Name = "Source", .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}}, .ReplicationConfig = Nothing()});
+            env.CreateTable("/Root", *table);
+            if (test.Owner != EOwner::Fresh) {
+                table->SetName("Dst");
+                FillReplicationConfig(*table->MutableReplicationConfig(), EReplicationMode::ReadOnly, EConsistencyLevel::Row);
+                if (test.Owner != EOwner::Legacy) {
+                    owner.ToProto(table->MutableReplicationConfig()->MutableOwnerPathId());
+                }
+                env.CreateTable("/Root", *table);
+            }
+            // A non-initial-scan replication starts paused and waits for import into a placeholder.
+            env.GetRuntime().Register(CreateDstCreator(env.GetSender(), owner.OwnerId, env.GetYdbProxy(),
+                "/Root", test.Owner == EOwner::Foreign ? env.GetPathId("/Root/Source") : owner,
+                1, 1, TReplication::ETargetKind::Table, "/Root/Source", "/Root/Dst",
+                EReplicationMode::ReadOnly, EConsistencyLevel::Row, test.InitialScan, TReplication::EState::Paused));
+            const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            if (test.Owner == EOwner::Foreign) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusPreconditionFailed, result->Get()->Error);
+                UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "owned by another replication");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusSuccess, result->Get()->Error);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, env.GetPathId("/Root/Dst"));
+            }
+            const auto config = env.GetDescription("/Root/Dst").GetPathDescription().GetTable().GetReplicationConfig();
+            const bool owned = test.Owner == EOwner::Fresh ? TableOwnership : test.Owner != EOwner::Legacy;
+            UNIT_ASSERT_VALUES_EQUAL(config.HasOwnerPathId(), owned);
+            if (owned) {
+                UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config.GetOwnerPathId()), owner);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
         }
     }
 
@@ -775,12 +1038,11 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         Basic("/Root/Replicated", EReplicationMode::ReadOnly, EConsistencyLevel::Global);
     }
 
-    void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType, bool enableAsyncIndexReplication = false) {
+    void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType,
+            bool enableAsyncIndexReplication = false, TMaybe<ui32> defaultValue = Nothing()) {
         TFeatureFlags featureFlags;
         featureFlags.SetEnableChangefeedsOnIndexTables(true);
-        if (enableAsyncIndexReplication) {
-            featureFlags.SetEnableAsyncIndexReplication(true);
-        }
+        featureFlags.SetEnableAsyncIndexReplication(enableAsyncIndexReplication);
         TEnv env(featureFlags);
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
@@ -796,7 +1058,13 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         const TString indexName = "index_by_value";
 
-        env.CreateTableWithIndex("/Root", *MakeTableDescription(tableDesc),
+        auto source = MakeTableDescription(tableDesc);
+        if (defaultValue) {
+            auto* literal = source->MutableColumns(1)->MutableDefaultFromLiteral();
+            literal->mutable_type()->set_type_id(Ydb::Type::UINT32);
+            literal->mutable_value()->set_uint32_value(*defaultValue);
+        }
+        env.CreateTableWithIndex("/Root", *source,
              indexName, TVector<TString>{"value"}, indexType);
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
@@ -812,6 +1080,16 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         const auto& replicatedDesc = desc.GetPathDescription().GetTable();
 
         CheckTableReplica(tableDesc, replicatedDesc);
+
+        if (defaultValue) {
+            const auto* valueColumn = FindIfPtr(replicatedDesc.GetColumns(), [](const auto& column) {
+                return column.GetName() == "value";
+            });
+            UNIT_ASSERT(valueColumn);
+            UNIT_ASSERT(valueColumn->HasDefaultFromLiteral());
+            UNIT_ASSERT_VALUES_EQUAL(valueColumn->GetDefaultFromLiteral().SerializeAsString(),
+                source->GetColumns(1).GetDefaultFromLiteral().SerializeAsString());
+        }
 
         if (indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync && !enableAsyncIndexReplication) {
             UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.TableIndexesSize(), 0);
@@ -861,12 +1139,20 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
+    Y_UNIT_TEST(WithSyncIndexAndLiteralDefault) {
+        WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobal, false, ui32(42));
+    }
+
     Y_UNIT_TEST(WithSyncIndexAndIntermediateDir) {
         WithIndex("/Root/Dir/Replicated", NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
     Y_UNIT_TEST(WithAsyncIndex) {
         WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobalAsync, true);
+    }
+
+    Y_UNIT_TEST(WithAsyncIndexAndLiteralDefault) {
+        WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobalAsync, true, ui32(42));
     }
 
     Y_UNIT_TEST(WithAsyncIndexDisabled) {
@@ -983,8 +1269,13 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     template <typename T>
-    void ExistingDstFamily(const TString& error, T&& modify) {
-        TEnv env;
+    void ExistingDstFamily(const TString& error, T&& modify,
+            NKikimrSchemeOp::EColumnCodec codec = NKikimrSchemeOp::ColumnCodecLZ4,
+            TMaybe<i32> compressionLevel = Nothing())
+    {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableRowTableZstdCompression(codec == NKikimrSchemeOp::ColumnCodecZSTD);
+        TEnv env(flags);
         auto source = MakeTableDescription({
             .Name = "Src",
             .KeyColumns = {"key"},
@@ -997,7 +1288,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         source->MutableColumns(1)->SetFamilyName("archive");
         auto* family = source->MutablePartitionConfig()->AddColumnFamilies();
         family->SetName("archive");
-        family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+        family->SetColumnCodec(codec);
+        if (compressionLevel) {
+            family->SetColumnCodecLevel(*compressionLevel);
+        }
         auto* data = family->MutableStorageConfig()->MutableData();
         data->SetPreferredPoolKind("test");
         data->SetAllowOtherKinds(false);
@@ -1015,8 +1309,39 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table,
             "/Root/Src", "/Root/Dst"));
         const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusSchemeError);
-        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status,
+            error ? NKikimrScheme::StatusSchemeError : NKikimrScheme::StatusSuccess, result->Get()->Error);
+        if (error) {
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, error);
+        }
+    }
+
+    Y_UNIT_TEST(ZstdColumnFamilyCompressionLevelMismatch) {
+        for (const i32 level : {0, 7, ZSTD_maxCLevel()}) {
+            ExistingDstFamily("Column family compression level mismatch", [](auto& destination) {
+                destination.MutablePartitionConfig()->MutableColumnFamilies(0)->ClearColumnCodecLevel();
+            }, NKikimrSchemeOp::ColumnCodecZSTD, level);
+        }
+    }
+
+    Y_UNIT_TEST(ZstdColumnFamilyDefaultCompressionLevel) {
+        for (const bool explicitSourceLevel : {false, true}) {
+            ExistingDstFamily({}, [explicitSourceLevel](auto& destination) {
+                auto* family = destination.MutablePartitionConfig()->MutableColumnFamilies(0);
+                if (explicitSourceLevel) {
+                    family->ClearColumnCodecLevel();
+                } else {
+                    family->SetColumnCodecLevel(1);
+                }
+            }, NKikimrSchemeOp::ColumnCodecZSTD,
+                explicitSourceLevel ? TMaybe<i32>(1) : Nothing());
+        }
+    }
+
+    Y_UNIT_TEST(ZstdColumnFamilyCompressionLevelMatches) {
+        for (const i32 level : {0, 7, ZSTD_maxCLevel()}) {
+            ExistingDstFamily({}, [](auto&) {}, NKikimrSchemeOp::ColumnCodecZSTD, level);
+        }
     }
 
     Y_UNIT_TEST(ColumnFamilyCodecMismatch) {

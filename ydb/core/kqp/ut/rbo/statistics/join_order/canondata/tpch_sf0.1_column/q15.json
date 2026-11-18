@@ -1,0 +1,36 @@
+{
+  "op_name":"InnerJoin (BlockHash)",
+  "args":
+    [
+      {
+        "op_name":"TableFullScan",
+        "table":"supplier"
+      },
+      {
+        "op_name":"InnerJoin (BlockHash)",
+        "args":
+          [
+            {
+              "op_name":"HashShuffle",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"lineitem"
+                  }
+                ]
+            },
+            {
+              "op_name":"HashShuffle",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"lineitem"
+                  }
+                ]
+            }
+          ]
+      }
+    ]
+}

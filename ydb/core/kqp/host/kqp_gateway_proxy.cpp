@@ -441,10 +441,6 @@ bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp
         }
     }
 
-    if (families.Modified && !families.ValidateColumnFamilies(&code, &error)) {
-        return false;
-    }
-
     if (!NGRpcService::FillCreateTableSettingsDesc(tableDesc, createTableProto, profiles, code, error, warnings)) {
         return false;
     }

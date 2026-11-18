@@ -38,6 +38,85 @@ void TMemoryLimits::Register(TRegistrar registrar)
         .Optional();
 }
 
+void TMemoryLimitRange::Register(TRegistrar registrar)
+{
+    registrar.Parameter("min", &TThis::Min)
+        .GreaterThanOrEqual(0)
+        .Optional();
+    registrar.Parameter("max", &TThis::Max)
+        .GreaterThanOrEqual(0)
+        .Optional();
+
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->Min && config->Max && *config->Min > *config->Max) {
+            THROW_ERROR_EXCEPTION("Minimum memory limit must not exceed maximum memory limit: %v > %v",
+                *config->Min,
+                *config->Max);
+        }
+    });
+}
+
+void TMemoryLimitBounds::Register(TRegistrar registrar)
+{
+    registrar.Parameter("tablet_static", &TThis::TabletStatic)
+        .Default();
+    registrar.Parameter("tablet_dynamic", &TThis::TabletDynamic)
+        .Default();
+    registrar.Parameter("compressed_block_cache", &TThis::CompressedBlockCache)
+        .Default();
+    registrar.Parameter("uncompressed_block_cache", &TThis::UncompressedBlockCache)
+        .Default();
+    registrar.Parameter("key_filter_block_cache", &TThis::KeyFilterBlockCache)
+        .Default();
+    registrar.Parameter("versioned_chunk_meta", &TThis::VersionedChunkMeta)
+        .Default();
+    registrar.Parameter("lookup_row_cache", &TThis::LookupRowCache)
+        .Default();
+    registrar.Parameter("reserved", &TThis::Reserved)
+        .Default();
+    registrar.Parameter("query", &TThis::Query)
+        .Default();
+}
+
+void TMemoryLimitBounds::ValidateMemoryLimits(const TMemoryLimitsPtr& memoryLimits) const
+{
+    auto validateLimit = [] (TStringBuf category, std::optional<i64> limit, const TMemoryLimitRange& range) {
+        if (!limit) {
+            return;
+        }
+
+        if (range.Min && range.Max && (*limit < *range.Min || *limit > *range.Max)) {
+            THROW_ERROR_EXCEPTION("Memory limit for category %Qv must be in range [%v, %v], got %v",
+                category,
+                *range.Min,
+                *range.Max,
+                *limit);
+        }
+        if (range.Min && *limit < *range.Min) {
+            THROW_ERROR_EXCEPTION("Memory limit for category %Qv must be at least %v, got %v",
+                category,
+                *range.Min,
+                *limit);
+        }
+        if (range.Max && *limit > *range.Max) {
+            THROW_ERROR_EXCEPTION("Memory limit for category %Qv must be below %v, got %v",
+                category,
+                *range.Max,
+                *limit);
+        }
+    };
+
+    validateLimit("compressed_block_cache", memoryLimits->CompressedBlockCache, CompressedBlockCache);
+    validateLimit("key_filter_block_cache", memoryLimits->KeyFilterBlockCache, KeyFilterBlockCache);
+    validateLimit("lookup_row_cache", memoryLimits->LookupRowCache, LookupRowCache);
+    validateLimit("tablet_dynamic", memoryLimits->TabletDynamic, TabletDynamic);
+    validateLimit("tablet_static", memoryLimits->TabletStatic, TabletStatic);
+    validateLimit("uncompressed_block_cache", memoryLimits->UncompressedBlockCache, UncompressedBlockCache);
+    validateLimit("versioned_chunk_meta", memoryLimits->VersionedChunkMeta, VersionedChunkMeta);
+    validateLimit("reserved", memoryLimits->Reserved, Reserved);
+    validateLimit("query", memoryLimits->Query, Query);
+}
+
 void TInstanceResources::Register(TRegistrar registrar)
 {
     registrar.Parameter("vcpu", &TThis::Vcpu)
@@ -105,6 +184,8 @@ void TInstanceSize::Register(TRegistrar registrar)
     registrar.Parameter("resource_guarantee", &TThis::ResourceGuarantee)
         .DefaultNew();
     registrar.Parameter("default_config", &TThis::DefaultConfig)
+        .DefaultNew();
+    registrar.Parameter("memory_limit_bounds", &TThis::MemoryLimitBounds)
         .DefaultNew();
     registrar.Parameter("host_tag_filter", &TThis::HostTagFilter)
         .Optional();

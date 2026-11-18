@@ -53,6 +53,10 @@ public:
         , ExecutionValidator_([this]() { return MakeHolder<TDqExecutionValidator>(State_); })
     { }
 
+    bool AcceptsProjectSetting(const TProjectSettings::TPragma& pragma) const override {
+        return State_->Settings->AcceptsProjectSetting(pragma);
+    }
+
     TStringBuf GetName() const override {
         return DqProviderName;
     }

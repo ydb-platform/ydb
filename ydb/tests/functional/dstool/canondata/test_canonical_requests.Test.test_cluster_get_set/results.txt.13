@@ -9,5 +9,5 @@ Expected one of the next options: --default-max-slots,--enable-self-heal,--
 disable-self-heal,--enable-donor-mode,--disable-donor-mode,--scrub-periodicity,
 --pdisk-space-margin-promille,--group-reserve-min,--group-reserve-part-ppm,--
 max-scrubbed-disks-at-once,--pdisk-space-color-border,--database-space-block-
-color,--bridge-sync-total-rate,--disk-management-mode,--enable-self-heal-local-
-policy,--disable-self-heal-local-policy
+color,--bridge-sync-total-rate,--bridge-sync-max-syncers,--disk-management-mode,
+--enable-self-heal-local-policy,--disable-self-heal-local-policy

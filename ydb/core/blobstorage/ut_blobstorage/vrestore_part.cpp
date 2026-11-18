@@ -1,5 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 
 #include <array>
@@ -31,10 +32,9 @@ namespace {
         const TString Data = TString(1024, 'x');
         const TLogoBlobID FullId{1, 1, 1, 0, ui32(Data.size()), 0};
         std::array<TVDiskResponse, 9> VDiskResponses;
-        TDuration LocalReadDelay = TDuration::Zero();
 
         TFixture() {
-            Env.Runtime->FilterFunction = [this](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            Env.Runtime->FilterFunction = [this](ui32, std::unique_ptr<IEventHandle>& ev) {
                 if (ev->GetTypeRewrite() == TEvBlobStorage::EvProxyQueueState) {
                     const auto* recipient = Env.Runtime->GetActor(ev->GetRecipientRewrite());
                     if (recipient && recipient->GetActivityType() == NKikimrServices::TActivity::BS_BLOB_RECOVERY_ACTOR) {
@@ -45,13 +45,6 @@ namespace {
                 }
                 if (!Info || ev->GetTypeRewrite() != TEvBlobStorage::EvVGet) {
                     return true;
-                }
-                const auto* get = ev->Get<TEvBlobStorage::TEvVGet>();
-                if (LocalReadDelay != TDuration::Zero() && get->SuppressCorruptedBlobRestoration
-                        && get->Record.GetHandleClass() == NKikimrBlobStorage::AsyncRead) {
-                    Env.Runtime->Schedule(std::exchange(LocalReadDelay, TDuration::Zero()), ev.release(),
-                        nullptr, nodeId);
-                    return false;
                 }
                 const auto* sender = Env.Runtime->GetActor(ev->Sender);
                 if (!sender || sender->GetActivityType() != NKikimrServices::TActivity::BS_BLOB_RECOVERY_ACTOR) {
@@ -98,7 +91,7 @@ namespace {
         }
 
         NKikimrBlobStorage::TEvVRestorePartResult RestorePart(ui32 subgroupIdx, ui32 partId,
-                TDuration timeout = TDuration::Seconds(30)) {
+                TDuration timeout = TDuration::Seconds(30), bool issueKeepFlag = false) {
             const auto vdiskId = VDisk(subgroupIdx);
             const auto target = Info->GetActorId(TVDiskIdShort(vdiskId));
             const auto edge = Env.Runtime->AllocateEdgeActor(target.NodeId(), __FILE__, __LINE__);
@@ -107,6 +100,7 @@ namespace {
             VDiskIDFromVDiskID(vdiskId, request->Record.MutableVDiskID());
             LogoBlobIDFromLogoBlobID(TLogoBlobID(FullId, partId), request->Record.MutableBlobID());
             request->Record.SetDeadline(deadline.GetValue());
+            request->Record.SetIssueKeepFlag(issueKeepFlag);
             Env.Runtime->Send(new IEventHandle(target, edge, request.release()), target.NodeId());
             const auto result = Env.WaitForEdgeActorEvent<TEvVRestorePartResult>(edge, true,
                 deadline + TDuration::Seconds(1));
@@ -151,7 +145,111 @@ namespace {
 
 } // anonymous namespace
 
+Y_UNIT_TEST_SUITE(VPut) {
+    Y_UNIT_TEST(DuplicateSameData) {
+        TFixture f;
+        f.PutLocalPart(0, 1);
+        f.PutLocalPart(0, 1);
+        f.CheckWritten(0, 1);
+    }
+
+    Y_UNIT_TEST(DuplicateDifferentData) {
+        TFixture f;
+        // Model replacing conflicting local bytes without involving TEvVRestorePart.
+        f.Env.PutBlob(f.VDisk(0), TLogoBlobID(f.FullId, 1), TString(f.Data.size(), 'z'));
+        f.PutLocalPart(0, 1);
+        f.CheckWritten(0, 1);
+    }
+}
+
 Y_UNIT_TEST_SUITE(VRestorePart) {
+    Y_UNIT_TEST(Mirror3dcRepairSyncer) {
+        TFixture fixture;
+        fixture.PutLocalPart(0, 1);
+        fixture.PutLocalPart(3, 1);
+        fixture.PutLocalPart(1, 2);
+        fixture.PutLocalPart(4, 2);
+        fixture.VDiskResponses[0] = {.Status = NKikimrProto::OK, .PartId = 1, .Data = fixture.Data};
+
+        TActorId edge = fixture.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        TInstant deadline = fixture.Env.Runtime->GetClock() + TDuration::Minutes(1);
+        fixture.Env.Runtime->Register(NGroupSyncer::CreateMirror3dcRepairSyncer(fixture.Info, edge), 1);
+        NGroupSyncer::TEvMirror3dcRepairScanResult::TPtr result =
+            fixture.Env.WaitForEdgeActorEvent<NGroupSyncer::TEvMirror3dcRepairScanResult>(edge, true, deadline + TDuration::Seconds(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        fixture.CheckWritten(2, 3);
+        UNIT_ASSERT(!fixture.Read(5, 3));
+        UNIT_ASSERT(!fixture.Read(8, 3));
+    }
+
+    Y_UNIT_TEST(Mirror3dcRepairSyncerPropagatesKeep) {
+        TFixture fixture;
+        fixture.PutLocalPart(0, 1);
+        fixture.PutLocalPart(3, 1);
+        fixture.PutLocalPart(1, 2);
+        fixture.PutLocalPart(4, 2);
+        fixture.VDiskResponses[0] = {.Status = NKikimrProto::OK, .PartId = 1, .Data = fixture.Data};
+
+        auto previousFilter = fixture.Env.Runtime->FilterFunction;
+        fixture.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvBlobStorage::TEvAssimilateResult::EventType) {
+                for (auto& blob : event->Get<TEvBlobStorage::TEvAssimilateResult>()->Blobs) {
+                    if (blob.Id == fixture.FullId) {
+                        blob.Keep = true;
+                    }
+                }
+            }
+            return previousFilter(node, event);
+        };
+        TActorId edge = fixture.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        TInstant deadline = fixture.Env.Runtime->GetClock() + TDuration::Minutes(1);
+        fixture.Env.Runtime->Register(NGroupSyncer::CreateMirror3dcRepairSyncer(fixture.Info, edge), 1);
+        NGroupSyncer::TEvMirror3dcRepairScanResult::TPtr result =
+            fixture.Env.WaitForEdgeActorEvent<NGroupSyncer::TEvMirror3dcRepairScanResult>(edge, true, deadline + TDuration::Seconds(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        fixture.CheckWritten(2, 3, true);
+        UNIT_ASSERT(!fixture.Read(5, 3));
+        UNIT_ASSERT(!fixture.Read(8, 3));
+    }
+
+    Y_UNIT_TEST(NodeWardenStartsRepairSyncer) {
+        TFixture fixture;
+        fixture.PutLocalPart(0, 1);
+        fixture.PutLocalPart(3, 1);
+        fixture.PutLocalPart(1, 2);
+        fixture.PutLocalPart(4, 2);
+        fixture.VDiskResponses[0] = {.Status = NKikimrProto::OK, .PartId = 1, .Data = fixture.Data};
+        ui32 node = fixture.Info->GetActorId(TVDiskIdShort(fixture.VDisk(0))).NodeId();
+        TActorId edge = fixture.Env.Runtime->AllocateEdgeActor(node, __FILE__, __LINE__);
+        std::unique_ptr<NGroupSyncer::TEvRunMirror3dcRepair> request = std::make_unique<NGroupSyncer::TEvRunMirror3dcRepair>();
+        request->Record.SetGroupId(fixture.Info->GroupID.GetRawId());
+        request->Record.SetGeneration(fixture.Info->GroupGeneration);
+        fixture.Env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(node), edge, request.release(), 0, 17), node);
+        NGroupSyncer::TEvRunMirror3dcRepairResult::TPtr result =
+            fixture.Env.WaitForEdgeActorEvent<NGroupSyncer::TEvRunMirror3dcRepairResult>(
+                edge, true, fixture.Env.Runtime->GetClock() + TDuration::Minutes(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 17);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetGeneration(), fixture.Info->GroupGeneration);
+        fixture.CheckWritten(2, 3);
+    }
+
+    Y_UNIT_TEST(NodeWardenRejectsObsoleteRepairGeneration) {
+        TFixture fixture;
+        TActorId edge = fixture.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        std::unique_ptr<NGroupSyncer::TEvRunMirror3dcRepair> request = std::make_unique<NGroupSyncer::TEvRunMirror3dcRepair>();
+        request->Record.SetGroupId(fixture.Info->GroupID.GetRawId());
+        request->Record.SetGeneration(fixture.Info->GroupGeneration - 1);
+        fixture.Env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), edge, request.release(), 0, 18), 1);
+        NGroupSyncer::TEvRunMirror3dcRepairResult::TPtr result =
+            fixture.Env.WaitForEdgeActorEvent<NGroupSyncer::TEvRunMirror3dcRepairResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 18);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::RACE);
+    }
+
     Y_UNIT_TEST(MissingPart) {
         TFixture f;
         f.VDiskResponses[1] = {.Status = NKikimrProto::OK, .PartId = 2, .Data = f.Data};
@@ -166,28 +264,36 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
         f.CheckWritten(3, 1);
     }
 
-    Y_UNIT_TEST(Already) {
+    Y_UNIT_TEST(LocalPartRecoveryTimeout) {
         TFixture f;
         f.PutLocalPart(0, 1);
         f.VDiskResponses[1].Status = NKikimrProto::UNKNOWN;
-        UNIT_ASSERT_VALUES_EQUAL(f.RestorePart(0, 1).GetStatus(), NKikimrProto::ALREADY);
+        UNIT_ASSERT_VALUES_EQUAL(f.RestorePart(0, 1, TDuration::Seconds(1)).GetStatus(), NKikimrProto::DEADLINE);
         f.CheckWritten(0, 1);
     }
 
-    Y_UNIT_TEST(AlreadyAfterRecovery) {
+    Y_UNIT_TEST(LocalPartNoRecoveryData) {
         TFixture f;
         f.PutLocalPart(0, 1);
-        f.LocalReadDelay = TDuration::Seconds(1);
-        UNIT_ASSERT_VALUES_EQUAL(f.RestorePart(0, 1).GetStatus(), NKikimrProto::ALREADY);
+        UNIT_ASSERT_VALUES_EQUAL(f.RestorePart(0, 1).GetStatus(), NKikimrProto::NODATA);
         f.CheckWritten(0, 1);
     }
 
-    Y_UNIT_TEST(AlreadyAfterSuccessfulRecovery) {
+    Y_UNIT_TEST(RewriteLocalPart) {
         TFixture f;
         f.PutLocalPart(0, 1);
-        f.LocalReadDelay = TDuration::Seconds(1);
         f.VDiskResponses[1] = {.Status = NKikimrProto::OK, .PartId = 2, .Data = f.Data, .Keep = true};
-        UNIT_ASSERT_VALUES_EQUAL(f.RestorePart(0, 1).GetStatus(), NKikimrProto::ALREADY);
+        UNIT_ASSERT_VALUES_EQUAL(f.RestorePart(0, 1).GetStatus(), NKikimrProto::OK);
+        f.CheckWritten(0, 1, /*keep=*/true);
+    }
+
+    Y_UNIT_TEST(DifferentLocalData) {
+        TFixture f;
+        const TString localData(f.Data.size(), 'z');
+        // Write valid storage data whose contents differ from the recovered blob.
+        f.Env.PutBlob(f.VDisk(0), TLogoBlobID(f.FullId, 1), localData);
+        f.VDiskResponses[1] = {.Status = NKikimrProto::OK, .PartId = 2, .Data = f.Data};
+        UNIT_ASSERT_VALUES_EQUAL(f.RestorePart(0, 1).GetStatus(), NKikimrProto::OK);
         f.CheckWritten(0, 1);
     }
 
@@ -219,6 +325,14 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
         f.VDiskResponses[1] = {.Status = NKikimrProto::OK, .PartId = 2, .Data = f.Data, .DoNotKeep = true};
         UNIT_ASSERT_VALUES_EQUAL(f.RestorePart(0, 1).GetStatus(), NKikimrProto::OK);
         f.CheckWritten(0, 1);
+    }
+
+    Y_UNIT_TEST(IssueKeepFlag) {
+        TFixture f;
+        f.VDiskResponses[1] = {.Status = NKikimrProto::OK, .PartId = 2, .Data = f.Data};
+        UNIT_ASSERT_VALUES_EQUAL(f.RestorePart(0, 1, TDuration::Seconds(30), /*issueKeepFlag=*/true).GetStatus(),
+            NKikimrProto::OK);
+        f.CheckWritten(0, 1, /*keep=*/true);
     }
 
     Y_UNIT_TEST(RecoveryTimeout) {

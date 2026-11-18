@@ -65,3 +65,8 @@ ELSE()
         str_size
     )
 ENDIF()
+
+SRCS(
+    mul.cpp
+)
+

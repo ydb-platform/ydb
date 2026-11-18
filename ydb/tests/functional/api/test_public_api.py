@@ -90,14 +90,7 @@ storage_policy {
 class Base(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(
-            KikimrConfigGenerator(
-                additional_log_configs={
-                    'TENANT_POOL': LogLevels.DEBUG,
-                    'KQP_PROXY': LogLevels.DEBUG
-                }
-            )
-        )
+        cls.cluster = KiKiMR()
         cls.cluster.start()
 
         cls.database_name = "/Root"
@@ -1521,8 +1514,6 @@ class TestSelectAfterDropWithRepetitions(object):
         cls.cluster = KiKiMR(
             configurator=KikimrConfigGenerator(
                 additional_log_configs={
-                    'TX_PROXY': LogLevels.DEBUG,
-                    'TX_PROXY_SCHEME_CACHE': LogLevels.DEBUG,
                     'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
                 }
             )

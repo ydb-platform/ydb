@@ -3,6 +3,7 @@
 #include <ydb/library/yaml_config/tools/util/defaults.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config.h>
+#include <ydb/library/yaml_json/yaml_to_json.h>
 #include "rpc_config_base.h"
 
 #include <ydb/core/base/path.h>
@@ -355,17 +356,23 @@ public:
     {}
 
     bool IsDistconfEnableQuery() const {
-        NKikimrConfig::TAppConfig newConfig;
-        try {
-            auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
-            auto config = shim.StorageConfig
-                ? NFyaml::TDocument::Parse(*shim.StorageConfig)
-                : NFyaml::TDocument::Parse(shim.MainConfig.value_or(TString{"{}"}));
-            newConfig = NYamlConfig::YamlToProto(config.Root(), true, true);
-        } catch (const std::exception&) {
-            return false; // assuming no distconf enabled in this config
+        const auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
+        if (!shim.StorageConfig && !shim.MainConfig) {
+            return false;
         }
-        return newConfig.GetSelfManagementConfig().GetEnabled();
+        const auto& yaml = shim.StorageConfig ? *shim.StorageConfig : *shim.MainConfig;
+        const auto document = YAML::Load(yaml);
+        Y_ENSURE(document.IsMap(), "YAML root must be an object");
+        const auto nested = document["config"];
+        const auto& config = nested || document["metadata"] ? nested : document;
+        Y_ENSURE(config && config.IsMap(), "'config' must be an object");
+        const auto selfManagement = config["self_management_config"];
+        if (!selfManagement || selfManagement.IsNull()) {
+            return false;
+        }
+        Y_ENSURE(selfManagement.IsMap(), "'self_management_config' must be an object");
+        const auto enabled = selfManagement["enabled"];
+        return enabled && NYaml::Yaml2Json(enabled, false).GetBooleanRobust();
     }
 
     std::unique_ptr<IEventBase> ProcessControllerQuery() override {

@@ -152,6 +152,8 @@ struct TBackupToS3Settings {
     // System Views
     TControlWrapper EnableSysViewPermissionsExport;
     TControlWrapper EnableSysViewPermissionsImport;
+    // Coordination Nodes
+    TControlWrapper EnableKesusExport;
 
     TBackupToS3Settings()
         : EnableAsyncReplicationExport(1, 0, 1)
@@ -164,6 +166,7 @@ struct TBackupToS3Settings {
         , EnableExternalTableImport(1, 0, 1)
         , EnableSysViewPermissionsExport(1, 0, 1)
         , EnableSysViewPermissionsImport(1, 0, 1)
+        , EnableKesusExport(0, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -181,6 +184,8 @@ struct TBackupToS3Settings {
 
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsExport, icb->BackupControls.S3Controls.EnableSysViewPermissionsExport);
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsImport, icb->BackupControls.S3Controls.EnableSysViewPermissionsImport);
+
+        TControlBoard::RegisterSharedControl(EnableKesusExport, icb->BackupControls.S3Controls.EnableKesusExport);
     }
 };
 
@@ -1890,6 +1895,10 @@ struct TShardInfo {
     static TShardInfo TestShardSetInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::TestShard);
     }
+
+    static TShardInfo CdcAggregatorInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::CdcAggregator);
+    }
 };
 
 /**
@@ -1933,7 +1942,6 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     ui32 MaxPartsPerTablet = 0;
     ui64 AlterVersion = 0;
     TString TabletConfig;
-    TString BootstrapConfig;
     THashMap<TShardIdx, TTopicTabletInfo::TPtr> Shards; // key - shardIdx
     TKeySchema KeySchema;
     TTopicInfo::TPtr AlterData; // changes to be applied
@@ -3387,6 +3395,13 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 Y_ENSURE(success, description);
                 break;
             }
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::THnswIndexDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -3493,6 +3508,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
                 break;
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+                alterData->SpecializedIndexDescription = config.GetHnswIndexDescription();
+                break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -3564,6 +3582,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::THnswIndexDescription,
         NKikimrSchemeOp::TFulltextIndexDescription,
         NKikimrSchemeOp::TBloomFilter,
         NKikimrSchemeOp::TBloomNGrammFilter> SpecializedIndexDescription;
@@ -3574,6 +3593,8 @@ struct TCdcStreamSettings {
     using EMode = NKikimrSchemeOp::ECdcStreamMode;
     using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
     using EState = NKikimrSchemeOp::ECdcStreamState;
+    using ECompression = NKikimrSchemeOp::ECdcStreamCompression;
+    using EHeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatMode;
 
     #define OPTION(type, name) \
         TSelf&& With##name(type value) && { \
@@ -3591,6 +3612,9 @@ struct TCdcStreamSettings {
     OPTION(EState, State);
     OPTION(bool, UserSIDs);
     OPTION(bool, TraceIds);
+    OPTION(ECompression, Compression);
+    OPTION(i32, CompressionLevel);
+    OPTION(EHeartbeatMode, HeartbeatMode);
 
     #undef OPTION
 };
@@ -3640,6 +3664,11 @@ struct TCdcStreamInfo
             .WithAwsRegion(desc.GetAwsRegion())
             .WithUserSIDs(desc.GetUserSIDs())
             .WithTraceIds(desc.GetTraceIds())
+            .WithCompression(desc.GetCompression())
+            .WithCompressionLevel(desc.HasCompressionLevel()
+                ? desc.GetCompressionLevel()
+                : (desc.GetCompression() == NKikimrSchemeOp::ECdcStreamCompressionZstd ? 3 : 0))
+            .WithHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect)
         );
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
@@ -3666,6 +3695,11 @@ struct TCdcStreamInfo
         }
         desc.SetUserSIDs(UserSIDs);
         desc.SetTraceIds(TraceIds);
+        desc.SetCompression(Compression);
+        if (CompressionLevel) {
+            desc.SetCompressionLevel(CompressionLevel);
+        }
+        desc.SetHeartbeatMode(HeartbeatMode);
     }
 
     void FinishAlter() {
@@ -3673,12 +3707,14 @@ struct TCdcStreamInfo
 
         AlterVersion = AlterData->AlterVersion;
         static_cast<TCdcStreamSettings&>(*this) = static_cast<TCdcStreamSettings&>(*AlterData);
+        AggregatorShardIdx = AlterData->AggregatorShardIdx;
 
         AlterData.Reset();
     }
 
     ui64 AlterVersion = 1;
     TCdcStreamInfo::TPtr AlterData = nullptr;
+    TShardIdx AggregatorShardIdx = InvalidShardIdx;
 
     TMap<TShardIdx, TShardStatus> ScanShards;
     THashSet<TShardIdx> PendingShards;
@@ -4007,6 +4043,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TMaybe<Ydb::Table::CreateTableRequest> Table;
         TMaybe<Ydb::Topic::CreateTopicRequest> Topic;
         TMaybe<Ydb::Table::DescribeSystemViewResult> SysView;
+        TMaybe<NKikimrSchemeOp::TImportKesus> Kesus;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
@@ -4021,6 +4058,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
+        TActorId KesusRestorer;
         int NextIndexIdx = 0;
         int NextChangefeedIdx = 0;
         TString Issue;
@@ -4061,6 +4099,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TMaybe<NBackup::TEncryptionIV> ExportIV;
     TMaybe<NBackup::TSchemaMapping> SchemaMapping;
     TActorId SchemaMappingGetter;
+    bool CanRestoreRateLimiterMetering = false;
 
     EState State = EState::Invalid;
     TString Issue;

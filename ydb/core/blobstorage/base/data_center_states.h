@@ -1,24 +1,18 @@
 #pragma once
 
-#include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 
-#include <array>
 #include <expected>
 #include <unordered_map>
 
 namespace NKikimr {
 
-using TDataCenterStates = std::unordered_map<TString,
-    NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter::EDataCenterState>;
-using TFailRealmStates = std::array<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState, 3>;
+using TDataCenterStates = std::unordered_map<TString, NKikimrBlobStorage::TDataCenterState::EState>;
 
 // Preserve explicitly supplied states. Unlisted datacenters are included.
 std::expected<TDataCenterStates, TString> ParseDataCenterStates(
     const NKikimrBlobStorage::TDefineDataCenterStates& command);
 NKikimrBlobStorage::TDefineDataCenterStates SerializeDataCenterStates(const TDataCenterStates& states);
-
-// Validate against the shared mirror-3-dc transition graph, preserving physical realm identities.
-std::expected<void, TString> ValidateFailRealmStateTransition(const TFailRealmStates& before, const TFailRealmStates& after);
 
 } // namespace NKikimr

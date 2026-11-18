@@ -58,6 +58,7 @@ namespace NSchemeShardUT_Private {
         OPTION(THashSet<TString>, SystemBackupSIDs, {});
         OPTION(std::optional<bool>, EnableMoveIndex, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedInitialScan, std::nullopt);
+        OPTION(std::optional<bool>, EnableCdcAggregator, std::nullopt);
         OPTION(std::optional<bool>, EnableNotNullDataColumns, std::nullopt);
         OPTION(std::optional<bool>, EnableAlterDatabaseCreateHiveFirst, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicDiskSubDomainQuota, std::nullopt);
@@ -223,6 +224,7 @@ namespace NSchemeShardUT_Private {
         const bool KillOnCommit;
         ui32 TotalBuckets = 0;
         ui32 Bucket = 0;
+        bool CreateDefaultDirectory = true;
 
         explicit TTestWithReboots(bool killOnCommit = false, TTestEnv::TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard);
         virtual ~TTestWithReboots() = default;

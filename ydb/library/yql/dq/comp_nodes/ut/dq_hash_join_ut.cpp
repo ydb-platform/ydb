@@ -7,6 +7,7 @@
 #include <ydb/library/yql/dq/comp_nodes/ut/join_perf/construct_join_graph.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_join_common.h>
+#include <yql/essentials/minikql/codegen/codegen.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -2765,6 +2766,62 @@ Y_UNIT_TEST_SUITE(TDqHashJoinPgTypesTest) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TDqHashJoinResourceKeyTest) {
+    template <bool BlockJoin>
+    TRuntimeNode MakeHashJoin(TDqSetup<false>& setup, TVector<TType*> leftColumns, TVector<TType*> rightColumns,
+                              const TVector<ui32>& leftKeys, const TVector<ui32>& rightKeys, TType* returnItemType) {
+        auto& pb = setup.GetDqProgramBuilder();
+        auto source = [&](TVector<TType*> columns) {
+            if constexpr (BlockJoin) {
+                for (auto*& type : columns) {
+                    type = pb.NewBlockType(type, TBlockType::EShape::Many);
+                }
+                columns.push_back(pb.LastScalarIndexBlock());
+            }
+            auto* multi = pb.NewMultiType(columns);
+            // ExternalNode is a stream node. Scalar hash join needs a wide flow, which ToFlow
+            // produces from a wide stream. A flow-typed ExternalNode is not IComputationWideFlowNode.
+            TCallableBuilder builder(*setup.Env, "ExternalNode", pb.NewStreamType(multi));
+            TRuntimeNode stream(builder.Build(), false);
+            if constexpr (BlockJoin) {
+                return stream;
+            }
+            return pb.ToFlow(stream, {});
+        };
+        auto* returnType = BlockJoin
+            ? pb.NewStreamType(pb.NewMultiType({pb.NewBlockType(returnItemType, TBlockType::EShape::Many),
+                                                pb.LastScalarIndexBlock()}))
+            : pb.NewFlowType(pb.NewMultiType({returnItemType}));
+        const auto lhs = source(std::move(leftColumns));
+        const auto rhs = source(std::move(rightColumns));
+        if constexpr (BlockJoin) {
+            return pb.DqBlockHashJoin(lhs, rhs, EJoinKind::Inner, leftKeys, rightKeys, {0, 0}, {}, returnType);
+        } else {
+            return pb.DqScalarHashJoin(lhs, rhs, EJoinKind::Inner, leftKeys, rightKeys, {0, 0}, {}, returnType);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(RejectResourceKey, BlockJoin) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* resourceType = pb.NewResourceType("Test.Resource");
+        const auto join = MakeHashJoin<BlockJoin>(setup, {resourceType, intType}, {resourceType, intType}, {0}, {0}, intType);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(setup.BuildGraph(join), yexception,
+            "Resource types are not supported as hash join keys");
+    }
+
+    Y_UNIT_TEST_TWIN(AllowResourcePayload, BlockJoin) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* resourceType = pb.NewResourceType("Test.Resource");
+        const auto join = MakeHashJoin<BlockJoin>(setup, {intType, resourceType}, {intType, resourceType}, {0}, {0}, intType);
+        auto graph = setup.BuildGraph(join);
+        UNIT_ASSERT(graph.Get() != nullptr);
+    }
+}
+
 Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
     Y_UNIT_TEST(InnerAndCrossKeepPreservedSide) {
         const auto inner = DispatchPhysicalJoin(EJoinKind::Inner, ESide::Build, false);
@@ -2786,6 +2843,43 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
         Test(BasicInnerJoinTestData(), BlockJoin);
+    }
+
+    // FromFlow compiles its input. Without a codegen stub on the join this throws TNoCodegen.
+    Y_UNIT_TEST_LLVM(ScalarHashJoinUnderCodegen) {
+        TDqSetup<LLVM> setup;
+        const TVector<ui64> leftKeys = {1, 2, 3};
+        const TVector<TString> leftValues = {"a", "b", "c"};
+        const TVector<ui64> rightKeys = {2, 3, 4};
+        const TVector<TString> rightValues = {"B", "C", "D"};
+        const TVector<ui64> expectedKeys = {2, 3};
+        const TVector<TString> expectedLeft = {"b", "c"};
+        const TVector<TString> expectedRight = {"B", "C"};
+
+        const auto left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+        const auto right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+        const auto expected = ConvertVectorsToTuples(setup, expectedKeys, expectedLeft, expectedKeys, expectedRight);
+
+        auto& pb = setup.GetDqProgramBuilder();
+        const auto leftColumns = AS_TYPE(TTupleType, AS_TYPE(TListType, left.Type)->GetItemType())->GetElements();
+        const auto rightColumns = AS_TYPE(TTupleType, AS_TYPE(TListType, right.Type)->GetItemType())->GetElements();
+        const auto leftArg = pb.Arg(left.Type);
+        const auto rightArg = pb.Arg(right.Type);
+        const ui32 leftRenames[] = {0, 0, 1, 1};
+        const ui32 rightRenames[] = {0, 2, 1, 3};
+        const auto join = pb.FromFlow(pb.DqScalarHashJoin(
+            ToWideFlow(pb, leftArg), ToWideFlow(pb, rightArg), EJoinKind::Inner, {0}, {0}, leftRenames, rightRenames,
+            pb.NewFlowType(pb.NewMultiType({leftColumns[0], leftColumns[1], rightColumns[0], rightColumns[1]}))));
+
+        auto graph = setup.BuildGraph(join, {leftArg.GetNode(), rightArg.GetNode()});
+        if (NYql::NCodegen::ICodegen::IsCodegenAvailable()) {
+            const auto expectedStatus = LLVM ? ECompileStatus::Compiled : ECompileStatus::NoCompilationStarted;
+            UNIT_ASSERT_C(setup.Pattern->GetCompileStatus() == expectedStatus,
+                static_cast<int>(setup.Pattern->GetCompileStatus()));
+        }
+        graph->GetEntryPoint(0, false)->SetValue(graph->GetContext(), NUdf::TUnboxedValue(left.Value));
+        graph->GetEntryPoint(1, false)->SetValue(graph->GetContext(), NUdf::TUnboxedValue(right.Value));
+        CompareListAndStreamIgnoringOrder(expected, *graph);
     }
 
     Y_UNIT_TEST_TWIN(TestOutputRowsOperatorStat, BlockJoin) {

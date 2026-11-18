@@ -1,0 +1,39 @@
+{
+  "scale": 0.1,
+  "workload": "tpch",
+  "storage": "column",
+  "tables": {
+    "/Root/Database/tpch/customer": {
+      "n_rows": 15000,
+      "byte_size": 1775680
+    },
+    "/Root/Database/tpch/lineitem": {
+      "n_rows": 600572,
+      "byte_size": 42742616
+    },
+    "/Root/Database/tpch/nation": {
+      "n_rows": 25,
+      "byte_size": 2424
+    },
+    "/Root/Database/tpch/orders": {
+      "n_rows": 150000,
+      "byte_size": 9450048
+    },
+    "/Root/Database/tpch/part": {
+      "n_rows": 20000,
+      "byte_size": 1688416
+    },
+    "/Root/Database/tpch/partsupp": {
+      "n_rows": 80000,
+      "byte_size": 5834512
+    },
+    "/Root/Database/tpch/region": {
+      "n_rows": 5,
+      "byte_size": 1008
+    },
+    "/Root/Database/tpch/supplier": {
+      "n_rows": 1000,
+      "byte_size": 216344
+    }
+  }
+}

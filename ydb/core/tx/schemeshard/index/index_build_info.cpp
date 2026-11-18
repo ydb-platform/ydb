@@ -187,6 +187,9 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            *index.MutableHnswIndexDescription() = std::get<NKikimrSchemeOp::THnswIndexDescription>(SpecializedIndexDescription);
+            break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:

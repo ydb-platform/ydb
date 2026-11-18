@@ -140,6 +140,32 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TStringFixedParseFunction
+{
+public:
+    Y_FORCE_INLINE explicit TStringFixedParseFunction(i64 size);
+
+    Y_FORCE_INLINE TStringBuf operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const;
+
+private:
+    const i64 Size_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TStringFixedWriteFunction
+{
+public:
+    Y_FORCE_INLINE explicit TStringFixedWriteFunction(i64 size);
+
+    Y_FORCE_INLINE void operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
+
+private:
+    const i64 Size_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TParseFunctions
 {
     using TUuidFunction = TUuidParseFunction;
@@ -149,6 +175,8 @@ struct TParseFunctions
 
     template <NSkiff::EWireType WireType>
     using TDirectFunction = TDirectParseFunction<WireType>;
+
+    using TStringFixedFunction = TStringFixedParseFunction;
 
     template <NSkiff::EWireType WireType>
     using TDecimalFunction = TDecimalParseFunction<WireType>;
@@ -163,6 +191,8 @@ struct TWriteFunctions
 
     template <NSkiff::EWireType WireType>
     using TDirectFunction = TDirectWriteFunction<WireType>;
+
+    using TStringFixedFunction = TStringFixedWriteFunction;
 
     template <NSkiff::EWireType WireType>
     using TDecimalFunction = TDecimalWriteFunction<WireType>;

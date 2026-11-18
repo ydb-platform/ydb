@@ -286,9 +286,6 @@ runs:
           --slug "${REPOSITORY_SLUG}"
           --sha "${COMMIT_SHA}"
           --branch "${BRANCH}"
-          --disable-search
-          --plugin noop
-          --file "$report_copy"
           --flag "${FLAG}"
           --name "${SUITE}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
         )
@@ -296,7 +293,13 @@ runs:
         if [ -n "${PR_NUMBER}" ]; then
           upload_args+=(--pull-request-number "${PR_NUMBER}")
         fi
-        codecovcli upload-coverage "${upload_args[@]}"
+        python3 .github/scripts/codecov/upload_coverage.py \
+          --source-root "$PWD" \
+          --suite "${SUITE}" \
+          --report "$report_copy" \
+          --config "$PWD/.github/codecov.yml" \
+          --temp-dir "$RUNNER_TEMP" \
+          -- "${upload_args[@]}"
         # Pin the exact successful upload for the patch job. A failed-jobs-only
         # rerun can legitimately reuse a successful component's older receipt.
         python3 - <<'PY'

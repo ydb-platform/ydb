@@ -1720,6 +1720,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "empty SourceId";
         } else if (cmd.GetPartitionKey().size() > 256) {
             errorStr = "too long partition key";
+        } else if (cmd.GetExplicitHash().size() > Max<ui8>()) {
+            errorStr = "too long explicit hash";
         } else if (cmd.GetSeqNo() < 0) {
             errorStr = "SeqNo must be >= 0";
         } else if (cmd.HasMaxSeqNo() && cmd.GetMaxSeqNo() < 0) {
@@ -2007,6 +2009,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, NWilson::T
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
     THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender,
             req.GetCmdGetOwnership().GetForce(), req.GetCmdGetOwnership().GetRegisterIfNotExists());
+    event->WriteSessionQuotaWaitTime = TDuration::MilliSeconds(Max<i64>(0, req.GetCmdGetOwnership().GetQuotaWaitTimeMs()));
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
@@ -2326,6 +2329,26 @@ void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, NWilson::TT
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SPLIT_MESSAGE_GROUP);
     ctx.Send(partActor, new TEvPQ::TEvSplitMessageGroup(responseCookie, std::move(deregistrations), std::move(registrations)), 0, 0, std::move(traceId));
+}
+
+void TPersQueue::HandleEmitHeartbeatRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
+    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
+{
+    PQ_ENSURE(req.HasCmdEmitHeartbeat());
+    const auto& cmd = req.GetCmdEmitHeartbeat();
+
+    if (!cmd.HasHeartbeat()) {
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "no Heartbeat");
+    }
+    if (cmd.GetHeartbeat().GetData().empty()) {
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "empty Heartbeat");
+    }
+    if (cmd.GetHeartbeat().GetData().size() > MAX_HEARTBEAT_SIZE) {
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "Too big Heartbeat");
+    }
+
+    InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_WRITE);
+    ctx.Send(partActor, new TEvPQ::TEvEmitHeartbeat(responseCookie, THeartbeat::Parse(cmd.GetHeartbeat())), 0, 0, std::move(traceId));
 }
 
 const TPartitionInfo& TPersQueue::GetPartitionInfo(const NKikimrClient::TPersQueuePartitionRequest& req) const
@@ -2657,7 +2680,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         + req.HasCmdPublishRead()
         + req.HasCmdForgetRead()
         + req.HasCmdUpdateReadMetrics()
-        + req.HasCmdAbortDeferredStaging();
+        + req.HasCmdAbortDeferredStaging()
+        + req.HasCmdEmitHeartbeat();
 
     if (count != 1) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -2666,11 +2690,22 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     }
 
     if (IsTopicMutateDisabled(ctx)
-        && (req.CmdWriteSize() > 0 || req.HasCmdSetClientOffset()))
+        && (req.CmdWriteSize() > 0 || req.HasCmdEmitHeartbeat()))
     {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
                    "Topic mutations are temporarily disabled");
         return;
+    }
+
+    if (IsTopicMutateDisabled(ctx)
+        && req.HasCmdSetClientOffset())
+    {
+        const auto* consumer = GetConsumer(Config, req.GetCmdSetClientOffset().GetClientId());
+        if (!consumer || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+                       "Topic mutations are temporarily disabled");
+            return;
+        }
     }
 
     if (req.HasWriteId()) {
@@ -2711,6 +2746,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         HandleSplitMessageGroupRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdUpdateReadMetrics()) {
         HandleUpdateReadMetricsRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
+    } else if (req.HasCmdEmitHeartbeat()) {
+        HandleEmitHeartbeatRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else {
         PQ_LOG_ERROR_AND_DIE("unknown or empty command");
         return;
@@ -4211,36 +4248,6 @@ void TPersQueue::AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
     range->SetIncludeTo(false);
 }
 
-void TPersQueue::AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
-                                   const NKikimrPQ::TPQTabletConfig& cfg,
-                                   const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
-                                   const NKikimrPQ::TPartitions& partitionsData,
-                                   const TActorContext& ctx)
-{
-    PQ_ENSURE(request);
-
-    TString str;
-    PQ_ENSURE(cfg.SerializeToString(&str));
-
-    auto write = request->Record.AddCmdWrite();
-    write->SetKey(KeyConfig());
-    write->SetValue(str);
-    write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
-    write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-
-    auto graph = MakePartitionGraph(cfg);
-    for (const auto& partition : cfg.GetPartitions()) {
-        auto explicitMessageGroups = CreateExplicitMessageGroups(bootstrapCfg, partitionsData, graph, partition.GetPartitionId());
-
-        TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);
-        for (const auto& [id, mg] : *explicitMessageGroups) {
-            sourceIdWriter.RegisterSourceId(id, mg.SeqNo, 0, ctx.Now(), std::move(mg.KeyRange), false);
-        }
-
-        sourceIdWriter.FillRequest(request, TPartitionId(partition.GetPartitionId()));
-    }
-}
-
 void TPersQueue::AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& request)
 {
     NKikimrPQ::TTabletTxInfo info;
@@ -5197,14 +5204,11 @@ void TPersQueue::SendProposeTransactionOverloaded(const TActorId& target,
 void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
                                               TDistributedTransaction& tx)
 {
-    auto graph = MakePartitionGraph(tx.TabletConfig);
-
     for (auto& [partitionId, partition] : Partitions) {
         if (partitionId.IsSupportivePartition()) {
             continue;
         }
 
-        auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData, graph, partitionId.OriginalPartitionId);
         auto event = std::make_unique<TEvPQ::TEvProposePartitionConfig>(tx.Step, tx.TxId);
 
         event->TopicConverter = tx.TopicConverter;

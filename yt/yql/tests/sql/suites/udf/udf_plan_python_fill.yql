@@ -1,0 +1,18 @@
+USE plato;
+PRAGMA config.flags("ShowLinksInPlan");
+
+$script = @@
+def Decorate(value):
+    return b"[" + value + b"]"
+@@;
+
+$decorate = Python3::Decorate(Callable<(String)->String>, $script);
+$rows = [
+    <|value: "alpha"|>,
+    <|value: "beta"|>
+];
+
+-- There is no input table: the computation is in YtFill.Content.
+INSERT INTO Output WITH TRUNCATE
+SELECT $decorate(value) AS value
+FROM AS_TABLE($rows);

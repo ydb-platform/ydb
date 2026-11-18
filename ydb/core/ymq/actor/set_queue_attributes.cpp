@@ -163,12 +163,12 @@ private:
     void UpdateTopic() {
         Ydb::Topic::AlterTopicRequest request;
         request.set_path(GetTopicName());
-        if (ValidatedAttributes_.MessageRetentionPeriod) {
-            request.mutable_set_retention_period()->set_seconds(*ValidatedAttributes_.MessageRetentionPeriod);
-        }
 
         auto* consumer = request.add_alter_consumers();
         consumer->set_name(ConsumerName);
+        if (ValidatedAttributes_.MessageRetentionPeriod) {
+            consumer->mutable_set_availability_period()->set_seconds(*ValidatedAttributes_.MessageRetentionPeriod);
+        }
 
         if (ValidatedAttributes_.ContentBasedDeduplication) {
             request.set_set_content_based_deduplication(*ValidatedAttributes_.ContentBasedDeduplication);

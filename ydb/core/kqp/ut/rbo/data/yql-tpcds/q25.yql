@@ -12,21 +12,21 @@ SELECT
     Sum(sr_net_loss) AS store_returns_loss,
     Sum(cs_net_profit) AS catalog_sales_profit
 FROM
-    `/Root/test/ds/store_sales`
+    `store_sales`
 ,
-    `/Root/test/ds/store_returns`
+    `store_returns`
 ,
-    `/Root/test/ds/catalog_sales`
+    `catalog_sales`
 ,
-    `/Root/test/ds/date_dim` AS d1
+    `date_dim` AS d1
 ,
-    `/Root/test/ds/date_dim` AS d2
+    `date_dim` AS d2
 ,
-    `/Root/test/ds/date_dim` AS d3
+    `date_dim` AS d3
 ,
-    `/Root/test/ds/store`
+    `store`
 ,
-    `/Root/test/ds/item`
+    `item`
 WHERE
     d1.d_moy == 4
     AND d1.d_year == 2000

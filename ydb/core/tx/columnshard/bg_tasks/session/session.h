@@ -76,7 +76,10 @@ public:
     }
 
     void FinishActor() {
-        AFL_VERIFY(!!ActorId);
+        // Stop() or an earlier completion may have already requested actor shutdown.
+        if (!ActorId) {
+            return;
+        }
         NActors::TActivationContext::AsActorContext().Send(*ActorId, new NActors::TEvents::TEvPoisonPill);
         ActorId.reset();
     }

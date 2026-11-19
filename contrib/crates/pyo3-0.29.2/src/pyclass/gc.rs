@@ -1,0 +1,64 @@
+// TODO https://github.com/PyO3/pyo3/issues/5487
+#![allow(clippy::undocumented_unsafe_blocks)]
+
+use core::{
+    ffi::{c_int, c_void},
+    marker::PhantomData,
+    num::NonZero,
+};
+
+use crate::{ffi, Py};
+
+/// Error returned by a `__traverse__` visitor implementation.
+#[repr(transparent)]
+pub struct PyTraverseError(NonZero<c_int>);
+
+impl PyTraverseError {
+    /// Returns the error code.
+    pub(crate) fn into_inner(self) -> c_int {
+        self.0.into()
+    }
+}
+
+/// Object visitor for GC.
+#[derive(Clone)]
+pub struct PyVisit<'a> {
+    pub(crate) visit: ffi::visitproc,
+    pub(crate) arg: *mut c_void,
+    /// Prevents the `PyVisit` from outliving the `__traverse__` call.
+    pub(crate) _guard: PhantomData<&'a ()>,
+}
+
+impl PyVisit<'_> {
+    /// Visit `obj`.
+    ///
+    /// Note: `obj` accepts a variety of types, including
+    /// - `&Py<T>`
+    /// - `&Option<Py<T>>`
+    /// - `Option<&Py<T>>`
+    pub fn call<'a, T, U: 'a>(&self, obj: T) -> Result<(), PyTraverseError>
+    where
+        T: Into<Option<&'a Py<U>>>,
+    {
+        let ptr = obj.into().map_or_else(core::ptr::null_mut, Py::as_ptr);
+        if !ptr.is_null() {
+            match NonZero::new(unsafe { (self.visit)(ptr, self.arg) }) {
+                None => Ok(()),
+                Some(r) => Err(PyTraverseError(r)),
+            }
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PyVisit;
+    use static_assertions::assert_not_impl_any;
+
+    #[test]
+    fn py_visit_not_send_sync() {
+        assert_not_impl_any!(PyVisit<'_>: Send, Sync);
+    }
+}

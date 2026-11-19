@@ -7,6 +7,41 @@
 
 using namespace NYT;
 
+TEST(TJobStatisticsTest, TaggedStatistics)
+{
+    TJobStatistics stat(NodeFromYsonString(R"""({
+        data = { input = { data_weight = [
+            {tags={job_state=running;job_type=map;pool_tree=physical};summary={sum=30;count=2;min=10;max=20}};
+            {tags={job_state=running;job_type=map;pool_tree=cloud};summary={sum=40;count=1;min=40;max=40}};
+            {tags={job_state=completed;job_type=map;pool_tree=physical};summary={sum=100;count=1;min=100;max=100}};
+            {tags={job_state=failed;job_type=map;pool_tree=physical};summary={sum=500;count=1;min=500;max=500}};
+            {tags={job_state=unknown;job_type=map;pool_tree=physical};summary={sum=1000;count=1;min=1000;max=1000}};
+        ]; row_count = [
+            {tags={job_state=running;job_type=partition_map;pool_tree=physical};summary={sum=7;count=1;min=7;max=7}};
+        ]}};
+        custom = {"path/with/slashes" = [
+            {tags={job_state=completed;job_type=map;pool_tree=physical};summary={sum=-3;count=1;min=-3;max=-3}};
+            {tags={job_state=completed;job_type=map;pool_tree=cloud};summary={sum=-5;count=1;min=-5;max=-5}};
+        ]};
+    })"""));
+
+    EXPECT_EQ(stat.GetStatistics("data/input/data_weight").Sum(), 100);
+    EXPECT_EQ(stat.GetStatistics("data/input/row_count").Sum(), TMaybe<i64>());
+    auto running = stat.JobState({EJobState::Running}).GetStatistics("data/input/data_weight");
+    EXPECT_EQ(running.Sum(), 70);
+    EXPECT_EQ(running.Count(), 3);
+    EXPECT_EQ(running.Min(), 10);
+    EXPECT_EQ(running.Max(), 40);
+    EXPECT_EQ(running.Avg(), 70 / 3);
+    EXPECT_EQ(stat.JobState({EJobState::Running, EJobState::Completed}).GetStatistics("data/input/data_weight").Sum(), 170);
+    EXPECT_EQ(stat.JobState({}).GetStatistics("data/input/data_weight").Sum(), 670);
+    EXPECT_EQ(stat.JobState({EJobState::Running}).TaskName({ETaskName::PartitionMap0}).GetStatistics("data/input/row_count").Sum(), 7);
+    EXPECT_EQ(stat.JobState({EJobState::Running}).TaskName({ETaskName::PartitionMap0}).GetStatistics("data/input/data_weight").Sum(), TMaybe<i64>());
+    EXPECT_EQ(stat.GetCustomStatistics("path\\/with\\/slashes").Sum(), -8);
+    EXPECT_EQ(stat.GetCustomStatistics("path\\/with\\/slashes").Min(), -5);
+    EXPECT_EQ(stat.GetCustomStatistics("path\\/with\\/slashes").Max(), -3);
+}
+
 TEST(TJobStatisticsTest, Simple)
 {
     const TStringBuf input = R"""(

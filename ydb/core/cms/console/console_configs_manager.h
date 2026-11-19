@@ -98,6 +98,8 @@ public:
     void ReplaceDatabaseConfigMetadata(const TString &config, bool force, TUpdateDatabaseConfigOpContext& opCtx);
     void ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opCtx);
     bool IsDatabaseConfigSelectorsAllowed(const TString& database) const;
+    // Check whether the database attribute enables config types without AllowInDatabaseConfig.
+    bool IsAllTypesInDatabaseConfigAllowed(const TString& database) const;
 
     void SendInReply(const TActorId& sender, const TActorId& icSession, std::unique_ptr<IEventBase> ev, ui64 cookie = 0);
 
@@ -146,6 +148,10 @@ public:
                                                 const TActorContext &ctx) const;
 
 private:
+    // Read a tenant bool attribute, defaulting to false for a missing tenant,
+    // missing attribute, or invalid value.
+    bool IsTenantBoolAttributeEnabled(const TString& database, TStringBuf key) const;
+
     class TTxAddConfigSubscription;
     class TTxCleanupSubscriptions;
     class TTxConfigure;
@@ -221,6 +227,8 @@ private:
 
     template <typename TRequestEvent, typename TResponse>
     bool CheckSession(TEventHandle<TRequestEvent>& ev, std::unique_ptr<TResponse>& failEvent, TResponse::ProtoRecordType::EStatus status);
+
+    bool IsCurrentConfigSession(const TActorId& senderId, const TActorId& pipeServerId) const;
 
     template <class T>
     void HandleWithRights(T &ev, const TActorContext &ctx) {

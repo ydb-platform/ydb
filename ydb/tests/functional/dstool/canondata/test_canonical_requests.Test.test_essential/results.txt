@@ -52,9 +52,6 @@ dstool
 │  ├─ list                              List pools
 │  ├─ set                               Set storage pool settings that are not 
 │  │                                    part of the pool definition
-│  ├─ set-bridge-mode                   Make storage pool of bridged cluster 
-│  │                                    bridged or ordinary one; its groups keep
-│  │                                     their ids and data
 │  └─ create
 │     └─ virtual                        Create pool suitable for virtual groups
 ├─ box
@@ -82,6 +79,12 @@ dstool
 │  │                                    by=space_ratio):
 │  │                                       Redistributes VDisks based on 
 │  │                                    available free space ratios.
+│  │                                    
+│  │                                    4. Group slot-based balancing (--sort-
+│  │                                    by=group_slots):
+│  │                                       Equalizes the number of VDisks from 
+│  │                                    selected groups or a storage pool across
+│  │                                     PDisks.
 │  │                                    
 │  │                                    Use --storage-pool to limit balancing to
 │  │                                     a specific storage pool, or --group-ids

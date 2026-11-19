@@ -18,7 +18,7 @@ void TBlobsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSu
     auto& source = SourceLease->GetSource();
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("fbf"));
     source.MutableStageData().AddBlobs(source.DecodeBlobAddresses(ExtractBlobsData()));
-    AFL_VERIFY(Step.Next());
+    YDB_LOG_VERIFY(Step.Next());
     auto task = std::make_shared<TStepAction>(std::move(SourceLease), std::move(Step), Context->GetCommonContext()->GetScanActorId(), false);
     Context->GetCommonContext()->SendTaskToExecute(task);
 }
@@ -87,7 +87,7 @@ void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::N
     for (auto&& [_, i] : DataFetchers) {
         i->OnDataReceived(readActions, blobsData);
     }
-    AFL_VERIFY(blobsData.IsEmpty());
+    YDB_LOG_VERIFY(blobsData.IsEmpty());
     if (readActions.IsEmpty()) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("cf_finished"));
         for (auto&& i : DataFetchers) {

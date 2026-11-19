@@ -1,0 +1,6 @@
+package temporal:workflow-runtime@0.1.0;
+
+world workflow-module {
+  import workflow-host;
+  export workflow-guest;
+}

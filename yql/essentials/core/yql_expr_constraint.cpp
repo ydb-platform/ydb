@@ -25,6 +25,21 @@ using namespace NNodes;
 
 namespace {
 
+bool NeedMultiConstraintInferenceFix(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char Flag[] = "FixMultiConstraintInference";
+    return IsOptimizerEnabled<Flag>(*types) || !IsOptimizerDisabled<Flag>(*types);
+}
+
+TConstraintNode::TListType GetRecurringStateConstraints(const TExprNode& initialState) {
+    auto constraints = initialState.GetAllConstraints();
+    // An empty initial state can become non-empty after an update.
+    constraints.erase(std::remove_if(constraints.begin(), constraints.end(), [](const TConstraintNode* constraint) {
+                          return constraint->GetName() == TEmptyConstraintNode::Name();
+                      }), constraints.end());
+    return constraints;
+}
+
 template <size_t FromChild, class... Other>
 struct TApplyConstraintFromInput;
 
@@ -316,8 +331,7 @@ public:
 private:
     static bool IsEventTimeType(const TTypeAnnotationNode* type) {
         type = RemoveOptionalType(type);
-        return type && type->GetKind() == ETypeAnnotationKind::Data
-            && type->Cast<TDataExprType>()->GetSlot() == EDataSlot::Timestamp;
+        return type && type->GetKind() == ETypeAnnotationKind::Data && type->Cast<TDataExprType>()->GetSlot() == EDataSlot::Timestamp;
     }
 
     static TStatus StreamingHoppingWrap(
@@ -325,8 +339,7 @@ private:
         const TStreamingConstraintNode* streaming,
         const TExprNode* timeExtractor,
         TStringBuf hoppingColumn,
-        TExprContext& ctx
-    ) {
+        TExprContext& ctx) {
         const auto pos = ctx.GetPosition(input->Pos());
 
         if (!streaming->GetEventTime()) {
@@ -350,9 +363,9 @@ private:
 
         if (!streaming->IsEventTimePath(*hoppingEventTime)) {
             ctx.AddError(TIssue(pos, TStringBuilder()
-                << "HoppingWindow time extractor does not match assigned event time (expected: "
-                << JoinSeq('.', *streaming->GetEventTime())
-                << ", got: " << JoinSeq('.', *hoppingEventTime) << ")"));
+                                         << "HoppingWindow time extractor does not match assigned event time (expected: "
+                                         << JoinSeq('.', *streaming->GetEventTime())
+                                         << ", got: " << JoinSeq('.', *hoppingEventTime) << ")"));
             return TStatus::Error;
         }
 
@@ -1059,8 +1072,7 @@ private:
 
     template <class TInput>
     static void PreserveStreamingProperty(const TInput& input, TConstraintSet& output, TExprContext& ctx) {
-        if (input.template GetConstraint<TStreamingConstraintNode>()
-            && !output.GetConstraint<TStreamingConstraintNode>()) {
+        if (input.template GetConstraint<TStreamingConstraintNode>() && !output.GetConstraint<TStreamingConstraintNode>()) {
             output.AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
         }
     }
@@ -1192,6 +1204,7 @@ private:
             }
         }
 
+        const bool fixMultiInference = NeedMultiConstraintInferenceFix(&Types_);
         const auto inputMulti = input->Head().GetConstraint<TMultiConstraintNode>();
         if (lambdaMulti && !input->Head().GetConstraint<TEmptyConstraintNode>()) {
             TMultiConstraintNode::TMapType remappedItems;
@@ -1210,41 +1223,41 @@ private:
                 } else if (lambdaVarIndex && inputMulti) {
                     const auto range = lambdaVarIndex->GetIndexMapping().equal_range(item.first);
                     switch (std::distance(range.first, range.second)) {
-                    case 0: // new index
-                        PreserveStreamingProperty(input->Head(), remappedItems.back().second, ctx);
-                        break;
-                    case 1: // remapping 1 to 1
-                        if (const auto origConstr = inputMulti->GetItem(range.first->second)) {
-                            GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
-                            GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
-                            GetFromMapLambda<TPartOfSortedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
-                            GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
-                            GetFromMapLambda<TPartOfStreamingConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
+                        case 0: // new index
+                            PreserveStreamingProperty(input->Head(), remappedItems.back().second, ctx);
+                            break;
+                        case 1: // remapping 1 to 1
+                            if (const auto origConstr = inputMulti->GetItem(range.first->second)) {
+                                GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
+                                GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
+                                GetFromMapLambda<TPartOfSortedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
+                                GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
+                                GetFromMapLambda<TPartOfStreamingConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
 
-                            if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
+                                if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
+                                    remappedItems.pop_back();
+                                }
+                            } else {
                                 remappedItems.pop_back();
                             }
-                        } else {
-                            remappedItems.pop_back();
-                        }
-                        break;
-                    default: // remapping many to one
-                    {
-                        std::vector<const TConstraintSet*> nonEmpty;
-                        for (auto i = range.first; i != range.second; ++i) {
-                            if (auto origConstr = inputMulti->GetItem(i->second)) {
-                                nonEmpty.push_back(origConstr);
+                            break;
+                        default: // remapping many to one
+                        {
+                            std::vector<const TConstraintSet*> nonEmpty;
+                            for (auto i = range.first; i != range.second; ++i) {
+                                if (auto origConstr = inputMulti->GetItem(i->second)) {
+                                    nonEmpty.push_back(origConstr);
+                                }
                             }
-                        }
-                        EraseIf(nonEmpty, [](const TConstraintSet* c) { return !!c->GetConstraint<TEmptyConstraintNode>(); });
+                            EraseIf(nonEmpty, [](const TConstraintSet* c) { return !!c->GetConstraint<TEmptyConstraintNode>(); });
 
-                        if (nonEmpty.empty()) {
-                            remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
-                        } else if (nonEmpty.size() == 1) {
-                            remappedItems.back().second = *nonEmpty.front();
+                            if (nonEmpty.empty()) {
+                                remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+                            } else if (nonEmpty.size() == 1) {
+                                remappedItems.back().second = *nonEmpty.front();
+                            }
+                            PreserveStreamingProperty(input->Head(), remappedItems.back().second, ctx);
                         }
-                        PreserveStreamingProperty(input->Head(), remappedItems.back().second, ctx);
-                    }
                     }
                 } else {
                     remappedItems.back().second = item.second;
@@ -1254,7 +1267,7 @@ private:
             if (remappedItems) {
                 input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(remappedItems)));
             }
-        } else if (inputMulti && lambdaVarIndex) { // Many to one
+        } else if (inputMulti && lambdaVarIndex && !fixMultiInference) { // Many to one
             const auto range = lambdaVarIndex->GetIndexMapping().equal_range(0);
             static const TConstraintSet DefConstr;
             std::vector<const TConstraintSet*> nonEmpty;
@@ -1610,6 +1623,11 @@ private:
         if (const auto varIndex = TVarIndexConstraintNode::MakeCommon(structConstraints, ctx)) {
             input->AddConstraint(varIndex);
         }
+        if (NeedMultiConstraintInferenceFix(&Types_)) {
+            if (const auto multi = TMultiConstraintNode::MakeCommon(structConstraints, ctx)) {
+                input->AddConstraint(multi);
+            }
+        }
 
         return TStatus::Ok;
     }
@@ -1958,16 +1976,8 @@ private:
             return TStatus::Ok;
         }
 
-        const std::vector<const TConstraintSet*> both = { &lambda->GetConstraintSet(), &input->Tail().GetConstraintSet() };
-        TApplyCommonConstraint<TPartOfSortedConstraintNode
-            , TPartOfChoppedConstraintNode
-            , TPartOfUniqueConstraintNode
-            , TPartOfDistinctConstraintNode
-            , TPartOfStreamingConstraintNode
-            , TEmptyConstraintNode
-            , TVarIndexConstraintNode
-            , TMultiConstraintNode
-            >::Do(input, both, ctx);
+        const std::vector<const TConstraintSet*> both = {&lambda->GetConstraintSet(), &input->Tail().GetConstraintSet()};
+        TApplyCommonConstraint<TPartOfSortedConstraintNode, TPartOfChoppedConstraintNode, TPartOfUniqueConstraintNode, TPartOfDistinctConstraintNode, TPartOfStreamingConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>::Do(input, both, ctx);
         return TStatus::Ok;
     }
 
@@ -3007,7 +3017,7 @@ private:
         auto argsConstraints = GetConstraintsForInputArgument<true, false, false>(*input, ctx);
 
         const auto initState = input->Child(1);
-        argsConstraints.emplace_back(initState->GetAllConstraints());
+        argsConstraints.emplace_back(GetRecurringStateConstraints(*initState));
 
         if (const auto status = UpdateLambdaConstraints(input->ChildRef(2), ctx, argsConstraints)
                                     .Combine(UpdateLambdaConstraints(input->TailRef(), ctx, argsConstraints));
@@ -3086,7 +3096,7 @@ private:
 
         argsConstraints.reserve(argsConstraints.size() + initLambda->ChildrenSize() - 1U);
         for (ui32 i = 1U; i < initLambda->ChildrenSize(); ++i) {
-            argsConstraints.emplace_back(initLambda->Child(i)->GetAllConstraints());
+            argsConstraints.emplace_back(GetRecurringStateConstraints(*initLambda->Child(i)));
         }
 
         if (const auto status = UpdateLambdaConstraints(input->ChildRef(2), ctx, argsConstraints)
@@ -3129,7 +3139,7 @@ private:
         const auto initLambda = input->Child(1);
         argsConstraints.reserve(argsConstraints.size() + initLambda->ChildrenSize() - 1U);
         for (ui32 i = 1U; i < initLambda->ChildrenSize(); ++i) {
-            argsConstraints.emplace_back(initLambda->Child(i)->GetAllConstraints());
+            argsConstraints.emplace_back(GetRecurringStateConstraints(*initLambda->Child(i)));
         }
 
         if (const auto status = UpdateLambdaConstraints(input->ChildRef(2), ctx, argsConstraints); status != TStatus::Ok) {
@@ -3449,13 +3459,7 @@ private:
         }
 
         const auto initState = input->Child(1);
-        auto stateConstraints = initState->GetAllConstraints();
-        stateConstraints.erase(
-            std::remove_if(
-                stateConstraints.begin(),
-                stateConstraints.end(),
-                [](const TConstraintNode* c) { return c->GetName() == TEmptyConstraintNode::Name(); }),
-            stateConstraints.end());
+        const auto stateConstraints = GetRecurringStateConstraints(*initState);
 
         TConstraintNode::TListType argConstraints;
         if (const auto status = UpdateLambdaConstraints(input->TailRef(), ctx, {argConstraints, stateConstraints}); status != TStatus::Ok) {

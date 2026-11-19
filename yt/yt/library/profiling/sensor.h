@@ -204,6 +204,7 @@ DEFINE_BIT_ENUM_WITH_UNDERLYING_TYPE(ESummaryPolicy, ui8,
     ((Min)                 (0x0004))
     ((Max)                 (0x0008))
     ((Avg)                 (0x0010))
+    ((Count)               (0x0040))
     // Export policy.
     ((OmitNameLabelSuffix) (0x0020))
 );

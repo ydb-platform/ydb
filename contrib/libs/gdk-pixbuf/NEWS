@@ -1,0 +1,1190 @@
+2.44.8
+======
+
+- glycin: Support x-/y-dpi options for png, tiff and jpeg
+- Translation updates
+
+2.44.7
+===
+
+- xpm: Fix loading the xpm module if built-in
+- glycin: Fix the build on 32bit
+- glycin: Use fwrite to avoid problems with saving
+- glycin: Add signature for webp
+- glycin: Make filename tricks work in pid namespaces
+- Translation updates
+
+2.44.6
+===
+
+- build: Add a legacy_xpm option to build the old xpm loader
+- xpm: Rename the old xpm loader to legacy-xpm, and use it
+  for gdk_pixbuf_new_from_xpm_data if it is available.
+  Note that the old loader will only be used for this purpose.
+  xpm files still get loaded with glycin
+- jpeg: Reject data with an unsupported number of components
+- Update contribution guidelines
+- glycin: Fix an issue with looping animations
+- Do not accidentally query loaders from the host
+
+2.44.5
+===
+
+- Make the testsuite work with glycin
+- glycin: Add support for xpm and xbm.
+  Note that xpm+xbm support is new in glycin 2.1
+- Translation updates
+
+2.44.4
+===
+
+- glycin: Make svgz work
+- glycin: Support saving avif
+- docs: Add deprecation tags for GdkPixbufAnimation
+- bmp: Fix loading of bottom-up images
+
+2.44.3
+===
+
+- glycin: Fix an off-by-one-error in option handling
+- glycin: Handle outdated uses of the prepare callback
+- glycin: Consolidate image and animation loading
+- glycin: Handle animations better, using new glycin API
+- build: Require glycin 2.0.1
+
+2.44.2
+===
+
+- glycin: Ignore unknowns keys when saving [!239]
+- Translation updates
+
+2.44.1
+===
+
+- Re-enable animation tests [!236]
+- Fix leak in load_animation_with_glycin [!237]
+
+2.44.0
+===
+
+- build: Fix cross-building
+- build: Don't build documentation by default
+- glycin: Implement animation
+- Translation updates
+
+2.43.5 (development)
+===
+
+- The animation-related APIs have been deprecated
+- jpeg: Fix a crash related to icc data (CVE-2025-7345)
+- glycin: Save jpeg without alpha
+- glycin: Simplify wrapping code and avoid a copy
+- glycin: Support exif orientation
+- glycin: Set sandbox mode for saving
+- Plug some memory leaks
+- build: Disabled the thumbnailer by default on Linux
+- Prefer builtin modules
+
+2.43.3 (development)
+===
+
+- Add a native loader for Android builds
+- Use the glycin loader for SVG as well.
+- Change the default build options to be 'auto' for all loader options.
+  On Linux, we build only the glycin loader, unless overwritten.
+- Change the default value for the builtin_loaders option to 'default'.
+  On Linux, we interpret 'default' as 'glycin'. On other platforms, we
+  interpret it as 'png,jpeg' (which was the previous default value).
+- Require Meson 1.5 to build gdk-pixbuf
+- Use glycin for saving. The following formats are supported:
+  png, jpeg, tiff, webp, ico, bmp. For png, jpeg and tiff, the most
+  common options are supported when saving.
+- Fix introspection annotations for loading and saving GdkPixbuf
+  from and to streams asynchronously
+
+2.43.2 (development)
+===
+
+- Make the thumbnailer optional
+- Add a glycin loader. Glycin is a sandboxed image loading framework that
+  is written in rust, and supports more image formats than gdk-pixbuf ever
+  did. On Linux, we recommend that you build gdk-pixbuf with *only* the
+  glycin loaders, and rely on glycin for thumbnailers too. Like this:
+
+  meson configure -Dpng=disabled                \
+                  -Dtiff=disabled               \
+                  -Djpeg=disabled               \
+                  -Dgif=disabled                \
+                  -Dothers=disabled             \
+                  -Dglycin=enabled              \
+                  -Dbuiltin_loaders='glycin'    \
+                  -Dthumbnailer=disabled
+
+  Note that this change has some potential for fallout: use of gdk-pixbuf
+  (e.g. for pixdata conversions) will fail if bubblewrap sandboxing is not
+  available (as is the case in many build systems). The recommendation is
+  to simply stop using pixdata as a format for resources, and just use png.
+- Deprecate "gtk_doc" configuration option; to conform with the rest of the
+  GNOME core libraries, use "documentation" instead
+- Remove the long-since deprecated "docs" configuration option
+- Require Meson 1.0 to build gdk-pixbuf
+- Deprecate the XPM-related API; the XPM loader is disabled by default,
+  and we have better API for loading those kinds of assets, though nobody
+  should be shipping XPM files in 2025
+
+2.42.12 (stable)
+===
+
+- Fix a build failure (Christian Heusel)
+- Fix occasional build failures (Benjamin Gilbert)
+- ani: Reject files with multiple INA or IART chunks (Benjamin Gilbert)
+- ani: Reject files with multiple anih chunks (Benjamin Gilbert, CVE-2022-48622)
+- ani: validate chunk size (Benjamin Gilbert)
+- Translation updates
+
+2.42.11 (stable)
+===
+
+- Disable fringe loaders by default
+- Introspection fixes [#146]
+- Translation updates
+
+2.42.10 (stable)
+===
+
+- Search for rst2man.py [!145, Matt Turner]
+- Update the memory size limit for JPEG images [#216, #218]
+- Translation updates
+
+2.42.9 (stable)
+===
+
+- Fix the check for maximum value of LZW initial code size [#136, Robert Ancell]
+- Use CMake for dependencies on Windows/MSVC [!131, Chun-Wei Fan]
+- Add option for building tests [!132]
+- Move man pages to reStructuredText [!134]
+- Disable relocation when built as a static libary on Windows [!136, Hesham Essam]
+- Update wrap file for libjpeg-turbo [!138, Georges Basile Stavracas Neto]
+- Limit the memory size when loading image data [#205, Sam Ezeh]
+
+2.42.8 (stable)
+===
+
+- Clear the pixbuf's memory buffer to avoid returning uninitialized memory [#199]
+- Turn GdkPixbufModule functions into typed callbacks [!123]
+- tiff: Use non-deprecated C99 integer types [!124]
+- gif: Check for overflow when compositing or clearing frames [#190]
+- Change png/jpeg/tiff build options from boolean to feature [!118]
+- jpeg: Do not rely on UB around setjmp/longjmp [#143]
+- Build fixes [!114, #185, #182]
+- Documentation fixes [!120, !125]
+- Translation updates
+
+2.42.6 (stable)
+===
+
+ - Disable shared-mime-info dependency on Android [BogDan Vatra, !104]
+ - Yield gtk_doc option value in subprojects
+ - Always initialise locale on thumbnailer startup [Bastien Nocera, !110]
+ - Add fallback subproject for libjpeg [Benjamin Otte, !109]
+ - Install API reference directly under $datadir/doc/gdk-pixbuf
+ - Use type:array for the builtin_loaders option
+ - Default to using builtin png and jpeg loaders
+ - Replace platform-specific post-install script files with a Python script
+
+2.42.4 (stable)
+===
+
+ - Make enum type registration thread safe
+ - Do not install skipped test files [Jan Tojnar]
+ - Fix GIF initialization [Simon McVittie]
+ - Always run GIF loader tests [Simon McVittie]
+ - Fix leaks discovered via ASan [Simon McVittie]
+ - Expose GdkPixbufLoader API via introspection [Paolo Borelli]
+ - Fix revert-to-previous first frame behaviour for GIF files [Robert Ancell, #166]
+ - Link to libintl if needed [Fabrice Fontaine]
+ - Improve support for using gdk-pixbuf as a subproject [Xavier Claessens]
+ - Fix build with GModule disabled [Fabrice Fontaine]
+ - Use gi-docgen to generate the API reference from introspection data
+
+2.42.2 (stable)
+===
+
+ - Requre Meson 0.55.3
+ - Improve the PNG save operation
+ - Fix leak in the error path of the XPM loader
+ - Fix loading GIF without a GCE rendering color 0 [Robert Ancell, #162]
+ - Fix invalid LZW codes in the GIF loader [Robert Ancell, #164, CVE-2020-29385]
+
+2.42.0 (stable)
+===
+
+ - Remove the libjasper JPEG2000 loader
+ - Split the gdk-pixbuf-xlib library to a separate repository
+ - Fix build on Solaris [Alan Coopersmith]
+ - Fix cppcheck 'shifting signed 32-bit value warning' [Emmanuel Fleury, #96]
+ - Fix memory leaks in pixops error paths [Alex Henrie]
+ - Improve internal consistency of loaders [Federico Mena Quintero]
+ - Fix build with MSVC [Chun-wei Fan]
+ - Skip bytes during JPEG incremental load [Nathan Lee]
+ - Check for overflows [#132]
+ - Add missing test for issue #70 [Bastien Nocera]
+ - Let the test suite cope with missing loaders [#123]
+ - Fix build on SunOS [#128]
+ - Check for mmap failure [Tobias Müller]
+ - Fix UB in the XPM loader [Tobias Stoeckmann]
+ - Speed up alpha scaling pixop [Jan Ziak]
+ - Add the `gtk_doc` configuration option, and deprecate `docs`
+ - Add the `introspection` configuration option, and remove `gir` [Xavier Claessens, !85]
+ - Handle truncated PNMs more gracefully [Felix Riemann, #111]
+ - Clean up GIF loader code [Robert Ancell]
+ - Fix colormap handling in GIF [Robert Ancell, #156]
+
+2.40.0 (stable)
+===
+
+ - Allow creating a GdkPixbuf instance without any property [Federico Mena
+   Quintero, #91]
+
+2.39.2 (development)
+===
+
+ - Add gdk_pixbuf_init_modules() for applications with GdkPixbuf loader
+   modules in a separate directory [Bastien Nocera, bgo#786035]
+ - Add subproject fallback for dependencies [Nirbheek Chauhan]
+ - Handle large XPM without crashing [Bastien Nocera, #95]
+ - Use the appropriate gdk-pixbuf-query-loaders on install [Emmanuele
+   Bassi, #126]
+ - Disable deprecation warnings introduced by GLib 2.62
+ - Escape GIF version in error messages [Robert Ancell]
+ - Use the appropriate fallback for libpng on Windows [Chun-wei Fan]
+ - Render GIF frames on demand [Robert Ancell, #101]
+
+2.38.0 (stable)
+===
+ - Documentation fixes
+
+2.37.92 (release candidate)
+===
+ - Ensure that GdkPixbuf's storage is safely handled [Federico Mena Quintero]
+ - Add test case for buffer overflow in pixdata loader [Bastien Nocera, #57]
+
+2.37.0 (development)
+===
+ - Rework relocation support for loaders cache on Windows [Christoph Reiter, #776081]
+ - Properly install test data [Emmanuele Bassi, Jeremy Bicha, #795527, #795210]
+ - Plug a memory leak when using GBytes [Vitaly Kirsanov, #787626]
+ - Fix introspection annotations [Iñaki García Etxebarria, #789935]
+ - Fix documentation building with X11 disabled [Quentin Glidic, #794872]
+ - Drop Autotools build and move to Meson [Emmanuele Bassi]
+ - Fix OOB error when dithering [Bert Pauline, #748211]
+ - Drop the MMX assembly optimizations for pixops [Emmanuele Bassi]
+ - Improve compatibility for the post-install script [Brendan L, #795705]
+ - Expose the dimensions of the original image from GdkPixbufLoader [Debarshi Ray, #778517]
+ - Improve thumbnailer implementation [Debarshi Ray, #778517]
+ - Make X11 a dependency if the `x11` build option is enabled [Emmanuele Bassi, #77]
+ - Generate separate introspection data for GdkPixdata API [Emmanuele Bassi, #72]
+ - Deprecate GDK_INTERP_HYPER [Emmanuele Bassi, #3]
+ - Avoid a deprecation warning with recent libjasper [Emmanuele Bassi, #73]
+ - Fix build on macOS [Emmanuele Bassi, !5]
+ - Fix build with Visual Studio [Chun-wei Fan, !8]
+ - Fix cross-compilation of Windows build on Linux [Benjamin Gilbert, !10]
+
+2.36.12
+=======
+* build: meson fixes for win32
+* build: Make --without-libtiff work
+* build: Make x11 support optional
+* gif, ico, jpeg, tiff, icns: various fixes (#778584, #779012, #753605, #779020, #779016)
+* Implement async loading without threads
+* Translation updates
+
+2.36.11
+=======
+* build: Fix tiff loader build (#786342)
+* build: Fix the build on OS X (#786167)
+* build: Prefer newer libpng (#786035)
+* Use a free reference images for tests (#787050)
+* gif: fail quickly if image dimensions are too big (#785973)
+* xlib: Avoid an out-of-bounds error on bigendian (#775896)
+* Translation updates
+
+2.36.10
+=======
+* build: meson build improvements
+* build: win32 build fixes
+* tests: show error before failing (#786259)
+* Translation updates
+
+2.36.9
+======
+* build: meson build improvements
+* OS X: don't require shared-mime-info (#786167)
+* gif: fix a coverity warning (#785696)
+* build: make queryloaders output reproducible (#7835920
+* Translation updates
+
+2.36.8
+======
+* jpeg: restore grayscale image support (#785171)
+* bmp: Tighten image dimension checks (#776694)
+* ico: Fixo icon quality sorting (#785447)
+* Various other leak and overflow fixes (#765094, #783538, #778204)
+* Add some assertion to help static analysis (#778943)
+* Remove support for building on various obsolete platforms
+* Translation updates
+
+2.36.7
+======
+
+* Add tests for recent bug fixes
+* ico, bmp, tiff: avoid integer overflows (#776040, #776694, #780269)
+* jpeg: error out if wrong # of channels (#784866)
+* Misc.bugfixes (#784583)
+* Support mimetypes: image/wmf, image/emf
+* Translation updates
+
+2.36.6
+======
+
+* jpeg: Support the EXIF tag (#143608)
+* ico: Make option parsing locale-independent (#776990)
+* Fix build on Windows
+* Translation updates
+
+2.36.5
+======
+
+* Fix mimetypes for thumbnailer (#778451)
+* Handle fseek failure (#776990)
+* Fix signed/unsigned handling (#777374)
+* Fix an overflow check (#777315)
+* Handle extreme scaling better (#80925)
+* Translation updates
+
+2.36.4
+======
+
+* Add a fastpath for no-op scales
+* Documentation improvements (#442452)
+* Fix some coverity warnings (#776945, #768062)
+* Translation updates
+
+2.36.3
+======
+
+* gif, ico: Fix area-updated coordinates (#581484)
+* tga: Improve error handling (#575217)
+* jasper: Improve error handling (#685543)
+* Test suite improvements (#696331)
+* Minor documentation fixes (#776457)
+* Translation updates
+
+2.36.2
+======
+
+* Fix a NULL pointer dereference (#776026)
+* Fix a memory leak (#776020)
+* Support bmp headers with bitmask (#766890)
+* Add tests for scaling (#80925)
+* Handle compressed pixdata in resources (#776105)
+* Avoid a buffer overrun in the qtif loader ($#775648)
+* Fix a crash in the bmp loader (#775242)
+* Fix crash opening pnm images with large dimensions (#775232)
+* Prevent buffer overflow in the pixdata loader (#775693)
+* Translation updates
+
+2.36.1
+======
+
+* Remove the pixdata loader (#776004)
+* Fix integer overflows in the jpeg loader (#775218)
+* Add an external thumbnailer for images
+* Translation updates
+
+2.36.0
+======
+
+* Translation updates
+
+2.35.5
+======
+
+* Fix undefined behavior in overflow checks (#770986)
+* Fix a typo (#770756)
+* Avoid segfault in some tests (#771026)
+* Translation updates
+
+2.35.4
+======
+
+* Translation updates
+
+2.35.3
+======
+
+* Add API to determine supported save options (#683371)
+* Add helper API for pixbuf options (#768043)
+* Fix invalid gettext use (#758552)
+* Fix a compiler warning in the xpm loader (#768042)
+* Fix integer overflows in the bmp loader (#768688, #768738)
+* Fix a crash in the ico loader (#769170)
+* Translation updates
+
+2.35.2
+======
+
+* Use compiler directives for exporting symbols (#767164)
+* Fix a problem with nearest scaling (#766842)
+* Avoid redundant property notification
+* Translation updates
+
+2.35.1
+======
+
+* Add non-varargs variant to save to stream (#683063)
+* Add a common autotools module (#765034)
+* Translation updates
+
+2.34.0
+======
+
+* Don't force no static builds on Win32 (#760369)
+* Translation updates
+
+2.33.2
+======
+
+* Fix two crashes in the bmp loader (#747605, #758991)
+* Translation updates
+
+2.33.1
+======
+
+* Improve various tests
+* ico: integer overflow fixes
+* tga: rewrite the loader, introducing a buffer queue abstraction
+* gif: fix thumbnailing animations
+* Translation updates
+
+2.32.1
+======
+
+* Make relocations optional
+* Fix a crash due to overflow when scaling
+* Drop loaders for some rare image formats: wbmp, ras, pcx
+* Prevent testsuite failures due to lack of memory
+* Translation updates
+
+2.32.0
+======
+
+* Fix build issues (#754154)
+* Fix animation loading (#755269)
+* More overflow fixes in the scaling code (#754387)
+* Fix a crash in the tga loader
+* Translation updates: Swedish, Turkish, Slovak,
+  Indonesian, French, Greek, Polish, Brazilian Portuguese,
+  Danish, Russian, Galician, Hungarian
+
+2.31.7
+======
+
+* Fix several integer overflows (#753908, #753569)
+* Fix build failure with --disable-modules (#740912)
+* Port animations to GTask
+* Translation updates: Chinese (Taiwan), Polish
+
+2.31.6
+======
+
+* Really fix bug 752297. This is CVE-2015-4491
+* Translation updates: Catalan
+
+2.31.5
+======
+
+* Add support for g_autoptr for all object types (#750497)
+* Avoid a possible divide-by-zero in the pixbuf loader (750440)
+* Remove gettext .pot file hack (#743574)
+* Be more careful about integer overflow (#752297)
+* Translation upates: Portuguese
+
+2.31.4
+======
+
+* Bug fixes:
+ 648815 SVGZ icons in notification GNOME3
+ 725582 gdk_pixbuf_apply_embedded_orientation is not working...
+
+* Translation updates:
+ Bosnian, Danish, Italian, Kazakh, Korean, Swedish
+
+2.31.3
+======
+
+* API changes:
+- Revert an annotation change that broke bindings
+
+* Build fixes:
+- Clean up configure
+- Fix Visual Studio build
+- Define MAP_ANONYMOUS when needed
+- Include gi18n-lib.h where needed
+
+* Translation updates:
+ Hungarian, German, Indonesian, Turkish, Serbian, Slovenian,
+ Basque, Russian, Icelandic, French, Chinese (Taiwan), Galician,
+ Slovak
+
+2.31.2
+======
+
+* API changes:
+- Deprecate GdkPixdata
+- Add gdk_pixbuf_get_options() helper to list set options
+- Annotations fixes for various functions
+- Remove incorrect info about area-prepared signal
+
+* Image format support changes
+- Flag multi-page TIFF files
+- Fix memory usage for GIF animations, add note about minimum frame length
+- Return an error for truncated PNG files
+- Add density (DPI) support for JPEG, PNG and TIFF
+- Fix reading CMYK JPEG files generated by Photoshop
+- Allow saving 1-bit mono TIFF files as used in faxes
+- Simplify loader names
+- Fix loading GIF files when the first write is short
+- Add progressive loading to ICNS files
+- Add support for 256x256 ICO files
+- Fix reading MS AMCap2 BMP files
+
+* Other:
+- Honour requested depth in Xlib
+- Special-case compositing/copying with no scaling
+- Add relocation support to OSX and Linux
+- Prefer gdk-pixbuf's loaders to the GDI+ ones on Windows
+
+2.31.1
+======
+
+* Add gdk_pixbuf_get_file_info_async
+
+* Translation updates
+
+2.31.0
+======
+
+* To improve the situation for language bindings, pixbufs can now
+  be constructed from data in GBytes, and pixbuf data can also be
+  extracted in this form. The GBytes data is treated as readonly,
+  and gdk_pixbuf_get_pixels() will create a copy. To avoid this
+  copy, a new function gdk_pixbuf_read_pixels() was introduced
+  which returns a const pointer to the data without copying.
+
+2.30.8
+======
+
+* Add missing nullability annotations
+
+* Documentation improvements
+
+* Translation updates
+
+2.30.7
+======
+
+* Documentation fixes
+
+2.30.6
+======
+
+* Add annotations to gdk_pixbuf_save_to_buffer
+
+* Win32 build fixes
+
+* Translation updates
+
+2.30.5
+======
+
+* Convert documentation to markdown
+
+* Translation updates
+
+2.30.4
+======
+
+* Make test suite robust against disabled formats
+
+* Fix test failure when using libpng without iTXt support
+
+* Translation updates
+
+2.30.3
+======
+
+* Expand the test suite
+
+* Enable coverage testing with --enable-coverage
+
+* Unify sniff buffer sizes across loaders: 4k everywhere
+
+* Port to GTask (#712704)
+
+* xpm: Fix scaling (#686514)
+
+* xpm: Update colors from pango (#678996)
+
+* qtif: fix fread() error check (#721371)
+
+* Translation updates
+
+2.30.2
+======
+
+* jpeg: fix icc profile loading
+
+* jpeg: Improve error handling
+
+* Make --update-cache work better
+
+* Translation updates
+
+2.30.1
+======
+
+* Only use RLIMIT_AS when available (#708666)
+
+* Only use setrlimit when available (#710690)
+
+* Avoid a bashism (#711600)
+
+* Translation updates
+
+2.30.0
+======
+
+* Visual C++ build fixes
+
+* Translation updates
+
+2.29.3
+======
+
+* Use GLib setup for installed tests
+
+* Make installed tests find data files
+
+* Translation updates
+
+2.29.1
+======
+
+* Install some tests
+
+* ANI: Set an error if we fail to produce an animation
+
+* Translation updates
+
+2.29.0
+======
+
+* Add gdk_pixbuf_loader_write_bytes (696917)
+
+* Update GIcon implementation (688820)
+
+* Fix libpng linking issues (698093)
+
+* Translation updates (Turkish)
+
+2.28.0
+======
+
+* Translation updates (Tadjik, Russian, Crimean Tatar, Hindi)
+
+2.27.3
+======
+
+* Allow prepare_func call in stop_load (695228)
+
+* Translation updates (Lithuanian, German, Basque, Belarusian,
+  Thai, Greek, Indonesian, Korean, Assamese, Italian, Estonian,
+  Hungarian, Portuguese, Danish, Latvian)
+
+2.27.2
+======
+
+* Make gdk_pixbuf_animation_new_from_file load png files (694148)
+
+* Fix string formatting for l10n extraction (693534)
+
+* Translation updates (Hebrew, Spanish, Brazilian Portuguese,
+  Slovenian, Galician, French, Catalan, Catalan (Valencian),
+  Malayalam, Slovak, Polish, Czech, Serbian, Uyghur, Norwegian
+  bokmål, Punjabi, Traditional Chinese)
+
+2.27.1
+======
+
+* Allow loading animations from streams
+
+* Allow loading animations from resources
+
+* Fix cross-compiling for Windows and Wine (692072)
+
+* Translation updates (Hungarian, German, Polish)
+
+2.27.0
+======
+
+* The broken locking mechanism for loaders has been removed.
+  gdk-pixbuf now ignores loaders that are not marked as thread-safe.
+
+
+2.26.5
+======
+
+* Improve error message for missing cache file (686844)
+
+* Ensure we link to gobject (#686822)
+
+* Silence custom make rule (#686605)
+
+* Prevent an error pileup (#686139)
+
+* Don't use AC_PATH_PROG (#671516)
+
+* Translation updates
+ Bulgarian
+ Estonian
+ Hindi
+ Italian
+ Japanese
+ Latvian
+ Malayalam
+ Norwegian bokmål
+ Simplified Chinese
+ Telugu
+ Thai
+
+
+2.26.4
+======
+
+* Make tiff loader threadsafe
+
+* Support saving ICC profiles in jpeg (#604610)
+
+* Add some missing annotations (#683064)
+
+* Documentation improvements (#676430)
+
+* Translation updates
+ Assamese
+ Belarusian
+ Brazilian Portuguese
+ British English
+ Catalan
+ Czech
+ Danish
+ French
+ Galician
+ German
+ Greek
+ Hebrew
+ Hungarian
+ Indonesian
+ Korean
+ Latvian
+ Lithuanian
+ Norwegian bokmål
+ Polish
+ Portuguese
+ Punjabi
+ Russian
+ Serbian
+ Slovenian
+ Spanish
+ Traditional Chinese
+ Vietnamese
+
+2.26.3
+======
+
+* Fix a minor string leak (#681943)
+
+* Bail out as soon as a module is found (#681943)
+
+* Add an option to disable GIO mime detection (#676726)
+
+* Translation updates
+ Assamese
+ Catalan
+ Hebrew
+ Japanese
+ Portuguese
+ Telugu
+ Traditional Chinese
+ Turkish
+
+
+2.26.2
+======
+
+* Various functions have been added to the docs
+
+* Fix introspection of gdk_pixbuf_new_from_xpm_data (#668956)
+
+* Improve the gif loaders handling of animations
+  with varying frame sizes (#613595)
+
+* Translation updates:
+ Galician
+ German
+ Greek
+ Indonesian
+ Kashubian
+ Polish
+ Serbian
+ Slovakian
+ Spanish
+
+
+2.26.1
+======
+
+* Fix srcdir != builddir build (#672133)
+
+* Avoid an integer overflow in the xbm loader (#672811)
+
+* Translation updates:
+ Catalan (Valencian)
+ Hindi
+ Latvian
+ Odia
+
+
+2.26.0
+======
+
+* Win32 build fixes
+
+* Correctly load .ANI files without sequence chunks
+
+* Translation updates:
+ Assamese
+ Basque
+ Belarusian
+ Brazilian Portuguese
+ British English
+ Bulgarian
+ Catalan
+ Czech
+ Danish
+ Estonian
+ French
+ Galician
+ German
+ Hebrew
+ Italian
+ Khmer
+ Korean
+ Lithuanian
+ Norwegian bokmål
+ Polish
+ Portuguese
+ Russian
+ Serbian
+ Swedish
+ Traditional Chinese
+ Turkish
+ Ukranian
+
+
+2.25.1
+======
+
+* New functions to load pixbufs from resources:
+  gdk_pixbuf_new_from_resource
+  gdk_pixbuf_new_from_resource_at_scale
+
+* gdk-pixbuf-pixdata is a new program that generates
+  raw binary GdkPixdata files, and there is a new
+  loader for these.
+
+* Translation updates:
+ Belarusian
+ Bulgarian
+ Catalan
+ Czech
+ French
+ Galician
+ German
+ Hebrew
+ Norwegian bokmål
+ Slovenian
+ Spanish
+ Swedish
+ Telugu
+ Traditional Chinese
+
+
+2.25.0
+======
+
+* Fix some string problems in the qtif loader (#629396)
+* Fix various introspection annotations (#659888)
+* Fix introspectability of gdk_pixbuf_get_pixels (#662009)
+* Fix build problem on NetBSD (#640405)
+* Skip compressed icons in ICOs (#652498)
+* Add a --with-x11 configure options (#657569)
+* Fix mingw build (#657876)
+* Work around gtk-doc limitations (#663554)
+* Fix thread-safety issues with animations
+* Fix gif animation delays between frames (#655755)
+
+* Translation updates:
+ Belarusian
+ Esperanto
+ Tamil
+ Japanese
+ Punjabi
+
+2.24.0
+======
+
+* Clean up dependencies in the .pc file
+
+* Win32 build fixes
+
+* Translation updates:
+ Lithuanian
+
+2.23.5
+======
+
+* Prevent the return of partically initialized pixbuf structures
+  from the gif loader in some error cases (CVE-2011-2485)
+
+* Win32 build updates
+
+2.23.4
+======
+
+* Drop use of G_CONST_RETURN
+
+* Win32 build fixes
+
+* Translation updates:
+ Catalan (Valencian)
+ Esperanto
+ Finnish
+ Turkish
+ Vietnamese
+
+2.23.3
+======
+
+- Fix release tarball
+
+- More win32 build fixes
+
+2.23.2
+======
+
+* Fix possible crashes when loading jpegs (#636138)
+
+* Introspection annotation fixes
+
+* Update build files on Win32
+
+* Translation updates:
+- Italian
+- Slovenian
+- Dutch
+- Oriya
+- Serbian
+- Ukrainian
+- Assamese
+- Telugu
+- Marathi
+- Japanese
+- Uighur
+
+
+2.23.1
+======
+
+* Win32:
+ - Use dynamically constructed GDK_PIXBUF_LIBDIR for locating modules
+ - Use dynamically constructed GDK_PIXBUF_LOCALEDIR to find translations
+ - Use GDI+ loader by default
+
+* Introspection:
+ - Add package information
+ - Don't include backend API
+
+* Build against libpng 1.5
+
+* Bugs fixed:
+ 634659 gdk-pixbuf 2.22 can't find localisation
+ 635364 Add C include and exported packages information to GIR
+ 639922 Proposed Visual C++ 2008 Project Files
+ 640407 Unportable test(1) construct in configure script.
+
+* Translation updates
+ Asturian
+ Basque
+ Bengali India
+ Bulgarian
+ French
+ Galician
+ Greek
+ Korean
+ Latvian
+ Portuguese
+ Russian
+ Simplified Chinese
+ Swedish
+ Uighur
+
+
+2.23.0
+======
+
+* New API: gdk_pixbuf_new_from_stream_async
+
+* Translation updates
+ Brazilian Portuguese
+ British English
+ Catalan
+ Czech
+ Estonian
+ Galician
+ German
+ Hebrew
+ Indonesian
+ Hungarian
+ Norwegian bokmål
+ Polish
+ Romanian
+ Slovenian
+ Spanish
+ Thai
+ Traditional Chinese
+ Uighur
+
+
+2.22.1
+======
+
+* Make GdkPixbuf implement the GIcon interface
+
+* Fix loader.cache detection on Windows
+
+* Translation updates
+  Brazilian Portuguese
+  Bulgarian
+  Catalan
+  Catalan (Valencian)
+  Chinese
+  Greek
+  Lithuanian
+  Norwegian bokmål
+  Punjabi
+  Romanian
+  Russian
+  Uighur
+
+
+2.22.0
+======
+
+* Fix a problem with mime type detection
+
+* Win32: Fix linking on x64
+
+* Drop gobject-introspection requirement to 0.9.3
+
+* Translation updates
+  Basque
+  Czech
+  Danish
+  Dutch
+  Estonian
+  French
+  Galician
+  German
+  Hebrew
+  Hungarian
+  Indonesian
+  Japanese
+  Polish
+  Portuguese
+  Simplified Chinese
+  Slovenian
+  Spanish
+  Turkish
+
+2.21.7
+======
+
+* Fix linking when libpng loader is builtin (#624712)
+
+* Improve the pixbuf loader docs (#604284)
+
+* Fix compat issues wrt to single includes (#622940)
+
+* Win32: Link directly to GDI+
+
+* Require gobject-introspection 0.9.5
+
+* Translation updates:
+  British English
+  Italian
+
+2.21.6
+======
+
+* Drop aliasing hacks, use -Bsymbolic-functions
+
+* Support NOCONFIGURE in autogen.sh
+
+* Check for different versions of libpng
+
+2.21.5
+======
+
+* Bring back deprecated API
+
+* Allow including individual headers again
+
+2.21.4
+======
+
+* Drop -2.0 suffix on gdk-pixbuf-csource and gdk-pixbuf-query-loaders
+
+* Include gdk-pixbuf-xlib again
+
+* Add pixbuf tests from the GTK+ tree
+
+* Add binary version and module dir as variables in the .pc file
+
+* Add a boxed type for GdkPixbufFormat
+
+
+2.21.3
+======
+
+gdk-pixbuf has been turned back into a standalone library, after being
+shipped as part of GTK+ for a number of years. The changes in this
+version, compared to the version included in GTK+ 2.20 are the following:
+
+* The default location for loaders has been changed to
+  $libdir/gdk-pixbuf-2.0/2.10.0/loaders
+
+* The default location for the module file has been changed to
+  $libdir/gdk-pixbuf-2.0/2.10.0/loaders.cache
+  and gdk-pixbuf-query-loaders-2.0 will update that file when given
+  the --update-cache option.

@@ -1,10 +1,98 @@
 #include "distconf_invoke.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
+
+    bool ApplyStaticDataCenterStates(NKikimrBlobStorage::TStorageConfig *config,
+            const NKikimrBlobStorage::TDataCenterStates& command) {
+        auto states = ParseDataCenterStates(command);
+        Y_ENSURE(states, states.error());
+        THashMap<ui32, TString> dataCenters;
+        for (const auto& node : config->GetAllNodes()) {
+            dataCenters.emplace(node.GetNodeId(), node.GetLocation().GetDataCenter());
+        }
+        auto *serviceSet = config->MutableBlobStorageConfig()->MutableServiceSet();
+        THashMap<TGroupId, ui32> generations;
+        for (auto& group : *serviceSet->MutableGroups()) {
+            if (group.GetErasureSpecies() != TBlobStorageGroupType::ErasureMirror3dc || group.HasBridgeGroupState()
+                    || group.HasBridgeProxyGroupId()) {
+                continue;
+            }
+            Y_ENSURE(group.RingsSize() == 3, "Static mirror-3-dc group must have three realms");
+            TMirror3dcGroupConfiguration current{group.GetMirror3dcState(), {}};
+            std::array<bool, 3> excluded{};
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                const auto& ring = group.GetRings(realm);
+                current.Realms[realm] = ring.GetState();
+                std::optional<TString> realmDataCenter;
+                for (const auto& domain : ring.GetFailDomains()) {
+                    for (const auto& disk : domain.GetVDiskLocations()) {
+                        auto it = dataCenters.find(disk.GetNodeID());
+                        Y_ENSURE(it != dataCenters.end(), "Unknown static VDisk node");
+                        Y_ENSURE(!realmDataCenter || *realmDataCenter == it->second,
+                            "Static fail realm spans different data centers");
+                        realmDataCenter = it->second;
+                    }
+                }
+                Y_ENSURE(realmDataCenter, "Empty static fail realm");
+                auto it = states->find(*realmDataCenter);
+                excluded[realm] = it != states->end() && it->second == NKikimrBlobStorage::TDataCenterState::EXCLUDED;
+            }
+            Y_ENSURE(IsValidMirror3dcGroupConfiguration(current), "Invalid static mirror-3-dc configuration");
+            ui32 changes = 0;
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                if (IsExcluded(current.Realms[realm]) == excluded[realm]) {
+                    continue;
+                }
+                Y_ENSURE(++changes == 1, "Only one static fail realm may change availability at a time");
+                auto next = excluded[realm] ? TakeDownFailRealm(current, realm) : ReturnFailRealm(current, realm);
+                Y_ENSURE(next, "Invalid static mirror-3-dc transition");
+                current = *next;
+            }
+            if (changes) {
+                Y_ENSURE(group.GetGroupGeneration() != Max<ui32>(), "Static group generation overflow");
+                group.SetGroupGeneration(group.GetGroupGeneration() + 1);
+                group.SetMirror3dcState(current.State);
+                for (ui32 realm = 0; realm < 3; ++realm) {
+                    group.MutableRings(realm)->SetState(current.Realms[realm]);
+                }
+                generations.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
+                    group.GetGroupGeneration());
+            }
+        }
+        UpdateStaticVDiskGenerations(serviceSet, generations);
+        auto previous = ParseDataCenterStates(config->GetDataCenterStates());
+        Y_ENSURE(previous, previous.error());
+        bool changed = !generations.empty() || !config->HasDataCenterStates() || *previous != *states;
+        if (changed) {
+            *config->MutableDataCenterStates() = SerializeDataCenterStates(*states);
+        }
+        return changed;
+    }
+
+    void TInvokeRequestHandlerActor::ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command) {
+        RunCommonChecks();
+        auto config = *Self->StorageConfig;
+        try {
+            if (!ApplyStaticDataCenterStates(&config, command)) {
+                return StartDataCenterReconciliation();
+            }
+        } catch (const yexception& error) {
+            throw TExError() << error.what();
+        }
+        if (Self->StorageConfig->HasDataCenterStates()) {
+            ProposedStorageConfig = std::move(config);
+            DataCenterPreflight = true;
+            return StartDataCenterReconciliation();
+        }
+        StartProposition(&config);
+    }
 
     namespace {
 
@@ -477,6 +565,9 @@ namespace NKikimr::NStorage {
                 if (!currentVDiskId.SameExceptGeneration(vdiskId)) {
                     continue; // definitely incorrect group or position in group
                 }
+                if (!isDropDonor && currentVDiskId != vdiskId) {
+                    continue;
+                }
                 if (isDropDonor && vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
                     continue; // dropping donor and this entity is already destroyed
                 }
@@ -533,6 +624,10 @@ namespace NKikimr::NStorage {
             }
         }
 
+        if (!changes) {
+            return Finish(TResult::OK, std::nullopt);
+        }
+
         bool unusedPDisk = true;
         for (const auto& vdisk : ss->GetVDisks()) {
             if (vdisk.HasVDiskLocation()) {
@@ -547,15 +642,10 @@ namespace NKikimr::NStorage {
             for (size_t i = 0; i < ss->PDisksSize(); ++i) {
                 if (const auto& pdisk = ss->GetPDisks(i); pdisk.HasNodeID() && pdisk.HasPDiskID() &&
                         pdisk.GetNodeID() == vslotId.GetNodeId() && pdisk.GetPDiskID() == vslotId.GetPDiskId()) {
-                    Y_ABORT_UNLESS(changes);
                     ss->MutablePDisks()->DeleteSubrange(i, 1);
                     break;
                 }
             }
-        }
-
-        if (!changes) {
-            return Finish(TResult::OK, std::nullopt);
         }
 
         StartProposition(&config);

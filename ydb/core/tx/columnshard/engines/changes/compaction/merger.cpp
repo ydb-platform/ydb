@@ -36,18 +36,18 @@ public:
     }
 
     void SetChunks(std::vector<i64>&& recordsCount) {
-        AFL_VERIFY(RecordsCount == 0);
-        AFL_VERIFY(ChunkRecordsCount.empty());
+        YDB_LOG_VERIFY(RecordsCount == 0);
+        YDB_LOG_VERIFY(ChunkRecordsCount.empty());
         for (auto&& i : recordsCount) {
             RecordsCount += i;
         }
         ChunkRecordsCount = std::move(recordsCount);
-        AFL_VERIFY(RecordsCount);
+        YDB_LOG_VERIFY(RecordsCount);
     }
 
     void AddColumnChunks(const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks) {
         ResultChunks.insert(ResultChunks.end(), chunks.begin(), chunks.end());
-        AFL_VERIFY(ChunksReady <= ChunkRecordsCount.size());
+        YDB_LOG_VERIFY(ChunksReady <= ChunkRecordsCount.size());
         ui32 checkRecordsCount = 0;
         for (auto&& i : chunks) {
             checkRecordsCount += i->GetRecordsCountVerified();
@@ -59,7 +59,9 @@ public:
                     {"packed", i->GetPackedSize()});
             }
         }
-        AFL_VERIFY(checkRecordsCount == ChunkRecordsCount[ChunksReady])("check", checkRecordsCount)("split", ChunkRecordsCount[ChunksReady]);
+        YDB_LOG_VERIFY(checkRecordsCount == ChunkRecordsCount[ChunksReady],
+            {"check", checkRecordsCount},
+            {"split", ChunkRecordsCount[ChunksReady]});
         ++ChunksReady;
     }
 };
@@ -81,7 +83,7 @@ public:
 
     const TColumnSplitInfo& GetColumnInfo(const ui32 columnId) const {
         auto it = Columns.find(columnId);
-        AFL_VERIFY(it != Columns.end());
+        YDB_LOG_VERIFY(it != Columns.end());
         return it->second;
     }
 
@@ -104,16 +106,18 @@ public:
 
     void AddColumnChunks(const ui32 columnId, const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks) {
         auto it = Columns.find(columnId);
-        AFL_VERIFY(it != Columns.end());
+        YDB_LOG_VERIFY(it != Columns.end());
         it->second.AddColumnChunks(chunks);
     }
 
     void AddColumnSplitting(const ui32 columnId, std::vector<i64>&& chunks,
         const std::optional<NArrow::NSplitter::TSimpleSerializationStat>& stats, const NSplitter::TSplitSettings& settings) {
         auto it = Columns.emplace(columnId, TColumnSplitInfo(columnId, stats, settings));
-        AFL_VERIFY(it.second);
+        YDB_LOG_VERIFY(it.second);
         it.first->second.SetChunks(std::move(chunks));
-        AFL_VERIFY(RecordsCount == it.first->second.GetRecordsCount())("new", it.first->second.GetRecordsCount())("control", RecordsCount);
+        YDB_LOG_VERIFY(RecordsCount == it.first->second.GetRecordsCount(),
+            {"new", it.first->second.GetRecordsCount()},
+            {"control", RecordsCount});
     }
 };
 
@@ -173,7 +177,7 @@ public:
         , ResultFiltered(resultFiltered)
         , Settings(settings)
     {
-        AFL_VERIFY(Remapper);
+        YDB_LOG_VERIFY(Remapper);
         const std::vector<i64> recordsCount = [&]() {
             auto batchStatsOpt = stats->GetStatsForColumns(resultFiltered->GetColumnIds(), false);
             if (batchStatsOpt) {
@@ -186,7 +190,10 @@ public:
         }();
         ui32 recordsCountCursor = 0;
         for (auto&& p : recordsCount) {
-            AFL_VERIFY(recordsCountCursor + p <= Remapper->num_rows())("cursor", recordsCountCursor)("size", p)("length", Remapper->num_rows());
+            YDB_LOG_VERIFY(recordsCountCursor + p <= Remapper->num_rows(),
+                {"cursor", recordsCountCursor},
+                {"size", p},
+                {"length", Remapper->num_rows()});
             Portions.emplace_back(p, Remapper->Slice(recordsCountCursor, p));
             recordsCountCursor += p;
             for (auto&& c : resultFiltered->GetColumnIds()) {
@@ -212,7 +219,9 @@ public:
                 Portions.back().AddColumnSplitting(c, std::move(chunks), colStatsOpt, settings);
             }
         }
-        AFL_VERIFY(recordsCountCursor == Remapper->num_rows())("cursor", recordsCountCursor)("length", Remapper->num_rows());
+        YDB_LOG_VERIFY(recordsCountCursor == Remapper->num_rows(),
+            {"cursor", recordsCountCursor},
+            {"length", Remapper->num_rows()});
     }
 };
 
@@ -235,7 +244,7 @@ public:
     }
 
     void FillRemapping(std::vector<std::shared_ptr<arrow::RecordBatch>>&& remapping, const NSplitter::TSplitSettings& settings) {
-        AFL_VERIFY(SplittedBatches.empty());
+        YDB_LOG_VERIFY(SplittedBatches.empty());
         for (auto&& i : remapping) {
             SplittedBatches.emplace_back(std::move(i), Stats, ResultFiltered, settings);
         }
@@ -245,7 +254,7 @@ public:
 std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
     const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
     const TInternalPathId pathId, const std::optional<ui64> shardingActualVersion) {
-    AFL_VERIFY(Batches.size() == Filters.size());
+    YDB_LOG_VERIFY(Batches.size() == Filters.size());
     TSplitTopology splitInfo(stats, resultFiltered);
     {
         arrow::FieldVector indexFields;
@@ -326,8 +335,9 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
 
         THolder<IColumnMerger> merger =
             IColumnMerger::TFactory::MakeHolder(commonContext.GetLoader()->GetAccessorConstructor().GetClassName(), commonContext);
-        AFL_VERIFY(!!merger)("problem", "cannot create merger")(
-            "class_name", commonContext.GetLoader()->GetAccessorConstructor().GetClassName());
+        YDB_LOG_VERIFY(!!merger,
+            {"problem", "cannot create merger"},
+            {"className", commonContext.GetLoader()->GetAccessorConstructor().GetClassName()});
         merger->Start(std::move(columnData), mergingContext);
 
         for (auto&& batchResult : splitInfo.MutableSplittedBatches()) {
@@ -338,7 +348,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
                     cursor += c;
                     portion.AddColumnChunks(columnId, merger->Execute(context, mergingContext).GetChunks());
                 }
-                AFL_VERIFY(cursor == portion.GetRecordsCount());
+                YDB_LOG_VERIFY(cursor == portion.GetRecordsCount());
             }
         }
     }

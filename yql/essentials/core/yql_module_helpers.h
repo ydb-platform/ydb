@@ -21,4 +21,11 @@ TExprNode::TPtr ImportDeeplyCopied(
     TExprContext& ctx,
     TTypeAnnotationContext& types);
 
+TExprNode::TPtr ImportCached(
+    const TPosition& position,
+    const TString& path,
+    const TString& name,
+    TExprContext& ctx,
+    TTypeAnnotationContext& types);
+
 } // namespace NYql

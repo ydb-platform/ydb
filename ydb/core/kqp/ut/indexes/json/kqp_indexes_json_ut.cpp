@@ -65,6 +65,51 @@ TString SelectJsonRows(TQueryClient& db, const TString& sql, TParams params = TP
     return FormatResultSetYson(result.GetResultSet(0));
 }
 
+void TestJsonIndexErrorHandler(bool isJsonDocument, bool withParameter, TStringBuf predicate, TStringBuf errorMessage) {
+    auto kikimr = KikimrJson(/* enableJsonIndexAutoSelect */ true);
+    auto db = kikimr.GetQueryClient();
+    const TString jsonType = isJsonDocument ? "JsonDocument" : "Json";
+    CreateTestTable(db, jsonType, /* withIndex */ true);
+    ExecuteJsonStatement(db, TStringBuilder()
+        << "UPSERT INTO TestTable (Key, Text) VALUES "
+        << "(1u, " << jsonType << "('{\"k1\": 1, \"tag\": true}')), "
+        << "(2u, " << jsonType << "('{\"tag\": true}'))");
+
+    // Verify the fixture and the index independently of the throwing predicate.
+    ValidatePredicateKeys(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) = 1)", "[[[1u]]]");
+
+    const auto params = withParameter
+        ? TParamsBuilder().AddParam("$p").Int64(1).Build().Build()
+        : TParamsBuilder().Build();
+    const auto query = [&](TStringBuf view) {
+        return std::format("SELECT Key FROM TestTable{} WHERE {} ORDER BY Key", view, predicate);
+    };
+
+    const auto primary = db.ExecuteQuery(query(" VIEW PRIMARY KEY"), TTxControl::NoTx(), params).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(primary.GetStatus(), EStatus::PRECONDITION_FAILED, primary.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS_C(primary.GetIssues().ToString(), errorMessage, predicate);
+
+    // The row without k1 must not silently disappear before its error handler runs.
+    const auto indexed = db.ExecuteQuery(query(" VIEW json_idx"), TTxControl::NoTx(), params).ExtractValueSync();
+    UNIT_ASSERT_C(!indexed.IsSuccess(), "JSON index suppressed an error for predicate: " << predicate);
+    UNIT_ASSERT_STRING_CONTAINS_C(indexed.GetIssues().ToString(),
+        "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics", predicate);
+
+    const auto automatic = db.ExecuteQuery(query(""), TTxControl::NoTx(), params).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(automatic.GetStatus(), EStatus::PRECONDITION_FAILED, automatic.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS_C(automatic.GetIssues().ToString(), errorMessage, predicate);
+
+    const std::string declarations = withParameter ? "DECLARE $p AS Int64;" : "";
+    ValidateNoAutoSelectWithDecl(db, declarations, std::format("{}", predicate));
+    ValidateNoAutoSelectWithDecl(db, declarations, std::format("({}) OR JSON_EXISTS(Text, '$.tag')", predicate));
+
+    // A separate AND branch can supply index tokens, but the throwing branch
+    // must still run on both matching rows as a residual predicate.
+    const auto conjunction = std::format("({}) AND JSON_EXISTS(Text, '$.tag')", predicate);
+    ValidateAutoSelectWithDecl(db, declarations, conjunction);
+    ValidatePredicateError(db, conjunction, params, std::format("{}", errorMessage));
+}
+
 TString JsonLiteralToken(TStringBuf json) {
     TString error;
     auto tokens = NJsonIndex::TokenizeJson(json, error);
@@ -2044,6 +2089,27 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         });
     }
 
+    Y_UNIT_TEST_QUAD(JsonExistsErrorOnErrorWithoutJsonParameter, IsJsonDocument, WithParameter) {
+        const TString predicate = WithParameter
+            ? R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR))"
+            : R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == 1)' ERROR ON ERROR))";
+        TestJsonIndexErrorHandler(IsJsonDocument, WithParameter, predicate, "Member not found");
+    }
+
+    Y_UNIT_TEST_QUAD(JsonValueErrorOnErrorWithoutJsonParameter, IsJsonDocument, WithParameter) {
+        const TString predicate = WithParameter
+            ? R"(JSON_VALUE(Text, 'strict $.k1' RETURNING Int64 ERROR ON ERROR) = $p)"
+            : R"(JSON_VALUE(Text, 'strict $.k1' RETURNING Int64 ERROR ON ERROR) = 1)";
+        TestJsonIndexErrorHandler(IsJsonDocument, WithParameter, predicate, "Member not found");
+    }
+
+    Y_UNIT_TEST_QUAD(JsonValueErrorOnEmptyWithoutJsonParameter, IsJsonDocument, WithParameter) {
+        const TString predicate = WithParameter
+            ? R"(JSON_VALUE(Text, 'lax $.k1' RETURNING Int64 ERROR ON EMPTY) = $p)"
+            : R"(JSON_VALUE(Text, 'lax $.k1' RETURNING Int64 ERROR ON EMPTY) = 1)";
+        TestJsonIndexErrorHandler(IsJsonDocument, WithParameter, predicate, "Result is empty");
+    }
+
     Y_UNIT_TEST_TWIN(JsonPassingParameterMatrix, IsJsonDocument) {
         TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::nullopt, [](TQueryClient& db, const auto&) {
             struct TJsonParamCase {
@@ -2191,7 +2257,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             const auto emptyJsonParam = TParamsBuilder()
                 .AddParam("$p").Json("[]").Build()
                 .Build();
-            const TString indexError = "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters";
+            const TString indexError = "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics";
 
             const auto validateErrorHandler = [&](const TString& predicate, const TString& primaryError = {}) {
                 const auto query = [&](TStringBuf view) {

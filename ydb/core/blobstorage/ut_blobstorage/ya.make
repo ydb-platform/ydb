@@ -58,6 +58,7 @@ SRCS(
     validation.cpp
     vdisk_malfunction.cpp
     virtual_group.cpp
+    vrestore_part.cpp
     group_size_in_units.cpp
     pdisk_status_flags.cpp
     retro_tracing.cpp
@@ -65,6 +66,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/blobstorage/syncer
     ydb/core/blobstorage/dsproxy
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/ut_blobstorage/lib

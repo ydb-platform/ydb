@@ -30,11 +30,6 @@ bool MetricReader::Collect(
         "collection!")
     return false;
   }
-  if (IsShutdown())
-  {
-    // Continue with warning, and let pull and push MetricReader state machine handle this.
-    OTEL_INTERNAL_LOG_WARN("MetricReader::Collect invoked while Shutdown in progress!");
-  }
 
   auto result = metric_producer_->Produce();
 

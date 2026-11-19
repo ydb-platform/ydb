@@ -1,0 +1,1 @@
+#define HAVE_FREETYPE 1

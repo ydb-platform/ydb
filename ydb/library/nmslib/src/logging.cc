@@ -33,6 +33,7 @@ using namespace std;
 
 namespace {
   std::unique_ptr<Logger> global_log(new StdErrLogger());
+  thread_local bool logging_disabled = false;
 }
 
 void setGlobalLogger(Logger * logger) {
@@ -40,7 +41,15 @@ void setGlobalLogger(Logger * logger) {
 }
 
 Logger * getGlobalLogger() {
-  return global_log.get();
+  return logging_disabled ? nullptr : global_log.get();
+}
+
+ScopedLoggingDisabled::ScopedLoggingDisabled() : previous_(logging_disabled) {
+  logging_disabled = true;
+}
+
+ScopedLoggingDisabled::~ScopedLoggingDisabled() {
+  logging_disabled = previous_;
 }
 
 Logger::~Logger() {
@@ -49,9 +58,14 @@ Logger::~Logger() {
 std::string LibGetCurrentTime() {
   time_t now;
   time(&now);
-  struct tm* timeinfo = localtime(&now);
+  struct tm timeinfo;
+#ifdef _WIN32
+  localtime_s(&timeinfo, &now);
+#else
+  localtime_r(&now, &timeinfo);
+#endif
   char time_string[50];
-  strftime(time_string, sizeof(time_string), "%Y-%m-%d %H:%M:%S", timeinfo);
+  strftime(time_string, sizeof(time_string), "%Y-%m-%d %H:%M:%S", &timeinfo);
   return std::string(time_string);
 }
 

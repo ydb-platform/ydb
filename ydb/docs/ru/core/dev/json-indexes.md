@@ -64,6 +64,8 @@ JSON-индексы автоматически поддерживаются пр
 
 Для выполнения через JSON-индексы поддерживаются только выражения на основе функций `JSON_EXISTS` и `JSON_VALUE` в блоке `WHERE`, объединённые операторами `AND` / `OR` по правилам ниже.
 
+Предикаты с `ERROR ON ERROR` в `JSON_EXISTS`, а также с `ERROR ON EMPTY` или `ERROR ON ERROR` в `JSON_VALUE` не используются для поиска через JSON-индекс, так как при поиске через индекс часть строк таблицы не читается, и ошибка на такой строке может остаться незамеченной. Если другое условие в `AND` позволяет использовать индекс, условие с обработчиком `ERROR` проверяется пост-фильтром.
+
 ### JSON_EXISTS {#json-exists}
 
 Проверка существования пути или значения внутри фильтра JsonPath.
@@ -107,6 +109,9 @@ WHERE JSON_EXISTS(doc, '!($.key == 10)')
 -- ON ERROR TRUE
 WHERE JSON_EXISTS(doc, '$.key' TRUE ON ERROR)
 
+-- ERROR ON ERROR
+WHERE JSON_EXISTS(doc, 'strict $.key' ERROR ON ERROR)
+
 -- Путь без оператора контекста ($) — переданный документ не используется
 WHERE JSON_EXISTS(doc, '1')
 ```
@@ -116,6 +121,14 @@ WHERE JSON_EXISTS(doc, '1')
 Функция `JSON_EXISTS` возвращает `true` для любого непустого результата JsonPath. Предикат `$.key == 10`, указанный на верхнем уровне, дал бы «существование пути» даже когда сравнение ложно, что не соответствует ожидаемой семантике. Сравнения нужно выносить в вызовы `JSON_VALUE` или в фильтр вида `? (...)`.
 
 {% endnote %}
+
+Параметр типа `Json` из секции `PASSING` можно использовать в условии равенства:
+
+```yql
+WHERE JSON_EXISTS(doc, '$.tags[*] ? (@ == $values)' PASSING $values AS values)
+```
+
+При передаче массива в `$values` сравнение по равенству `@ == $values` в режиме `lax` (по умолчанию) ищет совпадение с любым элементом массива. Для такого условия JSON-индекс во время выполнения ищет строки по отдельным значениям параметра и объединяет результаты через `OR`. Это позволяет одним запросом искать пересечение с массивом любой длины. Повторяющиеся значения не создают дубли строк, а пустой массив возвращает пустой результат. Исходное условие JsonPath проверяется пост-фильтром.
 
 ### JSON_VALUE {#json-value}
 
@@ -181,6 +194,10 @@ WHERE JSON_VALUE(doc, '$.key') = "x"
 
 -- DEFAULT при ON EMPTY / ON ERROR (кроме NULL)
 WHERE JSON_VALUE(doc, '$.k' RETURNING Utf8 DEFAULT "x" ON ERROR) = "y"
+
+-- ERROR ON EMPTY / ERROR ON ERROR
+WHERE JSON_VALUE(doc, '$.k' RETURNING Utf8 ERROR ON EMPTY) = "x"u
+WHERE JSON_VALUE(doc, '$.k' RETURNING Utf8 ERROR ON ERROR) = "x"u
 
 -- Неподдерживаемый тип данных в RETURNING
 WHERE JSON_VALUE(doc, '$.ts' RETURNING Timestamp) = ...

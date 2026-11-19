@@ -71,6 +71,9 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& c
     (*out.mutable_attributes())["_service_type"] = serviceType;
 
     switch (in.GetType()) {
+        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION: {
+            break;
+        }
         case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING: {
             out.mutable_streaming_consumer_type();
             break;
@@ -266,8 +269,12 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     }
 
     for (const auto& consumer : config.GetConsumers()) {
-        if (!FillConsumer(*out.add_consumers(), config, consumer, status, error)) {
+        auto& publicConsumer = *out.add_consumers();
+        if (!FillConsumer(publicConsumer, config, consumer, status, error)) {
             return false;
+        }
+        if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            (*out.mutable_attributes())["_ydb_replication_consumer"] = publicConsumer.name();
         }
     }
     return true;

@@ -195,8 +195,7 @@ struct TDataEvents {
 
         bool IsPrepared() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED; }
         bool IsComplete() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED; }
-        bool IsDuplicate() const { return Record.GetIsDuplicate(); }
-        bool IsError() const { return !IsPrepared() && !IsComplete() && !IsDuplicate(); }
+        bool IsError() const { return !IsPrepared() && !IsComplete(); }
 
         void SetOrbit(NLWTrace::TOrbit&& orbit) { Orbit = std::move(orbit); }
         NLWTrace::TOrbit& GetOrbit() { return Orbit; }

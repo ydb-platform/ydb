@@ -297,6 +297,9 @@ void AddClustersFromConnections(const NConfig::TCommonConfig& common, const THas
                 break;
             }
 
+            case FederatedQuery::ConnectionSetting::kExternalService:
+                // Resolved by the external function provider, not a table provider.
+                break;
             // Do not replace with default. Adding a new connection should cause a compilation error
             case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
                 break;

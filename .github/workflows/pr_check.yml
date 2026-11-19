@@ -5,9 +5,10 @@ on:
       - 'main'
       - 'stable-*'
       - 'nbs-*'
+      - 'nbs2-*'
       - 'prestable-*'
       - 'stream-nb-*'
-      - 'dev-*'
+      - 'dev/**/*'
       - 'rc-*'
       - 'q-stable-*'
     types:
@@ -20,6 +21,7 @@ on:
       - 'main'
       - 'stable-*'
       - 'nbs-*'
+      - 'nbs2-*'
       - 'stream-nb-*'
     paths-ignore:
       - 'ydb/docs/**'

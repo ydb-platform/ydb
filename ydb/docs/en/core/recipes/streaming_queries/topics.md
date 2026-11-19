@@ -25,7 +25,7 @@ You will perform the following steps:
 To run the examples, you will need:
 
 * A running {{ ydb-short-name }} database — see [quick start](../../quickstart.md);
-* The `enable_streaming_queries` feature flag enabled.
+* The `enable_streaming_queries` [feature flag](../../reference/configuration/feature_flags.md) enabled.
 
 {% list tabs %}
 

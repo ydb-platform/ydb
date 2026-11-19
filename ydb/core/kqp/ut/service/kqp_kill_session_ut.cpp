@@ -130,7 +130,6 @@ Y_UNIT_TEST_SUITE(KqpKillSession) {
 
     Y_UNIT_TEST(RepeatedParameterizedQueryUsesCurrentSessionId) {
         auto settings = KillSessionSettings();
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
         auto first = CreateSession(client);
@@ -151,10 +150,8 @@ Y_UNIT_TEST_SUITE(KqpKillSession) {
         UNIT_ASSERT_VALUES_EQUAL_C(repeated.GetStatus(), EStatus::PRECONDITION_FAILED, repeated.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_TWIN(MultipleKillStatements, perStatementExecution) {
+    Y_UNIT_TEST(MultipleKillStatements) {
         auto settings = KillSessionSettings();
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(perStatementExecution);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
         auto first = CreateSession(client);
@@ -170,28 +167,8 @@ Y_UNIT_TEST_SUITE(KqpKillSession) {
         }
     }
 
-    Y_UNIT_TEST(KillBetweenSelectStatements) {
+    Y_UNIT_TEST(FailedKillStopsFollowingStatements) {
         auto settings = KillSessionSettings();
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-        TKikimrRunner kikimr(settings);
-        auto client = kikimr.GetQueryClient();
-        auto victim = CreateSession(client);
-        const TString query = "SELECT 1;\n" + KillSessionQuery(victim.GetId()) + "\nSELECT 2;";
-        auto result = client.ExecuteQuery(query, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
-        CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(R"([[2]])", FormatResultSetYson(result.GetResultSet(1)));
-        auto repeated = client.ExecuteQuery(KillSessionQuery(victim.GetId()), TTxControl::NoTx(),
-            NoRetryExecuteQuerySettings()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(repeated.GetStatus(), EStatus::PRECONDITION_FAILED, repeated.GetIssues().ToString());
-    }
-
-    Y_UNIT_TEST_TWIN(FailedKillStopsFollowingStatements, perStatementExecution) {
-        auto settings = KillSessionSettings();
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(perStatementExecution);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
         auto first = CreateSession(client);
@@ -211,11 +188,8 @@ Y_UNIT_TEST_SUITE(KqpKillSession) {
         AssertSessionAlive(last);
     }
 
-    Y_UNIT_TEST_TWIN(MixedDataWithoutPerStatementExecutionDoesNotKill, astCache) {
+    Y_UNIT_TEST(MixedDataDoesNotKill) {
         auto settings = KillSessionSettings().SetWithSampleTables(true);
-        // Both flags are required to split the query into individual statements.
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(astCache);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(!astCache);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
         auto victim = CreateSession(client);
@@ -387,7 +361,6 @@ Y_UNIT_TEST_SUITE(KqpKillSession) {
     Y_UNIT_TEST(DatabaseOwnershipIsCheckedForEachExecution) {
         auto settings = KillSessionSettings();
         settings.FeatureFlags.SetEnableDatabaseAdmin(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
         TKikimrRunner kikimr(settings);
         auto admin = kikimr.GetQueryClient();
         auto first = CreateSession(admin);
@@ -494,7 +467,6 @@ Y_UNIT_TEST_SUITE(KqpKillSession) {
     Y_UNIT_TEST(UpdateRowIsCheckedForEachExecution) {
         auto settings = KillSessionSettings();
         settings.FeatureFlags.SetEnableDatabaseAdmin(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
         TKikimrRunner kikimr(settings);
         auto admin = kikimr.GetQueryClient();
         auto first = CreateSession(admin);

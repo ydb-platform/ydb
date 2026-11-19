@@ -4,8 +4,8 @@
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
-#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
-#include <ydb/core/kqp/common/dynamic_function_registry.h>
+#include <ydb/core/kqp/common/warmup/warmup.h>
+#include <ydb/core/kqp/common/dynamic_function_registry/dynamic_function_registry.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>
@@ -1621,7 +1621,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     const auto& pathMapping = runConfig.AppConfig.GetResourcePathPrefixMapping();
     if (pathMapping.RulesSize()) {
-        AppData->PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping);
+        AppData->SetPathNormalizer(std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping, Counters));
     }
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
@@ -2218,6 +2218,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
     }
 
+    sil->AddServiceInitializer(new TWriteSessionsQuoterInitializer(runConfig));
     sil->AddServiceInitializer(new TTopicDeferredPublishRegistryInitializer(runConfig));
 
     if (serviceMask.EnablePersQueueDirectReadCache) {

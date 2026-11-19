@@ -10,6 +10,222 @@
 
 using namespace NSQLTranslation;
 
+Y_UNIT_TEST_SUITE(PgProjectSettings) {
+Y_UNIT_TEST(AcceptsNormalizedSettingNames) {
+    const auto translator = NSQLTranslationPG::MakeTranslator();
+    for (const TString& name : {"TablePathPrefix", "TABLE_PATH_PREFIX", "Dq_Engine", "CostBasedOptimizer", "Warning"}) {
+        UNIT_ASSERT_C(translator->AcceptsProjectSetting({.Name = name}), name);
+    }
+    for (const TString& name : {"", "Unknown", "Table__PathPrefix", "_TablePathPrefix", "yt.TablePathPrefix", "search_path", "SearchPath", "UseBlocks", "EmitAggApply", "UnorderedResult", "BlockEngine", "ApplicationName"}) {
+        UNIT_ASSERT_C(!translator->AcceptsProjectSetting({.Name = name}), name);
+    }
+}
+
+Y_UNIT_TEST(UnknownAndDisallowedProjectSettingsAreIgnored) {
+    for (bool strict : {false, true}) {
+        for (const TString& name : {"Unknown", "search_path", "USE_BLOCKS", "EmitAggApply", "UnorderedResult", "BlockEngine", "ApplicationName"}) {
+            for (const TVector<TString>& values : {TVector<TString>{}, TVector<TString>{"invalid"}, TVector<TString>{"one", "two"}}) {
+                TTranslationSettings settings;
+                settings.StrictConfigValidation = strict;
+                settings.GUCSettings = std::make_shared<TGUCSettings>();
+                const auto searchPath = settings.GUCSettings->Get("search_path");
+                const auto expected = NSQLTranslationPG::PGToYql("SELECT 1", settings);
+                settings.ProjectSettings.AddPragma(name, values);
+                const auto result = NSQLTranslationPG::PGToYql("SELECT 1", settings);
+                UNIT_ASSERT_C(expected.IsOk(), expected.Issues.ToString());
+                UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+                UNIT_ASSERT_C(result.Issues.Empty(), result.Issues.ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.Root->ToString(), expected.Root->ToString());
+                UNIT_ASSERT(settings.GUCSettings->Get("search_path") == searchPath);
+            }
+        }
+    }
+}
+
+Y_UNIT_TEST(NormalizedProjectSettingsAreApplied) {
+    for (bool strict : {false, true}) {
+        for (const TString& name : {"TablePathPrefix", "TABLE_PATH_PREFIX", "Table_Path_Prefix"}) {
+            TTranslationSettings settings;
+            settings.StrictConfigValidation = strict;
+            settings.ClusterMapping["plato"] = "yt";
+            settings.ProjectSettings.AddPragma(name, "project/");
+            const auto result = NSQLTranslationPG::PGToYql("SELECT * FROM plato.input", settings);
+            UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.Root->ToString(), "project/input");
+        }
+    }
+}
+
+Y_UNIT_TEST(NormalizedSearchPathUsesCanonicalGucName) {
+    for (const TString& name : {"search_path", "SEARCH_PATH", "SearchPath"}) {
+        TTranslationSettings settings;
+        settings.StrictConfigValidation = true;
+        settings.GUCSettings = std::make_shared<TGUCSettings>();
+        const auto result = NSQLTranslationPG::PGToYql("SET " + name + "='pg_catalog'; SELECT 1", settings);
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+        const auto searchPath = settings.GUCSettings->Get("search_path");
+        UNIT_ASSERT(searchPath.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*searchPath, "pg_catalog");
+    }
+}
+
+Y_UNIT_TEST(CostBasedOptimizerSurvivesStatementBoundaries) {
+    for (bool queryOverride : {false, true}) {
+        TTranslationSettings settings;
+        settings.ProjectSettings.AddPragma("CostBasedOptimizer", "pg");
+        const TString query = queryOverride ? "SET CostBasedOptimizer='native'; SELECT 1; SELECT 2" : "SELECT 1; SELECT 2";
+        const auto results = NSQLTranslationPG::PGToYqlStatements(query, settings);
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), queryOverride ? 3 : 2);
+        for (const auto& result : results) {
+            UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.Root->ToString(), queryOverride ? "'CostBasedOptimizer 'native" : "'CostBasedOptimizer 'pg");
+        }
+    }
+}
+
+Y_UNIT_TEST(ApplicationNameSurvivesStatementBoundaries) {
+    const TString select = "SELECT 1 = ANY (ARRAY(WITH RECURSIVE t(x) AS (SELECT 1) SELECT x FROM t));";
+    for (bool queryOverride : {false, true}) {
+        TTranslationSettings settings;
+        settings.ProjectSettings.AddPragma("ApplicationName", queryOverride ? "other" : "pgAdmin");
+        const auto results = NSQLTranslationPG::PGToYqlStatements(
+            TString("SET ApplicationName='pgAdmin';") + select + select, settings);
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 3);
+        for (size_t index = 1; index < results.size(); ++index) {
+            const auto& result = results[index];
+            UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(), "AEXPR_OP_ANY forced to false");
+        }
+    }
+}
+
+Y_UNIT_TEST(ExecutionFlagsSurviveStatementBoundaries) {
+    for (const TString& name : {"UseBlocks", "EmitAggApply"}) {
+        for (bool enabled : {false, true}) {
+            TTranslationSettings settings;
+            settings.ProjectSettings.AddPragma(name, enabled ? "true" : "false");
+            const auto results = NSQLTranslationPG::PGToYqlStatements(
+                "SET " + name + "='" + (enabled ? "true" : "false") + "'; SELECT 1; SELECT 2; SET " + name + "='" + (enabled ? "false" : "true") + "'; SELECT 3; SELECT 4", settings);
+            UNIT_ASSERT_VALUES_EQUAL(results.size(), 6);
+            for (size_t index = 0; index < results.size(); ++index) {
+                const auto& result = results[index];
+                UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+                const TString flag = name == "UseBlocks" ? "UseBlocks" : "PgEmitAggApply";
+                const TString expected = TString(index < 3 ? (enabled ? "" : "Disable") : (enabled ? "Disable" : "")) + flag;
+                UNIT_ASSERT_STRING_CONTAINS(result.Root->ToString(), "'" + expected);
+            }
+        }
+    }
+}
+
+Y_UNIT_TEST(AcceptanceOnlyChecksNames) {
+    const auto translator = NSQLTranslationPG::MakeTranslator();
+    for (const TVector<TString>& values : {TVector<TString>{}, TVector<TString>{"invalid"}, TVector<TString>{"one", "two"}}) {
+        UNIT_ASSERT(!translator->AcceptsProjectSetting({.Name = "ApplicationName", .Value = values}));
+        UNIT_ASSERT(translator->AcceptsProjectSetting({.Name = "DqEngine", .Value = values}));
+        UNIT_ASSERT(!translator->AcceptsProjectSetting({.Name = "Unknown", .Value = values}));
+    }
+}
+
+Y_UNIT_TEST(QueryOverridesSurviveStatementBoundaries) {
+    TTranslationSettings settings;
+    settings.ClusterMapping["plato"] = "yt";
+    settings.ProjectSettings.AddPragma("TablePathPrefix", "project/");
+    settings.ProjectSettings.AddPragma("DqEngine", "force");
+    const auto results = NSQLTranslationPG::PGToYqlStatements(
+        "SET TablePathPrefix='query/'; SET DqEngine='disable'; SELECT * FROM plato.input", settings);
+    UNIT_ASSERT_VALUES_EQUAL(results.size(), 3);
+    for (const auto& result : results) {
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+    UNIT_ASSERT_STRING_CONTAINS(results.back().Root->ToString(), "query/input");
+    UNIT_ASSERT(!results.back().Root->ToString().Contains("'DqEngine 'force"));
+}
+
+Y_UNIT_TEST(UnknownProjectSettingsDoNotDuplicateStatements) {
+    TTranslationSettings settings;
+    settings.PgParser = true;
+    settings.ProjectSettings.AddPragma("DqEngine", "force");
+    TTranslators translators(nullptr, nullptr, NSQLTranslationPG::MakeTranslator());
+    const auto expected = SqlToYql(translators, "SELECT 1", settings);
+    settings.ProjectSettings.AddPragma("Unknown", "value");
+    const auto result = SqlToYql(translators, "SELECT 1", settings);
+    UNIT_ASSERT_C(expected.IsOk(), expected.Issues.ToString());
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result.Root->ToString(), expected.Root->ToString());
+}
+
+Y_UNIT_TEST(OnlyUnknownProjectSettingsInNonStrictMode) {
+    for (const auto& query : {"", "SELECT 1", "SELECT 1; SELECT 2"}) {
+        TTranslationSettings settings;
+        settings.PgParser = true;
+        settings.StrictConfigValidation = false;
+        TTranslators translators(nullptr, nullptr, NSQLTranslationPG::MakeTranslator());
+        const auto expected = SqlToYql(translators, query, settings);
+        UNIT_ASSERT_C(expected.IsOk(), expected.Issues.ToString());
+        settings.ProjectSettings.AddPragma("UnknownFirst", TVector<TString>{});
+        settings.ProjectSettings.AddPragma("UnknownSecond", TVector<TString>{""});
+        settings.ProjectSettings.AddPragma("UnknownThird", TVector<TString>{"one", "two"});
+        const auto result = SqlToYql(translators, query, settings);
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+        UNIT_ASSERT(result.Issues.Empty());
+        UNIT_ASSERT_VALUES_EQUAL(result.Root->ToString(), expected.Root->ToString());
+    }
+}
+
+Y_UNIT_TEST(ProjectPragmaAndQueryOverride) {
+    TTranslationSettings settings;
+    settings.PgParser = true;
+    settings.ProjectSettings.AddPragma("Unknown", TVector<TString>{});
+    settings.ProjectSettings.AddPragma("TablePathPrefix", "project/");
+    settings.ClusterMapping["plato"] = "yt";
+    TTranslators translators(nullptr, nullptr, NSQLTranslationPG::MakeTranslator());
+    const auto project = SqlToYql(translators, "SELECT * FROM plato.input", settings);
+    UNIT_ASSERT_C(project.IsOk(), project.Issues.ToString());
+    UNIT_ASSERT_STRING_CONTAINS(project.Root->ToString(), "project/input");
+    const auto query = SqlToYql(translators, "SET TablePathPrefix='query/'; SELECT * FROM plato.input", settings);
+    UNIT_ASSERT_C(query.IsOk(), query.Issues.ToString());
+    UNIT_ASSERT_STRING_CONTAINS(query.Root->ToString(), "query/input");
+}
+
+Y_UNIT_TEST(UnknownProjectSettingsAreSkippedInStrictMode) {
+    TTranslationSettings settings;
+    settings.PgParser = true;
+    settings.ProjectSettings.AddPragma("Unknown", "value");
+    TTranslators translators(nullptr, nullptr, NSQLTranslationPG::MakeTranslator());
+    UNIT_ASSERT(SqlToYql(translators, "SELECT 1", settings).IsOk());
+    settings.StrictConfigValidation = true;
+    const auto result = SqlToYql(translators, "SELECT 1", settings);
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    UNIT_ASSERT(result.Issues.Empty());
+}
+
+Y_UNIT_TEST(AllSupportedProjectSettingsValidateValues) {
+    TTranslationSettings settings;
+    settings.PgParser = true;
+    settings.StrictConfigValidation = true;
+    settings.ProjectSettings.AddPragma("Unknown", TVector<TString>{"one", "two"});
+    settings.ProjectSettings.AddPragma("TablePathPrefix", TVector<TString>{});
+    settings.ProjectSettings.AddPragma("DqEngine", "invalid");
+    TTranslators translators(nullptr, nullptr, NSQLTranslationPG::MakeTranslator());
+    const auto result = SqlToYql(translators, "SELECT 1", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT(!result.Issues.ToString().Contains("Unknown"));
+    UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(), "expected 1 arg");
+    UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(), "DqEngine");
+}
+
+Y_UNIT_TEST(NonStrictModeStillValidatesKnownProjectSettings) {
+    TTranslationSettings settings;
+    settings.PgParser = true;
+    settings.ProjectSettings.AddPragma("TablePathPrefix", TVector<TString>{});
+    TTranslators translators(nullptr, nullptr, NSQLTranslationPG::MakeTranslator());
+    const auto result = SqlToYql(translators, "SELECT 1", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(), "expected 1 arg");
+}
+} // Y_UNIT_TEST_SUITE(PgProjectSettings)
+
 Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
 Y_UNIT_TEST(Locking) {
     auto res = PgSqlToYql("SELECT 1 FROM plato.Input FOR UPDATE");

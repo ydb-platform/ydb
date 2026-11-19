@@ -54,7 +54,7 @@ using NActors::TEvents;
 struct TErr {
     explicit TErr(const TString& err)
         : Reason(err)
-    {} 
+    {}
     TString Reason;
 };
 
@@ -169,7 +169,7 @@ void TInterconnectZcProcessor::DoProcessNotification(NInterconnect::TStreamSocke
             Confirmed += res.SendNum;
             ConfirmedWithCopy += res.SendWithCopyNum;
         }}, res);
-    
+
 
     if (ZcState == ZC_CONGESTED && Confirmed == SendAsZc) {
         ZcState = ZC_OK;
@@ -341,7 +341,9 @@ private:
 TGuardActor::TGuardActor(ui64 uncompleted, ui64 confirmed, std::list<TEventHolder>&& queue,
     TIntrusivePtr<NInterconnect::TStreamSocket> socket,
     std::unique_ptr<NActors::TEventHolderPool>&& pool)
-    : TInterconnectLoggingBase(Sprintf("TGuardActor, socket %lu", socket ? i64(*socket) : -1))
+    : TInterconnectLoggingBase(YDB_LOG_CREATE_MESSAGE(
+        {"selfActorKind", "TGuardActor"},
+        {"socket", socket ? i64(*socket) : -1}))
     , Uncompleted(uncompleted)
     , Confirmed(confirmed)
     , Delayed(std::move(queue))
@@ -365,6 +367,7 @@ void TGuardActor::DoGc()
         [this](const TErr& err) {
             // Nothing can do here (( VERIFY, or just drop buffer probably unsafe from network perspective
             YDB_LOG_ERROR("Error during ERRQUEUE",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICZC01"},
                 {"processing", err.Reason.data()});
             Pool->Release(Delayed);

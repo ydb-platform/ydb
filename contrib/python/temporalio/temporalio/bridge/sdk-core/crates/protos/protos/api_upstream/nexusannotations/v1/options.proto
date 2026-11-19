@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package nexusannotations.v1;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/nexus-rpc/nexus-proto-annotations/go/nexusannotations/v1";
+
+extend google.protobuf.ServiceOptions {
+  optional ServiceOptions service = 8233;
+}
+
+extend google.protobuf.MethodOptions {
+  optional OperationOptions operation = 8234;
+}
+
+message OperationOptions {
+  // Nexus operation name (defaults to proto method name).
+  string name = 1;
+  // Tags to attach to the operation. Used by code generators to include and exclude operations.
+  repeated string tags = 2;
+}
+
+message ServiceOptions {
+  // Nexus service name (defaults to proto service full name).
+  string name = 1;
+  // Tags to attach to the service. Used by code generators to include and exclude services.
+  repeated string tags = 2;
+}

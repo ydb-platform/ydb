@@ -27,7 +27,7 @@ struct TCommandLineOptions {
 };
 
 void AddQueryOptions(NLastGetopt::TOpts& opts, TCommandLineOptions& options) {
-    opts.AddLongOption('b', "blocks-engine", "Block engine settings").StoreResult(&options.Program.BlockEngineSettings).DefaultValue("disable");
+    opts.AddLongOption('b', "blocks-engine", "Block engine mode").StoreResult(&options.Program.BlockEngineMode).DefaultValue(ToString(NYql::EBlockEngineMode::Disable));
     opts.AddLongOption('c', "count", "number of rows passed to the generation query").StoreResult(&options.Program.GeneratorInputRows).DefaultValue(1000000);
     opts.AddLongOption('g', "gen-sql", "SQL query to generate data").StoreResult(&options.Program.GenerationQuery).DefaultValue("select index from Input");
     opts.AddLongOption('t', "test-sql", "SQL query to benchmark").StoreResult(&options.Program.MeasuredQuery).DefaultValue("select count(*) as count from Input");

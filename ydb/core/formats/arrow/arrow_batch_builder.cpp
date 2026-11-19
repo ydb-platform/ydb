@@ -2,7 +2,6 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers_minikql.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
-#include <ydb/core/kqp/common/kqp_types.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/minikql/minikql.h>
@@ -300,15 +299,19 @@ void TArrowBatchBuilder::AppendValue(const NUdf::TUnboxedValue& value, ui32 colN
 }
 
 void TArrowBatchBuilder::AddRow(const TDbTupleRef& key, const TDbTupleRef& value) {
-    AFL_VERIFY(key.ColumnCount + value.ColumnCount == YdbSchema.size())("key", key.ColumnCount)("value", value.ColumnCount)(
-                                                      "schema", YdbSchema.size());
+    YDB_LOG_VERIFY(key.ColumnCount + value.ColumnCount == YdbSchema.size(),
+        {"key", key.ColumnCount},
+        {"value", value.ColumnCount},
+        {"schema", YdbSchema.size()});
     ++NumRows;
 
     auto fnAppendTuple = [&] (const TDbTupleRef& tuple, size_t offsetInRow) {
         for (size_t i = 0; i < tuple.ColumnCount; ++i) {
             auto ydbType = tuple.Types[i];
             const ui32 colNum =  offsetInRow + i;
-            AFL_VERIFY(colNum < YdbSchema.size())("column", colNum)("schema", YdbSchema.size());
+            YDB_LOG_VERIFY(colNum < YdbSchema.size(),
+                {"column", colNum},
+                {"schema", YdbSchema.size()});
             Y_ABORT_UNLESS(ydbType == YdbSchema[colNum].second);
             auto& cell = tuple.Columns[i];
             AppendCell(cell, colNum);

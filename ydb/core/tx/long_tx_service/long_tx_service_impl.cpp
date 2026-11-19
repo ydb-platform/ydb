@@ -413,6 +413,11 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
 
     // TODO: we need to filter allowed databases
 
+    if (msg->Snapshot) {
+        RegisterRequestedSnapshot(ev, databaseName);
+        return;
+    }
+
     auto& state = DatabaseSnapshots[databaseName];
     {
         auto& req = state.PendingUserRequests.emplace_back();
@@ -427,6 +432,52 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
     }
 
     ScheduleAcquireSnapshot(databaseName, state);
+}
+
+void TLongTxServiceActor::RegisterRequestedSnapshot(
+    TEvLongTxService::TEvAcquireReadSnapshot::TPtr& ev, const TString& databaseName) {
+    auto* msg = ev->Get();
+    const auto snapshot = *msg->Snapshot;
+    if (!snapshot.Step || snapshot.Step == Max<ui64>()) {
+        Send(ev->Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(Ydb::StatusIds::BAD_REQUEST,
+                             NYql::TIssues{ NYql::TIssue("Invalid requested snapshot version") },
+                             std::move(msg->Orbit)), 0, ev->Cookie);
+        return;
+    }
+    if (!AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
+        Send(ev->Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(Ydb::StatusIds::UNSUPPORTED,
+                             NYql::TIssues{ NYql::TIssue("Explicit snapshot retention requires snapshots locking") },
+                             std::move(msg->Orbit)), 0, ev->Cookie);
+        return;
+    }
+    const auto promotionTime =
+        TDuration::Seconds(AppData()->LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds());
+    const ui64 oldestAllowedStep = PromotionCutoffStep(AppData()->TimeProvider->Now(), promotionTime);
+    // Older versions may already have been absent from a collection that
+    // authorized cleanup. Young versions are protected until publication by
+    // the registry freshness floor and its promotion/clock-skew margin.
+    if (snapshot.Step < oldestAllowedStep) {
+        Send(ev->Sender,
+            new TEvLongTxService::TEvAcquireReadSnapshotResult(Ydb::StatusIds::PRECONDITION_FAILED,
+                NYql::TIssues{ NYql::TIssue(
+                    TStringBuilder() << "Requested snapshot " << snapshot << " is outside the safe registration window"
+                                     << "; minimum step: " << oldestAllowedStep) }, std::move(msg->Orbit)), 0,
+            ev->Cookie);
+        return;
+    }
+
+    NKqp::TSnapshotHandle handle;
+    TLocalSnapshotInfo info(snapshot, ev->Sender, std::move(msg->TableIds));
+    handle = NKqp::TSnapshotHandle(info.AliveFlag);
+    if (!LocalSnapshotsStorage->Insert(std::move(info))) {
+        Send(ev->Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(Ydb::StatusIds::BAD_REQUEST,
+                             NYql::TIssues{ NYql::TIssue("Snapshot already registered by this actor") },
+                             std::move(msg->Orbit)), 0, ev->Cookie);
+        return;
+    }
+    Send(ev->Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, snapshot, std::move(handle),
+                         std::move(msg->Orbit)), 0, ev->Cookie);
+    return;
 }
 
 void TLongTxServiceActor::ScheduleAcquireSnapshot(const TString& databaseName, TDatabaseSnapshotState& state) {
@@ -472,17 +523,18 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
 
     if (msg->Status == Ydb::StatusIds::SUCCESS) {
         for (auto& userReq : req->UserRequests) {
-            auto snapshotHandle = [&]() {
-                if (AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
-                    TLocalSnapshotInfo snapshotInfo(msg->Snapshot, userReq.Sender, std::move(userReq.TableIds));
-                    NKqp::TSnapshotHandle snapshotHandle(snapshotInfo.AliveFlag);
-                    LocalSnapshotsStorage->Insert(std::move(snapshotInfo));
-
-                    return std::move(snapshotHandle);
-                } else {
-                    return NKqp::TSnapshotHandle{};
+            NKqp::TSnapshotHandle snapshotHandle;
+            if (AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
+                TLocalSnapshotInfo snapshotInfo(msg->Snapshot, userReq.Sender, std::move(userReq.TableIds));
+                snapshotHandle = NKqp::TSnapshotHandle(snapshotInfo.AliveFlag);
+                if (!LocalSnapshotsStorage->Insert(std::move(snapshotInfo))) {
+                    LWTRACK(AcquireReadSnapshotFailure, userReq.Orbit, int(Ydb::StatusIds::BAD_REQUEST));
+                    Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(Ydb::StatusIds::BAD_REQUEST,
+                                             NYql::TIssues{ NYql::TIssue("Snapshot already registered by this actor") },
+                                             std::move(userReq.Orbit)), 0, userReq.Cookie);
+                    continue;
                 }
-            }();
+            }
 
             LWTRACK(AcquireReadSnapshotSuccess, userReq.Orbit, msg->Snapshot.Step, msg->Snapshot.TxId);
             Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, msg->Snapshot, std::move(snapshotHandle), std::move(userReq.Orbit)), 0, userReq.Cookie);

@@ -1475,7 +1475,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
         // Retry deletion, it should not return locks.
         UNIT_ASSERT_VALUES_EQUAL(
             tx.Write(tableId, shards.at(0), TOperation::Delete(2)),
-            "OK (duplicate)");
+            "OK");
         UNIT_ASSERT_VALUES_EQUAL(tx.Locks.size(), 0);
 
         // Check that we are able to commit the tx.

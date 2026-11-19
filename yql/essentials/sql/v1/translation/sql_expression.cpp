@@ -337,7 +337,7 @@ TSQLStatus ExprList(TSqlExpression& sqlExpr, TVector<TNodePtr>& exprNodes, const
         return std::unexpected(status.error());
     }
 
-    for (auto b : node.GetBlock2()) {
+    for (const auto& b : node.GetBlock2()) {
         sqlExpr.Token(b.GetToken1());
         if (auto status = Expr(sqlExpr, exprNodes, b.GetRule_expr2()); !status) {
             return std::unexpected(status.error());
@@ -1249,8 +1249,34 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
                     case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::ALT_NOT_SET:
                         YQL_ENSURE(false, "Unreachable");
                 }
-
-                if (lastExpr) {
+                if (IsYqlSelectProduced_ && isColumnRef && isFirstElem &&
+                    (!YqlSelectSourceAliases_ || !YqlSelectSourceAliases_->contains(name))) {
+                    const auto& member = ids.back();
+                    TNodePtr key = member.Expr
+                                       ? new TCallNodeImpl(pos, "EvaluateAtom", {member.Expr})
+                                       : BuildQuotedAtom(pos, member.Name);
+                    TVector<TNodePtr> options;
+                    if (Ctx_.PragmaYsonAutoConvert) {
+                        options.push_back(BuildQuotedAtom(pos, "yson_auto_convert"));
+                    }
+                    if (Ctx_.PragmaYsonStrict) {
+                        options.push_back(BuildQuotedAtom(pos, "yson_strict"));
+                    }
+                    if (Ctx_.PragmaYsonFast) {
+                        options.push_back(BuildQuotedAtom(pos, "yson_fast"));
+                    }
+                    TVector<TNodePtr> args = {new TCallNodeImpl(pos, "Void", {}), BuildQuotedAtom(pos, name), key,
+                                              BuildQuote(pos, BuildList(pos, std::move(options)))};
+                    const bool shortAccess = suffix.GetBlock1().size() == 1 ||
+                                             suffix.GetBlock1()[1].GetBlock1().Alt_case() == TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt1;
+                    if (member.Expr && shortAccess && !YqlSelectIsJoin_) {
+                        // Legacy TColumnNode keeps ColumnExpr_ for x.$a on a single source,
+                        // but TJoinBase::AddColumn resets it. Preserve the same base column.
+                        args.push_back(key);
+                    }
+                    lastExpr = new TCallNodeImpl(pos, "YqlColumnOrAccess", args);
+                    ids.clear();
+                } else if (lastExpr) {
                     lastExpr = BuildAccess(pos, ids, /*isLookup=*/false);
                     ids.clear();
                 }

@@ -9,7 +9,6 @@ SRCS(
     retry_ut.cpp
     checked_deref_ptr_ut.cpp
     url_builder_ut.cpp
-    utf8_ut.cpp
 )
 
 END()

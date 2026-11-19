@@ -68,8 +68,19 @@ Y_UNIT_TEST_SUITE(QuoterWithKesusTest) {
 
     Y_UNIT_TEST(FailsToGetBigQuota) {
         TKesusQuoterTestSetup setup;
-        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, TKesusQuoterTestSetup::DEFAULT_KESUS_RESOURCE); // stabilization
-        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, TKesusQuoterTestSetup::DEFAULT_KESUS_RESOURCE, 40, TDuration::MilliSeconds(500), TEvQuota::TEvClearance::EResult::Deadline); // default rate is 10
+        const auto& path = TKesusQuoterTestSetup::DEFAULT_KESUS_PATH;
+        const auto& resource = TKesusQuoterTestSetup::DEFAULT_KESUS_RESOURCE;
+        setup.GetQuota(path, resource); // stabilization
+
+        // The local pacing rate includes both sustained quota and the available
+        // burst, which grows while this request waits. At the default 10 units/s,
+        // 40 units can be granted near the 500 ms deadline. Use a larger request
+        // to keep expiration well separated from quota fulfillment.
+        setup.GetQuota(path, resource, 1'000, TDuration::MilliSeconds(500), TEvQuota::TEvClearance::EResult::Deadline);
+
+        // Expiration must remove the oversized request without consuming quota
+        // or blocking the next request.
+        setup.GetQuota(path, resource, 1, TDuration::Seconds(3));
     }
 
     Y_UNIT_TEST(DualChannelPreventsStarvationAfterBurstConsumption) {

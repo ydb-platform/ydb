@@ -116,8 +116,8 @@ bool TPDisk::InitCommonLogger() {
         }
         CommonLogger->SwitchToNewChunk(TReqId(TReqId::InitCommonLoggerSwitchToNewChunk, 0), nullptr);
 
-        // Log chunk can be collected as soon as no one needs it
-        ChunkState[chunkIdx].CommitState = TChunkState::DATA_COMMITTED;
+        // The full log chunk is released like any other committed log chunk as soon as no one needs it
+        ChunkState[chunkIdx].CommitState = TChunkState::LOG_COMMITTED;
     }
     bool isOk = LogNonceJump(InitialPreviousNonce);
     return isOk;

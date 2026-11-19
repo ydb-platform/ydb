@@ -56,6 +56,16 @@ namespace NKikimr::NBlobDepot {
                     break;
                 }
 
+                case TEvBlobStorage::EvCheckIntegrity: {
+                    auto& check = static_cast<TEvBlobStorage::TEvCheckIntegrity&>(*event);
+                    auto result = check.MakeErrorResponse(NKikimrProto::NODATA, "proxy has vanished",
+                        TGroupId::FromValue(groupId));
+                    result->Id = check.Id;
+                    result->ExecutionRelay = std::move(check.ExecutionRelay);
+                    response = std::move(result); // re-resolve the key, just as Get does for a stale physical mapping
+                    break;
+                }
+
                 default:
                     Y_ABORT("unexpected request type for decommission proxy Type# 0x%08" PRIx32, type);
             }

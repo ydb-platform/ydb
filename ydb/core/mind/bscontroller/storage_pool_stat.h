@@ -106,7 +106,7 @@ namespace NKikimr::NBsController {
         }
 
         void DeleteStoragePool(const TString& id) {
-            Counters->RemoveSubgroup("storagePool", id);
+            Counters->RemoveSubgroup("storagePoolId", id);
             const size_t erased = Map.erase(id);
             Y_ABORT_UNLESS(erased);
         }

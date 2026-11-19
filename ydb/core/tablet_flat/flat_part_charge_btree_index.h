@@ -75,7 +75,8 @@ public:
 
         bool ready = true, overshot = true, hasValidRowsRange = Groups || IncludeHistory;
         const TRowId sliceBeginRowId = beginRowId, sliceEndRowId = endRowId;
-        const auto& meta = Part->IndexPages.GetBTree({});
+        const TGroupId groupId{};
+        const auto& meta = Part->IndexPages.GetBTree(groupId);
         Y_ENSURE(beginRowId < endRowId);
         Y_ENSURE(endRowId <= meta.GetRowCount());
 
@@ -133,7 +134,7 @@ public:
 
         const auto tryHandleNode = [&](const TChildState& child, bool isDataBelow) -> bool {
             if (child.Ref == firstChild.Ref || child.Ref == key1Ref || child.Ref == key2Ref) {
-                if (TryLoadNode(child, nextLevel, meta.HasRootV2())) {
+                if (TryLoadNode(child, groupId, nextLevel, meta.HasRootV2())) {
                     const auto& node = nextLevel.back();
                     if (child.Ref == key1Ref) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
@@ -158,7 +159,7 @@ public:
                     return false;
                 }
             } else {
-                return TryLoadNode(child, nextLevel, meta.HasRootV2());
+                return TryLoadNode(child, groupId, nextLevel, meta.HasRootV2());
             }
         };
 
@@ -171,8 +172,8 @@ public:
             prechargedBytes += child.Bytes - child.PrevBytes;
 
             if (hasValidRowsRange && (child.Ref == key1Ref || child.Ref == key2Ref)) {
-                auto location = NTable::ResolvePageLocation(Part, child.Ref, {});
-                const auto page = TryGetDataPage(location, { });
+                auto location = NTable::ResolvePageLocation(Part, child.Ref, groupId);
+                const auto page = TryGetDataPage(location, groupId);
                 if (page) {
                     auto data = NPage::TDataPage(page);
                     if (child.Ref == key1Ref) {
@@ -189,8 +190,8 @@ public:
                     return false;
                 }
             } else {
-                auto location = NTable::ResolvePageLocation(Part, child.Ref, {});
-                return HasDataPage(location, { });
+                auto location = NTable::ResolvePageLocation(Part, child.Ref, groupId);
+                return HasDataPage(location, groupId);
             }
         };
 
@@ -245,7 +246,8 @@ public:
 
         bool ready = true, overshot = true, hasValidRowsRange = Groups || IncludeHistory;
         const TRowId sliceBeginRowId = beginRowId, sliceEndRowId = endRowId;
-        const auto& meta = Part->IndexPages.GetBTree({});
+        const TGroupId groupId{};
+        const auto& meta = Part->IndexPages.GetBTree(groupId);
         Y_ENSURE(beginRowId < endRowId);
         Y_ENSURE(endRowId <= meta.GetRowCount());
 
@@ -303,7 +305,7 @@ public:
 
         const auto tryHandleNode = [&](const TChildState& child, bool isDataBelow) -> bool {
             if (child.Ref == lastChild.Ref || child.Ref == key1Ref || child.Ref == key2Ref) {
-                if (TryLoadNode(child, nextLevel, meta.HasRootV2())) {
+                if (TryLoadNode(child, groupId, nextLevel, meta.HasRootV2())) {
                     const auto& node = nextLevel.back();
                     if (child.Ref == key1Ref) {
                         TRecIdx pos = node.SeekReverse(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
@@ -328,7 +330,7 @@ public:
                     return false;
                 }
             } else {
-                return TryLoadNode(child, nextLevel, meta.HasRootV2());
+                return TryLoadNode(child, groupId, nextLevel, meta.HasRootV2());
             }
         };
 
@@ -341,8 +343,8 @@ public:
             prechargedBytes += child.Bytes - child.PrevBytes;
 
             if (hasValidRowsRange && (child.Ref == key1Ref || child.Ref == key2Ref)) {
-                auto location = NTable::ResolvePageLocation(Part, child.Ref, {});
-                const auto page = TryGetDataPage(location, { });
+                auto location = NTable::ResolvePageLocation(Part, child.Ref, groupId);
+                const auto page = TryGetDataPage(location, groupId);
                 if (page) {
                     auto data = NPage::TDataPage(page);
                     if (child.Ref == key1Ref) {
@@ -369,8 +371,8 @@ public:
                     return false;
                 }
             } else {
-                auto location = NTable::ResolvePageLocation(Part, child.Ref, {});
-                return HasDataPage(location, { });
+                auto location = NTable::ResolvePageLocation(Part, child.Ref, groupId);
+                return HasDataPage(location, groupId);
             }
         };
 
@@ -517,7 +519,7 @@ private:
         };
 
         const auto tryHandleNode = [&](const TChildState& child, bool /*isDataBelow*/) -> bool {
-            return TryLoadNode(child, nextLevel, meta.HasRootV2());
+            return TryLoadNode(child, groupId, nextLevel, meta.HasRootV2());
         };
 
         const auto tryHandleDataPage = [&](const TChildState& child, bool /*isDataBelow*/ = false) -> bool {
@@ -573,7 +575,7 @@ private:
         };
 
         const auto tryHandleNode = [&](const TChildState& child, bool /*isDataBelow*/) -> bool {
-            return TryLoadNode(child, nextLevel, meta.HasRootV2());
+            return TryLoadNode(child, groupId, nextLevel, meta.HasRootV2());
         };
 
         const auto tryHandleDataPage = [&](const TChildState& child, bool /*isDataBelow*/ = false) -> bool {
@@ -665,7 +667,7 @@ private:
 
         const auto tryHandleNode = [&](const TChildState& child, bool isDataBelow) -> bool {
             if (child.Ref == key1Ref || child.Ref == key2Ref) {
-                if (TryLoadNode(child, nextLevel, meta.HasRootV2())) {
+                if (TryLoadNode(child, groupId, nextLevel, meta.HasRootV2())) {
                     const auto& node = nextLevel.back();
                     if (child.Ref == key1Ref) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key1, scheme.ColsKeyIdx, keyDefaults);
@@ -686,7 +688,7 @@ private:
                     return false;
                 }
             } else {
-                return TryLoadNode(child, nextLevel, meta.HasRootV2());
+                return TryLoadNode(child, groupId, nextLevel, meta.HasRootV2());
             }
         };
 
@@ -751,20 +753,18 @@ private:
 
 private:
     ui64 GetPrevBytes(const TBtreeIndexMeta& meta, TGroupId groupId, TRowId rowId) const {
-        auto* indexPages = Part->GetPageCollection(0);
-        auto* groupPages = Part->GetPageCollection(groupId.Index);
-        auto location = GetBTreeRootLocation(meta, indexPages, groupPages);
+        auto location = Part->IndexPages.GetRootLocation(Part, groupId);
         ui64 result = 0;
 
         for (ui32 height = 0; height < meta.LevelCount(); height++) {
             bool isDataPage = (height + 1 == meta.LevelCount());
-            auto page = Env->TryGetPage(Part, location, {});
+            auto page = Env->TryGetIndexPage(Part, location, groupId);
             if (!page) {
                 return result;
             }
             auto node = TBtreeIndexNode(*page, meta.HasRootV2());
             auto pos = node.Seek(rowId);
-            location = ResolvePageLocation(Part, node.GetChild( pos, isDataPage), isDataPage ? groupId : TGroupId{});
+            location = node.GetChildLocation(pos, isDataPage, Part, groupId);
             if (pos) {
                 result = node.GetChildDataSize(pos - 1);
             }
@@ -774,20 +774,18 @@ private:
     }
 
     ui64 GetBytes(TBtreeIndexMeta meta, TGroupId groupId, TRowId rowId) const {
-        auto* indexPages = Part->GetPageCollection(0);
-        auto* groupPages = Part->GetPageCollection(groupId.Index);
-        auto location = GetBTreeRootLocation(meta, indexPages, groupPages);
+        auto location = Part->IndexPages.GetRootLocation(Part, groupId);
         ui64 result = meta.GetDataSize();
 
         for (ui32 height = 0; height < meta.LevelCount(); height++) {
             bool isDataPage = (height + 1 == meta.LevelCount());
-            auto page = Env->TryGetPage(Part, location, {});
+            auto page = Env->TryGetIndexPage(Part, location, groupId);
             if (!page) {
                 return result;
             }
             auto node = TBtreeIndexNode(*page, meta.HasRootV2());
             auto pos = node.Seek(rowId);
-            location = ResolvePageLocation(Part, node.GetChild( pos, isDataPage), isDataPage ? groupId : TGroupId{});
+            location = node.GetChildLocation(pos, isDataPage, Part, groupId);
             result = node.GetChildDataSize(pos);
         }
 
@@ -803,9 +801,9 @@ private:
         return bool(Env->TryGetPage(Part, location, groupId));
     }
 
-    bool TryLoadNode(const TChildState& child, TVector<TNodeState>& level, bool v2Format) const {
-        auto location = NTable::ResolvePageLocation(Part, child.Ref, {});
-        auto page = Env->TryGetPage(Part, location, {});
+    bool TryLoadNode(const TChildState& child, TGroupId groupId, TVector<TNodeState>& level, bool v2Format) const {
+        auto location = NTable::ResolveIndexPageLocation(Part, child.Ref, groupId);
+        auto page = Env->TryGetIndexPage(Part, location, groupId);
         if (!page) {
             return false;
         }

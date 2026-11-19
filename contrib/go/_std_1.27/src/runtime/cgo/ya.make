@@ -108,9 +108,12 @@ IF (CGO_ENABLED)
             callbacks_unix.go
             callbacks_traceback.go
             CGO_EXPORT gcc_android.c
+            CGO_EXPORT gcc_fatalf.c
             CGO_EXPORT gcc_libinit_unix.c
             CGO_EXPORT gcc_setenv.c
             CGO_EXPORT gcc_traceback.c
+            CGO_EXPORT gcc_unix.c
+            CGO_EXPORT pthread_unix.c
             linux.go
             CGO_EXPORT linux_syscall.c
             setenv.go

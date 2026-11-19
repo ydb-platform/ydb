@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/threading/bounded_queue
     library/cpp/threading/queue
     ydb/library/actors/util
 )
@@ -15,4 +16,5 @@ BENCHMARK_OPTS(
 
 SIZE(SMALL)
 
+REQUIREMENTS(cpu:4)
 END()

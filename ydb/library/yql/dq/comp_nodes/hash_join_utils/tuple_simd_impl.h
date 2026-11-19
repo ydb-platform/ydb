@@ -4,9 +4,12 @@
 #include "hashes_calc.h"
 #include "packing_simd_impl.h"
 #include "tuple_bitmatrix.h"
+#include "tuple_simd_target.h"
 
 #include <algorithm>
 #include <queue>
+
+TUPLE_LAYOUT_TARGET_PUSH
 
 // Included only by the ISA-specific layout implementations. Keeping the layout
 // and packing definitions together allows inlining without LTO.
@@ -822,3 +825,5 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
 }
 
 } // namespace NKikimr::NMiniKQL::NPackedTuple
+
+TUPLE_LAYOUT_TARGET_POP

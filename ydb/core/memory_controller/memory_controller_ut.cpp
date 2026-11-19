@@ -473,7 +473,8 @@ Y_UNIT_TEST(MemTable) {
     memoryControllerConfig->SetHardLimitBytes(200_MB);
     memoryControllerConfig->SetMemTableMinPercent(0);
     memoryControllerConfig->SetMemTableMaxPercent(100);
-    memoryControllerConfig->SetMemTableMinBytes(100_KB);
+    // Leave room for system-table memtables, which share the node-wide limit.
+    memoryControllerConfig->SetMemTableMinBytes(1_MB);
     memoryControllerConfig->SetMemTableMaxBytes(10_MB);
 
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
@@ -483,19 +484,25 @@ Y_UNIT_TEST(MemTable) {
     InitRoot(server, sender);
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
-    UpsertRows(server, sender);
+    // Generate enough rows to exceed the low limit without a large VALUES expression.
+    ExecSQL(server, sender, R"(
+        $rows = ListMap(ListFromRange(0u, 20000u), ($key) -> {
+            RETURN AsStruct($key AS key, $key AS value);
+        });
+        UPSERT INTO `/Root/table-1` SELECT * FROM AS_TABLE($rows);
+    )");
 
     runtime.SimulateSleep(TDuration::Seconds(2));
     UNIT_ASSERT_DOUBLES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Limit")->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB));
-    UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(100_KB));
+    UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(1_MB));
 
     server->ProcessMemoryInfo->AllocatedMemory = 1000_MB;
     // Consumption is refreshed on a controller tick after asynchronous compactions finish.
     runtime.WaitFor("MemTable consumption below limit", [&] {
-        return server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val() <= static_cast<i64>(100_KB);
+        return server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val() <= static_cast<i64>(1_MB);
     }, TDuration::Seconds(10));
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Limit")->Val(), static_cast<i64>(100_KB));
-    UNIT_ASSERT_LE(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(100_KB));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Limit")->Val(), static_cast<i64>(1_MB));
+    UNIT_ASSERT_LE(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(1_MB));
     UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(1_KB));
 }
 

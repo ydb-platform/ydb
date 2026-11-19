@@ -1,0 +1,5 @@
+id: ydb-description
+name: YDB test description styles
+description: Restore readable tables and text formatting in YDB test descriptions
+cssFiles:
+  - styles.css

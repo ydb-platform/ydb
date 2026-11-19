@@ -9,6 +9,23 @@ SRCS(
     simple_types.cpp
     yql_atom_enums.h
     yql_callable_names.h
+    block.cpp
+    hopping.cpp
+    hopping.h
+    sort_order.cpp
+    sort_order.h
+    time_order_recover.cpp
+    time_order_recover.h
+    window_direction.cpp
+    window_direction.h
+    window_frame_bounds.cpp
+    window_frame_bounds.h
+    window_frames_collector_params.cpp
+    window_frames_collector_params.h
+    window_number_and_direction.cpp
+    window_number_and_direction.h
+    yql_atom_enums.cpp
+    yql_callable_names.cpp
 )
 
 PEERDIR(

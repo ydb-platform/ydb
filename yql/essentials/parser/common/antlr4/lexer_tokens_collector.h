@@ -15,9 +15,9 @@ template <typename TLexer>
 class TLexerTokensCollector4 {
 public:
     explicit TLexerTokensCollector4(TStringBuf data, TString queryName = "query")
-        : QueryName(std::move(queryName))
-        , InputStream(data)
-        , Lexer(&InputStream)
+        : QueryName_(std::move(queryName))
+        , InputStream_(data)
+        , Lexer_(&InputStream_)
     {
     }
 
@@ -25,11 +25,11 @@ public:
         try {
             bool error = false;
             typename antlr4::YqlErrorListener listener(&errors, &error);
-            Lexer.removeErrorListeners();
-            Lexer.addErrorListener(&listener);
+            Lexer_.removeErrorListeners();
+            Lexer_.addErrorListener(&listener);
 
             for (;;) {
-                auto token = Lexer.nextToken();
+                auto token = Lexer_.nextToken();
                 auto type = token->getType();
                 const bool isEOF = type == TLexer::EOF;
                 NSQLTranslation::TParsedToken last;
@@ -50,16 +50,16 @@ public:
 
 private:
     TString GetTokenName(size_t type) const {
-        auto res = Lexer.getVocabulary().getSymbolicName(type);
+        auto res = Lexer_.getVocabulary().getSymbolicName(type);
         if (res != "") {
             return TString(res);
         }
         return TString(NAST::INVALID_TOKEN_NAME);
     }
 
-    TString QueryName;
-    antlr4::ANTLRInputStream InputStream;
-    TLexer Lexer;
+    TString QueryName_;
+    antlr4::ANTLRInputStream InputStream_;
+    TLexer Lexer_;
 };
 
 } // namespace NAST

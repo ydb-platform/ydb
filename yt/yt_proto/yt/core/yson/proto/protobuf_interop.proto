@@ -31,6 +31,7 @@ extend google.protobuf.MessageOptions
 {
     optional bool attribute_dictionary = 3000;
     optional int32 unknown_yson_field_number = 3001 [default = 3005];
+    optional bool yson_list = 3002;
 }
 
 extend google.protobuf.FileOptions

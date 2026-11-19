@@ -120,9 +120,10 @@ def create_simple_interactive_plot(processes, ram_usage_with_ts, output_file):
 
     detailed_hover_texts, process_counts = get_suite_consumption_text(timeline, memory_usage, processes, 'Suites Max RAM')
 
-    min_ts = timeline[0]
-    max_ts = timeline[-1]
-    ram_usage_with_ts = list(filter(lambda x: min_ts <= x[0] <= max_ts, ram_usage_with_ts))
+    if timeline:
+        min_ts = timeline[0]
+        max_ts = timeline[-1]
+        ram_usage_with_ts = list(filter(lambda x: min_ts <= x[0] <= max_ts, ram_usage_with_ts))
     ram_usage = list(map(lambda x: x[1], ram_usage_with_ts))
     ts_of_ram_usage = list(map(lambda x: x[0], ram_usage_with_ts))
     time_of_ram_usage = list(map(lambda x: timestamp_to_time(x), ts_of_ram_usage))
@@ -210,27 +211,29 @@ def create_simple_interactive_plot(processes, ram_usage_with_ts, output_file):
         row=1, col=1
     )
 
-    # Отмечаем пик
-    max_memory = max(ram_usage)
-    max_idx = ram_usage.index(max_memory)
-    max_time = time_of_ram_usage[max_idx]
+    max_memory = None
+    if ram_usage:
+        # Отмечаем пик
+        max_memory = max(ram_usage)
+        max_idx = ram_usage.index(max_memory)
+        max_time = time_of_ram_usage[max_idx]
 
-    if not output_file:
-        print(detailed_hover_texts[max_idx].replace('<br>', '\n'))
+        if not output_file:
+            print(hover_texts[max_idx].replace('<br>', '\n'))
 
-    fig.add_trace(
-        go.Scatter(
-            x=[max_time],
-            y=[max_memory],
-            mode='markers+text',
-            marker=dict(size=15, color='red', symbol='star'),
-            text=[f'Peak: {max_memory} GB'],
-            textposition='top center',
-            name='Peak',
-            showlegend=False
-        ),
-        row=1, col=1
-    )
+        fig.add_trace(
+            go.Scatter(
+                x=[max_time],
+                y=[max_memory],
+                mode='markers+text',
+                marker=dict(size=15, color='red', symbol='star'),
+                text=[f'Peak: {max_memory} GB'],
+                textposition='top center',
+                name='Peak',
+                showlegend=False
+            ),
+            row=1, col=1
+        )
 
     fig.update_yaxes(title_text="Memory (GB)", row=1, col=1)
 
@@ -316,6 +319,9 @@ if __name__ == "__main__":
     obj = json.load(report_file)
     all = parse_report_file(obj)
     ram_usage = parse_ram_usage_file(args.ram_usage_file)
+    if not ram_usage:
+        print("No RAM samples; skipping memory report and alert")
+        raise SystemExit(0)
 
     output_file = args.output_file
     # Draw or export fig with RAM usage

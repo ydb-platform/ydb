@@ -17,10 +17,11 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <util/digest/city.h>
+#include <array>
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
+#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
 #include <util/generic/string.h>
@@ -33,6 +34,36 @@ namespace NKikimr {
 namespace NSchemeBoard {
 
 namespace {
+
+    struct TEvPrivate {
+        enum EEv {
+            EvPublicationComplete = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+            EvRefreshUpdate,
+            EvEnd,
+        };
+
+        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE));
+
+        struct TEvPublicationComplete: public TEventLocal<TEvPublicationComplete, EvPublicationComplete> {
+            const TPathId PathId;
+            const ui64 Version;
+            const ui64 Cookie;
+
+            TEvPublicationComplete(TPathId pathId, ui64 version, ui64 cookie)
+                : PathId(pathId)
+                , Version(version)
+                , Cookie(cookie)
+            {}
+        };
+
+        struct TEvRefreshUpdate: public TEventLocal<TEvRefreshUpdate, EvRefreshUpdate> {
+            THolder<NInternalEvents::TEvUpdateBuilder> Update;
+
+            explicit TEvRefreshUpdate(THolder<NInternalEvents::TEvUpdateBuilder> update)
+                : Update(std::move(update))
+            {}
+        };
+    };
 
     using TDelayedUpdates = TVector<THolder<IEventHandle>>;
 
@@ -117,44 +148,78 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
             BatchSize = 0;
         }
 
-        Send(Replica, std::move(update), IEventHandle::FlagTrackDelivery);
+        Send(Replica, std::move(update), IEventHandle::FlagTrackDelivery, FullSyncCookie);
     }
 
     void ResumeSync(const TPathId& fromPathId) {
         ProcessSync(nullptr, fromPathId);
     }
 
-    void EnqueueUpdate(NInternalEvents::TEvUpdate::TPtr& ev, bool canSend = false) {
-        const TPathId pathId = ev->Get()->GetPathId();
-        const auto& record = (static_cast<NInternalEvents::TEvUpdateBuilder*>(ev->Get()))->Record;
+    void EnqueueUpdate(THolder<NInternalEvents::TEvUpdateBuilder> update, TMaybe<ui64> publicationCookie, bool canSend) {
+        const TPathId pathId = update->GetPathId();
+        const auto& record = update->Record;
         const ui64 version = record.GetIsDeletion() ? Max<ui64>() : NSchemeBoard::GetPathVersion(record);
 
         if (canSend && UpdatesInFlight.size() < BatchSizeLimit) {
             bool needSend = true;
 
             auto it = UpdatesInFlight.find(pathId);
-            if (it != UpdatesInFlight.end() && !it->second.empty() && it->second.rbegin()->first >= version) {
+            if (it != UpdatesInFlight.end() && it->second.Version >= version) {
                 needSend = false;
             }
 
             it = UpdatesRequested.find(pathId);
             if (it != UpdatesRequested.end()) {
-                UpdatesInFlight[pathId].insert(it->second.begin(), it->second.end());
+                UpdatesInFlight[pathId].Merge(it->second);
                 UpdatesRequested.erase(it);
             }
 
-            UpdatesInFlight[pathId].emplace(version, ev->Cookie);
+            auto& pending = UpdatesInFlight[pathId];
+            pending.Version = Max(pending.Version, version);
+            if (publicationCookie) {
+                pending.AddPublication(version, *publicationCookie);
+            }
             if (needSend) {
-                Send(Replica, ev->Release().Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+                // Publication cookies are retained in UpdatesInFlight. The
+                // replica only needs to echo the kind of update being ACKed.
+                Send(Replica, std::move(update), IEventHandle::FlagTrackDelivery, IncrementalUpdateCookie);
             }
         } else {
             auto it = UpdatesRequested.find(pathId);
             if (it != UpdatesRequested.end()) {
-                Updates[pathId].insert(it->second.begin(), it->second.end());
+                Updates[pathId].Merge(it->second);
                 UpdatesRequested.erase(it);
             }
 
-            Updates[pathId].emplace(version, ev->Cookie);
+            auto& pending = Updates[pathId];
+            pending.Version = Max(pending.Version, version);
+            if (publicationCookie) {
+                pending.AddPublication(version, *publicationCookie);
+            }
+        }
+    }
+
+    void EnqueueUpdate(NInternalEvents::TEvUpdate::TPtr& ev, bool canSend = false) {
+        auto update = THolder<NInternalEvents::TEvUpdateBuilder>(
+            static_cast<NInternalEvents::TEvUpdateBuilder*>(ev->Release().Release()));
+        EnqueueUpdate(std::move(update), TMaybe<ui64>(ev->Cookie), canSend);
+    }
+
+    void EnqueueUpdate(TEvPrivate::TEvRefreshUpdate::TPtr& ev, bool canSend = false) {
+        EnqueueUpdate(std::move(ev->Get()->Update), Nothing(), canSend);
+    }
+
+    void Handle(TEvPrivate::TEvRefreshUpdate::TPtr& ev) {
+        EnqueueUpdate(ev, true);
+    }
+
+    void Handle(TEvPrivate::TEvPublicationComplete::TPtr& ev) {
+        Y_ABORT_UNLESS(ev->Sender == Parent);
+        const auto* msg = ev->Get();
+        for (auto* updates : {&Updates, &UpdatesRequested, &UpdatesInFlight}) {
+            if (auto it = updates->find(msg->PathId); it != updates->end()) {
+                it->second.ForgetPublication(msg->Version, msg->Cookie);
+            }
         }
     }
 
@@ -164,15 +229,8 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
 
         auto it = UpdatesInFlight.find(pathId);
         if (it != UpdatesInFlight.end()) {
-            auto& versions = it->second;
-            TSet<ui64> txIds;
-
-            for (auto x = versions.begin(), end = versions.upper_bound(std::make_pair(version, Max<ui64>())); x != end;) {
-                txIds.insert(x->second);
-                versions.erase(x++);
-            }
-
-            if (versions.empty()) {
+            const auto txIds = it->second.AckVersion(version);
+            if (it->second.Versions.empty() && version >= it->second.Version) {
                 UpdatesInFlight.erase(it);
             }
 
@@ -196,7 +254,7 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
             return false;
         }
 
-        UpdatesRequested[it->first].insert(it->second.begin(), it->second.end());
+        UpdatesRequested[it->first].Merge(it->second);
         Send(Parent, new NInternalEvents::TEvRequestUpdate(it->first));
         Updates.erase(it);
 
@@ -205,7 +263,9 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
 
     void RequestUpdates() {
         auto move = [](auto& src, auto& dst) {
-            dst.insert(src.begin(), src.end());
+            for (const auto& [pathId, pending] : src) {
+                dst[pathId].Merge(pending);
+            }
             src.clear();
         };
 
@@ -306,7 +366,7 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
             return;
         }
 
-        if (!ev->Cookie && ev->Get()->GetPathId() == CurPathId) {
+        if (ev->Cookie == FullSyncCookie && ev->Get()->GetPathId() == CurPathId) {
             LastAckedPathId = CurPathId;
 
             CurPathId = CurPathId.NextId();
@@ -351,7 +411,7 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
 
         auto fillUpdates = [limit, &response = response->Record](const auto& from, auto& to) {
             ui32 count = 0;
-            for (const auto& [pathId, versions] : from) {
+            for (const auto& [pathId, pending] : from) {
                 auto& update = *to.Add();
 
                 update.MutablePathId()->SetOwnerId(pathId.OwnerId);
@@ -360,7 +420,7 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
                 NKikimrSchemeBoardMon::TReplicaPopulatorResponse::TUpdateInfo::TVersionInfo* info = nullptr;
                 TMaybe<ui64> prevVersion;
 
-                for (const auto& [version, txId] : versions) {
+                for (const auto& [version, txId] : pending.Versions) {
                     if (!prevVersion || *prevVersion != version) {
                         info = update.AddVersions();
                     }
@@ -436,6 +496,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvHandshakeResponse, Handle);
             hFunc(NInternalEvents::TEvUpdate, EnqueueUpdate);
+            hFunc(TEvPrivate::TEvRefreshUpdate, EnqueueUpdate);
+            hFunc(TEvPrivate::TEvPublicationComplete, Handle);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
@@ -450,6 +512,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvDescribeResult, Handle);
             hFunc(NInternalEvents::TEvUpdate, Handle);
+            hFunc(TEvPrivate::TEvRefreshUpdate, Handle);
+            hFunc(TEvPrivate::TEvPublicationComplete, Handle);
             hFunc(NSchemeshardEvents::TEvUpdateAck, Handle);
             hFunc(NInternalEvents::TEvCommitResponse, Handle);
 
@@ -465,6 +529,8 @@ public:
     STATEFN(StateSleep) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvUpdate, EnqueueUpdate);
+            hFunc(TEvPrivate::TEvRefreshUpdate, EnqueueUpdate);
+            hFunc(TEvPrivate::TEvPublicationComplete, Handle);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
@@ -475,6 +541,7 @@ public:
 
     STATEFN(StateCalm) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvPublicationComplete, Handle);
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
@@ -487,10 +554,50 @@ private:
     const ui64 Owner;
     const ui64 Generation;
 
-    // TPathId: [version; txId]
-    THashMap<TPathId, TSet<std::pair<ui64, ui64>>> Updates;
-    THashMap<TPathId, TSet<std::pair<ui64, ui64>>> UpdatesRequested;
-    THashMap<TPathId, TSet<std::pair<ui64, ui64>>> UpdatesInFlight;
+    struct TPendingUpdate {
+        ui64 Version = 0;
+        TSet<std::pair<ui64, ui64>> Versions;
+        TSet<std::pair<ui64, ui64>> VersionsByCookie;
+
+        void AddPublication(ui64 version, ui64 cookie) {
+            Versions.emplace(version, cookie);
+            VersionsByCookie.emplace(cookie, version);
+        }
+
+        void ForgetPublication(ui64 version, ui64 cookie) {
+            auto it = VersionsByCookie.lower_bound({cookie, 0});
+            while (it != VersionsByCookie.end() && it->first == cookie && it->second <= version) {
+                Versions.erase({it->second, cookie});
+                it = VersionsByCookie.erase(it);
+            }
+        }
+
+        TSet<ui64> AckVersion(ui64 version) {
+            TSet<ui64> cookies;
+            auto it = Versions.begin();
+            while (it != Versions.end() && it->first <= version) {
+                cookies.insert(it->second);
+                VersionsByCookie.erase({it->second, it->first});
+                it = Versions.erase(it);
+            }
+            return cookies;
+        }
+
+        void Merge(const TPendingUpdate& other) {
+            Version = Max(Version, other.Version);
+            Versions.insert(other.Versions.begin(), other.Versions.end());
+            VersionsByCookie.insert(other.VersionsByCookie.begin(), other.VersionsByCookie.end());
+        }
+    };
+
+    THashMap<TPathId, TPendingUpdate> Updates;
+    THashMap<TPathId, TPendingUpdate> UpdatesRequested;
+    THashMap<TPathId, TPendingUpdate> UpdatesInFlight;
+
+    // Transport cookies distinguish full-sync ACKs from live/catch-up ACKs.
+    // They are independent of the original publication cookie (which may be zero).
+    static constexpr ui64 FullSyncCookie = 0;
+    static constexpr ui64 IncrementalUpdateCookie = 1;
 
     // used during sync
     TPathId CurPathId;
@@ -504,8 +611,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
     TConstArrayRef<TActorId> SelectReplicas(TPathId pathId, TStringBuf path) {
         SelectionReplicaCache.clear();
 
-        const ui64 pathHash = CityHash64(path);
-        const ui64 idHash = pathId.Hash();
+        const ui64 pathKey = GetSchemeBoardSelectionKey(path);
+        const ui64 idKey = GetSchemeBoardSelectionKey(pathId);
 
         for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
             if (ShouldIgnore(GroupInfo->RingGroups[ringGroupIndex])) {
@@ -513,10 +620,10 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             }
             TStateStorageInfo::TSelection selection;
 
-            GroupInfo->SelectReplicas(pathHash, &selection, ringGroupIndex);
+            GroupInfo->SelectReplicas(pathKey, &selection, ringGroupIndex);
             SelectionReplicaCache.insert(SelectionReplicaCache.end(), selection.begin(), selection.end());
 
-            GroupInfo->SelectReplicas(idHash, &selection, ringGroupIndex);
+            GroupInfo->SelectReplicas(idKey, &selection, ringGroupIndex);
             for (const TActorId& replica : selection) {
                 if (Find(SelectionReplicaCache, replica) == SelectionReplicaCache.end()) {
                     SelectionReplicaCache.emplace_back(replica);
@@ -536,8 +643,22 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         Y_ABORT_UNLESS(desc || isDeletion);
 
         // Replay sends the latest description, so use its current path too.
-        // The saved publication path is needed only after deletion.
-        TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, desc ? TStringBuf(desc->Path) : path);
+        // Keep quorum routing in sync with the description actually sent.
+        // The saved publication route is needed after deletion.
+        auto& info = UpdateAcks.at(cookie);
+        auto& route = info.Paths.at(pathId);
+        const TStringBuf currentPath = desc ? TStringBuf(desc->Path) : path;
+        if (route.Path != currentPath) {
+            route.Path = currentPath;
+            route.MinAckVersion = Max(route.MinAckVersion, isDeletion ? Max<ui64>() : desc->PathVersion);
+            // Earlier ACKs describe the previous path, including those still
+            // in flight. Require fresh ACKs of the description sent below.
+            auto it = info.PathAcks.lower_bound({pathId, 0});
+            for (; it != info.PathAcks.end() && it->first.first == pathId; ++it) {
+                it->second.clear();
+            }
+        }
+        TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, route.Path);
         for (const auto& replica : replicas) {
             const TActorId* replicaPopulator = ReplicaToReplicaPopulator.FindPtr(replica);
             Y_ABORT_UNLESS(replicaPopulator != nullptr);
@@ -550,6 +671,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             }
             update->Record.SetNeedAck(true);
 
+            if (Find(route.ReplicaPopulators, *replicaPopulator) == route.ReplicaPopulators.end()) {
+                route.ReplicaPopulators.push_back(*replicaPopulator);
+            }
             Send(*replicaPopulator, std::move(update), 0, cookie);
         }
     }
@@ -637,7 +761,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             deletedBegin = 1;
         }
 
-        if (deletedEnd <= deletedBegin) {
+        // the interval is inclusive, so [N; N] holds one deleted path and only end < begin is empty
+        if (deletedEnd < deletedBegin) {
             // if pushing migrated pathes hasn'n finished jet, we do not set up deteled ranges between them
             deletedBegin = 0;
             deletedEnd = 0;
@@ -671,7 +796,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
         update->Record.SetNeedAck(true);
 
-        Send(ev->Sender, std::move(update));
+        Send(ev->Sender, new TEvPrivate::TEvRefreshUpdate(std::move(update)));
     }
 
     void DelayUpdate(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
@@ -718,7 +843,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             {"version", (isDeletion ? 0 : version)});
 
         if (isDeletion) {
-            if (!Descriptions.contains(pathId)) {
+            if (!Descriptions.contains(pathId) && record.GetPath().empty()) {
                 YDB_LOG_NOTICE("Immediate ack for deleted path",
                     {"selfId", SelfId()},
                     {"sender", ev->Sender},
@@ -742,29 +867,33 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         it->second.AckTo = ev->Sender;
         it->second.PathAcks.emplace(std::make_pair(pathId, version), THashSet<TActorId>{});
 
-        auto& path = it->second.Paths[pathId];
-        path = Descriptions.at(pathId).Path;
-        Update(pathId, isDeletion, ev->Cookie, path);
+        it->second.Paths.try_emplace(pathId);
+        Update(pathId, isDeletion, ev->Cookie, record.GetPath());
 
         if (isDeletion) {
             Descriptions.erase(pathId);
         }
     }
 
-    bool CheckQuorum(const THashSet<TActorId>& ackedPopulators) const {
-        for (const auto& ringGroup : GroupInfo->RingGroups) {
+    bool CheckQuorum(TPathId pathId, TStringBuf path, const THashSet<TActorId>& ackedPopulators) const {
+        const std::array keys = {GetSchemeBoardSelectionKey(path), GetSchemeBoardSelectionKey(pathId)};
+        for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
+            const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
             if (ShouldIgnoreInQuorum(ringGroup)) {
                 continue;
             }
-            ui32 acks = 0;
-            for (const auto& ring : ringGroup.Rings) {
-                for (const auto& replica : ring.Replicas) {
+
+            TStateStorageInfo::TSelection selection;
+            for (ui64 key : keys) {
+                GroupInfo->SelectReplicas(key, &selection, ringGroupIndex);
+                ui32 acks = 0;
+                for (const auto& replica : selection) {
                     const auto* populator = ReplicaToReplicaPopulator.FindPtr(replica);
                     acks += populator && ackedPopulators.contains(*populator);
                 }
-            }
-            if (!IsMajorityReached(ringGroup, acks)) {
-                return false;
+                if (!IsMajorityReached(ringGroup, acks)) {
+                    return false;
+                }
             }
         }
         return true;
@@ -799,13 +928,17 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
         const TPathId pathId = ev->Get()->GetPathId();
         const ui64 version = record.GetVersion();
+        const auto* route = it->second.Paths.FindPtr(pathId);
+        if (!route || version < route->MinAckVersion) {
+            return;
+        }
 
         auto pathIt = it->second.PathAcks.lower_bound({pathId, 0});
         while (pathIt != it->second.PathAcks.end()
                && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
             pathIt->second.insert(ev->Sender);
-            if (CheckQuorum(pathIt->second)) {
+            if (CheckQuorum(pathId, route->Path, pathIt->second)) {
                 YDB_LOG_NOTICE("Ack update",
                     {"selfId", SelfId()},
                     {"to", it->second.AckTo},
@@ -816,12 +949,24 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 auto ack = MakeHolder<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, pathIt->first.second);
                 Send(it->second.AckTo, std::move(ack), 0, ev->Cookie);
 
+                const ui64 completedVersion = pathIt->first.second;
                 auto eraseIt = pathIt;
                 ++pathIt;
                 it->second.PathAcks.erase(eraseIt);
 
-                if (it->second.PathAcks.empty()) {
-                    UpdateAcks.erase(it);
+                const auto pendingPath = it->second.PathAcks.lower_bound({pathId, 0});
+                const bool pathComplete = pendingPath == it->second.PathAcks.end() || pendingPath->first.first != pathId;
+                if (pathComplete || completedVersion < pendingPath->first.second) {
+                    const ui64 releaseVersion = pathComplete ? Max<ui64>() : completedVersion;
+                    for (const auto& replicaPopulator : route->ReplicaPopulators) {
+                        Send(replicaPopulator, new TEvPrivate::TEvPublicationComplete(pathId, releaseVersion, ev->Cookie));
+                    }
+                }
+                if (pathComplete) {
+                    it->second.Paths.erase(pathId);
+                    if (it->second.PathAcks.empty()) {
+                        UpdateAcks.erase(it);
+                    }
                     break;
                 }
             } else {
@@ -889,7 +1034,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             for (const auto& [pathVersion, _] : info.PathAcks) {
                 const auto& pathId = pathVersion.first;
                 if (pathId != previousPath) {
-                    Update(pathId, !Descriptions.contains(pathId), cookie, info.Paths.at(pathId));
+                    Update(pathId, !Descriptions.contains(pathId), cookie, info.Paths.at(pathId).Path);
                     previousPath = pathId;
                 }
             }
@@ -1072,8 +1217,14 @@ private:
         TActorId AckTo;
         // ReplicaPopulator actor IDs identify the replica incarnations that acknowledged each publication.
         TMap<std::pair<TPathId, ui64>, THashSet<TActorId>> PathAcks;
+        struct TPublicationRoute {
+            TString Path;
+            // ACKs of an older path must not satisfy the current route's quorum.
+            ui64 MinAckVersion = 0;
+            TVector<TActorId> ReplicaPopulators;
+        };
         // Keep routing information until completion, even for deleted paths.
-        THashMap<TPathId, TString> Paths;
+        THashMap<TPathId, TPublicationRoute> Paths;
     };
 
     THashMap<ui64, TUpdateAckInfo> UpdateAcks; // ui64 is a cookie

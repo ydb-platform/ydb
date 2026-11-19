@@ -962,12 +962,12 @@ public:
 
         if (Info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
             // Both VPatch and VMovedPatch require NORMAL; otherwise use ordinary Get/Put.
-            UseVPatch &= GetMirror3dcGroupState(Info->GetFailRealmState(0), Info->GetFailRealmState(1),
-                Info->GetFailRealmState(2)) == EMirror3dcGroupState::NORMAL;
+            UseVPatch &= Info->GetMirror3dcState().State == NKikimrBlobStorage::TGroupState::NORMAL;
         }
 
         IsGoodPatchedBlobId = result;
-        IsAllowedErasure = Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
+        IsAllowedErasure = (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
+                && Info->Type.GetErasure() != TErasureType::Erasure8Plus2Block)
                 || Info->Type.GetErasure() == TErasureType::ErasureNone
                 || Info->Type.GetErasure() == TErasureType::ErasureMirror3dc;
         if (EnableVPatchForTesting && IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch

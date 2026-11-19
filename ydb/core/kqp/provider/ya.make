@@ -28,18 +28,23 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/resource
     ydb/core/base
     ydb/core/docapi
     ydb/core/external_sources
+    ydb/core/kqp/common/simple
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/opt/cbo
-    ydb/core/local_indexes/bloom
     ydb/core/kqp/query_data
+    ydb/core/kqp/tracing
+    ydb/core/local_indexes/bloom
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
+    ydb/core/util
     ydb/library/aclib
     ydb/library/aclib/protos
+    ydb/library/table_digest
     ydb/library/ydb_issue/proto
     ydb/library/yql/dq/common
     ydb/library/yql/dq/constraints
@@ -54,8 +59,8 @@ PEERDIR(
     ydb/services/metadata/optimization
     yql/essentials/core
     yql/essentials/core/expr_nodes
-    yql/essentials/core/services
     yql/essentials/core/peephole_opt
+    yql/essentials/core/services
     yql/essentials/minikql
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/providers/common/codec
@@ -70,15 +75,15 @@ PEERDIR(
     yql/essentials/providers/result/provider
     yql/essentials/public/decimal
     yql/essentials/public/issue
-    yql/essentials/types/binary_json
-    yql/essentials/types/dynumber
     yql/essentials/sql
     yql/essentials/sql/settings
-    yql/essentials/sql/v1/translation
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
+    yql/essentials/sql/v1/translation
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
     yql/essentials/utils/log
 )
 
@@ -122,6 +127,10 @@ ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(yql_kikimr_provider.h)
 GENERATE_ENUM_SERIALIZATION(yql_kikimr_gateway.h)
+
+RESOURCE(
+    ydb/library/yql/udfs/digest/aggregate.sql /lib/ydb/digest.sql
+)
 
 END()
 

@@ -69,6 +69,7 @@ public:
     void SetImpersonationUser(const TString& impersonationUser);
 
     void SetServiceTicket(const TString& ticket);
+    void SetUserTicket(const TString& ticket);
 
     void SetInputFormat(const TMaybe<TFormat>& format);
 
@@ -103,6 +104,7 @@ private:
     TString ImpersonationUser_;
     TString Token_;
     TString ServiceTicket_;
+    TString UserTicket_;
     TNode Attributes_;
     TString ProxyAddress_;
     TString HostPort_;

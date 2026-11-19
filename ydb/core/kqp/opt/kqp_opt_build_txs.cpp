@@ -1,6 +1,6 @@
 #include "kqp_opt_impl.h"
 
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
@@ -577,6 +577,53 @@ TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
     return result;
 }
 
+TMaybeNode<TKqlUnsafeTruncate> GetUnsafeTruncate(const TKqlQuery& query) {
+    for (const auto& effect : query.Effects()) {
+        if (auto truncate = effect.Maybe<TKqlUnsafeTruncate>()) {
+            return truncate;
+        }
+    }
+    return {};
+}
+
+TKqpSinkEffect BuildTableTruncateEffect(const TKqlUnsafeTruncate& truncate, TExprContext& ctx) {
+    const auto pos = truncate.Pos();
+    const auto* rowType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{});
+    const auto rows = Build<TCoList>(ctx, pos)
+        .ListType(ExpandType(pos, *ctx.MakeType<TListExprType>(rowType), ctx))
+        .Done();
+
+    TDqStageSettings stageSettings;
+    stageSettings.PartitionMode = TDqStageSettings::EPartitionMode::Single;
+
+    // The sink carries the operation in the physical plan. Its executer needs no input rows.
+    const auto stage = Build<TDqStage>(ctx, pos)
+        .Inputs().Build()
+        .Program()
+            .Args({})
+            .Body<TCoToFlow>().Input(rows).Build()
+            .Build()
+        .Outputs()
+            .Add<TDqSink>()
+                .Index().Build("0")
+                .DataSink<TKqpTableSink>()
+                    .Category().Build(KqpTableTruncateSinkName)
+                    .Cluster().Build("db")
+                    .Build()
+                .Settings<TKqpTableTruncateSettings>()
+                    .TablePath(truncate.TablePath())
+                    .Build()
+                .Build()
+            .Build()
+        .Settings(stageSettings.BuildNode(ctx, pos))
+        .Done();
+
+    return Build<TKqpSinkEffect>(ctx, pos)
+        .Stage(stage)
+        .SinkIndex().Build("0")
+        .Done();
+}
+
 class TKqpBuildTxsTransformer : public TSyncTransformerBase {
     class TEffectsInfo {
     public:
@@ -648,6 +695,36 @@ public:
         YQL_CLOG(DEBUG, ProviderKqp) << ">>> TKqpBuildTxsTransformer: " << KqpExprToPrettyString(*inputExpr, ctx);
 
         TKqlQuery query(inputExpr);
+
+        if (auto truncate = GetUnsafeTruncate(query)) {
+            // The truncate must be the only effect so that no other operations are discarded.
+            YDB_LOG_ENSURE(query.Results().Empty() && query.Effects().Size() == 1,
+                {"results", query.Results().Size()},
+                {"effects", query.Effects().Size()});
+
+            const auto effects = Build<TExprList>(ctx, query.Pos())
+                .Add(BuildTableTruncateEffect(truncate.Cast(), ctx))
+                .Done();
+            const auto sinkQuery = Build<TKqlQuery>(ctx, query.Pos())
+                .Results().Build()
+                .Effects(effects)
+                .Done();
+            auto tx = BuildTx(KqpCtx->Config->GetEnableIndexStreamWrite() ? sinkQuery.Ptr() : effects.Ptr(),
+                ctx, /* isPrecompute */ false);
+            if (!tx) {
+                return TStatus::Error;
+            }
+
+            // Truncate has its own transaction and is never deferred as a regular table write.
+            TKqpPhyTxSettings txSettings;
+            txSettings.Type = EPhysicalTxType::Generic;
+            BuildCtx->PhysicalTxs.emplace_back(Build<TKqpPhysicalTx>(ctx, query.Pos())
+                .InitFrom(tx.Cast())
+                .Settings(txSettings.BuildNode(ctx, query.Pos()))
+                .Done());
+
+            return TStatus::Ok;
+        }
 
         if (auto status = TryBuildPrecomputeTx(query, outputExpr, ctx)) {
             return *status;
@@ -848,12 +925,12 @@ private:
 
         for (const auto& expr : list) {
             auto sinkEffect = expr.Maybe<TKqpSinkEffect>();
-            AFL_ENSURE(sinkEffect);
+            YDB_LOG_ENSURE(sinkEffect);
             const auto sinkSettings = GetStageSinkSettings(sinkEffect.Cast());
             if (!sinkSettings) {
                 const auto dqSink = GetStageSink(sinkEffect.Cast());
-                AFL_ENSURE(dqSink);
-                AFL_ENSURE(!kqpCtx.UsePessimisticLocks);
+                YDB_LOG_ENSURE(dqSink);
+                YDB_LOG_ENSURE(!kqpCtx.UsePessimisticLocks);
                 externalEffects.emplace_back(sinkEffect.Cast());
             } else {
                 // Two table sinks can't be executed in one physical transaction if they write into same table and have same priority.
@@ -864,7 +941,7 @@ private:
                     || kqpCtx.UsePessimisticLocks;
 
                 // At current time Read Committed (pessimistic locks) support only one effect per query.
-                AFL_ENSURE(!kqpCtx.UsePessimisticLocks || effectsInfos.empty());
+                YDB_LOG_ENSURE(!kqpCtx.UsePessimisticLocks || effectsInfos.empty());
 
                 if (needSingleEffect) {
                     const TStringBuf tablePathId = sinkSettings.Cast().Table().PathId().Value();
@@ -1056,11 +1133,11 @@ private:
     bool HasTableEffects(const TExprList& effectsList) const {
         for (const TExprBase& effect : effectsList) {
             auto maybeSinkEffect = effect.Maybe<TKqpSinkEffect>();
-            AFL_ENSURE(maybeSinkEffect);
+            YDB_LOG_ENSURE(maybeSinkEffect);
             // Both TDqSink and TDqTransform derive from TDqOutputAnnotationBase,
             // so the DataSink is read from the base uniformly for sinks and transforms.
             const auto output = GetStageOutput(maybeSinkEffect.Cast());
-            AFL_ENSURE(output);
+            YDB_LOG_ENSURE(output);
             auto dataSink = TCoDataSink(output.Cast().DataSink().Ptr());
             if (dataSink.Category() == YdbProviderName || dataSink.Category() == KikimrProviderName) {
                 return true;

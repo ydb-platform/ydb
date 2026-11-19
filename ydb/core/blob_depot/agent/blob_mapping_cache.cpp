@@ -89,6 +89,17 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
+        if (msg.GetStatus() != NKikimrProto::OK && msg.GetStatus() != NKikimrProto::OVERRUN) {
+            if (context) {
+                NKikimrBlobDepot::TEvResolveResult::TResolvedKey item;
+                item.SetKey(context->Obtain<TResolveContext>().Key);
+                item.SetErrorReason(msg.GetErrorReason() ? msg.GetErrorReason()
+                    : NKikimrProto::EReplyStatus_Name(msg.GetStatus()));
+                process(item, false);
+            }
+            return; // a failed lookup does not prove absence and must not populate the cache
+        }
+
         if (!context) {
             // aside requests -- just add received data to cache
             for (const auto& item : msg.GetResolvedKeys()) {
@@ -155,6 +166,8 @@ namespace NKikimr::NBlobDepot {
             // cache entry is a blob id and thus belongs to a single tablet, so every query sharing
             // it carries the same data kind.
             msg.SetDataKind(dataKind);
+            // queries joining this resolve share its deadline too: should it expire, they get a retryable error
+            query->SetResolveDeadline(msg);
 
             Agent.Issue(std::move(msg), this, std::make_unique<TResolveContext>(TString(keyBuf), mustRestoreFirst));
             ++(mustRestoreFirst ? entry.MustRestoreFirstResolvePending : entry.OrdinaryResolvePending);

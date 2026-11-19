@@ -286,7 +286,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             env.SetupRuntime(runtime);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             {
                 TInactiveZone inactive(activeZone);
                 CreateSchemeObjects(t, runtime, {
@@ -714,7 +714,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             env.SetupRuntime(runtime);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
             {
                 TInactiveZone inactive(activeZone);
@@ -744,7 +744,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             env.SetupRuntime(runtime);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
             {
                 TInactiveZone inactive(activeZone);
@@ -940,7 +940,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             env.SetupRuntime(runtime);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             {
                 TInactiveZone inactive(activeZone);
                 runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
@@ -985,7 +985,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             env.SetupRuntime(runtime);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             {
                 TInactiveZone inactive(activeZone);
                 runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
@@ -1034,7 +1034,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             env.SetupRuntime(runtime);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             {
                 TInactiveZone inactive(activeZone);
                 runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
@@ -1167,7 +1167,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             env.SetupRuntime(runtime);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             {
                 TInactiveZone inactive(activeZone);
                 CreateSchemeObjects(t, runtime, {

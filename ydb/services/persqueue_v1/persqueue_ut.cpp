@@ -9,6 +9,7 @@
 #include <ydb/services/persqueue_v1/ut/functions_executor_wrapper.h>
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc_bi_streaming.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -610,7 +611,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             //lock partition
             UNIT_ASSERT(readStream->Read(&resp));
             UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
-            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "topic1");
+            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "acc/topic1");
             UNIT_ASSERT(resp.start_partition_session_request().partition_session().partition_id() == 0);
 
             assignId = resp.start_partition_session_request().partition_session().partition_session_id();
@@ -2057,7 +2058,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             //lock partition
             UNIT_ASSERT(readStream->Read(&resp));
             UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
-            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "topic1");
+            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "acc/topic1");
             UNIT_ASSERT(resp.start_partition_session_request().partition_session().partition_id() == 0);
 
             assignId = resp.start_partition_session_request().partition_session().partition_session_id();
@@ -4425,6 +4426,83 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         //
         auto msg = reader->GetEvent(false);
         UNIT_ASSERT(!msg);
+    }
+
+    Y_UNIT_TEST(BalancerDisconnectWithFailedReleaseWrite) {
+        using TStreamContext = NRpcService::TLocalRpcBiStreamingCtx<
+            Ydb::Topic::StreamReadMessage::FromClient, Ydb::Topic::StreamReadMessage::FromServer>;
+
+        class TFailReleaseStreamContext : public TStreamContext {
+        public:
+            TFailReleaseStreamContext(const TActorSystem* actorSystem, TActorId owner,
+                                      TPromise<ui32> releaseAttemptsOnDestruction)
+                : TStreamContext(actorSystem, owner, {.Database = "/Root"})
+                , ReleaseAttemptsOnDestruction(std::move(releaseAttemptsOnDestruction))
+            {}
+
+            ~TFailReleaseStreamContext() override {
+                ReleaseAttemptsOnDestruction.SetValue(ReleaseAttempts);
+            }
+
+            bool Write(Ydb::Topic::StreamReadMessage::FromServer&& message,
+                       const grpc::WriteOptions& options) override {
+                if (message.has_stop_partition_session_request()) {
+                    ++ReleaseAttempts;
+                    return false;
+                }
+                return TStreamContext::Write(std::move(message), options);
+            }
+
+        private:
+            TPromise<ui32> ReleaseAttemptsOnDestruction;
+            ui32 ReleaseAttempts = 0;
+        };
+
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
+        auto* runtime = server.CleverServer->GetRuntime();
+        const auto edge = runtime->AllocateEdgeActor();
+        const auto timeout = TDuration::Seconds(10);
+        auto destroyed = NewPromise<ui32>();
+
+        runtime->Send(new IEventHandle(NGRpcProxy::V1::GetPQReadServiceActorID(), edge,
+            new NGRpcService::TEvStreamTopicReadRequest(
+                MakeIntrusive<TFailReleaseStreamContext>(runtime->GetActorSystem(0), edge, destroyed))));
+
+        auto attached = runtime->GrabEdgeEvent<TStreamContext::TRpcEvents::TEvActorAttached>(edge, timeout);
+        UNIT_ASSERT(attached);
+        const auto session = attached->Get()->RpcActor;
+        UNIT_ASSERT(runtime->GrabEdgeEvent<TStreamContext::TRpcEvents::TEvReadRequest>(edge, timeout));
+
+        auto init = MakeHolder<TStreamContext::TEvReadFinished>();
+        init->Success = true;
+        init->Record.mutable_init_request()->set_consumer("shared/user");
+        init->Record.mutable_init_request()->add_topics_read_settings()->set_path(TString(SHORT_TOPIC_NAME));
+        runtime->Send(new IEventHandle(session, edge, init.Release()));
+
+        auto acknowledgeWrite = [&] {
+            auto result = MakeHolder<TStreamContext::TEvWriteFinished>();
+            result->Success = true;
+            runtime->Send(new IEventHandle(session, edge, result.Release()));
+        };
+
+        using TEvWriteRequest = TStreamContext::TRpcEvents::TEvWriteRequest;
+        auto initResponse = runtime->GrabEdgeEvent<TEvWriteRequest>(edge, timeout);
+        UNIT_ASSERT(initResponse);
+        UNIT_ASSERT(initResponse->Get()->Message.has_init_response());
+        acknowledgeWrite();
+
+        auto assignment = runtime->GrabEdgeEvent<TEvWriteRequest>(edge, timeout);
+        UNIT_ASSERT(assignment);
+        UNIT_ASSERT(assignment->Get()->Message.has_start_partition_session_request());
+        acknowledgeWrite();
+
+        server.AnnoyingClient->RestartBalancerTablet(runtime, DEFAULT_TOPIC_NAME);
+
+        // The stream context is destroyed with the session after the handler returns.
+        auto result = destroyed.GetFuture();
+        UNIT_ASSERT(result.Wait(timeout));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue(), 1);
     }
 
     Y_UNIT_TEST(CheckKillBalancer) {

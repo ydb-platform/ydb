@@ -2,14 +2,12 @@
 
 To execute a `SELECT` query on a row table with explicit use of a [JSON index](../../../../dev/json-indexes.md), use the `VIEW` expression:
 
-
 ```yql
 SELECT ...
 FROM documents VIEW json_idx
-WHERE <предикат на основе JSON_EXISTS / JSON_VALUE>
+WHERE <predicate based on JSON_EXISTS / JSON_VALUE>
 ORDER BY ...
 ```
-
 
 In the query example above, `documents` is the name of the table containing a column of type `Json` or `JsonDocument`, and `json_idx` is the name of the JSON index created on that column.
 
@@ -28,7 +26,7 @@ For a description of supported predicates, see the [{#T}](../../../../dev/json-i
 If the `WHERE` predicate contains `JSON_EXISTS` / `JSON_VALUE` calls on an indexed JSON column, the [optimizer](../../../../concepts/glossary.md#optimizer) may use the JSON index without an explicit `VIEW`. Automatic selection follows these rules:
 
 * The JSON index is considered by the optimizer with the lowest priority — it is a fallback option that is selected only after other access methods have been ruled out.
-* The JSON index is not selected if the query can already be served by a [primary key](../../../../concepts/glossary.md#primary-index) or another, more specific [secondary index](../../../../concepts/glossary.md#secondary-index).
+* The JSON index is not selected if the query can already be served by a [primary key](../../../../concepts/glossary.md#primary-key) or another, more specific [secondary index](../../../../concepts/glossary.md#secondary-index).
 * Explicit specification of `VIEW` overrides the optimizer's decision and forces index usage.
 * All indexed subexpressions in a single query must refer to the same indexed JSON column. If predicates on different indexed columns are combined via `AND` / `OR`, automatic selection is not applied.
 
@@ -42,16 +40,13 @@ Automatic JSON index selection is rule-based: it uses the query structure and sc
 
 [JSON_EXISTS(doc, jsonpath)](../../builtins/json.md#json_exists) checks for the existence of a path or value inside a JSON document:
 
-
 ```yql
 SELECT id, payload
 FROM documents VIEW json_idx
 WHERE JSON_EXISTS(payload, '$.user.id');
 ```
 
-
 The JSON index supports almost all JsonPath syntax, except for nested predicates and boolean expressions at the context object level (`$`) in `JSON_EXISTS`. A more complex example of a supported expression:
-
 
 ```yql
 SELECT id, payload
@@ -59,11 +54,9 @@ FROM documents VIEW json_idx
 WHERE JSON_EXISTS(payload, '$.user ? (@.id > 100)');
 ```
 
-
 ## JSON_VALUE
 
 [JSON_VALUE(doc, jsonpath RETURNING <type>)](../../builtins/json.md#json_value) extracts a scalar value by a JsonPath and returns it in the specified type. To use the JSON index, the `RETURNING <type>` clause is required:
-
 
 ```yql
 SELECT id, payload
@@ -71,8 +64,9 @@ FROM documents VIEW json_idx
 WHERE JSON_VALUE(payload, '$.user.name' RETURNING Utf8) = "Charlie"u;
 ```
 
-
 When checking equality conditions or whether a value is in a given list (`IN`), the index search is performed by the 'path + value' token, which provides the highest selectivity. For other comparisons (`!=`, `<`, `>=`, `BETWEEN`, etc.), only the path token is used, and the final comparison accuracy is ensured by a post-filter.
+
+The indexed predicates do not support `ERROR ON ERROR` in `JSON_EXISTS`, or `ERROR ON EMPTY` and `ERROR ON ERROR` in `JSON_VALUE`; for more details, see [supported predicates](../../../../dev/json-indexes.md#predicates).
 
 ### Parameters
 
@@ -80,35 +74,47 @@ Three ways to pass query parameters are supported:
 
 1. Direct comparison of the `JSON_VALUE` result with a parameter:
 
-
-   ```yql
-   DECLARE $id AS Int64;
-   SELECT * FROM documents VIEW json_idx
-   WHERE JSON_VALUE(payload, '$.owner_id' RETURNING Int64) = $id;
-   ```
+    ```yql
+    DECLARE $id AS Int64;
+    SELECT * FROM documents VIEW json_idx
+    WHERE JSON_VALUE(payload, '$.owner_id' RETURNING Int64) = $id;
+    ```
 
 2. Checking whether the result is in a list of values:
 
-
-   ```yql
-   DECLARE $tags AS List<Utf8>;
-   SELECT * FROM documents VIEW json_idx
-   WHERE JSON_VALUE(payload, '$.tag' RETURNING Utf8) IN $tags;
-   ```
+    ```yql
+    DECLARE $tags AS List<Utf8>;
+    SELECT * FROM documents VIEW json_idx
+    WHERE JSON_VALUE(payload, '$.tag' RETURNING Utf8) IN $tags;
+    ```
 
 3. Passing a parameter to JsonPath via the `PASSING` clause:
 
+    ```yql
+    DECLARE $v AS Int64;
+    SELECT * FROM documents VIEW json_idx
+    WHERE JSON_EXISTS(payload, '$.k ? (@ == $v)' PASSING $v AS v);
+    ```
 
-   ```yql
-   DECLARE $v AS Int64;
-   SELECT * FROM documents VIEW json_idx
-   WHERE JSON_EXISTS(payload, '$.k ? (@ == $v)' PASSING $v AS v);
-   ```
+    To search for an intersection with a JSON array of arbitrary length, you can pass a parameter of type `Json`:
+
+    ```yql
+    DECLARE $values AS Json;
+
+    SELECT id
+    FROM documents VIEW json_idx
+    WHERE JSON_EXISTS(
+        payload,
+        '$.tags[*] ? (@ == $values)'
+        PASSING $values AS values
+    );
+    ```
+
+    When an array is passed in `$values`, the equality comparison `@ == $values` in `lax` mode (the default) looks for a match with any element of the array. For such a condition, the JSON index at runtime searches for rows by the individual values of the parameter and combines the results via `OR`. A single query is suitable for arrays of any length. Duplicate values do not produce duplicate rows, and an empty array returns an empty result. The original JsonPath condition is verified by a post-filter.
 
 ## AND and OR combinations
 
 `JSON_EXISTS` and `JSON_VALUE` on the same JSON column can be combined in a single `WHERE` using the `AND` and `OR` operators:
-
 
 ```yql
 SELECT id, payload
@@ -116,7 +122,6 @@ FROM documents VIEW json_idx
 WHERE JSON_VALUE(payload, '$.user.name' RETURNING Utf8) = "Charlie"u
   AND JSON_VALUE(payload, '$.user.id' RETURNING Int64) BETWEEN 100 AND 200;
 ```
-
 
 {% note info %}
 

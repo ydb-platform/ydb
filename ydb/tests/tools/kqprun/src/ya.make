@@ -3,21 +3,29 @@ LIBRARY()
 SRCS(
     actors.cpp
     kqp_runner.cpp
+    managed_config.cpp
     ydb_setup.cpp
 )
 
 PEERDIR(
+    library/cpp/json
     library/cpp/protobuf/json
     ydb/core/client/server
+    ydb/core/cms/console/events
     ydb/core/grpc_services
-    ydb/services/workload_manager/actors
     ydb/core/testlib
+    ydb/core/tx/cdc_aggregator/service
+    ydb/core/tx/replication/service
     ydb/core/util
     ydb/library/aclib
+    ydb/library/actors/wilson
     ydb/library/aws_init
+    ydb/library/yaml_config
     ydb/library/yql/providers/pq/gateway/abstract
+    ydb/services/dynamic_config
     ydb/services/keyvalue
     ydb/services/persqueue_v1
+    ydb/services/workload_manager/actors
     ydb/tests/tools/kqprun/runlib
     ydb/tests/tools/kqprun/src/proto
     yt/yql/providers/yt/mkql_dq
@@ -28,3 +36,7 @@ GENERATE_ENUM_SERIALIZATION(common.h)
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

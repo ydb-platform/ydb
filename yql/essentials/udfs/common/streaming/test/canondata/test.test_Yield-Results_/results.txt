@@ -1,0 +1,39 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "aaaaa11111qqqqd";
+                            "abbbbd111";
+                            "arrrrrrrr";
+                            "btzzzzzzzzzz";
+                            "bufffffffff";
+                            "wwwwwwwwwwwwwww1"
+                        ]
+                    ]
+                ]
+            }
+        ];
+        "Unordered" = %true
+    }
+]

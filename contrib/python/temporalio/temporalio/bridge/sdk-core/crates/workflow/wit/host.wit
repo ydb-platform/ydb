@@ -1,0 +1,11 @@
+package temporal:workflow-runtime@0.1.0;
+
+interface workflow-host {
+  use types.{workflow-command};
+
+  set-current-details: func(details: string);
+
+  push-command: func(command: workflow-command);
+
+  patch-activation: func(patch-id: string) -> bool;
+}

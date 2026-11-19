@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TDSProxyGetTest) {
 
 Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
     for (bool mustRestore : {false, true}) {
-        for (bool phantomCheck : {false, true}) {
+        for (const auto [phantomCheck, errorMask] : {std::pair{false, 1u}, {true, 1u}, {true, 7u}}) {
             TActorSystemStub actorSystemStub;
             TGroupMock group(0, TErasureType::ErasureMirror3dc, 4, 3, 1);
             const auto info = group.GetInfo();
@@ -64,8 +64,9 @@ Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
                 const ui32 disk = info->GetIdxInSubgroup(vdisk, uncertainId.Hash());
                 for (auto& item : *reply.Record.MutableResult()) {
                     if (LogoBlobIDFromLogoBlobID(item.GetBlobID()).FullID() == uncertainId) {
-                        // One real failure is in-model; ERROR plus NOT_YET can still hide 1+1+1.
-                        if (disk == 0) {
+                        // ERROR plus NOT_YET can hide 1+1+1. Phantom checks also cover errors
+                        // outside the failure model without aborting the other blobs in the batch.
+                        if (errorMask & (1u << disk)) {
                             item.SetStatus(NKikimrProto::ERROR);
                         } else if (!phantomCheck && (disk == 1 || disk == 2)) {
                             item.SetStatus(NKikimrProto::NOT_YET);
@@ -77,7 +78,7 @@ Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
                 UNIT_ASSERT(puts.empty());
             }
             UNIT_ASSERT_VALUES_EQUAL_C(result->Status, NKikimrProto::OK,
-                "mustRestore# " << mustRestore << " phantomCheck# " << phantomCheck);
+                "mustRestore# " << mustRestore << " phantomCheck# " << phantomCheck << " errorMask# " << errorMask);
             UNIT_ASSERT_VALUES_EQUAL(result->ResponseSz, 3);
             UNIT_ASSERT_VALUES_EQUAL(result->Responses[0].Id, uncertainId);
             UNIT_ASSERT_VALUES_EQUAL(result->Responses[0].Status, NKikimrProto::ERROR);
@@ -86,7 +87,7 @@ Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
             UNIT_ASSERT_VALUES_EQUAL(result->Responses[2].Id, absentId);
             UNIT_ASSERT_VALUES_EQUAL(result->Responses[2].Status, NKikimrProto::NODATA);
             if (phantomCheck) {
-                UNIT_ASSERT(!result->Responses[0].LooksLikePhantom.value());
+                UNIT_ASSERT_VALUES_EQUAL(result->Responses[0].LooksLikePhantom.value(), errorMask == 1);
                 UNIT_ASSERT(!result->Responses[1].LooksLikePhantom.value());
                 UNIT_ASSERT(result->Responses[2].LooksLikePhantom.value());
             } else {
@@ -127,8 +128,9 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
                 q.Id = blobSet.Get(queryIdx % blobCount).Id;
                 if (checkCrc) {
                     q.Shift = (queryIdx % groupType.DataParts()) * groupType.PartUserSize(q.Id.BlobSize());
-                    q.Shift = q.Shift <= q.Id.BlobSize() ? q.Shift : 0;
-                    q.Size = Max((ui64)16, (ui64)(queryIdx * 177) % (q.Id.BlobSize() - q.Shift));
+                    q.Shift = q.Shift < q.Id.BlobSize() ? q.Shift : 0;
+                    q.Size = Min<ui64>(q.Id.BlobSize() - q.Shift,
+                        Max((ui64)16, (ui64)(queryIdx * 177) % (q.Id.BlobSize() - q.Shift)));
                 } else {
                     q.Shift = (queryIdx * 177) % q.Id.BlobSize();
                     q.Size = Min((ui64)70, (ui64)q.Id.BlobSize() - (ui64)q.Shift);
@@ -196,6 +198,14 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
 // Without CRC
 Y_UNIT_TEST(TestBlock42GetIntervalsAllOk) {
     TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, false, false);
+}
+
+Y_UNIT_TEST(TestBlock82GetIntervalsAllOk) {
+    TestIntervalsAndCrcAllOk(TErasureType::Erasure8Plus2Block, false, false);
+}
+
+Y_UNIT_TEST(TestBlock82GetBlobCrcCheck) {
+    TestIntervalsAndCrcAllOk(TErasureType::Erasure8Plus2Block, false, true);
 }
 
 //Y_UNIT_TEST(TestBlock42GetIntervalsAllOkVerbose) {
@@ -1122,6 +1132,10 @@ void TestWipedErrorWithTwoBlobs(TErasureType::EErasureSpecies erasureSpecies, bo
 
 Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOk) {
     TestIntervalsWipedAllOk(TErasureType::Erasure4Plus2Block, false);
+}
+
+Y_UNIT_TEST(TestBlock82GetIntervalsWipedAllOk) {
+    TestIntervalsWipedAllOk(TErasureType::Erasure8Plus2Block, false);
 }
 
 Y_UNIT_TEST(TestBlock42GetIntervalsWipedError) {

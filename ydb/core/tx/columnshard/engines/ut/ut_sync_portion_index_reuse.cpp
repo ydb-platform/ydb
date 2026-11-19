@@ -75,7 +75,7 @@ ISnapshotSchema::TPtr MakeTestSchema(const ui64 presetId, const TTestSchemaOptio
 
     auto indexInfoOpt = TIndexInfo::BuildFromProto(presetId, proto, storages, cache);
     UNIT_ASSERT(indexInfoOpt);
-    return std::make_shared<TSnapshotSchema>(cache->UpsertIndexInfo(std::move(*indexInfoOpt)), TSnapshot(1, 1));
+    return std::make_shared<TSnapshotSchema>(cache->GetOrInsertIndexInfo(std::move(*indexInfoOpt)), TSnapshot(1, 1));
 }
 
 std::shared_ptr<arrow::RecordBatch> MakeTestBatch() {
@@ -157,7 +157,7 @@ void FillReadBlobs(TWritePortionInfoWithBlobsResult& portion, NBlobOperations::N
         const TString& data = blob.GetResultBlob();
         for (auto&& chunkAddress : blob.GetChunks()) {
             const auto* recordInfo = portion.GetPortionResult().GetRecordPointer(chunkAddress);
-            AFL_VERIFY(recordInfo);
+            YDB_LOG_VERIFY(recordInfo);
             const auto range = portion.GetPortionResult().RestoreBlobRange(recordInfo->GetBlobRange());
             blobs.Add(IStoragesManager::DefaultStorageId, range, data.substr(range.Offset, range.Size));
         }

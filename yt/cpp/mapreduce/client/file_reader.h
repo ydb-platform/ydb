@@ -24,7 +24,8 @@ public:
         IClientRetryPolicyPtr clientRetryPolicy,
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,
-        const TTransactionId& transactionId);
+        const TTransactionId& transactionId,
+        bool createTransaction = true);
 
     void Abort() override;
     bool IsAborted() const override;
@@ -43,6 +44,7 @@ private:
 
 private:
     const IClientRetryPolicyPtr ClientRetryPolicy_;
+    const TTransactionId ParentTransactionId_;
     TFileReaderOptions FileReaderOptions_;
 
     std::unique_ptr<IAbortableInputStream> Input_;

@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/util/proto_duration.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
@@ -173,6 +174,12 @@ namespace {
     TTruncateTableSettings ParseTruncateTableSettings(TKiTruncateTable truncateTable) {
         TTruncateTableSettings truncateTableSettings;
         truncateTableSettings.TablePath = truncateTable.TablePath().Value();
+        for (const auto& setting : truncateTable.Settings()) {
+            if (setting.Name().Value() == "UNSAFE") {
+                truncateTableSettings.Unsafe =
+                    setting.Value().Cast<TCoBool>().Literal().Value() == "true";
+            }
+        }
         return truncateTableSettings;
     }
 
@@ -1197,16 +1204,43 @@ namespace {
                     setting.Value().Cast<TCoInterval>().Literal().Value()
                 );
 
-                if (value <= 0) {
+                if (value < static_cast<i64>(TDuration::Seconds(1).MicroSeconds())) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                        TStringBuilder() << name << " must be positive"));
+                        TStringBuilder() << name << " must be at least 1 second"));
                     return false;
                 }
 
                 dstSettings.EnsureGlobalConsistency().CommitInterval = TDuration::FromValue(value);
+            } else if (name == "availability_period") {
+                dstSettings.AvailabilityPeriod = NKikimrReplication::TAvailabilityPeriod();
+                auto& period = *dstSettings.AvailabilityPeriod;
+                if (const auto interval = setting.Value().Maybe<TCoInterval>()) {
+                    const auto value = FromString<i64>(interval.Cast().Literal().Value());
+                    if (value <= 0) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), "Availability period must be positive"));
+                        return false;
+                    }
+                    NKikimr::SetDuration(TDuration::FromValue(value), *period.MutableDuration());
+                } else if (const auto value = setting.Value().Maybe<TCoString>();
+                    value && to_lower(TString(value.Cast().Literal().Value())) == "unlimited")
+                {
+                    period.MutableUnlimited();
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), "Invalid availability period"));
+                    return false;
+                }
             } else if (name == "initial_scan") {
                 YQL_ENSURE(setting.Value().Maybe<TCoBool>());
                 dstSettings.InitialScan = FromString<bool>(setting.Value().Cast<TCoBool>().Literal().Value());
+            } else if (name == "bootstrap") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                const auto mode = to_lower(value);
+                if (mode != "scan" && mode != "import" && mode != "switchover") {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown bootstrap mode: " << value));
+                    return false;
+                }
+                dstSettings.Bootstrap = mode;
             }
         }
 
@@ -2119,6 +2153,10 @@ public:
                                         "Column addition with a GENERATED ALWAYS AS expression is not supported"));
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
+                                    if (IsYqlNullExprNode(constraint.Value().Cast())) {
+                                        continue;
+                                    }
+
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
                                         ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                             "Default values are not supported in column tables"));
@@ -2178,6 +2216,12 @@ public:
                                 YqlIssue(ctx.GetPosition(columnTuple.Pos()),
                                     TIssuesIds::KIKIMR_BAD_REQUEST,
                                     "Cannot add not null column without default value"));
+                            return SyncError();
+                        }
+
+                        if (hasNotNull && hasDefaultValue && columnBuild->default_from_literal().value().has_null_flag_value()) {
+                            ctx.AddError(YqlIssue(ctx.GetPosition(columnTuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                                "Cannot add not null column with NULL default value"));
                             return SyncError();
                         }
 
@@ -2366,16 +2410,16 @@ public:
 
                             auto defaultExpr = TExprBase(alterColumnList.Item(1));
 
-                            if (auto maybeJust = defaultExpr.Maybe<TCoJust>()) {
-                                defaultExpr = maybeJust.Cast().Input();
-                            }
-
-                            bool isNull = defaultExpr.Maybe<TCoNull>().IsValid() || IsPgNullExprNode(defaultExpr);
-                            if (isNull) {
+                            if (IsYqlNullExprNode(defaultExpr)) {
                                 alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL);
+                                alter_columns->ClearDefaultFromLiteral();
                             } else {
+                                if (auto maybeJust = defaultExpr.Maybe<TCoJust>()) {
+                                    defaultExpr = maybeJust.Cast().Input();
+                                }
+
                                 alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
-                                auto err = FillLiteralProto(defaultExpr, nullptr, *alter_columns->MutableDefaultFromLiteral());
+                                auto err = FillLiteralProto(defaultExpr, &RemoveOptionality(*defaultExpr.Ref().GetTypeAnn()), *alter_columns->MutableDefaultFromLiteral());
                                 if (err) {
                                     ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
                                     return SyncError();
@@ -2770,6 +2814,9 @@ public:
                     }
 
                     switch (add_index->type_case()) {
+                        case Ydb::Table::TableIndex::kGlobalHnswIndex:
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "HNSW index implementation is not available yet"));
+                            return SyncError();
                         case Ydb::Table::TableIndex::kGlobalIndex:
                         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
                         case Ydb::Table::TableIndex::kGlobalUniqueIndex:
@@ -3478,7 +3525,7 @@ public:
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
 
             if (isTableStore) {
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
                 if (!isColumn) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
                         TStringBuilder() << "TABLESTORE with not COLUMN store"));
@@ -3760,6 +3807,11 @@ public:
             TDropReplicationSettings settings;
             settings.Name = TString(dropReplication.Replication());
             settings.Cascade = (dropReplication.Cascade().Value() == "1");
+            if (const auto cleanup = dropReplication.SourceCleanup()) {
+                settings.SourceCleanup = cleanup.Cast().Value() == "abandon"
+                    ? NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON
+                    : NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP;
+            }
 
             auto cluster = TString(dropReplication.DataSink().Cluster());
             auto future = Gateway->DropReplication(cluster, settings);

@@ -95,6 +95,14 @@ enum EEv {
     EvOverloadReady,
     EvOverloadUnsubscribe,
 
+    // local DB backup actor <-> tablet, see local_db_backup/events.h
+    EvLocalDbBackupStart,
+    EvLocalDbBackupStarted,
+    EvLocalDbBackupCancel,
+    EvLocalDbBackupProgress,
+
+    EvFindEmptyHistoryIntervalsScanFinished,
+
     EvEnd
 };
 
@@ -118,7 +126,7 @@ public:
 
 public:
     void AddColumn(const ui32 id) {
-        AFL_VERIFY(ColumnIdsSet.emplace(id).second);
+        YDB_LOG_VERIFY(ColumnIdsSet.emplace(id).second);
         ColumnIds.emplace_back(id);
     }
 
@@ -129,7 +137,7 @@ public:
         , LockId(lockId)
         , ReadOnlyConflicts(readOnlyConflicts)
     {
-        AFL_VERIFY(Snapshot.Valid());
+        YDB_LOG_VERIFY(Snapshot.Valid());
     }
 
     TString ToString() const {

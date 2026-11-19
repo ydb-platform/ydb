@@ -106,7 +106,16 @@ namespace NKikimr::NStorage {
         switch (record.GetStatus()) {
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::HashMismatch:
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::UnexpectedConfig:
-                // TODO: error condition; restart?
+                // Console has the config distconf doesn't (the same version with other content, or a newer one, set
+                // bypassing distconf); the main config isn't propagated to Console until distconf's one changes
+                YDB_LOG_CRIT("Console refused the main config proposed by distconf",
+                    {"marker", "NWDC91"},
+                    {"status", NKikimrBlobStorage::TEvControllerProposeConfigResponse::EStatus_Name(record.GetStatus())},
+                    {"proposedConfigHashVersion", ProposedConfigHashVersion},
+                    {"proposedConfigHash", record.GetProposedConfigHash()},
+                    {"consoleConfigHash", record.GetConsoleConfigHash()},
+                    {"proposedConfigVersion", record.GetProposedConfigVersion()},
+                    {"consoleConfigVersion", record.GetConsoleConfigVersion()});
                 break;
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNeeded: {

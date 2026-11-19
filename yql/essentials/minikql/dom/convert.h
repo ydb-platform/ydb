@@ -1,5 +1,7 @@
 #pragma once
 
+#include "node.h"
+
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/utils/utf8.h>

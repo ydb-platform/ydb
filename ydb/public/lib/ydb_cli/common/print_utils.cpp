@@ -194,6 +194,8 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
         return "block-store-volume";
     case NScheme::ESchemeEntryType::CoordinationNode:
         return "coordination-node";
+    case NScheme::ESchemeEntryType::SolomonVolume:
+        return "solomon-volume";
     case NScheme::ESchemeEntryType::ExternalDataSource:
         return "external-data-source";
     case NScheme::ESchemeEntryType::ExternalTable:

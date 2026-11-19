@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/row_version.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -133,7 +134,8 @@ protected:
     void Finish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues, bool rollbackOnError = true);
     void Finish();
 
-    void RunDataQuery(TString sql, NYdb::TParamsBuilder* params = nullptr, TTxControl txControl = TTxControl::BeginAndCommitTx());
+    void RunDataQuery(TString sql, NYdb::TParamsBuilder* params = nullptr, TTxControl txControl = TTxControl::BeginAndCommitTx(),
+        TDuration operationTimeout = TDuration::Zero());
     void RunStreamQuery(TString sql, NYdb::TParamsBuilder* params = nullptr, ui64 channelBufferSize = 60_MB);
     void CancelStreamQuery();
     void CommitTransaction();
@@ -211,6 +213,9 @@ protected:
     TString Database;
     TString SessionId;
     TMaybe<TString> RequestType;
+    // Caller-owned snapshot for RunDataQuery with a snapshot-read-only transaction.
+    // RunStreamQuery does not support an explicit snapshot version.
+    TMaybe<TRowVersion> MvccVersion;
     bool IsSystemUser = false;
     bool IsStreamingMode = false;
     const TMaybe<TString> UserToken;

@@ -121,6 +121,8 @@ namespace NKikimr {
             for (auto it = begin; it != end; ) {
                 TPerBlobInfo& info = it->second;
                 if (auto context = info.Context.lock()) { // context acquired, request is still intact
+                    info.Item->Keep |= res.GetKeep();
+                    info.Item->DoNotKeep |= res.GetDoNotKeep();
                     if (status == NKikimrProto::DEADLINE && now < context->Iterator->first) {
                         auto& deadline = rerequest[fullId];
                         deadline = Max(deadline, context->Iterator->first);

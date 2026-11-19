@@ -1,5 +1,7 @@
 #include "distconf_invoke.h"
 
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
+
 #include <ydb/core/protos/bridge.pb.h>
 
 namespace NKikimr::NStorage {
@@ -28,23 +30,28 @@ namespace NKikimr::NStorage {
 
         RunCommonChecks(/*requireScepter=*/ false);
 
+        // Compare-and-set. It goes before the checks of the new state: a command built from another generation
+        // may fail them (for example, the pile count has changed), and it must still be reported as a mismatch.
+        if (cmd.HasExpectedGeneration()) {
+            const ui64 expected = cmd.GetExpectedGeneration();
+            const auto& storageConfig = *Self->StorageConfig;
+            if (const ui64 current = storageConfig.GetClusterState().GetGeneration(); current != expected) {
+                throw TExGenerationMismatch() << "Cluster state generation# " << current << " expected# " << expected;
+            } else if (cmd.GetNewClusterState().GetGeneration() != expected + 1) {
+                throw TExError() << "New cluster state generation# " << cmd.GetNewClusterState().GetGeneration()
+                    << " must follow expected generation# " << expected;
+            }
+        }
+
         const auto& newClusterState = cmd.GetNewClusterState();
 
         // check new config alone
         Y_ABORT_UNLESS(Self->BridgeInfo);
         const ui32 numPiles = Self->BridgeInfo->Piles.size();
-        const auto primaryPileId = TBridgePileId::FromProto(&newClusterState, &NKikimrBridge::TClusterState::GetPrimaryPile);
-        const auto promotedPileId = TBridgePileId::FromProto(&newClusterState, &NKikimrBridge::TClusterState::GetPromotedPile);
         if (newClusterState.PerPileStateSize() != numPiles) {
             throw TExError() << "Incorrect number of per-pile states in new config";
-        } else if (primaryPileId.GetPileIndex() >= numPiles) {
-            throw TExError() << "Incorrect primary pile";
-        } else if (promotedPileId.GetPileIndex() >= numPiles) {
-            throw TExError() << "Incorrect promoted pile";
-        } else if (newClusterState.GetPerPileState(primaryPileId.GetPileIndex()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
-            throw TExError() << "Incorrect primary pile state";
-        } else if (newClusterState.GetPerPileState(promotedPileId.GetPileIndex()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
-            throw TExError() << "Incorrect promoted pile state";
+        } else if (auto error = ValidateBridgeClusterState(newClusterState)) {
+            throw TExError() << *error;
         }
 
         if (Self->StorageConfig->HasClusterState()) {
@@ -87,7 +94,17 @@ namespace NKikimr::NStorage {
                             throw TExError() << "Can't switch to NOT_SYNCHRONIZED_2 directly";
 
                         case NKikimrBridge::TClusterState::SUSPENDED:
-                            // explicit SUSPENDED request is allowed
+                            if (currentState != NKikimrBridge::TClusterState::SYNCHRONIZED) {
+                                // the suspended pile takes part in configuration quorum and its state storage rings
+                                // count as synchronized ones, which only the pile in sync can have
+                                throw TExError() << "Pile '" << Self->BridgeInfo->Piles[i].Name << "' is "
+                                    << NKikimrBridge::TClusterState::EPileState_Name(currentState)
+                                    << ", only SYNCHRONIZED pile can be suspended; switch it to DISCONNECTED instead";
+                            }
+                            break;
+
+                        case NKikimrBridge::TClusterState::HOT_STANDBY:
+                            // explicit request is allowed for a non-primary pile
                             break;
 
                         case NKikimrBridge::TClusterState::INACTIVE:
@@ -120,7 +137,18 @@ namespace NKikimr::NStorage {
         }
         clusterState->CopyFrom(newClusterState);
 
-        auto markPileUnsynced = [&](size_t pileIndex) {
+        for (const auto& [changedPileIndex, prevState] : changedPiles) {
+            if (prevState == NKikimrBridge::TClusterState::HOT_STANDBY &&
+                    clusterState->GetPerPileState(changedPileIndex) == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1 &&
+                    Self->HasConnectedNodeQuorum(*Self->StorageConfig, TBridgePileId::FromPileIndex(changedPileIndex))) {
+                // Rejoin of the standby that is connected: the pile takes part in data quorum at once, as it would when
+                // switching to NOT_SYNCHRONIZED_2 the next moment. Writers that don't know it yet send it their writes in
+                // background (instead of skipping it), so the parts reconciled while in standby can be taken for synced.
+                clusterState->SetPerPileState(changedPileIndex, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+            }
+        }
+
+        auto markPileUnsynced = [&](size_t pileIndex) -> NKikimrBridge::TClusterStateDetails::TPileSyncState& {
             for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
                 const auto& item = details->GetPileSyncState(i);
                 const auto bridgePileId = TBridgePileId::FromProto(&item, &std::decay_t<decltype(item)>::GetBridgePileId);
@@ -135,16 +163,20 @@ namespace NKikimr::NStorage {
                 &std::decay_t<decltype(*state)>::SetBridgePileId);
             state->SetBecameUnsyncedGeneration(clusterState->GetGeneration());
             state->SetUnsyncedBSC(true);
+            return *state;
         };
 
-        std::vector<size_t> disconnectedPileIndices;
+        std::vector<size_t> resetPileIndices;
+        bool sourceLost = false;
         for (const auto& [changedPileIndex, prevState] : changedPiles) {
             switch (clusterState->GetPerPileState(changedPileIndex)) {
                 case NKikimrBridge::TClusterState::DISCONNECTED:
                 case NKikimrBridge::TClusterState::SUSPENDED:
-                    // This pile no longer participates in replication.
+                case NKikimrBridge::TClusterState::HOT_STANDBY:
+                    // Writes to this pile are no longer required to succeed.
                     markPileUnsynced(changedPileIndex);
-                    disconnectedPileIndices.push_back(changedPileIndex);
+                    resetPileIndices.push_back(changedPileIndex);
+                    sourceLost |= prevState == NKikimrBridge::TClusterState::SYNCHRONIZED;
                     break;
 
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
@@ -158,8 +190,13 @@ namespace NKikimr::NStorage {
                     }
                     break;
 
-                case NKikimrBridge::TClusterState::SYNCHRONIZED:
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
+                    Y_ABORT_UNLESS(prevState == NKikimrBridge::TClusterState::HOT_STANDBY);
+                    markPileUnsynced(changedPileIndex).SetFromHotStandby(true);
+                    resetPileIndices.push_back(changedPileIndex);
+                    break;
+
+                case NKikimrBridge::TClusterState::SYNCHRONIZED:
                 case NKikimrBridge::TClusterState::INACTIVE:
                     Y_ABORT("invalid transition");
 
@@ -169,15 +206,45 @@ namespace NKikimr::NStorage {
             }
         }
 
-        if (!disconnectedPileIndices.empty()) {
+        if (sourceLost) {
+            // BSC may finish a target from the old source before learning that the source stopped receiving writes.
+            // Restart every unfinished pile's sync epoch, including groups BSC has already reported as synced.
+            for (size_t i = 0; i < clusterState->PerPileStateSize(); ++i) {
+                const auto state = clusterState->GetPerPileState(i);
+                if (state == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1 ||
+                        state == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2) {
+                    markPileUnsynced(i);
+                    resetPileIndices.push_back(i);
+                }
+            }
+        }
+
+        if (!resetPileIndices.empty()) {
             std::vector<TBridgePileId> pileIds;
-            for (size_t pileIndex : disconnectedPileIndices) {
+            for (size_t pileIndex : resetPileIndices) {
                 pileIds.push_back(TBridgePileId::FromPileIndex(pileIndex));
             }
             ResetStaticGroupPileParts(&config, pileIds, clusterState->GetGeneration());
         }
 
-        StartProposition(&config, /*mindPrev=*/ false);
+        if (std::ranges::find(clusterState->GetPerPileState(), NKikimrBridge::TClusterState::HOT_STANDBY) !=
+                clusterState->GetPerPileState().end() &&
+                GetRequiredBridgeFeatureLevel(config) < BridgeFeatureLevelHotStandby) {
+            // Older nodes don't understand the new state. Check connected participants before enabling it, and retain
+            // the requirement afterwards so that nodes returning later can't serve this cluster with old semantics.
+            auto registry = Self->GetConfigPileRegistry(config);
+            Y_ABORT_UNLESS(registry);
+            *details->MutablePileRegistry() = std::move(*registry);
+            details->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevelHotStandby);
+            // the nodes of the piles that can't connect now (like the DISCONNECTED one turning HOT_STANDBY) are fenced by
+            // the handshake when they come back, as the required level is persisted
+            RequireConnectedNodesCapability(BridgeFeatureLevelHotStandby, TBridgePileId(),
+                [this, config = std::move(config)]() mutable {
+                    StartProposition(&config, /*mindPrev=*/ false);
+                });
+        } else {
+            StartProposition(&config, /*mindPrev=*/ false);
+        }
     }
 
     void TInvokeRequestHandlerActor::NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd) {
@@ -325,6 +392,85 @@ namespace NKikimr::NStorage {
         });
     }
 
+    void TInvokeRequestHandlerActor::RollbackBridge(const TQuery::TRollbackBridge& cmd) {
+        RunCommonChecks();
+        NeedBridgeMode();
+
+        const auto& config = *Self->StorageConfig;
+        const auto& details = config.GetClusterStateDetails();
+        using TOperation = NKikimrBridge::TClusterStateDetails::TPendingPileOperation;
+        if (!Self->SelfManagementEnabled) {
+            throw TExError() << "Self-management must be enabled to roll the bridged cluster back";
+        } else if (NBridge::IsRollbackPending(details)) {
+            return Finish(TResult::OK, std::nullopt); // being rolled back already, see the rollback status
+        } else if (details.HasPendingPileOperation()) {
+            throw TExError() << "Operation on pile is in progress";
+        } else if (details.PileSyncStateSize()) {
+            throw TExError() << "Piles are being synchronized";
+        }
+
+        // the original (implicit) pile has to be the only one, holding all the data
+        const auto registry = Self->GetConfigPileRegistry(config);
+        Y_ABORT_UNLESS(registry); // the node runs with BridgeConfig
+        const auto pileId = TBridgePileId::FromProto(&*registry, &NKikimrBridge::TPileRegistry::GetImplicitPileId);
+        if (!pileId) {
+            throw TExError() << "Cluster has no original pile: it has been bridged with several piles from the very"
+                " beginning, or the original pile has been removed";
+        }
+        for (size_t i = 0; i < registry->PilesSize(); ++i) {
+            if (const auto& pile = registry->GetPiles(i); pile.HasName() && i != pileId.GetPileIndex()) {
+                throw TExError() << "Pile '" << pile.GetName() << "' has to be removed from the cluster and dropped from"
+                    " BridgeConfig first";
+            }
+        }
+        const auto& clusterState = config.GetClusterState();
+        if (NBridge::GetPileState(clusterState, pileId) != NKikimrBridge::TClusterState::SYNCHRONIZED ||
+                TBridgePileId::FromProto(&clusterState, &NKikimrBridge::TClusterState::GetPrimaryPile) != pileId) {
+            throw TExError() << "The original pile has to be the SYNCHRONIZED primary one";
+        } else if (const auto& name = registry->GetPiles(pileId.GetPileIndex()).GetName();
+                HasStoragePoolPileOverrides(config.GetBlobStorageConfig(), name)) {
+            // the groups of the ordinary cluster follow the settings of their pools only, while Console keeps the base
+            // settings of its pools, and static groups follow the self-management config
+            throw TExError() << "Storage pool pile overrides for the original pile '" << name << "' have to be removed"
+                " from the configuration first";
+        }
+
+        // static groups become ordinary ones right away, BSC does the same to its groups afterwards
+        NKikimrBlobStorage::TStorageConfig proposed = config;
+        if (auto error = MakeStaticGroupsOrdinary(&proposed, pileId)) {
+            throw TExError() << "Can't roll the bridged cluster back: " << *error;
+        }
+        auto *mutableDetails = proposed.MutableClusterStateDetails();
+        mutableDetails->ClearBscConversionPending(); // BSC makes its groups ordinary ones instead of converting them
+        mutableDetails->ClearBscConversionId();
+        auto *op = mutableDetails->MutablePendingPileOperation();
+        pileId.CopyToProto(op, &TOperation::SetBridgePileId);
+        op->SetKind(TOperation::ROLLBACK);
+        op->SetOperationId(proposed.GetGeneration() + 1); // the generation of the config being proposed
+        // nodes of older versions don't expect groups to lose their bridge state, and the cluster state to go away
+        auto *mutableRegistry = mutableDetails->MutablePileRegistry();
+        *mutableRegistry = *registry; // it may be implied by BridgeConfig for the cluster bridged by older versions
+        mutableRegistry->SetRequiredFeatureLevel(Max<ui32>(mutableRegistry->GetRequiredFeatureLevel(),
+            BridgeFeatureLevelRollback));
+
+        THashSet<ui32> requiredNodeIds;
+        for (const auto& node : config.GetAllNodes()) {
+            requiredNodeIds.insert(node.GetNodeId());
+        }
+        const bool skipBscValidation = cmd.GetSkipBscValidation();
+        RequireBridgeCapability(BridgeFeatureLevelRollback, std::move(requiredNodeIds), {},
+                [this, proposed = std::move(proposed), pileId, skipBscValidation]() mutable {
+            ProposedStorageConfig = std::move(proposed);
+            if (skipBscValidation) {
+                return StartProposition(&ProposedStorageConfig);
+            }
+            // BSC checks whether it can make its groups ordinary ones before anything is committed
+            BridgePileOpPileId = pileId;
+            ControllerOp = EControllerOp::BRIDGE_ROLLBACK;
+            ConnectToController();
+        });
+    }
+
     void TInvokeRequestHandlerActor::RequireBridgeCapability(ui32 minFeatureLevel, THashSet<ui32> requiredNodeIds,
             THashSet<ui32> ignoredNodeIds, std::function<void()> callback) {
         // every required static node must positively report its capability, as the one being temporarily disconnected
@@ -398,15 +544,22 @@ namespace NKikimr::NStorage {
         });
     }
 
-    void TInvokeRequestHandlerActor::NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& /*cmd*/) {
+    void TInvokeRequestHandlerActor::NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& cmd) {
         RunCommonChecks();
 
-        if (!Self->StorageConfig->GetClusterStateDetails().GetBscConversionPending()) {
+        const auto& details = Self->StorageConfig->GetClusterStateDetails();
+        if (!details.GetBscConversionPending()) {
             return Finish(TResult::OK, std::nullopt); // already cleared
+        } else if (cmd.GetBscConversionId() != details.GetBscConversionId()) {
+            // late notification of the conversion the cluster has been rolled back from, BSC performs the current one
+            // afterwards; BSC of older version reports no identity, but it can't take part in the conversion started by
+            // this version (which requires every node to support it), as it has 0 then
+            return Finish(TResult::OK, std::nullopt);
         }
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         config.MutableClusterStateDetails()->ClearBscConversionPending();
+        config.MutableClusterStateDetails()->ClearBscConversionId();
         StartProposition(&config);
     }
 
@@ -443,9 +596,9 @@ namespace NKikimr::NStorage {
         return pileId;
     }
 
-    void TInvokeRequestHandlerActor::RequirePileOperationCapability(TBridgePileId leavingPileId,
+    void TInvokeRequestHandlerActor::RequireConnectedNodesCapability(ui32 featureLevel, TBridgePileId leavingPileId,
             std::function<void()> callback) {
-        // every node connected to the cluster has to support pile operations; nodes of INACTIVE piles (including the one
+        // every node connected to the cluster has to support the feature; nodes of INACTIVE piles (including the one
         // being added), of DISCONNECTED ones (including the one being removed) can't connect, and the ones of lower
         // feature level are refused when their pile is back (connections are checked against the required level)
         const auto& config = *Self->StorageConfig;
@@ -458,13 +611,12 @@ namespace NKikimr::NStorage {
                 NBridge::GetPileState(config.GetClusterState(), *bridgePileId)).AllowsConnection;
             (outside ? ignoredNodeIds : requiredNodeIds).insert(node.GetNodeId());
         }
-        RequireBridgeCapability(BridgeFeatureLevelPileOps, std::move(requiredNodeIds), std::move(ignoredNodeIds),
-            std::move(callback));
+        RequireBridgeCapability(featureLevel, std::move(requiredNodeIds), std::move(ignoredNodeIds), std::move(callback));
     }
 
     void TInvokeRequestHandlerActor::AddBridgePile(const TQuery::TAddBridgePile& cmd) {
         const TBridgePileId pileId = CheckPileOperation(cmd.GetPileName(), NKikimrBridge::TClusterState::INACTIVE, true);
-        RequirePileOperationCapability(TBridgePileId(), [this, pileId] {
+        RequireConnectedNodesCapability(BridgeFeatureLevelPileOps, TBridgePileId(), [this, pileId] {
             // PDisks of the new pile are already known to BSC, static groups have to be allocated on the same ones
             BridgePileOpPileId = pileId;
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryBaseConfig);
@@ -509,6 +661,11 @@ namespace NKikimr::NStorage {
             if (auto error = RemoveBridgePileFromConfig(&config, NBridge::GetPendingPileOperationPileId(details))) {
                 throw TExError() << "Can't remove pile from the cluster: " << *error;
             }
+        } else if (op.GetKind() == NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ROLLBACK) {
+            // BSC has made its pools and groups ordinary ones, the cluster state goes away now
+            if (auto error = RemoveClusterStateAfterRollback(&config)) {
+                throw TExError() << "Can't remove the cluster state: " << *error;
+            }
         } else {
             mutableDetails->ClearPendingPileOperation();
         }
@@ -549,7 +706,7 @@ namespace NKikimr::NStorage {
             }
         }
 
-        RequirePileOperationCapability(pileId, [this, pileId] {
+        RequireConnectedNodesCapability(BridgeFeatureLevelPileOps, pileId, [this, pileId] {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
             auto *details = config.MutableClusterStateDetails();
             auto *op = details->MutablePendingPileOperation();

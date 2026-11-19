@@ -1,11 +1,15 @@
 #pragma once
 
 #include "knn-defines.h"
+#include "knn-serializer-shared.h"
+
+#include <ydb/library/vector_distance/int4_distance.h>
 
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
 #include <ydb/library/vector_distance/half_distance.h>
+#include <ydb/library/vector_distance/float8_distance.h>
 #include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
@@ -112,6 +116,17 @@ private:
         return VectorFuncImpl(v1.data(), v2.data(), v1.size(), v2.size(), std::forward<Func>(func));
     }
 
+    template <typename T, typename Func>
+    static TDistanceResult Int4VectorFunc(const TStringBuf& str1, const TStringBuf& str2, Func&& func) {
+        size_t count1 = 0, count2 = 0;
+        if (!NKnnVectorSerialization::TryGetInt4ElementCount(str1, count1)
+                || !NKnnVectorSerialization::TryGetInt4ElementCount(str2, count2)) {
+            return {};
+        }
+        return VectorFuncImpl(reinterpret_cast<const ui8*>(str1.data()), reinterpret_cast<const ui8*>(str2.data()),
+            count1, count2, std::forward<Func>(func));
+    }
+
     template <typename Func>
     static auto BitVectorFunc(const TStringBuf& str1, const TStringBuf& str2, Func&& func) {
         auto [v1, bitLen1] = GetBitArray(str1);
@@ -121,6 +136,10 @@ private:
 
 public:
     static TDistanceResult ManhattanDistance(const TStringBuf& str1, const TStringBuf& str2) {
+        if (Y_UNLIKELY(str1.Size() < HeaderLen || str2.Size() < HeaderLen)) {
+            return {};
+        }
+
         const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
         const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
         if (Y_UNLIKELY(format1 != format2)) {
@@ -140,9 +159,25 @@ public:
                 return VectorFunc<TBFloat16>(str1, str2, [](const TBFloat16* v1, const TBFloat16* v2, size_t len) {
                     return NVectorDistance::L1Distance(v1, v2, len);
                 });
+            case EFormat::Float8E4M3Vector:
+                return VectorFunc<TFloat8E4M3>(str1, str2, [](const TFloat8E4M3* v1, const TFloat8E4M3* v2, size_t len) {
+                    return NVectorDistance::L1Distance(v1, v2, len);
+                });
+            case EFormat::Float8E5M2Vector:
+                return VectorFunc<TFloat8E5M2>(str1, str2, [](const TFloat8E5M2* v1, const TFloat8E5M2* v2, size_t len) {
+                    return NVectorDistance::L1Distance(v1, v2, len);
+                });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
                     return ::L1Distance(v1, v2, len);
+                });
+            case EFormat::Uint4Vector:
+                return Int4VectorFunc<TUint4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    return NVectorDistance::NInt4::L1Distance(v1, v2, len, std::bool_constant<false>{});
+                });
+            case EFormat::Int4Vector:
+                return Int4VectorFunc<TInt4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    return NVectorDistance::NInt4::L1Distance(v1, v2, len, std::bool_constant<true>{});
                 });
             case EFormat::Uint8Vector:
                 return VectorFunc<ui8>(str1, str2, [](const ui8* v1, const ui8* v2, size_t len) {
@@ -162,6 +197,10 @@ public:
     }
 
     static TDistanceResult EuclideanDistance(const TStringBuf& str1, const TStringBuf& str2) {
+        if (Y_UNLIKELY(str1.Size() < HeaderLen || str2.Size() < HeaderLen)) {
+            return {};
+        }
+
         const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
         const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
         if (Y_UNLIKELY(format1 != format2)) {
@@ -181,9 +220,25 @@ public:
                 return VectorFunc<TBFloat16>(str1, str2, [](const TBFloat16* v1, const TBFloat16* v2, size_t len) {
                     return NVectorDistance::L2Distance(v1, v2, len);
                 });
+            case EFormat::Float8E4M3Vector:
+                return VectorFunc<TFloat8E4M3>(str1, str2, [](const TFloat8E4M3* v1, const TFloat8E4M3* v2, size_t len) {
+                    return NVectorDistance::L2Distance(v1, v2, len);
+                });
+            case EFormat::Float8E5M2Vector:
+                return VectorFunc<TFloat8E5M2>(str1, str2, [](const TFloat8E5M2* v1, const TFloat8E5M2* v2, size_t len) {
+                    return NVectorDistance::L2Distance(v1, v2, len);
+                });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
                     return ::L2Distance(v1, v2, len);
+                });
+            case EFormat::Uint4Vector:
+                return Int4VectorFunc<TUint4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    return NVectorDistance::NInt4::L2Distance(v1, v2, len, std::bool_constant<false>{});
+                });
+            case EFormat::Int4Vector:
+                return Int4VectorFunc<TInt4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    return NVectorDistance::NInt4::L2Distance(v1, v2, len, std::bool_constant<true>{});
                 });
             case EFormat::Uint8Vector:
                 return VectorFunc<ui8>(str1, str2, [](const ui8* v1, const ui8* v2, size_t len) {
@@ -203,6 +258,10 @@ public:
     }
 
     static TDistanceResult DotProduct(const TStringBuf& str1, const TStringBuf& str2) {
+        if (Y_UNLIKELY(str1.Size() < HeaderLen || str2.Size() < HeaderLen)) {
+            return {};
+        }
+
         const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
         const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
         if (Y_UNLIKELY(format1 != format2)) {
@@ -222,9 +281,25 @@ public:
                 return VectorFunc<TBFloat16>(str1, str2, [](const TBFloat16* v1, const TBFloat16* v2, size_t len) {
                     return NVectorDistance::DotProduct(v1, v2, len);
                 });
+            case EFormat::Float8E4M3Vector:
+                return VectorFunc<TFloat8E4M3>(str1, str2, [](const TFloat8E4M3* v1, const TFloat8E4M3* v2, size_t len) {
+                    return NVectorDistance::DotProduct(v1, v2, len);
+                });
+            case EFormat::Float8E5M2Vector:
+                return VectorFunc<TFloat8E5M2>(str1, str2, [](const TFloat8E5M2* v1, const TFloat8E5M2* v2, size_t len) {
+                    return NVectorDistance::DotProduct(v1, v2, len);
+                });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
                     return ::DotProduct(v1, v2, len);
+                });
+            case EFormat::Uint4Vector:
+                return Int4VectorFunc<TUint4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    return NVectorDistance::NInt4::DotProduct(v1, v2, len, std::bool_constant<false>{});
+                });
+            case EFormat::Int4Vector:
+                return Int4VectorFunc<TInt4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    return NVectorDistance::NInt4::DotProduct(v1, v2, len, std::bool_constant<true>{});
                 });
             case EFormat::Uint8Vector:
                 return VectorFunc<ui8>(str1, str2, [](const ui8* v1, const ui8* v2, size_t len) {
@@ -244,6 +319,10 @@ public:
     }
 
     static TDistanceResult CosineSimilarity(const TStringBuf& str1, const TStringBuf& str2) {
+        if (Y_UNLIKELY(str1.Size() < HeaderLen || str2.Size() < HeaderLen)) {
+            return {};
+        }
+
         const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
         const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
         if (Y_UNLIKELY(format1 != format2)) {
@@ -272,6 +351,16 @@ public:
                     const auto res = NVectorDistance::TriWayDotProduct(v1, v2, len);
                     return compute(res.LL, res.LR, res.RR);
                 });
+            case EFormat::Float8E4M3Vector:
+                return VectorFunc<TFloat8E4M3>(str1, str2, [&](const TFloat8E4M3* v1, const TFloat8E4M3* v2, size_t len) {
+                    const auto res = NVectorDistance::TriWayDotProduct(v1, v2, len);
+                    return compute(res.LL, res.LR, res.RR);
+                });
+            case EFormat::Float8E5M2Vector:
+                return VectorFunc<TFloat8E5M2>(str1, str2, [&](const TFloat8E5M2* v1, const TFloat8E5M2* v2, size_t len) {
+                    const auto res = NVectorDistance::TriWayDotProduct(v1, v2, len);
+                    return compute(res.LL, res.LR, res.RR);
+                });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [&](const i8* v1, const i8* v2, size_t len) {
                     // TODO We can optimize it if we will iterate over both vector at the same time, look to the float implementation
@@ -279,6 +368,16 @@ public:
                     const i64 lr = ::DotProduct(v1, v2, len);
                     const i64 rr = ::DotProduct(v2, v2, len);
                     return compute(ll, lr, rr);
+                });
+            case EFormat::Uint4Vector:
+                return Int4VectorFunc<TUint4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    const auto res = NVectorDistance::NInt4::TriWayDotProduct(v1, v2, len, std::bool_constant<false>{});
+                    return compute(res.LL, res.LR, res.RR);
+                });
+            case EFormat::Int4Vector:
+                return Int4VectorFunc<TInt4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    const auto res = NVectorDistance::NInt4::TriWayDotProduct(v1, v2, len, std::bool_constant<true>{});
+                    return compute(res.LL, res.LR, res.RR);
                 });
             case EFormat::Uint8Vector:
                 return VectorFunc<ui8>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {

@@ -6,6 +6,12 @@
 namespace NReWrapper::NDispatcher {
 
 Y_UNIT_TEST_SUITE(ReWrapperDispatcherRe2) {
+
+Y_UNIT_TEST(Has) {
+    UNIT_ASSERT(Has(TSerialization::kHyperscan));
+    UNIT_ASSERT(Has(TSerialization::kRe2));
+}
+
 Y_UNIT_TEST(Serialization) {
     auto w1 = Compile("[0-9]+", 0, NReWrapper::TSerialization::kRe2);
     auto string = w1->Serialize();

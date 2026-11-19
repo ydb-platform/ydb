@@ -66,7 +66,8 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
             outResponse.Id = query.Id;
             outResponse.PartMap = blobState.PartMap;
             outResponse.LooksLikePhantom = PhantomCheck
-                ? std::make_optional(blobState.WholeSituation == TBlobState::ESituation::Absent)
+                ? std::make_optional(blobState.LooksLikePhantom.value_or(
+                    blobState.WholeSituation == TBlobState::ESituation::Absent))
                 : std::nullopt;
 
             // fill in keep/doNotKeep flags
@@ -82,9 +83,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 
                     for (ui32 idxInSubgroup = 0; idxInSubgroup < blobState.Disks.size(); ++idxInSubgroup) {
                         const auto& disk = blobState.Disks[idxInSubgroup];
-                        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-                        const auto realmState = Info->GetFailRealmState(Info->GetVDiskId(disk.OrderNumber).FailRealm);
-                        if (realmState == R::F) {
+                        if (Info->IsFailRealmExcluded(Info->GetVDiskId(disk.OrderNumber).FailRealm)) {
                             continue;
                         }
                         for (ui32 partIdx = 0; partIdx < disk.DiskParts.size(); ++partIdx) {

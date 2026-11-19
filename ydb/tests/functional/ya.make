@@ -21,6 +21,7 @@ RECURSE(
     large_serializable
     limits
     minidumps
+    mirror3dc
     mvp
     nbs
     query_cache
@@ -31,14 +32,18 @@ RECURSE(
     scheme_tests
     script_execution
     sdk/cpp/path_aliasing
+    sdk/cpp/relative_database
     sdk/cpp/sdk_credprovider
     secrets
     security
     serializable
     serverless
+    snapshot_retention
+    snapshot_retention_with_load
     split_merge
     sqs
     sqs_topic
+    statestorage
     statistics
     suite_tests
     tpc

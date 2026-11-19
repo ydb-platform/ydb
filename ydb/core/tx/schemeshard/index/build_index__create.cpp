@@ -65,6 +65,9 @@ public:
         }
 
         auto subDomainPathId = domainPath.GetPathIdForDomain();
+        if (Self->IsDatabaseFreezeBlocking(subDomainPathId) && !IsImportContinuation(request, subDomainPathId)) {
+            return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for index builds");
+        }
         auto subDomainInfo = domainPath.DomainInfo();
         const bool quotaAcquired = subDomainInfo->TryConsumeSchemeQuota(ctx.Now());
 
@@ -86,9 +89,12 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
-                .NotAsyncReplicaTable()
                 .IsCommonSensePath()
                 .IsTheSameDomain(domainPath);
+
+            if (checks && (!request.GetInternal() || !tablePath.IsImportingReplica())) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (!checks) {
                 return Reply(checks.GetStatus(), checks.GetError());
@@ -306,9 +312,21 @@ public:
                             notNull,
                             familyName));
                 } else {
+                    const auto& literal = colInfo.default_from_literal();
+                    if (literal.value().has_null_flag_value()) {
+                        if (notNull) {
+                            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                                << "Cannot add not null column '" << colInfo.GetColumnName() << "' with NULL default value");
+                        }
+                        if (!literal.type().has_optional_type() && !literal.type().has_pg_type()) {
+                            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                                << "NULL default value for column '" << colInfo.GetColumnName()
+                                << "' requires an optional or PostgreSQL type");
+                        }
+                    }
                     buildInfo->BuildColumns.push_back(
                         TIndexBuildInfo::TColumnBuildInfo(
-                            colInfo.GetColumnName(), colInfo.default_from_literal(), notNull, familyName));
+                            colInfo.GetColumnName(), literal, notNull, familyName));
                 }
             }
         } else {
@@ -388,6 +406,35 @@ public:
     void DoComplete(const TActorContext&) override {}
 
 private:
+    bool IsImportContinuation(const NKikimrIndexBuilder::TEvCreateRequest& request, const TPathId& domainId) const {
+        if (!request.GetInternal() || !request.GetSettings().has_index()) {
+            return false;
+        }
+        const auto freeze = Self->DatabaseFreezeStates.find(domainId);
+        if (freeze == Self->DatabaseFreezeStates.end() || freeze->second.GetParticipantsFixed()) {
+            return false;
+        }
+        const auto importTx = Self->TxIdToImport.find(TTxId(request.GetTxId()));
+        if (importTx == Self->TxIdToImport.end()) {
+            return false;
+        }
+        const auto [importId, itemIdx] = importTx->second;
+        const auto import = Self->Imports.find(importId);
+        if (import == Self->Imports.end() || import->second->DomainPathId != domainId
+            || import->second->IsFinished() || itemIdx >= import->second->Items.size())
+        {
+            return false;
+        }
+        const auto& item = import->second->Items[itemIdx];
+        if (item.State != TImportInfo::EState::BuildIndexes || item.SubState != TImportInfo::TItem::ESubState::Proposed) {
+            return false;
+        }
+        // Freeze already waits for this import. Let its pending index build
+        // finish before fixing the participants, including the new index shards.
+        const auto tablePath = TPath::Resolve(request.GetSettings().source_path(), Self);
+        return tablePath.IsResolved() && tablePath.Base()->PathId == item.DstPathId;
+    }
+
     bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings,
                  TTableInfo::TPtr tableInfo, TString& explain) {
         Y_ASSERT(settings.has_index());
@@ -414,11 +461,27 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
             break;
         }
-        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
+        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
+        case Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex: {
+            const bool isHnsw = index.type_case()
+                == Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex;
+            if (isHnsw && !Self->EnableHnswIndex) {
+                explain = "HNSW index support is disabled (EnableHnswIndex)";
+                return false;
+            }
+            if (isHnsw) {
+                explain = "HNSW index implementation is not available yet (SQL support)";
+                return false;
+            }
+            const auto& requestedSettings = isHnsw
+                ? index.global_hnsw_index().vector_settings()
+                : index.global_vector_kmeans_tree_index().vector_settings();
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+            buildInfo.IndexType = isHnsw
+                ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw
+                : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
 
             if (buildInfo.IsRebuild) {
@@ -426,18 +489,37 @@ private:
                 const auto& indexPath = TPath::Resolve(settings.source_path(), Self).Child(index.name());
                 Y_ENSURE(indexPath.IsResolved());
                 auto existingIndex = Self->Indexes.at(indexPath.Base()->PathId);
-                const auto* existingDesc = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-                    &existingIndex->SpecializedIndexDescription);
-                if (!existingDesc) {
-                    explain = "REBUILD INDEX is only supported for vector_kmeans_tree indexes";
+                if (existingIndex->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+                        && existingIndex->Type != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                    explain = "REBUILD INDEX is only supported for vector indexes";
                     return false;
                 }
-                vectorIndexKmeansTreeDescription = *existingDesc;
+                if (existingIndex->Type != buildInfo.IndexType) {
+                    explain = "REBUILD INDEX cannot change index type";
+                    return false;
+                }
+                if (isHnsw) {
+                    const auto* description = std::get_if<NKikimrSchemeOp::THnswIndexDescription>(
+                        &existingIndex->SpecializedIndexDescription);
+                    if (!description) {
+                        explain = "REBUILD INDEX: HNSW index description is missing or does not match index type";
+                        return false;
+                    }
+                    *vectorIndexKmeansTreeDescription.MutableSettings() = description->GetSettings();
+                } else {
+                    const auto* description = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+                        &existingIndex->SpecializedIndexDescription);
+                    if (!description) {
+                        explain = "REBUILD INDEX: KMeans index description is missing or does not match index type";
+                        return false;
+                    }
+                    vectorIndexKmeansTreeDescription = *description;
+                }
                 // Merge user-provided settings over existing ones
-                const auto& userSettings = index.global_vector_kmeans_tree_index().vector_settings();
+                const auto& userSettings = requestedSettings;
                 if (userSettings.has_settings()) {
                     const auto& userVectorSettings = userSettings.settings();
-                    const auto& existingVectorSettings = existingDesc->GetSettings().settings();
+                    const auto& existingVectorSettings = vectorIndexKmeansTreeDescription.GetSettings().settings();
                     if (userVectorSettings.has_metric() && userVectorSettings.metric() != existingVectorSettings.metric()) {
                         explain = "REBUILD INDEX cannot change metric (distance/similarity)";
                         return false;
@@ -453,30 +535,49 @@ private:
                 }
                 vectorIndexKmeansTreeDescription.MutableSettings()->MergeFrom(userSettings);
             } else {
-                *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
+                *vectorIndexKmeansTreeDescription.MutableSettings() = requestedSettings;
             }
 
-            if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
+            auto& treeSettings = *vectorIndexKmeansTreeDescription.MutableSettings();
+            using TValidate = bool (*)(const Ydb::Table::KMeansTreeSettings&, TString&);
+            const TValidate validatePartial = isHnsw
+                ? NKikimr::NKMeans::ValidateHnswSettingsPartial
+                : static_cast<TValidate>(NKikimr::NKMeans::ValidateSettingsPartial);
+            const TValidate validate = isHnsw
+                ? NKikimr::NKMeans::ValidateHnswSettings
+                : static_cast<TValidate>(NKikimr::NKMeans::ValidateSettings);
+            if (!validatePartial(treeSettings, explain)) {
                 return false;
             }
-
-            if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
-                ui64 rowCount = tableInfo->GetStats().Aggregated.RowCount;
-                const bool isPrefixed = index.index_columns().size() > 1;
-                NKikimr::NKMeans::AutoSelectKMeansSettings(*vectorIndexKmeansTreeDescription.MutableSettings(), rowCount, isPrefixed);
-                if (isPrefixed) {
-                    vectorIndexKmeansTreeDescription.MutableSettings()->set_adaptive_clusters(true);
+            if (!validate(treeSettings, explain)) {
+                if (isHnsw) {
+                    if (!NKikimr::NKMeans::AutoSelectHnswSettings(treeSettings,
+                            tableInfo->GetStats().Aggregated.DataSize, explain)) {
+                        return false;
+                    }
+                } else {
+                    const ui64 rowCount = tableInfo->GetStats().Aggregated.RowCount;
+                    const bool isPrefixed = index.index_columns().size() > 1;
+                    NKikimr::NKMeans::AutoSelectKMeansSettings(treeSettings, rowCount, isPrefixed);
+                    if (isPrefixed) {
+                        treeSettings.set_adaptive_clusters(true);
+                    }
                 }
             }
 
-            const auto& kmSettings = vectorIndexKmeansTreeDescription.GetSettings();
+            const auto& kmSettings = treeSettings;
             const auto& vectorSettings = kmSettings.settings();
             const bool needVectorAutodetect = NKikimr::NKMeans::NeedsVectorSettingsAutoSelect(vectorSettings);
-            if (!NKikimr::NKMeans::ValidateSettings(kmSettings, explain) && !needVectorAutodetect) {
+            if (!validate(kmSettings, explain) && !needVectorAutodetect) {
                 return false;
             }
 
-            buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
+            if (isHnsw) {
+                auto& description = buildInfo.SpecializedIndexDescription.emplace<NKikimrSchemeOp::THnswIndexDescription>();
+                *description.MutableSettings() = treeSettings;
+            } else {
+                buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
+            }
             buildInfo.KMeans.K = kmSettings.clusters();
             buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + kmSettings.levels();
             buildInfo.KMeans.IsPrefixed = buildInfo.IsBuildPrefixedVectorIndex();
@@ -490,7 +591,7 @@ private:
                 : NTableIndex::NKMeans::DefaultOverlapRatio;
 
             if (!needVectorAutodetect) {
-                buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(vectorSettings, buildInfo.KMeans.Rounds, explain);
+                buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(buildInfo.GetKMeansVectorSettings(), buildInfo.KMeans.Rounds, explain);
             } else {
                 buildInfo.KMeans.NeedVectorAutodetect = true;
                 buildInfo.Clusters = nullptr;

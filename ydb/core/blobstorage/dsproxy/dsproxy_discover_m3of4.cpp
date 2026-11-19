@@ -138,7 +138,7 @@ public:
     TBlobStorageGroupInfo::TGroupVDisks FailedGroupDisks{&Info->GetTopology()};
     ui32 BlockedGeneration = 0;
     std::optional<TLogoBlobID> GetIssuedFor;
-    bool Doubted = false;
+    bool MustExist = false; // the blob being read was fully written, so NODATA means it is lost
 
     void IssueRangeReadQueries() {
         for (TDiskState& disk : DiskState) {
@@ -148,9 +148,15 @@ public:
 
     void IssueRangeReadQuery(TDiskState& state) {
         const TLogoBlobID to = TLogoBlobID(TabletId, MinGeneration, 0, 0, 0, 0);
-        SendToQueue(TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(state.VDiskId, Deadline, HandleClass,
+        auto query = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(state.VDiskId, Deadline, HandleClass,
             TEvBlobStorage::TEvVGet::EFlags::None, Nothing(), state.From, to, MaxBlobsAtOnce, nullptr,
-            TEvBlobStorage::TEvVGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration)), 0);
+            TEvBlobStorage::TEvVGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
+        if (DiscoverBlockedGeneration) {
+            // the VDisk reports the blocked generation only when both fields are set
+            query->Record.SetTabletId(TabletId);
+            query->Record.SetAcquireBlockedGeneration(true);
+        }
+        SendToQueue(std::move(query), 0);
         const EDiskState prev = std::exchange(state.State, EDiskState::READ_PENDING);
         Y_ABORT_UNLESS(prev == EDiskState::IDLE);
     }
@@ -263,8 +269,10 @@ public:
                     failedSubgroupDisks |= {&Info->GetTopology(), nodeId};
                 }
             }
-            Doubted = false;
-            switch (Info->GetTopology().GetQuorumChecker().GetBlobState(layout, failedSubgroupDisks)) {
+            const TBlobStorageGroupInfo::EBlobState state = Info->GetTopology().GetQuorumChecker().GetBlobState(layout,
+                failedSubgroupDisks);
+            MustExist = state == TBlobStorageGroupInfo::EBS_FULL;
+            switch (state) {
                 case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
                     Y_ABORT("incorrect state"); // we should not reach this point as we check failure model a bit earlier
 
@@ -274,8 +282,6 @@ public:
                     break;
 
                 case TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED:
-                    Doubted = true;
-                    [[fallthrough]];
                 case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY:
                 case TBlobStorageGroupInfo::EBS_FULL: {
                     // we have to process this blob
@@ -319,11 +325,11 @@ public:
         GetIssuedFor.reset();
         switch (resp.Status) {
             case NKikimrProto::NODATA:
-                if (Doubted) {
-                    // we could not read correct (as we thought) blob
+                if (MustExist) {
+                    // the blob was fully written, but we could not read it
                     ReplyAndDie(NKikimrProto::ERROR, "lost the blob");
                 } else {
-                    // this blob recoverability is doubted, so we skip it and continue with the next blob
+                    // this blob may have never been written completely, so we skip it and continue with the next blob
                     BlobMetadata.erase(resp.Id);
                     Process();
                 }

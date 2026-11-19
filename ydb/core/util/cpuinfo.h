@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <map>
 #include <unordered_map>
+#include <vector>
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
 

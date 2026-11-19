@@ -1,0 +1,70 @@
+# Native Rust build POC; dependencies and features follow Cargo.lock.
+
+CRATE(miniz_oxide)
+
+CRATE_VERSION(0.8.9)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+VERSION(0.8.9)
+LICENSE("MIT OR Zlib OR Apache-2.0")
+
+CRATE_SOURCES(
+    src/deflate/buffer.rs
+    src/deflate/core.rs
+    src/deflate/mod.rs
+    src/deflate/stored.rs
+    src/deflate/stream.rs
+    src/deflate/zlib.rs
+    src/inflate/core.rs
+    src/inflate/mod.rs
+    src/inflate/output_buffer.rs
+    src/inflate/stream.rs
+    src/serde/big_array.rs
+    src/serde/mod.rs
+    src/shared.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    Cargo.lock
+    LICENSE
+    LICENSE-APACHE.md
+    LICENSE-MIT.md
+    LICENSE-ZLIB.md
+    Readme.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+
+CRATE_FEATURES(
+    default
+    simd
+    simd-adler32
+    with-alloc
+)
+PEERDIR(
+    contrib/crates/adler2-2.0.1
+    contrib/crates/simd-adler32-0.3.10
+)
+
+CRATE_SOURCES(
+    src/deflate/buffer.rs
+    src/deflate/core.rs
+    src/deflate/mod.rs
+    src/deflate/stored.rs
+    src/deflate/stream.rs
+    src/deflate/zlib.rs
+    src/inflate/core.rs
+    src/inflate/mod.rs
+    src/inflate/output_buffer.rs
+    src/inflate/stream.rs
+    src/lib.rs
+    src/serde/big_array.rs
+    src/serde/mod.rs
+    src/shared.rs
+)
+
+END()

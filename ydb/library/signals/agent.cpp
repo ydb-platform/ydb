@@ -17,8 +17,8 @@ bool TValueAggregationAgent::CalcAggregationsAndClean(i64& sum, i64& minValue, i
     }
     sum = 0;
     const TInstant now = TInstant::Now();
-    auto minValueLocal = Values.front()->GetValue(now);
-    auto maxValueLocal = Values.front()->GetValue(now);
+    std::optional<i64> minValueLocal;
+    std::optional<i64> maxValueLocal;
     for (auto it = Values.begin(); it != Values.end();) {
         if (it->use_count() == 1) {
             it = Values.erase(it);
@@ -41,8 +41,8 @@ bool TValueAggregationAgent::CalcAggregationsAndClean(i64& sum, i64& minValue, i
     if (!maxValueLocal) {
         return false;
     }
-    minValue = maxValueLocal.value_or(0);
-    maxValue = maxValueLocal.value_or(0);
+    minValue = *minValueLocal;
+    maxValue = *maxValueLocal;
     return true;
 }
 

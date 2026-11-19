@@ -1,6 +1,7 @@
 #include "distconf.h"
 
 #include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/base/pdisk_config_validation.h>
 #include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
@@ -197,6 +198,9 @@ namespace NKikimr::NStorage {
                 << " proposed# " << proposed.GetGeneration();
         }
 
+        if (current.HasDataCenterStates() && !proposed.HasDataCenterStates()) {
+            return "DC state snapshot cannot be removed";
+        }
         if (auto error = ValidateConfig(proposed)) {
             return TStringBuilder() << "proposed config validation failed: " << *error;
         }
@@ -205,8 +209,11 @@ namespace NKikimr::NStorage {
                 return error;
             }
         }
-        if (current.GetClusterStateDetails().GetNonUniformStorageEnabled()
-                && !proposed.GetClusterStateDetails().GetNonUniformStorageEnabled()) {
+        const auto& currentDetails = current.GetClusterStateDetails();
+        const bool clusterStateRemoved = NBridge::IsRollbackPending(currentDetails) && !proposed.HasClusterState();
+        if (currentDetails.GetNonUniformStorageEnabled() && !proposed.GetClusterStateDetails().GetNonUniformStorageEnabled()
+                && !clusterStateRemoved) {
+            // it goes away only along with the cluster state, when the bridged cluster is rolled back
             return "non-uniform storage activation can't be disabled";
         }
 
@@ -502,7 +509,45 @@ namespace NKikimr::NStorage {
         return {};
     }
 
+    std::optional<TString> ValidateBridgeClusterState(const NKikimrBridge::TClusterState& state) {
+        const auto primary = TBridgePileId::FromProto(&state, &NKikimrBridge::TClusterState::GetPrimaryPile);
+        const auto promoted = TBridgePileId::FromProto(&state, &NKikimrBridge::TClusterState::GetPromotedPile);
+        if (!primary || primary.GetPileIndex() >= state.PerPileStateSize()) {
+            return "Incorrect primary pile";
+        } else if (!promoted || promoted.GetPileIndex() >= state.PerPileStateSize()) {
+            return "Incorrect promoted pile";
+        } else if (state.GetPerPileState(primary.GetPileIndex()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
+            return "Incorrect primary pile state";
+        } else if (state.GetPerPileState(promoted.GetPileIndex()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
+            return "Incorrect promoted pile state";
+        }
+        for (const auto pileState : state.GetPerPileState()) {
+            if (!NKikimrBridge::TClusterState::EPileState_IsValid(pileState)) {
+                return "Incorrect pile state";
+            }
+        }
+        return {};
+    }
+
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (config.HasDataCenterStates()) {
+            if (auto states = ParseDataCenterStates(config.GetDataCenterStates()); !states) {
+                return states.error();
+            }
+            auto normalized = config;
+            try {
+                if (ApplyStaticDataCenterStates(&normalized, config.GetDataCenterStates())) {
+                    return "Static group roles do not match authoritative DC states";
+                }
+            } catch (const yexception& error) {
+                return error.what();
+            }
+        }
+        if (config.HasClusterState()) {
+            if (auto error = ValidateBridgeClusterState(config.GetClusterState())) {
+                return error;
+            }
+        }
         // validate node list
         THashSet<ui32> nodeIds;
         THashSet<std::tuple<TString, ui16>> fqdns;

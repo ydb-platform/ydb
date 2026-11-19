@@ -236,6 +236,7 @@ int TCube<T>::ReadSensors(
 
     auto nameLabel = prepareNameLabel({});
     auto sumNameLabel = prepareNameLabel(".sum");
+    auto countNameLabel = prepareNameLabel(".count");
     auto minNameLabel = prepareNameLabel(".min");
     auto maxNameLabel = prepareNameLabel(".max");
     auto avgNameLabel = prepareNameLabel(".avg");
@@ -243,9 +244,11 @@ int TCube<T>::ReadSensors(
     auto globalHostLabel = consumer->PrepareLabel("host", "");
     auto hostLabel = consumer->PrepareLabel("host", options.Host.value_or(""));
     auto ytAggrLegacyLabel = consumer->PrepareLabel("yt_aggr", "1");
-    TCompactFlatMap<ESummaryPolicy, std::pair<ui32, ui32>, 5> ytAggrLabelBySummaryPolicy({
+    auto ytAggrSumLabel = consumer->PrepareLabel("yt_aggr", "sum");
+    TCompactFlatMap<ESummaryPolicy, std::pair<ui32, ui32>, TEnumTraits<ESummaryPolicy>::GetDomainSize()> ytAggrLabelBySummaryPolicy({
         {ESummaryPolicy::All, consumer->PrepareLabel("yt_aggr", "all")},
-        {ESummaryPolicy::Sum, consumer->PrepareLabel("yt_aggr", "sum")},
+        {ESummaryPolicy::Sum, ytAggrSumLabel},
+        {ESummaryPolicy::Count, ytAggrSumLabel},
         {ESummaryPolicy::Max, consumer->PrepareLabel("yt_aggr", "max")},
         {ESummaryPolicy::Min, consumer->PrepareLabel("yt_aggr", "min")},
         {ESummaryPolicy::Avg, consumer->PrepareLabel("yt_aggr", "avg")},
@@ -267,8 +270,8 @@ int TCube<T>::ReadSensors(
             if (options.EnableSolomonAggregates) {
                 auto ytAggrLabel = GetOrCrash(ytAggrLabelBySummaryPolicy, summaryPolicy);
                 consumer->OnLabel(ytAggrLabel.first, ytAggrLabel.second);
-            } else if (summaryPolicy == ESummaryPolicy::Sum && !options.Global) {
-                // By default support only sum aggregate except global sensors.
+            } else if ((summaryPolicy == ESummaryPolicy::Sum || summaryPolicy == ESummaryPolicy::Count) && !options.Global) {
+                // The legacy marker requests summation.
                 consumer->OnLabel(ytAggrLegacyLabel.first, ytAggrLegacyLabel.second);
             }
         }
@@ -400,7 +403,7 @@ int TCube<T>::ReadSensors(
             auto writeGaugeSummaryMetric = [&] (
                 ESummaryPolicy policyBit,
                 std::pair<ui32, ui32> specificNameLabel,
-                double (NMonitoring::TSummaryDoubleSnapshot::*valueGetter)() const)
+                auto valueGetter)
             {
                 writeMetric(
                     policyBit,
@@ -425,6 +428,11 @@ int TCube<T>::ReadSensors(
                 ESummaryPolicy::Sum,
                 sumNameLabel,
                 &NMonitoring::TSummaryDoubleSnapshot::GetSum);
+
+            writeGaugeSummaryMetric(
+                ESummaryPolicy::Count,
+                countNameLabel,
+                &NMonitoring::TSummaryDoubleSnapshot::GetCount);
 
             writeGaugeSummaryMetric(
                 ESummaryPolicy::Min,
@@ -761,6 +769,8 @@ int TCube<T>::ReadSensorValues(
                 }
             } else if (Any(options.SummaryPolicy & ESummaryPolicy::Avg)) {
                 fluent.Value(value.Count() > 0 ? value.Sum() / value.Count() : NAN);
+            } else if (Any(options.SummaryPolicy & ESummaryPolicy::Count)) {
+                fluent.Value(static_cast<ui64>(value.Count()));
             }
             ++valuesRead;
         } else if constexpr (std::is_same_v<T, TSummarySnapshot<TDuration>>) {

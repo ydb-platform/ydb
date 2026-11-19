@@ -1,0 +1,3 @@
+self_check_result: EMERGENCY
+issue_log { id: "ordinary" status: RED type: "STORAGE_GROUP" message: "Group failed" }
+issue_log { id: "numeric" status: RED type: "BRIDGE_GROUP" message: "Group failed" location { storage { pool { group { pile { name: "17" } } } } } }

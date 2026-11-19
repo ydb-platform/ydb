@@ -574,6 +574,26 @@ Y_UNIT_TEST(AsyncReplication) {
          "DROP ASYNC REPLICATION user;\n"},
         {"drop async replication user cascade",
          "DROP ASYNC REPLICATION user CASCADE;\n"},
+        {"drop async replication user force",
+         "DROP ASYNC REPLICATION user FORCE;\n"},
+        {"drop async replication user cascade force",
+         "DROP ASYNC REPLICATION user CASCADE FORCE;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(ForceIdentifier) {
+    TCases cases = {
+        {"drop async replication fOrCe",
+         "DROP ASYNC REPLICATION fOrCe;\n"},
+        {"drop async replication fOrCe force",
+         "DROP ASYNC REPLICATION fOrCe FORCE;\n"},
+        {"drop async replication fOrCe cascade force",
+         "DROP ASYNC REPLICATION fOrCe CASCADE FORCE;\n"},
+        {"create topic fOrCe (consumer fOrCe)",
+         "CREATE TOPIC fOrCe (\n\tCONSUMER fOrCe\n);\n"},
     };
 
     TSetup setup;
@@ -2333,6 +2353,19 @@ Y_UNIT_TEST(Analyze) {
          "ANALYZE table SAMPLE (0.1 / 2);\n"},
         {"analyze table sample $rate",
          "ANALYZE table SAMPLE $rate;\n"}};
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(ChecksumTable) {
+    TCases cases = {
+        {"checkSUM table my_table", "CHECKSUM TABLE my_table;\n"},
+        {"checksum table plato.`some/path` with(ALGORITHM=\"Sha256\")",
+         "CHECKSUM TABLE plato.`some/path` WITH (ALGORITHM = 'Sha256');\n"},
+        {"checksum table $table with (algorithm='CityHash128',)",
+         "CHECKSUM TABLE $table WITH (algorithm = 'CityHash128',\n);\n"},
+    };
 
     TSetup setup;
     setup.Run(cases);

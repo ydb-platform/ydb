@@ -1,6 +1,8 @@
 LIBRARY()
 
 PEERDIR(
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/library/actors/core
     ydb/library/wilson_ids
     library/cpp/containers/disjoint_interval_tree
@@ -13,9 +15,11 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/persqueue/public
     ydb/core/persqueue/public/counters
+    ydb/core/persqueue/public/metrics
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/dataplane
     ydb/core/persqueue/public/reset_offset
+    ydb/core/persqueue/public/write_sessions_quoter
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme

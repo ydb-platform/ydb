@@ -20,7 +20,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
     std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
     ui32 indexHitsCount = 0;
     for (reader.Start(); reader.IsCorrect();) {
-        AFL_VERIFY(reader.GetColumnsCount() == 1);
+        YDB_LOG_VERIFY(reader.GetColumnsCount() == 1);
         for (auto&& i : reader) {
             dataOwners.emplace_back(i.GetCurrentChunk());
             auto indexHitsCountLocal = GetDataExtractor()->GetIndexHitsCount(dataOwners.back());
@@ -77,7 +77,8 @@ bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std
     const std::shared_ptr<arrow::Scalar>& value, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     const ui32 hashesCount = Request.ResolvedHashesCount();
     std::set<ui64> hashes;
-    AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
+    YDB_LOG_VERIFY(op.GetOperation() == EOperation::Equals,
+        {"op", op.DebugString()});
     const ui32 bitsCount = data.GetBitsCount();
     if (!!category) {
         for (ui64 hashSeed = 0; hashSeed < hashesCount; ++hashSeed) {
@@ -101,7 +102,7 @@ bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std
 std::optional<ui64> TBloomIndexMeta::DoCalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const {
     ui64 result;
     const NRequest::TOriginalDataAddress addr(GetColumnId(), subColumnName);
-    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, &result));
+    YDB_LOG_VERIFY(GetDataExtractor()->CheckForIndex(addr, &result));
     if (subColumnName) {
         return result;
     } else {
@@ -120,8 +121,8 @@ TConclusionStatus TBloomIndexMeta::DoCheckModificationCompatibility(const IIndex
 }
 
 bool TBloomIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
-    AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
-    AFL_VERIFY(proto.HasBloomFilter());
+    YDB_LOG_VERIFY(TBase::DoDeserializeFromProto(proto));
+    YDB_LOG_VERIFY(proto.HasBloomFilter());
     auto& bFilter = proto.GetBloomFilter();
     {
         auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
@@ -157,7 +158,7 @@ void TBloomIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription&
 }
 
 bool TBloomIndexMeta::Initialize() {
-    AFL_VERIFY(!ResultSchema);
+    YDB_LOG_VERIFY(!ResultSchema);
     if (auto c = ValidateRequest(); c.IsFail()) {
         YDB_LOG_WARN("",
             {"indexInit", c.GetErrorMessage()});

@@ -156,7 +156,7 @@ TIntrusiveConstPtr<TSlices> SlicesOf(const TPartView& view) {
 
 struct TPageRef {
     TLogoBlobID Label;
-    ui32 Group = 0;
+    ui32 Slot = 0;
     TPageOffset Offset;
 
     bool operator==(const TPageRef&) const = default;
@@ -164,7 +164,7 @@ struct TPageRef {
     template <typename H>
     friend H AbslHashValue(H h, const TPageRef& ref) {
         const ui64* raw = ref.Label.GetRaw();
-        return H::combine(std::move(h), raw[0], raw[1], raw[2], ref.Group, static_cast<size_t>(ref.Offset));
+        return H::combine(std::move(h), raw[0], raw[1], raw[2], ref.Slot, static_cast<size_t>(ref.Offset));
     }
 };
 
@@ -183,13 +183,15 @@ public:
         return Inner->Locate(part, ref, lob);
     }
 
-    const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
-        const auto type = location.Type;
-        Y_ENSURE(type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2,
-            "key-block iterator requested a non-index page");
-        const TSharedData* page = Inner->TryGetPage(part, location, groupId);
+    const TSharedData* TryGetPage(const TPart*, const TPageLocation&, TGroupId) override {
+        Y_TABLET_ERROR("key-block iterator requested a data page");
+    }
+
+    const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
+        Y_ENSURE(NPage::IsIndexPage(location.Type), "key-block iterator requested a non-index page");
+        const TSharedData* page = Inner->TryGetIndexPage(part, location, groupId);
         if (page) {
-            Seen.insert({ part->Label, groupId.Raw(), location.Offset });
+            Seen.insert({ part->Label, part->IndexSlot(groupId), location.Offset });
         }
         return page;
     }
@@ -395,7 +397,7 @@ struct TKeyBlockIterator::TState {
             start = Later(start, page.Begin);
             end = Earlier(end, page.End);
             Block.OwnerRows = page.Rows;
-            if (SeenData.insert({ owner->Label, 0, page.Offset }).second) {
+            if (SeenData.insert({ owner->Label, owner->DataSlot({}), page.Offset }).second) {
                 Telemetry.OwnerMainGroupBytes += page.Bytes;
             }
         } else {

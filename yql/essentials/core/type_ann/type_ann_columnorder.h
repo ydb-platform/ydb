@@ -12,6 +12,8 @@ TMaybe<TColumnOrder> InferOrderForUnionAll(
     const TExprNode::TListType& children,
     TTypeAnnotationContext& ctx);
 
+IGraphTransformer::TStatus ColumnOrderOfWrapper(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);
+
 IGraphTransformer::TStatus OrderForSqlSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);
 IGraphTransformer::TStatus OrderForAssumeColumnOrder(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);
 IGraphTransformer::TStatus OrderForSqlProject(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);

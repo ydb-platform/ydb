@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
@@ -51,6 +51,8 @@ struct TQueryTable {
     // with the query. Empty otherwise.
     TVector<const NKqpProto::TKqpPhyKeyRange*> KeyRanges;
 };
+
+const NKqpProto::TKqpInternalSink* FindTableTruncateSink(const NKqpProto::TKqpPhyTx& tx);
 
 class TKqpPhyTxHolder {
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
@@ -119,6 +121,12 @@ public:
     const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& GetTables() const {
         return Proto->GetTables();
     }
+
+    bool HasUnsafeTruncate() const {
+        return FindTableTruncateSink(*Proto) != nullptr;
+    }
+
+    NKikimrKqp::TKqpTableTruncateSettings GetUnsafeTruncate() const;
 
     const NKqpProto::TKqpSchemeOperation& GetSchemeOperation() const {
         return Proto->GetSchemeOperation();

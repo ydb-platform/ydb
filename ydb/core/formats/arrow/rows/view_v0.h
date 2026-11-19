@@ -64,7 +64,7 @@ private:
         }
 
         [[nodiscard]] TConclusionStatus Next() {
-            AFL_VERIFY(!IsFinishedFlag);
+            YDB_LOG_VERIFY(!IsFinishedFlag);
             if (!!CurrentValue) {
                 Values.Skip(CurrentValue->size());
             }
@@ -177,7 +177,7 @@ public:
             if (fieldIndex != ColumnIndex) {
                 return false;
             }
-            AFL_VERIFY(fieldIndex == ColumnIndex);
+            YDB_LOG_VERIFY(fieldIndex == ColumnIndex);
             if (!data) {
                 return true;
             }
@@ -186,7 +186,7 @@ public:
                     Result = std::string_view(data, size);
                     return true;
                 }
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             }
             if constexpr (arrow::has_c_type<typename TWrap::T>() && !std::is_base_of<arrow::HalfFloatType, typename TWrap::T>()) {
                 using CType = typename arrow::TypeTraits<typename TWrap::T>::CType;
@@ -194,7 +194,7 @@ public:
                     Result = *(CType*)(data);
                     return true;
                 }
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             }
             return true;
         }

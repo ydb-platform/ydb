@@ -340,7 +340,10 @@ void TReadSessionActor<Protocol>::Handle(typename IContext::TEvWriteFinished::TP
 
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Die(const TActorContext& ctx) {
-    SessionClosing = true;
+    if (Dead) {
+        return;
+    }
+    Dead = true;
 
     if (AuthInitActor) {
         ctx.Send(AuthInitActor, new TEvents::TEvPoisonPill());
@@ -1835,13 +1838,13 @@ void TReadSessionActor<Protocol>::ProcessBalancerDead(ui64 tabletId, const TActo
 
                     if (jt->second.LockSent) {
                         SendReleaseSignal(jt->second, true, ctx);
-                        if (SessionClosing) {
+                        if (Dead) {
                             return;
                         }
                     }
 
                     ReleasePartition(jt, true, ctx);
-                    if (SessionClosing) {
+                    if (Dead) {
                         return;
                     }
                 } else {

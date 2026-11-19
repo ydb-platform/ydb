@@ -2,7 +2,7 @@ YQL_UDF_MINITEST()
 
 DEPENDS(
     ydb/library/yql/udfs/digest
-    yql/essentials/udfs/common/digest/impl
+    yql/essentials/udfs/common/digest
 )
 
 DATA(

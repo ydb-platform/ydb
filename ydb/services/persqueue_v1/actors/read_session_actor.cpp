@@ -344,6 +344,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvWrite
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
+    if (Dead) {
+        return;
+    }
+    Dead = true;
+
     if (AuthInitActor) {
         ctx.Send(AuthInitActor, new TEvents::TEvPoisonPill());
     }
@@ -599,7 +604,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReleased::TP
                 return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
                     << "releasing partition, but not all direct reads are done " << partitionInfo.Partition, ctx);
             }
-            SendReleaseSignal(it->second, true, ctx);
+            if (!SendReleaseSignal(partitionInfo, true, ctx)) {
+                return;
+            }
         }
     } else {
         AFL_ENSURE(DirectRead);
@@ -1573,7 +1580,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvError::TPt
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionActor<UseMigrationProtocol>::SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx) {
+bool TReadSessionActor<UseMigrationProtocol>::SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx) {
     TServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);
 
@@ -1599,12 +1606,13 @@ void TReadSessionActor<UseMigrationProtocol>::SendReleaseSignal(TPartitionActorI
     }
 
     if (!SendControlMessage(partition.Partition, std::move(result), ctx)) {
-        return;
+        return false;
     }
 
     AFL_ENSURE(partition.LockSent);
 
     partition.ReleaseSent = true;
+    return true;
 }
 
 template <bool UseMigrationProtocol>
@@ -1858,11 +1866,14 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessBalancerDead(ui64 tabletId,
                     auto jt = it;
                     ++it;
 
-                    if (jt->second.LockSent) {
-                        SendReleaseSignal(jt->second, true, ctx);
+                    if (jt->second.LockSent && !SendReleaseSignal(jt->second, true, ctx)) {
+                        return;
                     }
 
                     ReleasePartition(jt, true, ctx);
+                    if (Dead) {
+                        return;
+                    }
                 } else {
                     ++it;
                 }

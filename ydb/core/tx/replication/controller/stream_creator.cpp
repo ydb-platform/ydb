@@ -150,6 +150,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         case ETopicOperation::CreateConsumer: {
             auto& consumer = settings.BeginAddConsumer(SrcConsumerName);
             if (IsOwnedChangefeed()) {
+                settings.BeginAlterAttributes().Add("_ydb_replication_consumer", SrcConsumerName);
                 consumer.Important(ConsumerImportant).AvailabilityPeriod(ConsumerAvailabilityPeriod);
             }
             break;

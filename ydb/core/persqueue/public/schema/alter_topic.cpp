@@ -226,8 +226,21 @@ TResult ApplyChangesInt(
         if (!code) return code;
     }
 
-    if (request.alter_attributes().size()) {
-        CHECK_CDC;
+    const auto& attributes = request.alter_attributes();
+    if (isCdcStream && !attributes.empty()) {
+        const auto marker = attributes.find("_ydb_replication_consumer");
+        if (attributes.size() != 1 || marker == attributes.end() || marker->second.empty()
+            || request.add_consumers_size() != 1 || request.add_consumers(0).name() != marker->second)
+        {
+            return {Ydb::StatusIds::BAD_REQUEST, "Full alter of cdc stream is forbidden"};
+        }
+
+        const auto name = NPersQueue::ConvertNewConsumerName(marker->second, pqConfig);
+        for (const auto& consumer : pqTabletConfig->GetConsumers()) {
+            if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION && consumer.GetName() != name) {
+                return {Ydb::StatusIds::PRECONDITION_FAILED, "CDC stream already has a replication consumer"};
+            }
+        }
     }
 
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings consumersAdvancedMonitoringSettings;

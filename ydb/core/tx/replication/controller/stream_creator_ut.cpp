@@ -392,6 +392,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         const auto& config = topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
         UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionConfig().GetLifetimeSeconds(), 1);
         UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 1);
+        UNIT_ASSERT(config.GetConsumers(0).GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
         UNIT_ASSERT(!config.GetConsumers(0).GetImportant());
         UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers(0).GetAvailabilityPeriodMs(), TDuration::Days(1).MilliSeconds());
     }
@@ -1004,6 +1005,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(consumer->Get()->GetArgs()), "/Root/Topic");
             const auto& settings = TStreamSetup::Settings(consumer);
             UNIT_ASSERT_VALUES_EQUAL(settings.AddConsumers_.size(), 1);
+            UNIT_ASSERT(settings.AlterAttributes_.empty());
             UNIT_ASSERT_VALUES_EQUAL(settings.AddConsumers_[0].AvailabilityPeriod_, TDuration::Zero());
             UNIT_ASSERT(!settings.SetRetentionPeriod_);
             UNIT_ASSERT(!settings.SetPartitionWriteSpeedBytesPerSecond_);

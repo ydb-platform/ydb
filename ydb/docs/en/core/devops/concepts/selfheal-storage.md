@@ -14,7 +14,9 @@ Storage SelfHeal is enabled by default for [dynamic groups](../../concepts/gloss
 
 ## Planned VDisk Relocation Before Maintenance {#planned-maintenance}
 
-SelfHeal can relocate VDisks of dynamic groups before prolonged host maintenance while the host's disks are still healthy. CMS accepts a request with `EvictVDisks` enabled, and Sentinel initiates relocation according to the [`cms_config.sentinel_config.evict_vdisks_status`](../../reference/configuration/cms_config.md#evict-vdisks-status) parameter.
+Before host maintenance, an administrator can relocate the VDisks of dynamic groups from the host in advance. To do this, the administrator submits a maintenance request to CMS with `EvictVDisks` enabled. SelfHeal relocates the VDisks to other PDisks when sufficient free resources are available and the state of the groups permits safe relocation.
+
+The relocation mode is set by the [`cms_config.sentinel_config.evict_vdisks_status`](../../reference/configuration/cms_config.md#evict-vdisks-status) parameter.
 
 In the default `FAULTY` mode, the PDisks of the host being maintained are marked as faulty. If several of these disks belong to the same storage group, failure model checks can block relocation because all of them count as faulty at the same time.
 

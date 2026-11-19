@@ -83,22 +83,22 @@ message TSerialManagementStage {
 }
 
 // Mirror-3-dc group states and physical realm roles are persisted with the group generation.
-// I = Included, P = Pending, R = Recovering, X = Excluded.
+// I = Included, L = Leaving, R = Recovering, X = Excluded.
 // D is the replication target, W the write layout, E the guaranteed layout for confirmed blobs.
-// DC_SOLO_DISASTER is read-only. At a crossing (=), the horizontal and vertical paths continue independently.
+// At a crossing (=), the horizontal and vertical paths continue independently.
 //
-//   +--------------------------------+               +--------------------------------+               +--------------------------------+
-//   |             NORMAL             |               |           DC_FAILURE           |               |        DC_SOLO_DISASTER        |
-//   | I/I/I                          |<------------->| I/I/P                          |<------------->| I/P/P                          |
-//   | D: 1+1+1                       |               | D: 1+1+1                       |               | D: 1+1+1                       |
-//   | W: 1+1+1 OR 2+2                |               | W: 1+1+1 OR 2+2                |               | W: 1+1+1 OR 2+2                |
-//   | E: 1+1+1 OR 2+2                |               | E: 1+1+1 OR 2+2                |               | E: 1+1+1 OR 2+2                |
-//   +--------------------------------+               +--------------------------------+               +--------------------------------+
-//                   ^                                                |                                                |
-//                   |                                                |                                                |
-//                   |                                                |                                                |
-//                   |                                                |                                                |
-//                   |                                                v                                                v
+//   +--------------------------------+               +--------------------------------+
+//   |             NORMAL             |               |           DC_FAILURE           |
+//   | I/I/I                          |<------------->| I/I/L                          |
+//   | D: 1+1+1                       |               | D: 1+1+1                       |
+//   | W: 1+1+1 OR 2+2                |               | W: 1+1+1 OR 2+2                |
+//   | E: 1+1+1 OR 2+2                |               | E: 1+1+1 OR 2+2                |
+//   +--------------------------------+               +--------------------------------+
+//                   ^                                                |
+//                   |                                                |
+//                   |                                                |
+//                   |                                                |
+//                   |                                                v
 //   +--------------------------------+               +--------------------------------+               +--------------------------------+               +--------------------------------+
 //   |        DC_RECOVERY_INV1        |               |        DC_FAILURE_INV1         |               |          DC_SOLO_INV1          |               | DC_SOLO_RECOVERY_INV1_PENDING  |
 //   | I/I/R                          |<------------->| I/I/X                          |-------------->| I/X/X                          |<------------->| I/R/X                          |
@@ -157,14 +157,14 @@ message TGroupState {
     enum EState {
         NORMAL = 0;  // I/I/I.
 
-        DC_FAILURE = 1;  // I/I/P.
+        DC_FAILURE = 1;  // I/I/L.
         DC_FAILURE_INV1 = 2;  // I/I/X.
         DC_FAILURE_INV2_PENDING = 3;  // I/I/X.
         DC_FAILURE_INV2 = 4;  // I/I/X.
 
         DC_RECOVERY_INV1 = 5;  // I/I/R.
 
-        DC_SOLO_DISASTER = 6;  // I/P/P.
+        DC_SOLO_DISASTER = 6;  // Legacy read-only I/L/L. The controller can only leave this state.
         DC_SOLO_INV1 = 7;  // I/X/X.
         DC_SOLO_INV2_PENDING = 8;  // I/X/X.
         DC_SOLO_INV2 = 9;  // I/X/X.
@@ -182,6 +182,6 @@ message TDataCenterState {
         INCLUDED = 0;
         RECOVERING = 1;
         EXCLUDED = 2;
-        PENDING = 3; // Readable while the remaining Included realms are being repaired.
+        LEAVING = 3; // Readable while the remaining Included realms are being repaired.
     }
 }

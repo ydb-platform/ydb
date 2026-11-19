@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
     Y_UNIT_TEST(ConfigQuorumThenRepairThenTransition) {
         TGroupStateFixture fixture;
         fixture.Update(1, NKikimrBlobStorage::TGroupState::DC_FAILURE,
-            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::PENDING});
+            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::LEAVING});
         TVDiskReplicationStatus status;
         status.OnlyFirstRealm = true;
         fixture.ReplyRound(9, status);
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
     Y_UNIT_TEST(SoloDisasterRequiresPendingSourcesBeforePromotion) {
         TGroupStateFixture fixture;
         fixture.Update(1, NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER,
-            {TFailRealm::INCLUDED, TFailRealm::PENDING, TFailRealm::PENDING});
+            {TFailRealm::INCLUDED, TFailRealm::LEAVING, TFailRealm::LEAVING});
         TVDiskReplicationStatus status;
         status.UnreplicatedRealm = 2;
         status.ReplicatingRealm = 1;
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
     Y_UNIT_TEST(SoloDisasterRechecksDiskHealthAfterSuccessfulRepair) {
         TGroupStateFixture fixture;
         fixture.Update(4, NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER,
-            {TFailRealm::PENDING, TFailRealm::INCLUDED, TFailRealm::PENDING});
+            {TFailRealm::LEAVING, TFailRealm::INCLUDED, TFailRealm::LEAVING});
         fixture.ReplyRound(9);
         auto repair = fixture.GetRepair();
         fixture.ReplyRepair(repair, NKikimrProto::OK);

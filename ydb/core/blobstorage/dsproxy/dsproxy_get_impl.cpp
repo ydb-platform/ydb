@@ -37,6 +37,20 @@ bool ValidateVDiskGetResponseChecksum(NKikimrProto::EReplyStatus replyStatus,
 
 } // namespace NDsProxyGetImpl
 
+bool TGetImpl::CheckVDiskReadFailure(const TVDiskID& vdisk, NKikimrProto::EReplyStatus status) {
+    if (Info->Type.GetErasure() != TErasureType::ErasureMirror3dc || PhantomCheck) {
+        return true;
+    }
+    if (status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE) {
+        FailedReadDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
+        return TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*Info, FailedReadDisks);
+    }
+    if (status == NKikimrProto::OK && FailedReadDisks) {
+        FailedReadDisks -= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
+    }
+    return true;
+}
+
 void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReason, TLogContext &logCtx,
         TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult) {
     outGetResult.Reset(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID));

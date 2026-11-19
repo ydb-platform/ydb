@@ -419,21 +419,27 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         const auto& group = serviceSet.GetGroups(0);
         UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), 2);
         UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetMirror3dcState()), ui32(NKikimrBlobStorage::TGroupState::DC_FAILURE));
-        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetState()), ui32(NKikimrBlobStorage::TDataCenterState::PENDING));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetState()), ui32(NKikimrBlobStorage::TDataCenterState::LEAVING));
         for (const auto& disk : serviceSet.GetVDisks()) {
             UNIT_ASSERT_VALUES_EQUAL(disk.GetVDiskID().GetGroupGeneration(), 2);
         }
         UNIT_ASSERT(!NStorage::ApplyStaticDataCenterStates(&config, command));
-        auto disaster = config;
+        auto secondConfig = config;
         auto secondExclusion = command;
         auto *second = secondExclusion.AddDataCenter();
         second->SetName("dc-2");
         second->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
-        UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&disaster, secondExclusion));
-        const auto& disasterGroup = disaster.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
-        UNIT_ASSERT(disasterGroup.GetMirror3dcState() == NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER);
-        UNIT_ASSERT(disasterGroup.GetRings(1).GetState() == NKikimrBlobStorage::TDataCenterState::PENDING);
-        UNIT_ASSERT(disasterGroup.GetRings(2).GetState() == NKikimrBlobStorage::TDataCenterState::PENDING);
+        const auto beforeSecondExclusion = secondConfig.SerializeAsString();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(NStorage::ApplyStaticDataCenterStates(&secondConfig, secondExclusion),
+            yexception, "Invalid static mirror-3-dc transition");
+        UNIT_ASSERT_VALUES_EQUAL(secondConfig.SerializeAsString(), beforeSecondExclusion);
+        auto* repaired = secondConfig.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0);
+        repaired->SetMirror3dcState(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
+        repaired->MutableRings(2)->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        UNIT_ASSERT(NStorage::ApplyStaticDataCenterStates(&secondConfig, secondExclusion));
+        UNIT_ASSERT(repaired->GetMirror3dcState() == NKikimrBlobStorage::TGroupState::DC_SOLO_INV1);
+        UNIT_ASSERT(repaired->GetRings(1).GetState() == NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        UNIT_ASSERT(repaired->GetRings(2).GetState() == NKikimrBlobStorage::TDataCenterState::EXCLUDED);
         auto conflicting = config;
         conflicting.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0)->MutableRings(2)->SetState(
             NKikimrBlobStorage::TDataCenterState::RECOVERING);

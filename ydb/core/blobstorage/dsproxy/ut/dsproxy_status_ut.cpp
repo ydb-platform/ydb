@@ -38,11 +38,11 @@ Y_UNIT_TEST_SUITE(TDSProxyStatus) {
                 UNIT_ASSERT_VALUES_EQUAL(result->Get()->ApproximateFreeSpaceShare, expectedSpace);
             }
         };
-        check({G::DC_FAILURE, {DC::PENDING, DC::INCLUDED, DC::INCLUDED}}, 3, NKikimrProto::OK, 0.5f);
+        check({G::DC_FAILURE, {DC::LEAVING, DC::INCLUDED, DC::INCLUDED}}, 3, NKikimrProto::OK, 0.5f);
         check({G::DC_SOLO_RECOVERY_INV1_PENDING, {DC::INCLUDED, DC::RECOVERING, DC::EXCLUDED}}, 3, NKikimrProto::OK, 0.5f);
         check({G::DC_SOLO_RECOVERY_INV1, {DC::INCLUDED, DC::RECOVERING, DC::EXCLUDED}}, 3, NKikimrProto::OK, 0.125f);
-        check({G::DC_SOLO_DISASTER, {DC::PENDING, DC::INCLUDED, DC::PENDING}}, 2, NKikimrProto::OK, 0.0f);
-        check({G::DC_SOLO_DISASTER, {DC::PENDING, DC::INCLUDED, DC::PENDING}}, 1, NKikimrProto::ERROR, 0.0f);
+        check({G::DC_SOLO_DISASTER, {DC::LEAVING, DC::INCLUDED, DC::LEAVING}}, 2, NKikimrProto::OK, 0.0f);
+        check({G::DC_SOLO_DISASTER, {DC::LEAVING, DC::INCLUDED, DC::LEAVING}}, 1, NKikimrProto::ERROR, 0.0f);
     }
 }
 

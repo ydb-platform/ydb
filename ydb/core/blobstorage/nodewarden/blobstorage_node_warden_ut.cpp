@@ -2529,8 +2529,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         using TFailRealm = NKikimrBlobStorage::TDataCenterState;
         using TGroupState = NKikimrBlobStorage::TGroupState;
         for (const auto [before, after] : {
-                std::pair{TFailRealm::INCLUDED, TFailRealm::PENDING}, {TFailRealm::PENDING, TFailRealm::INCLUDED},
-                {TFailRealm::PENDING, TFailRealm::EXCLUDED}, {TFailRealm::EXCLUDED, TFailRealm::RECOVERING},
+                std::pair{TFailRealm::INCLUDED, TFailRealm::LEAVING}, {TFailRealm::LEAVING, TFailRealm::INCLUDED},
+                {TFailRealm::LEAVING, TFailRealm::EXCLUDED}, {TFailRealm::EXCLUDED, TFailRealm::RECOVERING},
                 {TFailRealm::EXCLUDED, TFailRealm::EXCLUDED}, {TFailRealm::INCLUDED, TFailRealm::RECOVERING}}) {
             TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
             const auto wardenId = SetupNodeWardenForSlayTest(runtime);
@@ -2541,7 +2541,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 TBlobStorageGroupInfo::TDynamicInfo dynamic(vdiskId.GroupID, generation);
                 dynamic.Mirror3dcState = {
                     state == TFailRealm::EXCLUDED ? TGroupState::DC_FAILURE_INV1
-                        : state == TFailRealm::PENDING ? TGroupState::DC_FAILURE
+                        : state == TFailRealm::LEAVING ? TGroupState::DC_FAILURE
                         : state == TFailRealm::RECOVERING ? TGroupState::DC_RECOVERY_INV1 : TGroupState::NORMAL,
                     {TFailRealm::INCLUDED, state, TFailRealm::INCLUDED}};
                 for (ui32 i = 0; i < 9; ++i) {

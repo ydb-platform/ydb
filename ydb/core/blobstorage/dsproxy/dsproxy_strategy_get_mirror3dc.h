@@ -84,6 +84,9 @@ class TMirror3dcGetStrategy : public IStrategy {
         // Without ERROR, NOT_YET replies confirm missing data for an ordinary Get.
         const auto absenceState = checker.GetBlobState(readState.Parts,
             readState.HasErrors ? readState.Uncertain : readState.Failed);
+        if (!PhantomCheck && absenceState == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
+            return EStrategyOutcome::Error("Cannot establish absence of a mirror-3-dc blob");
+        }
         if (PhantomCheck) {
             // A likely phantom is still an error until every disk confirms missing data.
             state->LooksLikePhantom = absenceState != TBlobStorageGroupInfo::EBS_DISINTEGRATED;
@@ -100,7 +103,7 @@ class TMirror3dcGetStrategy : public IStrategy {
             TBlackboard* blackboard, TGroupDiskRequests* groupDiskRequests,
             const TMirror3dcWriteQuorumChecker& checker, const TReadState& readState,
             const TAccelerationParams& accelerationParams) const {
-        // On the first call, read all parts from I and P in parallel.
+        // On the first call, read all parts from Included and Leaving realms in parallel.
         // Requested prevents duplicate reads on subsequent calls.
         for (ui32 disk = 0; disk < 9; ++disk) {
             if (readState.Unknown[disk]) {
@@ -219,17 +222,15 @@ public:
             }
         }
 
-        readState.BlobState = checker->GetBlobState(readState.Parts, readState.Failed);
-        // Return ERROR when failed disks exceed the current ensured failure model.
-        // Phantom checks collect replies and report each blob's verdict without aborting the batch.
-        if (!PhantomCheck && readState.BlobState == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
-            return EStrategyOutcome::Error("Mirror-3-dc read exceeds the ensured failure model");
+        if (MustRestoreFirst) {
+            readState.BlobState = checker->GetBlobState(readState.Parts, readState.Failed);
+            if (!PhantomCheck && readState.BlobState == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
+                return EStrategyOutcome::Error("Mirror-3-dc restore exceeds the ensured failure model");
+            }
+            return ProcessRestore(&logCtx, &state, info, &blackboard, &groupDiskRequests, *checker, readState,
+                accelerationParams);
         }
-
-        return MustRestoreFirst
-            ? ProcessRestore(&logCtx, &state, info, &blackboard, &groupDiskRequests, *checker, readState,
-                accelerationParams)
-            : ProcessRead(&state, &blackboard, &groupDiskRequests, *checker, readState, accelerationParams);
+        return ProcessRead(&state, &blackboard, &groupDiskRequests, *checker, readState, accelerationParams);
     }
 };
 

@@ -95,7 +95,7 @@ class Mirror3dcTestBase(unittest.TestCase):
         excluded = self.excluded_dcs.copy()
         if state == self.DC_STATES.EXCLUDED:
             excluded.add(dc)
-            matching_roles = (self.DC_STATES.PENDING, self.DC_STATES.EXCLUDED)
+            matching_roles = (self.DC_STATES.LEAVING, self.DC_STATES.EXCLUDED)
         elif state == self.DC_STATES.INCLUDED:
             excluded.discard(dc)
             matching_roles = (self.DC_STATES.RECOVERING, self.DC_STATES.INCLUDED)

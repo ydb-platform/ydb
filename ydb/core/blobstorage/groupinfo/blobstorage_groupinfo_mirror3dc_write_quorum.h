@@ -248,8 +248,8 @@ public:
     }
 
     bool CheckQuorumForLayout(const TSubgroupPartLayout& parts) const {
-        // Existing copies in Pending realms still contribute to the blob layout.
-        if (HasMirror3dcPendingRealm(State)) {
+        // Existing copies in Leaving realms still contribute to the blob layout.
+        if (HasMirror3dcLeavingRealm(State)) {
             return CheckCounts(CountParts(parts), WriteLayout, EParticipants::Read);
         }
         return CheckWriteQuorumForLayout(parts);

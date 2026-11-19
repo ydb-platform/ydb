@@ -517,13 +517,13 @@ Y_UNIT_TEST(Mirror3dcSkipsNewerCandidateBelowEnsuredLayout) {
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Id, blobId1);
 }
 
-Y_UNIT_TEST(Mirror3dcPendingRealmCompletesEnsuredCandidate) {
+Y_UNIT_TEST(Mirror3dcLeavingRealmCompletesEnsuredCandidate) {
     TTestBasicRuntime runtime;
     SetupRuntime(runtime);
     TDSProxyEnv env;
     env.Configure(runtime, TBlobStorageGroupType(TErasureType::ErasureMirror3dc), 0, 0,
         TBlobStorageGroupInfo::EEM_NONE, DormantTimeoutDefaultControl, false,
-        {TDataCenterState::INCLUDED, TDataCenterState::PENDING, TDataCenterState::INCLUDED},
+        {TDataCenterState::INCLUDED, TDataCenterState::LEAVING, TDataCenterState::INCLUDED},
         NKikimrBlobStorage::TGroupState::DC_FAILURE);
     TTestState state(runtime, env.Info);
     const TLogoBlobID id(123456, 1, 1, 0, state.BlobSize, 0);

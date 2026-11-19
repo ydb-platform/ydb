@@ -61,14 +61,14 @@ void CheckRangePagination(bool reverse, ui32 crcMode) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDSProxyRangePagination) {
-    Y_UNIT_TEST(PendingRealmsCanHoldTheEntireConfirmedBlob) {
+    Y_UNIT_TEST(LeavingRealmsCanHoldTheEntireConfirmedBlob) {
         using DC = NKikimrBlobStorage::TDataCenterState;
         TTestBasicRuntime runtime;
         SetupRuntime(runtime);
         TDSProxyEnv env;
         env.Configure(runtime, TBlobStorageGroupType(TErasureType::ErasureMirror3dc), 0, 0,
             TBlobStorageGroupInfo::EEM_NONE, DormantTimeoutDefaultControl, false,
-            {DC::INCLUDED, DC::PENDING, DC::PENDING}, NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER);
+            {DC::INCLUDED, DC::LEAVING, DC::LEAVING}, NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER);
         TTestState state(runtime, env.Info);
         TGroupMock& group = state.GetGroupMock();
         const TLogoBlobID id(123456, 1, 1, 0, state.BlobSize, 0);
@@ -78,14 +78,14 @@ Y_UNIT_TEST_SUITE(TDSProxyRangePagination) {
                 group.PutPartAtSlot(id, slot, slot % 3 + 1, state.BlobData);
             }
         }
-        for (bool pendingUnavailable : {false, true}) {
+        for (bool leavingUnavailable : {false, true}) {
             auto query = std::make_unique<TEvBlobStorage::TEvRange>(id.TabletID(), id, id, false, TInstant::Max(), true);
             runtime.Send(new IEventHandle(env.RealProxyActorId, state.EdgeActor, query.release()), 0);
             for (ui32 i = 0; i < 9; ++i) {
                 auto request = state.GrabEventPtr<TEvBlobStorage::TEvVGet>();
                 auto reply = state.CreateEventResultPtr(request, NKikimrProto::UNKNOWN);
                 const TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
-                if (pendingUnavailable && disk.FailRealm != 0) {
+                if (leavingUnavailable && disk.FailRealm != 0) {
                     reply->Get()->Record.SetStatus(NKikimrProto::ERROR);
                 } else {
                     group.OnVGet(*request->Get(), *reply->Get());
@@ -93,8 +93,8 @@ Y_UNIT_TEST_SUITE(TDSProxyRangePagination) {
                 runtime.Send(reply.Release());
             }
             auto result = state.GrabEventPtr<TEvBlobStorage::TEvRangeResult>();
-            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, pendingUnavailable ? NKikimrProto::ERROR : NKikimrProto::OK);
-            if (!pendingUnavailable) {
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, leavingUnavailable ? NKikimrProto::ERROR : NKikimrProto::OK);
+            if (!leavingUnavailable) {
                 UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses.front().Id, id);
             }

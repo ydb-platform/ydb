@@ -178,17 +178,20 @@ Y_UNIT_TEST_SUITE(TDSProxyMirror3dcIndexRange) {
     }
 
     Y_UNIT_TEST(AbsenceDependsOnNormalRealmsInEnsuredPair) {
+        const TMirror3dcGroupState recovery{NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1,
+            {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}};
         for (const ERead operation : {ERead::Range, ERead::Index, ERead::Get, ERead::Restore}) {
-            CheckRead(operation, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {1, 1, 1}, NKikimrProto::ERROR);
-            CheckRead(operation, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {2, 0, 2}, NKikimrProto::NODATA);
-            CheckRead(operation, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {1, 1, 0}, NKikimrProto::ERROR);
-            CheckRead(operation, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {0, 0, 3}, NKikimrProto::NODATA);
+            CheckRead(operation, recovery, {}, {1, 1, 1}, NKikimrProto::ERROR);
+            CheckRead(operation, recovery, {}, {2, 0, 2},
+                operation == ERead::Index ? NKikimrProto::NODATA : NKikimrProto::ERROR);
+            CheckRead(operation, recovery, {}, {1, 1, 0}, NKikimrProto::ERROR);
+            CheckRead(operation, recovery, {}, {0, 0, 3}, NKikimrProto::NODATA);
         }
     }
 
-    Y_UNIT_TEST(OrdinaryGetReadsIncludedAndPendingRealms) {
+    Y_UNIT_TEST(OrdinaryGetReadsIncludedAndLeavingRealms) {
         CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, NKikimrProto::OK);
-        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::PENDING, TDataCenterState::PENDING}}, {0, 2, 2}, {}, NKikimrProto::OK);
+        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::LEAVING}}, {0, 0, 2}, {}, NKikimrProto::OK);
         CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {0, 1, 0}, {}, NKikimrProto::NODATA);
     }
 

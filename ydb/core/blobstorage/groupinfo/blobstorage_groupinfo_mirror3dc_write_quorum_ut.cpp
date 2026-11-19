@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
             const bool pendingRealm = state == NKikimrBlobStorage::TGroupState::DC_FAILURE;
             const ui32 requiredCopies = pendingRealm ? 1 : 2;
             TBlobStorageGroupInfo info = MakeInfo({state,
-                {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, pendingRealm ? TDataCenterState::PENDING : TDataCenterState::EXCLUDED}});
+                {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, pendingRealm ? TDataCenterState::LEAVING : TDataCenterState::EXCLUDED}});
             for (ui32 hash = 0; hash < 3; ++hash) {
                 std::optional<TMirror3dcWriteQuorumChecker> checker = TryCreateChecker(info, hash);
                 UNIT_ASSERT(checker);
@@ -584,16 +584,16 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         CheckBlobStateCase(state, {1, 1, 1}, {}, TBlobStorageGroupInfo::EBS_FULL);
     }
 
-    Y_UNIT_TEST(PendingRealmSuppliesReadEvidenceAndCannotReceiveWrites) {
+    Y_UNIT_TEST(LeavingRealmSuppliesReadEvidenceAndCannotReceiveWrites) {
         using TState = NKikimrBlobStorage::TGroupState;
-        TMirror3dcGroupState failure{TState::DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::PENDING}};
+        TMirror3dcGroupState failure{TState::DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::LEAVING}};
         CheckCase(failure, {2, 2, 0}, true);
         CheckCase(failure, {2, 1, 3}, false);
         CheckBlobStateCase(failure, {0, 0, 1}, {}, TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY);
         CheckBlobStateCase(failure, {}, {1, 1, 1}, TBlobStorageGroupInfo::EBS_DISINTEGRATED);
         CheckBlobStateCase(failure, {}, {1, 1, 0}, TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY);
 
-        TMirror3dcGroupState readOnly{TState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::PENDING, TDataCenterState::PENDING}};
+        TMirror3dcGroupState readOnly{TState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::LEAVING, TDataCenterState::LEAVING}};
         CheckCase(readOnly, {3, 3, 3}, false);
         CheckBlobStateCase(readOnly, {}, {0, 2, 2}, TBlobStorageGroupInfo::EBS_DISINTEGRATED);
         CheckBlobStateCase(readOnly, {}, {0, 1, 3}, TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY);
@@ -609,7 +609,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
                 info.PickSubgroup(hash, &subgroup, nullptr);
                 TSubgroupPartLayout parts;
                 for (ui32 disk = 0; disk < 3; ++disk) {
-                    if (IsPending(state.FailRealmStates[subgroup[disk].FailRealm])) {
+                    if (IsLeaving(state.FailRealmStates[subgroup[disk].FailRealm])) {
                         parts.AddItem(disk, disk, info.Type);
                         break;
                     }
@@ -624,7 +624,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
 
     Y_UNIT_TEST(UnknownDiskDoesNotDuplicateAReportedCopyInEnsuredLayout) {
         auto info = MakeInfo({NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER,
-            {TDataCenterState::INCLUDED, TDataCenterState::PENDING, TDataCenterState::PENDING}});
+            {TDataCenterState::INCLUDED, TDataCenterState::LEAVING, TDataCenterState::LEAVING}});
         auto checker = TryCreateChecker(info, 0);
         UNIT_ASSERT(checker);
         TSubgroupPartLayout parts;
@@ -804,7 +804,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         const auto oldInfo = MakeInfo({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
         TBlobStorageGroupInfo::TDynamicInfo dynamic(oldInfo.GroupID, oldInfo.GroupGeneration + 1);
         dynamic.Mirror3dcState = oldInfo.GetDynamicInfo().Mirror3dcState;
-        dynamic.Mirror3dcState.FailRealmStates[2] = NKikimrBlobStorage::TDataCenterState::PENDING;
+        dynamic.Mirror3dcState.FailRealmStates[2] = NKikimrBlobStorage::TDataCenterState::LEAVING;
         dynamic.Mirror3dcState.State = NKikimrBlobStorage::TGroupState::DC_FAILURE;
         const TBlobStorageGroupInfo newInfo(oldInfo.PickTopology(), std::move(dynamic), "", {},
             NPDisk::DEVICE_TYPE_UNKNOWN);

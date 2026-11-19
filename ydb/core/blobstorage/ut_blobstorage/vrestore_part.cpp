@@ -95,7 +95,7 @@ namespace {
             definition->SetGroupId(groupId);
             definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER);
             for (ui32 realm = 0; realm < 3; ++realm) {
-                definition->AddFailRealmStates(realm == includedRealm ? R::INCLUDED : R::PENDING);
+                definition->AddFailRealmStates(realm == includedRealm ? R::INCLUDED : R::LEAVING);
             }
             auto response = Env.Invoke(config);
             UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());

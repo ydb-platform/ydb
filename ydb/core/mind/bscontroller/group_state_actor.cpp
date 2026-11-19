@@ -314,7 +314,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         TVDiskID reported = record.HasVDiskID() ? VDiskIDFromVDiskID(record.GetVDiskID()) : TVDiskID();
         const TVDiskID& expected = group.Info.VDisks[query.Disk].Id;
         EMirror3dcFailRealmState role = group.Info.States[expected.FailRealm];
-        bool allowReadOnly = group.Stage == EStage::CheckPromotion || IsPending(role);
+        bool allowReadOnly = group.Stage == EStage::CheckPromotion || IsLeaving(role);
         group.ConfirmedDisks[query.Disk] = record.HasVDiskID() && reported == expected
             && record.GetStatus() == NKikimrProto::OK && record.GetJoinedGroup() && record.GetReplicated()
             && (!record.GetIsReadOnly() || allowReadOnly);

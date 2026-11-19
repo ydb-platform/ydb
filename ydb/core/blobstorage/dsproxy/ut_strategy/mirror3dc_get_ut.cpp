@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
 
     Y_UNIT_TEST(ReadOnlyRestoreRequiresExistingRedundancy) {
         for (bool full : {false, true}) {
-            TTest t({NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::PENDING, TDataCenterState::PENDING}});
+            TTest t({NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::LEAVING, TDataCenterState::LEAVING}});
             for (ui32 disk = 0; disk < 9; ++disk) {
                 if (disk < 2) {
                     t.Data(disk);
@@ -333,12 +333,12 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
         UNIT_ASSERT_VALUES_EQUAL(t.Realm(t.RequestedDisk()), 0);
     }
 
-    Y_UNIT_TEST(ReadsRequestedRangeFromIncludedOrPendingRealm) {
-        for (const TMirror3dcGroupState states : {TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::PENDING, TDataCenterState::PENDING}}}) {
+    Y_UNIT_TEST(ReadsRequestedRangeFromIncludedOrLeavingRealm) {
+        for (const TMirror3dcGroupState states : {TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::LEAVING, TDataCenterState::LEAVING}}}) {
             for (ui32 cookie = 0; cookie < 3; ++cookie) {
                 TTest t(states, cookie, 2, 3);
-                if (states.FailRealmStates[1] == TDataCenterState::PENDING) {
-                    // Force fallback to P; its positive reply can supply the requested data.
+                if (states.FailRealmStates[1] == TDataCenterState::LEAVING) {
+                    // Force fallback to Leaving, which can supply the requested data.
                     for (ui32 disk = 0; disk < 9; ++disk) {
                         if (t.Realm(disk) == 0) {
                             t.Reply(disk, TBlobState::ESituation::Absent);
@@ -460,6 +460,18 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                 UNIT_ASSERT(t.Blackboard.GroupDiskRequests.GetsPending.empty());
             }
         }
+    }
+
+    Y_UNIT_TEST(OrdinaryReadCanFindDataAfterBlobErrors) {
+        TTest t({NKikimrBlobStorage::TGroupState::DC_FAILURE,
+            {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::LEAVING}});
+        for (ui32 disk = 0; disk < 3; ++disk) {
+            t.Reply(disk, TBlobState::ESituation::Error);
+        }
+        UNIT_ASSERT(t.Run() == EStrategyOutcome::IN_PROGRESS);
+        t.Data(t.RequestedDisk());
+        UNIT_ASSERT(t.Run() == EStrategyOutcome::DONE);
+        UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == TBlobState::ESituation::Present);
     }
 
     Y_UNIT_TEST(PhantomCheckContinuesReadingPastFailureModel) {
@@ -810,25 +822,22 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
         UNIT_ASSERT(legacy.Run(false, true) == EStrategyOutcome::DONE);
     }
 
-    Y_UNIT_TEST(NormalExcessiveErrorsWithPendingReadsMatchLegacy) {
-        for (bool restore : {false, true}) {
-            for (ui32 errors = 0; errors < 512; ++errors) {
-                TTest current({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
-                TTest legacy({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
-                for (ui32 disk = 0; disk < 9; ++disk) {
-                    if (errors & (1u << disk)) {
-                        current.Reply(disk, TBlobState::ESituation::Error);
-                        legacy.Reply(disk, TBlobState::ESituation::Error);
-                    }
+    Y_UNIT_TEST(NormalRestoreExcessiveErrorsWithPendingReadsMatchLegacy) {
+        for (ui32 errors = 0; errors < 512; ++errors) {
+            TTest current({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
+            TTest legacy({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
+            for (ui32 disk = 0; disk < 9; ++disk) {
+                if (errors & (1u << disk)) {
+                    current.Reply(disk, TBlobState::ESituation::Error);
+                    legacy.Reply(disk, TBlobState::ESituation::Error);
                 }
-                const auto actual = restore ? current.RunRestore() : current.Run();
-                const auto expected = restore ? legacy.RunRestore(false, true) : legacy.Run(false, true);
-                UNIT_ASSERT_VALUES_EQUAL_C(ui32(current.Result(actual)), ui32(legacy.Result(expected)),
-                    "errors " << errors << " restore " << restore);
-                if (actual == EStrategyOutcome::ERROR) {
-                    UNIT_ASSERT(current.Blackboard.GroupDiskRequests.GetsPending.empty());
-                    UNIT_ASSERT(current.Blackboard.GroupDiskRequests.PutsPending.empty());
-                }
+            }
+            const auto actual = current.RunRestore();
+            const auto expected = legacy.RunRestore(false, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(ui32(current.Result(actual)), ui32(legacy.Result(expected)), "errors " << errors);
+            if (actual == EStrategyOutcome::ERROR) {
+                UNIT_ASSERT(current.Blackboard.GroupDiskRequests.GetsPending.empty());
+                UNIT_ASSERT(current.Blackboard.GroupDiskRequests.PutsPending.empty());
             }
         }
     }

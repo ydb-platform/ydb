@@ -253,9 +253,9 @@ Y_UNIT_TEST_SUITE(Replication) {
         const auto base = replication->AddTarget(TReplication::ETargetKind::Table,
             std::make_shared<TTargetTable::TTableConfig>("/Root/table", "/Root/replica"));
         const auto index = replication->AddTarget(TReplication::ETargetKind::IndexTable,
-            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/by_value", "/Root/replica/by_value"));
+            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/by_value", "/Root/replica/by_value", false));
         const auto otherIndex = replication->AddTarget(TReplication::ETargetKind::IndexTable,
-            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/other", "/Root/replica/other"));
+            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/other", "/Root/replica/other", false));
         replication->UpdateLag(base, TDuration::Seconds(1));
         replication->UpdateLag(index, TDuration::Seconds(20));
         replication->UpdateLag(otherIndex, TDuration::Seconds(20));
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(Replication) {
         const auto base = replication->AddTarget(TReplication::ETargetKind::Table,
             std::make_shared<TTargetTable::TTableConfig>("/Root/table", "/Root/replica"));
         const auto index = replication->AddTarget(TReplication::ETargetKind::IndexTable,
-            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/by_value", "/Root/replica/by_value"));
+            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/by_value", "/Root/replica/by_value", false));
         replication->UpdateLag(base, TDuration::Seconds(1));
         UNIT_ASSERT(!replication->GetLag());
 

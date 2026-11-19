@@ -537,6 +537,7 @@ private:
             AUDIT_PART("request_id", requestId)
             AUDIT_PART("sanitized_token", (SanitizedToken_ ? SanitizedToken_ : EmptyValue))
             AUDIT_PART("subject", (UserSID_ ? UserSID_ : EmptyValue))
+            AUDIT_PART("remote_address", (SourceAddress_ ? SourceAddress_ : EmptyValue))
             AUDIT_PART("account", UserName_)
             AUDIT_PART("cloud_id", UserName_, Cfg().GetYandexCloudMode())
             AUDIT_PART("folder_id", Response_.GetFolderId(), Cfg().GetYandexCloudMode())

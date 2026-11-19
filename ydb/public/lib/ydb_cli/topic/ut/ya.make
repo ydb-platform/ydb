@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/public/lib/ydb_cli/topic)
 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/coverage_discard_debug_aranges.inc)
+
 ADDINCL(
     ydb/public/sdk/cpp
 )

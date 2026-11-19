@@ -2,6 +2,11 @@ UNITTEST_FOR(ydb/core/tx/datashard)
 
 FORK_SUBTESTS()
 
+# Avoid DWARF32 relocation overflow in this test executable
+IF (OS_LINUX)
+    LDFLAGS(-Wl,--strip-debug)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

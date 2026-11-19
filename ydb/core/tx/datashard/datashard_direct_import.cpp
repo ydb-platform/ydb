@@ -51,10 +51,7 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-bool TDataShard::IsActiveDirectImport(ui64 txId, ui64 tableId, const TActorId& sender) {
-    if (IsUserTableWriteBlocked()) {
-        return false;
-    }
+bool TDataShard::IsActiveS3Import(ui64 txId, ui64 tableId, const TActorId& sender) {
     auto op = Pipeline.FindOp(txId);
     if (!op || !op->IsSchemeTx() || !op->IsWaitingForAsyncJob()) {
         return false;
@@ -107,7 +104,7 @@ void TDataShard::Handle(TEvDataShard::TEvS3DirectWriteBegin::TPtr& ev, const TAc
         ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
     };
 
-    if (!IsActiveDirectImport(msg->TxId, msg->TableId, ev->Sender)) {
+    if (IsUserTableWriteBlocked() || !IsActiveS3Import(msg->TxId, msg->TableId, ev->Sender)) {
         return reply(MakeHolder<TEvDataShard::TEvS3DirectWriteBeginResult>(msg->TxId,
             "Restore is no longer active"));
     }
@@ -176,7 +173,7 @@ bool TDataShard::TTxS3DirectWriteFinish::Execute(TTransactionContext& txc, const
         Error = "Direct write reservation is no longer active";
         return true;
     }
-    if (!Self->IsActiveDirectImport(msg->TxId, msg->TableId, Ev->Sender)) {
+    if (Self->IsUserTableWriteBlocked() || !Self->IsActiveS3Import(msg->TxId, msg->TableId, Ev->Sender)) {
         Error = "Restore is no longer active";
         Self->CancelS3DirectWrite(msg->TxId);
         return true;

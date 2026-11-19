@@ -292,13 +292,15 @@ class TDataShard::TTxS3UploadRows
     , public TCommonUploadOps<TEvDataShard::TEvS3UploadRowsRequest, TEvDataShard::TEvS3UploadRowsResponse>
 {
 public:
-    TTxS3UploadRows(TDataShard* ds, TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev);
+    TTxS3UploadRows(TDataShard* ds, TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, TActorId sender);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_S3_UPLOAD_ROWS; }
 
 private:
     TRowVersion MvccVersion = TRowVersion::Min();
+    const TActorId Sender;
+    bool Cancelled = false;
 };
 
 // Attaches a directly-built part (direct part import) as a bottom layer of the

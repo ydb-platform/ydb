@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
 REQUIREMENTS(ram:32 cpu:1)
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/coverage_discard_debug_aranges.inc)
-
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

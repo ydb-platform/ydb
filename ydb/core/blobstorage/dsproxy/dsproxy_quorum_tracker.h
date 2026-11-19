@@ -8,7 +8,12 @@
 namespace NKikimr {
 
     class TGroupQuorumTracker {
+    public:
+        enum class EQuorum { Startup, Read };
+
+    private:
         const TBlobStorageGroupInfo *Info;
+        const EQuorum Quorum;
 
         // a set of disks that replied successfully (with OK)
         TBlobStorageGroupInfo::TGroupVDisks SuccessfulDisks;
@@ -26,8 +31,9 @@ namespace NKikimr {
         ui32 NumStatusRemain;
 
     public:
-        TGroupQuorumTracker(const TBlobStorageGroupInfo *info)
+        TGroupQuorumTracker(const TBlobStorageGroupInfo *info, EQuorum quorum = EQuorum::Startup)
             : Info(info)
+            , Quorum(quorum)
             , SuccessfulDisks(&Info->GetTopology())
             , ErroneousDisks(&Info->GetTopology())
             , NumResendsRemain(Info->GetTotalVDisksNum())
@@ -76,9 +82,13 @@ namespace NKikimr {
         NKikimrProto::EReplyStatus CalculateStatus() {
             if (Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
                 using Q = TMirror3dcWriteQuorumChecker;
-                return !Q::CheckFailModelForGroup(*Info, ErroneousDisks) ? NKikimrProto::ERROR :
-                       Q::CheckFailModelForGroup(*Info, ~SuccessfulDisks) ? NKikimrProto::OK :
-                                                                          NKikimrProto::UNKNOWN;
+                const auto check = [this](const TBlobStorageGroupInfo::TGroupVDisks& disks) {
+                    return Quorum == EQuorum::Read ? Q::CheckReadFailModelForGroup(*Info, disks)
+                                                  : Q::CheckFailModelForGroup(*Info, disks);
+                };
+                return !check(ErroneousDisks) ? NKikimrProto::ERROR :
+                       check(~SuccessfulDisks) ? NKikimrProto::OK :
+                                                 NKikimrProto::UNKNOWN;
             }
             const auto& checker = Info->GetQuorumChecker();
             return !checker.CheckFailModelForGroup(ErroneousDisks) ? NKikimrProto::ERROR  :

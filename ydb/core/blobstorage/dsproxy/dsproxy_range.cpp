@@ -39,10 +39,13 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
     };
     TVector<TBlobQueryItem> BlobsToGet;
 
-    bool CheckFailModel() const {
-        return Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
-            ? TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*Info, FailedDisks)
-            : Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks);
+    bool CheckRangeQuorum() const {
+        if (Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
+            return Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks);
+        }
+        using Q = TMirror3dcWriteQuorumChecker;
+        return ForceBlockedGeneration ? Q::CheckFailModelForGroup(*Info, FailedDisks)
+                                      : Q::CheckReadFailModelForGroup(*Info, FailedDisks);
     }
 
     void SendReply(std::unique_ptr<TEvBlobStorage::TEvRangeResult> reply) {
@@ -88,7 +91,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
             case NKikimrProto::ERROR:
             case NKikimrProto::VDISK_ERROR_STATE:
                 FailedDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
-                if (!CheckFailModel()) {
+                if (!CheckRangeQuorum()) {
                     ErrorReason = "Failed disks check fails on non-OK event status";
                     return ReplyAndDie(NKikimrProto::ERROR);
                 }
@@ -100,7 +103,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
                     DSP_LOG_CRIT_S("DSR09", "Don't know how to interpret an empty range with IsRangeOverflow set." <<
                             " TEvVGetResult# " << ev->Get()->ToString());
                     FailedDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
-                    if (!CheckFailModel()) {
+                    if (!CheckRangeQuorum()) {
                         ErrorReason = "Failed disks check fails on OK event status";
                         return ReplyAndDie(NKikimrProto::ERROR);
                     }
@@ -374,7 +377,7 @@ public:
         Y_ABORT_UNLESS(TabletId == From.TabletID());
         Y_ABORT_UNLESS(TabletId == To.TabletID());
 
-        if (!CheckFailModel()) {
+        if (!CheckRangeQuorum()) {
             ErrorReason = "Group state cannot establish range completeness";
             return ReplyAndDie(NKikimrProto::ERROR);
         }

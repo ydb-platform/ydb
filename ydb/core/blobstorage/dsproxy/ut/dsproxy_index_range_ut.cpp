@@ -54,7 +54,7 @@ void CheckRead(ERead operation, const TMirror3dcGroupState& realms, const TCount
             TEvBlobStorage::TEvRangeResult, TEvBlobStorage::TEvGetResult>(handle);
         if (get) {
             const auto vdisk = VDiskIDFromVDiskID(get->Record.GetVDiskID());
-            UNIT_ASSERT(realms.FailRealmStates[vdisk.FailRealm] != TDataCenterState::EXCLUDED);
+            UNIT_ASSERT(IsReadable(realms.FailRealmStates[vdisk.FailRealm]));
             const ui32 disk = env.Info->GetIdxInSubgroup(vdisk, id.Hash());
             TEvBlobStorage::TEvVGet::TPtr request(
                 static_cast<TEventHandle<TEvBlobStorage::TEvVGet>*>(handle.Release()));
@@ -96,8 +96,9 @@ void CheckRead(ERead operation, const TMirror3dcGroupState& realms, const TCount
             break;
         } else {
             UNIT_ASSERT(!range && indexResult);
-            UNIT_ASSERT_VALUES_EQUAL(indexResult->Status,
-                expected == NKikimrProto::NODATA || expectBlobError ? NKikimrProto::OK : expected);
+            UNIT_ASSERT_VALUES_EQUAL_C(indexResult->Status,
+                expected == NKikimrProto::NODATA || expectBlobError ? NKikimrProto::OK : expected,
+                "operation# " << static_cast<ui32>(operation) << " ErrorReason# " << indexResult->ErrorReason);
             if (indexResult->Status == NKikimrProto::OK) {
                 UNIT_ASSERT_VALUES_EQUAL(indexResult->ResponseSz, 1);
                 UNIT_ASSERT_VALUES_EQUAL(indexResult->Responses[0].Status, expected);
@@ -185,14 +186,18 @@ Y_UNIT_TEST_SUITE(TDSProxyMirror3dcIndexRange) {
         }
     }
 
-    Y_UNIT_TEST(OrdinaryGetReadsNormalAndRecoveringRealms) {
+    Y_UNIT_TEST(OrdinaryGetReadsIncludedAndPendingRealms) {
         CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, NKikimrProto::OK);
-        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {0, 1, 0}, {}, NKikimrProto::OK);
+        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::PENDING, TDataCenterState::PENDING}}, {0, 2, 2}, {}, NKikimrProto::OK);
+        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {0, 1, 0}, {}, NKikimrProto::NODATA);
     }
 
-    Y_UNIT_TEST(PhantomCheckSkipsFailedRealmsAndRejectsRecoveryErrors) {
+    Y_UNIT_TEST(PhantomCheckSkipsUnreadableRealmsAndReportsReadErrors) {
         CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {}, NKikimrProto::NODATA, true);
-        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {0, 0, 3}, NKikimrProto::ERROR, true, false, true);
+        const TMirror3dcGroupState recovery{NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1,
+            {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}};
+        CheckRead(ERead::Get, recovery, {}, {0, 0, 3}, NKikimrProto::NODATA, true);
+        CheckRead(ERead::Get, recovery, {}, {1, 0, 3}, NKikimrProto::ERROR, true, false, true);
     }
 
     Y_UNIT_TEST(PartialCopiesAreRestoredThroughNewPutStrategy) {

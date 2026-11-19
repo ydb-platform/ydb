@@ -144,6 +144,15 @@ public:
         return checker.CheckCounts(CountFailedDomainsByRealm(uncertainDisks), layouts.Ensured, EParticipants::Read);
     }
 
+    static bool CheckReadFailModelForGroup(const TBlobStorageGroupInfo& info,
+            const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) {
+        if (info.GetTopology().GetTotalFailRealmsNum() != 3 || failedDisks.GetTopology() != &info.GetTopology()) {
+            return CheckFailModelForGroup(info, failedDisks);
+        }
+        const auto& state = info.GetMirror3dcState();
+        return !CanHideEnsuredLayout({state.State, state.FailRealmStates}, failedDisks);
+    }
+
     static bool CheckFailModelForGroup(const TBlobStorageGroupInfo& info,
             const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) {
         const auto& topology = info.GetTopology();

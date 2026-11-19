@@ -526,6 +526,8 @@ SELECT Block(($arg)->{
 
 ## Yson::Mutate {#mutate}
 
+Для работы с линейными значениями проверьте [версию языка, выбранную сервером](../../types/linear.md). Используйте версию не ниже указанной для вызываемой функции.
+
 ```yql
 Yson::Mutate(Resource<Yson2.Node>) -> Linear<Resource<Yson2.MutNode>>
 ```
@@ -581,7 +583,7 @@ SELECT Block(($arg)->{
 ## Yson::MutUpsert {#mutupsert}
 
 ```yql
-Yson::MutUpsert(Linear<Resource<Yson2.MutNode>>, Resource<Yson2.MutNode>) -> Linear<Resource<Yson2.MutNode>>
+Yson::MutUpsert(Linear<Resource<Yson2.MutNode>>, Resource<Yson2.Node>) -> Linear<Resource<Yson2.MutNode>>
 ```
 
 Доступна начиная с версии [YQL 2025.05](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.05.md#yson-module).
@@ -600,7 +602,7 @@ SELECT Block(($arg)->{
 ## Yson::MutInsert {#mutinsert}
 
 ```yql
-Yson::MutInsert(Linear<Resource<Yson2.MutNode>>, Resource<Yson2.MutNode>) -> Linear<Resource<Yson2.MutNode>>
+Yson::MutInsert(Linear<Resource<Yson2.MutNode>>, Resource<Yson2.Node>) -> Linear<Resource<Yson2.MutNode>>
 ```
 
 Доступна начиная с версии [YQL 2025.05](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.05.md#yson-module).
@@ -620,7 +622,7 @@ SELECT Block(($arg)->{
 ## Yson::MutUpdate {#mutupdate}
 
 ```yql
-Yson::MutUpdate(Linear<Resource<Yson2.MutNode>>, Resource<Yson2.MutNode>) -> Linear<Resource<Yson2.MutNode>>
+Yson::MutUpdate(Linear<Resource<Yson2.MutNode>>, Resource<Yson2.Node>) -> Linear<Resource<Yson2.MutNode>>
 ```
 
 Доступна начиная с версии [YQL 2025.05](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.05.md#yson-module).
@@ -711,14 +713,14 @@ Yson::MutTryDown(Linear<Resource<Yson2.MutNode>>,location:String) -> Tuple<Linea
 Доступна начиная с версии [YQL 2025.05](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.05.md#yson-module).
 Передвигает текущий узел к элементу словаря или списка, при этом может быть создан новый узел в состоянии `Invalid`.
 
-В строке location используется экранирование символов через обратный слеш `\`.
+Текущая реализация использует исходную строку location при поиске ключа словаря. Не полагайтесь на декодирование escape-последовательностей.
 Если строка location начинается с символов `<`, `=` или `>`, то за ним должен быть указан индекс списка в формате десятичного числа (начиная с 0), `first` (0-й элемент списка) или `last` (последний элемент списка). Иначе location интерпретируется как ключ в словаре.
 Для пустого списка `first` и `last` описывают положение за концом списка.
 
 Для функции `MutDown` запрещается создавать новые ключи в словарях, в ней можно использовать только модификатор `=` для списков и она генерирует ошибку если перемещение текущего узла невозможно.
 Функция `MutTryDown` в отличии от `MutDown` возвращает `false` во втором элементе кортежа в случае невозможности перемещения.
 Если текущий узел имеет состояние `Invalid` или `Deleted`, то функция `MutDownOrCreate` сначала создает его в виде пустого списка или словаря, в зависимости от вида location.
-Если тип текущего узла (список или словарь) не совпадает с видом location, то `MutDown` и `MutDownOrCreate` выдадут ошибку.
+Для `MutDownOrCreate` используйте location, соответствующий типу текущего узла: ключ для словаря, индекс с модификатором для списка. `MutDown` выдаёт ошибку при несовпадении типа узла и вида location.
 
 ### Примеры
 
@@ -802,7 +804,7 @@ SELECT Block(($arg)->{
 
 ```yql
 SELECT Block(($arg)->{
-    $m = Udf(Yson::Mutate, $arg as Depends)('[a=1;b=2]'y);
+    $m = Udf(Yson::Mutate, $arg as Depends)('{a=1;b=2}'y);
     $m = Yson::MutDownOrCreate($m, '=0'); -- ошибка, текущий узел не список
     return Yson::MutFreeze($m);
 });

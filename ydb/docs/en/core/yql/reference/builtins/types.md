@@ -178,6 +178,8 @@ SELECT FormatType(VoidType()); -- Void
 
 ## LinearType, DynamicLinearType {#lineartype}
 
+To use linear values, check the [language version selected by the server](../types/linear.md). Use at least the version required by the function you call.
+
 ### Signature
 
 ```yql

@@ -523,6 +523,8 @@ SELECT Block(($arg)->{
 
 ## Yson::Mutate {#mutate}
 
+To use linear values, check the [language version selected by the server](../../types/linear.md). Use at least the version required by the function you call.
+
 ```yql
 Yson::Mutate(Resource<Yson2.Node>) -> Linear<Resource<Yson2.MutNode>>
 ```
@@ -577,7 +579,7 @@ SELECT Block(($arg)->{
 ## Yson::MutUpsert {#mutupsert}
 
 ```yql
-Yson::MutUpsert(Linear<Resource<Yson2.MutNode>>, Resource<Yson2.MutNode>) -> Linear<Resource<Yson2.MutNode>>
+Yson::MutUpsert(Linear<Resource<Yson2.MutNode>>, Resource<Yson2.Node>) -> Linear<Resource<Yson2.MutNode>>
 ```
 
 Available since version [YQL 2025.05](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.05.md#yson-module).
@@ -596,7 +598,7 @@ SELECT Block(($arg)->{
 ## Yson::MutInsert {#mutinsert}
 
 ```yql
-Yson::MutInsert(Linear<Resource<Yson2.MutNode>>, Resource<Yson2.MutNode>) -> Linear<Resource<Yson2.MutNode>>
+Yson::MutInsert(Linear<Resource<Yson2.MutNode>>, Resource<Yson2.Node>) -> Linear<Resource<Yson2.MutNode>>
 ```
 
 Available since version [YQL 2025.05](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.05.md#yson-module).
@@ -616,7 +618,7 @@ SELECT Block(($arg)->{
 ## Yson::MutUpdate {#mutupdate}
 
 ```yql
-Yson::MutUpdate(Linear<Resource<Yson2.MutNode>>, Resource<Yson2.MutNode>) -> Linear<Resource<Yson2.MutNode>>
+Yson::MutUpdate(Linear<Resource<Yson2.MutNode>>, Resource<Yson2.Node>) -> Linear<Resource<Yson2.MutNode>>
 ```
 
 Available since version [YQL 2025.05](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.05.md#yson-module).
@@ -707,13 +709,13 @@ Yson::MutTryDown(Linear<Resource<Yson2.MutNode>>,location:String) -> Tuple<Linea
 Available since version [YQL 2025.05](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.05.md#yson-module).
 Moves the current node to a dictionary or list element, possibly creating a new node in the `Invalid` state.
 
-The location string uses backslash escaping (`\`).
+The current implementation uses the original location string when looking up a dictionary key. Do not rely on escape-sequence decoding.
 If the location string begins with `<`, `=`, or `>`, it must be followed by a list index as a decimal number (starting at 0), `first` (the 0th element of the list), or `last` (the last element of the list). Otherwise, location is interpreted as a dictionary key.
 For an empty list, `first` and `last` describe the position beyond the end of the list.
 
 The `MutDown` function is not allowed to create new keys in dictionaries. It can only use the `=` modifier for lists. It generates an error if moving the current node is not possible. The `MutTryDown` function, unlike `MutDown`, returns `false` in the second element of the tuple if moving is not possible.
 If the current node has the `Invalid` or `Deleted` state, the `MutDownOrCreate` function first creates it as an empty list or dictionary, depending on the location type.
-If the current node type (list or dictionary) does not match the location type, both `MutDown` and `MutDownOrCreate` will throw an error.
+For `MutDownOrCreate`, use a location that matches the current node type: a key for a dictionary, or an index with a modifier for a list. `MutDown` raises an error when the node type does not match the location type.
 
 ### Examples
 
@@ -797,7 +799,7 @@ SELECT Block(($arg)->{
 
 ```yql
 SELECT Block(($arg)->{
-    $m = Udf(Yson::Mutate, $arg as Depends)('[a=1;b=2]'y);
+    $m = Udf(Yson::Mutate, $arg as Depends)('{a=1;b=2}'y);
     $m = Yson::MutDownOrCreate($m, '=0'); -- error, current node is not a list
     return Yson::MutFreeze($m);
 });

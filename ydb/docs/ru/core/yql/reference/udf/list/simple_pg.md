@@ -57,8 +57,10 @@ SELECT to_date('05 Dec 2000', 'DD Mon YYYY'); -- 2000-12-05
 ### Сигнатура
 
 ```yql
-SimplePg::to_char(AnyPrimitiveType?,Utf8?) -> Utf8?
+SimplePg::to_char(T?,Utf8?) -> Utf8?
 ```
+
+`T`: тип значения, для которого PostgreSQL может выбрать перегрузку `to_char` с допустимыми неявными преобразованиями. Например, `Bool` не поддерживается.
 
 Доступна начиная с версии [YQL 2025.04](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.04.md#simple-pg-module).
 
@@ -203,7 +205,7 @@ SimplePg::round(Double?,[Int32?]) -> Double?
 
 Округляет значение до заданного количества десятичных знаков. Используется округление от нуля.
 Оригинальная [документация](https://www.postgresql.org/docs/16/functions-math.html).
-Аналог - [Math::Round](math.md).
+См. также [Math::Round](math.md), у которой другие правила округления: например, `SimplePg::round(-2.5)` возвращает `-3`, а `Math::Round(-2.5)` возвращает `-2`.
 
 ### Примеры
 

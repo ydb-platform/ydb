@@ -547,6 +547,8 @@ SELECT DictRemove({'foo':1}, 'foo'); -- {}
 
 ## ToMutDict {#tomutdict}
 
+Для работы с линейными значениями проверьте [версию языка, выбранную сервером](../types/linear.md). Используйте версию не ниже указанной для вызываемой функции.
+
 ### Сигнатура
 
 ```yql
@@ -926,7 +928,7 @@ SELECT Block(
         $dict = ToMutDict({'foo':1}, $arg);
         $dict, $val = MutDictPayloads($dict);
         return (FromMutDict($dict), $val);
-    }); -- ({'foo':1},['1'])
+    }); -- ({'foo':1},[1])
 
 SELECT Block(
     ($arg)->{

@@ -304,6 +304,8 @@ SELECT FormatType(VoidType()); -- Void
 
 ## LinearType, DynamicLinearType {#lineartype}
 
+Для работы с линейными значениями проверьте [версию языка, выбранную сервером](../types/linear.md). Используйте версию не ниже указанной для вызываемой функции.
+
 ### Сигнатура
 
 ```yql

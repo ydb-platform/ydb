@@ -141,13 +141,7 @@ To escape a single quotation within a value, double it:
 --+ foo('value with single quote '' inside')
 ```
 
-If there're two or more hints with the same name in the list, the latter is used:
-
-```yql
---+ foo(v1 v2) bar(v3) foo()
--- equivalent to
---+ bar(v3) foo()
-```
+Handling of repeated hints depends on the hint. For example, specifying a JOIN strategy more than once raises the `Duplicate join strategy hint` error.
 
 Unknown SQL hint names (or syntactically incorrect hints) never result in errors, they're simply ignored:
 

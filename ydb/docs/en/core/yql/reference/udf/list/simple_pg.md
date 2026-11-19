@@ -57,8 +57,10 @@ SELECT to_date('05 Dec 2000', 'DD Mon YYYY'); -- 2000-12-05
 ### Signature
 
 ```yql
-SimplePg::to_char(AnyPrimitiveType?,Utf8?) -> Utf8?
+SimplePg::to_char(T?,Utf8?) -> Utf8?
 ```
+
+`T` is a value type for which PostgreSQL can select a `to_char` overload using permitted implicit conversions. For example, `Bool` is not supported.
 
 Available since version [YQL 2025.04](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.04.md#simple-pg-module).
 
@@ -75,7 +77,7 @@ Equivalent to [DateTime::Format](datetime.md#format).
 
 ```yql
 PRAGMA SimplePg;
-SELECT to_char(125.8, '999D9'); -- "125.8"
+SELECT to_char(125.8, '999D9'); -- " 125.8"
 SELECT to_char(Timestamp('2002-04-20T17:31:12.66Z'), 'HH12:MI:SS'); -- 05:31:12
 ```
 
@@ -203,7 +205,7 @@ Arguments:
 
 Rounds a value to the specified number of decimal places. Rounding away from zero is used.
 Original [documentation](https://www.postgresql.org/docs/16/functions-math.html).
-Equivalent to [Math::Round](math.md).
+See also [Math::Round](math.md), which uses different rounding semantics: for example, `SimplePg::round(-2.5)` returns `-3`, whereas `Math::Round(-2.5)` returns `-2`.
 
 ### Examples
 

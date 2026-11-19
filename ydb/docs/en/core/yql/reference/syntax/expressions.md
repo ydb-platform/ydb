@@ -93,6 +93,8 @@ For the Decimal data type, bankers rounding is used (to the nearest even integer
 
 Starting from language version [YQL 2026.02](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2026.02.md), arithmetic operators support operands with different `Decimal(N, M)` types. Both operands are implicitly converted to a common Decimal type.
 
+For this example, the server must use YQL language version 2026.02 or later. The standard `DefaultLangVer` setting in this source release corresponds to YQL 2025.01. Ask your cluster administrator which language version is configured.
+
 This conversion is possible only if a common `Decimal` type exists for the operand types. For example, `Decimal(35, 0)` and `Decimal(35, 35)` have no common type: it would need to store both 35 digits before and 35 digits after the decimal point, while the maximum `Decimal` precision is 35.
 
 ```yql

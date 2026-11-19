@@ -1098,6 +1098,8 @@ SELECT PeekErased($e, Int32), -- 1
 
 ## Block
 
+To use linear values, check the [language version selected by the server](../types/linear.md). Use at least the version required by the function you call.
+
 ### Signature
 
 ```yql
@@ -1281,7 +1283,7 @@ Arguments:
 ```yql
 SELECT
     TestBit(1u, 0), -- true
-    TestBit('ax', 12) -- true (second byte, fourth bit)
+    TestBit('ax', 12), -- true (second byte, fourth bit)
     SetBit(8u, 0); -- 9
 ```
 

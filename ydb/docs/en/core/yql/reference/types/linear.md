@@ -8,6 +8,8 @@ Linear types offer a different approach: instead of reusing the immutable result
 
 Linear types are available starting with version [YQL 2025.04](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.04.md).
 
+To run these examples, the server must use YQL language version 2025.04 or later. The standard server setting `DefaultLangVer` in this source release corresponds to YQL 2025.01. Ask your cluster administrator which language version is configured.
+
 Linear types are described by a single type parameter T and come in two varieties: statically verified Linear<T> and runtime-verified DynamicLinear<T>.
 Statically verified types are more efficient but have composition limitations.
 

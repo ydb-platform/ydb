@@ -757,9 +757,10 @@ namespace NKikimr {
                 }
                 HistoryComplete = RestoreHistory
                     && HasGuidHistoryCoverage(*GInfo, HistorySources, VCtx->ShortSelfVDisk, HasLocalFinal);
-                const bool historyBlockedByLegacySources = RestoreHistory
-                    && !HasGuidHistoryCoverage(*GInfo, ~LegacySources, VCtx->ShortSelfVDisk, HasLocalFinal);
-                const bool canFinishSurvey = !RestoreHistory || HistoryComplete || historyBlockedByLegacySources;
+                // A legacy responder cannot preserve the history invariant during an upgrade.
+                // Use the original GUID quorum even when only some responders are legacy;
+                // waiting for the remaining history-capable peers can block startup indefinitely.
+                const bool canFinishSurvey = !RestoreHistory || HistoryComplete || LegacySources;
                 if (DecisionMaker.GotQuorum() && canFinishSurvey) {
                     // kill actors that didn't respond
                     DecisionMaker.AbandomOngoingRequests(ctx);

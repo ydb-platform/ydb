@@ -313,7 +313,7 @@ void TestRollingWipe(bool delaySelf,
     UNIT_ASSERT_VALUES_EQUAL(result->Record.GetGeneration(), blockedGeneration);
 }
 
-void TestRestartWithTwoUnavailablePeers(bool legacyGuidReplies = false) {
+void TestRestartWithTwoUnavailablePeers(ui32 legacyGuidPeers = 0) {
     TEnvironmentSetup env(TEnvironmentSetup::TSettings{
         .NodeCount = 8,
         .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
@@ -333,6 +333,15 @@ void TestRestartWithTwoUnavailablePeers(bool legacyGuidReplies = false) {
     }
     const auto actor = info->GetActorId(stopped.front());
     const auto disk = info->GetVDiskId(stopped.front());
+    std::set<ui32> legacyPeers;
+    // Keep self history-capable in the mixed case; it is selected last.
+    for (ui32 offset = 1; offset <= 8 && legacyPeers.size() < legacyGuidPeers; ++offset) {
+        const ui32 order = (stopped.front() + offset) % 8;
+        if (order != stopped[1] && order != stopped[2]) {
+            legacyPeers.insert(order);
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(legacyPeers.size(), legacyGuidPeers);
     std::optional<NSyncer::EDecision> decision;
     bool replicated = false;
     bool durabilityReplicated = false;
@@ -344,12 +353,14 @@ void TestRestartWithTwoUnavailablePeers(bool legacyGuidReplies = false) {
             durabilityReplicated = record.GetDurabilityReplicated();
             return false;
         }
-        if (legacyGuidReplies && nodeId == actor.NodeId()
+        if (legacyGuidPeers && nodeId == actor.NodeId()
                 && ev->GetTypeRewrite() == TEvBlobStorage::EvVSyncGuidResult) {
             auto& record = ev->Get<TEvBlobStorage::TEvVSyncGuidResult>()->Record;
-            // Isolate scheduler completion from the history-survey gate.
-            record.ClearGuidHistory();
-            record.ClearRecoveredGuid();
+            const ui32 order = info->GetOrderNumber(VDiskIDFromVDiskID(record.GetVDiskID()));
+            if (legacyPeers.contains(order)) {
+                record.ClearGuidHistory();
+                record.ClearRecoveredGuid();
+            }
         }
         if (nodeId == actor.NodeId() && ev->GetTypeRewrite() == TEvBlobStorage::EvVDiskGuidRecovered) {
             decision = ev->Get<TEvVDiskGuidRecovered>()->Outcome.Decision;
@@ -372,7 +383,8 @@ void TestRestartWithTwoUnavailablePeers(bool legacyGuidReplies = false) {
 
 Y_UNIT_TEST_SUITE(RecoverLostDataRestart) {
     Y_UNIT_TEST(RestartWithTwoUnavailablePeers) { TestRestartWithTwoUnavailablePeers(); }
-    Y_UNIT_TEST(RestartWithLegacyGuidRepliesAndTwoUnavailablePeers) { TestRestartWithTwoUnavailablePeers(true); }
+    Y_UNIT_TEST(RestartWithLegacyGuidRepliesAndTwoUnavailablePeers) { TestRestartWithTwoUnavailablePeers(6); }
+    Y_UNIT_TEST(RestartWithMixedGuidRepliesAndTwoUnavailablePeers) { TestRestartWithTwoUnavailablePeers(4); }
     Y_UNIT_TEST(DuringFullSync) { TestRestart(ERestartPoint::FullSync); }
     Y_UNIT_TEST(DuringOsiris) { TestRestart(ERestartPoint::OsirisWriteReply); }
     Y_UNIT_TEST(AfterOsirisBeforeFinalCommit) { TestRestart(ERestartPoint::OsirisDone); }

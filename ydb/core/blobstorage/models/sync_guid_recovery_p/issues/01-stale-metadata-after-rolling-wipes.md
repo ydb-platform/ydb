@@ -1,5 +1,5 @@
-> Historical investigation and evidence. For the reconstructed series, current
-> scope and verification results, see [AUDIT.md](../AUDIT.md).
+> Historical investigation and evidence. For current model scope and commands,
+> see [README.md](../README.md).
 
 # VDisk returns Good after rolling peer wipes but misses committed Block metadata
 

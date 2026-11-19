@@ -25,4 +25,4 @@ done
   requests are exercised separately by TRecoveryStorage, outside this harness.
 
 These are checks of P components and their explicit harness assumptions.
-They do not establish general C++ refinement. See [audit](../AUDIT.md).
+They do not establish general C++ refinement. See [model scope](../README.md#scope-and-assumptions).

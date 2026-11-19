@@ -3,7 +3,21 @@
 P 3.1.0, .NET 8; PEx also needs Java/Maven. Run commands from this directory.
 The baseline-model commit intentionally exposes six failures; the corrected
 model checks the same properties plus degraded startup and partial publication.
-See [audit and correspondence](AUDIT.md) for scope, abstractions and results.
+
+## Scope and assumptions
+
+The model covers `Erasure4Plus2Block` and static `ErasureMirror3dc` with group
+state `NORMAL` and all realms `INCLUDED`. It assumes history-capable peers and
+quorum-backed GUID history. A history survey must intersect every possible
+`Final` publication quorum; it need not read from every VDisk. This preserves
+established history across modeled recoveries, but cannot reconstruct witnesses
+already lost by legacy recovery. Conflicting committed GUID evidence remains
+an `Inconsistency`, rather than authorizing one GUID to overwrite another.
+
+Mixed-version fallback, read-only handling, `TEvVGenerationChange` and realm
+transitions are outside the model. Surveys use atomic reads and recoveries are
+serialized. Publication models individual durable writes and acknowledgements;
+these checks do not establish general C++ refinement.
 
 ## PChecker
 

@@ -12,11 +12,14 @@
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
+#include <ydb/core/tx/general_cache/source/events.h>
 #include <ydb/core/tx/general_cache/usage/events.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <atomic>
 
 using namespace NKikimr;
 using namespace NKikimr::NOlap;
@@ -63,20 +66,38 @@ private:
     using TBase = NActors::TActor<TMockCacheService>;
     const bool WithRemovedAddresses;
     const std::shared_ptr<const TPortionChunks> Chunks;
+    const std::shared_ptr<std::atomic<int>> Publications;
+    THashMap<TGlobalPortionAddress, std::shared_ptr<const TPortionChunks>> Published;
 
 public:
-    TMockCacheService(bool withRemovedAddresses, std::shared_ptr<const TPortionChunks> chunks = nullptr)
+    TMockCacheService(bool withRemovedAddresses, std::shared_ptr<const TPortionChunks> chunks = nullptr,
+        std::shared_ptr<std::atomic<int>> publications = nullptr)
         : TBase(&TMockCacheService::StateWork)
         , WithRemovedAddresses(withRemovedAddresses)
         , Chunks(std::move(chunks))
+        , Publications(std::move(publications))
     {
     }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKikimr::NGeneralCache::NPublic::TEvents<TPortionsMetadataCachePolicy>::TEvAskData, Handle);
+            HFunc(NKikimr::NGeneralCache::NSource::TEvents<TPortionsMetadataCachePolicy>::TEvAdditionalObjectsInfo, HandleAdditional);
             default:
                 break;
+        }
+    }
+
+    void HandleAdditional(NKikimr::NGeneralCache::NSource::TEvents<TPortionsMetadataCachePolicy>::TEvAdditionalObjectsInfo::TPtr& ev,
+        const NActors::TActorContext&) {
+        for (const auto& address : ev->Get()->ExtractRemoveObjects()) {
+            Published.erase(address);
+        }
+        for (auto&& [address, chunks] : ev->Get()->ExtractAddObjects()) {
+            Published[address] = std::move(chunks);
+        }
+        if (Publications) {
+            Publications->fetch_add(1);
         }
     }
 
@@ -92,9 +113,13 @@ public:
             for (auto&& addr : addresses) {
                 removedAddresses.emplace(std::move(addr));
             }
-        } else if (Chunks) {
+        } else {
             for (const auto& addr : addresses) {
-                objectAddresses.emplace(addr, Chunks);
+                if (const auto* published = Published.FindPtr(addr)) {
+                    objectAddresses.emplace(addr, *published);
+                } else if (Chunks) {
+                    objectAddresses.emplace(addr, Chunks);
+                }
             }
         }
 
@@ -121,6 +146,24 @@ public:
 
     void Bootstrap() {
         Manager->AskData(Request);
+        PassAway();
+    }
+};
+
+class TAddPortionActor: public NActors::TActorBootstrapped<TAddPortionActor> {
+private:
+    std::shared_ptr<TActorAccessorsManager> Manager;
+    std::shared_ptr<TPortionDataAccessor> Accessor;
+
+public:
+    TAddPortionActor(std::shared_ptr<TActorAccessorsManager> manager, std::shared_ptr<TPortionDataAccessor> accessor)
+        : Manager(std::move(manager))
+        , Accessor(std::move(accessor))
+    {
+    }
+
+    void Bootstrap() {
+        Manager->AddPortion(Accessor);
         PassAway();
     }
 };
@@ -251,5 +294,79 @@ Y_UNIT_TEST_SUITE(TActorAccessorsManagerTests) {
         UNIT_ASSERT(dropped.GetPortionInfoPtr().get() == removed.get());
         UNIT_ASSERT(!kept.GetPortionInfo().HasRemoveSnapshot());
         UNIT_ASSERT(dropped.GetPortionInfo().HasRemoveSnapshot());
+    }
+
+    std::shared_ptr<TPortionDataAccessor> MakeRetargetAccessor(ui64 portionId) {
+        const auto pathId = TInternalPathId::FromRawValue(1);
+        const auto portion = NTest::MakeTestCompactedPortion(pathId, portionId, 0, 0, 1, TSnapshot(0, 0), std::nullopt);
+        const TUnifiedBlobId blob(1, TLogoBlobID(123, 1, 1, 2, 100, 0));
+        auto record = TColumnRecord::TTestInstanceBuilder::Build(1, 0, 0, 100, 2, 80);
+        record.RegisterBlobIdx(0);
+        return std::make_shared<TPortionDataAccessor>(
+            portion, std::vector<TUnifiedBlobId>{ blob }, std::vector<TColumnRecord>{ record }, std::vector<TIndexChunk>{}, false);
+    }
+
+    void RetargetPortion(TPortionDataAccessor & accessor, ui64 pathId, ui64 portionId) {
+        accessor.MutablePortionInfo().SetPathId(TInternalPathId::FromRawValue(pathId));
+        accessor.MutablePortionInfo().SetPortionId(portionId);
+    }
+
+    std::shared_ptr<TTestSubscriber> PublishAndAsk(const std::shared_ptr<TPortionDataAccessor>& accessor) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto publications = std::make_shared<std::atomic<int>>(0);
+        NActors::TActorId mockServiceId =
+            NKikimr::NGeneralCache::TServiceOperator<TPortionsMetadataCachePolicy>::MakeServiceId(runtime.GetNodeId(0));
+        runtime.RegisterService(mockServiceId, runtime.Register(new TMockCacheService(false, nullptr, publications)));
+
+        auto manager = std::make_shared<TActorAccessorsManager>(runtime.AllocateEdgeActor());
+        runtime.Register(new TAddPortionActor(manager, accessor));
+        TDispatchOptions published;
+        published.FinalEvents.emplace_back([&publications](IEventHandle&) {
+            return publications->load() > 0;
+        });
+        runtime.DispatchEvents(published, TDuration::Seconds(1));
+        UNIT_ASSERT(publications->load() > 0);
+
+        auto subscriber = std::make_shared<TTestSubscriber>();
+        auto request = std::make_shared<TDataAccessorsRequest>(TPortionsMetadataCachePolicy::DefaultConsumer());
+        request->RegisterSubscriber(subscriber);
+        request->AddPortion(accessor->GetPortionInfoPtr());
+        runtime.Register(new TTestActor(manager, request));
+        TDispatchOptions asked;
+        asked.FinalEvents.emplace_back([&subscriber](IEventHandle&) {
+            return subscriber->IsFinished();
+        });
+        runtime.DispatchEvents(asked, TDuration::Seconds(1));
+        UNIT_ASSERT(subscriber->IsFinished());
+        return subscriber;
+    }
+
+    Y_UNIT_TEST(AddPortionRetargetsSoleChunksInPlace) {
+        auto accessor = MakeRetargetAccessor(7);
+        const auto* chunks = accessor->GetChunksPtr().get();
+        RetargetPortion(*accessor, 9, 11);
+
+        const auto subscriber = PublishAndAsk(accessor);
+        const auto& published = subscriber->GetResult().GetPortionAccessorVerified(11);
+        UNIT_ASSERT(published.GetChunksPtr().get() == chunks);
+        UNIT_ASSERT(published.GetChunks().GetAddress() == accessor->GetPortionInfo().GetAddress());
+        UNIT_ASSERT(chunks->GetAddress() == accessor->GetPortionInfo().GetAddress());
+        UNIT_ASSERT_VALUES_EQUAL(published.GetRecordsVerified().size(), 1);
+    }
+
+    Y_UNIT_TEST(AddPortionRetargetsSharedChunksByCopy) {
+        auto accessor = MakeRetargetAccessor(7);
+        const auto original = accessor->GetChunksPtr();
+        const auto oldAddress = original->GetAddress();
+        RetargetPortion(*accessor, 9, 11);
+
+        const auto subscriber = PublishAndAsk(accessor);
+        const auto& published = subscriber->GetResult().GetPortionAccessorVerified(11);
+        UNIT_ASSERT(published.GetChunksPtr().get() != original.get());
+        UNIT_ASSERT(published.GetChunks().GetAddress() == accessor->GetPortionInfo().GetAddress());
+        UNIT_ASSERT(original->GetAddress() == oldAddress);
+        UNIT_ASSERT_VALUES_EQUAL(original->GetRecordsVerified().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(published.GetRecordsVerified().size(), 1);
     }
 }

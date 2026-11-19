@@ -112,9 +112,16 @@ private:
         YDB_LOG_VERIFY(chunks);
         const auto portionAddress = accessor->GetPortionInfo().GetAddress();
         if (chunks->GetAddress() != portionAddress) {
-            auto retargeted = std::make_shared<TPortionChunks>(*chunks);
-            retargeted->ResetAddress(portionAddress);
-            chunks = std::move(retargeted);
+            // The local copy above is the second owner when only this accessor holds the chunks.
+            // Data sharing rewrites the portion id before publication and the chunks are not shared yet,
+            // so retarget that object. Copy only when another accessor or the cache already holds it.
+            if (chunks.use_count() == 2) {
+                std::const_pointer_cast<TPortionChunks>(chunks)->ResetAddress(portionAddress);
+            } else {
+                auto retargeted = std::make_shared<TPortionChunks>(*chunks);
+                retargeted->ResetAddress(portionAddress);
+                chunks = std::move(retargeted);
+            }
         }
         NGeneralCache::TGlobalPortionAddress address(GetTabletActorId(), portionAddress);
         add.emplace(address, std::move(chunks));

@@ -12,8 +12,9 @@
 
 namespace NKikimr::NOlap {
 
-// Immutable chunk metadata of one portion. The portion itself (snapshots, schema, tier) is not stored here,
-// so the same chunks can be reused after a tablet restart and paired with the portion loaded from the tablet.
+// Chunk metadata of one portion, without its lifecycle (snapshots, schema, tier).
+// The same object can be paired with the portion loaded after a tablet restart.
+// Data sharing may rewrite the address before publication; after that the object is shared and is not mutated.
 class TPortionChunks: public TPortionMetaBase {
 private:
     using TBase = TPortionMetaBase;

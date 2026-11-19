@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import base64
 import os
 import shutil
 import datetime
@@ -15,6 +16,19 @@ pr_label_retry = "automerge-retry"
 check_name = "checks_integrated"
 failed_comment_mark = "<!--SyncFailed-->"
 retry_comment_mark = "<!--SyncRetry-->"
+
+
+def fetch_proxy_args() -> list:
+    """Rewrite only this git command's GitHub URL, when the workflow probe chose a proxy.
+
+    Not stored in repo config, so a later push still goes to github.com and can
+    carry the auth header. The header is attached to https://github.com/, not to
+    the rewritten proxy URL.
+    """
+    proxy = os.environ.get("GH_FETCH_PROXY_URL", "").strip().rstrip("/")
+    if not proxy:
+        return []
+    return ["-c", f"url.{proxy}/https://github.com/.insteadOf=https://github.com/"]
 
 
 class PrAutomerger:
@@ -114,10 +128,39 @@ class PrAutomerger:
             self.add_failed_comment(pr, "Unable to push merged revision (failed to schedule retry).")
             self.add_pr_failed_label(pr)
 
+    def fetch_ref_matching_github(self, fetch_args, rev: str, expected: str) -> None:
+        """Fetch a ref and require it to be the commit GitHub API reports.
+
+        A proxy can answer a branch name with a different tip. The commit object
+        hash does not catch that. On mismatch, refetch without the proxy once.
+        """
+        self.git_transfer(*fetch_args)
+        actual = self.git_run("rev-parse", rev).strip()
+        if actual == expected:
+            return
+        if fetch_proxy_args():
+            self.logger.warning("%s is %s, GitHub has %s; refetching without proxy", rev, actual, expected)
+            self.git_run(*fetch_args, stream=True)
+            actual = self.git_run("rev-parse", rev).strip()
+            if actual == expected:
+                return
+        raise RuntimeError(f"{rev} is {actual}, GitHub has {expected}")
+
     def refresh_base_and_merge(self, pr: PullRequest, commit_msg: str) -> bool:
         base_ref = pr.base.ref
-        self.git_run("fetch", "origin", base_ref)
-        self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
+        # Fetch may go through the probe-selected proxy. Tips must match GitHub
+        # before we merge. Push below does not use the proxy.
+        expected_base = self.repo.get_branch(base_ref).commit.sha
+        self.fetch_ref_matching_github(
+            ("fetch", "origin", base_ref),
+            f"origin/{base_ref}",
+            expected_base,
+        )
+        self.fetch_ref_matching_github(
+            ("fetch", "origin", f"pull/{pr.number}/head:PR"),
+            "PR",
+            pr.head.sha,
+        )
         self.git_run("reset", "--hard", f"origin/{base_ref}")
         try:
             self.git_run("merge", "PR", "-m", commit_msg)
@@ -129,15 +172,28 @@ class PrAutomerger:
         shutil.rmtree("merge-repo", ignore_errors=True)
         original_dir = os.getcwd()
         try:
-            self.git_run(
+            repo_url = f"https://github.com/{self.repo_name}.git"
+            proxy = os.environ.get("GH_FETCH_PROXY_URL", "").strip().rstrip("/")
+            self.logger.info("clone %s via %s", repo_url, proxy or "direct")
+            clone_args = (
                 "clone",
                 "--filter=blob:none",
                 "--single-branch",
                 "--branch",
                 pr.base.ref,
-                f"https://{self.token}@github.com/{self.repo_name}.git",
+                repo_url,
                 "merge-repo",
             )
+            if fetch_proxy_args():
+                try:
+                    self.git_run(*clone_args, proxy=True, stream=True)
+                except subprocess.CalledProcessError:
+                    # Proxied clone can leave a partial directory; clear before a direct retry.
+                    self.logger.warning("proxied clone failed, retrying on github.com")
+                    shutil.rmtree("merge-repo", ignore_errors=True)
+                    self.git_run(*clone_args, stream=True)
+            else:
+                self.git_run(*clone_args, stream=True)
             os.chdir("merge-repo")
 
             commit_msg = f"Merge pull request #{pr.number} from {pr.head.user.login}/{pr.head.ref}"
@@ -148,6 +204,7 @@ class PrAutomerger:
                 return False
 
             try:
+                self.configure_push_auth()
                 self.git_run("push")
                 return True
             except subprocess.CalledProcessError:
@@ -200,25 +257,47 @@ class PrAutomerger:
             text += f" Sync workflow logs can be found [here]({self.workflow_url})."
         pr.create_issue_comment(f"{failed_comment_mark}\n{text}")
 
-    def git_run(self, *args):
-        args = ["git"] + list(args)
+    def configure_push_auth(self) -> None:
+        """Authenticate later git calls without putting the token in the remote URL.
 
-        self.logger.info("run: %r", args)
+        GitHub redirects push to the same repo with a trailing slash, and git drops
+        credentials that were embedded in the clone URL. http.extraheader is sent
+        on the redirected request as well. It matches https://github.com/, not the
+        proxy URL used by clone and fetch.
+        """
+        basic = base64.b64encode(f"x-access-token:{self.token}".encode()).decode()
+        self.logger.info("configure push auth for https://github.com/")
+        subprocess.run(
+            ["git", "config", "http.https://github.com/.extraheader", f"AUTHORIZATION: basic {basic}"],
+            check=True,
+            capture_output=True,
+        )
+
+    def git_run(self, *args, proxy=False, stream=False, check=True):
+        cmd = ["git"]
+        if proxy:
+            cmd.extend(fetch_proxy_args())
+        cmd.extend(args)
+
+        self.logger.info("run: %r", cmd)
         try:
             completed = subprocess.run(
-                args,
-                capture_output=True,
-                check=True,
+                cmd,
+                env={**os.environ, "GIT_TRACE": "1"} if stream else None,
+                capture_output=not stream,
+                check=check,
             )
         except subprocess.CalledProcessError as e:
-            stdout = (e.stdout or b"").decode()
-            stderr = (e.stderr or b"").decode()
+            stdout = (e.stdout or b"").decode() if not stream else ""
+            stderr = (e.stderr or b"").decode() if not stream else ""
             if stdout:
                 self.logger.error("stdout:\n%s", stdout)
             if stderr:
                 self.logger.error("stderr:\n%s", stderr)
             raise
 
+        if stream:
+            return ""
         stdout = completed.stdout.decode()
         stderr = completed.stderr.decode()
         if stdout:
@@ -226,6 +305,15 @@ class PrAutomerger:
         if stderr:
             self.logger.info("stderr:\n%s", stderr)
         return stdout
+
+    def git_transfer(self, *args, check=True):
+        """Fetch or clone through the proxy, then retry on github.com if that fails."""
+        if fetch_proxy_args():
+            try:
+                return self.git_run(*args, proxy=True, stream=True, check=True)
+            except subprocess.CalledProcessError:
+                self.logger.warning("proxied git failed, retrying on github.com: %s", " ".join(args))
+        return self.git_run(*args, stream=True, check=check)
 
     def git_revparse_head(self):
         return self.git_run("rev-parse", "HEAD").strip()

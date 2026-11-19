@@ -729,6 +729,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
 
 Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     using TCdcStream = TShardedTableOptions::TCdcStream;
+    using TDataChange = NKikimrChangeExchange::TDataChange;
 
     NKikimrPQ::TPQConfig WithProtoSourceIdInfo();
 
@@ -830,164 +831,215 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         });
     }
 
-    template <typename TCallback>
-    void WithScanCollector(TCallback callback, const TShardedTableOptions& options = DefaultScanTableOptions())
-    {
-        TPortManager pm;
-        TServer::TPtr server = new TServer(TServerSettings(pm.GetPort(2134), {}, WithProtoSourceIdInfo())
-            .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableChangefeedInitialScan(true));
-        auto& runtime = *server->GetRuntime();
-        const auto sender = runtime.AllocateEdgeActor();
-        InitRoot(server, sender);
-        CreateShardedTable(server, sender, "/Root", "Table", options);
+    class TScanCollectorFixture {
+    private:
+        TPortManager PortManager;
+        TServer::TPtr Server;
+        TDataShard* Shard = nullptr;
 
-        TDataShard* shard = nullptr;
-        // Keep the scan from running while exercising the collector directly.
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvCdcStreamScanRequest) {
-                shard = dynamic_cast<TDataShard*>(runtime.FindActor(ev->GetRecipientRewrite()));
-                UNIT_ASSERT(shard);
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root", "Table", TCdcStream{
-            .Name = "Stream",
-            .Mode = NKikimrSchemeOp::ECdcStreamModeUpdate,
-            .Format = NKikimrSchemeOp::ECdcStreamFormatProto,
-            .InitialState = NKikimrSchemeOp::ECdcStreamStateScan,
-        }));
-        runtime.WaitFor("scan request", [&] { return shard != nullptr; });
+    public:
+        explicit TScanCollectorFixture(const TShardedTableOptions& options = DefaultScanTableOptions())
+            : Server(new TServer(TServerSettings(PortManager.GetPort(2134), {}, WithProtoSourceIdInfo())
+                .SetDomainName("Root")
+                .SetUseRealThreads(false)
+                .SetEnableChangefeedInitialScan(true)))
+        {
+            auto& runtime = *Server->GetRuntime();
+            const auto sender = runtime.AllocateEdgeActor();
+            InitRoot(Server, sender);
+            CreateShardedTable(Server, sender, "/Root", "Table", options);
 
-        UNIT_ASSERT_VALUES_EQUAL(shard->GetUserTables().size(), 1);
-        const auto table = shard->GetUserTables().begin()->second;
-        const auto streamId = table->CdcStreams.begin()->first;
-        const TTableId tableId(streamId.OwnerId, shard->GetUserTables().begin()->first);
-        TSnapshotUserDb db;
-        TSnapshotSink sink;
-        TCdcStreamChangeCollector collector(shard, db, sink);
-        auto collect = [&](ui32 a, ui32 b, NTable::ERowOp op = NTable::ERowOp::Upsert,
+            // Keep the scan from running while exercising the collector directly.
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvDataShard::EvCdcStreamScanRequest) {
+                    Shard = dynamic_cast<TDataShard*>(runtime.FindActor(ev->GetRecipientRewrite()));
+                    UNIT_ASSERT(Shard);
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+            WaitTxNotification(Server, sender, AsyncAlterAddStream(Server, "/Root", "Table", TCdcStream{
+                .Name = "Stream",
+                .Mode = NKikimrSchemeOp::ECdcStreamModeUpdate,
+                .Format = NKikimrSchemeOp::ECdcStreamFormatProto,
+                .InitialState = NKikimrSchemeOp::ECdcStreamStateScan,
+            }));
+            runtime.WaitFor("scan request", [&] { return Shard != nullptr; });
+            runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+
+            UNIT_ASSERT_VALUES_EQUAL(Shard->GetUserTables().size(), 1);
+            const auto table = Shard->GetUserTables().begin()->second;
+            StreamId = table->CdcStreams.begin()->first;
+            TableId = TTableId(StreamId.OwnerId, Shard->GetUserTables().begin()->first);
+            Collector = MakeHolder<TCdcStreamChangeCollector>(Shard, Db, Sink);
+        }
+
+        TUserTable::TCPtr GetTable() const {
+            return Shard->GetUserTables().at(TableId.PathId.LocalPathId);
+        }
+
+        void SetTable(TUserTable::TPtr table) {
+            Shard->SetUserTable(TableId.PathId, std::move(table));
+        }
+
+        void SetStreamMode(NKikimrSchemeOp::ECdcStreamMode mode) {
+            TUserTable::TPtr table = new TUserTable(*GetTable());
+            table->CdcStreams.at(StreamId).Mode = mode;
+            SetTable(std::move(table));
+        }
+
+        void CompleteInitialScan() {
+            Shard->GetCdcStreamScanManager().Complete(StreamId);
+        }
+
+        auto* GetScanState() const {
+            return Shard->GetCdcStreamScanManager().Get(StreamId);
+        }
+
+        bool Collect(ui32 a, ui32 b, NTable::ERowOp op = NTable::ERowOp::Upsert,
                 TArrayRef<const NTable::TUpdateOp> updates = {})
         {
+            const auto table = GetTable();
             const TVector<TCell> cells{TCell::Make(a), TCell::Make(b)};
             const auto key = NStreamScan::MakeKey(cells, table->KeyColumnTypes);
-            return collector.Collect(tableId, op, key, updates, {});
-        };
-        callback(*shard, tableId, streamId, collector, db, sink, collect);
-        runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
-    }
+            return Collector->Collect(TableId, op, key, updates, {});
+        }
+
+        void ClearResults() {
+            Db.Reads.clear();
+            Sink.Changes.clear();
+        }
+
+        TTableId TableId;
+        TPathId StreamId;
+        TSnapshotUserDb Db;
+        TSnapshotSink Sink;
+        THolder<TCdcStreamChangeCollector> Collector;
+    };
 
     Y_UNIT_TEST(InitialScanCompletedPrefix) {
-        WithScanCollector([](auto& shard, const auto& tableId, const auto& streamId,
-                auto& collector, auto& db, auto& sink, auto collect) {
-            const auto& keyTypes = shard.GetUserTables().at(tableId.PathId.LocalPathId)->KeyColumnTypes;
-            const TVector<TCell> lastKey{TCell::Make(ui32(7)), TCell::Make(ui32(256))};
-            const auto lastRawKey = NStreamScan::MakeKey(lastKey, keyTypes);
-            UNIT_ASSERT(collector.NeedHistoricalPrecharge(tableId, lastRawKey));
-            shard.GetCdcStreamScanManager().Get(streamId)->LastKey = TSerializedCellVec(lastKey);
+        TScanCollectorFixture fixture;
+        const auto& keyTypes = fixture.GetTable()->KeyColumnTypes;
+        const TVector<TCell> lastKey{TCell::Make(ui32(7)), TCell::Make(ui32(256))};
+        const auto lastRawKey = NStreamScan::MakeKey(lastKey, keyTypes);
+        UNIT_ASSERT(fixture.Collector->NeedHistoricalPrecharge(fixture.TableId, lastRawKey));
+        fixture.GetScanState()->LastKey = TSerializedCellVec(lastKey);
 
-            // A snapshot read would fault. Typed ordering must also handle 255 < 256.
-            db.PageFault = true;
-            for (auto [a, b] : {std::pair{6u, 1000u}, {7u, 255u}, {7u, 256u}}) {
-                const TVector<TCell> key{TCell::Make(a), TCell::Make(b)};
-                UNIT_ASSERT(!collector.NeedHistoricalPrecharge(tableId, NStreamScan::MakeKey(key, keyTypes)));
-                UNIT_ASSERT(collect(a, b));
-                UNIT_ASSERT(collect(a, b, NTable::ERowOp::Erase));
-                UNIT_ASSERT(collect(a, b, NTable::ERowOp::Reset));
-            }
-            UNIT_ASSERT_VALUES_EQUAL(db.SnapshotReads, 0);
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 9);
-            for (auto [a, b] : {std::pair{7u, 257u}, {8u, 0u}}) {
-                const TVector<TCell> key{TCell::Make(a), TCell::Make(b)};
-                UNIT_ASSERT(collector.NeedHistoricalPrecharge(tableId, NStreamScan::MakeKey(key, keyTypes)));
-            }
-            UNIT_ASSERT(!collect(7, 257));
-            UNIT_ASSERT(!collect(8, 0));
-            UNIT_ASSERT_VALUES_EQUAL(db.SnapshotReads, 2);
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 9);
+        // A snapshot read would fault. Typed ordering must also handle 255 < 256.
+        fixture.Db.PageFault = true;
+        for (auto [a, b] : {std::pair{6u, 1000u}, {7u, 255u}, {7u, 256u}}) {
+            const TVector<TCell> key{TCell::Make(a), TCell::Make(b)};
+            UNIT_ASSERT(!fixture.Collector->NeedHistoricalPrecharge(fixture.TableId, NStreamScan::MakeKey(key, keyTypes)));
+            UNIT_ASSERT(fixture.Collect(a, b));
+            UNIT_ASSERT(fixture.Collect(a, b, NTable::ERowOp::Erase));
+            UNIT_ASSERT(fixture.Collect(a, b, NTable::ERowOp::Reset));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Db.SnapshotReads, 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 9);
 
-            // Image modes must still read the current row behind the frontier.
-            TUserTable::TPtr images = new TUserTable(*shard.GetUserTables().at(tableId.PathId.LocalPathId));
-            images->CdcStreams.at(streamId).Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages;
-            shard.SetUserTable(tableId.PathId, images);
-            UNIT_ASSERT(!collector.NeedHistoricalPrecharge(tableId, lastRawKey));
-            UNIT_ASSERT(!collect(7, 256));
-            UNIT_ASSERT_VALUES_EQUAL(db.SnapshotReads, 2);
-            UNIT_ASSERT_VALUES_EQUAL(db.CurrentReads, 1);
-            db.PageFault = false;
-            UNIT_ASSERT(collect(7, 256, NTable::ERowOp::Erase));
-            UNIT_ASSERT(sink.Changes.back().Body.HasErase());
-            UNIT_ASSERT(sink.Changes.back().Body.HasOldImage());
-            UNIT_ASSERT(!sink.Changes.back().Body.HasNewImage());
-        });
+        for (auto [a, b] : {std::pair{7u, 257u}, {8u, 0u}}) {
+            const TVector<TCell> key{TCell::Make(a), TCell::Make(b)};
+            UNIT_ASSERT(fixture.Collector->NeedHistoricalPrecharge(fixture.TableId, NStreamScan::MakeKey(key, keyTypes)));
+        }
+        UNIT_ASSERT(!fixture.Collect(7, 257));
+        UNIT_ASSERT(!fixture.Collect(8, 0));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Db.SnapshotReads, 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 9);
+
+        // Image modes must still read the current row behind the frontier.
+        fixture.SetStreamMode(NKikimrSchemeOp::ECdcStreamModeNewAndOldImages);
+        UNIT_ASSERT(!fixture.Collector->NeedHistoricalPrecharge(fixture.TableId, lastRawKey));
+        UNIT_ASSERT(!fixture.Collect(7, 256));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Db.SnapshotReads, 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Db.CurrentReads, 1);
+
+        fixture.Db.PageFault = false;
+        UNIT_ASSERT(fixture.Collect(7, 256, NTable::ERowOp::Erase));
+        UNIT_ASSERT(fixture.Sink.Changes.back().Body.HasErase());
+        UNIT_ASSERT(fixture.Sink.Changes.back().Body.HasOldImage());
+        UNIT_ASSERT(!fixture.Sink.Changes.back().Body.HasNewImage());
     }
 
     Y_UNIT_TEST(InitialScanSnapshotRetryAndOrdering) {
-        WithScanCollector([](auto& shard, const auto&, const auto& streamId,
-                auto& collector, auto& db, auto& sink, auto collect) {
-            db.PageFault = true;
-            UNIT_ASSERT(!collect(7, 256));
-            UNIT_ASSERT(sink.Changes.empty());
-            collector.OnRestart();
-            db.PageFault = false;
-            UNIT_ASSERT(collect(7, 256, NTable::ERowOp::Erase));
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 2);
-            UNIT_ASSERT(sink.Changes[0].Body.HasUpsert());
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes[0].Version.WriteVersion,
-                shard.GetCdcStreamScanManager().Get(streamId)->SnapshotVersion);
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes[0].Version.WriteTxId, 0);
-            UNIT_ASSERT(sink.Changes[1].Body.HasErase());
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes[1].Version.WriteVersion, TRowVersion(100, 200));
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes[1].Version.WriteTxId, 123);
-            UNIT_ASSERT_VALUES_EQUAL(sink.Version.WriteTxId, 123);
+        TScanCollectorFixture fixture;
+        fixture.Db.PageFault = true;
+        UNIT_ASSERT(!fixture.Collect(7, 256));
+        UNIT_ASSERT(fixture.Sink.Changes.empty());
 
-            db.Invisible = true;
-            UNIT_ASSERT(collect(7, 256));
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 3);
-            db.Invisible = false;
-            db.RowOp = NTable::ERowOp::Erase;
-            UNIT_ASSERT(collect(7, 256));
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 4);
-        });
+        fixture.Collector->OnRestart();
+        fixture.Db.PageFault = false;
+        UNIT_ASSERT(fixture.Collect(7, 256, NTable::ERowOp::Erase));
+
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 2);
+        UNIT_ASSERT(fixture.Sink.Changes[0].Body.HasUpsert());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes[0].Version.WriteVersion, fixture.GetScanState()->SnapshotVersion);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes[0].Version.WriteTxId, 0);
+        UNIT_ASSERT(fixture.Sink.Changes[1].Body.HasErase());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes[1].Version.WriteVersion, TRowVersion(100, 200));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes[1].Version.WriteTxId, 123);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Version.WriteTxId, 123);
+
+        fixture.Db.Invisible = true;
+        UNIT_ASSERT(fixture.Collect(7, 256));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 3);
+
+        fixture.Db.Invisible = false;
+        fixture.Db.RowOp = NTable::ERowOp::Erase;
+        UNIT_ASSERT(fixture.Collect(7, 256));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 4);
     }
 
     Y_UNIT_TEST(ValueSchemaCacheInvalidation) {
-        WithScanCollector([](auto& shard, const auto& tableId, const auto& streamId,
-                auto& collector, auto& db, auto&, auto collect) {
-            const auto original = shard.GetUserTables().at(tableId.PathId.LocalPathId);
-            UNIT_ASSERT(collect(1, 1));
-            const auto valueTag = original->Columns.rbegin()->first;
-            UNIT_ASSERT_VALUES_EQUAL(db.LastTags.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(db.LastTags[0], valueTag);
-            UNIT_ASSERT(collect(1, 2));
+        TScanCollectorFixture fixture;
+        const auto original = fixture.GetTable();
+        UNIT_ASSERT(fixture.Collect(1, 1));
+        const auto valueTag = original->Columns.rbegin()->first;
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Db.LastTags.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Db.LastTags[0], valueTag);
+        UNIT_ASSERT(fixture.Collect(1, 2));
 
-            // A replacement schema must invalidate the cache even at the same version.
-            TUserTable::TPtr replacement = new TUserTable(*original);
-            replacement->Columns.erase(valueTag);
-            replacement->Columns.emplace(valueTag + 1,
-                TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "extra"));
-            shard.SetUserTable(tableId.PathId, replacement);
-            UNIT_ASSERT(collect(1, 3));
-            UNIT_ASSERT_VALUES_EQUAL(db.LastTags.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(db.LastTags[0], valueTag + 1);
+        // A replacement schema must invalidate the cache even at the same version.
+        TUserTable::TPtr replacement = new TUserTable(*original);
+        replacement->Columns.erase(valueTag);
+        replacement->Columns.emplace(valueTag + 1,
+            TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "extra"));
+        fixture.SetTable(replacement);
+        UNIT_ASSERT(fixture.Collect(1, 3));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Db.LastTags.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Db.LastTags[0], valueTag + 1);
 
-            // Also invalidate when the same schema object's version changes.
-            replacement->Columns.erase(valueTag + 1);
-            replacement->SetTableSchemaVersion(original->GetTableSchemaVersion() + 1);
-            UNIT_ASSERT(collect(1, 4));
-            UNIT_ASSERT(db.LastTags.empty());
-            collector.OnRestart();
-            UNIT_ASSERT(collect(1, 5));
-            UNIT_ASSERT(db.LastTags.empty());
+        // Also invalidate when the same schema object's version changes.
+        replacement->Columns.erase(valueTag + 1);
+        replacement->SetTableSchemaVersion(original->GetTableSchemaVersion() + 1);
+        UNIT_ASSERT(fixture.Collect(1, 4));
+        UNIT_ASSERT(fixture.Db.LastTags.empty());
 
-            shard.GetCdcStreamScanManager().Complete(streamId);
-            const auto reads = db.SnapshotReads;
-            UNIT_ASSERT(collect(1, 6));
-            UNIT_ASSERT_VALUES_EQUAL(db.SnapshotReads, reads);
-        });
+        fixture.Collector->OnRestart();
+        UNIT_ASSERT(fixture.Collect(1, 5));
+        UNIT_ASSERT(fixture.Db.LastTags.empty());
+
+        fixture.CompleteInitialScan();
+        const auto reads = fixture.Db.SnapshotReads;
+        UNIT_ASSERT(fixture.Collect(1, 6));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Db.SnapshotReads, reads);
     }
+
+    enum EColumnTag : NTable::TTag {
+        KeyATag = 1,
+        KeyBTag = 2,
+        NumberTag = 3,
+        BuildingTextTag = 4,
+        TextTag = 5,
+        BuildingWideTag = 6,
+        WideTag = 7,
+    };
+
+    constexpr ui64 OldWideValue = 0x1122334455667788ULL;
+    constexpr ui64 NewWideValue = 0xffeeddccbbaa9988ULL;
+    constexpr ui64 OldBuildingWideValue = 0x8899aabbccddeeffULL;
+    constexpr ui64 NewBuildingWideValue = 0x123456789abcdef0ULL;
+
+    using TColumnValues = TVector<std::pair<NTable::TTag, TCell>>;
 
     TShardedTableOptions BuildingColumnsTable() {
         return TShardedTableOptions().Columns({
@@ -1001,20 +1053,20 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         });
     }
 
-    TUserTable::TPtr StartBuildingColumns(TDataShard& shard, const TTableId& tableId) {
-        const auto original = shard.GetUserTables().at(tableId.PathId.LocalPathId);
+    TUserTable::TPtr StartBuildingColumns(TScanCollectorFixture& fixture) {
+        const auto original = fixture.GetTable();
         NKikimrSchemeOp::TTableDescription alter;
         alter.SetName(original->Name);
         alter.SetTableSchemaVersion(original->GetTableSchemaVersion());
 
-        for (const auto tag : {4u, 6u}) {
+        for (const auto tag : {BuildingTextTag, BuildingWideTag}) {
             auto* column = alter.AddColumns();
             column->SetId(tag);
             column->SetIsBuildInProgress(true);
         }
 
         TUserTable::TPtr building = new TUserTable(*original, alter);
-        shard.SetUserTable(tableId.PathId, building);
+        fixture.SetTable(building);
         return building;
     }
 
@@ -1022,30 +1074,51 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         return TCell(value.data(), value.size());
     }
 
-    auto BuildingColumnValues() {
-        return THashMap<NTable::TTag, TCell>{
-            {3, TCell::Make(ui32(31))},
-            {4, TextCell("hidden-old-value")},
-            {5, TextCell("old-text-value")},
-            {6, TCell::Make(ui64(0x8899aabbccddeeffULL))},
-            {7, TCell::Make(ui64(0x1122334455667788ULL))},
+    TColumnValues OldColumnValues() {
+        return {
+            {NumberTag, TCell::Make(ui32(31))},
+            {BuildingTextTag, TextCell("hidden-old-value")},
+            {TextTag, TextCell("old-text-value")},
+            {BuildingWideTag, TCell::Make(OldBuildingWideValue)},
+            {WideTag, TCell::Make(OldWideValue)},
         };
     }
 
-    auto BuildingColumnUpdates() {
+    TColumnValues VisibleOldColumnValues() {
+        return {
+            {NumberTag, TCell::Make(ui32(31))},
+            {TextTag, TextCell("old-text-value")},
+            {WideTag, TCell::Make(OldWideValue)},
+        };
+    }
+
+    TColumnValues ColumnUpdates() {
         // Deliberately mix tag order and cell sizes around both hidden columns.
-        return TVector<std::pair<NTable::TTag, TCell>>{
-            {6, TCell::Make(ui64(0x123456789abcdef0ULL))},
-            {7, TCell::Make(ui64(0xffeeddccbbaa9988ULL))},
-            {4, TextCell("hidden-new-value")},
-            {3, TCell::Make(ui32(73))},
-            {5, TextCell("new-text-value")},
+        return {
+            {BuildingWideTag, TCell::Make(NewBuildingWideValue)},
+            {WideTag, TCell::Make(NewWideValue)},
+            {BuildingTextTag, TextCell("hidden-new-value")},
+            {NumberTag, TCell::Make(ui32(73))},
+            {TextTag, TextCell("new-text-value")},
         };
     }
 
-    auto MakeColumnUpdates(const TUserTable& table,
-            const TVector<std::pair<NTable::TTag, TCell>>& values)
-    {
+    TColumnValues VisibleColumnUpdates() {
+        return {
+            {WideTag, TCell::Make(NewWideValue)},
+            {NumberTag, TCell::Make(ui32(73))},
+            {TextTag, TextCell("new-text-value")},
+        };
+    }
+
+    void SetColumnValues(TSnapshotUserDb& db, const TColumnValues& values) {
+        db.Values.clear();
+        for (const auto& [tag, cell] : values) {
+            db.Values.emplace(tag, cell);
+        }
+    }
+
+    TVector<NTable::TUpdateOp> MakeColumnUpdates(const TUserTable& table, const TColumnValues& values) {
         TVector<NTable::TUpdateOp> updates;
         for (const auto& [tag, cell] : values) {
             updates.emplace_back(tag, NTable::ECellOp::Set,
@@ -1054,322 +1127,334 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         return updates;
     }
 
-    void AssertCells(const NKikimrChangeExchange::TDataChange::TSerializedCells& serialized,
-            const TVector<NTable::TTag>& tags, const TVector<TCell>& expected)
-    {
-        UNIT_ASSERT_VALUES_EQUAL(serialized.TagsSize(), tags.size());
-        UNIT_ASSERT_VALUES_EQUAL(tags.size(), expected.size());
+    void AssertCells(const TDataChange::TSerializedCells& serialized, const TColumnValues& expected) {
+        UNIT_ASSERT_VALUES_EQUAL(serialized.TagsSize(), expected.size());
+
         TSerializedCellVec cells;
         UNIT_ASSERT(TSerializedCellVec::TryParse(serialized.GetData(), cells));
         UNIT_ASSERT_VALUES_EQUAL(cells.GetCells().size(), expected.size());
-        for (size_t pos = 0; pos < tags.size(); ++pos) {
-            UNIT_ASSERT_VALUES_EQUAL(serialized.GetTags(pos), tags[pos]);
+
+        for (size_t pos = 0; pos < expected.size(); ++pos) {
+            const auto& [tag, cell] = expected[pos];
+            UNIT_ASSERT_VALUES_EQUAL(serialized.GetTags(pos), tag);
+
             const auto& actual = cells.GetCells()[pos];
-            UNIT_ASSERT_VALUES_EQUAL(actual.IsNull(), expected[pos].IsNull());
-            UNIT_ASSERT_VALUES_EQUAL(actual.Size(), expected[pos].Size());
+            UNIT_ASSERT_VALUES_EQUAL(actual.IsNull(), cell.IsNull());
+            UNIT_ASSERT_VALUES_EQUAL(actual.Size(), cell.Size());
             if (!actual.IsNull()) {
-                UNIT_ASSERT_VALUES_EQUAL(TStringBuf(actual.Data(), actual.Size()),
-                    TStringBuf(expected[pos].Data(), expected[pos].Size()));
+                UNIT_ASSERT_VALUES_EQUAL(actual.AsBuf(), cell.AsBuf());
             }
+        }
+    }
+
+    void AssertRowOperation(const TDataChange& body, NTable::ERowOp op) {
+        switch (op) {
+        case NTable::ERowOp::Upsert:
+            UNIT_ASSERT_C(body.GetRowOperationCase() == TDataChange::kUpsert, body.DebugString());
+            break;
+        case NTable::ERowOp::Reset:
+            UNIT_ASSERT_C(body.GetRowOperationCase() == TDataChange::kReset, body.DebugString());
+            break;
+        case NTable::ERowOp::Erase:
+            UNIT_ASSERT_C(body.GetRowOperationCase() == TDataChange::kErase, body.DebugString());
+            break;
+        default:
+            UNIT_FAIL("Unexpected row operation: " << op);
+        }
+    }
+
+    void AssertUpdates(const TDataChange& body, const TColumnValues& expected) {
+        if (body.HasUpsert()) {
+            AssertCells(body.GetUpsert(), expected);
+        } else {
+            UNIT_ASSERT(body.HasReset());
+            AssertCells(body.GetReset(), expected);
         }
     }
 
     void AssertReadTags(const TSnapshotUserDb& db, const TVector<NTable::TTag>& expected) {
         UNIT_ASSERT(!db.Reads.empty());
         for (const auto& read : db.Reads) {
-            UNIT_ASSERT_VALUES_EQUAL(read.Tags.size(), expected.size());
-            for (size_t pos = 0; pos < expected.size(); ++pos) {
-                UNIT_ASSERT_VALUES_EQUAL(read.Tags[pos], expected[pos]);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(read.Tags, expected);
         }
     }
 
-    void AssertBuildingColumnsKey(const TSnapshotSink::TChange& change,
-            const TTableId& tableId, const TPathId& streamId)
-    {
-        UNIT_ASSERT(change.TableId == tableId);
-        UNIT_ASSERT_VALUES_EQUAL(change.StreamId, streamId);
+    void AssertBuildingColumnsKey(const TSnapshotSink::TChange& change, const TScanCollectorFixture& fixture) {
+        UNIT_ASSERT(change.TableId == fixture.TableId);
+        UNIT_ASSERT_VALUES_EQUAL(change.StreamId, fixture.StreamId);
         UNIT_ASSERT_VALUES_EQUAL(change.Kind, TChangeRecord::EKind::CdcDataChange);
-        AssertCells(change.Body.GetKey(), {1, 2}, {TCell::Make(ui32(7)), TCell::Make(ui32(256))});
+        AssertCells(change.Body.GetKey(), {
+            {KeyATag, TCell::Make(ui32(7))},
+            {KeyBTag, TCell::Make(ui32(256))},
+        });
     }
 
     Y_UNIT_TEST(BuildingColumnsFilterUpdatesAndReset) {
-        WithScanCollector([](auto& shard, const auto& tableId, const auto& streamId,
-                auto&, auto& db, auto& sink, auto collect) {
-            shard.GetCdcStreamScanManager().Complete(streamId);
-            // Prime the cache before a replacement schema starts building columns.
-            UNIT_ASSERT(collect(7, 256));
-            const auto table = StartBuildingColumns(shard, tableId);
-            const auto values = BuildingColumnUpdates();
-            const auto updates = MakeColumnUpdates(*table, values);
-            sink.Changes.clear();
+        TScanCollectorFixture fixture(BuildingColumnsTable());
+        fixture.CompleteInitialScan();
 
-            for (const auto op : {NTable::ERowOp::Upsert, NTable::ERowOp::Reset, NTable::ERowOp::Erase}) {
-                UNIT_ASSERT(collect(7, 256, op, updates));
-                const auto& change = sink.Changes.back();
-                AssertBuildingColumnsKey(change, tableId, streamId);
-                const auto& body = change.Body;
-                UNIT_ASSERT_VALUES_EQUAL(body.HasUpsert(), op == NTable::ERowOp::Upsert);
-                UNIT_ASSERT_VALUES_EQUAL(body.HasReset(), op == NTable::ERowOp::Reset);
-                UNIT_ASSERT_VALUES_EQUAL(body.HasErase(), op == NTable::ERowOp::Erase);
-                UNIT_ASSERT(!body.HasOldImage());
-                UNIT_ASSERT(!body.HasNewImage());
-                if (op != NTable::ERowOp::Erase) {
-                    AssertCells(op == NTable::ERowOp::Upsert ? body.GetUpsert() : body.GetReset(),
-                        {7, 3, 5}, {TCell::Make(ui64(0xffeeddccbbaa9988ULL)),
-                            TCell::Make(ui32(73)), TextCell("new-text-value")});
-                }
-            }
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 3);
+        // Prime the cache before a replacement schema starts building columns.
+        UNIT_ASSERT(fixture.Collect(7, 256));
+        const auto table = StartBuildingColumns(fixture);
+        const auto values = ColumnUpdates();
+        const auto updates = MakeColumnUpdates(*table, values);
+        fixture.Sink.Changes.clear();
 
-            // Filtering every updated column must preserve the row operation.
-            const TVector<std::pair<NTable::TTag, TCell>> hiddenValues{values[0], values[2]};
-            const auto hiddenUpdates = MakeColumnUpdates(*table, hiddenValues);
-            for (const auto op : {NTable::ERowOp::Upsert, NTable::ERowOp::Reset}) {
-                UNIT_ASSERT(collect(7, 256, op, hiddenUpdates));
-                const auto& change = sink.Changes.back();
-                AssertBuildingColumnsKey(change, tableId, streamId);
-                UNIT_ASSERT_VALUES_EQUAL(change.Body.HasUpsert(), op == NTable::ERowOp::Upsert);
-                UNIT_ASSERT_VALUES_EQUAL(change.Body.HasReset(), op == NTable::ERowOp::Reset);
-                AssertCells(op == NTable::ERowOp::Upsert ? change.Body.GetUpsert() : change.Body.GetReset(), {}, {});
+        for (const auto op : {NTable::ERowOp::Upsert, NTable::ERowOp::Reset, NTable::ERowOp::Erase}) {
+            UNIT_ASSERT(fixture.Collect(7, 256, op, updates));
+            const auto& change = fixture.Sink.Changes.back();
+            AssertBuildingColumnsKey(change, fixture);
+
+            const auto& body = change.Body;
+            AssertRowOperation(body, op);
+            UNIT_ASSERT(!body.HasOldImage());
+            UNIT_ASSERT(!body.HasNewImage());
+            if (op != NTable::ERowOp::Erase) {
+                AssertUpdates(body, VisibleColumnUpdates());
             }
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 5);
-            UNIT_ASSERT(db.Reads.empty());
-        }, BuildingColumnsTable());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 3);
+
+        // Filtering every updated column must preserve the row operation.
+        const TColumnValues hiddenValues{
+            {BuildingWideTag, TCell::Make(NewBuildingWideValue)},
+            {BuildingTextTag, TextCell("hidden-new-value")},
+        };
+        const auto hiddenUpdates = MakeColumnUpdates(*table, hiddenValues);
+        for (const auto op : {NTable::ERowOp::Upsert, NTable::ERowOp::Reset}) {
+            UNIT_ASSERT(fixture.Collect(7, 256, op, hiddenUpdates));
+            const auto& change = fixture.Sink.Changes.back();
+            AssertBuildingColumnsKey(change, fixture);
+            AssertRowOperation(change.Body, op);
+            AssertUpdates(change.Body, {});
+        }
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 5);
+        UNIT_ASSERT(fixture.Db.Reads.empty());
     }
 
     Y_UNIT_TEST(BuildingColumnsFilterImages) {
-        WithScanCollector([](auto& shard, const auto& tableId, const auto& streamId,
-                auto&, auto& db, auto& sink, auto collect) {
-            shard.GetCdcStreamScanManager().Complete(streamId);
-            const auto building = StartBuildingColumns(shard, tableId);
-            db.Values = BuildingColumnValues();
-            auto values = BuildingColumnUpdates();
-            values.pop_back(); // The visible Utf8 column is not updated.
-            const auto updates = MakeColumnUpdates(*building, values);
+        TScanCollectorFixture fixture(BuildingColumnsTable());
+        fixture.CompleteInitialScan();
+        const auto building = StartBuildingColumns(fixture);
+        SetColumnValues(fixture.Db, OldColumnValues());
 
-            const auto imageModes = {
-                NKikimrSchemeOp::ECdcStreamModeNewImage,
-                NKikimrSchemeOp::ECdcStreamModeOldImage,
-                NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
-            };
+        auto values = ColumnUpdates();
+        values.pop_back(); // The visible Utf8 column is not updated.
+        const auto updates = MakeColumnUpdates(*building, values);
 
-            for (const auto mode : imageModes) {
-                TUserTable::TPtr table = new TUserTable(*building);
-                table->CdcStreams.at(streamId).Mode = mode;
-                shard.SetUserTable(tableId.PathId, table);
-                for (const auto op : {NTable::ERowOp::Upsert, NTable::ERowOp::Reset, NTable::ERowOp::Erase}) {
-                    db.Reads.clear();
-                    UNIT_ASSERT(collect(7, 256, op, updates));
-                    UNIT_ASSERT_VALUES_EQUAL(db.Reads.size(), 1);
-                    UNIT_ASSERT(!db.Reads[0].Snapshot);
-                    AssertReadTags(db, {3, 5, 7});
-                    const auto& change = sink.Changes.back();
-                    AssertBuildingColumnsKey(change, tableId, streamId);
-                    const auto& body = change.Body;
-                    UNIT_ASSERT_VALUES_EQUAL(body.HasUpsert(), op == NTable::ERowOp::Upsert);
-                    UNIT_ASSERT_VALUES_EQUAL(body.HasReset(), op == NTable::ERowOp::Reset);
-                    UNIT_ASSERT_VALUES_EQUAL(body.HasErase(), op == NTable::ERowOp::Erase);
-                    UNIT_ASSERT_VALUES_EQUAL(body.HasOldImage(), mode != NKikimrSchemeOp::ECdcStreamModeNewImage);
-                    UNIT_ASSERT_VALUES_EQUAL(body.HasNewImage(),
-                        mode != NKikimrSchemeOp::ECdcStreamModeOldImage && op != NTable::ERowOp::Erase);
-                    if (body.HasOldImage()) {
-                        AssertCells(body.GetOldImage(), {3, 5, 7}, {TCell::Make(ui32(31)),
-                            TextCell("old-text-value"), TCell::Make(ui64(0x1122334455667788ULL))});
-                    }
-                    if (body.HasNewImage()) {
-                        AssertCells(body.GetNewImage(), {3, 5, 7}, {TCell::Make(ui32(73)),
-                            op == NTable::ERowOp::Upsert ? TextCell("old-text-value") : TCell(),
-                            TCell::Make(ui64(0xffeeddccbbaa9988ULL))});
-                    }
+        const auto imageModes = {
+            NKikimrSchemeOp::ECdcStreamModeNewImage,
+            NKikimrSchemeOp::ECdcStreamModeOldImage,
+            NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
+        };
+        for (const auto mode : imageModes) {
+            fixture.SetStreamMode(mode);
+
+            for (const auto op : {NTable::ERowOp::Upsert, NTable::ERowOp::Reset, NTable::ERowOp::Erase}) {
+                fixture.Db.Reads.clear();
+                UNIT_ASSERT(fixture.Collect(7, 256, op, updates));
+
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Db.Reads.size(), 1);
+                UNIT_ASSERT(!fixture.Db.Reads[0].Snapshot);
+                AssertReadTags(fixture.Db, {NumberTag, TextTag, WideTag});
+
+                const auto& change = fixture.Sink.Changes.back();
+                AssertBuildingColumnsKey(change, fixture);
+                const auto& body = change.Body;
+                AssertRowOperation(body, op);
+
+                const bool expectOldImage = mode != NKikimrSchemeOp::ECdcStreamModeNewImage;
+                const bool expectNewImage = mode != NKikimrSchemeOp::ECdcStreamModeOldImage &&
+                    op != NTable::ERowOp::Erase;
+                UNIT_ASSERT_VALUES_EQUAL(body.HasOldImage(), expectOldImage);
+                UNIT_ASSERT_VALUES_EQUAL(body.HasNewImage(), expectNewImage);
+                if (expectOldImage) {
+                    AssertCells(body.GetOldImage(), VisibleOldColumnValues());
+                }
+                if (expectNewImage) {
+                    const auto text = op == NTable::ERowOp::Upsert ? TextCell("old-text-value") : TCell();
+                    AssertCells(body.GetNewImage(), {
+                        {NumberTag, TCell::Make(ui32(73))},
+                        {TextTag, text},
+                        {WideTag, TCell::Make(NewWideValue)},
+                    });
                 }
             }
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 9);
-            UNIT_ASSERT_VALUES_EQUAL(db.SnapshotReads, 0);
-        }, BuildingColumnsTable());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Db.SnapshotReads, 0);
     }
 
     Y_UNIT_TEST(BuildingColumnsFilterInitialSnapshot) {
-        WithScanCollector([](auto& shard, const auto& tableId, const auto& streamId,
-                auto&, auto& db, auto& sink, auto collect) {
-            const auto building = StartBuildingColumns(shard, tableId);
-            db.Values = BuildingColumnValues();
-            const auto modes = {
-                NKikimrSchemeOp::ECdcStreamModeKeysOnly,
-                NKikimrSchemeOp::ECdcStreamModeUpdate,
-                NKikimrSchemeOp::ECdcStreamModeNewImage,
-                NKikimrSchemeOp::ECdcStreamModeOldImage,
-                NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
-            };
+        TScanCollectorFixture fixture(BuildingColumnsTable());
+        StartBuildingColumns(fixture);
+        SetColumnValues(fixture.Db, OldColumnValues());
 
-            for (const auto mode : modes) {
-                TUserTable::TPtr table = new TUserTable(*building);
-                table->CdcStreams.at(streamId).Mode = mode;
-                shard.SetUserTable(tableId.PathId, table);
-                db.Reads.clear();
-                sink.Changes.clear();
-                UNIT_ASSERT(collect(7, 256, NTable::ERowOp::Erase));
-                const bool images = mode != NKikimrSchemeOp::ECdcStreamModeKeysOnly &&
-                    mode != NKikimrSchemeOp::ECdcStreamModeUpdate;
-                UNIT_ASSERT_VALUES_EQUAL(db.Reads.size(), images ? 2 : 1);
-                UNIT_ASSERT(db.Reads[0].Snapshot);
-                if (images) {
-                    UNIT_ASSERT(!db.Reads[1].Snapshot);
-                }
-                AssertReadTags(db, {3, 5, 7});
-                UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 2);
-                const auto& initial = sink.Changes[0];
-                AssertBuildingColumnsKey(initial, tableId, streamId);
-                UNIT_ASSERT_VALUES_EQUAL(initial.Version.WriteVersion,
-                    shard.GetCdcStreamScanManager().Get(streamId)->SnapshotVersion);
-                UNIT_ASSERT_VALUES_EQUAL(initial.Version.WriteTxId, 0);
-                const auto& body = initial.Body;
-                UNIT_ASSERT(body.HasUpsert());
-                UNIT_ASSERT(!body.HasReset());
-                UNIT_ASSERT(!body.HasErase());
-                UNIT_ASSERT_VALUES_EQUAL(body.HasOldImage(), mode == NKikimrSchemeOp::ECdcStreamModeOldImage);
-                UNIT_ASSERT_VALUES_EQUAL(body.HasNewImage(), mode == NKikimrSchemeOp::ECdcStreamModeNewImage ||
-                    mode == NKikimrSchemeOp::ECdcStreamModeNewAndOldImages);
-                if (mode == NKikimrSchemeOp::ECdcStreamModeUpdate || images) {
-                    const auto& cells = mode == NKikimrSchemeOp::ECdcStreamModeUpdate ? body.GetUpsert() :
-                        (body.HasNewImage() ? body.GetNewImage() : body.GetOldImage());
-                    AssertCells(cells, {3, 5, 7}, {TCell::Make(ui32(31)), TextCell("old-text-value"),
-                        TCell::Make(ui64(0x1122334455667788ULL))});
-                } else {
-                    AssertCells(body.GetUpsert(), {}, {});
-                }
+        const auto modes = {
+            NKikimrSchemeOp::ECdcStreamModeKeysOnly,
+            NKikimrSchemeOp::ECdcStreamModeUpdate,
+            NKikimrSchemeOp::ECdcStreamModeNewImage,
+            NKikimrSchemeOp::ECdcStreamModeOldImage,
+            NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
+        };
+        for (const auto mode : modes) {
+            fixture.SetStreamMode(mode);
+            fixture.ClearResults();
+            UNIT_ASSERT(fixture.Collect(7, 256, NTable::ERowOp::Erase));
 
-                const auto& current = sink.Changes[1];
-                AssertBuildingColumnsKey(current, tableId, streamId);
-                UNIT_ASSERT(current.Body.HasErase());
-                UNIT_ASSERT(!current.Body.HasNewImage());
-                UNIT_ASSERT_VALUES_EQUAL(current.Body.HasOldImage(), mode == NKikimrSchemeOp::ECdcStreamModeOldImage ||
-                    mode == NKikimrSchemeOp::ECdcStreamModeNewAndOldImages);
-                if (current.Body.HasOldImage()) {
-                    AssertCells(current.Body.GetOldImage(), {3, 5, 7}, {TCell::Make(ui32(31)),
-                        TextCell("old-text-value"), TCell::Make(ui64(0x1122334455667788ULL))});
-                }
-                UNIT_ASSERT_VALUES_EQUAL(current.Version.WriteVersion, TRowVersion(100, 200));
-                UNIT_ASSERT_VALUES_EQUAL(current.Version.WriteTxId, 123);
+            const bool withImages = mode != NKikimrSchemeOp::ECdcStreamModeKeysOnly &&
+                mode != NKikimrSchemeOp::ECdcStreamModeUpdate;
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Db.Reads.size(), withImages ? 2 : 1);
+            UNIT_ASSERT(fixture.Db.Reads[0].Snapshot);
+            if (withImages) {
+                UNIT_ASSERT(!fixture.Db.Reads[1].Snapshot);
             }
-        }, BuildingColumnsTable());
+            AssertReadTags(fixture.Db, {NumberTag, TextTag, WideTag});
+
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 2);
+            const auto& initial = fixture.Sink.Changes[0];
+            AssertBuildingColumnsKey(initial, fixture);
+            AssertRowOperation(initial.Body, NTable::ERowOp::Upsert);
+            UNIT_ASSERT_VALUES_EQUAL(initial.Version.WriteVersion, fixture.GetScanState()->SnapshotVersion);
+            UNIT_ASSERT_VALUES_EQUAL(initial.Version.WriteTxId, 0);
+
+            const auto& body = initial.Body;
+            const bool initialOldImage = mode == NKikimrSchemeOp::ECdcStreamModeOldImage;
+            const bool initialNewImage = mode == NKikimrSchemeOp::ECdcStreamModeNewImage || mode == NKikimrSchemeOp::ECdcStreamModeNewAndOldImages;
+            UNIT_ASSERT_VALUES_EQUAL(body.HasOldImage(), initialOldImage);
+            UNIT_ASSERT_VALUES_EQUAL(body.HasNewImage(), initialNewImage);
+
+            switch (mode) {
+            case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
+                AssertUpdates(body, {});
+                break;
+            case NKikimrSchemeOp::ECdcStreamModeUpdate:
+                AssertUpdates(body, VisibleOldColumnValues());
+                break;
+            case NKikimrSchemeOp::ECdcStreamModeOldImage:
+                AssertCells(body.GetOldImage(), VisibleOldColumnValues());
+                break;
+            case NKikimrSchemeOp::ECdcStreamModeNewImage:
+            case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
+                AssertCells(body.GetNewImage(), VisibleOldColumnValues());
+                break;
+            default:
+                UNIT_FAIL("Unexpected CDC mode: " << mode);
+            }
+
+            const auto& current = fixture.Sink.Changes[1];
+            AssertBuildingColumnsKey(current, fixture);
+            AssertRowOperation(current.Body, NTable::ERowOp::Erase);
+            UNIT_ASSERT(!current.Body.HasNewImage());
+
+            const bool currentOldImage = mode == NKikimrSchemeOp::ECdcStreamModeOldImage ||
+                mode == NKikimrSchemeOp::ECdcStreamModeNewAndOldImages;
+            UNIT_ASSERT_VALUES_EQUAL(current.Body.HasOldImage(), currentOldImage);
+            if (currentOldImage) {
+                AssertCells(current.Body.GetOldImage(), VisibleOldColumnValues());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(current.Version.WriteVersion, TRowVersion(100, 200));
+            UNIT_ASSERT_VALUES_EQUAL(current.Version.WriteTxId, 123);
+        }
     }
 
     Y_UNIT_TEST(BuildingColumnsBecomeVisibleAfterCompletion) {
-        WithScanCollector([](auto& shard, const auto& tableId, const auto& streamId,
-                auto&, auto& db, auto& sink, auto collect) {
-            const auto building = StartBuildingColumns(shard, tableId);
-            db.Values = BuildingColumnValues();
-            const auto values = BuildingColumnUpdates();
-            const auto updates = MakeColumnUpdates(*building, values);
-            UNIT_ASSERT(collect(7, 256, NTable::ERowOp::Upsert, updates));
-            AssertReadTags(db, {3, 5, 7});
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 2);
-            AssertCells(sink.Changes[1].Body.GetUpsert(), {7, 3, 5},
-                {TCell::Make(ui64(0xffeeddccbbaa9988ULL)), TCell::Make(ui32(73)), TextCell("new-text-value")});
+        TScanCollectorFixture fixture(BuildingColumnsTable());
+        const auto building = StartBuildingColumns(fixture);
+        SetColumnValues(fixture.Db, OldColumnValues());
+        const auto values = ColumnUpdates();
+        const auto updates = MakeColumnUpdates(*building, values);
 
-            // Finishing a replacement schema must refresh visibility even at the same version.
-            TUserTable::TPtr completed = new TUserTable(*building);
-            UNIT_ASSERT(completed->FinishColumnBuilding());
-            UNIT_ASSERT_VALUES_EQUAL(completed->GetTableSchemaVersion(), building->GetTableSchemaVersion());
-            shard.SetUserTable(tableId.PathId, completed);
-            db.Reads.clear();
-            sink.Changes.clear();
-            UNIT_ASSERT(collect(7, 256, NTable::ERowOp::Upsert, updates));
-            AssertReadTags(db, {3, 4, 5, 6, 7});
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 2);
-            for (const auto& change : sink.Changes) {
-                AssertBuildingColumnsKey(change, tableId, streamId);
-                UNIT_ASSERT(change.Body.HasUpsert());
-            }
-            AssertCells(sink.Changes[0].Body.GetUpsert(), {3, 4, 5, 6, 7}, {TCell::Make(ui32(31)),
-                TextCell("hidden-old-value"), TextCell("old-text-value"),
-                TCell::Make(ui64(0x8899aabbccddeeffULL)), TCell::Make(ui64(0x1122334455667788ULL))});
-            AssertCells(sink.Changes[1].Body.GetUpsert(), {6, 7, 4, 3, 5},
-                {TCell::Make(ui64(0x123456789abcdef0ULL)), TCell::Make(ui64(0xffeeddccbbaa9988ULL)),
-                    TextCell("hidden-new-value"), TCell::Make(ui32(73)), TextCell("new-text-value")});
-        }, BuildingColumnsTable());
+        UNIT_ASSERT(fixture.Collect(7, 256, NTable::ERowOp::Upsert, updates));
+        AssertReadTags(fixture.Db, {NumberTag, TextTag, WideTag});
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 2);
+        AssertCells(fixture.Sink.Changes[1].Body.GetUpsert(), VisibleColumnUpdates());
+
+        // Finishing a replacement schema must refresh visibility even at the same version.
+        TUserTable::TPtr completed = new TUserTable(*building);
+        UNIT_ASSERT(completed->FinishColumnBuilding());
+        UNIT_ASSERT_VALUES_EQUAL(completed->GetTableSchemaVersion(), building->GetTableSchemaVersion());
+        fixture.SetTable(completed);
+
+        fixture.ClearResults();
+        UNIT_ASSERT(fixture.Collect(7, 256, NTable::ERowOp::Upsert, updates));
+        AssertReadTags(fixture.Db, {NumberTag, BuildingTextTag, TextTag, BuildingWideTag, WideTag});
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 2);
+
+        for (const auto& change : fixture.Sink.Changes) {
+            AssertBuildingColumnsKey(change, fixture);
+            AssertRowOperation(change.Body, NTable::ERowOp::Upsert);
+        }
+        AssertCells(fixture.Sink.Changes[0].Body.GetUpsert(), OldColumnValues());
+        AssertCells(fixture.Sink.Changes[1].Body.GetUpsert(), ColumnUpdates());
     }
 
     Y_UNIT_TEST(BuildingColumnsCancellationInvalidatesSchema) {
-        WithScanCollector([](auto& shard, const auto& tableId, const auto& streamId,
-                auto&, auto& db, auto& sink, auto collect) {
-            const auto building = StartBuildingColumns(shard, tableId);
-            db.Values = BuildingColumnValues();
-            UNIT_ASSERT(collect(7, 256));
-            AssertReadTags(db, {3, 5, 7});
+        TScanCollectorFixture fixture(BuildingColumnsTable());
+        const auto building = StartBuildingColumns(fixture);
+        SetColumnValues(fixture.Db, OldColumnValues());
 
-            NKikimrSchemeOp::TTableDescription alter;
-            alter.SetName(building->Name);
-            alter.SetTableSchemaVersion(building->GetTableSchemaVersion() + 1);
-            alter.AddDropColumns()->SetId(4);
-            alter.AddDropColumns()->SetId(6);
-            TUserTable::TPtr cancelled = new TUserTable(*building, alter);
-            UNIT_ASSERT(!cancelled->FinishColumnBuilding());
-            shard.SetUserTable(tableId.PathId, cancelled);
-            const TVector<std::pair<NTable::TTag, TCell>> values{
-                {7, TCell::Make(ui64(0xffeeddccbbaa9988ULL))},
-                {3, TCell::Make(ui32(73))},
-                {5, TextCell("new-text-value")},
-            };
-            const auto updates = MakeColumnUpdates(*cancelled, values);
-            db.Reads.clear();
-            sink.Changes.clear();
-            UNIT_ASSERT(collect(7, 256, NTable::ERowOp::Reset, updates));
-            AssertReadTags(db, {3, 5, 7});
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 2);
-            for (const auto& change : sink.Changes) {
-                AssertBuildingColumnsKey(change, tableId, streamId);
-            }
-            UNIT_ASSERT(sink.Changes[0].Body.HasUpsert());
-            AssertCells(sink.Changes[0].Body.GetUpsert(), {3, 5, 7}, {TCell::Make(ui32(31)),
-                TextCell("old-text-value"), TCell::Make(ui64(0x1122334455667788ULL))});
-            UNIT_ASSERT(sink.Changes[1].Body.HasReset());
-            AssertCells(sink.Changes[1].Body.GetReset(), {7, 3, 5},
-                {TCell::Make(ui64(0xffeeddccbbaa9988ULL)), TCell::Make(ui32(73)), TextCell("new-text-value")});
-        }, BuildingColumnsTable());
+        UNIT_ASSERT(fixture.Collect(7, 256));
+        AssertReadTags(fixture.Db, {NumberTag, TextTag, WideTag});
+
+        NKikimrSchemeOp::TTableDescription alter;
+        alter.SetName(building->Name);
+        alter.SetTableSchemaVersion(building->GetTableSchemaVersion() + 1);
+        alter.AddDropColumns()->SetId(BuildingTextTag);
+        alter.AddDropColumns()->SetId(BuildingWideTag);
+
+        TUserTable::TPtr cancelled = new TUserTable(*building, alter);
+        UNIT_ASSERT(!cancelled->FinishColumnBuilding());
+        fixture.SetTable(cancelled);
+        const auto values = VisibleColumnUpdates();
+        const auto updates = MakeColumnUpdates(*cancelled, values);
+
+        fixture.ClearResults();
+        UNIT_ASSERT(fixture.Collect(7, 256, NTable::ERowOp::Reset, updates));
+        AssertReadTags(fixture.Db, {NumberTag, TextTag, WideTag});
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 2);
+
+        for (const auto& change : fixture.Sink.Changes) {
+            AssertBuildingColumnsKey(change, fixture);
+        }
+        AssertRowOperation(fixture.Sink.Changes[0].Body, NTable::ERowOp::Upsert);
+        AssertCells(fixture.Sink.Changes[0].Body.GetUpsert(), VisibleOldColumnValues());
+        AssertRowOperation(fixture.Sink.Changes[1].Body, NTable::ERowOp::Reset);
+        AssertCells(fixture.Sink.Changes[1].Body.GetReset(), VisibleColumnUpdates());
     }
 
     Y_UNIT_TEST(BuildingColumnsSchemaVersionAndRestart) {
-        WithScanCollector([](auto& shard, const auto& tableId, const auto& streamId,
-                auto& collector, auto& db, auto& sink, auto collect) {
-            const auto table = StartBuildingColumns(shard, tableId);
-            table->CdcStreams.at(streamId).Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages;
-            db.Values = BuildingColumnValues();
-            UNIT_ASSERT(collect(7, 256));
-            AssertReadTags(db, {3, 5, 7});
+        TScanCollectorFixture fixture(BuildingColumnsTable());
+        const auto table = StartBuildingColumns(fixture);
+        table->CdcStreams.at(fixture.StreamId).Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages;
+        SetColumnValues(fixture.Db, OldColumnValues());
 
-            // The same table object can change its schema version.
-            UNIT_ASSERT(table->FinishColumnBuilding());
-            table->SetTableSchemaVersion(table->GetTableSchemaVersion() + 1);
-            db.Reads.clear();
-            sink.Changes.clear();
-            UNIT_ASSERT(collect(7, 256));
-            AssertReadTags(db, {3, 4, 5, 6, 7});
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 2);
-            AssertCells(sink.Changes[0].Body.GetNewImage(), {3, 4, 5, 6, 7}, {TCell::Make(ui32(31)),
-                TextCell("hidden-old-value"), TextCell("old-text-value"),
-                TCell::Make(ui64(0x8899aabbccddeeffULL)), TCell::Make(ui64(0x1122334455667788ULL))});
-            AssertCells(sink.Changes[1].Body.GetOldImage(), {3, 4, 5, 6, 7}, {TCell::Make(ui32(31)),
-                TextCell("hidden-old-value"), TextCell("old-text-value"),
-                TCell::Make(ui64(0x8899aabbccddeeffULL)), TCell::Make(ui64(0x1122334455667788ULL))});
+        UNIT_ASSERT(fixture.Collect(7, 256));
+        AssertReadTags(fixture.Db, {NumberTag, TextTag, WideTag});
 
-            // A restart must discard visibility cached before rebuilding in-memory schema.
-            table->Columns.at(4).IsBuildInProgress = true;
-            table->Columns.at(6).IsBuildInProgress = true;
-            collector.OnRestart();
-            db.Reads.clear();
-            sink.Changes.clear();
-            UNIT_ASSERT(collect(7, 256));
-            AssertReadTags(db, {3, 5, 7});
-            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 2);
-            AssertCells(sink.Changes[0].Body.GetNewImage(), {3, 5, 7}, {TCell::Make(ui32(31)),
-                TextCell("old-text-value"), TCell::Make(ui64(0x1122334455667788ULL))});
-            AssertCells(sink.Changes[1].Body.GetOldImage(), {3, 5, 7}, {TCell::Make(ui32(31)),
-                TextCell("old-text-value"), TCell::Make(ui64(0x1122334455667788ULL))});
-            AssertCells(sink.Changes[1].Body.GetNewImage(), {3, 5, 7}, {TCell::Make(ui32(31)),
-                TextCell("old-text-value"), TCell::Make(ui64(0x1122334455667788ULL))});
-        }, BuildingColumnsTable());
+        // The same table object can change its schema version.
+        UNIT_ASSERT(table->FinishColumnBuilding());
+        table->SetTableSchemaVersion(table->GetTableSchemaVersion() + 1);
+
+        fixture.ClearResults();
+        UNIT_ASSERT(fixture.Collect(7, 256));
+        AssertReadTags(fixture.Db, {NumberTag, BuildingTextTag, TextTag, BuildingWideTag, WideTag});
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 2);
+        AssertCells(fixture.Sink.Changes[0].Body.GetNewImage(), OldColumnValues());
+        AssertCells(fixture.Sink.Changes[1].Body.GetOldImage(), OldColumnValues());
+
+        // A restart must discard visibility cached before rebuilding in-memory schema.
+        table->Columns.at(BuildingTextTag).IsBuildInProgress = true;
+        table->Columns.at(BuildingWideTag).IsBuildInProgress = true;
+        fixture.Collector->OnRestart();
+
+        fixture.ClearResults();
+        UNIT_ASSERT(fixture.Collect(7, 256));
+        AssertReadTags(fixture.Db, {NumberTag, TextTag, WideTag});
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Sink.Changes.size(), 2);
+        AssertCells(fixture.Sink.Changes[0].Body.GetNewImage(), VisibleOldColumnValues());
+        AssertCells(fixture.Sink.Changes[1].Body.GetOldImage(), VisibleOldColumnValues());
+        AssertCells(fixture.Sink.Changes[1].Body.GetNewImage(), VisibleOldColumnValues());
     }
 
     class TStructRecord: public TStructRecordBase<ui32> {

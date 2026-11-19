@@ -239,6 +239,8 @@ std::vector<TQueryOutcome> RunQueries(bool newRbo, const std::function<void(TKik
     auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
     settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
     settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+    // The release defaults this feature off; exercise projection pushdown explicitly.
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownProjections(true);
     // A query the new optimizer cannot compile must fail, not run with the old one.
     settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
     TKikimrRunner kikimr(settings);

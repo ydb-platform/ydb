@@ -11,6 +11,10 @@
 
 #include <variant>
 
+namespace NKikimrTxDataShard {
+    class TSplitMergeDescription;
+}
+
 namespace NKikimr::NDataShard {
 
 class TDataShard;
@@ -89,6 +93,7 @@ struct TEvChangeExchange {
 TEvChangeExchange::ESenderType GetSenderType(const TEvChangeExchange::TSenderParams& params);
 
 IActor* CreateChangeSender(const TDataShard* self);
-IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& dstDataShards);
+IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& dstDataShards,
+    const NKikimrTxDataShard::TSplitMergeDescription* splitDescription);
 
 }

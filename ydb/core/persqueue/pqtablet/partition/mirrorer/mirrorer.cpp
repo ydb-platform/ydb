@@ -422,6 +422,16 @@ void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, co
             {"logPrefix", NPQ_LOG_PREFIX});
 
         StartInit(ctx);
+    } else if (!ev->Get()->ConsumersToResendOffsets.empty()) {
+        for (const auto& consumer : ev->Get()->ConsumersToResendOffsets) {
+            auto it = ReplicatedOffsetsByConsumers.find(consumer);
+            if (it != ReplicatedOffsetsByConsumers.end()) {
+                // A queued upstream update is newer than the last value sent to the partition.
+                OffsetsByConsumers.try_emplace(consumer, it->second);
+                ReplicatedOffsetsByConsumers.erase(it);
+            }
+        }
+        TryToSendReplicationData(ctx);
     }
 }
 
@@ -703,6 +713,24 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
 void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
+<<<<<<< HEAD
+=======
+        if (NYdb::NTopic::IsReplicationServiceMessage(offset, msg.GetMessageMeta()->Fields)) {
+            NKikimrPQ::TReplicationDataPayload replicationData;
+            if (replicationData.ParseFromString(msg.GetData())) {
+                LastReplicationDataTimestamp = TActivationContext::Now();
+                LOG_D("Received replication data", {"replicationData", replicationData.DebugString()});
+
+                for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
+                    OffsetsByConsumers[consumer] = offset;
+                }
+            } else {
+                LOG_E("Failed to parse replication service message", {"payloadSize", msg.GetData().size()});
+            }
+            continue;
+        }
+
+>>>>>>> 49acd63de6c (Implement replication of rolled back offsets in source topic (#59550))
         PQ_ENSURE(OffsetToRead <= offset);
         LastReadOffset = offset;
         ui64 messageSize = msg.GetData().size();

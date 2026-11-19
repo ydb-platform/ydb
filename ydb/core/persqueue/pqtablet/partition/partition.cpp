@@ -4095,6 +4095,14 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 {
     bool autopartitioningChanged = SplitMergeEnabled(Config) != SplitMergeEnabled(config);
 
+    TVector<TString> consumersToResendOffsets;
+    for (const auto& consumer : config.GetConsumers()) {
+        const auto* previous = GetConsumer(Config, consumer.GetName());
+        if (previous && !previous->GetReplicateOffsets() && consumer.GetReplicateOffsets()) {
+            consumersToResendOffsets.push_back(consumer.GetName());
+        }
+    }
+
     Config = std::move(config);
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
@@ -4132,8 +4140,9 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 
     if (MirroringEnabled(Config)) {
         if (Mirrorer) {
-            ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
-                                                                          Config));
+            auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, Config);
+            event->ConsumersToResendOffsets = std::move(consumersToResendOffsets);
+            ctx.Send(Mirrorer->Actor, event.Release());
         } else {
             ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
             CreateMirrorerActor();

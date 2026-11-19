@@ -38,6 +38,9 @@ TResult AddConsumerImpl(
     auto* consumer = config->AddConsumers();
 
     consumer->SetName(consumerName);
+    if (rr.has_replicate_offsets()) {
+        consumer->SetReplicateOffsets(rr.replicate_offsets());
+    }
 
     if (rr.starting_message_timestamp_ms() < 0) {
         return {Ydb::StatusIds::BAD_REQUEST, 

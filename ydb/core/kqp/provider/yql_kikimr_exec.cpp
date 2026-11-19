@@ -531,6 +531,8 @@ namespace {
 
             if (name == "important") {
                 protoConsumer->set_important(GetBoolValue(setting));
+            } else if (name == "replicate_offsets") {
+                protoConsumer->set_replicate_offsets(GetBoolValue(setting));
             } else if (name == "setAvailabilityPeriod"sv) {
                 auto period = GetIntervalValue(setting);
                 protoConsumer->mutable_availability_period()->set_seconds(period.Seconds());
@@ -659,6 +661,8 @@ namespace {
             auto name = setting.Name().Value();
             if (name == "important") {
                 protoConsumer->set_set_important(GetBoolValue(setting));
+            } else if (name == "replicate_offsets") {
+                protoConsumer->set_set_replicate_offsets(GetBoolValue(setting));
             } else if (name == "setAvailabilityPeriod"sv) {
                 auto period = GetIntervalValue(setting);
                 protoConsumer->mutable_set_availability_period()->set_seconds(period.Seconds());

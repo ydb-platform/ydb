@@ -496,4 +496,5 @@ message TFeatureFlags {
     // write quota.
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
     optional bool EnableColumnShardStats = 395 [default = false];
+    optional bool EnableReadSecrets = 396 [default = false];
 }

@@ -1,5 +1,4 @@
 #include "kql_codec.h"
-#include "stage_error.h"
 
 #include <yql/essentials/core/yql_type_annotation.h>
 
@@ -74,32 +73,32 @@ ui32 ExportNode(const TExprNode& node, TExprContext& ctx, TWire& output, TNodeMa
 
 TExprNode::TPtr ImportNode(const TWire::Node& wire, TExprNode::TListType children, TExprContext& ctx) {
     const auto pos = ctx.AppendPosition(TPosition(wire.column(), wire.row(), wire.file()));
-    Y_ENSURE_EX(wire.kind() == TWire::Node::ATOM || !wire.atom_flags(), TStageError() << "Unexpected KQL atom flags");
-    Y_ENSURE_EX(wire.kind() == TWire::Node::ATOM || wire.kind() == TWire::Node::ARGUMENT || wire.kind() == TWire::Node::CALLABLE
-        || wire.content().empty(), TStageError() << "Unexpected KQL node content");
+    Y_ENSURE(wire.kind() == TWire::Node::ATOM || !wire.atom_flags(), "Unexpected KQL atom flags");
+    Y_ENSURE(wire.kind() == TWire::Node::ATOM || wire.kind() == TWire::Node::ARGUMENT || wire.kind() == TWire::Node::CALLABLE
+        || wire.content().empty(), "Unexpected KQL node content");
     switch (wire.kind()) {
         case TWire::Node::ATOM:
-            Y_ENSURE_EX(children.empty() && !(wire.atom_flags() & ~TNodeFlags::FlagsMask), TStageError() << "Invalid KQL atom");
+            Y_ENSURE(children.empty() && !(wire.atom_flags() & ~TNodeFlags::FlagsMask), "Invalid KQL atom");
             return ctx.NewAtom(pos, wire.content(), wire.atom_flags());
         case TWire::Node::LIST:
             return ctx.NewList(pos, std::move(children));
         case TWire::Node::CALLABLE:
-            Y_ENSURE_EX(!wire.content().empty(), TStageError() << "Missing KQL callable name");
+            Y_ENSURE(!wire.content().empty(), "Missing KQL callable name");
             return ctx.NewCallable(pos, wire.content(), std::move(children));
         case TWire::Node::LAMBDA:
-            Y_ENSURE_EX(children.size() >= 2 && children.front()->IsArguments(), TStageError() << "Invalid KQL lambda");
+            Y_ENSURE(children.size() >= 2 && children.front()->IsArguments(), "Invalid KQL lambda");
             return ctx.NewLambda(pos, std::move(children));
         case TWire::Node::ARGUMENT:
-            Y_ENSURE_EX(children.empty(), TStageError() << "Invalid KQL argument");
+            Y_ENSURE(children.empty(), "Invalid KQL argument");
             return ctx.NewArgument(pos, wire.content());
         case TWire::Node::ARGUMENTS:
-            Y_ENSURE_EX(std::ranges::all_of(children, [](const auto& arg) { return arg->IsArgument(); }), TStageError() << "Invalid KQL arguments");
+            Y_ENSURE(std::ranges::all_of(children, [](const auto& arg) { return arg->IsArgument(); }), "Invalid KQL arguments");
             return ctx.NewArguments(pos, std::move(children));
         case TWire::Node::WORLD:
-            Y_ENSURE_EX(children.empty(), TStageError() << "Invalid KQL world");
+            Y_ENSURE(children.empty(), "Invalid KQL world");
             return ctx.NewWorld(pos);
         default:
-            ythrow TStageError() << "Unknown KQL node kind";
+            ythrow yexception() << "Unknown KQL node kind";
     }
 }
 
@@ -122,13 +121,13 @@ void ExportKqlQueryList(const TExprNode& query, TExprContext& ctx, const TTypeAn
 TExprNode::TPtr ImportKqlQueryList(const TWire& input, TExprContext& ctx, TTypeAnnotationContext& types) {
     const auto count = static_cast<size_t>(input.nodes_size());
     const bool legacy = input.format_version() == 1;
-    Y_ENSURE_EX(legacy || input.format_version() == 2, TStageError() << "Unsupported KQL graph version");
+    Y_ENSURE(legacy || input.format_version() == 2, "Unsupported KQL graph version");
     if (legacy) {
-        Y_ENSURE_EX(!input.has_derive_column_order() && !input.has_ordered_columns(), TStageError() << "Unexpected column-order settings in KQL version 1");
+        Y_ENSURE(!input.has_derive_column_order() && !input.has_ordered_columns(), "Unexpected column-order settings in KQL version 1");
     } else {
-        Y_ENSURE_EX(input.has_derive_column_order() && input.has_ordered_columns(), TStageError() << "Missing KQL column-order settings");
+        Y_ENSURE(input.has_derive_column_order() && input.has_ordered_columns(), "Missing KQL column-order settings");
     }
-    Y_ENSURE_EX(count, TStageError() << "Empty KQL graph");
+    Y_ENSURE(count, "Empty KQL graph");
     Y_ENSURE(count <= MaxNodes, "KQL graph exceeds node limit");
     TVector<TExprNode::TPtr> nodes;
     TVector<size_t> depths;
@@ -140,7 +139,7 @@ TExprNode::TPtr ImportKqlQueryList(const TWire& input, TExprContext& ctx, TTypeA
         children.reserve(node.children_size());
         size_t depth = 1;
         for (const auto id : node.children()) {
-            Y_ENSURE_EX(id && id <= nodes.size(), TStageError() << "Invalid or forward KQL child reference");
+            Y_ENSURE(id && id <= nodes.size(), "Invalid or forward KQL child reference");
             children.push_back(nodes[id - 1]);
             depth = std::max(depth, depths[id - 1] + 1);
             used[id - 1] = true;
@@ -149,7 +148,7 @@ TExprNode::TPtr ImportKqlQueryList(const TWire& input, TExprContext& ctx, TTypeA
         depths.push_back(depth);
         nodes.push_back(ImportNode(node, std::move(children), ctx));
     }
-    Y_ENSURE_EX(std::find(used.begin(), used.end() - 1, false) == used.end() - 1, TStageError() << "Orphan KQL node");
+    Y_ENSURE(std::find(used.begin(), used.end() - 1, false) == used.end() - 1, "Orphan KQL node");
     auto root = std::move(nodes.back());
     CheckQueryList(*root);
     CheckArguments(*root);

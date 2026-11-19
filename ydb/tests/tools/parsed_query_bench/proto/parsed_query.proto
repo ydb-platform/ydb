@@ -10,7 +10,8 @@ import "ydb/tests/tools/parsed_query_bench/proto/native_query.proto";
 import "ydb/tests/tools/parsed_query_bench/proto/main_stages.proto";
 
 message ParsedQuery {
-  string sql_for_fallback = 1;
+  reserved 1;
+  reserved "sql_for_fallback";
 
   oneof stage {
     // NewParser

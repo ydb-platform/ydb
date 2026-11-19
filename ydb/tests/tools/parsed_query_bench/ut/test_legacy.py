@@ -115,61 +115,60 @@ def test_mismatched_script(tmp_path, stage):
     assert not failure.stdout
 
 
-def test_sql_fallback(tmp_path):
+def test_strict_dispatch(tmp_path):
     tool = yatest.common.binary_path(TOOL)
     sql = tmp_path / "query.sql"
     sql.write_text("SELECT 1 AS id;")
-    inputs = [tmp_path / (stage + ".pb") for stage in STAGES]
+    stages = (*STAGES, "kql_query_list")
+    inputs = [tmp_path / (stage + ".pb") for stage in stages]
     subprocess.run([tool, "--export", sql, *inputs], check=True)
     control = ydb_query_pb2.ExecuteQueryRequest.FromString(inputs[0].read_bytes())
     control.ClearField("query_content")
+    envelope = control.SerializeToString()
     fixture = tmp_path / "parsed.pb"
 
     def field(tag, payload):
         assert len(payload) < 128
         return bytes([tag * 8 + 2, len(payload)]) + payload
 
-    def check(route):
-        proc = subprocess.run([tool, "--check-request", fixture], text=True, capture_output=True)
-        if route:
-            assert proc.returncode == 0, proc.stderr
-            assert "BENCH_ROUTE=" + route in proc.stdout.splitlines()
-        else:
-            assert proc.returncode != 0
-            assert not proc.stdout
+    def check(wire):
+        fixture.write_bytes(wire)
+        return subprocess.run([tool, "--check-request", fixture], text=True, capture_output=True)
 
-    for index, stage in enumerate(STAGES):
-        fixture.write_bytes(inputs[index].read_bytes())
-        check(stage)
+    def rejected(wire, message):
+        proc = check(wire)
+        assert proc.returncode == 1, proc.stderr
+        assert message in proc.stderr
+        assert not proc.stdout
+
+    for stage, path in zip(stages, inputs):
+        proc = check(path.read_bytes())
+        assert proc.returncode == 0, proc.stderr
+        assert "BENCH_ROUTE=" + stage in proc.stdout.splitlines()
+
+    rejected(envelope, "Missing request query")
+    old_sql = field(1, sql.read_bytes())
+    for payload, message in [
+        (b"", "Missing or unknown parsed query stage"),
+        (old_sql, "Missing or unknown parsed query stage"),
+        (field(11, b""), "Missing or unknown parsed query stage"),
+        (field(2, b""), "Parsed query stage is unsupported on main"),
+        (field(8, b""), "Grammar schema fingerprint mismatch or missing AST"),
+        (field(6, b"\x08\x02"), "Unsupported or empty YQL AST"),
+        (field(6, b"\x08\x01" + field(2, b"")), "Missing YQL node kind"),
+        (field(7, b""), "Unsupported KQL graph version"),
+    ]:
+        rejected(envelope + field(5, payload), message)
+
     grammar = inputs[1].read_bytes()
     assert b"select_stmt" in grammar
-    fixture.write_bytes(grammar.replace(b"select_stmt", b"broken_stmt"))
-    check("sql_fallback")
-    embedded = field(1, sql.read_bytes())
-    for payload in [b"", field(2, b""), field(11, b""), field(6, b"\x08\x02"),
-                    field(6, b"\x08\x01" + field(2, b"")), field(7, b""), field(8, b"")]:
-        fixture.write_bytes(control.SerializeToString() + field(5, payload))
-        check(None)
-        fixture.write_bytes(control.SerializeToString() + field(5, embedded + payload))
-        check("sql_fallback")
+    rejected(grammar.replace(b"select_stmt", b"broken_stmt"), "Invalid SQL statement description")
 
-    rows = list(csv.DictReader(subprocess.check_output(
-        [tool, "--bench-fallback", "0", "1", inputs[0], fixture], text=True).splitlines()))
-    assert {r["stage"] for r in rows} == {"sql_fallback", "text"}
-    assert int(next(r for r in rows if r["stage"] == "sql_fallback")["bytes"]) == fixture.stat().st_size
+    # A second occurrence of the same message field merges its unknown field into the selected stage.
+    proc = check(inputs[2].read_bytes() + field(5, old_sql))
+    assert proc.returncode == 0, proc.stderr
+    assert "BENCH_ROUTE=yql_ast" in proc.stdout.splitlines()
 
     control.exec_mode = ydb_query_pb2.EXEC_MODE_EXPLAIN
-    fixture.write_bytes(control.SerializeToString() + field(5, embedded))
-    check(None)
-    fixture.write_bytes(b"\xff" + fixture.read_bytes())
-    check(None)
-
-    sizes = [p.stat().st_size for p in inputs]
-    subprocess.run([tool, "--without-sql-fallback", "--export", sql, *inputs], check=True)
-    assert sizes[0] == inputs[0].stat().st_size
-    assert all(p.stat().st_size < prior for p, prior in zip(inputs[1:], sizes[1:]))
-    for index, stage in enumerate(STAGES):
-        fixture.write_bytes(inputs[index].read_bytes())
-        check(stage)
-    fixture.write_bytes(inputs[1].read_bytes().replace(b"select_stmt", b"broken_stmt"))
-    check(None)
+    rejected(control.SerializeToString() + field(5, old_sql), "Expected execute mode")
+    rejected(b"\xff" + envelope, "Invalid protobuf request")

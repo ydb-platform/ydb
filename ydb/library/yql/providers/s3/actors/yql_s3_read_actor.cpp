@@ -491,12 +491,13 @@ public:
             const auto now = TMonotonic::Now();
             const auto delay = Work->TryStartExecution(now);
             throttled = delay.has_value();
-            ActorStats->OnAdmission(!delay, now);
             if (!delay) {
+                ActorStats->OnAllowed(now);
                 ActorStats->SetState(IS3ActorStats::EState::Processing);
                 break;
             }
 
+            ActorStats->OnRejected(now);
             ActorStats->SetState(IS3ActorStats::EState::WaitingCpu);
             // A delivered event means the scheduler woke us up.
             const auto resumeEv =
@@ -1969,7 +1970,7 @@ private:
         size_t readers = 0, waitingCpu = 0, cpuHolders = 0, finished = 0;
         for (const auto& [actorId, stats] : CoroActors) {
             const auto snapshot = stats->GetSnapshot();
-            out << "      ActorId: " << actorId << " State: " << IS3ActorStats::StateName(snapshot.State)
+            out << "      ActorId: " << actorId << " State: " << snapshot.State
                 << " StateFor: " << (TMonotonic::Now() - snapshot.StateSince) << " CpuHeld: " << snapshot.CpuHeld << '\n';
             if (snapshot.State == IS3ActorStats::EState::Finished) {
                 ++finished;

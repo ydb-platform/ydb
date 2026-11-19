@@ -1,5 +1,7 @@
 #pragma once
 
+#include "yql_s3_actor_stats_interface.h"
+
 #include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -8,49 +10,17 @@
 
 namespace NYql::NDq {
 
-class IS3ActorStats {
-public:
-    enum class EState {
-        Initializing,
-        WaitingCpu,
-        WaitingHttp,
-        WaitingConsumer,
-        Processing,
-        Finished
-    };
-
-    struct TSnapshot {
-        EState State;
-        TMonotonic StateSince;
-        bool CpuHeld;
-    };
-
-    virtual ~IS3ActorStats() = default;
-    virtual TSnapshot GetSnapshot() const = 0;
-
-    static TStringBuf StateName(EState state) {
-        switch (state) {
-            case EState::Initializing:
-                return "Initializing";
-            case EState::WaitingCpu:
-                return "WaitingCpu";
-            case EState::WaitingHttp:
-                return "WaitingHttp";
-            case EState::WaitingConsumer:
-                return "WaitingConsumer";
-            case EState::Processing:
-                return "Processing";
-            case EState::Finished:
-                return "Finished";
-        }
-        Y_ABORT("Unknown S3 reader state");
-    }
-};
-
 // Observes the caller's scheduler state without changing quota accounting.
 // Gauges count live work; unfinished exits are retained in a cumulative
 // counter.
 class TS3ActorStats final: public IS3ActorStats {
+private:
+    enum class ECpuState {
+        Idle,
+        Waiting,
+        Active
+    };
+
 public:
     TS3ActorStats(const ::NMonitoring::TDynamicCounterPtr &counters, const IDqSchedulableWork *work, const TString &kind = "reader")
         : SchedulerEnabled(work != nullptr)
@@ -83,20 +53,26 @@ public:
         SetStateLocked(state, now);
     }
 
-    void OnAdmission(bool admitted, TMonotonic now) {
+    void OnAllowed(TMonotonic now) {
         const auto guard = Guard(Lock);
         if (!SchedulerEnabled) {
             return;
         }
-        if (admitted) {
-            FinishWaiting(now);
-            if (CpuState != ECpuState::Active) {
-                if (Active) {
-                    Active->Inc();
-                }
-                CpuState = ECpuState::Active;
+        FinishWaiting(now);
+        if (CpuState != ECpuState::Active) {
+            if (Active) {
+                Active->Inc();
             }
-        } else if (CpuState == ECpuState::Idle) {
+            CpuState = ECpuState::Active;
+        }
+    }
+
+    void OnRejected(TMonotonic now) {
+        const auto guard = Guard(Lock);
+        if (!SchedulerEnabled) {
+            return;
+        }
+        if (CpuState == ECpuState::Idle) {
             if (Waiting) {
                 Waiting->Inc();
             }
@@ -153,11 +129,7 @@ private:
         }
     }
 
-    enum class ECpuState {
-        Idle,
-        Waiting,
-        Active
-    };
+private:
     mutable TAdaptiveLock Lock;
     const bool SchedulerEnabled;
     EState Phase = EState::Initializing;

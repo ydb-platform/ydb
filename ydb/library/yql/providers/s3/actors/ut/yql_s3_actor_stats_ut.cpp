@@ -47,17 +47,17 @@ Y_UNIT_TEST_SUITE(TS3ActorStatsTest) {
     Y_UNIT_TEST(RetriesCountOneWaitAndItsFullDuration) {
         TFixture f;
         TS3ActorStats metrics(f.Counters, &f.Work, "reader");
-        metrics.OnAdmission(false, f.Start);
-        metrics.OnAdmission(false, f.Start + TDuration::MicroSeconds(10));
+        metrics.OnRejected(f.Start);
+        metrics.OnRejected(f.Start + TDuration::MicroSeconds(10));
         UNIT_ASSERT_VALUES_EQUAL(f.Value("S3CpuWaiting"), 1);
         UNIT_ASSERT_VALUES_EQUAL(f.Value("S3CpuActive"), 0);
-        metrics.OnAdmission(true, f.Start + TDuration::MicroSeconds(30));
+        metrics.OnAllowed(f.Start + TDuration::MicroSeconds(30));
         UNIT_ASSERT_VALUES_EQUAL(f.Value("S3CpuWaiting"), 0);
         UNIT_ASSERT_VALUES_EQUAL(f.Value("S3CpuActive"), 1);
         UNIT_ASSERT_VALUES_EQUAL(f.Value("S3CpuAdmissionWaitUs"), 30);
         metrics.OnStop(f.Start + TDuration::MicroSeconds(40));
-        metrics.OnAdmission(false, f.Start + TDuration::MicroSeconds(50));
-        metrics.OnAdmission(true, f.Start + TDuration::MicroSeconds(55));
+        metrics.OnRejected(f.Start + TDuration::MicroSeconds(50));
+        metrics.OnAllowed(f.Start + TDuration::MicroSeconds(55));
         metrics.OnStop(f.Start + TDuration::MicroSeconds(60));
         metrics.OnExit(f.Start + TDuration::MicroSeconds(70));
         UNIT_ASSERT_VALUES_EQUAL(f.Value("S3CpuAdmissionWaitUs"), 35);
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TS3ActorStatsTest) {
         TFixture f;
         {
             TS3ActorStats metrics(f.Counters, &f.Work, "reader");
-            metrics.OnAdmission(false, f.Start);
+            metrics.OnRejected(f.Start);
             metrics.OnExit(f.Start + TDuration::MicroSeconds(25));
             metrics.OnExit(f.Start + TDuration::MicroSeconds(30));
             UNIT_ASSERT_VALUES_EQUAL(f.Value("S3CpuWaiting"), 0);
@@ -81,10 +81,10 @@ Y_UNIT_TEST_SUITE(TS3ActorStatsTest) {
     Y_UNIT_TEST(DestructionWhileActivePreservesOtherLiveWork) {
         TFixture f;
         TS3ActorStats live(f.Counters, &f.Work, "reader");
-        live.OnAdmission(true, f.Start);
+        live.OnAllowed(f.Start);
         {
             TS3ActorStats exiting(f.Counters, &f.Work, "reader");
-            exiting.OnAdmission(true, f.Start);
+            exiting.OnAllowed(f.Start);
             UNIT_ASSERT_VALUES_EQUAL(f.Value("S3CpuActive"), 2);
         }
         UNIT_ASSERT_VALUES_EQUAL(f.Value("S3CpuActive"), 1);
@@ -96,8 +96,8 @@ Y_UNIT_TEST_SUITE(TS3ActorStatsTest) {
         TFixture f;
         TS3ActorStats reader(f.Counters, &f.Work);
         TS3ActorStats waiting(f.Counters, &f.Work);
-        reader.OnAdmission(true, f.Start);
-        waiting.OnAdmission(false, f.Start);
+        reader.OnAllowed(f.Start);
+        waiting.OnRejected(f.Start);
         waiting.SetState(IS3ActorStats::EState::WaitingCpu, f.Start);
         UNIT_ASSERT(reader.GetSnapshot().CpuHeld);
         UNIT_ASSERT(!waiting.GetSnapshot().CpuHeld);
@@ -114,19 +114,19 @@ Y_UNIT_TEST_SUITE(TS3ActorStatsTest) {
         using EState = IS3ActorStats::EState;
         UNIT_ASSERT(stats.GetSnapshot().State == EState::Initializing);
         stats.SetState(EState::Processing, f.Start);
-        stats.OnAdmission(true, f.Start);
+        stats.OnAllowed(f.Start);
         // A phase must not conceal an erroneously held slot.
         stats.SetState(EState::WaitingHttp, f.Start);
         UNIT_ASSERT(stats.GetSnapshot().CpuHeld);
         stats.OnStop(f.Start);
         stats.SetState(EState::WaitingCpu, f.Start + TDuration::MicroSeconds(10));
-        stats.OnAdmission(false, f.Start + TDuration::MicroSeconds(10));
-        stats.OnAdmission(false, f.Start + TDuration::MicroSeconds(20));
+        stats.OnRejected(f.Start + TDuration::MicroSeconds(10));
+        stats.OnRejected(f.Start + TDuration::MicroSeconds(20));
         auto snapshot = stats.GetSnapshot();
         UNIT_ASSERT(snapshot.State == EState::WaitingCpu);
         UNIT_ASSERT(!snapshot.CpuHeld);
         UNIT_ASSERT(snapshot.StateSince == f.Start + TDuration::MicroSeconds(10));
-        stats.OnAdmission(true, f.Start + TDuration::MicroSeconds(30));
+        stats.OnAllowed(f.Start + TDuration::MicroSeconds(30));
         // Admission updates CPU accounting only; the caller resets the wait.
         UNIT_ASSERT(stats.GetSnapshot().State == EState::WaitingCpu);
         stats.SetState(EState::Processing, f.Start + TDuration::MicroSeconds(30));
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TS3ActorStatsTest) {
         TFixture f;
         auto stats = std::make_shared<TS3ActorStats>(f.Counters, &f.Work);
         std::shared_ptr<const IS3ActorStats> source = stats;
-        stats->OnAdmission(false, f.Start);
+        stats->OnRejected(f.Start);
         stats->OnExit(f.Start + TDuration::MicroSeconds(25));
         stats.reset();
         UNIT_ASSERT(source->GetSnapshot().State == IS3ActorStats::EState::Finished);
@@ -174,9 +174,9 @@ Y_UNIT_TEST_SUITE(TS3ActorStatsTest) {
             } while (!done.load());
         });
         for (ui32 i = 0; i < 10000; ++i) {
-            stats.OnAdmission(false, f.Start);
+            stats.OnRejected(f.Start);
             stats.SetState(EState::WaitingCpu, f.Start);
-            stats.OnAdmission(true, f.Start);
+            stats.OnAllowed(f.Start);
             stats.SetState(EState::Processing, f.Start);
             stats.OnStop(f.Start);
         }
@@ -191,8 +191,8 @@ Y_UNIT_TEST_SUITE(TS3ActorStatsTest) {
         TS3ActorStats noCounters(nullptr, &f.Work, "reader");
         TS3ActorStats noWork(f.Counters, nullptr, "reader");
         for (auto *metrics : { &noCounters, &noWork }) {
-            metrics->OnAdmission(false, f.Start);
-            metrics->OnAdmission(true, f.Start);
+            metrics->OnRejected(f.Start);
+            metrics->OnAllowed(f.Start);
             metrics->OnExit(f.Start);
         }
         UNIT_ASSERT_VALUES_EQUAL(f.Value("S3CpuActive"), 0);

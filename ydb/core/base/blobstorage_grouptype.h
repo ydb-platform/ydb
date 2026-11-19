@@ -141,12 +141,6 @@ struct TBlobStorageGroupType : public TErasureType {
     ui32 GetExpectedVGetReplyProtobufSize(const TLogoBlobID &id) const {
         return (BlobProtobufHeaderMaxSize + PartSize(id)) * TotalPartCount();
     }
-
-    ui64 PartSize(const TLogoBlobID &id) const;
-    ui64 MaxPartSize(const TLogoBlobID &id) const;
-    ui64 MaxPartSize(TErasureType::ECrcMode crcMode, ui32 blobSize) const;
-
-    bool PartFits(ui32 partId, ui32 idxInSubgroup) const;
 };
 
 }

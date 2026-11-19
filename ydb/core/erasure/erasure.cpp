@@ -2107,6 +2107,15 @@ ui64 TErasureType::PartUserSize(ui64 dataSize) const {
     ythrow TWithBackTrace<yexception>() << "Unknown ErasureFamily = " << (i32)erasure.ErasureFamily;
 }
 
+ui64 TErasureType::PartSize(const TLogoBlobID& id) const {
+    // Y_ABORT_UNLESS(id.PartId()); // TODO(alexvru): uncomment when dsproxy is ready for KIKIMR-9881
+    if (ErasureSpecies == TErasureType::ErasureMirror3of4 && id.PartId() == 3) {
+        return 0;
+    } else {
+        return PartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize());
+    }
+}
+
 ui64 TErasureType::PartSize(ECrcMode crcMode, ui64 dataSize) const {
     const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
     switch (erasure.ErasureFamily) {
@@ -2138,6 +2147,28 @@ ui64 TErasureType::PartSize(ECrcMode crcMode, ui64 dataSize) const {
         }
     }
     ythrow TWithBackTrace<yexception>() << "Unknown ErasureFamily = " << (i32)erasure.ErasureFamily;
+}
+
+ui64 TErasureType::MaxPartSize(const TLogoBlobID &id) const {
+    Y_ABORT_UNLESS(!id.PartId());
+    return MaxPartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize());
+}
+
+ui64 TErasureType::MaxPartSize(TErasureType::ECrcMode crcMode, ui32 blobSize) const {
+    return PartSize(crcMode, blobSize);
+}
+
+bool TErasureType::PartFits(ui32 partId, ui32 idxInSubgroup) const {
+    switch (GetErasure()) {
+        case TErasureType::ErasureMirror3dc:
+            return idxInSubgroup % 3 == partId - 1;
+
+        case TErasureType::ErasureMirror3of4:
+            return idxInSubgroup >= 4 || partId == 3 || idxInSubgroup % 2 == partId - 1;
+
+        default:
+            return idxInSubgroup >= TotalPartCount() || idxInSubgroup == partId - 1;
+    }
 }
 
 ui64 TErasureType::SuggestDataSize(ECrcMode crcMode, ui64 partSize, bool roundDown) const {

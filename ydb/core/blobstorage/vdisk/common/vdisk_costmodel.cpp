@@ -210,7 +210,7 @@ namespace NKikimr {
     }
 
     ui64 TCostModel::MovedPatchCostBySize(ui32 blobSize) const {
-        ui32 partSize = GType.TErasureType::PartSize(TErasureType::CrcModeNone, blobSize);
+        ui32 partSize = GType.PartSize(TErasureType::CrcModeNone, blobSize);
         ui32 memMultiply = 3; // in the worst case (buffer + parts + serealized events)
         return memMultiply * GType.TotalPartCount() * (ReadCostBySize(partSize) + HugeWriteCost(partSize));
     }

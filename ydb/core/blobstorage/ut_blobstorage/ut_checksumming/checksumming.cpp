@@ -523,6 +523,48 @@ Y_UNIT_TEST(VDiskAcceptsValidWholePartChecksumWhenWriteValidationEnabled) {
     UNIT_ASSERT_VALUES_EQUAL(env.Write(GenData(16_KB, 1))->Get()->Status, NKikimrProto::OK);
 }
 
+Y_UNIT_TEST(VDiskAcceptsMirror3of4MetadataWhenWriteValidationEnabled) {
+    TTestEnv env(TErasureType::CrcModeWholePart, TBlobStorageGroupType::ErasureMirror3of4);
+    env.EnableVDiskChecksumValidation(false, true);
+    const TString data = GenData(16_KB, 1);
+    env.PrepareBlobId(data.size());
+    const TLogoBlobID metadataId(env.LastBlobId, 3);
+
+    THashSet<TVDiskID> metadataDisks;
+    bool metadataAccepted = false;
+    TString metadataError;
+    env.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvBlobStorage::EvVPut) {
+            const auto* put = ev->Get<TEvBlobStorage::TEvVPut>();
+            const auto& record = put->Record;
+            if (LogoBlobIDFromLogoBlobID(record.GetBlobID()) == metadataId && put->GetBuffer().IsEmpty()) {
+                metadataDisks.insert(VDiskIDFromVDiskID(record.GetVDiskID()));
+            }
+        } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvVPutResult) {
+            const auto* result = ev->Get<TEvBlobStorage::TEvVPutResult>();
+            const auto& record = result->Record;
+            if (LogoBlobIDFromLogoBlobID(record.GetBlobID()) == metadataId
+                    && metadataDisks.contains(VDiskIDFromVDiskID(record.GetVDiskID()))) {
+                if (record.GetStatus() == NKikimrProto::OK) {
+                    metadataAccepted = true;
+                } else {
+                    metadataError = result->ToString();
+                }
+            }
+        }
+        return true;
+    };
+
+    const auto result = env.WritePrepared(data, env.Env.Runtime->GetClock() + TDuration::Seconds(30));
+    env.Env.Runtime->FilterFunction = {};
+
+    UNIT_ASSERT_C(!metadataDisks.empty(), "DSProxy did not send an empty metadata part");
+    UNIT_ASSERT_C(metadataError.empty(), metadataError);
+    UNIT_ASSERT_C(metadataAccepted, "No VDisk acknowledged the metadata write");
+    UNIT_ASSERT_C(result, "DSProxy did not finish the write");
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ToString());
+}
+
 Y_UNIT_TEST(VDiskRejectsCorruptedWholePartChecksumWhenWriteValidationEnabled) {
     TTestEnv env(TErasureType::CrcModeWholePart);
     env.EnableVDiskChecksumValidation(false, true);

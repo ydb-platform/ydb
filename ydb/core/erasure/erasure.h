@@ -335,7 +335,12 @@ struct TErasureType {
     // Size of user data contained in the part.
     ui64 PartUserSize(ui64 dataSize) const;
     // Size of the part including user data and crcs
+    ui64 PartSize(const TLogoBlobID& id) const;
     ui64 PartSize(ECrcMode crcMode, ui64 dataSize) const;
+    ui64 MaxPartSize(const TLogoBlobID &id) const;
+    ui64 MaxPartSize(TErasureType::ECrcMode crcMode, ui32 blobSize) const;
+    bool PartFits(ui32 partId, ui32 idxInSubgroup) const;
+
     ui64 SuggestDataSize(ECrcMode crcMode, ui64 partSize, bool roundDown) const;
     ui32 Prime() const;
 

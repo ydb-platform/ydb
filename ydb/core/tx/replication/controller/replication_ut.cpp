@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(Replication) {
             std::make_shared<TTargetTable::TTableConfig>("/Root/table", "/Root/replica"));
         const auto ordinary = replication->AddTarget(TReplication::ETargetKind::IndexTable,
             std::make_shared<TTargetIndexTable::TIndexTableConfig>(
-                "/Root/table/indexImplTable", "/Root/replica/indexImplTable/indexImplTable"));
+                "/Root/table/indexImplTable", "/Root/replica/indexImplTable/indexImplTable", false));
         const auto fulltext = replication->AddTarget(TReplication::ETargetKind::IndexTable,
             std::make_shared<TTargetIndexTable::TIndexTableConfig>(
                 "/Root/table/search/indexImplDocsTable", "/Root/replica/search/indexImplDocsTable", true));

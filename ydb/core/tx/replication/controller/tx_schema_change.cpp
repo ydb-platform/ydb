@@ -1092,7 +1092,6 @@ public:
                         }
                         if (fulltext || rowId) {
                             build.SetIndexGroupId(groupId);
-                            build.SetIndexName(index.GetName());
                         }
                         db.Table<Schema::Targets>().Key(key.first, tid).Update(
                             NIceDb::TUpdate<Schema::Targets::Kind>(TReplication::ETargetKind::IndexTable),

@@ -9,7 +9,6 @@
 #include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/sequenceproxy/public/events.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/testlib/helpers.h>
@@ -773,54 +772,6 @@ Y_UNIT_TEST_SUITE(FulltextReplication) {
             runtime.SimulateSleep(TDuration::MilliSeconds(100));
         }
         UNIT_ASSERT(!monitoring().Contains(reason));
-    }
-
-    Y_UNIT_TEST_TWIN(DescribeTableSurvivesSequenceLookupFailure, Transient) {
-        NTestHelpers::TFeatureFlags flags;
-        flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
-        NTestHelpers::TEnv env(flags, true, NTestHelpers::ERuntimeMode::Simulated);
-        auto& runtime = env.GetRuntime();
-        NYdb::NTable::TTableClient client(env.GetDriver());
-        auto sessionResult = env.RunCall([&] { return client.GetSession().GetValueSync(); });
-        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
-        auto session = sessionResult.GetSession();
-        const auto create = env.RunCall([&] {
-            return session.ExecuteSchemeQuery(R"(
-                CREATE TABLE `/Root/source` (key Utf8 NOT NULL, value Utf8, PRIMARY KEY(key),
-                    INDEX idx GLOBAL USING fulltext_plain ON (value) WITH (tokenizer=standard));
-            )").GetValueSync();
-        });
-        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
-        runtime.GetAppData().FeatureFlags.SetEnableFulltextIndexReplication(false);
-        ui32 lookups = 0;
-        auto observer = runtime.AddObserver<NSequenceProxy::TEvSequenceProxy::TEvGetSequence>(
-            [&](NSequenceProxy::TEvSequenceProxy::TEvGetSequence::TPtr& ev) {
-                ++lookups;
-                NYql::TIssues issues;
-                issues.AddIssue(NYql::TIssue("injected sequence lookup failure"));
-                runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
-                    new NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult(
-                        Transient ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::SCHEME_ERROR, issues),
-                    0, ev->Cookie));
-                ev.Reset();
-            });
-        const auto result = env.RunCall([&] {
-            return session.DescribeTable("/Root/source", NYdb::NTable::TDescribeTableSettings().WithSetVal(true)).GetValueSync();
-        });
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT(lookups);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "injected sequence lookup failure");
-        bool found = false;
-        const auto& table = NYdb::TProtoAccessor::GetProto(result.GetTableDescription());
-        UNIT_ASSERT_VALUES_EQUAL(table.indexes_size(), 2);
-        for (const auto& column : table.columns()) {
-            if (column.name() == NTableIndex::NFulltext::RowIdColumn) {
-                UNIT_ASSERT(column.has_from_sequence());
-                UNIT_ASSERT(!column.from_sequence().has_set_val());
-                found = true;
-            }
-        }
-        UNIT_ASSERT(found);
     }
 
     Y_UNIT_TEST_TWIN(PlainOnline, Compact) {

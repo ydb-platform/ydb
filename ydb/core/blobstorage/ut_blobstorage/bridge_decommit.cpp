@@ -1,9 +1,8 @@
 #include "bridge_common.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/scheme_cache_stub.h>
 #include <ydb/core/blob_depot/blob_depot_tablet.h>
-#include <ydb/core/protos/subdomains.pb.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/testlib/helpers.h>
 
 #include <util/system/type_name.h>
@@ -15,49 +14,6 @@
 using namespace NBridgeTest;
 
 namespace {
-
-    // test environment has no SchemeCache, while BS_CONTROLLER resolves database of the decommitted group through it;
-    // this stub describes the root domain containing provided storage pools
-    class TSchemeCacheStub : public TActor<TSchemeCacheStub> {
-        const NKikimrSubDomains::TDomainDescription Description;
-
-    public:
-        TSchemeCacheStub(NKikimrSubDomains::TDomainDescription description)
-            : TActor(&TThis::StateFunc)
-            , Description(std::move(description))
-        {}
-
-        void Handle(TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr ev) {
-            TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request = ev->Get()->Request.Release();
-            for (auto& entry : request->ResultSet) {
-                entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
-                entry.DomainInfo = MakeIntrusive<NSchemeCache::TDomainInfo>(Description);
-                auto domain = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TDomainDescription>();
-                domain->Description = Description;
-                entry.DomainDescription = domain;
-            }
-            Send(ev->Sender, new TEvTxProxySchemeCache::TEvNavigateKeySetResult(request), 0, ev->Cookie);
-        }
-
-        STRICT_STFUNC(StateFunc,
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySet, Handle)
-        )
-    };
-
-    void SetupSchemeCacheStub(TEnvironmentSetup& env) {
-        NKikimrSubDomains::TDomainDescription description;
-        auto *key = description.MutableDomainKey();
-        key->SetSchemeShard(env.Runtime->GetDomainsInfo()->GetDomain()->SchemeRoot);
-        key->SetPathId(1);
-        auto *pool = description.AddStoragePools();
-        pool->SetName(env.StoragePoolName);
-        pool->SetKind(env.StoragePoolName);
-
-        for (ui32 nodeId : env.Runtime->GetNodes()) {
-            env.Runtime->RegisterService(MakeSchemeCacheID(), env.Runtime->Register(new TSchemeCacheStub(description),
-                nodeId));
-        }
-    }
 
     NKikimrBlobStorage::TConfigResponse DecommitGroup(TEnvironmentSetup& env, ui32 groupId) {
         NKikimrBlobStorage::TConfigRequest request;

@@ -12,6 +12,7 @@ SRCS(
     node_warden_mock_state.cpp
     node_warden_mock_state.h
     node_warden_mock_vdisk.h
+    scheme_cache_stub.h
     ut_helpers.cpp
 )
 

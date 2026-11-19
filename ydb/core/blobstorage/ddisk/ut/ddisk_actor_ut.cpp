@@ -2090,6 +2090,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(update.DDiskSlotId, 1);
             UNIT_ASSERT_VALUES_EQUAL(update.OwnerRound, 1);
             UNIT_ASSERT_VALUES_EQUAL(update.Lifetime, reportPeriod * 3);
+            UNIT_ASSERT_VALUES_EQUAL(update.StoragePoolName, "ddisk_pool");
             statuses[update.IsPersistentBuffer].push_back(update.Status);
             if (update.Status == TStatus::Broken) {
                 brokenReason = update.Reason;

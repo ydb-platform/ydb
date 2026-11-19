@@ -3,6 +3,7 @@
 #include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/util/cpuinfo.h>
 #include <ydb/core/util/tuples.h>
@@ -98,6 +99,7 @@ protected:
         TComponent PersistentBuffer;
         NKikimrWhiteboard::TDDiskStateInfo Space;
         TInstant SpaceExpiresAt;
+        TString StoragePoolName;
         ui64 OwnerRound = 0;
 
         TComponent& GetComponent(bool isPersistentBuffer) {
@@ -688,6 +690,9 @@ protected:
         if (auto* state = AcceptDDiskPublication(update.Record.GetPDiskId(), update.Record.GetDDiskSlotId(),
                 update.OwnerRound, true, ev->Sender)) {
             const auto now = TActivationContext::Now();
+            if (update.Record.GetStoragePoolName()) {
+                state->StoragePoolName = update.Record.GetStoragePoolName();
+            }
             state->Space = std::move(update.Record);
             state->Space.SetChangeTime(now.MilliSeconds());
             state->SpaceExpiresAt = now + update.Lifetime;
@@ -712,6 +717,9 @@ protected:
         auto& update = *ev->Get();
         if (auto* state = AcceptDDiskPublication(update.PDiskId, update.DDiskSlotId, update.OwnerRound,
                 update.IsPersistentBuffer, ev->Sender)) {
+            if (update.StoragePoolName) {
+                state->StoragePoolName = std::move(update.StoragePoolName);
+            }
             auto& component = state->GetComponent(update.IsPersistentBuffer);
             component.Status = update.Status;
             component.Reason = std::move(update.Reason);
@@ -1081,8 +1089,16 @@ protected:
                 if (hasSpace) {
                     info->CopyFrom(state.Space);
                 }
-                info->SetPDiskId(key >> 32);
-                info->SetDDiskSlotId(static_cast<ui32>(key));
+                const ui32 pdiskId = key >> 32;
+                const ui32 slotId = key;
+                info->SetPDiskId(pdiskId);
+                info->SetDDiskSlotId(slotId);
+                if (state.StoragePoolName) {
+                    info->SetStoragePoolName(state.StoragePoolName);
+                }
+                if (!info->HasPersistentBufferId()) {
+                    info->SetPersistentBufferId(MakeBlobStoragePersistentBufferId(SelfId().NodeId(), pdiskId, slotId).ToString());
+                }
                 info->SetHasWhiteboardData(hasSpace);
                 if (hasDDisk) {
                     info->SetDDiskStatus(*state.DDisk.Status);

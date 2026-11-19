@@ -186,7 +186,7 @@ message TDDiskStateInfo {
     optional bool HasWhiteboardData = 11;
     optional uint32 GroupId = 12; // absent when controller information is unavailable
     optional string DDiskPath = 13; // actor monitoring path on the owning node
-    optional string StoragePoolName = 14; // controller identity, also available without whiteboard samples
+    optional string StoragePoolName = 14; // slot pool name, when known locally or supplied by the controller
     // An absent component status means health is unknown, including when the last report expired.
     optional EComponentStatus DDiskStatus = 15;
     optional EComponentStatus PersistentBufferStatus = 16;

@@ -205,7 +205,7 @@ struct TEvWhiteboard {
         ui64 OwnerRound;
         bool IsPersistentBuffer;
 
-        TEvDDiskStateDelete(ui32 pdiskId, ui32 slotId, ui64 ownerRound, bool isPersistentBuffer = true)
+        TEvDDiskStateDelete(ui32 pdiskId, ui32 slotId, ui64 ownerRound, bool isPersistentBuffer)
             : PDiskId(pdiskId)
             , DDiskSlotId(slotId)
             , OwnerRound(ownerRound)
@@ -221,9 +221,11 @@ struct TEvWhiteboard {
         NKikimrWhiteboard::TDDiskStateInfo::EComponentStatus Status;
         TString Reason;
         TDuration Lifetime;
+        TString StoragePoolName;
 
         TEvDDiskHealthUpdate(ui32 pdiskId, ui32 slotId, ui64 ownerRound, bool isPersistentBuffer,
-                NKikimrWhiteboard::TDDiskStateInfo::EComponentStatus status, TString reason, TDuration lifetime)
+                NKikimrWhiteboard::TDDiskStateInfo::EComponentStatus status, TString reason, TDuration lifetime,
+                TString storagePoolName = {})
             : PDiskId(pdiskId)
             , DDiskSlotId(slotId)
             , OwnerRound(ownerRound)
@@ -231,6 +233,7 @@ struct TEvWhiteboard {
             , Status(status)
             , Reason(std::move(reason))
             , Lifetime(lifetime)
+            , StoragePoolName(std::move(storagePoolName))
         {}
     };
 

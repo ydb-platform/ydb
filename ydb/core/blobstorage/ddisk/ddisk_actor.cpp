@@ -387,7 +387,8 @@ namespace {
 
         Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
             new NNodeWhiteboard::TEvWhiteboard::TEvDDiskHealthUpdate(BaseInfo.PDiskId, BaseInfo.VDiskSlotId,
-                BaseInfo.InitOwnerRound, IsPersistentBufferActor, status, std::move(reason), Config.HealthReportPeriod * 3));
+                BaseInfo.InitOwnerRound, IsPersistentBufferActor, status, std::move(reason), Config.HealthReportPeriod * 3,
+                BaseInfo.StoragePoolName));
     }
 
     void TDDiskActor::PublishHealthAndSchedule() {

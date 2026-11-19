@@ -114,6 +114,9 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         const ui32 groupId = PrepareStandby(env);
         const auto piles = GetPileGroups(env, groupId);
         std::unique_ptr<IEventHandle> standbyWrite;
+        const auto writtenBytes = GetBridgeRequestCounters(env, 1)->GetSubgroup("handleClass", "PutTabletLog")
+            ->GetSubgroup("sizeClass", "256")->GetCounter("requestBytes", true);
+        const auto bytesBefore = writtenBytes->Val();
         TMessageRelevanceOwner relevance = std::make_shared<TMessageRelevanceTracker>();
         ui32 standbyReads = 0;
         env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
@@ -150,6 +153,7 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         UNIT_ASSERT_VALUES_EQUAL(writtenGroup, groupId);
         WaitUntil(env, [&] { return ReadFromPileGroup(env, piles[1], 9, id, data) == NKikimrProto::OK; },
             "background write reaches standby");
+        UNIT_ASSERT_VALUES_EQUAL(writtenBytes->Val() - bytesBefore, data.size());
         UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::HOT_STANDBY);
     }
 

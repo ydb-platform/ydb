@@ -80,7 +80,11 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::UpdateSyncerCounters() {
         if (!BridgeSyncNodeCounters) {
-            return;
+            if (!AppData()->BridgeModeEnabled && WorkingSyncers.empty()) {
+                return;
+            }
+            BridgeSyncNodeCounters = GetServiceCounters(AppData()->Counters, "bridge|nodewarden");
+            UpdateSyncRateQuoter();
         }
         std::array<ui32, 2> running{}, waiting{};
         for (const auto& syncer : WorkingSyncers) {

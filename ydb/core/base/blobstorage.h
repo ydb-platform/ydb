@@ -1304,8 +1304,8 @@ struct TEvBlobStorage {
             return Print(false);
         }
 
-        ui32 PayloadSizeBytes() const {
-            ui32 size = 0;
+        ui64 PayloadSizeBytes() const {
+            ui64 size = 0;
             for (ui32 i = 0; i < ResponseSz; ++i) {
                 size += Responses[i].Buffer.size();
             }

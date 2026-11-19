@@ -542,6 +542,10 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         std::tie(res, duration) = get(); // the proxy doesn't wait any more
         UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::ERROR, res->ToString());
         UNIT_ASSERT_C(duration <= TDuration::Seconds(1), duration);
+        const auto counters = GetBridgeRequestCounters(env, nodeId);
+        const auto reads = counters->GetSubgroup("handleClass", "GetFast")->GetSubgroup("sizeClass", "256");
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("RoutingTimeouts", true)->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reads->GetSubgroup("status", "ERROR")->GetCounter("completedRequests", true)->Val(), 2);
 
         hold = false;
         for (auto& ev : std::exchange(held, {})) {

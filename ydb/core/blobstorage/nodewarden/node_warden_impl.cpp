@@ -668,11 +668,7 @@ void TNodeWarden::Bootstrap() {
     // create bridge syncer rate quoter
     SyncRateConfigLimit = Cfg->BlobStorageConfig->GetBridgeSyncRateBytesPerSecond();
     SyncRateQuoter = std::make_shared<TReplQuoter>(SyncRateConfigLimit);
-    if (AppData()->BridgeModeEnabled) {
-        BridgeSyncNodeCounters = GetServiceCounters(AppData()->Counters, "bridge|nodewarden");
-        UpdateSyncerCounters();
-        BridgeSyncNodeCounters->GetCounter("SyncRateLimitBytesPerSecond")->Set(SyncRateConfigLimit);
-    }
+    UpdateSyncerCounters();
 
     // start compaction broker
     actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(

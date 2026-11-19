@@ -2144,7 +2144,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 1);
     }
 
-    Y_UNIT_TEST(ShouldRejectStrategyChangeWhenKeyRangeTopicIsCreated) {
+    Y_UNIT_TEST(ShouldRejectStrategyChangeWhenTopicHasKeySchema) {
         // given
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()

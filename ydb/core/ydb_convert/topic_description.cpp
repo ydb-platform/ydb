@@ -147,6 +147,10 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
 
     out.set_content_based_deduplication(config.GetContentBasedDeduplication());
 
+    if (config.HasWriteEnabled()) {
+        (*out.mutable_attributes())["_write_enabled"] = config.GetWriteEnabled() ? "true" : "false";
+    }
+
     if (!config.GetRequireAuthWrite()) {
         (*out.mutable_attributes())["_allow_unauthenticated_write"] = "true";
     }

@@ -165,6 +165,16 @@ TResult ProcessTopicAttributes(
                     return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Attribute allow_unauthenticated_write is " << attrValue << ", which is not bool"};
                 }
             }
+        } else if (attrName == "_write_enabled") {
+            if (attrValue.empty()) {
+                tabletConfig->ClearWriteEnabled();
+            } else {
+                bool enabled;
+                if (!TryFromString<bool>(attrValue, enabled)) {
+                    return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Attribute write_enabled is " << attrValue << ", which is not bool"};
+                }
+                tabletConfig->SetWriteEnabled(enabled);
+            }
         } else if (attrName == "_abc_slug") {
             tabletConfig->SetAbcSlug(attrValue);
         }  else if (attrName == "_federation_account") {

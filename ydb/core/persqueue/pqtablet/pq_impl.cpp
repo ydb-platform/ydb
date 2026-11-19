@@ -3039,6 +3039,12 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
+    if (req.CmdWriteSize() > 0 && !Config.GetWriteEnabled()) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+                   "Write to topic is disabled");
+        return;
+    }
+
     if (IsTopicMutateDisabled(ctx)
         && req.CmdWriteSize() > 0)
     {

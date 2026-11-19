@@ -157,6 +157,8 @@ TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::T
             AllowUnauthenticatedRead_ = FromString<bool>(pair.second);
         } else if (pair.first == "_allow_unauthenticated_write") {
             AllowUnauthenticatedWrite_ = FromString<bool>(pair.second);
+        } else if (pair.first == "_write_enabled") {
+            WriteEnabled_ = FromString<bool>(pair.second);
         } else if (pair.first == "_abc_id") {
             AbcId_ = FromString<ui32>(pair.second);
         } else if (pair.first == "_abc_slug") {

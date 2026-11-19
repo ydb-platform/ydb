@@ -4,6 +4,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
 
+#include <algorithm>
 #include <utility>
 
 namespace NKikimr::NGRpcService {
@@ -38,6 +39,12 @@ namespace NKikimr::NGRpcService {
                 base.empty() ? database : PrependDomainIfNeeded(database, base), path);
             if (resolved.StartsWith('/')) {
                 resolved = CanonizePath(resolved);
+            }
+        }
+        if (appData && appData->FeatureFlags.GetEnableRelativePaths() && resolved.Contains('.')) {
+            auto parts = SplitPath(resolved);
+            if (std::erase(parts, TString("."))) {
+                resolved = (resolved.StartsWith('/') ? "/" : "") + JoinPath(parts);
             }
         }
         return PathNormalizer_ ? PathNormalizer_->NormalizePath(resolved) : resolved;

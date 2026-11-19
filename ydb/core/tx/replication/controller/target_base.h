@@ -39,6 +39,7 @@ public:
         ETargetKind GetKind() const override;
         const TString& GetSrcPath() const override;
         const TString& GetDstPath() const override;
+        bool GetSrcIsImpl() const override;
 
     private:
         const ETargetKind Kind;
@@ -88,6 +89,8 @@ public:
     void Reset(TActorId& actorId);
 
     void UpdateConfig(const NKikimrReplication::TReplicationConfig&) override;
+
+    TString GetSrcIndexPath() const override;
 
 private:
     TReplication* const Replication;

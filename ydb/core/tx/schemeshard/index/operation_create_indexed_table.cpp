@@ -419,6 +419,17 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         }
 
         auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {
+            // A replicated base table keeps its impl tables read-only as well: they are replicated as
+            // separate targets, so the destination must not write them on its own. Async indexes are
+            // the exception: the destination maintains them from the base table changes.
+            if (baseTableDescription.HasReplicationConfig()
+                    && baseTableDescription.GetReplicationConfig().GetMode()
+                        == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+                    && GetIndexType(indexDescription) != NKikimrSchemeOp::EIndexTypeGlobalAsync)
+            {
+                implTableDesc.MutableReplicationConfig()->CopyFrom(baseTableDescription.GetReplicationConfig());
+            }
+
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" + indexDescription.GetName(),
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);

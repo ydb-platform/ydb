@@ -72,6 +72,7 @@ struct TControllerSchema: NIceDb::Schema {
             using Type = TLocalPathId;
             static constexpr Type Default = InvalidLocalPathId;
         };
+        struct SrcIsImpl: Column<21, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
@@ -88,7 +89,8 @@ struct TControllerSchema: NIceDb::Schema {
             RunAsUser,
             DirectoryPath,
             PendingDstPathOwnerId,
-            PendingDstPathLocalId
+            PendingDstPathLocalId,
+            SrcIsImpl
         >;
     };
 

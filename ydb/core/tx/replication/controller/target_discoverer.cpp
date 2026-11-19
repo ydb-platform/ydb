@@ -6,6 +6,7 @@
 #include "util.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -127,24 +128,59 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"kind", target.Kind});
 
             for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
-                switch (index.GetIndexType()) {
-                case NYdb::NTable::EIndexType::GlobalSync:
-                case NYdb::NTable::EIndexType::GlobalUnique:
-                    break;
-                default:
-                    continue;
-                }
+                const auto indexSrcPath = CanonizePath(ChildPath(SplitPath(path.first),
+                    TString{index.GetIndexName()}));
+                const auto indexDstPath = CanonizePath(ChildPath(SplitPath(path.second),
+                    TString{index.GetIndexName()}));
 
-                const auto& target = ToAdd.emplace_back(
-                    TReplication::ETargetKind::IndexTable,
-                    std::make_shared<TTargetIndexTable::TIndexTableConfig>(
-                        CanonizePath(ChildPath(SplitPath(path.first), TString{index.GetIndexName()})),
-                        CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"}))
-                    ));
-                YDB_LOG_INFO("Add target",
-                    {"srcPath", target.Config->GetSrcPath()},
-                    {"dstPath", target.Config->GetDstPath()},
-                    {"kind", target.Kind});
+                if (index.GetIndexType() != NYdb::NTable::EIndexType::GlobalAsync) {
+                    // Async indexes are maintained by the destination's own change exchange.
+                    // Other index types (fulltext, vector, json) are replicated as their impl
+                    // tables: their names are defined by the index type and its keys.
+                    const auto indexType = NTableIndex::TryConvertIndexType(index.GetIndexType(),
+                        AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
+                    if (!indexType || !NTableIndex::HasReplicatedImplTables(*indexType)) {
+                        YDB_LOG_DEBUG("Skip target for local index",
+                            {"path", indexSrcPath},
+                            {"type", index.GetIndexType()});
+                        continue;
+                    }
+
+                    TVector<TString> indexColumns;
+                    for (const auto& column : index.GetIndexColumns()) {
+                        indexColumns.emplace_back(column.data(), column.size());
+                    }
+
+                    if (*indexType == NKikimrSchemeOp::EIndexTypeGlobal
+                        || *indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique)
+                    {
+                        // Secondary indexes use the legacy scheme: src is the index, dst is its impl table.
+                        const auto& target = ToAdd.emplace_back(
+                            TReplication::ETargetKind::IndexTable,
+                            std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+                                indexSrcPath,
+                                CanonizePath(TStringBuilder() << indexDstPath << '/' << NTableIndex::ImplTable),
+                                false));
+                        YDB_LOG_INFO("Add target",
+                            {"srcPath", target.Config->GetSrcPath()},
+                            {"dstPath", target.Config->GetDstPath()},
+                            {"kind", target.Kind});
+                        continue;
+                    }
+
+                    for (const auto implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
+                        const auto& target = ToAdd.emplace_back(
+                            TReplication::ETargetKind::IndexTable,
+                            std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+                                CanonizePath(TStringBuilder() << indexSrcPath << '/' << implTable),
+                                CanonizePath(TStringBuilder() << indexDstPath << '/' << implTable),
+                                true));
+                        YDB_LOG_INFO("Add target",
+                            {"srcPath", target.Config->GetSrcPath()},
+                            {"dstPath", target.Config->GetDstPath()},
+                            {"kind", target.Kind});
+                    }
+                }
             }
         } else {
             YDB_LOG_ERROR("Describe table failed",

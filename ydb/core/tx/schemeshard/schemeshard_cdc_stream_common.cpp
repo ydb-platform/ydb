@@ -8,9 +8,17 @@
 namespace NKikimr::NSchemeShard::NCdcStreamAtTable {
 
 bool IsIndexTypeSupportedForCdc(NKikimrSchemeOp::EIndexType type) {
+    // Every index whose impl tables are maintained incrementally (and thus can be replicated
+    // through the changefeeds of those impl tables).
     return type == NKikimrSchemeOp::EIndexTypeGlobal
         || type == NKikimrSchemeOp::EIndexTypeGlobalUnique
-        || type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+        || type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+        || type == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
+        || type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+        || type == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+        || type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+        || type == NKikimrSchemeOp::EIndexTypeGlobalJson
+        || type == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact;
 }
 
 void MaybeGuardIndexWithBaseCdcScanLock(

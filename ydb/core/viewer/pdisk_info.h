@@ -36,6 +36,8 @@ protected:
     TRequestResponse<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse> WhiteboardVDisk;
     TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> SysViewPDisks;
     TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> SysViewVSlots;
+    std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> SysViewGroups;
+    std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> SysViewPools;
 
     ui32 NodeId = 0;
     ui32 PDiskId = 0;
@@ -82,6 +84,8 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
             cFunc(TEvRetryNodeRequest::EventType, HandleRetry);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -139,25 +143,18 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            ui32 requestsDone = 0;
-            if (SysViewPDisks.Error("ClientNotConnected")) {
-                ++requestsDone;
-            }
-            if (SysViewVSlots.Error("ClientNotConnected")) {
-                ++requestsDone;
-            }
-            TBase::RequestDone(requestsDone);
+            FailBSCRequests("ClientNotConnected");
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        ui32 requestsDone = 0;
-        if (SysViewPDisks.Error("ClientDestroyed")) {
-            ++requestsDone;
-        }
-        if (SysViewVSlots.Error("ClientDestroyed")) {
-            ++requestsDone;
-        }
+        FailBSCRequests("ClientDestroyed");
+    }
+
+    void FailBSCRequests(const TString& error) {
+        const ui32 requestsDone = SysViewPDisks.Error(error) + SysViewVSlots.Error(error)
+            + (SysViewGroups && SysViewGroups->Error(error))
+            + (SysViewPools && SysViewPools->Error(error));
         TBase::RequestDone(requestsDone);
     }
 
@@ -169,6 +166,24 @@ public:
 
     void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
         if (SysViewVSlots.Set(std::move(ev), /*updateCache=*/ false)) {
+            if (IncludeDDisks && SysViewVSlots.IsOk() && std::ranges::any_of(SysViewVSlots->Record.GetEntries(), [](const auto& entry) {
+                    return entry.GetInfo().GetDDisk() && !entry.GetInfo().HasStoragePoolName();
+                })) {
+                SysViewGroups = MakeCachedRequestBSControllerGroups();
+                SysViewPools = MakeCachedRequestBSControllerPools();
+            }
+            TBase::RequestDone();
+        }
+    }
+
+    void Handle(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
+        if (SysViewGroups && SysViewGroups->Set(std::move(ev))) {
+            TBase::RequestDone();
+        }
+    }
+
+    void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
+        if (SysViewPools && SysViewPools->Set(std::move(ev))) {
             TBase::RequestDone();
         }
     }
@@ -197,6 +212,30 @@ public:
 
     void HandleTimeout() {
         ReplyAndPassAway(); // try to respond with what we have
+    }
+
+    const TString* FindDDiskPoolName(ui32 groupId) const {
+        if (!SysViewGroups || !SysViewGroups->IsOk() || !SysViewPools || !SysViewPools->IsOk()) {
+            return nullptr;
+        }
+
+        // System View snapshots are ordered by key. Look up only groups on this PDisk.
+        const auto& groups = SysViewGroups->Get()->Record.GetEntries();
+        const auto group = std::ranges::lower_bound(groups, groupId, {}, [](const auto& entry) {
+            return entry.GetKey().GetGroupId();
+        });
+        if (group == groups.end() || group->GetKey().GetGroupId() != groupId) {
+            return nullptr;
+        }
+
+        const auto poolKey = std::make_pair(group->GetInfo().GetBoxId(), group->GetInfo().GetStoragePoolId());
+        const auto getKey = [](const auto& entry) {
+            return std::make_pair(entry.GetKey().GetBoxId(), entry.GetKey().GetStoragePoolId());
+        };
+        const auto& pools = SysViewPools->Get()->Record.GetEntries();
+        const auto pool = std::ranges::lower_bound(pools, poolKey, {}, getKey);
+        return pool != pools.end() && getKey(*pool) == poolKey && pool->GetInfo().GetName()
+            ? &pool->GetInfo().GetName() : nullptr;
     }
 
     void ReplyAndPassAway() override {
@@ -272,6 +311,8 @@ public:
                     ddisk.SetGroupId(bscInfo.GetGroupId());
                     if (bscInfo.HasStoragePoolName()) {
                         ddisk.SetStoragePoolName(bscInfo.GetStoragePoolName());
+                    } else if (const auto* poolName = FindDDiskPoolName(bscInfo.GetGroupId())) {
+                        ddisk.SetStoragePoolName(*poolName);
                     }
                     if (!ddisk.HasHasWhiteboardData()) {
                         ddisk.SetHasWhiteboardData(false);

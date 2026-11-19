@@ -3562,6 +3562,25 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT(NJson::ReadJsonTree(result->Response->Body, &json));
             return json;
         };
+        auto queryPDisk = [&](const TString& mode) {
+            THttpRequest httpReq(HTTP_METHOD_GET);
+            httpReq.CgiParameters.emplace("node_id", ToString(runtime.GetNodeId(0)));
+            httpReq.CgiParameters.emplace("pdisk_id", "1");
+            if (!mode.empty()) {
+                httpReq.CgiParameters.emplace("include_ddisks", mode);
+            }
+            auto page = MakeHolder<TMonPage>("pdisk", "title");
+            TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/info", nullptr);
+            auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, request.Release()));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+            const auto bodyPos = result->Answer.find("\r\n\r\n");
+            UNIT_ASSERT_C(bodyPos != TString::npos, result->Answer);
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(result->Answer.substr(bodyPos + 4), &json), result->Answer);
+            return json;
+        };
         auto checkDisks = [&](const NJson::TJsonValue& disks, bool sample, bool fallback) {
             const auto& vdisks = disks["VDisks"].GetArray();
             UNIT_ASSERT_VALUES_EQUAL(vdisks.size(), fallback ? (includeDDisks ? 1 : 4) : 0);
@@ -3616,22 +3635,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 withSample = sample;
                 storagePoolRequests = 0;
                 groupRequests = 0;
-                THttpRequest httpReq(HTTP_METHOD_GET);
-                httpReq.CgiParameters.emplace("node_id", ToString(runtime.GetNodeId(0)));
-                httpReq.CgiParameters.emplace("pdisk_id", "1");
-                if (!mode.empty()) {
-                    httpReq.CgiParameters.emplace("include_ddisks", mode);
-                }
-                auto page = MakeHolder<TMonPage>("pdisk", "title");
-                TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/info", nullptr);
-                auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
-                runtime.Send(new IEventHandle(MakeViewerID(0), sender, request.Release()));
-                TAutoPtr<IEventHandle> handle;
-                auto* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
-                const auto bodyPos = result->Answer.find("\r\n\r\n");
-                UNIT_ASSERT_C(bodyPos != TString::npos, result->Answer);
-                NJson::TJsonValue json;
-                UNIT_ASSERT_C(NJson::ReadJsonTree(result->Answer.substr(bodyPos + 4), &json), result->Answer);
+                const auto json = queryPDisk(mode);
                 checkDisks(json["Whiteboard"], sample, true);
                 UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, 0);
                 UNIT_ASSERT_VALUES_EQUAL(groupRequests, 0);
@@ -3701,6 +3705,17 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, useCache ? 0 : 1);
             UNIT_ASSERT_VALUES_EQUAL(groupRequests, useCache ? 0 : 1);
         }
+
+        withSample = false;
+        storagePoolRequests = 0;
+        groupRequests = 0;
+        const auto legacyPDisk = queryPDisk("true");
+        checkDisks(legacyPDisk["Whiteboard"], false, true);
+        for (const auto& disk : legacyPDisk["Whiteboard"]["DDisks"].GetArray()) {
+            UNIT_ASSERT_VALUES_EQUAL(disk["StoragePoolName"].GetString(), "ddisk-pool");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(groupRequests, 1);
 
         legacyController = false;
         withSample = true;

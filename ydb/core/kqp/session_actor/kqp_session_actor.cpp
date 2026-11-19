@@ -1178,7 +1178,8 @@ public:
                     Settings.TableService.GetResourceManager(),
                     Settings.TableService.GetAggregationConfig(),
                     RequestCounters, {}, nullptr,
-                    QueryState->PreparedQuery->GetUseKqpTasksGraphV2());
+                    QueryState->PreparedQuery->GetUseKqpTasksGraphV2(),
+                    QueryState->PreparedQuery->GetPhysicalQuery().GetMaxTasksPerStage());
                 tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
                 tasksGraph.GetMeta().UserRequestContext = QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId);
                 tasksGraph.GetMeta().SecureParams = std::move(secureParams);
@@ -1886,6 +1887,7 @@ public:
                 request.AllowTrailingResults &= (QueryState->RequestEv->GetSupportsStreamTrailingResult());
                 request.DisablePessimisticLocks =
                     queryState->PreparedQuery->GetPhysicalQuery().GetDisablePessimisticLocks();
+                request.MaxTasksPerStage = queryState->PreparedQuery->GetPhysicalQuery().GetMaxTasksPerStage();
             }
         }
 

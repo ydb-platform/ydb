@@ -26,16 +26,10 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         TNodeId nodeId = Local.NodeId();
         TNodeInfo& node = Self->GetNode(nodeId);
-<<<<<<< HEAD
-        if (node.Local != Local) {
-=======
         const bool localChanged = node.Local != Local;
-        const TActorId previousLocal = node.Local;
-        const auto previousState = node.GetVolatileState();
         // An absent field from an old Local clears capabilities from its predecessor.
         node.Capabilities.CopyFrom(Record.GetCapabilities());
         if (localChanged) {
->>>>>>> 35e37cd38b4 (Hive <-> Local protocol extension with settings and capabilities propagation (#59361))
             Self->RemoveNodeFromSegments(&node);
 
             TInstant now = TActivationContext::Now();

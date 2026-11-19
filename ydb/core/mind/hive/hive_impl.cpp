@@ -823,25 +823,13 @@ void THive::BuildLocalConfig() {
 
 void THive::BuildCurrentConfig() {
     const bool previousLockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
-<<<<<<< HEAD
-    CurrentConfig = ClusterConfig;
-    CurrentConfig.MergeFrom(DatabaseConfig);
-=======
-    const auto previousCountersExportMode = CurrentConfig.GetCountersExportMode();
     const bool previousTrackResourceBrokerUsage = CurrentConfig.GetTrackResourceBrokerUsage();
     CurrentConfig = ClusterConfig;
     CurrentConfig.MergeFrom(DatabaseConfig);
-    CurrentConfig.SetTabletEventHistorySize(std::min(CurrentConfig.GetTabletEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
-    CurrentConfig.SetNodeEventHistorySize(std::min(CurrentConfig.GetNodeEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
     bool broadcastLocalSettings = false;
-    if (CurrentConfig.GetCountersExportMode() != previousCountersExportMode) {
-        UpdateCountersExportMode();
-        broadcastLocalSettings = true;
-    }
     if (CurrentConfig.GetTrackResourceBrokerUsage() != previousTrackResourceBrokerUsage) {
         broadcastLocalSettings = true;
     }
->>>>>>> b2c815257ed (add a setting to disable rb resource aggregation on locals (#59930))
     TabletLimit.clear();
     for (const auto& tabletLimit : CurrentConfig.GetDefaultTabletLimit()) {
         TabletLimit.insert_or_assign(tabletLimit.GetType(), tabletLimit);
@@ -924,6 +912,10 @@ void THive::BuildCurrentConfig() {
                 }
             }
         }
+    }
+
+    if (broadcastLocalSettings) {
+        UpdateLocalSettings();
     }
 }
 
@@ -2295,15 +2287,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
         {"namedImproved", named.Improved},
         {"namedWorsened", named.Worsened},
         {"expedient", result});
-    return {
-        .Expedient = result,
-        .Reason = after < before ? EHiveEventReason::ResourceStDevImproved : EHiveEventReason::NamedResourceImproved,
-        .StDevBefore = before,
-        .StDevAfter = after,
-        .NamedResource = named.Resource,
-        .NamedBefore = named.Before,
-        .NamedAfter = named.After,
-    };
+    return result;
 }
 
 THive::TNamedResourcesMoveEffect THive::CheckNamedResourcesMoveEffect(const TTabletInfo& tablet, const TNodeInfo& node) const {
@@ -2312,9 +2296,6 @@ THive::TNamedResourcesMoveEffect THive::CheckNamedResourcesMoveEffect(const TTab
     if (source == nullptr) {
         return effect;
     }
-<<<<<<< HEAD
-    return result;
-=======
 
     auto overCapacity = [](ui64 value, ui64 maximum) -> ui64 {
         return value > maximum ? value - maximum : 0;
@@ -2474,10 +2455,6 @@ std::optional<TBalancerSettings> THive::CheckNamedResources(TIter begin, TIter e
         if (sources.empty()) {
             continue;
         }
-        YDB_LOG_DEBUG("ProcessTabletBalancer: named resource triggered balancer",
-            {"logPrefix", GetLogPrefix()},
-            {"resource", name},
-            {"sourceNodes", sources});
         NextNamedResourceToCheck = (index + 1) % names.size();
         auto [minIt, maxIt] = std::minmax_element(usages.begin(), usages.end(), [](const TNodeUsage& a, const TNodeUsage& b) {
             return a.Usage < b.Usage;
@@ -2491,7 +2468,12 @@ std::optional<TBalancerSettings> THive::CheckNamedResources(TIter begin, TIter e
             triggerDetails << " scatter=" << Sprintf("%.3f", (maxIt->Usage - minIt->Usage) / maxIt->Usage)
                 << " minScatterToBalance=" << Sprintf("%.3f", settings.MinScatterToBalance);
         }
-        triggerDetails << " sourceNodes=" << sources;
+        YDB_LOG_DEBUG("ProcessTabletBalancer: named resource triggered balancer",
+            {"logPrefix", GetLogPrefix()},
+            {"trigger", saturation ? "named resource saturation" : "named resource scatter"},
+            {"resource", name},
+            {"sourceNodes", sources},
+            {"details", triggerDetails});
         return TBalancerSettings{
             .Type = EBalancerType::ScatterNamed,
             .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
@@ -2499,12 +2481,9 @@ std::optional<TBalancerSettings> THive::CheckNamedResources(TIter begin, TIter e
             .MaxInFlight = GetBalancerInflight(),
             .FilterNodeIds = std::move(sources),
             .NamedResource = name,
-            .Trigger = saturation ? "named resource saturation" : "named resource scatter",
-            .TriggerDetails = triggerDetails,
         };
     }
     return std::nullopt;
->>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
 }
 
 void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo *info, const NKikimrHive::TEvRequestHiveInfo &req) {
@@ -3537,13 +3516,7 @@ void THive::RemoveFromPingInProgress(TNodeId node) {
 }
 
 void THive::FillLocalSettings(NKikimrLocal::THiveSettings* settings) const {
-<<<<<<< HEAD
-    Y_UNUSED(settings);
-    // Select the relevant CurrentConfig fields here when settings are added.
-=======
-    settings->SetCountersExportMode(CurrentConfig.GetCountersExportMode());
     settings->SetTrackResourceBrokerUsage(CurrentConfig.GetTrackResourceBrokerUsage());
->>>>>>> b2c815257ed (add a setting to disable rb resource aggregation on locals (#59930))
 }
 
 void THive::SendPing(const TNodePing& nodePing) {

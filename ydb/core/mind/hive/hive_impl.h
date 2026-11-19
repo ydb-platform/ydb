@@ -1101,26 +1101,10 @@ protected:
     void ScheduleUnlockTabletExecution(TNodeInfo& node, NKikimrHive::ELockLostReason reason);
     TString DebugDomainsActiveNodes() const;
     TResourceNormalizedValues GetStDevResourceValues() const;
-<<<<<<< HEAD
-    bool IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const;
-=======
-    struct TMoveExpediency {
-        bool Expedient = false;
-        EHiveEventReason Reason = EHiveEventReason::ResourceStDevImproved; // meaningful only when Expedient
-        // max stdev of the built-in resources, set whenever the move was evaluated by resources
-        // (i.e. not decided by one of the early checks)
-        double StDevBefore = 0;
-        double StDevAfter = 0;
-        // the named resource which the move worsens (the first one), or if none, the first one it improves,
-        // with its imbalance before and after the move, see CheckNamedResourcesMoveEffect
-        TString NamedResource;
-        double NamedBefore = 0;
-        double NamedAfter = 0;
-    };
     // The move has to improve at least one of the built-in resources (as a whole) and the balanced
     // named resources of the tablet, and must not worsen any of them. The built-in resources may worsen
     // by up to BUILTIN_STDEV_WORSENING_TOLERANCE, any worsening of a named resource vetoes the move.
-    TMoveExpediency CheckTabletMoveExpediency(const TTabletInfo& tablet, const TNodeInfo& node) const;
+    bool IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const;
     struct TNamedResourcesMoveEffect {
         bool Improved = false;
         bool Worsened = false;
@@ -1145,10 +1129,6 @@ protected:
     // Returns settings of the balancer for a named resource which needs balancing among the nodes, if any
     template<std::forward_iterator TIter>
     std::optional<TBalancerSettings> CheckNamedResources(TIter begin, TIter end);
-    bool IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const {
-        return CheckTabletMoveExpediency(tablet, node).Expedient;
-    }
->>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
     TResourceRawValues GetDefaultResourceInitialMaximumValues();
     double GetScatter() const;
     double GetUsage() const;

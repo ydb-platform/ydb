@@ -34,12 +34,8 @@
 
 #include <util/stream/format.h>
 
-<<<<<<< HEAD
-=======
 #include "named_resources.h"
-#include "outgoing_requests.h"
 
->>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
 namespace NKikimr {
 namespace NHive {
 
@@ -324,72 +320,9 @@ struct TBalancerSettings {
     const std::vector<TNodeId> FilterNodeIds = {};
     EResourceToBalance ResourceToBalance = EResourceToBalance::ComputeResources;
     std::optional<TFullObjectId> FilterObjectId;
-<<<<<<< HEAD
-=======
     // When set, the balancer moves tablets to even out usage of this named resource
     // (FilterNodeIds are the source nodes), ResourceToBalance is ignored
     TString NamedResource;
-    // why this balancer was started, for the log: a short constant kind and the numbers behind the decision
-    TString Trigger = "manual";
-    TString TriggerDetails;
-};
-
-// Why a balancer that would have been started was not, see THive::LogBalancerNotStarted
-enum class EBalancerSuppressReason {
-    PreviousRunNoMovements, // the same balancer type ran last and found nothing to move
-    AnotherBalancerRunning,
-    SubActorActivity,       // drain, fill or another sub-actor is working
-};
-
-TString EBalancerSuppressReasonName(EBalancerSuppressReason value);
-
-// What one balancer run looked at and why it did or did not move tablets
-struct TBalancerRunStats {
-    // Per-tablet outcomes. The balancer walks the nodes again after every move, so Raw sums all passes:
-    // a tablet seen in three passes is counted three times. Unique counts a tablet at most once per counter,
-    // see THiveBalancer::CountTablet.
-    struct TTabletCounters {
-        ui64 TabletsOnNodes = 0;        // running tablets on the considered nodes
-        ui64 TabletsEligible = 0;       // of them, candidates for a move
-        ui64 SkippedPolicy = 0;         // balancer policy forbids or the tablet type is in the ignore list
-        ui64 SkippedCooldown = 0;       // moved by the balancer recently
-        ui64 SkippedNoMetric = 0;       // no metric of the balanced resource
-        ui64 SkippedPinned = 0;         // the tablet is the reason of its node's load
-        ui64 SkippedObjectFilter = 0;   // not the object being spread
-        ui64 TabletsExamined = 0;       // eligible tablets for which a target node was searched
-        ui64 RejectedNoNode = 0;        // no node could run the tablet
-        ui64 RejectedNotEnoughResources = 0;
-        ui64 RejectedTooManyStarting = 0;
-        ui64 RejectedSameNode = 0;      // the best node is the current one
-        ui64 RejectedNotExpedient = 0;  // a move would not improve the balance
-    };
-
-    // bit positions in TTabletInfo::BalancerRunCounted, one per TTabletCounters field
-    enum class ETabletCounter : ui8 {
-        TabletsOnNodes,
-        TabletsEligible,
-        SkippedPolicy,
-        SkippedCooldown,
-        SkippedNoMetric,
-        SkippedPinned,
-        SkippedObjectFilter,
-        TabletsExamined,
-        RejectedNoNode,
-        RejectedNotEnoughResources,
-        RejectedTooManyStarting,
-        RejectedSameNode,
-        RejectedNotExpedient,
-    };
-
-    TInstant StartTime;
-    TInstant EndTime;
-    ui64 Passes = 0;
-    ui64 NodesConsidered = 0;       // summed over all passes
-    TTabletCounters Raw;
-    TTabletCounters Unique;
-    ui64 Movements = 0;
-    TString EndReason;              // what ended the run: max movements, all tablets examined, timeout, stop
->>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
 };
 
 struct TStorageBalancerSettings {

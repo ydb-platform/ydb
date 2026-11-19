@@ -477,19 +477,9 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbou
     auto current = tablet.IsPresentOnLocal(Local) ? nodeValues : nodeValues + tabletValues;
     // basically, this is: return max(a / b);
     double usage = TTabletInfo::GetUsage(current, maximum);
-<<<<<<< HEAD
-=======
-    double reserved = GetMaxTabletImpact(&tablet);
-    if (reserved > 0 && Hive.GetUseTabletUsageEstimate()) {
-        if (!alreadyHere) {
-            reserved += TTabletInfo::GetUsage(tabletValues, maximum);
-        }
-        usage = std::max(usage, reserved);
-    }
     if (includeNamed) {
         usage = std::max(usage, GetNamedUsageForTablet(tablet));
     }
->>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
     if (Hive.GetSpreadNeighbours() && usage < 1 && neighbourPenalty) {
         auto neighbours = GetTabletNeighboursCount(tablet);
         if (neighbours > 0) {

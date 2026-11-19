@@ -4,6 +4,7 @@
 #include <ydb/core/protos/tablet.pb.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/map.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>

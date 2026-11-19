@@ -23,6 +23,7 @@ RUN_PYTHON3(
 )
 
 PEERDIR(
+    contrib/libs/antlr4_cpp_runtime
     contrib/libs/protobuf
     library/cpp/json
     ydb/core/kqp/common/simple
@@ -49,7 +50,10 @@ PEERDIR(
     yql/essentials/ast
     yql/essentials/core
     yql/essentials/core/services/mounts
+    yql/essentials/parser/common/antlr4
     yql/essentials/parser/lexer_common
+    yql/essentials/parser/proto_ast/gen/v1_antlr4
+    yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4
     yql/essentials/providers/common/arrow_resolve
     yql/essentials/sql/pg_dummy
     yql/essentials/sql/settings

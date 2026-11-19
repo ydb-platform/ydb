@@ -19,7 +19,7 @@ namespace NKikimr::NKqp::NParsedQueryBench {
 namespace {
 
 enum class EStage { Text, AntlrAst, YqlAst, KqlQueryList };
-constexpr std::array<TStringBuf, 4> StageNames = {"text", "main_antlr_ast", "yql_ast", "kql_query_list"};
+constexpr std::array<TStringBuf, 4> StageNames = {"text", "antlr_ast", "yql_ast", "kql_query_list"};
 
 EStage GetStage(const TRequest& request) {
     Y_ENSURE(request.exec_mode() == Ydb::Query::EXEC_MODE_EXECUTE, "Expected execute mode");
@@ -29,7 +29,7 @@ EStage GetStage(const TRequest& request) {
     }
     Y_ENSURE(request.has_parsed_query(), "Missing request query");
     switch (request.parsed_query().stage_case()) {
-        case Ydb::Query::ParsedQuery::kMainAntlrAst: return EStage::AntlrAst;
+        case Ydb::Query::ParsedQuery::kAntlrAst: return EStage::AntlrAst;
         case Ydb::Query::ParsedQuery::kYqlAst: return EStage::YqlAst;
         case Ydb::Query::ParsedQuery::kKqlQueryList: return EStage::KqlQueryList;
         case Ydb::Query::ParsedQuery::STAGE_NOT_SET:
@@ -80,7 +80,7 @@ TString Prepare(EStage stage, const TString& text, const TRequest& envelope, con
             request.mutable_query_content()->set_text(text);
             break;
         case EStage::AntlrAst:
-            ExportGrammar(text, envelope, engine, *request.mutable_parsed_query()->mutable_main_antlr_ast());
+            ExportGrammar(text, envelope, engine, *request.mutable_parsed_query()->mutable_antlr_ast());
             break;
         case EStage::YqlAst: {
             const auto ast = TranslateText(text, envelope, engine);
@@ -97,7 +97,7 @@ TString Prepare(EStage stage, const TString& text, const TRequest& envelope, con
 
 NYql::TAstParseResult ToAst(const TRequest& request, EStage stage, const TEngine& engine) {
     switch (stage) {
-        case EStage::AntlrAst: return TranslateGrammar(request.parsed_query().main_antlr_ast(), request, engine);
+        case EStage::AntlrAst: return TranslateGrammar(request.parsed_query().antlr_ast(), request, engine);
         case EStage::YqlAst: return ImportAst(request.parsed_query().yql_ast());
         default: ythrow yexception() << "Expected a syntax input";
     }
@@ -133,7 +133,7 @@ TLogicalResult Verify(const TVector<TInput>& inputs, const TEngine& engine) {
         Y_ENSURE(!ordered[index], "Duplicate benchmark stage: " << StageNames[index]);
         ordered[index] = &input;
     }
-    Y_ENSURE(ordered[0] && ordered[1] && ordered[2], "Provide text, main_antlr_ast and yql_ast requests");
+    Y_ENSURE(ordered[0] && ordered[1] && ordered[2], "Provide text, antlr_ast and yql_ast requests");
     TRequest envelope;
     DecodeRequest(ordered[0]->Bytes, envelope);
     const TString sql = envelope.query_content().text();
@@ -154,9 +154,9 @@ TLogicalResult Verify(const TVector<TInput>& inputs, const TEngine& engine) {
         actualEnvelope.clear_query();
         Y_ENSURE(equals(envelope, actualEnvelope), "Request envelope differs for " << name);
         if (stage == EStage::AntlrAst) {
-            Ydb::Query::MainSqlV1ParserAst expectedGrammar;
+            Ydb::Query::SqlV1ParserAst expectedGrammar;
             ExportGrammar(sql, envelope, engine, expectedGrammar);
-            Y_ENSURE(equals(expectedGrammar, request.parsed_query().main_antlr_ast()), "Grammar AST or tokens differ for " << name);
+            Y_ENSURE(equals(expectedGrammar, request.parsed_query().antlr_ast()), "Grammar AST or tokens differ for " << name);
         } else if (stage == EStage::YqlAst) {
             Y_ENSURE(equals(referenceAst, request.parsed_query().yql_ast()), "Translated YQL AST differs for " << name);
         }

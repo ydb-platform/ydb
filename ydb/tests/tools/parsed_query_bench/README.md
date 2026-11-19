@@ -5,7 +5,7 @@ This offline tool measures the upstream KQP SQL frontend with YqlSelect forced f
 | Input | Client constructs | Server consumes |
 | --- | --- | --- |
 | `text` | Public YQL v1 QueryContent | PrepareGenericQuery receives the original SQL and runs the host SQL translator |
-| `main_antlr_ast` | Generated TSQLv1ParserAST and complete TParsedTokenList | SqlASTToYql translates the grammar tree with its original tokens |
+| `antlr_ast` | Generated TSQLv1ParserAST and complete numeric token stream | SqlASTToYql translates the grammar tree with its original tokens |
 | `yql_ast` | Translated TAstNode tree | Import restores atom bytes, flags, source positions and ordered children in a memory pool |
 
 The optional fourth stage, `kql_query_list`, carries the expression DAG produced by BuildKqlQuery. The receiver reconstructs shared children and lambda arguments, checks table and parameter bindings, and enters the runner with the restored query list. Add `kql.pb` after the three filenames on export and include it in server measurements. Add `kql_query_list` to the stage names for client timing.
@@ -13,13 +13,13 @@ The optional fourth stage, `kql_query_list`, carries the expression DAG produced
 ```text
 Decode ExecuteQueryRequest
   text           → PrepareGenericQuery(SQL) → SQL translator ──┐
-  main_antlr_ast → SqlASTToYql(grammar tree, tokens) ──────────┤
+  antlr_ast      → SqlASTToYql(grammar tree, tokens) ──────────┤
   yql_ast        → restore translated TAstNode ─────────────────┴→ CompileExpr → host preparation → BuildKqlQuery ─┐
   kql_query_list → restore the expression DAG and bind its tables and parameters ────────────────────────────────┴→ TKqlQueryList
 TKqlQueryList → new RBO pipeline → PlanConverter::ConvertRoot → ComputeParents → stop before if (Roots.size() > 1)
 ```
 
-The grammar input stores main's native token names, contents and positions, including comments, whitespace and EOF. The importer reconstructs the SQL source from token contents and applies leading directives. The parser fingerprint covers the SQL grammar, lexer build definitions and generated protobuf schema. The NewParser benchmark packages the grammar tree with the token fields needed by its own CST importer. Compare request sizes using the serialized files for each implementation.
+The shared grammar input carries the generated AST, lexer mode, leading directives and the complete numeric token stream, including comments, whitespace and EOF. Main converts tokens to the names expected by `SqlASTToYql` and reconstructs the SQL source for translation settings. NewParser restores its parser tree from the same wire. The common producer fingerprint covers the SQL grammar, lexer build definitions, parser generation templates and generated protobuf schema.
 
 `--verify TEXT.pb` compiles a public SQL text request through the stock host and prints its ordered result schema at the RBO boundary.
 
@@ -34,7 +34,7 @@ set -- "$dir/text.pb" "$dir/grammar.pb" "$dir/yql.pb" "$dir/kql.pb"
 "$bench" --export "$dir/query.sql" "$@"
 "$bench" --verify "$@"
 "$bench" --bench 30 300 "$@" > "$dir/server.csv"
-"$bench" --client 30 300 "$dir/query.sql" text main_antlr_ast yql_ast kql_query_list > "$dir/client.csv"
+"$bench" --client 30 300 "$dir/query.sql" text antlr_ast yql_ast kql_query_list > "$dir/client.csv"
 ```
 
 Omit `--catalog` for table-free queries. For table reads, use the NewParser benchmark's offline JSON catalog to provide the same table names, column types, primary keys, nullability and path prefix to both frontends. A template is a binary public ExecuteQueryRequest. Export retains its session, execution options, transaction control and typed parameters and replaces query content. Without a template, export creates an execute-mode request.

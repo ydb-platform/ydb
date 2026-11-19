@@ -9,7 +9,7 @@ from ydb.public.api.protos import ydb_query_pb2, ydb_value_pb2
 
 
 TOOL = "ydb/tests/tools/parsed_query_bench/parsed_query_legacy_bench"
-STAGES = ("text", "main_antlr_ast", "yql_ast")
+STAGES = ("text", "antlr_ast", "yql_ast")
 
 
 def test_table_and_parameters(tmp_path):
@@ -152,8 +152,9 @@ def test_strict_dispatch(tmp_path):
         (b"", "Missing or unknown parsed query stage"),
         (old_sql, "Missing or unknown parsed query stage"),
         (field(11, b""), "Missing or unknown parsed query stage"),
-        (field(2, b""), "Parsed query stage is unsupported on main"),
-        (field(8, b""), "Grammar schema fingerprint mismatch or missing AST"),
+        (field(3, b""), "Parsed query stage is unsupported on main"),
+        (field(8, b""), "Missing or unknown parsed query stage"),
+        (field(2, b""), "Invalid ANTLR AST envelope"),
         (field(6, b"\x08\x02"), "Unsupported or empty YQL AST"),
         (field(6, b"\x08\x01" + field(2, b"")), "Missing YQL node kind"),
         (field(7, b""), "Unsupported KQL graph version"),
@@ -172,3 +173,13 @@ def test_strict_dispatch(tmp_path):
     control.exec_mode = ydb_query_pb2.EXEC_MODE_EXPLAIN
     rejected(control.SerializeToString() + field(5, old_sql), "Expected execute mode")
     rejected(b"\xff" + envelope, "Invalid protobuf request")
+
+
+def test_shared_antlr_ast_ansi(tmp_path):
+    tool = yatest.common.binary_path(TOOL)
+    sql = tmp_path / "query.sql"
+    sql.write_text("--!syntax_v1\n--!ansi_lexer\n/* ordinary comment */ SELECT 'Привет' AS key;\n", encoding="utf-8")
+    inputs = [tmp_path / (stage + ".pb") for stage in STAGES]
+    subprocess.run([tool, "--export", sql, *inputs], check=True)
+    output = subprocess.check_output([tool, "--check-request", inputs[1]], text=True)
+    assert "BENCH_ROUTE=antlr_ast" in output.splitlines()

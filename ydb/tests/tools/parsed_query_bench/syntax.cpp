@@ -6,6 +6,10 @@
 #include <ydb/tests/tools/parsed_query_bench/grammar_fingerprint.h>
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/parser/common/antlr4/error_listener.h>
+#include <yql/essentials/parser/common/issue.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
@@ -16,12 +20,20 @@
 
 #include <google/protobuf/arena.h>
 
+#include <util/charset/utf8.h>
 #include <util/generic/yexception.h>
+
+#include <algorithm>
 
 namespace NKikimr::NKqp::NParsedQueryBench {
 namespace {
 
 using namespace Ydb::Query;
+
+using TDefaultLexer = NALPDefaultAntlr4::SQLv1Antlr4Lexer;
+using TAnsiLexer = NALPAnsiAntlr4::SQLv1Antlr4Lexer;
+constexpr size_t MaxGrammarSourceBytes = 1 << 20;
+constexpr int MaxGrammarTokens = 100'000;
 
 TKqpTranslationSettingsBuilder SettingsBuilder(const TString& sql, const TRequest& envelope, const TEngine& engine) {
     const auto& config = engine.TranslationConfig();
@@ -45,6 +57,7 @@ struct TGrammarContext {
     NSQLTranslationV1::TLexers Lexers;
     NSQLTranslationV1::TParsers Parsers;
     NSQLTranslation::TTranslationSettings Settings;
+    NSQLTranslation::TParsedSettings Directives;
     google::protobuf::Arena Arena;
     NYql::TIssues Issues;
 
@@ -57,19 +70,103 @@ struct TGrammarContext {
         NYql::TExprContext ctx;
         Settings = builder.Build(ctx);
         Settings.Arena = &Arena;
-        Y_ENSURE(NSQLTranslation::ParseTranslationSettings(sql, Settings, Issues), Issues.ToString());
+        Y_ENSURE(NSQLTranslation::ParseTranslationSettingsFromComments(sql, Directives, Issues)
+            && Directives.ApplyTo(Settings, Issues), Issues.ToString());
         Y_ENSURE(Settings.SyntaxVersion == 1 && !Settings.PgParser && !Settings.Syntax,
             "Expected YQL v1 translation settings");
     }
 };
 
-TString RecoverSource(const MainSqlV1ParserAst& input) {
-    Y_ENSURE(!input.tokens().empty(), "Missing grammar token stream");
-    TString sql;
-    for (int i = 0; i + 1 < input.tokens_size(); ++i) {
-        sql += input.tokens(i).content();
+bool IsHint(TStringBuf text) {
+    return text.StartsWith("/*+") || text.StartsWith("--+");
+}
+
+void CheckSource(TStringBuf sql) {
+    Y_ENSURE(sql.size() <= MaxGrammarSourceBytes && !sql.StartsWith("\xef\xbb\xbf")
+        && sql.find('\0') == TStringBuf::npos, "Unsupported ANTLR AST source");
+}
+
+template <class TLexer>
+void ExportTokens(const TString& sql, TGrammarContext& grammar, SqlV1ParserAst& output) {
+    const auto& settings = grammar.Settings;
+    NSQLTranslation::TErrorCollectorOverIssues collector(grammar.Issues, settings.MaxErrors, settings.File);
+    bool lexerError = false;
+    antlr4::YqlErrorListener listener(&collector, &lexerError);
+    antlr4::ANTLRInputStream source(sql);
+    TLexer lexer(&source);
+    lexer.removeErrorListeners();
+    lexer.addErrorListener(&listener);
+    TString recovered;
+    for (;;) {
+        const auto token = lexer.nextToken();
+        const bool eof = token->getType() == TLexer::EOF;
+        Y_ENSURE(output.tokens_size() < MaxGrammarTokens, "ANTLR AST token limit exceeded");
+        auto& item = *output.add_tokens();
+        item.set_type(eof ? -1 : static_cast<int>(token->getType()));
+        item.set_text(token->getText());
+        item.set_channel(token->getChannel());
+        item.set_line(token->getLine());
+        item.set_column(token->getCharPositionInLine());
+        item.set_begin(token->getStartIndex());
+        item.set_end(eof ? token->getStartIndex() : token->getStopIndex() + 1);
+        Y_ENSURE(item.channel() == antlr4::Token::DEFAULT_CHANNEL || !IsHint(item.text()),
+            "ANTLR AST query hints are unsupported");
+        if (eof) {
+            break;
+        }
+        recovered += item.text();
     }
-    return sql;
+    Y_ENSURE(!lexerError, grammar.Issues.ToString());
+    Y_ENSURE(recovered == sql, "Token stream cannot reproduce the original SQL");
+}
+
+struct TGrammarInput {
+    TString Sql;
+    NSQLTranslation::TParsedTokenList Tokens;
+};
+
+template <class TLexer>
+TGrammarInput ImportTokens(const SqlV1ParserAst& input) {
+    static const TLexer lexer(nullptr);
+    TGrammarInput result;
+    result.Tokens.reserve(input.tokens_size());
+    size_t offset = 0;
+    size_t line = 1;
+    size_t column = 0;
+    for (int i = 0; i != input.tokens_size(); ++i) {
+        const auto& token = input.tokens(i);
+        const bool eof = i + 1 == input.tokens_size();
+        const auto type = eof ? TLexer::EOF : static_cast<size_t>(token.type());
+        const TStringBuf text(token.text());
+        Y_ENSURE(eof ? token.type() == -1 && text == "<EOF>"
+                : token.type() > 0 && type <= lexer.getATN().maxTokenType && !text.empty(),
+            "Invalid ANTLR AST token type or EOF");
+        const bool hidden = type == TLexer::TOKEN_WS || type == TLexer::TOKEN_COMMENT;
+        Y_ENSURE(token.channel() == (hidden ? antlr4::Token::HIDDEN_CHANNEL : antlr4::Token::DEFAULT_CHANNEL),
+            "Invalid ANTLR AST token channel");
+        Y_ENSURE(!hidden || !IsHint(text), "ANTLR AST query hints are unsupported");
+        Y_ENSURE(token.begin() == offset && token.line() == line && token.column() == column,
+            "Invalid ANTLR AST token position");
+        if (!eof) {
+            Y_ENSURE(text.size() <= MaxGrammarSourceBytes - result.Sql.size(), "ANTLR AST source byte limit exceeded");
+            result.Sql += text;
+            const size_t length = GetNumberOfUTF8Chars(text);
+            offset += length;
+            const size_t lastNewline = text.rfind('\n');
+            if (lastNewline == TStringBuf::npos) {
+                column += length;
+            } else {
+                line += std::count(text.begin(), text.end(), '\n');
+                column = GetNumberOfUTF8Chars(text.substr(lastNewline + 1));
+            }
+        }
+        Y_ENSURE(token.end() == offset, "Invalid ANTLR AST token end");
+        const auto name = lexer.getVocabulary().getSymbolicName(type);
+        result.Tokens.push_back({name.empty() ? TString(NAST::INVALID_TOKEN_NAME) : TString(name),
+            TString(text), token.line(), token.column()});
+    }
+    CheckSource(result.Sql);
+    return result;
 }
 
 void ExportNode(const NYql::TAstNode& node, YqlAst::Node& output) {
@@ -119,28 +216,40 @@ NYql::TAstParseResult TranslateText(const TString& sql, const TRequest& envelope
     return result;
 }
 
-void ExportGrammar(const TString& sql, const TRequest& envelope, const TEngine& engine, MainSqlV1ParserAst& output) {
+void ExportGrammar(const TString& sql, const TRequest& envelope, const TEngine& engine, SqlV1ParserAst& output) {
+    CheckSource(sql);
     TGrammarContext grammar(sql, envelope, engine);
     const auto& settings = grammar.Settings;
     const auto* ast = NSQLTranslationV1::SqlAST(grammar.Parsers, sql, settings.File, grammar.Issues,
         settings.MaxErrors, settings.AnsiLexer, &grammar.Arena);
     Y_ENSURE(ast, grammar.Issues.ToString());
+    output.set_format_version(1);
     output.mutable_ast()->CopyFrom(*ast);
-    output.set_grammar_fingerprint(GrammarFingerprint, sizeof(GrammarFingerprint) - 1);
+    auto& metadata = *output.mutable_metadata();
+    metadata.set_grammar_fingerprint(GrammarFingerprint, sizeof(GrammarFingerprint) - 1);
+    metadata.set_source_name(settings.File);
+    metadata.set_lexer_mode(settings.AnsiLexer ? YqlParserMetadata::ANSI : YqlParserMetadata::DEFAULT);
+    metadata.mutable_directives()->set_explicit_syntax_v1(grammar.Directives.HasSyntaxV1);
+    metadata.mutable_directives()->set_explicit_ansi_lexer(grammar.Directives.HasAnsiLexer);
 
-    auto lexer = NSQLTranslationV1::MakeLexer(grammar.Lexers, settings.AnsiLexer);
-    Y_ENSURE(lexer->Tokenize(sql, settings.File, [&](NSQLTranslation::TParsedToken&& token) {
-        auto* item = output.add_tokens();
-        item->set_name(std::move(token.Name));
-        item->set_content(std::move(token.Content));
-        item->set_line(token.Line);
-        item->set_column(token.LinePos);
-    }, grammar.Issues, settings.MaxErrors), grammar.Issues.ToString());
-    Y_ENSURE(RecoverSource(output) == sql, "Token stream cannot reproduce the original SQL");
+    if (settings.AnsiLexer) {
+        ExportTokens<TAnsiLexer>(sql, grammar, output);
+    } else {
+        ExportTokens<TDefaultLexer>(sql, grammar, output);
+    }
 }
 
-NYql::TAstParseResult TranslateGrammar(const MainSqlV1ParserAst& input, const TRequest& envelope, const TEngine& engine) {
-    Y_ENSURE(input.has_ast() && input.grammar_fingerprint() == TStringBuf(GrammarFingerprint, sizeof(GrammarFingerprint) - 1), "Grammar schema fingerprint mismatch or missing AST");
+NYql::TAstParseResult TranslateGrammar(const SqlV1ParserAst& input, const TRequest& envelope, const TEngine& engine) {
+    Y_ENSURE(input.format_version() == 1 && input.has_ast() && input.has_metadata(), "Invalid ANTLR AST envelope");
+    const auto& metadata = input.metadata();
+    Y_ENSURE(metadata.grammar_fingerprint() == TStringBuf(GrammarFingerprint, sizeof(GrammarFingerprint) - 1),
+        "Grammar schema fingerprint mismatch");
+    Y_ENSURE(metadata.lexer_mode() == YqlParserMetadata::DEFAULT || metadata.lexer_mode() == YqlParserMetadata::ANSI,
+        "Unsupported ANTLR AST lexer mode");
+    const bool ansi = metadata.lexer_mode() == YqlParserMetadata::ANSI;
+    Y_ENSURE(metadata.hints().empty() && metadata.source_name().size() <= 4096, "Unsupported ANTLR AST metadata");
+    Y_ENSURE(input.tokens_size() > 0 && input.tokens_size() <= MaxGrammarTokens, "Invalid ANTLR AST token count");
+
     using namespace NSQLv1Generated;
     const auto& query = input.ast().GetRule_sql_query();
     Y_ENSURE(query.GetAltCase() != TRule_sql_query::ALT_NOT_SET, "Missing SQL query alternative");
@@ -151,13 +260,14 @@ NYql::TAstParseResult TranslateGrammar(const MainSqlV1ParserAst& input, const TR
             (statement->GetAltCase() != TRule_sql_stmt_core::kAltSqlStmtCore2 || description == "select_stmt"),
             "Invalid SQL statement description");
     }
-    const auto sql = RecoverSource(input);
+
+    auto [sql, tokens] = ansi ? ImportTokens<TAnsiLexer>(input) : ImportTokens<TDefaultLexer>(input);
     TGrammarContext grammar(sql, envelope, engine);
-    NSQLTranslation::TParsedTokenList tokens;
-    tokens.reserve(input.tokens_size());
-    for (const auto& token : input.tokens()) {
-        tokens.push_back({token.name(), token.content(), token.line(), token.column()});
-    }
+    Y_ENSURE(grammar.Directives.HasSyntaxV1 == metadata.directives().explicit_syntax_v1()
+        && grammar.Directives.HasAnsiLexer == metadata.directives().explicit_ansi_lexer()
+        && (!grammar.Directives.HasAnsiLexer || ansi), "Inconsistent ANTLR AST directives");
+    grammar.Settings.AnsiLexer = ansi;
+    grammar.Settings.File = metadata.source_name();
     auto result = NSQLTranslationV1::SqlASTToYql(grammar.Lexers, grammar.Parsers, sql, input.ast(), tokens, grammar.Settings);
     Y_ENSURE(result.IsOk(), result.Issues.ToString());
     return result;

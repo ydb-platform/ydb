@@ -93,6 +93,14 @@ void CompareResults(const std::vector<NYdb::TResultSet>& expected,
     UNIT_ASSERT_VALUES_EQUAL_C(actual.size(), expected.size(), context);
     for (size_t index = 0; index < actual.size(); ++index) {
         const TString resultContext = context + ": result set " + ToString(index);
+        if (actual[index].GetColumnsMeta() != expected[index].GetColumnsMeta()) {
+            for (const auto& column : expected[index].GetColumnsMeta()) {
+                Cerr << "Expected column: " << column.Name << ": " << column.Type.ToString() << Endl;
+            }
+            for (const auto& column : actual[index].GetColumnsMeta()) {
+                Cerr << "Actual column: " << column.Name << ": " << column.Type.ToString() << Endl;
+            }
+        }
         UNIT_ASSERT_C(actual[index].GetColumnsMeta() == expected[index].GetColumnsMeta(),
             resultContext << ": column names or types differ");
         CompareYson(NYdb::FormatResultSetYson(expected[index]), NYdb::FormatResultSetYson(actual[index]), resultContext);
@@ -133,7 +141,10 @@ void RunAnalyzedBenchmark(const TString& name, NYqlTests::EBenchType type, ui32 
                 const TString executionContext = context + " (" + optimizer + ")";
                 Cerr << "Executing " << executionContext << Endl;
                 database.SetEnableNewRbo(enableNewRbo);
+                // Compare columns positionally only with an explicit order: without
+                // this pragma SELECT * column order is undefined on this release.
                 const TString query = R"(
+                    PRAGMA OrderedColumns;
                     $to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
                     $to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };
                     $round = ($x,$y) -> {return $x;};

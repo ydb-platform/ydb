@@ -2705,6 +2705,13 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
+    if (req.HasCmdSetClientOffset()
+        && IsConsumerOffsetCommitDisabled(req.GetCmdSetClientOffset().GetClientId(), ctx)) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                   "Commits for consumer are disabled");
+        return;
+    }
+
     if (IsTopicMutateDisabled(ctx)
         && req.HasCmdSetClientOffset())
     {
@@ -2714,13 +2721,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
                        "Topic mutations are temporarily disabled");
             return;
         }
-    }
-
-    if (req.HasCmdSetClientOffset()
-        && IsConsumerOffsetCommitDisabled(req.GetCmdSetClientOffset().GetClientId(), ctx)) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-                   "Commits for consumer are disabled");
-        return;
     }
 
     if (req.HasWriteId()) {

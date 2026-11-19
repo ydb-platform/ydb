@@ -714,7 +714,7 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         const ui16 monPort = ports.GetPort();
         auto settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
         settings.InitKikimrRunConfig().SetMonitoringPortOffset(monPort, true);
-        TTopicReplicationEnv env(settings);
+        TTopicReplicationEnv env(false, settings);
         const TString source = "/Root/replication_source";
         const TString destination = "/Root/replication_destination";
         env.Create(source, true);

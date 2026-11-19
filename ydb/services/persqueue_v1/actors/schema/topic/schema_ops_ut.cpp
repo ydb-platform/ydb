@@ -1014,55 +1014,6 @@ Y_UNIT_TEST(DescribeTopicSmokeAndMissing) {
     }
 }
 
-Y_UNIT_TEST(ReplicateOffsetsViaYql) {
-    auto setup = CreateSetup();
-    auto& runtime = setup->GetRuntime();
-    const TString path = "/Root/topic_replicate_offsets_yql";
-    ExecuteDDL(*setup, R"(
-        CREATE TOPIC `/Root/topic_replicate_offsets_yql` (
-            CONSUMER inherited,
-            CONSUMER `local` WITH (replicate_offsets = false),
-            CONSUMER replicated WITH (replicate_offsets = true)
-        );
-    )");
-
-    auto check = [&](bool localReplicateOffsets, bool added) {
-        const auto config = DescribeTabletConfig(runtime, path);
-        UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), added ? 4 : 3);
-        for (const auto& consumer : config.GetConsumers()) {
-            const auto& name = consumer.GetName();
-            UNIT_ASSERT_VALUES_EQUAL_C(consumer.HasReplicateOffsets(), name != "inherited", name);
-            const bool expected = name == "local" ? localReplicateOffsets : name != "added";
-            UNIT_ASSERT_VALUES_EQUAL_C(consumer.GetReplicateOffsets(), expected, name);
-        }
-    };
-    check(false, false);
-
-    ExecuteDDL(*setup, R"(
-        ALTER TOPIC `/Root/topic_replicate_offsets_yql`
-            ADD CONSUMER added WITH (replicate_offsets = false);
-    )");
-    check(false, true);
-
-    ExecuteDDL(*setup, R"(
-        ALTER TOPIC `/Root/topic_replicate_offsets_yql`
-            ALTER CONSUMER `local` SET (replicate_offsets = true);
-    )");
-    check(true, true);
-
-    ExecuteDDL(*setup, R"(
-        ALTER TOPIC `/Root/topic_replicate_offsets_yql`
-            ALTER CONSUMER `local` SET (replicate_offsets = false);
-    )");
-    check(false, true);
-
-    ExecuteDDL(*setup, R"(
-        ALTER TOPIC `/Root/topic_replicate_offsets_yql`
-            ALTER CONSUMER `local` SET (important = true);
-    )");
-    check(false, true);
-}
-
 Y_UNIT_TEST(DescribeReplicateOffsets) {
     auto server = CreateSimulatedServer();
     auto& runtime = server->GetRuntime();

@@ -83,7 +83,6 @@ Ydb::Topic::CreateTopicRequest BuildTopicMirrorRequest(const NYdb::NTopic::TTopi
 {
     Ydb::Topic::CreateTopicRequest request;
     description.SerializeTo(request);
-    request.mutable_partitioning_settings()->set_min_active_partitions(description.GetPartitions().size());
 
     const auto& source = NYdb::TProtoAccessor::GetProto(description);
     request.set_partition_total_read_speed_bytes_per_second(source.partition_total_read_speed_bytes_per_second());

@@ -120,6 +120,10 @@ class WorkloadManagerBase(LoadSuiteBase):
         pass
 
     @classmethod
+    def before_stop_checking(cls):
+        pass
+
+    @classmethod
     def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
         pass
 
@@ -155,12 +159,11 @@ class WorkloadManagerBase(LoadSuiteBase):
                         pass
             else:
                 results = {}
-            self.stop_checking.set()
-            check_thread.join()
-            self.after_workload(overall_result)
+            self.before_stop_checking()
         finally:
             self.stop_checking.set()
             check_thread.join()
+        self.after_workload(overall_result)
         if len(results) > 0:
             overall_result.merge(*results.values())
         overall_result.iterations.clear()
@@ -433,6 +436,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
     threads = 1
     tpcc_warehouses: int = 4500
     tpcc_threads: int = 0
+    tpcc_warmup: float = 0
     verify_data: bool = False
     _tpcc_executions: list[tuple[str, re.LongRemoteExecution]] = []
     _tpcc_thread: Thread = None
@@ -461,7 +465,8 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
             path=cls.get_tpcc_path(),
             warehouses=cls.tpcc_warehouses,
             users=[user],
-            threads=cls.tpcc_threads
+            threads=cls.tpcc_threads,
+            warmup=cls.tpcc_warmup,
         )
         cls._tpcc_thread = Thread(target=cls._tpcc_thread_func)
         cls._tpcc_thread.start()
@@ -511,10 +516,11 @@ class TestWorkloadManagerOltp100(WorkloadManagerOltp):
         cls.run_tpcc(cls.timeout, user=f'testuser{cls.tpcc_pool_perc}')
 
     @classmethod
-    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def before_stop_checking(cls):
+        # Keep signal checks and scheduler metrics active until TPC-C finishes.
         if cls._tpcc_thread is not None:
             cls.wait_tpcc()
-        super().after_workload(result)
+        super().before_stop_checking()
 
     @classmethod
     def benchmark_setup(cls) -> None:

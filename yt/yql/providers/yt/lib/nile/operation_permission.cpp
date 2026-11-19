@@ -7,7 +7,7 @@
 namespace NYql {
 
     TMaybe<THashSet<TString>> BuildNileOperationPermissions(const TGatewaysConfig* config, TStringBuf userName, const TMaybe<TString>& attributes) {
-        if (!config || !config->HasNile() || !attributes || attributes->empty() || !NYT::NodeFromYsonString(*attributes).HasKey("nile_job_uuid")) {
+        if (!config || !config->HasNile() || !attributes || attributes->empty() || !NYT::NodeFromYsonString(*attributes).HasKey("yql_nile_job_uuid")) {
             return Nothing();
         }
 

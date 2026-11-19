@@ -1,3 +1,4 @@
+import "ydb/core/protos/base.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/core/protos/blockstore_config.proto";
@@ -443,6 +444,8 @@ message TTableDescription {
 
     // Local graph of the logical index owning this physical posting table.
     optional TLocalHnswIndexDescription LocalHnswIndex = 56;
+    // DataShard-only capture evidence for a private backup copy
+    optional NKikimrProto.TRowVersion TableChecksumSnapshot = 57;
 }
 
 message TCompressionOptions {
@@ -1620,6 +1623,18 @@ message TBackupTask {
     }
 
     optional TEncryptionSettings EncryptionSettings = 19;
+    message TTableChecksum {
+        optional string Database = 1;
+        optional string TablePath = 2;
+        optional uint32 Version = 3;
+        optional uint64 Count = 4;
+        optional string Hash = 5;
+        optional string ErrorCode = 6;
+        optional string ErrorMessage = 7;
+        optional bytes SourceSchemaHash = 8; // Frozen source column identities and types
+        optional string Algorithm = 9;
+    }
+    optional TTableChecksum TableChecksum = 22;
 }
 
 message TRestoreTask {
@@ -1644,6 +1659,7 @@ message TRestoreTask {
     }
 
     optional TEncryptionSettings EncryptionSettings = 8;
+    optional uint64 TableChecksumImportId = 10;
 }
 
 message TPersQueueGroupAllocate {

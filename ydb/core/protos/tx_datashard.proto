@@ -536,6 +536,7 @@ message TSnapshotTransferReadSet {
     optional uint64 MvccImmediateWriteEdgeTxId = 11;
     optional bool WithOpenTxs = 12;
     optional TMvccRemovedRowVersions RemovedRowVersions = 13;
+    optional bool SupportsTableChecksumSnapshots = 14;
 }
 
 message TSnapshotTransferInfo {
@@ -546,12 +547,15 @@ message TReceiveSnapshot {
     optional uint64 TableId_Deprecated = 1;
     repeated TSnapshotTransferInfo ReceiveFrom = 2;
     optional NKikimrDataEvents.TTableId TableId = 3;
+    optional uint64 TableChecksumExportId = 4;
 }
 
 message TSendSnapshot {
     optional uint64 TableId_Deprecated = 1;
     repeated TSnapshotTransferInfo SendTo = 2;
     optional NKikimrDataEvents.TTableId TableId = 3;
+    optional uint64 TableChecksumExportId = 4;
+    optional bool ReleaseTableChecksumSnapshotOnCompletion = 5;
 }
 
 message TSchemeOpSeqNo {
@@ -719,6 +723,7 @@ message TFlatSchemeTransaction {
     optional TTruncateTable TruncateTable = 25;
 
     optional TPrepareIndexValidation PrepareIndexValidation = 26;
+    optional uint64 TableChecksumExportId = 27; // Parent export for backup copy pin cleanup
 }
 
 message TDistributedEraseTransaction {
@@ -1549,6 +1554,8 @@ message TEvRefreshVolatileSnapshotResponse {
     optional uint64 TxId = 5;
     optional EStatus Status = 6;
     repeated uint64 TransferredToShards = 7;
+    optional bool SupportsTableChecksumSnapshots = 8;
+    optional NKikimrProto.TRowVersion TableChecksumSnapshot = 9;
 }
 
 message TEvDiscardVolatileSnapshotRequest {

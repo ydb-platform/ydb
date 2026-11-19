@@ -496,4 +496,6 @@ message TFeatureFlags {
     // write quota.
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
     optional bool EnableColumnShardStats = 395 [default = false];
+    // Logical table checksums for server-side S3 and FS export/import
+    optional bool EnableBackupTableChecksum = 396 [default = false];
 }

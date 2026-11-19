@@ -1,4 +1,5 @@
 #include "metadata.h"
+#include <util/string/builder.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -12,6 +13,165 @@ Y_UNIT_TEST_SUITE(BackupMetadataTest) {
         UNIT_ASSERT(TMetadata::Deserialize(R"({"version": 1})").GetSourceDatabase().empty());
         metadata.SetSourceDatabase("/Root/tenant/database");
         UNIT_ASSERT_VALUES_EQUAL(TMetadata::Deserialize(metadata.Serialize()).GetSourceDatabase(), "/Root/tenant/database");
+    }
+}
+
+Y_UNIT_TEST_SUITE(TableChecksumMetadataTest) {
+    Y_UNIT_TEST(RoundTrip) {
+        const TTableChecksum checksum{ .Count = Max<ui64>(), .Hash = TString(16, 'F'), .Algorithm = "CityHash64" };
+        TMetadata metadata;
+        metadata.SetRateLimiterResources(
+            { { .ExportPrefix = "rate_limiter_resources/001", .ResourcePath = "resource" } });
+        metadata.SetSemaphores({ { .ExportPrefix = "semaphores/001", .Name = "semaphore" } });
+        const auto encoded = TMetadata::WithTableChecksum(metadata.Serialize(), checksum);
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(encoded, &json));
+        UNIT_ASSERT(json.Has("table_checksum"));
+        UNIT_ASSERT_VALUES_EQUAL(json["table_checksum"]["version"].GetUInteger(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["table_checksum"]["algorithm"].GetStringSafe(), "CityHash64");
+        const auto decoded = TMetadata::Deserialize(encoded, true);
+        UNIT_ASSERT(decoded.GetTableChecksum());
+        UNIT_ASSERT(*decoded.GetTableChecksum() == checksum);
+        const auto roundTrip = TMetadata::Deserialize(decoded.Serialize(), true);
+        UNIT_ASSERT(roundTrip.GetTableChecksum() == decoded.GetTableChecksum());
+        UNIT_ASSERT(roundTrip.GetRateLimiterResources().has_value());
+        UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetRateLimiterResources()->front().ResourcePath, "resource");
+        UNIT_ASSERT(roundTrip.GetSemaphores().has_value());
+        UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSemaphores()->front().Name, "semaphore");
+        UNIT_ASSERT(!TMetadata::Deserialize(encoded).GetTableChecksum());
+    }
+
+    Y_UNIT_TEST(ChecksumErrorRoundTrip) {
+        const TTableChecksum checksum{ .Error = TTableChecksum::TError{ .Code = "SOURCE_SCHEMA_CHANGED",
+                                           .Message = "Source schema changed after the backup copy was created" } };
+        const auto encoded = TMetadata::WithTableChecksum(R"({"version":1})", checksum);
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(encoded, &json));
+        UNIT_ASSERT(!json["table_checksum"].Has("count"));
+        UNIT_ASSERT(!json["table_checksum"].Has("hash"));
+        const auto decoded = TMetadata::Deserialize(encoded, true);
+        UNIT_ASSERT(decoded.GetTableChecksum().has_value());
+        UNIT_ASSERT(*decoded.GetTableChecksum() == checksum);
+        UNIT_ASSERT(TMetadata::Deserialize(decoded.Serialize(), true).GetTableChecksum() == decoded.GetTableChecksum());
+        UNIT_ASSERT(!TMetadata::Deserialize(encoded).GetTableChecksum().has_value());
+        UNIT_ASSERT_STRING_CONTAINS(checksum.ToString(), "SOURCE_SCHEMA_CHANGED");
+    }
+
+    Y_UNIT_TEST(WideHashRoundTrip) {
+        const TTableChecksum checksums[] = {
+            { .Count = 1, .Hash = TString(32, 'F'), .Algorithm = "CityHash128" },
+            { .Count = 1, .Hash = TString(64, 'F'), .Algorithm = "Sha256" },
+        };
+        for (const auto& checksum : checksums) {
+            const auto json = TMetadata::WithTableChecksum(R"({"version":1})", checksum);
+            const auto decoded = TMetadata::Deserialize(json, true);
+            UNIT_ASSERT(decoded.GetTableChecksum().has_value());
+            UNIT_ASSERT(*decoded.GetTableChecksum() == checksum);
+            UNIT_ASSERT(
+                TMetadata::Deserialize(decoded.Serialize(), true).GetTableChecksum() == decoded.GetTableChecksum());
+        }
+    }
+
+    Y_UNIT_TEST(CanonicalHash) {
+        for (const TString text : { "0000000000000000", "0000000000000011", "00000000000AbCdE" }) {
+            const auto json = TStringBuilder()
+                              << R"({"table_checksum":{"version":1,"algorithm":"CityHash64","count":"1","hash":")"
+                              << text << R"("}})";
+            const auto decoded = TMetadata::Deserialize(json, true);
+            UNIT_ASSERT(decoded.GetTableChecksum().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(decoded.GetTableChecksum()->Hash, to_upper(text));
+            UNIT_ASSERT_VALUES_EQUAL(decoded.GetTableChecksum()->Hash.size(), text.size());
+            const TTableChecksum checksum{ .Count = 1, .Hash = text, .Algorithm = "CityHash64" };
+            const auto saved = TMetadata::WithTableChecksum(R"({"version":1})", checksum);
+            UNIT_ASSERT(TMetadata::Deserialize(saved, true).GetTableChecksum() == decoded.GetTableChecksum());
+        }
+    }
+
+    Y_UNIT_TEST(RejectsInvalidHashes) {
+        for (const TString text : { "-1", "", "+1", "1.5", "1x", "1", "123", "0x12", "gg" }) {
+            const auto json = TStringBuilder()
+                              << R"({"table_checksum":{"version":1,"algorithm":"CityHash64","count":"1","hash":")"
+                              << text << R"("}})";
+            UNIT_ASSERT_EXCEPTION(TMetadata::Deserialize(json, true), yexception);
+        }
+    }
+
+    Y_UNIT_TEST(RejectsMalformedChecksumErrors) {
+        for (const TString error : { "null", R"({})", R"({"code":"x"})", R"({"code":"","message":"message"})",
+                 R"({"code":"x","message":17})" }) {
+            const auto json = TStringBuilder() << R"({"table_checksum":{"version":1,"error":)" << error << "}}";
+            UNIT_ASSERT_EXCEPTION(TMetadata::Deserialize(json, true), yexception);
+        }
+        UNIT_ASSERT_EXCEPTION(
+            TMetadata::Deserialize(
+                R"({"table_checksum":{"version":1,"count":"0","hash":"0","error":{"code":"x","message":"y"}}})", true),
+            yexception);
+    }
+
+    Y_UNIT_TEST(LegacyMetadata) {
+        UNIT_ASSERT(!TMetadata::Deserialize(R"({"version":1})", true).GetTableChecksum());
+    }
+
+    Y_UNIT_TEST(DisabledIgnoresInvalidAndUnknownChecksums) {
+        for (const TString value : { "null", "17", R"({"version":999})", R"({"version":0,"count":"1","hash":"2"})",
+                 R"({"version":2,"count":"1","hash":"2"})", R"({"version":1,"count":"-1","hash":"2"})" }) {
+            const TString json = TStringBuilder() << "{\"table_checksum\":" << value << "}";
+            UNIT_ASSERT(!TMetadata::Deserialize(json).GetTableChecksum());
+        }
+    }
+
+    Y_UNIT_TEST(UnsupportedVersionsAreIgnored) {
+        for (const TString value : { R"({"version":0,"count":"1","hash":"2"})", R"({"version":999})",
+                 R"({"version":2,"future_layout":[1,2,3]})", R"({"version":18446744073709551615})" }) {
+            const TString json = TStringBuilder()
+                                 << R"({"version":1,"permissions":1,"table_checksum":)" << value << "}";
+            const auto metadata = TMetadata::Deserialize(json, true);
+            UNIT_ASSERT(!metadata.GetTableChecksum().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetVersion(), 1);
+            UNIT_ASSERT(metadata.GetEnablePermissions());
+            UNIT_ASSERT(!TMetadata::Deserialize(metadata.Serialize(), true).GetTableChecksum().has_value());
+        }
+    }
+
+    Y_UNIT_TEST(RejectsMalformedChecksums) {
+        for (const TString value : { "null", "17", "{}", R"({"version":"1"})", R"({"version":-1})",
+                 R"({"version":1.5})", R"({"version":1})" }) {
+            const TString json = TStringBuilder() << "{\"table_checksum\":" << value << "}";
+            UNIT_ASSERT_EXCEPTION(TMetadata::Deserialize(json, true), yexception);
+        }
+    }
+
+    Y_UNIT_TEST(RequiresAlgorithmForChecksums) {
+        for (const TString& algorithm : { TString(), TString(",\"algorithm\":null"), TString(",\"algorithm\":17"),
+                 TString(",\"algorithm\":\"\"") }) {
+            const TString json = TStringBuilder()
+                                 << R"({"table_checksum":{"version":1,"count":"1","hash":"0000000000000002")"
+                                 << algorithm << "}}";
+            UNIT_ASSERT_EXCEPTION(TMetadata::Deserialize(json, true), yexception);
+        }
+    }
+
+    Y_UNIT_TEST(RejectsInvalidValues) {
+        for (const TString value : { "-1", "", "18446744073709551616", "+1", "1.5", "1x" }) {
+            const TString json = TStringBuilder()
+                                 << R"({"table_checksum":{"version":1,"algorithm":"CityHash64","count":")" << value
+                                 << R"(","hash":"0000000000000000"}})";
+            UNIT_ASSERT_EXCEPTION(TMetadata::Deserialize(json, true), yexception);
+        }
+    }
+
+    Y_UNIT_TEST(EnrichmentPreservesAllMetadata) {
+        const TString original = R"({"version":1,"full_backups":[{"snapshot_vts":[123,456]}],"extra":"keep"})";
+        const auto json =
+            TMetadata::WithTableChecksum(original, { .Count = 0, .Hash = TString(16, '0'), .Algorithm = "CityHash64" });
+        NJson::TJsonValue value;
+        UNIT_ASSERT(NJson::ReadJsonTree(json, &value));
+        UNIT_ASSERT_VALUES_EQUAL(value["extra"].GetString(), "keep");
+        UNIT_ASSERT_VALUES_EQUAL(value["full_backups"][0]["snapshot_vts"][0].GetUInteger(), 123);
+        const auto metadata = TMetadata::Deserialize(json, true);
+        UNIT_ASSERT(metadata.GetTableChecksum());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetTableChecksum()->Count, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetTableChecksum()->Hash, TString(16, '0'));
     }
 }
 

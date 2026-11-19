@@ -390,7 +390,7 @@ private:
     bool ReadWithoutConsumer;
 
     bool InitDone;
-    bool SessionClosing = false;
+    bool Dead = false;
     bool RangesMode;
 
     ui32 MaxReadMessagesCount;

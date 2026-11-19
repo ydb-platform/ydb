@@ -4,8 +4,8 @@
 #include "dsproxy_blackboard.h"
 #include "dsproxy_mon.h"
 #include "request_history.h"
-#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/erasure/erasure.h>
 #include <util/generic/set.h>
 
 namespace NKikimr {
@@ -235,7 +235,7 @@ public:
             if (replyStatus == NKikimrProto::OK) {
                 // TODO(cthulhu): Verify shift and response size, and cookie
                 DSP_LOG_DEBUG_SX(logCtx, "BPG58", "Got# OK orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
-                if (isFullPart && LogoBlobCrcModeHasXxh3WholePartChecksum(blobId)) {
+                if (isFullPart && TChecksum::IsRequired(blobId)) {
                     // The checksum trailer is stored on VDisk, but it is not part of the erasure data.
                     const ui64 partUserSize = Info->Type.PartUserSize(blobId.BlobSize());
                     Y_ABORT_UNLESS(partUserSize <= resultBuffer.size());

@@ -4,6 +4,7 @@ SRCS(
     erasure.cpp
     erasure.h
     erasure_perf_test.cpp
+    erasure_checksum.cpp
     erasure_split.cpp
     erasure_restore.cpp
 )

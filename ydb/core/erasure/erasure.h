@@ -385,6 +385,11 @@ protected:
     ui32 ColumnSize() const;
 };
 
+class TChecksum final {
+public:
+    static bool IsRequired(const TLogoBlobID& id) noexcept;
+};
+
 bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TContiguousSpan& buf);
 bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TRope& rope);
 

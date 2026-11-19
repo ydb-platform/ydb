@@ -18,7 +18,6 @@
 #include "skeleton_block_and_get.h"
 #include "skeleton_shred.h"
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/blobstorage/vdisk/localrecovery/localrecovery_public.h>
 #include <ydb/core/blobstorage/vdisk/balance/balancing_actor.h>
@@ -50,6 +49,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -558,7 +558,7 @@ namespace NKikimr {
                 return {NKikimrProto::ERROR, "empty TabletID"};
             }
 
-            if (LogoBlobCrcModeHasXxh3WholePartChecksum(id)
+            if (TChecksum::IsRequired(id)
                     && static_cast<bool>(Config->EnableChecksumWriteValidationOnVDisk)
                     && !CheckCrcAtTheEnd(static_cast<TErasureType::ECrcMode>(id.CrcMode()), buffer)) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix

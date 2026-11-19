@@ -18,6 +18,7 @@ SET(_YASM_PREDEFINED_FLAGS_VALUE "")
 
 SRCS(
     erasure_ut.cpp
+    erasure_checksum_ut.cpp
     erasure_new_ut.cpp
 )
 

@@ -251,7 +251,7 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
     TStackVec<std::unique_ptr<TEvBlobStorage::TEvVGet>, TypicalDisksInGroup> gets(Info->GetTotalVDisksNum());
 
     for (auto& get : Blackboard.GroupDiskRequests.GetsPending) {
-        if (LogoBlobCrcModeHasXxh3WholePartChecksum(get.Id)
+        if (TChecksum::IsRequired(get.Id)
                 && get.Shift == 0
                 && get.Size == Info->Type.PartUserSize(get.Id.BlobSize())) {
             get.Size = Info->Type.PartSize(get.Id);

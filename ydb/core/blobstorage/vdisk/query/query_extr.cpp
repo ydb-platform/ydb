@@ -1,5 +1,4 @@
 #include "query_base.h"
-#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 #include <ydb/core/erasure/erasure.h>
 
@@ -279,7 +278,7 @@ namespace NKikimr {
                         const bool isFullPartRead = query->Shift == 0 && responseSize == partSize;
                         TProcessor processor{Result, it->Id, query->Shift, query->Size, cookiePtr, pingr, keep,
                             doNotKeep, isFullPartRead,
-                            LogoBlobCrcModeHasXxh3WholePartChecksum(it->Id)
+                            TChecksum::IsRequired(it->Id)
                                 && static_cast<bool>(QueryCtx->HullCtx->VCfg->EnableChecksumReadValidationOnVDisk)};
                         rit.GetData(processor);
                         if (!processor.Success) {

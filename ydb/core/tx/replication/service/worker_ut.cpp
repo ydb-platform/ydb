@@ -1700,7 +1700,7 @@ Y_UNIT_TEST_SUITE(Worker) {
     };
 
     struct TDataEndSetup {
-        TEnv<> Env;
+        TEnv<> Env{true, ERuntimeMode::Simulated};
         TActorId Edge;
         TActorId Reader;
         TActorId Writer;
@@ -1712,12 +1712,14 @@ Y_UNIT_TEST_SUITE(Worker) {
             Worker = runtime.Register(CreateWorker(Edge,
                 [this] { return new TDataEndReader(Edge, Reader); },
                 [this] { return new TDataEndWriter(Edge, Writer); }));
-            runtime.GrabEdgeEventRethrow<TEvWorker::TEvPoll>(Edge);
+            UNIT_ASSERT_C(runtime.GrabEdgeEventRethrow<TEvWorker::TEvPoll>(Edge, TDuration::Seconds(5)),
+                "Reader did not receive the first poll");
 
             runtime.Send(new IEventHandle(Worker, Reader, new TEvWorker::TEvData(0, "source", {
                 TTopicMessage(0, "first"),
             })));
-            runtime.GrabEdgeEventRethrow<TEvWorker::TEvData>(Edge);
+            UNIT_ASSERT_C(runtime.GrabEdgeEventRethrow<TEvWorker::TEvData>(Edge, TDuration::Seconds(5)),
+                "Writer did not receive the data batch");
         }
 
         void SendDataEnd() {
@@ -1745,7 +1747,8 @@ Y_UNIT_TEST_SUITE(Worker) {
         s.Env.GetRuntime().Send(new IEventHandle(s.Writer, s.Edge, new TEvents::TEvWakeup()));
 
         // then
-        const auto dataEnd = s.Env.GetRuntime().GrabEdgeEventRethrow<TEvWorker::TEvDataEnd>(s.Edge);
+        const auto dataEnd = s.Env.GetRuntime().GrabEdgeEventRethrow<TEvWorker::TEvDataEnd>(s.Edge, TDuration::Seconds(5));
+        UNIT_ASSERT(dataEnd);
         UNIT_ASSERT_VALUES_EQUAL(dataEnd->Get()->PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(dataEnd->Get()->ChildPartitionsIds.size(), 2);
     }

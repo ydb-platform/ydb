@@ -42,8 +42,6 @@ void DoCreateStream(
     const bool initialScan,
     const bool internal = false);
 
-bool IsKeyRangeHeartbeatsRequested(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
-
 bool ShouldUseKeyRangeHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
 
 bool CheckCdcKeyRangeHeartbeatsCanBeUsed(

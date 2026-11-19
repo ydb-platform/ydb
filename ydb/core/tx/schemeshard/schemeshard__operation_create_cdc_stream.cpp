@@ -1015,14 +1015,10 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
 
 } // anonymous
 
-bool IsKeyRangeHeartbeatsRequested(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
-    return IsSupportedByReplication(streamDesc, "supports_key_range_autopartitioning");
-}
-
 bool ShouldUseKeyRangeHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
     return AppData()->FeatureFlags.GetEnableCdcKeyRangeHeartbeats()
         && streamDesc.GetResolvedTimestampsIntervalMs() > 0
-        && IsKeyRangeHeartbeatsRequested(streamDesc);
+        && IsSupportedByReplication(streamDesc, "supports_key_range_autopartitioning");
 }
 
 bool CheckCdcKeyRangeHeartbeatsCanBeUsed(

@@ -7802,111 +7802,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImportChangefeeds(EnableDataShardDirectPartImport, 1, AddedScheme, "UINT32");
     }
 
-    void ImportTable(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, ui16 port) {
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: "Table"
-                destination_path: "/MyRoot/Table"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
-    }
-
-    Y_UNIT_TEST(ShouldPartitionTopicByTableShardsWhenImportedChangefeedUsesKeyRangeHeartbeats) {
-        // given
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableCdcKeyRangeHeartbeats(true));
-        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
-        ui64 txId = 100;
-
-        THashMap<TString, TTestDataWithScheme> bucketContent;
-        AddedScheme(bucketContent, "UINT64");
-        auto changefeed = GenChangefeed(1, true, "Table", 3);
-        changefeed.Changefeed.second.Changefeed.Changefeed = TString(R"(
-            name: "updates_feed1"
-            mode: MODE_UPDATES
-            format: FORMAT_JSON
-            state: STATE_ENABLED
-            virtual_timestamps: true
-            resolved_timestamps_interval {
-              seconds: 1
-            }
-            attributes {
-              key: "__async_replication"
-              value: "{\"id\":\"1\",\"path\":\"/Root/replica\",\"supports_key_range_autopartitioning\":true}"
-            }
-        )");
-        bucketContent.emplace(changefeed.Changefeed);
-
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        // when
-        ImportTable(runtime, env, txId, port);
-
-        // then
-        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/updates_feed1"), {
-            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange),
-        });
-        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/updates_feed1/streamImpl").GetPathDescription().GetPersQueueGroup();
-        UNIT_ASSERT_VALUES_EQUAL(topic.GetTotalGroupCount(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(topic.GetPQTabletConfig().PartitionKeySchemaSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(
-            static_cast<int>(topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()),
-            static_cast<int>(NKikimrPQ::TPQTabletConfig::CAN_SPLIT));
-    }
-
-    Y_UNIT_TEST(ShouldPartitionTopicByTableShardsWhenImportedChangefeedRequestsKeyRangeHeartbeatsWithFlagOff) {
-        // given
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
-        ui64 txId = 100;
-
-        THashMap<TString, TTestDataWithScheme> bucketContent;
-        AddedScheme(bucketContent, "UINT64");
-        auto changefeed = GenChangefeed(1, true, "Table", 3);
-        changefeed.Changefeed.second.Changefeed.Changefeed = TString(R"(
-            name: "updates_feed1"
-            mode: MODE_UPDATES
-            format: FORMAT_JSON
-            state: STATE_ENABLED
-            virtual_timestamps: true
-            resolved_timestamps_interval {
-              seconds: 1
-            }
-            attributes {
-              key: "__async_replication"
-              value: "{\"id\":\"1\",\"path\":\"/Root/replica\",\"supports_key_range_autopartitioning\":true}"
-            }
-        )");
-        bucketContent.emplace(changefeed.Changefeed);
-
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        // when
-        ImportTable(runtime, env, txId, port);
-
-        // then
-        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/updates_feed1/streamImpl").GetPathDescription().GetPersQueueGroup();
-        UNIT_ASSERT_VALUES_EQUAL(topic.GetTotalGroupCount(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(topic.GetPQTabletConfig().PartitionKeySchemaSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(
-            static_cast<int>(topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()),
-            static_cast<int>(NKikimrPQ::TPQTabletConfig::DISABLED));
-    }
-
     Y_UNIT_TEST_FLAG(ChangefeedTopicWithUnknownFields, EnableDataShardDirectPartImport) {
         TestImportChangefeeds({{"Table", "UTF8", 1, AddedScheme, 3}}, EnableDataShardDirectPartImport, R"(
             future_write_limit: 1048576
@@ -8155,9 +8050,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         }
     }
 
-    void ImportSkipsChangefeed(const TAttrs& attrs, bool enableDataShardDirectPartImport, bool replica) {
+    void ImportSkipsChangefeed(const TAttrs& attrs, bool enableDataShardDirectPartImport, bool replica,
+            const TTestEnvOptions& options = {}) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
@@ -8223,6 +8119,12 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_FLAG(ImportSkipsLegacyAsyncReplicationChangefeed, EnableDataShardDirectPartImport) {
         ImportSkipsChangefeed(LegacyReplicationFeedAttrs(), EnableDataShardDirectPartImport, false);
+    }
+
+    Y_UNIT_TEST_FLAG(ImportSkipsLegacyKeyRangeReplicationChangefeed, EnableCdcKeyRangeHeartbeats) {
+        ImportSkipsChangefeed({
+            {"__async_replication", R"({"id":"1","path":"/Root/replica","supports_key_range_autopartitioning":true})"},
+        }, false, false, TTestEnvOptions().EnableCdcKeyRangeHeartbeats(EnableCdcKeyRangeHeartbeats));
     }
 
     Y_UNIT_TEST_FLAG(ReplicaImportSkipsOmittedChangefeed, EnableDataShardDirectPartImport) {

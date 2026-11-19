@@ -118,6 +118,7 @@ struct TPullUpFixture : NTests::TIdTestContext {
     explicit TPullUpFixture(bool nullable = false)
         : Nullable(nullable)
     {
+        Config->SetUseBlockHashJoin(true);
         SetTypes(*Left);
     }
 

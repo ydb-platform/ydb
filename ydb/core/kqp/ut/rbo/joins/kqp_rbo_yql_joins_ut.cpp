@@ -850,13 +850,20 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             CREATE TABLE `/Root/r` (id Int64 NOT NULL, k Int64, v Int64, PRIMARY KEY(id));
         )").GetValueSync();
         UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
-        auto upsert = tableSession.ExecuteDataQuery(R"(
-            UPSERT INTO `/Root/l` (id, k, v) VALUES
-                (1, 1, 10), (2, 2, 30), (3, 2, 50), (4, 3, 40), (5, 5, NULL), (6, NULL, 60), (7, 7, 70);
-            UPSERT INTO `/Root/r` (id, k, v) VALUES
-                (1, 1, 20), (2, 2, 20), (3, 2, 40), (4, 4, 30), (5, 5, 10), (6, NULL, 50), (8, 8, 80);
-        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        const auto upsert = [&](const TString& table,
+            const std::vector<std::tuple<i64, std::optional<i64>, std::optional<i64>>>& data) {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [id, k, v] : data) {
+                rows.AddListItem().BeginStruct().AddMember("id").Int64(id)
+                    .AddMember("k").OptionalInt64(k).AddMember("v").OptionalInt64(v).EndStruct();
+            }
+            rows.EndList();
+            const auto result = kikimr.GetTableClient().BulkUpsert(table, rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        upsert("/Root/l", {{1, 1, 10}, {2, 2, 30}, {3, 2, 50}, {4, 3, 40}, {5, 5, {}}, {6, {}, 60}, {7, 7, 70}});
+        upsert("/Root/r", {{1, 1, 20}, {2, 2, 20}, {3, 2, 40}, {4, 4, 30}, {5, 5, 10}, {6, {}, 50}, {8, 8, 80}});
 
         const TVector<std::pair<TString, TString>> cases = {
             // Rejected pairs must preserve both rows. Duplicate join keys can

@@ -8,57 +8,68 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpRboCboFilters) {
     Y_UNIT_TEST(RestoresPredicatesInNewRbo) {
-        for (bool newRbo : {true}) {
-            NKikimrConfig::TAppConfig config;
-            config.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
-            config.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
-            config.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-            TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));
-            auto client = kikimr.GetQueryClient();
-            auto execute = [&](const TString& sql, bool schema = false) {
-                auto result = client.ExecuteQuery(sql, schema ? NYdb::NQuery::TTxControl::NoTx()
-                    : NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), "new RBO=" << newRbo << "\n" << sql << "\n" << result.GetIssues().ToString());
-                return result;
-            };
-            execute(R"(
-                CREATE TABLE `/Root/A` (k Int32 NOT NULL, PRIMARY KEY(k));
-                CREATE TABLE `/Root/B` (k Int32 NOT NULL, a Int32, x Int32, PRIMARY KEY(k));
-                CREATE TABLE `/Root/C` (k Int32 NOT NULL, a Int32, x Int32, PRIMARY KEY(k));
-                CREATE TABLE `/Root/F` (k Int32 NOT NULL, PRIMARY KEY(k));
-            )", true);
-            execute(R"(
-                UPSERT INTO `/Root/A` (k) VALUES (1), (2), (3);
-                UPSERT INTO `/Root/F` (k) VALUES (1), (2), (3);
-                UPSERT INTO `/Root/B` (k, a, x) VALUES (11, 1, 5), (12, 1, 6), (13, 1, 5), (21, 2, NULL);
-                UPSERT INTO `/Root/C` (k, a, x) VALUES (101, 1, 5), (102, 1, NULL), (201, 2, NULL), (301, 3, NULL);
-            )");
-            for (bool equalNulls : {false, true}) {
-                // Legacy SQL accepts only equality predicates in JOIN ON.
-                if (equalNulls && !newRbo) {
-                    continue;
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        config.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
+        config.MutableTableServiceConfig()->SetEnableBlockHashJoinEqualNulls(true);
+        config.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        config.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));
+        auto client = kikimr.GetQueryClient();
+        auto execute = [&](const TString& sql, bool schema = false) {
+            auto result = client.ExecuteQuery(sql, schema ? NYdb::NQuery::TTxControl::NoTx()
+                : NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), sql << "\n" << result.GetIssues().ToString());
+            return result;
+        };
+        execute(R"(
+            CREATE TABLE `/Root/A` (k Int32 NOT NULL, PRIMARY KEY(k));
+            CREATE TABLE `/Root/B` (k Int32 NOT NULL, a Int32, x Int32, PRIMARY KEY(k));
+            CREATE TABLE `/Root/C` (k Int32 NOT NULL, a Int32, x Int32, PRIMARY KEY(k));
+            CREATE TABLE `/Root/F` (k Int32 NOT NULL, PRIMARY KEY(k));
+        )", true);
+        // Populate through the storage API: VALUES in NewRBO DML is not part of this backport.
+        auto tableClient = kikimr.GetTableClient();
+        const auto upsert = [&](const TString& table, bool extended,
+            const std::vector<std::tuple<i32, std::optional<i32>, std::optional<i32>>>& data) {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [k, a, x] : data) {
+                rows.AddListItem().BeginStruct().AddMember("k").Int32(k);
+                if (extended) {
+                    rows.AddMember("a").OptionalInt32(a).AddMember("x").OptionalInt32(x);
                 }
-                const TString comparison = equalNulls ? "IS NOT DISTINCT FROM" : "=";
-                const TString joins = TStringBuilder() << R"(
-                    SELECT a.k AS id FROM `/Root/A` AS a
-                    LEFT JOIN `/Root/B` AS b ON a.k = b.a
-                    INNER JOIN `/Root/C` AS c ON a.k = c.a AND b.x )" << comparison << " c.x";
-                const TString pragmas = TStringBuilder()
-                    << (newRbo ? "PRAGMA YqlSelect = 'force';\n" : "")
-                    << "PRAGMA ydb.CostBasedOptimizationLevel = '4';\n"
-                    << "PRAGMA ydb.OptimizerHints = 'JoinOrder((a c) b)';\n";
-                auto result = execute(pragmas + joins + " ORDER BY id;");
-                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
-                    equalNulls ? "[[1];[1];[2];[3]]" : "[[1];[1]]");
-
-                // The residual must run inside the nullable input of F LEFT JOIN.
-                // Moving it to the top would discard F's otherwise unmatched rows.
-                result = execute(pragmas + "$q = (" + joins + ");\n" + R"(
-                    SELECT f.k, q.id FROM `/Root/F` AS f LEFT JOIN $q AS q ON f.k = q.id ORDER BY f.k;
-                )");
-                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), equalNulls
-                    ? "[[1;[1]];[1;[1]];[2;[2]];[3;[3]]]" : "[[1;[1]];[1;[1]];[2;#];[3;#]]");
+                rows.EndStruct();
             }
+            rows.EndList();
+            const auto result = tableClient.BulkUpsert(table, rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        upsert("/Root/A", false, {{1, {}, {}}, {2, {}, {}}, {3, {}, {}}});
+        upsert("/Root/F", false, {{1, {}, {}}, {2, {}, {}}, {3, {}, {}}});
+        upsert("/Root/B", true, {{11, 1, 5}, {12, 1, 6}, {13, 1, 5}, {21, 2, {}}});
+        upsert("/Root/C", true, {{101, 1, 5}, {102, 1, {}}, {201, 2, {}}, {301, 3, {}}});
+        for (bool equalNulls : {false, true}) {
+            const TString comparison = equalNulls ? "IS NOT DISTINCT FROM" : "=";
+            const TString joins = TStringBuilder() << R"(
+                SELECT a.k AS id FROM `/Root/A` AS a
+                LEFT JOIN `/Root/B` AS b ON a.k = b.a
+                INNER JOIN `/Root/C` AS c ON a.k = c.a AND b.x )" << comparison << " c.x";
+            const TString pragmas = TStringBuilder()
+                << "PRAGMA YqlSelect = 'force';\n"
+                << "PRAGMA ydb.CostBasedOptimizationLevel = '4';\n"
+                << "PRAGMA ydb.OptimizerHints = 'JoinOrder((a c) b)';\n";
+            auto result = execute(pragmas + joins + " ORDER BY id;");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
+                equalNulls ? "[[1];[1];[2];[3]]" : "[[1];[1]]");
+
+            // The residual must run inside the nullable input of F LEFT JOIN.
+            // Moving it to the top would discard F's otherwise unmatched rows.
+            result = execute(pragmas + "$q = (" + joins + ");\n" + R"(
+                SELECT f.k, q.id FROM `/Root/F` AS f LEFT JOIN $q AS q ON f.k = q.id ORDER BY f.k;
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), equalNulls
+                ? "[[1;[1]];[1;[1]];[2;[2]];[3;[3]]]" : "[[1;[1]];[1;[1]];[2;#];[3;#]]");
         }
     }
 

@@ -25,6 +25,8 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/aclib/aclib.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
@@ -67,6 +69,35 @@ using namespace NYdb::NTable;
 using namespace NYql::NNodes;
 using namespace NStat;
 using namespace NKikimr::NKqp::NYqlTests;
+
+// Count reads using an expression, even when the serialized AST shares its
+// let binding between several reads.
+ui32 CountOlapReadsWith(TStringBuf ast, TStringBuf property) {
+    auto parsed = NYql::ParseAst(ast);
+    UNIT_ASSERT_C(parsed.IsOk(), parsed.Issues.ToString());
+    NYql::TExprContext ctx;
+    NYql::TExprNode::TPtr root;
+    UNIT_ASSERT_C(NYql::CompileExpr(*parsed.Root, root, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
+    ui32 count = 0;
+    const auto inspect = [&](const auto& read) {
+        if (property == "ItemsLimit") {
+            count += bool(NYql::GetSetting(read.Settings().Ref(), property));
+        } else {
+            count += bool(NYql::FindNode(read.Process().Ptr(), [&](const NYql::TExprNode::TPtr& node) {
+                return node->IsCallable(property);
+            }));
+        }
+    };
+    NYql::VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
+        if (auto read = TMaybeNode<TKqpReadOlapTableRanges>(node)) {
+            inspect(read.Cast());
+        } else if (auto read = TMaybeNode<TKqpBlockReadOlapTableRanges>(node)) {
+            inspect(read.Cast());
+        }
+        return true;
+    });
+    return count;
+}
 
 // A partial aggregate must reduce rows in its input's stage, so no stage
 // connection may separate it from its input. Returns the number of partials.
@@ -1734,7 +1765,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             const TString query = TStringBuilder() << "PRAGMA YqlSelect = \"force\"; " << testCase.Query << ";";
             const auto ast = *run(query, NYdb::NQuery::EExecMode::Explain).GetStats()->GetAst();
             if (testCase.OlapFilters) {
-                UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "KqpOlapFilter"), *testCase.OlapFilters, query << " AST: " << ast);
+                UNIT_ASSERT_VALUES_EQUAL_C(CountOlapReadsWith(ast, "KqpOlapFilter"), *testCase.OlapFilters, query << " AST: " << ast);
             }
             CompareYson(testCase.Expected, FormatResultSetYson(run(query, NYdb::NQuery::EExecMode::Execute).GetResultSet(0)));
         }
@@ -1872,7 +1903,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "TopSort"), *testCase.TopSorts, query << " AST: " << ast);
             }
             if (testCase.ReadLimits) {
-                UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "ItemsLimit"), *testCase.ReadLimits, query << " AST: " << ast);
+                UNIT_ASSERT_VALUES_EQUAL_C(CountOlapReadsWith(ast, "ItemsLimit"), *testCase.ReadLimits, query << " AST: " << ast);
             }
             CompareYson(testCase.Expected, FormatResultSetYson(run(query, NYdb::NQuery::EExecMode::Execute, noParams).GetResultSet(0)));
         }

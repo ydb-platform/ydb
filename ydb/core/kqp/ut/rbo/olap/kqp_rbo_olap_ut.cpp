@@ -3813,6 +3813,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlapAggregations) {
     NKikimrConfig::TTableServiceConfig NewRboTableServiceConfig() {
         NKikimrConfig::TTableServiceConfig config;
         config.SetEnableNewRBO(true);
+        config.SetDqHashOperatorsUseBlocks(true);
         config.SetEnableFallbackToYqlOptimizer(false);
         return config;
     }

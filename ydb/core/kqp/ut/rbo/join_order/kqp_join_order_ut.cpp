@@ -81,6 +81,12 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
     NKikimrConfig::TAppConfig appConfig;
     auto* config = appConfig.MutableTableServiceConfig();
     config->SetEnableNewRBO(true);
+    // Main's benchmark baselines use these features; keep release defaults unchanged.
+    config->SetUseBlockHashJoin(true);
+    config->SetUseBlockHashJoinForCross(true);
+    config->SetEnableBlockHashJoinEqualNulls(true);
+    config->SetDqHashOperatorsUseBlocks(true);
+    config->SetEnableWindowFunctionsV2(true);
     config->SetEnableFallbackToYqlOptimizer(false);
     config->SetEnableFallbackOnMultipleStatements(false);
     config->SetEnableKqpDataQueryStreamIdxLookupJoin(false);

@@ -724,7 +724,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         NTests::TIdTestContext ctx;
         const auto a = ctx.Id("a");
         const auto b = ctx.Id("b");
-        TIntrusivePtr<IOperator> input = ctx.Read({a});
+        // This regression needs the scan and map in one stage. Row reads on
+        // the release branch have a separate source stage.
+        auto read = ctx.Read({a});
+        read->StorageType = NYql::EStorageType::ColumnStorage;
+        TIntrusivePtr<IOperator> input = read;
         if (MultipleNonMap) {
             input = MakeIntrusive<TOpFilter>(input, ctx.Pos, ctx.Constant());
         }

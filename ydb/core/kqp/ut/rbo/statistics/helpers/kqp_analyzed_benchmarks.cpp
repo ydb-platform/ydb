@@ -48,6 +48,12 @@ NJson::TJsonValue ReadBaseStatistics(const TString& workload, double scale, bool
 void ConfigureBenchmark(Tests::TServerSettings& settings, const NJson::TJsonValue& baseStatistics) {
     auto* config = settings.AppConfig->MutableTableServiceConfig();
     config->SetEnableNewRBO(true);
+    // Main's benchmark baselines use these features; keep release defaults unchanged.
+    config->SetUseBlockHashJoin(true);
+    config->SetUseBlockHashJoinForCross(true);
+    config->SetEnableBlockHashJoinEqualNulls(true);
+    config->SetDqHashOperatorsUseBlocks(true);
+    config->SetEnableWindowFunctionsV2(true);
     config->SetEnableFallbackToYqlOptimizer(false);
     config->SetEnableFallbackOnMultipleStatements(false);
     config->SetEnableKqpDataQueryStreamIdxLookupJoin(false);

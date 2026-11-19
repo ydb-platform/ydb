@@ -546,7 +546,7 @@ void TCloudAuthRequestProxy::ChangeCounters(std::function<void()> func) {
 
 void THttpProxyAuthRequestProxy::DoReply() {
     auto response = Error_.Empty()
-        ? MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(CloudId_, FolderId_, UserSID_)
+        ? MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(CloudId_, FolderId_, UserSID_, SanitizedToken_)
         : MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(Error_.GetRef());
 
     Send(Requester_, response.Release());

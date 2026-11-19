@@ -101,6 +101,7 @@ namespace NKikimr::NHttpProxy {
                     {NYmq::V1::FOLDER_ID, FolderId},
                     {NYmq::V1::CLOUD_ID, CloudId ? CloudId : HttpContext.UserName },
                     {NYmq::V1::USER_SID, UserSid},
+                    {NYmq::V1::SANITIZED_TOKEN, SanitizedToken},
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
                     {NYmq::V1::SECURITY_TOKEN, HttpContext.SecurityToken},
                     {NYmq::V1::SOURCE_ADDRESS, HttpContext.SourceAddress},
@@ -308,6 +309,7 @@ namespace NKikimr::NHttpProxy {
                     HttpContext.FolderId = FolderId = ev->Get()->FolderId;
                     HttpContext.CloudId = CloudId = ev->Get()->CloudId;
                     UserSid = ev->Get()->Sid;
+                    SanitizedToken = ev->Get()->SanitizedToken;
                     IamAuthenticated = true;
                     SendGrpcRequestNoDriver(ctx);
                 } else {
@@ -418,6 +420,7 @@ namespace NKikimr::NHttpProxy {
             TString CloudId;
             TString ResourceId;
             TString UserSid;
+            TString SanitizedToken;
             bool IsFifo = false;
         };
 

@@ -1,4 +1,5 @@
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -7,6 +8,8 @@
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
 #include <ydb/core/ymq/actor/events.h>
 #include <ydb/core/ymq/actor/serviceid.h>
+#include <ydb/services/ymq/rpc_params.h>
+#include <ydb/services/ymq/ymq_proxy.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -50,7 +53,7 @@ public:
         return WaitForAuditLine();
     }
 
-    std::string RunCloud() {
+    std::string RunCloud(TAuthActorData::ESqsRequestFormat format = TAuthActorData::Xml) {
         auto& config = Runtime_.GetAppData().SqsConfig;
         config.SetYandexCloudMode(true);
         config.SetYandexCloudFolderServiceAddress("folder-service");
@@ -72,7 +75,23 @@ public:
             .IAMToken = RawToken,
             .FolderID = "folder",
         };
-        Runtime_.Register(new TCloudAuthRequestProxy(std::move(data), {}));
+        if (format == TAuthActorData::Json) {
+            Runtime_.Register(new THttpProxyAuthRequestProxy(std::move(data), {}, EdgeActor_));
+            auto response = Runtime_.GrabEdgeEvent<NHttpProxy::TEvYmqCloudAuthResponse>(EdgeActor_);
+            UNIT_ASSERT(response->Get()->IsSuccess);
+            Ydb::Ymq::V1::DeleteQueueRequest request;
+            request.set_queue_url("https://ymq.example/cloud/missing-queue");
+            NRpcService::DoLocalRpc<NGRpcService::TEvYmqDeleteQueueRequest>(
+                std::move(request), {}, Nothing(), Nothing(), Runtime_.GetActorSystem(0), {
+                    {NYmq::V1::CLOUD_ID, response->Get()->CloudId},
+                    {NYmq::V1::FOLDER_ID, response->Get()->FolderId},
+                    {NYmq::V1::USER_SID, response->Get()->Sid},
+                    {NYmq::V1::SANITIZED_TOKEN, response->Get()->SanitizedToken},
+                    {NYmq::V1::REQUEST_ID, "json-audit-token"},
+                });
+        } else {
+            Runtime_.Register(new TCloudAuthRequestProxy(std::move(data), {}));
+        }
         return WaitForAuditLine();
     }
 
@@ -88,7 +107,7 @@ private:
             }
             case TEvTicketParser::EvAuthorizeTicket: {
                 const auto* request = ev->Get<TEvTicketParser::TEvAuthorizeTicket>();
-                UNIT_ASSERT_VALUES_EQUAL(request->Ticket, RawToken);
+                AuthorizedTicket_ = request->Ticket;
                 Runtime_.Send(new IEventHandle(ev->Sender, ev->Recipient,
                     new TEvTicketParser::TEvAuthorizeTicketResult(request->Ticket, Token_)));
                 return NActors::TTestActorRuntimeBase::EEventAction::DROP;
@@ -121,6 +140,9 @@ private:
         const auto line = Tests::FindAuditLine(AuditLines_, "component=ymq");
         UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
         UNIT_ASSERT_C(line.find(RawToken.c_str()) == std::string::npos, line);
+        if (AuthorizedTicket_) {
+            UNIT_ASSERT_VALUES_EQUAL(*AuthorizedTicket_, RawToken);
+        }
         return line;
     }
 
@@ -129,6 +151,7 @@ private:
     NActors::TTestBasicRuntime Runtime_;
     TActorId EdgeActor_;
     TIntrusivePtr<NACLib::TUserToken> Token_;
+    TMaybe<TString> AuthorizedTicket_;
 };
 
 } // namespace
@@ -161,6 +184,18 @@ Y_UNIT_TEST_SUITE(YmqAuditLog) {
     Y_UNIT_TEST(CloudTokenWithoutSanitizedValueIsWrittenAsNone) {
         TAuditLogRuntime runtime({});
         const auto line = runtime.RunCloud();
+        UNIT_ASSERT_STRING_CONTAINS(line, "sanitized_token={none}");
+    }
+
+    Y_UNIT_TEST(CloudJsonAuthorizationPreservesSanitizedToken) {
+        TAuditLogRuntime runtime(SanitizedToken);
+        const auto line = runtime.RunCloud(TAuthActorData::Json);
+        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "sanitized_token=" << SanitizedToken);
+    }
+
+    Y_UNIT_TEST(CloudJsonTokenWithoutSanitizedValueIsWrittenAsNone) {
+        TAuditLogRuntime runtime({});
+        const auto line = runtime.RunCloud(TAuthActorData::Json);
         UNIT_ASSERT_STRING_CONTAINS(line, "sanitized_token={none}");
     }
 }

@@ -158,14 +158,16 @@ namespace NKikimr::NHttpProxy {
         TString CloudId;
         TString FolderId;
         TString Sid;
+        TString SanitizedToken;
 
         TMaybe<TError> Error;
 
-        TEvYmqCloudAuthResponse(const TString& cloudId, const TString& folderId, const TString& sid)
+        TEvYmqCloudAuthResponse(const TString& cloudId, const TString& folderId, const TString& sid, const TString& sanitizedToken)
             : IsSuccess(true)
             , CloudId(cloudId)
             , FolderId(folderId)
             , Sid(sid)
+            , SanitizedToken(sanitizedToken)
             , Error(Nothing())
             {}
 

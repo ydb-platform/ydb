@@ -272,6 +272,14 @@ namespace NActors {
         void HandleMonInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx);
         void HandleWakeup();
         [[nodiscard]] bool OutputRecord(NLog::TEvLog *evLog) noexcept;
+        void OutputRecordToSinks(
+            TInstant time,
+            NLog::EPrio priority,
+            NLog::EComponent component,
+            const char* fileName,
+            ui64 lineNumber,
+            const TString& formatted,
+            const TMaybe<NActors::NStructuredLog::TStructuredMessage>& structuredMessage) noexcept;
         [[nodiscard]] bool OutputRecord(
             TInstant time,
             NLog::EPrio priority,

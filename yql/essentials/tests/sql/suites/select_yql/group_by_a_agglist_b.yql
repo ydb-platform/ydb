@@ -1,7 +1,5 @@
-/* custom error: YqlSelect unsupported: Aggregation 'AggList' */
 PRAGMA YqlSelect = 'force';
 
--- FIXME(YQL-20436): bad test.
 SELECT
     a,
     ListSort(AggList(b)) AS bs

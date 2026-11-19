@@ -41,15 +41,13 @@ TBaseColumnShardLogWriter::TBaseColumnShardLogWriter(
 {
 }
 
-bool TBaseColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
-    if (!TBaseEventLogWriter::Write(message)) {
-        return false;
-    }
+void TBaseColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
+    TBaseEventLogWriter::Write(message);
 
     if (Settings.FlushBatchSize.has_value() && CurrentBatchSize.load() >= Settings.FlushBatchSize.value()) {
         Flush();
     }
-    return true;
+    return;
 }
 
 TString TBaseColumnShardLogWriter::GetCreateStoreQuery() {

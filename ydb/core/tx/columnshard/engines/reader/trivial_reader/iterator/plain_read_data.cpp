@@ -27,7 +27,7 @@ std::vector<std::unique_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyR
     for (auto&& r : result) {
         count += r->GetRecordsCount();
     }
-    AFL_VERIFY(count == ReadyResultsCount);
+    YDB_LOG_VERIFY(count == ReadyResultsCount);
     ReadyResultsCount = 0;
 
     YDB_LOG_DEBUG("",

@@ -96,12 +96,12 @@ public:
     TString ProfileDebugString() const;
 
     const std::shared_ptr<IFetchingStep>& GetStep(const ui32 index) const {
-        AFL_VERIFY(index < Steps.size());
+        YDB_LOG_VERIFY(index < Steps.size());
         return Steps[index];
     }
 
     bool IsFinished(const ui32 currentStepIdx) const {
-        AFL_VERIFY(currentStepIdx <= Steps.size());
+        YDB_LOG_VERIFY(currentStepIdx <= Steps.size());
         return currentStepIdx == Steps.size();
     }
 
@@ -119,7 +119,7 @@ private:
 
     void FinishInitialization(std::shared_ptr<TFetchingScript>&& script) {
         Script = std::move(script);
-        AFL_VERIFY(AtomicCas(&InitializationDetector, StateInitialized, StateInProgress));
+        YDB_LOG_VERIFY(AtomicCas(&InitializationDetector, StateInitialized, StateInProgress));
     }
 
     // Script is published by the release AtomicCas above and may happen on another thread
@@ -130,8 +130,8 @@ private:
 
 public:
     const std::shared_ptr<TFetchingScript>& GetScriptVerified() const {
-        AFL_VERIFY(IsInitialized());
-        AFL_VERIFY(Script);
+        YDB_LOG_VERIFY(IsInitialized());
+        YDB_LOG_VERIFY(Script);
         return Script;
     }
 
@@ -167,7 +167,7 @@ public:
         }
 
         ~TInitializationGuard() {
-            AFL_VERIFY(!Owner.NeedInitialization());
+            YDB_LOG_VERIFY(!Owner.NeedInitialization());
         }
     };
 
@@ -201,7 +201,9 @@ private:
 
     template <class T, typename... Args>
     std::shared_ptr<T> InsertStep(const ui32 index, Args... args) {
-        AFL_VERIFY(index <= Steps.size())("index", index)("size", Steps.size());
+        YDB_LOG_VERIFY(index <= Steps.size(),
+            {"index", index},
+            {"size", Steps.size()});
         auto result = std::make_shared<T>(args...);
         Steps.insert(Steps.begin() + index, result);
         return result;
@@ -215,7 +217,7 @@ public:
     }
 
     void AddStep(const std::shared_ptr<IFetchingStep>& step) {
-        AFL_VERIFY(step);
+        YDB_LOG_VERIFY(step);
         Steps.emplace_back(step);
     }
 

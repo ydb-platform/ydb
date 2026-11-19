@@ -72,7 +72,7 @@ public:
             auto& counters = (i.first == targetLevelIdx) ? Singleton<TGeneralCompactionCounters>()->RepackPortionsToLevel
                                                          : Singleton<TGeneralCompactionCounters>()->RepackPortionsFromLevel;
             auto it = counters.find(i.first);
-            AFL_VERIFY(it != counters.end());
+            YDB_LOG_VERIFY(it != counters.end());
             it->second.OnData(i.second);
         }
     }
@@ -82,7 +82,7 @@ public:
             auto& counters = (i.first == targetLevelIdx) ? Singleton<TGeneralCompactionCounters>()->MovePortionsToLevel
                                                          : Singleton<TGeneralCompactionCounters>()->MovePortionsFromLevel;
             auto it = counters.find(i.first);
-            AFL_VERIFY(it != counters.end());
+            YDB_LOG_VERIFY(it != counters.end());
             it->second.OnData(i.second);
         }
     }

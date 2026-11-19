@@ -164,12 +164,11 @@ public:
     {
     }
 
-    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
+    void Write(const NActors::NStructuredLog::TLogMessage& message) override {
         if (!TBaseColumnShardLogWriter::Write(message)) {
-            return false;
+            return;
         }
         WrittenCount++;
-        return true;
     }
 
     void Stop() override {

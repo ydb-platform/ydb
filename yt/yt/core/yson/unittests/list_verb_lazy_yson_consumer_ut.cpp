@@ -23,7 +23,7 @@ std::string BuildYsonAndGetResult(std::function<void(TFluentAny&)> build, std::o
     return yson.Str();
 }
 
-TEST(TListVerbLazyYsonConsumerTest, TestSimple)
+TEST(TListVerbLazyYsonConsumerTest, Simple)
 {
     std::string actual = BuildYsonAndGetResult([] (TFluentAny& fluent) {
         fluent
@@ -36,7 +36,7 @@ TEST(TListVerbLazyYsonConsumerTest, TestSimple)
     EXPECT_EQ("[\"a\";\"b\";]", actual);
 }
 
-TEST(TListVerbLazyYsonConsumerTest, TestLimit)
+TEST(TListVerbLazyYsonConsumerTest, Limit)
 {
     std::string actual = BuildYsonAndGetResult([] (TFluentAny& fluent) {
         fluent
@@ -51,7 +51,7 @@ TEST(TListVerbLazyYsonConsumerTest, TestLimit)
     EXPECT_EQ("[\"a\";\"b\";\"c\";]", actual);
 }
 
-TEST(TListVerbLazyYsonConsumerTest, TestNestedMap)
+TEST(TListVerbLazyYsonConsumerTest, NestedMap)
 {
     std::string actual = BuildYsonAndGetResult([] (TFluentAny& fluent) {
         fluent
@@ -66,7 +66,7 @@ TEST(TListVerbLazyYsonConsumerTest, TestNestedMap)
     EXPECT_EQ("[\"a\";\"b\";]", actual);
 }
 
-TEST(TListVerbLazyYsonConsumerTest, TestThrowOnNonMapNode)
+TEST(TListVerbLazyYsonConsumerTest, ThrowOnNonMapNode)
 {
     EXPECT_THROW(BuildYsonAndGetResult([] (TFluentAny fluent) { fluent.Value("a"); }), std::exception);
     EXPECT_THROW(BuildYsonAndGetResult([] (TFluentAny fluent) { fluent.Value(1); }), std::exception);
@@ -77,7 +77,7 @@ TEST(TListVerbLazyYsonConsumerTest, TestThrowOnNonMapNode)
     EXPECT_THROW(BuildYsonAndGetResult([] (TFluentAny fluent) { fluent.BeginList(); }), std::exception);
 }
 
-TEST(TListVerbLazyYsonConsumerTest, TestIgnoreAttributes)
+TEST(TListVerbLazyYsonConsumerTest, IgnoreAttributes)
 {
     std::string actual = BuildYsonAndGetResult([] (TFluentAny& fluent) {
         fluent

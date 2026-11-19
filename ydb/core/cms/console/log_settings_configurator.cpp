@@ -9,7 +9,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-#include <ydb/library/actors/struct_log/otel/otel_log_sink.h>
+#include <ydb/library/actors/struct_log/otel/full_otel_log_sink.h>
+#include <ydb/library/actors/struct_log/otel/simple_otel_log_sink.h>
 
 #include <util/system/file.h>
 #include <util/system/fs.h>
@@ -55,10 +56,12 @@ public:
     static std::pair<TString, TString> GetDefaultStoreTableName(const TString& eventSource);
 
     static NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings
-    GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink, const NKikimrConfig::TLogConfig_TSink* defaultSink);
+    GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink,
+        const NKikimrConfig::TLogConfig_TSink* defaultSink);
 
-    static NActors::NStructuredLog::TOtelLogSink::TOtelSettings
-    GetOtelSettings(const NKikimrConfig::TLogConfig_TSink& sink, const NKikimrConfig::TLogConfig_TSink* defaultSink);
+    static NActors::NStructuredLog::TBaseOtelLogSink::TOtelSettings
+    GetBaseOtelSettings(const NKikimrConfig::TLogConfig_TSink& sink,
+        const NKikimrConfig::TLogConfig_TSink* defaultSink);
 
     NStructuredLog::ILogSinkSPtr CreateLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
         const NKikimrConfig::TLogConfig_TSink* defaultSink);
@@ -310,10 +313,11 @@ TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TL
     return settings;
 }
 
-NActors::NStructuredLog::TOtelLogSink::TOtelSettings
-TLogSettingsConfigurator::GetOtelSettings(const NKikimrConfig::TLogConfig_TSink& sink, const NKikimrConfig::TLogConfig_TSink* defaultSink) {
+NActors::NStructuredLog::TBaseOtelLogSink::TOtelSettings
+TLogSettingsConfigurator::GetBaseOtelSettings(const NKikimrConfig::TLogConfig_TSink& sink,
+    const NKikimrConfig::TLogConfig_TSink* defaultSink) {
 
-    NActors::NStructuredLog::TOtelLogSink::TOtelSettings settings;
+    NActors::NStructuredLog::TBaseOtelLogSink::TOtelSettings settings;
 
     SET_PROPERTY(CollectorUri);
     SET_PROPERTY(ScopeName);
@@ -349,9 +353,9 @@ NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateLogSink(const NKiki
         destination = defaultSink->GetDestination();
     }
 
-#define CHECK_SINK(EventSource, Dest, Class, GetSettings) if (eventSource == EventSource && destination == Dest) {       \
-        auto settins = GetSettings(sink, defaultSink);                                                                   \
-        return std::make_shared<Class>(settins);                                                                         \
+#define CHECK_SINK(EventSource, Dest, Class, GetSettings) if (eventSource == EventSource && destination == Dest) {        \
+        auto settings = GetSettings(sink, defaultSink);                                                                   \
+        return std::make_shared<Class>(settings);                                                                         \
     }
 
     using namespace NKqp::NEventLog;
@@ -371,16 +375,17 @@ NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateLogSink(const NKiki
     CHECK_SINK("audit-web-login", "local-db", NAudit::NToColumnShard::TWebLoginEventLogWriter, GetColumnShardDatabaseSettings);
     CHECK_SINK("audit-console", "local-db", NAudit::NToColumnShard::TConsoleEventLogWriter, GetColumnShardDatabaseSettings);
 
-    CHECK_SINK("full", "simple-otel", NActors::NStructuredLog::TOtelLogSink, GetOtelSettings);
+    CHECK_SINK("full", "simple-otel", NActors::NStructuredLog::TSimpleOtelLogSink, GetBaseOtelSettings);
+    CHECK_SINK("full", "full-otel", NActors::NStructuredLog::TFullOtelLogSink, GetBaseOtelSettings);
 
-#undef CHECK
+#undef CHECK_SINK
     return nullptr;
 }
 
 void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogConfig &config, const TActorContext &ctx) {
     Y_UNUSED(config);
 
-    auto *logSettings = static_cast<NLog::TSettings*>(ctx.LoggerSettings());
+    auto* logSettings = static_cast<NLog::TSettings*>(ctx.LoggerSettings());
 
     NActors::NLog::TSettings::TLogSinkMap oldSinks, newSinks;
 

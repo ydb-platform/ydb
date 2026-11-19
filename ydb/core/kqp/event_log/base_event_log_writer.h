@@ -30,7 +30,7 @@ public:
         return Columns;
     }
 
-    bool Write(const NActors::NStructuredLog::TLogMessage&) override;
+    void Write(const NActors::NStructuredLog::TLogMessage&) override;
 
     void Stop() override {
         State.store(TState(TStateKind::Stop));

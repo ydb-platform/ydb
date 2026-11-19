@@ -436,9 +436,11 @@ Y_UNIT_TEST(NoStatements) {
                 input, "", issues, /*maxErrors=*/8, settings);
             UNIT_ASSERT_C(message, issues.ToString());
 
-            NSQLTranslation::TSQLHints hints;
+            NSQLTranslation::TParsedTokenList tokens;
+            auto lexer = translator->MakeLexer(settings);
+            UNIT_ASSERT(NSQLTranslation::Tokenize(*lexer, input, "", tokens, issues, /*maxErrors=*/8));
             NYql::TAstParseResult result = translator->TextAndMessageToAst(
-                input, *message, hints, settings);
+                input, *message, tokens, settings);
 
             return std::move(result);
         },
@@ -787,7 +789,7 @@ Y_UNIT_TEST(CreateAlterUserWithLoginNoLogin) {
     )");
 
     UNIT_ASSERT(!reqLoginNoLogin.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(reqLoginNoLogin.Issues.ToString(), "Error: Conflicting or redundant options");
+    UNIT_ASSERT_STRING_CONTAINS(reqLoginNoLogin.Issues.ToString(), "3:33: Error: Conflicting or redundant options");
 
     auto reqAlterLoginNoLogin = SqlToYql(R"(
         USE plato;
@@ -841,7 +843,7 @@ Y_UNIT_TEST(CreateUserWithHash) {
             )");
 
     UNIT_ASSERT(!reqCreateUserWithPassword.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(reqCreateUserWithPassword.Issues.ToString(), "Error: Conflicting or redundant options");
+    UNIT_ASSERT_STRING_CONTAINS(reqCreateUserWithPassword.Issues.ToString(), "8:17: Error: Conflicting or redundant options");
 
     auto reqAlterUser = SqlToYql(R"(
                 USE plato;
@@ -1473,7 +1475,7 @@ Y_UNIT_TEST(KillSessionUnsupportedProvider) {
     for (const auto provider : {NYql::YtProviderName, NYql::YdbProviderName}) {
         const auto res = SqlToYql("USE plato; KILL SESSION `session-id`;", /*maxErrors=*/10, TString(provider));
         UNIT_ASSERT_C(!res.IsOk(), provider);
-        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "KILL SESSION is supported only for YDB");
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "<main>:1:12: Error: KILL SESSION is supported only for YDB");
     }
 }
 

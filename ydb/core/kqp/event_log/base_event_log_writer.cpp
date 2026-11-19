@@ -29,20 +29,20 @@ TBaseEventLogWriter::TBaseEventLogWriter(
     }
 }
 
-bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
+void TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
     auto stateKind = State.load().Kind;
     if (stateKind == TStateKind::StorageCreateError ||
         stateKind == TStateKind::StorageStructureChanged ||
         stateKind == TStateKind::Stop) {
-        return false;
+        return;
     }
 
     if (!Filter(message)) {
-        return false;
+        return;
     }
 
     if (CurrentBatchSize.load() >= MaxBatchSize) {
-        return false;
+        return;
     }
 
     if (CheckFlushActorCreate) {
@@ -104,7 +104,6 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
         ErrorColumn->Write(columnWriteErrors);
     }
     CurrentBatchSize++;
-    return true;
 }
 
 void TBaseEventLogWriter::Flush() {

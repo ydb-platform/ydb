@@ -43,7 +43,7 @@ public:
         return Settings;
     }
 
-    bool Write(const NActors::NStructuredLog::TLogMessage&) override;
+    void Write(const NActors::NStructuredLog::TLogMessage&) override;
 
 protected:
     TString GetCreateStoreQuery();
@@ -77,7 +77,7 @@ template <typename TLogClass>
 class TColumnShardLogWriter : public TBaseColumnShardLogWriter {
 public:
     TColumnShardLogWriter(TDatabaseSettings settings) :
-        TBaseColumnShardLogWriter(settings, TLogClass::GetColumns(), TLogClass::CreateFilter()) 
+        TBaseColumnShardLogWriter(settings, TLogClass::GetColumns(), TLogClass::CreateFilter())
     {}
 };
 

@@ -15,12 +15,12 @@ private:
 
 public:
     const NOlap::TPortionDataAccessor& GetPortionInfo() const {
-        AFL_VERIFY(PortionInfo);
+        YDB_LOG_VERIFY(PortionInfo);
         return **PortionInfo;
     }
 
     const std::shared_ptr<NOlap::TPortionDataAccessor>& GetPortionInfoPtr() const {
-        AFL_VERIFY(PortionInfo);
+        YDB_LOG_VERIFY(PortionInfo);
         return *PortionInfo;
     }
 
@@ -44,14 +44,14 @@ private:
 
 public:
     TWriteResult& SetErrorMessage(const TString& value, const bool isInternal) {
-        AFL_VERIFY(!ErrorMessage);
+        YDB_LOG_VERIFY(!ErrorMessage);
         IsInternalErrorFlag = isInternal;
         ErrorMessage = value;
         return *this;
     }
 
     bool IsInternalError() const {
-        AFL_VERIFY_DEBUG(!!IsInternalErrorFlag);
+        YDB_LOG_VERIFY_DEBUG(!!IsInternalErrorFlag);
         if (!IsInternalErrorFlag) {
             return true;
         }
@@ -60,7 +60,7 @@ public:
 
     const TString& GetErrorMessage() const {
         static TString undefinedMessage = "UNKNOWN_WRITE_RESULT_MESSAGE";
-        AFL_VERIFY_DEBUG(!!ErrorMessage);
+        YDB_LOG_VERIFY_DEBUG(!!ErrorMessage);
         if (!ErrorMessage) {
             return undefinedMessage;
         }
@@ -68,7 +68,7 @@ public:
     }
 
     const std::shared_ptr<arrow::RecordBatch>& GetPKBatchVerified() const {
-        AFL_VERIFY(PKBatch);
+        YDB_LOG_VERIFY(PKBatch);
         return PKBatch;
     }
 
@@ -103,17 +103,17 @@ public:
         : WriteResults(std::move(writeResults))
         , Portions(std::move(portions))
     {
-        AFL_VERIFY(WriteResults.size());
+        YDB_LOG_VERIFY(WriteResults.size());
         std::optional<TInternalPathId> pathId;
         for (auto&& i : WriteResults) {
-            AFL_VERIFY(!i.GetWriteMeta().HasLongTxId());
+            YDB_LOG_VERIFY(!i.GetWriteMeta().HasLongTxId());
             if (!pathId) {
                 pathId = i.GetWriteMeta().GetPathId().InternalPathId;
             } else {
-                AFL_VERIFY(pathId == i.GetWriteMeta().GetPathId().InternalPathId);
+                YDB_LOG_VERIFY(pathId == i.GetWriteMeta().GetPathId().InternalPathId);
             }
         }
-        AFL_VERIFY(pathId);
+        YDB_LOG_VERIFY(pathId);
         PathId = *pathId;
     }
 };
@@ -131,12 +131,12 @@ private:
 
 public:
     const std::shared_ptr<NOlap::IBlobsWritingAction>& GetWriteAction() const {
-        AFL_VERIFY(!!WriteAction);
+        YDB_LOG_VERIFY(!!WriteAction);
         return *WriteAction;
     }
 
     TInsertedPortions&& DetachInsertedData() {
-        AFL_VERIFY(!Detached);
+        YDB_LOG_VERIFY(!Detached);
         Detached = true;
         return std::move(InsertedData);
     }

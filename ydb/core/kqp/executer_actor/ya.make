@@ -40,6 +40,7 @@ PEERDIR(
     ydb/core/kqp/topics
     ydb/core/kqp/tracing
     ydb/core/protos
+    ydb/core/scheme/mkql
     ydb/core/sys_view/common
     ydb/core/tx/long_tx_service/public
     ydb/core/ydb_convert

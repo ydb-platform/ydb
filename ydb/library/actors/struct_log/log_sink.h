@@ -23,11 +23,9 @@ struct TLogMessage {
 
 class ILogSink {
 public:
-    virtual bool Write(const TLogMessage&) = 0;
+    virtual void Write(const TLogMessage&) = 0;
     virtual void Stop() = 0;
     virtual ~ILogSink() = default;
 };
-using ILogSinkSPtr = std::shared_ptr<ILogSink>;
-}
 
-
+}  // namespace NActors::NStructuredLog

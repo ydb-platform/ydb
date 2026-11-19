@@ -39,7 +39,7 @@ public:
 
     TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
         const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) override {
-        AFL_VERIFY(ValidateConfig());
+        YDB_LOG_VERIFY(ValidateConfig());
 
         TNiceDb db(txc.DB);
         std::vector<INormalizerTask::TPtr> tasks;

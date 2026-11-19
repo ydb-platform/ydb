@@ -31,9 +31,15 @@ PEERDIR(
     ydb/core/kqp/host
     ydb/core/kqp/opt
     ydb/core/kqp/provider
+    ydb/core/kqp/session_actor
     ydb/core/kqp/tracing
     ydb/core/scheme
     ydb/core/testlib/basics/core
+    ydb/core/tx/columnshard/data_accessor/local_db
+    ydb/core/tx/columnshard/engines/reader/common_reader/iterator
+    ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch
+    ydb/core/tx/columnshard/engines/storage/indexes/max
+    ydb/core/tx/columnshard/engines/storage/indexes/min_max
     ydb/library/yql/providers/s3/provider
     ydb/public/api/protos
     ydb/tests/tools/parsed_query_bench/proto

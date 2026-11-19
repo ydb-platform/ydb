@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
+LINKER_SCRIPT(strip_debug.ld)
+
 FORK_SUBTESTS()
 SPLIT_FACTOR(150)
 

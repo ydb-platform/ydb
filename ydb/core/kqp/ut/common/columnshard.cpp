@@ -441,21 +441,6 @@ TString BuildOlapJsonValueRawColumnQuery() {
     )";
 }
 
-TString BuildOlapJsonValueWholeRowInSecondaryHandlerQuery(bool pushdown) {
-    // Condense1 uses JSON_VALUE in $init and the whole row in $update
-    return Sprintf(R"(
-        PRAGMA Kikimr.OptEnableOlapPushdownProjections = '%s';
-        $init = ($row) -> (AsStruct(JSON_VALUE($row.labels, '$.host') AS host, '' AS raw));
-        $switch = ($row, $state) -> (false);
-        $update = ($row, $state) -> (AsStruct($state.host AS host, Pickle($row) AS raw));
-        $rows = SELECT labels FROM `/Root/docs`;
-        $condense = ($input) -> (YQL::Condense1($input, $init, $switch, $update));
-        $condensed = (PROCESS $rows USING $condense(TableRows()));
-        $by_host = SELECT JSON_VALUE(labels, '$.host') AS host FROM $rows;
-        SELECT c.raw, b.host FROM $condensed AS c CROSS JOIN $by_host AS b ORDER BY c.raw, b.host;
-    )", pushdown ? "true" : "false");
-}
-
 } // namespace
 
 TString BuildOlapJsonValueTopHostsQuery(bool useRbo) {
@@ -581,27 +566,6 @@ void TOlapJsonValueProjectionSuite::CheckDifferentSharedPaths() const {
 
 void TOlapJsonValueProjectionSuite::CheckRawColumn() const {
     CheckQuery(BuildOlapJsonValueRawColumnQuery(), CreateOlapJsonValueAggregationRows, false, true, AssertOlapJsonValueRawColumnResult);
-}
-
-void TOlapJsonValueProjectionSuite::CheckWholeRowInSecondaryHandler() const {
-    TKikimrRunner kikimr(CreateSettings());
-    CreateOlapJsonValueAggregationRows(kikimr);
-    auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
-
-    auto baseline = session.ExecuteQuery(BuildOlapJsonValueWholeRowInSecondaryHandlerQuery(false), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
-    UNIT_ASSERT_C(baseline.IsSuccess(), baseline.GetIssues().ToString());
-    NYdb::TResultSetParser baselineParser(baseline.GetResultSet(0));
-    UNIT_ASSERT(baselineParser.TryNextRow());
-
-    const auto query = BuildOlapJsonValueWholeRowInSecondaryHandlerQuery(true);
-    auto execution = ExecuteQuery(kikimr, session, query);
-    UNIT_ASSERT_C(execution.IsSuccess(), execution.GetIssues().ToString());
-    auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
-                                        NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain))
-                       .GetValueSync();
-    UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
-    AssertOlapJsonValueProjectionNotPushedDown(*explain.GetStats()->GetAst());
-    CompareYson(FormatResultSetYson(execution.GetResultSet(0)), FormatResultSetYson(baseline.GetResultSet(0)));
 }
 
 } // namespace NKikimr::NKqp

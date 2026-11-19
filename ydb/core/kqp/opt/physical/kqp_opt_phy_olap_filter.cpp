@@ -1353,32 +1353,45 @@ struct TReplicateJsonValueCandidate {
     TNodeOnNodeOwnedMap Replacements;
 };
 
+bool UsesBranchInputOutsideOperator(const TCoLambda& branch, const TCoInputBase& input) {
+    const auto* branchInput = branch.Args().Arg(0).Raw();
+    const auto extract = input.Input().Maybe<TCoExtractMembers>();
+    const auto* inputConsumer = extract ? extract.Raw() : input.Raw();
+    return !!FindNode(branch.Body().Ptr(), [&](const TExprNode::TPtr& node) {
+        for (const auto& child : node->Children()) {
+            if ((child.Get() == branchInput && node.Get() != inputConsumer) ||
+                (extract && child.Get() == extract.Raw() && node.Get() != input.Raw())) {
+                return true;
+            }
+        }
+        return false;
+    });
+}
+
 // Ensure that there are no possible transformations between the Replicate input and the JsonValue node
 // that could reassign the column name - JsonValue is inside a lambda that either consumes the Replicate input directly
 // or through ExtractMembers.
-bool HasJsonValueInAnyPerRowLambdaOnBranchInput(const TCoLambda& branch, const TExprNode& rowArg, const TCoJsonValue& jsonValue) {
+bool IsRowArgumentOfSupportedBranchInputOperator(const TCoLambda& branch, const TExprNode& rowArg) {
     return !!FindNode(branch.Body().Ptr(), [&](const TExprNode::TPtr& candidate) {
-        const auto input = TMaybeNode<TCoInputBase>(candidate);
-        if (!input || candidate->ChildrenSize() < 2) {
+        // Accept only a whitelist of operators because an unknown shape may access whole row in some unaccounted way.
+        if (!TCoMap::Match(candidate.Get()) && !TCoFlatMap::Match(candidate.Get()) &&
+            !TCoCombineByKey::Match(candidate.Get())) {
             return false;
         }
+        const auto input = TMaybeNode<TCoInputBase>(candidate);
         const auto inputLambda = TMaybeNode<TCoLambda>(candidate->ChildPtr(1));
         if (!inputLambda || inputLambda.Cast().Args().Size() != 1 || inputLambda.Cast().Args().Arg(0).Raw() != &rowArg) {
-            return false;
-        }
-        if (!FindNode(inputLambda.Cast().Body().Ptr(), [&jsonValue](const TExprNode::TPtr& node) {
-                return node.Get() == jsonValue.Raw();
-            })) {
             return false;
         }
         const auto rows = input.Cast().Input();
         // lambda operates on untransformed input
         if (rows.Raw() == branch.Args().Arg(0).Raw()) {
-            return true;
+            return !UsesBranchInputOutsideOperator(branch, input.Cast());
         }
         // lambda operates on selected input fields
         const auto extract = rows.Maybe<TCoExtractMembers>();
-        return extract && extract.Cast().Input().Raw() == branch.Args().Arg(0).Raw();
+        return extract && extract.Cast().Input().Raw() == branch.Args().Arg(0).Raw() &&
+               !UsesBranchInputOutsideOperator(branch, input.Cast());
     });
 }
 
@@ -1401,15 +1414,10 @@ bool UsesWholeRow(const TCoLambda& branch, const TExprNode& rowArg) {
                 continue;
             }
             if (FindNode(lambda.Body().Ptr(), [&arg](const TExprNode::TPtr& current) {
-                    if (TCoMember::Match(current.Get())) {
-                        return false;
-                    }
-                    for (const auto& child : current->Children()) {
-                        if (child.Get() == arg.Raw()) {
-                            return true;
-                        }
-                    }
-                    return false;
+                    const auto member = TMaybeNode<TCoMember>(current);
+                    return !member || member.Cast().Struct().Raw() != arg.Raw();
+                }, [&arg](const TExprNode::TPtr& current) {
+                    return current.Get() == arg.Raw();
                 })) {
                 return true;
             }
@@ -1440,7 +1448,7 @@ std::optional<TReplicateJsonValueCandidate> CollectReplicateJsonValueCandidate(c
         }
 
         const auto& rowArg = member.Cast().Struct().Ref();
-        if (!HasJsonValueInAnyPerRowLambdaOnBranchInput(lambda.Cast(), rowArg, jsonValue)) {
+        if (!IsRowArgumentOfSupportedBranchInputOperator(lambda.Cast(), rowArg)) {
             return std::nullopt;
         }
 

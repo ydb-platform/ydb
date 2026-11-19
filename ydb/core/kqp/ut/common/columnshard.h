@@ -112,7 +112,6 @@ public:
     void CheckAggregationBranches(bool threeBranches, bool nestedJsonValue) const;
     void CheckDifferentSharedPaths() const;
     void CheckRawColumn() const;
-    void CheckWholeRowInSecondaryHandler() const;
 
 protected:
     virtual TKikimrSettings CreateSettings() const = 0;

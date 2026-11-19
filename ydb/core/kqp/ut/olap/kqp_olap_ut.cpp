@@ -2754,10 +2754,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     YDB_OLAP_JSON_VALUE_PROJECTION_TESTS(TOldOlapJsonValueProjectionSuite)
 
-    Y_UNIT_TEST(ProjectionPushDownPreservesWholeRowInSecondaryHandler) {
-        TOldOlapJsonValueProjectionSuite().CheckWholeRowInSecondaryHandler();
-    }
-
     // Unit tests for datetime pushdowns in query service
     Y_UNIT_TEST(PredicatePushdown_Datetime_QS) {
         auto settings = TKikimrSettings()

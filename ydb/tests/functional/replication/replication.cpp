@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(Replication)
         });
     }
 
-    std::pair<ui64, ui64> ReadCountAndChecksum(MainTestCase& testCase, const TString& table) {
+    std::pair<ui64, ui64> ReadCountAndChecksum(MainTestCase& testCase, const std::string& table) {
         auto result = testCase.ExecuteQuery(Sprintf(
             "SELECT COUNT(*) AS count, SUM(Key %% 1000003ul) AS checksum FROM `%s`;", table.data()), false);
         if (!result.IsSuccess()) {

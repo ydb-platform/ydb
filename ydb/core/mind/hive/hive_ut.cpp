@@ -7206,6 +7206,150 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_C(!usage, "lost update was not repaired by local");
     }
 
+    // resource broker -> local -> hive, with the tracking controlled by THiveConfig.TrackResourceBrokerUsage
+    struct TNamedResourcesTrackingTest {
+        const TString Resource = NResourceBroker::MakeQueueResourceName("queue_cdc_initial_scan");
+        const ui64 HiveTablet = MakeDefaultHiveID();
+        const ui64 TesterTablet = MakeTabletID(false, 1);
+        TTestBasicRuntime Runtime{1, false};
+        THashSet<TActorId> LocalActors;
+        NHive::TTestHive* LiveHive = nullptr;
+        TActorId Sender;
+        TActorId TaskOwner;
+        ui64 TabletId = 0;
+        ui32 QueueUsageRequests = 0;
+        TTestActorRuntime::TEventObserverHolder QueueUsageRequestObserver;
+
+        explicit TNamedResourcesTrackingTest(bool trackResourceBrokerUsage)
+            : QueueUsageRequestObserver(Runtime.AddObserver<NResourceBroker::TEvResourceBroker::TEvQueueUsageRequest>([this](auto&) {
+                ++QueueUsageRequests;
+            }))
+        {
+            // see TestNamedResourcesReportedByLocal
+            Runtime.SetRegistrationObserverFunc([this](TTestActorRuntimeBase& rt, const TActorId& parentId, const TActorId& actorId) {
+                TTestActorRuntimeBase::DefaultRegistrationObserver(rt, parentId, actorId);
+                if (parentId == rt.GetLocalServiceId(MakeLocalID(rt.GetNodeId(0)), 0) || LocalActors.contains(parentId)) {
+                    LocalActors.insert(actorId);
+                    rt.EnableScheduleForActor(actorId, true);
+                }
+            });
+            Setup(Runtime, true, 1, [trackResourceBrokerUsage](TAppPrepare& app) {
+                app.HiveConfig.SetTrackResourceBrokerUsage(trackResourceBrokerUsage);
+            });
+            TActorId brokerId = Runtime.Register(NResourceBroker::CreateResourceBrokerActor(
+                NResourceBroker::MakeDefaultConfig(), Runtime.GetDynamicCounters(0)), 0);
+            Runtime.RegisterService(NResourceBroker::MakeResourceBrokerID(), brokerId, 0);
+            Sender = Runtime.AllocateEdgeActor();
+            CreateTestBootstrapper(Runtime, CreateTestTabletInfo(HiveTablet, TTabletTypes::Hive),
+                [this](const TActorId& tablet, TTabletStorageInfo* info) -> IActor* {
+                    LiveHive = new NHive::TTestHive(info, tablet);
+                    return LiveHive;
+                });
+            {
+                TDispatchOptions options;
+                options.FinalEvents.emplace_back(TEvLocal::EvStatus, 1);
+                Runtime.DispatchEvents(options);
+            }
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(TesterTablet, 100500, TTabletTypes::Dummy, BINDED_CHANNELS));
+            TabletId = SendCreateTestTablet(Runtime, HiveTablet, TesterTablet, std::move(ev), 0, true);
+            MakeSureTabletIsUp(Runtime, TabletId, 0);
+
+            // more tasks than the queue runs at a time: some run, some wait
+            TaskOwner = Runtime.AllocateEdgeActor(0);
+            for (ui64 taskId = 1; taskId <= 3; ++taskId) {
+                auto submit = MakeHolder<NResourceBroker::TEvResourceBroker::TEvSubmitTask>(
+                    taskId, TStringBuilder() << "scan-" << taskId, NResourceBroker::TResourceValues{{1, 0}}, "cdc_initial_scan", 10, nullptr);
+                submit->SetOwner(TabletId);
+                Runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), TaskOwner, submit.Release()), 0);
+            }
+        }
+
+        // non-zero usage of the queue by the tablet, as known to hive
+        ui64 GetUsage() {
+            THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
+            request->Record.SetTabletID(TabletId);
+            request->Record.SetReturnMetrics(true);
+            Runtime.SendToPipe(HiveTablet, Sender, request.Release());
+            TAutoPtr<IEventHandle> handle;
+            auto* response = Runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.TabletsSize(), 1);
+            for (const auto& named : response->Record.GetTablets(0).GetMetrics().GetNamedResources()) {
+                if (named.GetName() == Resource) {
+                    return named.GetValue();
+                }
+            }
+            return 0;
+        }
+
+        bool HasMaximum() {
+            return Runtime.RunCall([&] {
+                return LiveHive->Node(Runtime.GetNodeId(0)).NamedResourceMaximum.contains(Resource);
+            });
+        }
+
+        void SetTracking(bool trackResourceBrokerUsage) {
+            // a restarted hive takes its config from AppData
+            Runtime.GetAppData(0).HiveConfig.SetTrackResourceBrokerUsage(trackResourceBrokerUsage);
+            Runtime.RunCall([&] {
+                LiveHive->UpdateConfig([&](auto& config) { config.SetTrackResourceBrokerUsage(trackResourceBrokerUsage); });
+                return 0;
+            });
+        }
+
+        void WaitFor(const TString& description, std::function<bool()> condition) {
+            for (int i = 0; i < 30 && !condition(); ++i) {
+                Runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT_C(condition(), description);
+        }
+    };
+
+    Y_UNIT_TEST(TestNamedResourcesTrackingDisabled) {
+        TNamedResourcesTrackingTest test(false);
+        // the poll made on startup, before the settings arrive from hive, is not reported: see below
+        const ui32 requests = test.QueueUsageRequests;
+        test.Runtime.SimulateSleep(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(test.GetUsage(), 0);
+        UNIT_ASSERT(!test.HasMaximum());
+        UNIT_ASSERT_VALUES_EQUAL(test.QueueUsageRequests, requests);
+    }
+
+    Y_UNIT_TEST(TestNamedResourcesTrackingToggled) {
+        TNamedResourcesTrackingTest test(true);
+        test.WaitFor("queue usage was not reported to hive", [&] { return test.GetUsage() == 3 && test.HasMaximum(); });
+        UNIT_ASSERT_GT(test.QueueUsageRequests, 0); // the observer sees the polls
+
+        // the tasks are still there, but the reported usage and maximum are reset and the broker is not polled
+        test.SetTracking(false);
+        test.WaitFor("queue usage was not reset in hive", [&] { return test.GetUsage() == 0 && !test.HasMaximum(); });
+        const ui32 requests = test.QueueUsageRequests;
+        test.Runtime.SimulateSleep(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(test.QueueUsageRequests, requests);
+        UNIT_ASSERT_VALUES_EQUAL(test.GetUsage(), 0);
+
+        // a zero acked by hive, but lost on its restart before persisted (TTxProcessTabletMetrics):
+        // nothing repairs the stale value while connected, local resends the zeros on reconnect
+        {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            auto* tabletMetrics = metrics->Record.AddTabletMetrics();
+            tabletMetrics->SetTabletID(test.TabletId);
+            auto* named = tabletMetrics->MutableResourceUsage()->AddNamedResources();
+            named->SetName(test.Resource);
+            named->SetValue(3);
+            test.Runtime.SendToPipe(test.HiveTablet, test.Sender, metrics.Release());
+            TAutoPtr<IEventHandle> handle;
+            test.Runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
+        }
+        test.Runtime.SimulateSleep(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(test.GetUsage(), 3);
+        RebootTablet(test.Runtime, test.HiveTablet, test.Sender);
+        test.WaitFor("stale queue usage was not reset after hive restart", [&] { return test.GetUsage() == 0; });
+        UNIT_ASSERT_VALUES_EQUAL(test.QueueUsageRequests, requests);
+
+        test.SetTracking(true);
+        test.WaitFor("queue usage was not reported to hive again", [&] { return test.GetUsage() == 3 && test.HasMaximum(); });
+    }
+
     Y_UNIT_TEST(TestNamedResourcesIgnoredFromOtherNode) {
         const TString resource = NResourceBroker::MakeQueueResourceName("queue_cdc_initial_scan");
         TTestBasicRuntime runtime(2, false);

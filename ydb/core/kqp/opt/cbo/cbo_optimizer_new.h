@@ -364,8 +364,6 @@ struct TJoinOptimizerNode: public IBaseOptimizerNode {
     std::shared_ptr<IBaseOptimizerNode> RightArg;
     TVector<TJoinColumn> LeftJoinKeys;
     TVector<TJoinColumn> RightJoinKeys;
-    // Predicates evaluated on the join's output, after any null extension.
-    TVector<std::pair<TJoinColumn, TJoinColumn>> PostJoinConditions;
     EJoinKind JoinType;
     EJoinAlgoType JoinAlgo;
     /////////////////// 'ANY' flag means leaving only one row from the join side.
@@ -424,8 +422,6 @@ struct TCBOSettings {
     ui32 CBOTimeout = 1'000ULL; // 1s
     ui32 CBOHardTimeout = UINT32_MAX; // disabled by default
     ui32 ShuffleEliminationJoinNumCutoff = 14;
-    // Backport: keep legacy CBO behavior unless called by NewRBO.
-    bool EnableNonInnerJoinConditionCompletion = false;
 };
 
 class IOptimizerFactory: private TNonCopyable {

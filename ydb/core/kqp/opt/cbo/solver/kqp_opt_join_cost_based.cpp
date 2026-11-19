@@ -1,5 +1,4 @@
 #include "kqp_opt_join_cost_based.h"
-#include "kqp_opt_join_condition_completion.h"
 #include "kqp_opt_dphyp_solver.h"
 #include "kqp_opt_make_join_hypergraph.h"
 #include "kqp_opt_cbo_latency_predictor.h"
@@ -366,8 +365,7 @@ private:
         if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverClassic<TNodeSet>>) {
             return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx, hardTimeout);
         } else if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverShuffleElimination<TNodeSet>>) {
-            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM, hardTimeout,
-                OptimizerSettings_.EnableNonInnerJoinConditionCompletion);
+            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM, hardTimeout);
         } else {
             static_assert(false, "No such DPHyp implementation");
         }
@@ -440,11 +438,7 @@ private:
 
         auto resTree = ConvertFromInternal(bestJoinOrder, EnableShuffleElimination, OrderingsFSM? &OrderingsFSM->FDStorage: nullptr);
 
-        if (OptimizerSettings_.EnableNonInnerJoinConditionCompletion) {
-            NKikimr::NKqp::AddMissingConditions(hypergraph, resTree);
-        } else {
-            AddMissingConditions(hypergraph, resTree);
-        }
+        AddMissingConditions(hypergraph, resTree);
         if (stats) {
             ++stats->TreesOptimized;
         }

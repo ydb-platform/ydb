@@ -124,11 +124,6 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
                << "=" << RightJoinKeys[i].RelName << "."
                << RightJoinKeys[i].AttributeName << ",";
     }
-    for (const auto& [left, right] : PostJoinConditions) {
-        stream << " Filter: " << left.RelName << "." << left.AttributeName
-               << (IsEqualNullsKey(left, right) ? " IS NOT DISTINCT FROM " : "=")
-               << right.RelName << "." << right.AttributeName;
-    }
     stream << "\n";
 
     for (int i = 0; i < ntabs; i++) {

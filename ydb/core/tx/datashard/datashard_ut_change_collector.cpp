@@ -1194,7 +1194,10 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         fixture.CompleteInitialScan();
 
         // Prime the cache before a replacement schema starts building columns.
-        UNIT_ASSERT(fixture.Collect(7, 256));
+        const auto visibleValues = VisibleColumnUpdates();
+        const auto visibleUpdates = MakeColumnUpdates(*fixture.GetTable(), visibleValues);
+        UNIT_ASSERT(fixture.Collect(7, 256, NTable::ERowOp::Upsert, visibleUpdates));
+
         const auto table = StartBuildingColumns(fixture);
         const auto values = ColumnUpdates();
         const auto updates = MakeColumnUpdates(*table, values);

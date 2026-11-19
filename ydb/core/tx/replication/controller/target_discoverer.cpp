@@ -144,8 +144,10 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             YDB_LOG_DEBUG("Describe table succeeded",
                 {"path", path.first});
 
+            const auto description = result.GetTableDescription();
+            const auto& sourceTable = NYdb::TProtoAccessor::GetProto(description);
             if (AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
-                const auto pendingIndexes = GetBuildingFulltextIndexes(NYdb::TProtoAccessor::GetProto(result.GetTableDescription()));
+                const auto pendingIndexes = GetBuildingFulltextIndexes(sourceTable);
                 if (!pendingIndexes.empty()) {
                     ReportStatus(*it, TStringBuilder() << "Waiting for source fulltext/JSON index builds on "
                         << path.first << ": " << JoinSeq(", ", pendingIndexes));
@@ -161,9 +163,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"dstPath", target.Config->GetDstPath()},
                 {"kind", target.Kind});
 
-            const auto& sourceTable = NYdb::TProtoAccessor::GetProto(result.GetTableDescription());
             const bool usesRowId = UsesFulltextRowId(sourceTable);
-            for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
+            for (const auto& index : description.GetIndexDescriptions()) {
                 const auto indexSrcPath = CanonizePath(ChildPath(SplitPath(path.first),
                     TString{index.GetIndexName()}));
                 const auto indexDstPath = CanonizePath(ChildPath(SplitPath(path.second),
@@ -230,7 +231,6 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                     }
                 }
             }
-
         } else {
             YDB_LOG_ERROR("Describe table failed",
                 {"path", path.first},

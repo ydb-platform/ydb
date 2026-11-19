@@ -273,9 +273,7 @@ void TTargetBase::Progress(const TActorContext& ctx) {
                         && Replication->FindBaseTableTarget(*peer) == this
                         && peer->GetDstState() != EDstState::Done && peer->GetDstState() != EDstState::Removing)
                     {
-                        // Keep the base table read-only until compact index
-                        // sequences have been advanced and its backing tables
-                        // detached. Failed early writes must not cache old gens.
+                        // Release the base table after its backing tables can accept writes.
                         return;
                     }
                 }

@@ -400,7 +400,6 @@ message TIndexBuildState {
     optional uint64 SnapshotTxId = 5;
     // Shared by the backing-table targets of one fulltext/JSON index.
     optional uint64 IndexGroupId = 6;
-    optional string IndexName = 7;
 }
 
 message TEvIndexBuildProgress {

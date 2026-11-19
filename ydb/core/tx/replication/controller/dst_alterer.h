@@ -7,7 +7,6 @@ namespace NKikimr::NReplication::NController {
 IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorContext& ctx);
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
     ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState,
-    const TPathId& replicationPathId = {},
-    const TActorId& proxy = {}, const TString& srcPath = {}, const TString& dstPath = {});
+    const TPathId& replicationPathId = {});
 
 }

@@ -1,6 +1,5 @@
 #include "dst_creator.h"
 #include "index_replication.h"
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include "logging.h"
 #include "private_events.h"
 #include "util.h"
@@ -289,8 +288,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 << ", issue: " << result.GetIssues().ToOneLineString());
         }
 
+        const auto description = result.GetTableDescription();
+        const auto& sourceTable = NYdb::TProtoAccessor::GetProto(description);
         if (Kind == TReplication::ETargetKind::Table && AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
-            const auto pendingIndexes = GetBuildingFulltextIndexes(NYdb::TProtoAccessor::GetProto(result.GetTableDescription()));
+            const auto pendingIndexes = GetBuildingFulltextIndexes(sourceTable);
             if (!pendingIndexes.empty()) {
                 ReportStatus(TStringBuilder() << "Waiting for source fulltext/JSON index builds on "
                     << SrcPath << ": " << JoinSeq(", ", pendingIndexes));
@@ -300,13 +301,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         ReportStatus({});
 
         Ydb::Table::CreateTableRequest scheme;
-        const auto description = result.GetTableDescription();
         description.SerializeTo(scheme);
 
         // SDK table descriptions do not retain literal defaults when serialized.
-        const auto& source = NYdb::TProtoAccessor::GetProto(description);
         THashMap<TStringBuf, const Ydb::TypedValue*> literalDefaults;
-        for (const auto& column : source.columns()) {
+        for (const auto& column : sourceTable.columns()) {
             if (column.has_from_literal()) {
                 literalDefaults.emplace(column.name(), &column.from_literal());
             }
@@ -364,7 +363,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             if (!FillIndexDescription(*TxBody.MutableCreateIndexedTable(), scheme, AppData()->FeatureFlags.GetEnableCompactFulltextIndex(), status, error)) {
                 return Error(NKikimrScheme::StatusSchemeError, error);
             }
-            const auto& sourceTable = NYdb::TProtoAccessor::GetProto(result.GetTableDescription());
             if (InitialScan && AppData()->FeatureFlags.GetEnableFulltextIndexReplication() && UsesFulltextRowId(sourceTable)) {
                 for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
                     if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique && index.KeyColumnNamesSize() == 1
@@ -375,17 +373,15 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 }
             }
             for (const auto& source : sourceTable.indexes()) {
-                if (!IsFulltextIndex(source) || !AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
+                if (!IsFulltextIndex(source)) {
                     continue;
-                }
-                if (!HasSupportedFulltextLayout(source)) {
-                    return Error(NKikimrScheme::StatusPreconditionFailed,
-                        TStringBuilder() << "Source does not describe the physical layout of index " << source.name());
                 }
                 for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
                     if (index.GetName() == source.name()) {
-                        index.SetType(GetFulltextIndexType(source));
-                        index.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(source.use_row_id_as_doc_id());
+                        if (HasSupportedFulltextLayout(source)) {
+                            index.SetType(GetFulltextIndexType(source));
+                            index.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(source.use_row_id_as_doc_id());
+                        }
                         if (source.has_global_fulltext_plain_index()) {
                             *index.MutableFulltextIndexDescription()->MutableSettings()
                                 = source.global_fulltext_plain_index().fulltext_settings();
@@ -393,7 +389,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                             *index.MutableFulltextIndexDescription()->MutableSettings()
                                 = source.global_fulltext_relevance_index().fulltext_settings();
                         }
-                        if (InitialScan) {
+                        if (InitialScan && AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
                             index.SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
                         }
                     }
@@ -407,14 +403,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         Y_ABORT_UNLESS(desc);
         desc->SetName(pathPair.second);
 
-        if (AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
-            // Column conversion already copies the row-id default and its
-            // sequence. Only permission to create the system column is needed.
-            for (const auto& column : desc->GetColumns()) {
-                if (column.GetName() == NTableIndex::NFulltext::RowIdColumn) {
-                    desc->SetSystemColumnNamesAllowed(true);
-                    break;
-                }
+        // Column conversion already copies the row-id default and its sequence.
+        for (const auto& column : desc->GetColumns()) {
+            if (column.GetName() == NTableIndex::NFulltext::RowIdColumn) {
+                desc->SetSystemColumnNamesAllowed(true);
+                break;
             }
         }
 

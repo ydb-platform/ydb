@@ -1,5 +1,4 @@
 #include "controller_impl.h"
-#include "index_replication.h"
 #include "dst_schema_changer.h"
 
 #include <ydb/core/base/path.h>

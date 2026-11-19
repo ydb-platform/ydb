@@ -436,7 +436,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         }
 
         auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {
-    // Index impl tables inherit their base table's detailed metrics level.
+            // Index impl tables inherit their base table's detailed metrics level.
             if (AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics() && baseTableDescription.HasDetailedMetricsSettings()) {
                 *implTableDesc.MutableDetailedMetricsSettings() = baseTableDescription.GetDetailedMetricsSettings();
             }

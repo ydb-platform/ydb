@@ -1,6 +1,7 @@
 #include "controller_impl.h"
-#include "index_replication.h"
 #include "target_transfer.h"
+
+#include <ydb/core/base/appdata.h>
 
 #include <util/string/join.h>
 
@@ -87,7 +88,8 @@ public:
 
                 if (target.Kind == TReplication::ETargetKind::IndexTable
                     && (target.Config->IsFulltextOrJsonIndex() || target.Config->IsRowIdIndex())
-                    && Replication->GetConfig().GetInitialScan())
+                    && Replication->GetConfig().GetInitialScan()
+                    && AppData()->FeatureFlags.GetEnableFulltextIndexReplication())
                 {
                     const auto indexPath = Replication->FindTarget(tid)->GetSrcIndexPath();
                     const auto [group, inserted] = indexGroups.emplace(indexPath, tid);
@@ -96,7 +98,6 @@ public:
                     auto& build = Self->IndexBuilds[{rid, tid}];
                     build.SetPhase(NKikimrReplication::TIndexBuildState::FILLING);
                     build.SetIndexGroupId(group->second);
-                    build.SetIndexName(SplitPath(indexPath).back());
                     Self->SaveIndexBuild(db, {rid, tid}, build);
                 }
 

@@ -52,6 +52,7 @@ public:
                 IKqpGateway::TExecPhysicalRequest request(TxAlloc);
                 request.Transactions.emplace_back(tx, TransformCtx->QueryCtx->QueryData);
                 request.NeedTxId = false;
+                request.MaxTasksPerStage = query.GetMaxTasksPerStage();
 
                 ExecuteFuture = Gateway->ExecuteLiteral(std::move(request), TransformCtx->QueryCtx->QueryData, CurrentTxIndex);
 

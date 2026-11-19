@@ -452,6 +452,16 @@ void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, co
         LOG_N("Changing config");
 
         StartInit(ctx);
+    } else if (!ev->Get()->ConsumersToResendOffsets.empty()) {
+        for (const auto& consumer : ev->Get()->ConsumersToResendOffsets) {
+            auto it = ReplicatedOffsetsByConsumers.find(consumer);
+            if (it != ReplicatedOffsetsByConsumers.end()) {
+                // A queued upstream update is newer than the last value sent to the partition.
+                OffsetsByConsumers.try_emplace(consumer, it->second);
+                ReplicatedOffsetsByConsumers.erase(it);
+            }
+        }
+        TryToSendReplicationData(ctx);
     }
 }
 

@@ -535,7 +535,8 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
                 auto response = runtime.GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(edge, TDuration::Seconds(30));
                 UNIT_ASSERT(response);
                 if (!immediate) {
-                    UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::PREPARED);
+                    UNIT_ASSERT_C(response->Get()->Record.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::PREPARED,
+                        response->Get()->Record.ShortDebugString());
                     planStep = Max(planStep + 1, response->Get()->Record.GetMinStep());
                     auto plan = MakeHolder<TEvTxProcessing::TEvPlanStep>();
                     plan->Record.SetStep(planStep);
@@ -547,8 +548,8 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
                     UNIT_ASSERT(response);
                 }
                 UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetTxId(), id);
-                UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(),
-                    allowed ? NKikimrPQ::TEvProposeTransactionResult::COMPLETE : NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+                UNIT_ASSERT_C(response->Get()->Record.GetStatus() ==
+                    (allowed ? NKikimrPQ::TEvProposeTransactionResult::COMPLETE : NKikimrPQ::TEvProposeTransactionResult::ABORTED),
                     response->Get()->Record.ShortDebugString());
                 env.WaitForOffsets(destination, allowed ? 3 : 2, 5);
                 if (allowed) {
@@ -582,7 +583,15 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
             unknownResponse->Get()->Record.ShortDebugString());
         UNIT_ASSERT_STRING_CONTAINS(unknownResponse->Get()->Record.GetErrorReason(), "Commits for consumer are disabled");
 
-        setReplicateOffsets(true);
+        // The source offset is already mirrored and no new source commits follow.
+        // Re-enabling must restore it from the cache, both forward and backward.
+        for (ui64 localOffset : {1u, 3u}) {
+            setReplicateOffsets(false);
+            env.Commit(destination, localOffset);
+            env.WaitForOffsets(destination, localOffset, 5);
+            setReplicateOffsets(true);
+            env.WaitForOffsets(destination, 2, 5);
+        }
         checkTransactionalCommits(false);
         const auto disabled = env.Client.CommitOffset(destination, 0, "reader", 3).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(disabled.GetStatus(), NYdb::EStatus::BAD_REQUEST);

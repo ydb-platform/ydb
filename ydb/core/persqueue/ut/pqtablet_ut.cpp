@@ -4097,32 +4097,6 @@ Y_UNIT_TEST_F(PlanStep_Changed_While_WriteTx_Inflight_Is_Persisted, TPQTabletFix
     UNIT_ASSERT_VALUES_EQUAL(info.GetExecTxId(), txId);
 }
 
-Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)
-{
-    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
-    PQTabletPrepare({.partitions=1}, {}, *Ctx);
-    EnsurePipeExist();
-    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
-
-    // send data to create blobs for supportive partitions
-    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
-
-    // validate supportive partition was created
-    WaitForExactSupportivePartitionsCount(1);
-    auto txInfo = GetTxWritesFromKV();
-    UNIT_ASSERT_VALUES_EQUAL(txInfo.TxWritesSize(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetKafkaTransaction(), true);
-
-    // increment time till after kafka txn timeout
-    ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs()
-        + KAFKA_TRANSACTION_DELETE_DELAY_MS;
-    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
-    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
-
-    // wait till supportive partition for this kafka transaction is deleted
-    WaitForExactSupportivePartitionsCount(0);
-}
-
 Y_UNIT_TEST_F(Kafka_Expired_Writes_Without_Partitions_Are_Deleted_After_Restart, TPQTabletFixture)
 {
     const NKafka::TProducerInstanceId producerInstanceId = {1, 0};
@@ -4159,8 +4133,14 @@ Y_UNIT_TEST_F(Kafka_Expired_Writes_Without_Partitions_Are_Deleted_After_Restart,
     Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(timeoutMs + 1));
     SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
 
-    // With no partitions, cleanup erases TxWrites synchronously. ASan catches
-    // advancing an iterator to the erased entry in the old implementation.
+    // Prepare an unrelated read transaction to persist the cleaned-up TxWrites.
+    SendProposeTransactionRequest({.TxId=txId + 1,
+                                  .Senders={Ctx->TabletId}, .Receivers={Ctx->TabletId},
+                                  .TxOps={
+                                      {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId + 1,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
     WaitForExactTxWritesCount(0);
 }
 

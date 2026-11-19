@@ -1,5 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <util/string/hex.h>
+
 namespace {
     using namespace NSchemeShardUT_Private;
     using NKikimrScheme::EStatus;
@@ -78,6 +80,81 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
+    Y_UNIT_TEST(ReadOnlySecretRejectsValueChanges) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSecret(runtime, ++txId, "/MyRoot", R"(Name: "secret" Value: "initial" Mode: READ_ONLY InheritPermissions: true)");
+        env.TestWaitNotification(runtime, txId);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestAlterSecret(runtime, ++txId, "/MyRoot", R"(Name: "secret" Value: "")",
+            {{EStatus::StatusPreconditionFailed}});
+        TestCreateSecretOrReplace(runtime, ++txId, "/MyRoot", R"(Name: "secret" Value: "replacement")",
+            {{EStatus::StatusPreconditionFailed}});
+        TestAlterSecret(runtime, ++txId, "/MyRoot", R"(Name: "secret" InheritPermissions: false)");
+        env.TestWaitNotification(runtime, txId);
+
+        NACLib::TDiffACL acl;
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, "reader");
+        AsyncModifyACL(runtime, ++txId, "/MyRoot", "secret", acl.SerializeAsString(), "new-owner");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto path = DescribePathWithSecretValue(runtime, "/MyRoot/secret").GetPathDescription();
+        const auto& secret = path.GetSecretDescription();
+        UNIT_ASSERT(secret.HasMode());
+        UNIT_ASSERT_VALUES_EQUAL(secret.GetMode(), NKikimrSchemeOp::TSecretDescription::READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(secret.GetValue(), "initial");
+        UNIT_ASSERT_VALUES_EQUAL(secret.GetVersion(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(path.GetSelf().GetOwner(), "new-owner");
+        UNIT_ASSERT(NACLib::TACL(path.GetSelf().GetACL()).GetInterruptInheritance());
+        const TSecurityObject security(path.GetSelf().GetOwner(), path.GetSelf().GetEffectiveACL(), false);
+        UNIT_ASSERT(security.CheckAccess(NACLib::DescribeSchema, NACLib::TUserToken("reader", {})));
+
+        TestDropSecret(runtime, ++txId, "/MyRoot", "secret");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/secret", false, NLs::PathNotExist);
+    }
+
+    Y_UNIT_TEST(AlterSecretUsesCurrentMode) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSecret(runtime, ++txId, "/MyRoot", R"(Name: "secret" Value: "initial" InheritPermissions: true)");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterSecret(runtime, ++txId, "/MyRoot",
+            R"(Name: "secret" Value: "replicated" Mode: READ_ONLY InheritPermissions: false)");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterSecret(runtime, ++txId, "/MyRoot",
+            R"(Name: "secret" Mode: NONE Value: "" InheritPermissions: true)", {{EStatus::StatusPreconditionFailed}});
+        const auto locked = DescribePathWithSecretValue(runtime, "/MyRoot/secret").GetPathDescription();
+        UNIT_ASSERT(locked.GetSecretDescription().HasMode());
+        UNIT_ASSERT_VALUES_EQUAL(locked.GetSecretDescription().GetMode(), NKikimrSchemeOp::TSecretDescription::READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(locked.GetSecretDescription().GetValue(), "replicated");
+        UNIT_ASSERT_VALUES_EQUAL(locked.GetSecretDescription().GetVersion(), 1);
+        UNIT_ASSERT(NACLib::TACL(locked.GetSelf().GetACL()).GetInterruptInheritance());
+
+        TestAlterSecret(runtime, ++txId, "/MyRoot", R"(Name: "secret" Mode: NONE InheritPermissions: true)");
+        env.TestWaitNotification(runtime, txId);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const auto path = DescribePathWithSecretValue(runtime, "/MyRoot/secret").GetPathDescription();
+        const auto& secret = path.GetSecretDescription();
+        UNIT_ASSERT(secret.HasMode());
+        UNIT_ASSERT_VALUES_EQUAL(secret.GetMode(), NKikimrSchemeOp::TSecretDescription::NONE);
+        UNIT_ASSERT_VALUES_EQUAL(secret.GetValue(), "replicated");
+        UNIT_ASSERT(path.GetSelf().GetACL().empty());
+
+        TestAlterSecret(runtime, ++txId, "/MyRoot", R"(Name: "secret" Value: "")");
+        env.TestWaitNotification(runtime, txId);
+        const auto updated = DescribePathWithSecretValue(runtime, "/MyRoot/secret").GetPathDescription().GetSecretDescription();
+        UNIT_ASSERT(updated.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetValue(), "");
+    }
+
     Y_UNIT_TEST(CreateSecret) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -98,6 +175,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
             const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
             ExpectEqualSecretDescription(describeResult, "test-secret", "test-value", 0);
+            const auto& path = describeResult.GetPathDescription();
+            UNIT_ASSERT(path.GetSecretDescription().HasMode());
+            UNIT_ASSERT_VALUES_EQUAL(path.GetSecretDescription().GetMode(), NKikimrSchemeOp::TSecretDescription::NONE);
+
+            // Reboot with a description persisted before the Mode field existed.
+            auto legacy = path.GetSecretDescription();
+            legacy.ClearMode();
+            LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"((
+                (let key '('('PathId (Uint64 '%lu))))
+                (let update '('('Description (String 'x"%s"))))
+                (return (AsList (UpdateRow 'Secrets key update)))
+            ))", path.GetSelf().GetPathId(), HexEncode(legacy.SerializeAsString()).c_str()));
         }
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -107,6 +196,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
             const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
             ExpectEqualSecretDescription(describeResult, "test-secret", "test-value", 0);
+            const auto& secret = describeResult.GetPathDescription().GetSecretDescription();
+            UNIT_ASSERT(secret.HasMode());
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetMode(), NKikimrSchemeOp::TSecretDescription::NONE);
         }
     }
 

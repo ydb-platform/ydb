@@ -2709,9 +2709,15 @@ message TIncrementalRestoreLockTargets {
 }
 
 message TSecretDescription {
+    enum EMode {
+        NONE = 0;
+        READ_ONLY = 1;
+    }
+
     optional string Name = 1;
     optional string Value = 2 [(Ydb.sensitive) = true]; // original, unencrypted value
     optional uint64 Version = 3;
+    optional EMode Mode = 4;
 }
 
 message TSecretSchemaOp {
@@ -2722,6 +2728,7 @@ message TSecretSchemaOp {
     // However, this field is supposed to be resolved at KQP to the actual value and be cleared.
     // Schemeshard always uses secret's value from the Value field and asserts that the ValueParamName field is empty.
     optional string ValueParamName = 4;
+    optional TSecretDescription.EMode Mode = 5;
 }
 
 message TStreamingQueryProperties {

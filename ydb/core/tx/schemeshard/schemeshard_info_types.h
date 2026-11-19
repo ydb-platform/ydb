@@ -4760,15 +4760,23 @@ struct TFullBackupInfo : public TSimpleRefCount<TFullBackupInfo> {
 struct TSecretInfo : TSimpleRefCount<TSecretInfo> {
     using TPtr = TIntrusivePtr<TSecretInfo>;
 
-    TSecretInfo(const ui64 alterVersion)
+    TSecretInfo(const ui64 alterVersion, NKikimrSchemeOp::TSecretDescription::EMode mode)
         : AlterVersion(alterVersion)
     {
+        Description.SetMode(mode);
     }
 
     TSecretInfo(const ui64 alterVersion, NKikimrSchemeOp::TSecretDescription&& desc)
         : AlterVersion(alterVersion)
         , Description(std::move(desc))
     {
+        if (!Description.HasMode()) {
+            Description.SetMode(NKikimrSchemeOp::TSecretDescription::NONE);
+        }
+    }
+
+    NKikimrSchemeOp::TSecretDescription::EMode GetMode() const {
+        return Description.HasMode() ? Description.GetMode() : NKikimrSchemeOp::TSecretDescription::NONE;
     }
 
     TPtr CreateNextVersion() {
@@ -4781,12 +4789,10 @@ struct TSecretInfo : TSimpleRefCount<TSecretInfo> {
         return result;
     }
 
-    static TPtr New() {
-        return new TSecretInfo(0);
-    }
-
     static TPtr Create(NKikimrSchemeOp::TSecretDescription&& desc) {
-        TPtr result = New();
+        const auto mode = desc.HasMode() ? desc.GetMode() : NKikimrSchemeOp::TSecretDescription::NONE;
+
+        TPtr result = new TSecretInfo(0, mode);
         TPtr alterData = result->CreateNextVersion();
         alterData->Description = std::move(desc);
 

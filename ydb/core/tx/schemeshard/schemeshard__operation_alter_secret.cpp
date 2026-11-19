@@ -167,6 +167,11 @@ public:
             return result;
         }
 
+        if (alterSecretProto.HasValue() && secretInfo->GetMode() == NKikimrSchemeOp::TSecretDescription::READ_ONLY) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot change the value of a read-only secret");
+            return result;
+        }
+
         context.MemChanges.GrabPath(context.SS, secretPath.Base()->PathId);
         context.MemChanges.GrabSecret(context.SS, secretPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
@@ -175,9 +180,7 @@ public:
         context.DbChanges.PersistAlterSecret(secretPath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        // InheritPermissions is set only by CREATE OR REPLACE SECRET over an existing secret:
-        // reapply the ACL so that the result matches a freshly created secret (DROP + CREATE).
-        // Keep the same precedence as TCreateSecret: an explicit ACL wins over InheritPermissions.
+        // As in TCreateSecret, an explicit ACL takes precedence over InheritPermissions.
         if (alterSecretProto.HasInheritPermissions()) {
             const TString acl = Transaction.GetModifyACL().GetDiffACL();
             if (!acl.empty()) {
@@ -194,7 +197,12 @@ public:
         }
 
         auto alterData = secretInfo->CreateNextVersion();
-        alterData->Description.SetValue(alterSecretProto.GetValue());
+        if (alterSecretProto.HasMode()) {
+            alterData->Description.SetMode(alterSecretProto.GetMode());
+        }
+        if (alterSecretProto.HasValue()) {
+            alterData->Description.SetValue(alterSecretProto.GetValue());
+        }
         alterData->Description.SetVersion(secretInfo->AlterVersion);
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));

@@ -1250,6 +1250,7 @@ void TPathDescriber::DescribeSecret(const TActorContext&, TPathId pathId, TPathE
         entry->SetValue(secretInfo->Description.GetValue());
     }
     entry->SetVersion(secretInfo->Description.GetVersion());
+    entry->SetMode(secretInfo->GetMode());
 }
 
 void TPathDescriber::DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr pathEl) {

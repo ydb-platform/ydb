@@ -488,12 +488,8 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
             path=cls.get_tpcc_path(),
             warehouses=cls.tpcc_warehouses,
             users=[user],
-<<<<<<< HEAD
-            threads=cls.tpcc_threads
-=======
             threads=cls.tpcc_threads,
             warmup=cls.tpcc_warmup,
->>>>>>> d25fd897524 (Reduce repeated setup in functional TPC tests (#59801))
         )
         cls._tpcc_thread = Thread(target=cls._tpcc_thread_func)
         cls._tpcc_thread.start()

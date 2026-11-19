@@ -329,6 +329,20 @@ bool TTargetWithStream::CanDetachWithoutStream() const {
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
 
+    if (GetKind() == TReplication::ETargetKind::Topic
+        && replication->GetState() == TReplication::EState::Removing)
+    {
+        switch (GetDstState()) {
+        case EDstState::Alter:
+        case EDstState::Removing:
+            // Complete destination cleanup before removing the source consumer.
+            TTargetBase::Progress(ctx);
+            return;
+        default:
+            break;
+        }
+    }
+
     if (replication->GetState() == TReplication::EState::Removing
         && GetStreamState() == EStreamState::Removed)
     {
@@ -402,6 +416,17 @@ bool TTargetWithStream::IsExpectedStreamCreator(const TActorId& actorId) const {
     return StreamCreator && StreamCreator == actorId;
 }
 
+<<<<<<< HEAD
+=======
+TString TTargetWithStream::BuildStreamConsumerName() const {
+    return ReplicationConsumerName;
+}
+
+TString TTargetWithStream::GetStreamPath() const {
+    return BuildStreamPath();
+}
+
+>>>>>>> 14db6214eaf ([KIKIMR-27673] Manage topic mirroring through replication lifecycle (#59451))
 void TTargetWithStream::WorkerStatusChanged(ui64, ui64) {
     // nop
 }

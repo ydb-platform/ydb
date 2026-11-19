@@ -83,6 +83,12 @@ public:
     void Shutdown(const TActorContext& ctx) override;
     bool IsExpectedStreamCreator(const TActorId& actorId) const override;
 
+<<<<<<< HEAD
+=======
+    TString GetStreamPath() const override;
+    TString BuildStreamConsumerName() const override;
+
+>>>>>>> 14db6214eaf ([KIKIMR-27673] Manage topic mirroring through replication lifecycle (#59451))
     void WorkerStatusChanged(ui64 workerId, ui64 status) override;
     bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) override;
 

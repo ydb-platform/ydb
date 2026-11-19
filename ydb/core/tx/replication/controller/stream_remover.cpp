@@ -3,10 +3,14 @@
 #include "stream_remover.h"
 #include "util.h"
 
+#include <ydb/core/base/path.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+
+#include <util/generic/algorithm.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -43,6 +47,10 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
                 0,
                 ProxyGeneration);
             break;
+        case TReplication::ETargetKind::Topic:
+            Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(SrcPath,
+                NYdb::NTopic::TAlterTopicSettings().AppendDropConsumers(StreamName)), 0, ProxyGeneration);
+            break;
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("Unreachable");
         }
@@ -54,35 +62,103 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
             {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
+            hFunc(TEvYdbProxy::TEvAlterTableResponse, HandleResult);
+            hFunc(TEvYdbProxy::TEvAlterTopicResponse, HandleResult);
+            hFunc(TEvYdbProxy::TEvListDirectoryResponse, Handle);
             hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
     }
 
-    void Handle(TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
+    template <typename TEvent>
+    void HandleResult(TEvent& ev) {
         if (ev->Cookie != ProxyGeneration) {
             return;
         }
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
+        if (Kind == TReplication::ETargetKind::Topic && result.GetStatus() == NYdb::EStatus::NOT_FOUND) {
+            result = NYdb::TStatus(NYdb::EStatus::SUCCESS, {});
+        }
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 YDB_LOG_DEBUG("Retry");
-                return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup(ProxyGeneration));
+                return Schedule(RetryInterval, new TEvents::TEvWakeup(ProxyGeneration));
             }
 
             YDB_LOG_ERROR("Error",
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()});
+
+            // Keep cleanup pending: the important consumer still retains source data.
+            if (Kind == TReplication::ETargetKind::Topic) {
+                if (result.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
+                    return CheckParentDirectory(SrcPath);
+                }
+                return Schedule(RetryInterval, new TEvents::TEvWakeup(ProxyGeneration));
+            }
         } else {
             YDB_LOG_INFO("Success",
                 {"issues", result.GetIssues().ToOneLineString()});
         }
 
+        Reply(std::move(result));
+    }
+
+    void CheckParentDirectory(TString childPath) {
+        const TString parent(ExtractParent(childPath));
+        if (parent.empty()) {
+            return Schedule(RetryInterval, new TEvents::TEvWakeup(ProxyGeneration));
+        }
+
+        ChildPath = std::move(childPath);
+        Send(YdbProxy, new TEvYdbProxy::TEvListDirectoryRequest(parent, {}), 0, ProxyGeneration);
+    }
+
+    bool SourceTopicIsGone(const NYdb::NScheme::TListDirectoryResult& result) const {
+        using EType = NYdb::NScheme::ESchemeEntryType;
+        const auto parentType = result.GetEntry().Type;
+        if (!EqualToOneOf(parentType, EType::Directory, EType::SubDomain)) {
+            // An ordinary source topic cannot be nested under a table or another topic.
+            return EqualToOneOf(parentType, EType::Table, EType::Topic, EType::PqGroup);
+        }
+
+        // Directory listings include children regardless of their ACLs.
+        const auto name = ExtractBase(ChildPath);
+        const auto& children = result.GetChildren();
+        const auto child = FindIf(children, [&](const auto& entry) {
+            return TStringBuf(entry.Name) == name;
+        });
+        return child == children.end()
+            || (ChildPath == SrcPath
+                && !EqualToOneOf(child->Type, EType::Topic, EType::PqGroup, EType::Unknown));
+    }
+
+    void Handle(TEvYdbProxy::TEvListDirectoryResponse::TPtr& ev) {
+        if (ev->Cookie != ProxyGeneration) {
+            return;
+        }
+
+        const auto& result = ev->Get()->Result;
+        if (result.IsSuccess()) {
+            if (SourceTopicIsGone(result)) {
+                return Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}));
+            }
+        } else if (EqualToOneOf(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, NYdb::EStatus::NOT_FOUND)) {
+            return CheckParentDirectory(TString(ExtractParent(ChildPath)));
+        } else {
+            YDB_LOG_ERROR("Cannot confirm source topic absence",
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()});
+        }
+
+        Schedule(RetryInterval, new TEvents::TEvWakeup(ProxyGeneration));
+    }
+
+    void Reply(NYdb::TStatus result) {
         Send(Parent, new TEvPrivate::TEvDropStreamResult(ReplicationId, TargetId, std::move(result)));
         PassAway();
     }
@@ -137,6 +213,7 @@ public:
         switch (Kind) {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
+        case TReplication::ETargetKind::Topic:
             return RequestPermission();
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("Unreachable");
@@ -161,15 +238,23 @@ private:
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
     const TString StreamName;
+    TString ChildPath;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
+
+    static constexpr auto RetryInterval = TDuration::Seconds(10);
 
 }; // TStreamRemover
 
 IActor* CreateStreamRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
+    auto srcPath = target->GetSrcPath();
+    if (target->GetKind() == TReplication::ETargetKind::Topic) {
+        srcPath = CanonizePath(IsStartWithSlash(srcPath) ? srcPath
+            : replication->GetConfig().GetSrcConnectionParams().GetDatabase() + "/" + srcPath);
+    }
     return CreateStreamRemover(ctx.SelfID, replication->GetYdbProxy(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetStreamName());
+        replication->GetId(), target->GetId(), target->GetKind(), srcPath, target->GetStreamName());
 }
 
 IActor* CreateStreamRemover(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,

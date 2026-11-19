@@ -25,4 +25,4 @@ public:
     virtual TSnapshot GetSnapshot() const = 0;
 };
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

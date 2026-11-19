@@ -1970,8 +1970,8 @@ private:
         size_t readers = 0, waitingCpu = 0, cpuHolders = 0, finished = 0;
         for (const auto& [actorId, stats] : CoroActors) {
             const auto snapshot = stats->GetSnapshot();
-            out << "      ActorId: " << actorId << " State: " << snapshot.State
-                << " StateFor: " << (TMonotonic::Now() - snapshot.StateSince) << " CpuHeld: " << snapshot.CpuHeld << '\n';
+            out << "      ActorId: " << actorId << " State: " << snapshot.State << " StateFor: " << (TMonotonic::Now() - snapshot.StateSince)
+                << " CpuHeld: " << snapshot.CpuHeld << '\n';
             if (snapshot.State == IS3ActorStats::EState::Finished) {
                 ++finished;
             } else {

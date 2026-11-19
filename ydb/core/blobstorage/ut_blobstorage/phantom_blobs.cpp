@@ -994,7 +994,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         const TListResult::TPtr empty = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId,
             std::make_unique<TList>(peerId, donorId));
         UNIT_ASSERT_VALUES_EQUAL(empty->Get()->Record.GetStatus(), NKikimrProto::OK);
-        UNIT_ASSERT_VALUES_EQUAL(empty->Get()->Record.ChunkIndexesSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(empty->Get()->Record.ChunksSize(), 0);
 
         // An offline peer keeps the donor from trimming these records as fully synchronized.
         ui32 laggingNodeId = 0;
@@ -1008,52 +1008,60 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         UNIT_ASSERT(laggingNodeId);
         ctx.Env->StopNode(laggingNodeId);
 
-        // The Keep records fill several TinySyncLog pages and create a threshold for this tablet.
-        // The DoNotKeep record is the only flag the persistent builder should export.
-        const TLogoBlobID key(740002, 1, 1, 0, 4096, 0);
-        const TVector<TLogoBlobID> doNotKeep{key};
-        constexpr ui32 keepCount = 1024;
-        TVector<TLogoBlobID> keep;
-        keep.reserve(keepCount);
-        for (ui32 cookie = 1; cookie <= keepCount; ++cookie) {
-            keep.emplace_back(key.TabletID(), key.Generation(), key.Step(), key.Channel(), key.BlobSize(), cookie);
-        }
-        ctx.Env->WithQueueId(donorId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queue) {
-            const TActorId sender = ctx.Env->Runtime->AllocateEdgeActor(queue.NodeId());
-            ctx.Env->Runtime->Send(new IEventHandle(queue, sender, new TEvBlobStorage::TEvVCollectGarbage(
-                key.TabletID(), key.Generation(), 1, key.Channel(), false, 0, 0, false, &keep, &doNotKeep,
-                donorId, TInstant::Max())), sender.NodeId());
-            const TEvBlobStorage::TEvVCollectGarbageResult::TPtr result =
-                ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVCollectGarbageResult>(
-                    sender, true, ctx.Env->Now() + TDuration::Seconds(30));
-            UNIT_ASSERT(result);
-            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
-        });
+        const auto publishFlags = [&](const TLogoBlobID& flagKey) {
+            // The Keep records fill several TinySyncLog pages and create a threshold for this tablet.
+            // The DoNotKeep record is the only flag the persistent builder should export.
+            const TVector<TLogoBlobID> doNotKeep{flagKey};
+            constexpr ui32 keepCount = 1024;
+            TVector<TLogoBlobID> keep;
+            keep.reserve(keepCount);
+            for (ui32 cookie = 1; cookie <= keepCount; ++cookie) {
+                keep.emplace_back(flagKey.TabletID(), flagKey.Generation(), flagKey.Step(), flagKey.Channel(),
+                    flagKey.BlobSize(), cookie);
+            }
+            ctx.Env->WithQueueId(donorId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queue) {
+                const TActorId sender = ctx.Env->Runtime->AllocateEdgeActor(queue.NodeId());
+                ctx.Env->Runtime->Send(new IEventHandle(queue, sender, new TEvBlobStorage::TEvVCollectGarbage(
+                    flagKey.TabletID(), flagKey.Generation(), 1, flagKey.Channel(), false, 0, 0, false, &keep, &doNotKeep,
+                    donorId, TInstant::Max())), sender.NodeId());
+                const TEvBlobStorage::TEvVCollectGarbageResult::TPtr result =
+                    ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVCollectGarbageResult>(
+                        sender, true, ctx.Env->Now() + TDuration::Seconds(30));
+                UNIT_ASSERT(result);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+            });
 
-        // Use the same SyncLog trim path as the persistent storage recovery tests.
-        using TBald = TEvBlobStorage::TEvVBaldSyncLog;
-        using TBaldResult = TEvBlobStorage::TEvVBaldSyncLogResult;
-        ctx.Env->Sim(TDuration::Seconds(5));
-        const std::unique_ptr<TBaldResult> bald = ctx.Env->SyncQuery<TBaldResult, TBald>(donor, donorId, true);
-        UNIT_ASSERT_VALUES_EQUAL(bald->Record.GetStatus(), NKikimrProto::OK);
+            // Use the same SyncLog trim path as the persistent storage recovery tests.
+            using TBald = TEvBlobStorage::TEvVBaldSyncLog;
+            using TBaldResult = TEvBlobStorage::TEvVBaldSyncLogResult;
+            ctx.Env->Sim(TDuration::Seconds(5));
+            const std::unique_ptr<TBaldResult> bald = ctx.Env->SyncQuery<TBaldResult, TBald>(donor, donorId, true);
+            UNIT_ASSERT_VALUES_EQUAL(bald->Record.GetStatus(), NKikimrProto::OK);
+        };
+        const TLogoBlobID key(740002, 1, 1, 0, 4096, 0);
+        publishFlags(key);
 
         TListResult::TPtr published;
         for (ui32 attempt = 0; attempt < 20; ++attempt) {
             ctx.Env->Sim(TDuration::Seconds(1));
             published = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId, std::make_unique<TList>(peerId, donorId));
-            if (published->Get()->Record.GetStatus() == NKikimrProto::OK && published->Get()->Record.ChunkIndexesSize()) {
+            if (published->Get()->Record.GetStatus() == NKikimrProto::OK && published->Get()->Record.ChunksSize()) {
                 break;
             }
         }
         UNIT_ASSERT(published);
         UNIT_ASSERT_VALUES_EQUAL(published->Get()->Record.GetStatus(), NKikimrProto::OK);
+
         bool keyFound = false;
         bool continued = false;
         constexpr ui32 pageSize = 1;
         constexpr ui32 maxPages = 64;
-        for (const ui32 chunkIndex : published->Get()->Record.GetChunkIndexes()) {
+        for (const auto& chunk : published->Get()->Record.GetChunks()) {
+            const ui32 chunkIndex = chunk.GetChunkIndex();
+            const ui64 generation = chunk.GetGeneration();
+            UNIT_ASSERT(generation > 0);
             const TReadResult::TPtr whole = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId,
-                std::make_unique<TRead>(peerId, donorId, chunkIndex));
+                std::make_unique<TRead>(peerId, donorId, chunkIndex, generation));
             const auto& wholeRecord = whole->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(wholeRecord.GetStatus(), NKikimrProto::OK);
             UNIT_ASSERT_VALUES_EQUAL(wholeRecord.GetChunkIndex(), chunkIndex);
@@ -1065,7 +1073,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             bool reachedEof = false;
             for (ui32 pageIndex = 0; pageIndex < maxPages; ++pageIndex) {
                 const TReadResult::TPtr read = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId,
-                    std::make_unique<TRead>(peerId, donorId, chunkIndex, readOffset, pageSize));
+                    std::make_unique<TRead>(peerId, donorId, chunkIndex, generation, readOffset, pageSize));
                 const auto& record = read->Get()->Record;
                 UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetChunkIndex(), chunkIndex);
@@ -1080,6 +1088,12 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                     reachedEof = true;
                     break;
                 }
+                const TReadResult::TPtr staleGeneration = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId,
+                    std::make_unique<TRead>(peerId, donorId, chunkIndex, generation - 1, readOffset, pageSize));
+                UNIT_ASSERT_VALUES_EQUAL(staleGeneration->Get()->Record.GetStatus(), NKikimrProto::RACE);
+                UNIT_ASSERT_VALUES_EQUAL(staleGeneration->Get()->Record.KeysSize(), 0);
+                UNIT_ASSERT(!staleGeneration->Get()->Record.HasNextReadOffset());
+                UNIT_ASSERT(!staleGeneration->Get()->Record.HasEof());
                 continued = true;
             }
             UNIT_ASSERT(reachedEof);
@@ -1089,7 +1103,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             UNIT_ASSERT_VALUES_EQUAL(keys, wholeKeys);
 
             const TReadResult::TPtr end = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId,
-                std::make_unique<TRead>(peerId, donorId, chunkIndex, readOffset, pageSize));
+                std::make_unique<TRead>(peerId, donorId, chunkIndex, generation, readOffset, pageSize));
             const auto& endRecord = end->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(endRecord.GetStatus(), NKikimrProto::OK);
             UNIT_ASSERT(endRecord.HasEof() && endRecord.GetEof());
@@ -1105,9 +1119,17 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         UNIT_ASSERT(keyFound);
         UNIT_ASSERT(continued);
 
-        const ui32 chunkIndex = published->Get()->Record.GetChunkIndexes(0);
+        const ui32 chunkIndex = published->Get()->Record.GetChunks(0).GetChunkIndex();
+        const ui64 generation = published->Get()->Record.GetChunks(0).GetGeneration();
+        const TReadResult::TPtr staleGeneration = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId,
+            std::make_unique<TRead>(peerId, donorId, chunkIndex, generation - 1, Max<ui32>()));
+        UNIT_ASSERT_VALUES_EQUAL(staleGeneration->Get()->Record.GetStatus(), NKikimrProto::RACE);
+        UNIT_ASSERT_VALUES_EQUAL(staleGeneration->Get()->Record.KeysSize(), 0);
+        UNIT_ASSERT(!staleGeneration->Get()->Record.HasNextReadOffset());
+        UNIT_ASSERT(!staleGeneration->Get()->Record.HasEof());
+
         const TReadResult::TPtr invalidOffset = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId,
-            std::make_unique<TRead>(peerId, donorId, chunkIndex, Max<ui32>()));
+            std::make_unique<TRead>(peerId, donorId, chunkIndex, generation, Max<ui32>()));
         UNIT_ASSERT_VALUES_EQUAL(invalidOffset->Get()->Record.GetStatus(), NKikimrProto::ERROR);
         UNIT_ASSERT_VALUES_EQUAL(invalidOffset->Get()->Record.GetChunkIndex(), chunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(invalidOffset->Get()->Record.KeysSize(), 0);
@@ -1115,14 +1137,14 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         UNIT_ASSERT(!invalidOffset->Get()->Record.HasEof());
 
         const TReadResult::TPtr zeroSize = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId,
-            std::make_unique<TRead>(peerId, donorId, chunkIndex, std::nullopt, ui32{0}));
+            std::make_unique<TRead>(peerId, donorId, chunkIndex, generation, std::nullopt, ui32{0}));
         UNIT_ASSERT_VALUES_EQUAL(zeroSize->Get()->Record.GetStatus(), NKikimrProto::ERROR);
         UNIT_ASSERT(!zeroSize->Get()->Record.HasNextReadOffset());
         UNIT_ASSERT(!zeroSize->Get()->Record.HasEof());
 
         const ui32 missingChunk = 0;
         const TReadResult::TPtr missing = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId,
-            std::make_unique<TRead>(peerId, donorId, missingChunk));
+            std::make_unique<TRead>(peerId, donorId, missingChunk, generation));
         UNIT_ASSERT_VALUES_EQUAL(missing->Get()->Record.GetStatus(), NKikimrProto::NOT_FOUND);
 
         TVDiskID stalePeerId = peerId;
@@ -1132,7 +1154,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         UNIT_ASSERT_VALUES_EQUAL(stale->Get()->Record.GetStatus(), NKikimrProto::RACE);
 
         const TReadResult::TPtr staleRead = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId,
-            std::make_unique<TRead>(stalePeerId, donorId, chunkIndex));
+            std::make_unique<TRead>(stalePeerId, donorId, chunkIndex, generation));
         UNIT_ASSERT_VALUES_EQUAL(staleRead->Get()->Record.GetStatus(), NKikimrProto::RACE);
 
         std::unique_ptr<TList> invalidCoordinatesRequest = std::make_unique<TList>(peerId, donorId);
@@ -1141,12 +1163,67 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             *ctx.Env, donor, peerNodeId, std::move(invalidCoordinatesRequest));
         UNIT_ASSERT_VALUES_EQUAL(invalidCoordinates->Get()->Record.GetStatus(), NKikimrProto::ERROR);
 
-        std::unique_ptr<TRead> noChunkIndexRequest = std::make_unique<TRead>(peerId, donorId, chunkIndex);
+        std::unique_ptr<TRead> noChunkIndexRequest = std::make_unique<TRead>(peerId, donorId, chunkIndex, generation);
         noChunkIndexRequest->Record.ClearChunkIndex();
         const TReadResult::TPtr noChunkIndex = QueryPhantomFlagStorage(
             *ctx.Env, donor, peerNodeId, std::move(noChunkIndexRequest));
         UNIT_ASSERT_VALUES_EQUAL(noChunkIndex->Get()->Record.GetStatus(), NKikimrProto::ERROR);
         UNIT_ASSERT(!noChunkIndex->Get()->Record.HasChunkIndex());
+
+        ui64 maxGeneration = 0;
+        for (const auto& chunk : published->Get()->Record.GetChunks()) {
+            maxGeneration = std::max(maxGeneration, chunk.GetGeneration());
+        }
+        ctx.Env->StartNode(laggingNodeId);
+        TListResult::TPtr dropped;
+        for (ui32 attempt = 0; attempt < 60; ++attempt) {
+            ctx.Env->Sim(TDuration::Seconds(30));
+            dropped = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId, std::make_unique<TList>(peerId, donorId));
+            if (dropped->Get()->Record.GetStatus() == NKikimrProto::OK && !dropped->Get()->Record.ChunksSize()) {
+                break;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(dropped->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(dropped->Get()->Record.ChunksSize(), 0);
+
+        ctx.Env->RestartNode(donor.NodeId());
+        ctx.Env->Sim(TDuration::Seconds(5));
+        ctx.Env->StopNode(laggingNodeId);
+        const TLogoBlobID nextKey(740003, 1, 1, 0, 4096, 0);
+        publishFlags(nextKey);
+        TListResult::TPtr allocated;
+        for (ui32 attempt = 0; attempt < 20; ++attempt) {
+            ctx.Env->Sim(TDuration::Seconds(1));
+            allocated = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId, std::make_unique<TList>(peerId, donorId));
+            if (allocated->Get()->Record.GetStatus() == NKikimrProto::OK && allocated->Get()->Record.ChunksSize()) {
+                break;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(allocated->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT(allocated->Get()->Record.ChunksSize());
+        for (const auto& chunk : allocated->Get()->Record.GetChunks()) {
+            UNIT_ASSERT(chunk.GetGeneration() > maxGeneration);
+        }
+
+        ctx.Env->RestartNode(donor.NodeId());
+        TListResult::TPtr recovered;
+        for (ui32 attempt = 0; attempt < 20; ++attempt) {
+            ctx.Env->Sim(TDuration::Seconds(1));
+            recovered = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId, std::make_unique<TList>(peerId, donorId));
+            if (recovered->Get()->Record.GetStatus() == NKikimrProto::OK) {
+                break;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(recovered->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(recovered->Get()->Record.ChunksSize(), allocated->Get()->Record.ChunksSize());
+        for (const auto& chunk : allocated->Get()->Record.GetChunks()) {
+            const auto it = std::find_if(recovered->Get()->Record.GetChunks().begin(),
+                recovered->Get()->Record.GetChunks().end(), [&](const auto& recoveredChunk) {
+                    return recoveredChunk.GetChunkIndex() == chunk.GetChunkIndex();
+                });
+            UNIT_ASSERT(it != recovered->Get()->Record.GetChunks().end());
+            UNIT_ASSERT_VALUES_EQUAL(it->GetGeneration(), chunk.GetGeneration());
+        }
     }
 
     Y_UNIT_TEST(ReclaimsUnpublishedPhantomFlagStorageChunksOnRestart) {
@@ -1226,7 +1303,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         const TListResult::TPtr list = QueryPhantomFlagStorage(*ctx.Env, donor, group->GetActorId(1).NodeId(),
             std::make_unique<TList>(group->GetVDiskId(1), group->GetVDiskId(0)));
         UNIT_ASSERT_VALUES_EQUAL(list->Get()->Record.GetStatus(), NKikimrProto::OK);
-        UNIT_ASSERT_VALUES_EQUAL(list->Get()->Record.ChunkIndexesSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(list->Get()->Record.ChunksSize(), 0);
     }
 
     Y_UNIT_TEST(PhantomFlagStorageRequestsWithDisabledChunkKeeper) {
@@ -1254,11 +1331,11 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         const TListResult::TPtr list = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId,
             std::make_unique<TList>(peerId, donorId));
         UNIT_ASSERT_VALUES_EQUAL(list->Get()->Record.GetStatus(), NKikimrProto::NODATA);
-        UNIT_ASSERT_VALUES_EQUAL(list->Get()->Record.ChunkIndexesSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(list->Get()->Record.ChunksSize(), 0);
 
         const ui32 chunkIndex = 1;
         const TReadResult::TPtr read = QueryPhantomFlagStorage(*ctx.Env, donor, peerNodeId,
-            std::make_unique<TRead>(peerId, donorId, chunkIndex));
+            std::make_unique<TRead>(peerId, donorId, chunkIndex, ui64{0}));
         UNIT_ASSERT_VALUES_EQUAL(read->Get()->Record.GetStatus(), NKikimrProto::NODATA);
         UNIT_ASSERT_VALUES_EQUAL(read->Get()->Record.GetChunkIndex(), chunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(read->Get()->Record.KeysSize(), 0);

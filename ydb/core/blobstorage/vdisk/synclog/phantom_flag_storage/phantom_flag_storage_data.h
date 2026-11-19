@@ -74,6 +74,7 @@ std::optional<ui32> ReadPhantomFlagStorageKeys(TStringBuf data, ui32 readSize, u
 struct TPhantomFlagStorageData {
     struct TChunk {
         ui32 DataSize;
+        ui64 Generation = 0;
     };
 
     void Deserialize(const TPhantomFlagStorageDataProto& proto);
@@ -81,6 +82,8 @@ struct TPhantomFlagStorageData {
 
     std::unordered_map<ui32, TChunk> Chunks;
     ui32 ChunkSize;
+    // SyncLog preserves this counter when replacing or clearing the chunk manifest.
+    ui64 LastChunkGeneration = 0;
 };
 
 }  // namespace NKikimr::NSyncLog

@@ -846,9 +846,15 @@ message TEvVPhantomFlagStorageListChunks {
 }
 
 message TEvVPhantomFlagStorageListChunksResult {
+    message TChunk {
+        optional uint32 ChunkIndex = 1;
+        // Chunks written before generation tracking use zero.
+        optional uint64 Generation = 2;
+    }
+
     optional NKikimrProto.EReplyStatus Status = 1;
     optional TVDiskID VDiskID = 2;
-    repeated uint32 ChunkIndexes = 3 [packed = true];
+    repeated TChunk Chunks = 3;
 }
 
 message TEvVPhantomFlagStorageReadChunk {
@@ -860,6 +866,8 @@ message TEvVPhantomFlagStorageReadChunk {
     // Positive byte budget for the read. The donor caps it to fit the transport limit.
     // A record starting within this budget is consumed in full. If unset, use the donor's limit.
     optional uint32 ReadSize = 5;
+    // Must match the generation returned by ListChunks for the entire paged read.
+    optional uint64 Generation = 6;
 }
 
 message TEvVPhantomFlagStorageReadChunkResult {

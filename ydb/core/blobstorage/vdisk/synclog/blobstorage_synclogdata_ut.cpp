@@ -83,6 +83,83 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(stat.FreeBytes, 0);
         }
 
+        Y_UNIT_TEST(PhantomFlagStorageChunkGenerations) {
+            const auto restoreSnapshot = [](const TSyncLogSnapshotPtr& snapshot) {
+                TEntryPointSerializer serializer(snapshot, {}, 0);
+                TDeltaToDiskRecLog delta(10);
+                serializer.Serialize(delta);
+                return Parse(serializer.GetSerializedData());
+            };
+
+            constexpr ui32 chunkIndex = 17;
+            TPhantomFlagStorageDataProto legacyManifest;
+            legacyManifest.SetChunkSize(32_MB);
+            auto* legacyChunk = legacyManifest.AddChunks();
+            legacyChunk->SetChunkIdx(chunkIndex);
+            legacyChunk->SetDataSize(4096);
+
+            TPhantomFlagStorageData data;
+            data.Deserialize(legacyManifest);
+            UNIT_ASSERT_VALUES_EQUAL(data.Chunks.at(chunkIndex).Generation, 0);
+            UNIT_ASSERT_VALUES_EQUAL(data.LastChunkGeneration, 0);
+
+            constexpr ui64 generation = 4;
+            constexpr ui64 lastGeneration = 8;
+            data.Chunks.at(chunkIndex).Generation = generation;
+            data.LastChunkGeneration = lastGeneration;
+            TPhantomFlagStorageDataProto manifest;
+            data.Serialize(&manifest);
+            UNIT_ASSERT_VALUES_EQUAL(manifest.GetGeneration(), lastGeneration);
+            TPhantomFlagStorageData recovered;
+            recovered.Deserialize(manifest);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.Chunks.at(chunkIndex).Generation, generation);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.LastChunkGeneration, lastGeneration);
+
+            legacyChunk->SetGeneration(generation);
+            TPhantomFlagStorageData beforeGlobalData;
+            beforeGlobalData.Deserialize(legacyManifest);
+            TSyncLogPtr syncLog = CreateEmpty();
+            syncLog->UpdatePhantomFlagStorageData(std::move(beforeGlobalData));
+            const TSyncLogPtr beforeGlobalGeneration = restoreSnapshot(syncLog->GetSnapshot());
+            UNIT_ASSERT_VALUES_EQUAL(beforeGlobalGeneration->GetPhantomFlagStorageData().LastChunkGeneration, 0);
+            UNIT_ASSERT_VALUES_EQUAL(
+                beforeGlobalGeneration->GetPhantomFlagStorageData().Chunks.at(chunkIndex).Generation, generation);
+
+            syncLog->UpdatePhantomFlagStorageData(std::move(recovered));
+            const TSyncLogSnapshotPtr originalSnapshot = syncLog->GetSnapshot();
+            const TSyncLogPtr original = restoreSnapshot(originalSnapshot);
+            UNIT_ASSERT_VALUES_EQUAL(original->GetPhantomFlagStorageData().LastChunkGeneration, lastGeneration);
+            UNIT_ASSERT_VALUES_EQUAL(original->GetPhantomFlagStorageData().Chunks.at(chunkIndex).Generation, generation);
+
+            // Removing the manifest must preserve the global generation in the entry point.
+            syncLog->UpdatePhantomFlagStorageData(std::nullopt);
+            const TSyncLogSnapshotPtr withoutManifest = syncLog->GetSnapshot();
+            UNIT_ASSERT(!withoutManifest->PhantomFlagStorageData);
+            TSyncLogPtr afterDrop = restoreSnapshot(withoutManifest);
+            UNIT_ASSERT(afterDrop->GetPhantomFlagStorageData().Chunks.empty());
+            UNIT_ASSERT_VALUES_EQUAL(afterDrop->GetPhantomFlagStorageData().LastChunkGeneration, lastGeneration);
+            UNIT_ASSERT_VALUES_EQUAL(afterDrop->GetPhantomFlagStorageData().ChunkSize, 64_MB);
+
+            // Rebuilding from an older manifest cannot roll back the saved global generation.
+            TPhantomFlagStorageData rebuilt = beforeGlobalGeneration->GetPhantomFlagStorageData();
+            afterDrop->UpdatePhantomFlagStorageData(std::move(rebuilt));
+            const TSyncLogPtr afterRebuild = restoreSnapshot(afterDrop->GetSnapshot());
+            UNIT_ASSERT_VALUES_EQUAL(afterRebuild->GetPhantomFlagStorageData().LastChunkGeneration, lastGeneration);
+            UNIT_ASSERT_VALUES_EQUAL(
+                afterRebuild->GetPhantomFlagStorageData().Chunks.at(chunkIndex).Generation, generation);
+
+            constexpr ui64 nextGeneration = lastGeneration + 1;
+            TPhantomFlagStorageData next = afterDrop->GetPhantomFlagStorageData();
+            next.LastChunkGeneration = nextGeneration;
+            next.Chunks.at(chunkIndex).Generation = nextGeneration;
+            syncLog->UpdatePhantomFlagStorageData(std::move(next));
+            const TSyncLogPtr afterAllocation = restoreSnapshot(syncLog->GetSnapshot());
+            UNIT_ASSERT_VALUES_EQUAL(afterAllocation->GetPhantomFlagStorageData().LastChunkGeneration, nextGeneration);
+            const TSyncLogPtr unchangedSnapshot = restoreSnapshot(withoutManifest);
+            UNIT_ASSERT_VALUES_EQUAL(unchangedSnapshot->GetPhantomFlagStorageData().LastChunkGeneration, lastGeneration);
+            UNIT_ASSERT(unchangedSnapshot->GetPhantomFlagStorageData().Chunks.empty());
+        }
+
         Y_UNIT_TEST(PhantomFlagStorageItemFraming) {
             const TLogoBlobID key(123, 4, 5, 6, 4096, 0);
             const TLogoBlobRec record(key, 0);

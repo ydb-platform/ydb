@@ -31,11 +31,12 @@ namespace NKikimr::NTable {
     };
 
     // Resolve unloaded parts' runtime placement in the default tier, preserving
-    // default-generation levels and normalizing non-default generations to 255.
+    // default-generation levels and normalizing non-default generations/finals to 255.
     ui32 ResolveColdPartLevel(ui32 level, const NLocalDb::TCompactionPolicy& policy);
 
     // Build a runtime placement view without modifying state.PartLevels.
-    // Missing levels, FinalParts (level 255), and unloaded parts belong to default.
+    // Final levels are decoded using the policy's stable tier slots. Missing
+    // bindings and unloaded parts belong to the default tier.
     // Normalized levels are not a snapshot of persisted bindings; do not write
     // them back to state.PartLevels when saving compaction state.
     TVector<TCompactionPartInfo> DescribeCompactionParts(

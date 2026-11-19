@@ -11016,6 +11016,11 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Tiering) {
                 return true;
             }
 
+            auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+            auto coldGeneration = policy->Generations.back();
+            coldGeneration.TierId = ColdTierId;
+            policy->Generations.push_back(coldGeneration);
+
             txc.DB.Alter()
                 .AddTable("tiered", TableId)
                 .AddColumn(TableId, "key", KeyColumnId, NScheme::TUint64::TypeId, false, false)
@@ -11024,6 +11029,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Tiering) {
                 .AddFamily(TableId, ColdTierId, NTable::TScheme::DefaultRoom)
                 .SetFamilyCompression(TableId, ColdTierId, NTable::NPage::ECodec::LZ4)
                 .SetFamilyIndexPlacement(TableId, ColdTierId, false, false)
+                .SetCompactionPolicy(TableId, *policy)
                 .SetTieringPolicy(TableId, MakeTieringPolicy());
             return true;
         }

@@ -25,8 +25,6 @@
 #include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
-#include <ydb/public/lib/ydb_cli/common/normalize_path.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
@@ -50,31 +48,6 @@
 namespace NYdb::NConsoleClient {
 
 namespace {
-
-TScopedDriver ResolveDatabase(TClientCommand::TConfig& config, const TDeadline& deadline = TDeadline::Max()) {
-    if (!config.NeedToConnect || config.Database.empty() || config.Database.StartsWith('/')) {
-        return {};
-    }
-    auto driverConfig = config.CreateDriverConfigWithBuildInfo();
-    if (!config.StaticCredentials.User.empty()) {
-        // Login must authenticate against the resolved database.
-        driverConfig.SetCredentialsProviderFactory(config.CredentialsGetter(config));
-    }
-    TScopedDriver driver{TDriver(driverConfig)};
-    NScheme::TSchemeClient client(driver);
-    auto root = client.ListDirectory("/", NScheme::TListDirectorySettings().Deadline(deadline)).GetValueSync();
-    if (!root.IsSuccess()) {
-        Cerr << "Cannot resolve the relative database path; specify an absolute database path starting with '/'." << Endl;
-    }
-    NStatusHelpers::ThrowOnErrorOrPrintIssues(root);
-    Y_ENSURE(root.GetChildren().size() == 1, "Exactly one cluster root expected");
-    const TString rootName(root.GetChildren().front().Name);
-    if (config.Database == rootName || config.Database.StartsWith(rootName + "/")) {
-        throw TMisuseException() << "Ambiguous slashless database path; specify an absolute database path starting with '/'.";
-    }
-    config.Database = NormalizePath("/" + rootName + "/" + config.Database);
-    return driver;
-}
 
 #ifndef NDEBUG
 std::terminate_handler DefaultTerminateHandler;
@@ -244,10 +217,8 @@ int TClientCommandRootCommon::Process(TConfig& config) {
             TClientCommand::Prepare(config);
             ExtractParams(config);
             config.BuildInfoCommandTag = "completion-scheme";
-            const auto deadline = TDeadline::AfterDuration(TDuration::Seconds(3));
-            const auto bootstrapDriver = ResolveDatabase(config, deadline);
             TScopedDriver driver(TDriver(config.CreateDriverConfigWithBuildInfo()));
-            RunSchemeCompletion(driver, config.Database, *SchemeCompletionContext_, deadline);
+            RunSchemeCompletion(driver, config.Database, *SchemeCompletionContext_);
         } catch (...) {
         }
         return EXIT_SUCCESS;
@@ -980,7 +951,6 @@ void TClientCommandRootCommon::Validate(TConfig& config) {
 }
 
 int TClientCommandRootCommon::Run(TConfig& config) {
-    const auto bootstrapDriver = ResolveDatabase(config);
     if (HasSelectedCommand()) {
         return TClientCommandRootBase::Run(config);
     }

@@ -118,13 +118,7 @@ public:
             CHECK_EXP(context->deadline() <= std::chrono::system_clock::now() + std::chrono::microseconds(MaxClientTimeout.MicroSeconds()),
                 "ListDirectory client deadline exceeds the completion timeout");
         }
-        if (BootstrapDatabase) {
-            CHECK_EXP(request->path() == "/", "Expected cluster-root discovery");
-            CheckClientMetadata(context, "x-ydb-database", BootstrapDatabase);
-            BootstrapDatabase.clear();
-        } else {
-            CheckClientMetadata(context, "x-ydb-database", Database);
-        }
+        CheckClientMetadata(context, "x-ydb-database", Database);
         if (Token) {
             CheckClientMetadata(context, "x-ydb-auth-ticket", Token);
         } else {
@@ -197,7 +191,6 @@ public:
 
     void ClearExpectations() {
         ExpectedClientCert = Token = {};
-        BootstrapDatabase.clear();
         Database = TEST_DATABASE;
         Directories.clear();
         MaxClientTimeout = TDuration::Max();
@@ -208,7 +201,6 @@ public:
     }
 
     TString Database = TEST_DATABASE;
-    TString BootstrapDatabase;
     TString Token;
     TString ExpectedClientCert;
     TDuration MaxClientTimeout = TDuration::Max();

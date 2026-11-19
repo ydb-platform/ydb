@@ -24,7 +24,6 @@
 #include <ydb/library/workload/vector/vector.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
-#include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -445,17 +444,6 @@ int TWorkloadCommandBase::Run(TConfig& config) {
 
 void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) {
     auto pathsToDelete = workloadGen.GetCleanPaths();
-    for (const auto& path : pathsToDelete) {
-        if (NormalizePath("/" + path).empty()) {
-            throw TMisuseException() << "Workload cleanup path must not be empty or the database root";
-        }
-        for (TStringBuf remaining(path); remaining;) {
-            const auto component = remaining.NextTok('/');
-            if (component == "." || component == "..") {
-                throw TMisuseException() << "Workload cleanup path must not contain '.' or '..' components";
-            }
-        }
-    }
     TRemoveDirectoryRecursiveSettings settings;
     settings.NotExistsIsOk(true);
     settings.CreateProgressBar(true);

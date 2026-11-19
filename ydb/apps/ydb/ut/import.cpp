@@ -463,9 +463,7 @@ Y_UNIT_TEST_SUITE(ImportTest) {
 
         const TString s3Endpoint = GetS3Endpoint();
 
-        Service<TSchemeImpl>().BootstrapDatabase = "import-root";
-        Service<TSchemeImpl>().Database = GetDatabase() + "/import-root";
-        Service<TSchemeImpl>().ExpectChild("/", "test_database", Ydb::Scheme::Entry::DIRECTORY);
+        Service<TSchemeImpl>().Database = "tenant";
         Service<TImportImpl>()
             .ExpectBucket(TEST_BUCKET)
             .ExpectS3Endpoint(s3Endpoint)
@@ -473,13 +471,16 @@ Y_UNIT_TEST_SUITE(ImportTest) {
             .ExpectS3AccessKey("test-key")
             .ExpectS3SecretKey("test-access-key")
             .ExpectDisableVirtualAddressing(true)
-            .ExpectItem("source/prefix/keep", "/test_database/import-root/keep");
+            .ExpectCommonDestinationPath("base")
+            .ExpectItem("source/prefix/keep", "./keep")
+            .ExpectItem("source/prefix/keep", "restore/keep")
+            .ExpectItem("source/prefix/keep", "/test_database/absolute/keep");
 
         RunCli(
             {
                 "-v",
                 "-e", GetEndpoint(),
-                "-d", "import-root",
+                "-d", "tenant",
                 "import", "s3",
                 "--bucket", TEST_BUCKET,
                 "--s3-endpoint", s3Endpoint,
@@ -487,7 +488,10 @@ Y_UNIT_TEST_SUITE(ImportTest) {
                 "--access-key", "test-key",
                 "--secret-key", "test-access-key",
                 "--use-virtual-addressing", "false",
+                "--destination-path", "base",
                 "--item", "src=source/prefix,dst=.",
+                "--item", "src=source/prefix,dst=restore",
+                "--item", "src=source/prefix,dst=/test_database/absolute",
                 "--exclude", "skip",
             }
         );

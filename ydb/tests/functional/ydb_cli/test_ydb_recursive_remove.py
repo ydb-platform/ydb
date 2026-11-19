@@ -8,7 +8,6 @@ import yatest
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin
 from ydb.tests.library.common.wait_for import wait_for
-from ydb.tests.library.fixtures import ydb_database_ctx
 
 CLUSTER_CONFIG = dict(
     extra_feature_flags=["enable_external_data_sources", "enable_schema_secrets", "enable_backup_service"],
@@ -94,30 +93,9 @@ def create_external_table(session, external_table, external_data_source):
     ids=["relative_paths_disabled", "relative_paths_enabled"],
 )
 class TestRootPathSafety:
-    def test_ambiguous_relative_database_is_rejected(
-        self, ydb_cluster, ydb_root, ydb_client_session,
-    ):
-        relative_database = ydb_root.lstrip("/")
-        with ydb_database_ctx(ydb_cluster, f"{ydb_root}/{relative_database}") as database:
-            with ydb_client_session(database).checkout() as session:
-                create_table(session, "orders")
-                session.transaction().execute(
-                    'UPSERT INTO orders (key, value) VALUES (1, "tenant");', commit_tx=True,
-                )
-                node = ydb_cluster.nodes[1]
-                execution = yatest.common.execute(
-                    [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}",
-                     "--database", relative_database, "table", "drop", "orders"],
-                    check_exit_code=False,
-                )
-                assert execution.exit_code != 0
-                assert "Ambiguous slashless database path" in execution.std_err.decode("utf-8")
-                rows = session.transaction().execute("SELECT key, value FROM orders;", commit_tx=True)[0].rows
-                assert [(row.key, row.value) for row in rows] == [(1, "tenant")]
-
     @pytest.mark.parametrize(
-        "path", ["/", "//"],
-        ids=["root", "slashes"],
+        "path", ["/", "//", "/./", "///././/"],
+        ids=["root", "slashes", "dot", "mixed"],
     )
     def test_rmdir_root_aliases(self, ydb_cluster, ydb_root, ydb_client_session, path):
         node = ydb_cluster.nodes[1]
@@ -127,7 +105,7 @@ class TestRootPathSafety:
                 'UPSERT INTO sentinel (key, value) VALUES (1, "retained");', commit_tx=True,
             )
             removal = yatest.common.execute(
-                [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}", "--database", ydb_root,
+                [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}", "--database", ydb_root.lstrip("/"),
                  "scheme", "rmdir", "-rf", path], check_exit_code=False,
             )
             rows = session.transaction().execute("SELECT key, value FROM sentinel;", commit_tx=True)[0].rows
@@ -135,29 +113,6 @@ class TestRootPathSafety:
             assert removal.exit_code != 0
             assert "Cannot remove the cluster root" in removal.std_err.decode("utf-8")
             session.execute_scheme("DROP TABLE sentinel;")
-
-    @pytest.mark.parametrize("command", [["clean"], ["init", "--clear"]], ids=["clean", "init_clear"])
-    @pytest.mark.parametrize(
-        "path", [".", "", "bench/.", "bench/.."],
-        ids=["dot", "empty", "bench_dot", "bench_dotdot"],
-    )
-    def test_workload_cleanup_paths(self, ydb_cluster, ydb_database, ydb_client_session, command, path):
-        node = ydb_cluster.nodes[1]
-        with ydb_client_session(ydb_database).checkout() as session:
-            create_table(session, "bench/sentinel")
-            session.transaction().execute(
-                'UPSERT INTO `bench/sentinel` (key, value) VALUES (1, "retained");', commit_tx=True,
-            )
-            cleanup = yatest.common.execute(
-                [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}", "--database", ydb_database,
-                 "workload", "kv"] + command + ["--path", path], check_exit_code=False,
-            )
-            rows = session.transaction().execute(
-                "SELECT key, value FROM `bench/sentinel`;", commit_tx=True,
-            )[0].rows
-            assert [(row.key, row.value) for row in rows] == [(1, "retained")]
-            assert cleanup.exit_code != 0
-
 
 class TestRecursiveRemove:
     @pytest.fixture(autouse=True, scope="function")

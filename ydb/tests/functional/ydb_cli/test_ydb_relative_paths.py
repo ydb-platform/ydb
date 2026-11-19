@@ -8,7 +8,7 @@ from ydb.tests.library.fixtures import ydb_database_ctx
 CLUSTER_CONFIG = dict(extra_feature_flags=["enable_relative_paths"])
 
 
-@pytest.fixture(params=["mydb", "folder/mydb"], ids=["root", "nested"])
+@pytest.fixture(params=["mydb", "folder/mydb", "Root"], ids=["root", "nested", "domain_name"])
 def relative_database_paths(ydb_cluster, ydb_root, request):
     with ydb_database_ctx(ydb_cluster, f"{ydb_root}/{request.param}") as database:
         yield database, request.param

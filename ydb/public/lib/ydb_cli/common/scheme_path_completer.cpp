@@ -8,6 +8,7 @@ namespace NYdb::NConsoleClient {
 namespace {
 
 constexpr TStringBuf SpecialFlag = "---CUSTOM-COMPLETION---";
+constexpr TDuration CompletionTimeout = TDuration::Seconds(3);
 
 struct TSchemeCompleterNameMapping {
     TStringBuf Name;
@@ -179,8 +180,7 @@ std::optional<TSchemeCompletionContext> DetectSchemeCompletion(int& argc, const 
 void RunSchemeCompletion(
     TDriver& driver,
     const TString& database,
-    const TSchemeCompletionContext& ctx,
-    const TDeadline& deadline)
+    const TSchemeCompletionContext& ctx)
 {
     TStringBuf prefix(ctx.Prefix);
     TStringBuf root;
@@ -202,13 +202,13 @@ void RunSchemeCompletion(
     if (root && TStringBuf(root).StartsWith('/')) {
         listPath = TString(root);
     } else if (root) {
-        listPath = database + "/" + root;
+        listPath = database.empty() || database.StartsWith('/') ? database + "/" + root : TString(root);
     } else {
-        listPath = database;
+        listPath = !database.empty() && !database.StartsWith('/') ? TString(".") : database;
     }
 
     auto settings = NScheme::TListDirectorySettings();
-    settings.Deadline(deadline);
+    settings.ClientTimeout(CompletionTimeout);
 
     auto result = client.ListDirectory(listPath, settings).GetValueSync();
     if (!result.IsSuccess()) {

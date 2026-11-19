@@ -408,32 +408,37 @@ Y_UNIT_TEST_SUITE(ExportTest) {
     }
 
     Y_UNIT_TEST_F(PassItems, TExportFixture) {
-        Service<TExportImpl>()
-            .ExpectBucket(TEST_BUCKET)
-            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
-            .ExpectS3AccessKey("test-key")
-            .ExpectS3SecretKey("test-access-key")
-            .ExpectCommonSourcePrefix("/test_database/root/path")
-            .ExpectCommonDstPrefix("dest/prefix")
-            .ExpectItem("/test_database/root/path/path", "")
-            .ExpectItem("/test_database/root/path/srcpath", "dstpath");
+        for (const bool relative : {false, true}) {
+            const TString database = relative ? "tenant" : GetDatabase();
+            Service<TExportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonSourcePrefix(relative ? "root/path" : "/test_database/root/path")
+                .ExpectCommonDstPrefix("dest/prefix")
+                .ExpectItem(relative ? "path" : "/test_database/root/path/path", "")
+                .ExpectItem(relative ? "srcpath" : "/test_database/root/path/srcpath", "dstpath")
+                .ExpectItem("/test_database/absolute", "absolute");
 
-        RunCli(
-            {
-                "-v",
-                "-e", GetEndpoint(),
-                "-d", GetDatabase(),
-                "export", "s3",
-                "--bucket", TEST_BUCKET,
-                "--s3-endpoint", TEST_S3_ENDPOINT,
-                "--access-key", "test-key",
-                "--secret-key", "test-access-key",
-                "--root-path", "root/path",
-                "--destination-prefix", "dest/prefix",
-                "--item", "src=srcpath,dst=dstpath",
-                "--include", "path",
-            }
-        );
+            RunCli(
+                {
+                    "-v",
+                    "-e", GetEndpoint(),
+                    "-d", database,
+                    "export", "s3",
+                    "--bucket", TEST_BUCKET,
+                    "--s3-endpoint", TEST_S3_ENDPOINT,
+                    "--access-key", "test-key",
+                    "--secret-key", "test-access-key",
+                    "--root-path", "root/path",
+                    "--destination-prefix", "dest/prefix",
+                    "--item", "src=srcpath,dst=dstpath",
+                    "--include", "path",
+                    "--item", "src=/test_database/absolute,dst=absolute",
+                }
+            );
+        }
     }
 
     Y_UNIT_TEST_F(CommonDestinationPrefixWithoutItems, TExportFixture) {
@@ -517,11 +522,9 @@ Y_UNIT_TEST_SUITE(ExportTest) {
     }
 
     Y_UNIT_TEST_F(ApplyExcludeClientFilter, TExportFixture) {
-        const TString path = GetDatabase() + "/tenant/a";
-        Service<TSchemeImpl>().BootstrapDatabase = "tenant";
-        Service<TSchemeImpl>().Database = GetDatabase() + "/tenant";
+        const TString path = "a";
+        Service<TSchemeImpl>().Database = "tenant";
         Service<TSchemeImpl>()
-            .ExpectChild("/", "test_database", Ydb::Scheme::Entry::DIRECTORY)
             .ExpectListDirectory(path)
             .ExpectChild(path, "keep", Ydb::Scheme::Entry::TABLE)
             .ExpectChild(path, "skip", Ydb::Scheme::Entry::TABLE)
@@ -536,8 +539,8 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             .ExpectS3SecretKey("test-access-key")
             .ExpectCommonSourcePrefix(path)
             .ExpectCommonDstPrefix("dst")
-            .ExpectItem(path + "/keep", "dst/keep")
-            .ExpectItem(path + "/nested/keep_nested", "dst/nested/keep_nested");
+            .ExpectItem("keep", "dst/keep")
+            .ExpectItem("nested/keep_nested", "dst/nested/keep_nested");
 
         RunCli(
             {
@@ -554,6 +557,35 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 "--exclude", "skip",
             }
         );
+    }
+
+    Y_UNIT_TEST_F(RelativeDatabaseExpandsItemsWithCommonSource, TExportFixture) {
+        Service<TSchemeImpl>().Database = "tenant";
+        Service<TSchemeImpl>()
+            .ExpectListDirectory("root/path", Ydb::Scheme::Entry::TABLE)
+            .ExpectListDirectory("/test_database/absolute", Ydb::Scheme::Entry::TABLE);
+        Service<TExportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectCommonSourcePrefix("root")
+            .ExpectCommonDstPrefix("dst")
+            .ExpectItem("path", "relative")
+            .ExpectItem("/test_database/absolute", "absolute");
+
+        RunCli({
+            "-e", GetEndpoint(), "-d", "tenant", "export", "s3",
+            "--bucket", TEST_BUCKET,
+            "--s3-endpoint", TEST_S3_ENDPOINT,
+            "--access-key", "test-key",
+            "--secret-key", "test-access-key",
+            "--root-path", "root",
+            "--destination-prefix", "dst",
+            "--item", "src=path,dst=relative",
+            "--item", "src=/test_database/absolute,dst=absolute",
+            "--exclude", "^never$",
+        });
     }
 
     Y_UNIT_TEST_F(SkipNotExportableItems, TExportFixture) {
@@ -635,12 +667,8 @@ Y_UNIT_TEST_SUITE(ExportTest) {
         for (bool relative : {false, true}) {
             for (bool explicitItem : {false, true}) {
                 const TString database = relative ? "tenant" : GetDatabase();
-                const TString path = relative ? GetDatabase() + "/tenant" : GetDatabase();
-                Service<TSchemeImpl>().Database = path;
-                if (relative) {
-                    Service<TSchemeImpl>().BootstrapDatabase = database;
-                    Service<TSchemeImpl>().ExpectChild("/", "test_database", Ydb::Scheme::Entry::DIRECTORY);
-                }
+                const TString path = relative ? "." : GetDatabase();
+                Service<TSchemeImpl>().Database = database;
                 Service<TSchemeImpl>()
                     .ExpectListDirectory(path)
                     .ExpectChild(path, "keep", Ydb::Scheme::Entry::TABLE)

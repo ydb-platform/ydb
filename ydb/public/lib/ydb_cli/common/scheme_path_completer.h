@@ -35,8 +35,7 @@ std::optional<TSchemeCompletionContext> DetectSchemeCompletion(int& argc, const 
 void RunSchemeCompletion(
     TDriver& driver,
     const TString& database,
-    const TSchemeCompletionContext& ctx,
-    const TDeadline& deadline = TDeadline::AfterDuration(TDuration::Seconds(3)));
+    const TSchemeCompletionContext& ctx);
 
 // Set up shell completion for a free argument that expects a path to a table
 // or column table in the YDB database. Connects to the database using

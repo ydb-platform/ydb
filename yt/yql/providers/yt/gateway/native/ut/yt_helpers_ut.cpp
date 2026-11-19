@@ -1,8 +1,12 @@
 #include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/utils/parse_double.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <cmath>
+#include <limits>
 
 namespace NYql {
 namespace {
@@ -20,6 +24,49 @@ TExprNode::TPtr MakeQLFilter(TExprContext& ctx, TPositionHandle pos, TExprNode::
 TExprNode::TPtr MakeQLFilter(TExprContext& ctx, TPositionHandle pos, TStringBuf op, TExprNode::TListType operands) {
     auto predicate = ctx.NewCallable(pos, op, std::move(operands));
     return MakeQLFilter(ctx, pos, std::move(predicate));
+}
+
+Y_UNIT_TEST_SUITE(TConvertFloatingValueForQLTest) {
+    Y_UNIT_TEST(PreservesValuesAndFloatingPointSyntax) {
+        struct TCase {
+            TStringBuf Value;
+            bool IsFloat;
+            double ExpectedValue;
+            TStringBuf ExpectedLiteral;
+        };
+        const double infinity = std::numeric_limits<double>::infinity();
+        constexpr double base = 87423.203125;
+        for (const auto& test : {
+            TCase{"1E2", false, 100.0, "100.0"},
+            TCase{"-1e-2", false, -0.01, "-0.01"},
+            TCase{"1E100", false, 1e100, "1e+100"},
+            TCase{"0xAA", false, 170.0, "170.0"},
+            // 2^63 is exact in Double but exceeds Int64.
+            TCase{"9223372036854775808", false, 0x1p63, {}},
+            // Float(2^27 + 1) rounds to 2^27; QL must recover that exact value as Double.
+            TCase{"134217729", true, 0x1p27, {}},
+            // Each pair straddles the midpoint between base and its next representable value.
+            TCase{"87423.2031250000001", false, base, {}},
+            TCase{"87423.20312500001", false, std::nextafter(base, infinity), {}},
+            TCase{"87423.207", true, base, {}},
+            TCase{"87423.208", true, std::nextafter(static_cast<float>(base), std::numeric_limits<float>::infinity()), {}},
+            TCase{"+inf", false, infinity, "inf"},
+            TCase{"-inf", false, -infinity, "-inf"},
+        }) {
+            const auto literal = ConvertFloatingValueForQL(test.Value, test.IsFloat);
+            UNIT_ASSERT_C(literal, test.Value);
+            UNIT_ASSERT_VALUES_EQUAL_C(DoubleFromString(*literal), test.ExpectedValue, test.Value);
+            if (test.ExpectedLiteral) {
+                UNIT_ASSERT_VALUES_EQUAL(*literal, test.ExpectedLiteral);
+            } else {
+                UNIT_ASSERT_C(literal->Contains('.') || literal->Contains('e'), *literal);
+            }
+        }
+        for (bool isFloat : {false, true}) {
+            UNIT_ASSERT(!ConvertFloatingValueForQL("nan", isFloat));
+        }
+        UNIT_ASSERT(!ConvertFloatingValueForQL("1e+", false));
+    }
 }
 
 Y_UNIT_TEST_SUITE(TGenerateInputQueryTest) {

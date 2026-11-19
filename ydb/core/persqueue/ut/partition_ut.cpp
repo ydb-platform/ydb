@@ -9900,6 +9900,7 @@ Y_UNIT_TEST_F(ReadLagEstimateUsesFirstUnreadMessage, TPartitionFixture) {
     UNIT_ASSERT(Ctx.Defined());
 
     TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    UNIT_ASSERT(Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvInitComplete>(Ctx->Edge, TDuration::Seconds(1)));
     const TPartitionId partitionId(1);
 
     const TInstant oldTs = TInstant::Now() - TDuration::Hours(5);
@@ -9949,6 +9950,7 @@ Y_UNIT_TEST_F(ReadLagClampsWhenFirstUnreadWrittenAfterLastRead, TPartitionFixtur
     UNIT_ASSERT(Ctx.Defined());
 
     TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    UNIT_ASSERT(Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvInitComplete>(Ctx->Edge, TDuration::Seconds(1)));
     const TPartitionId partitionId(1);
 
     const TInstant oldTs = TInstant::Now() - TDuration::Hours(5);

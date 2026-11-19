@@ -38,10 +38,10 @@
 
 namespace grpc_core {
 
-class FileWatcherCertificateProviderFactory
+class FileWatcherCertificateProviderFactory final
     : public CertificateProviderFactory {
  public:
-  class Config : public CertificateProviderFactory::Config {
+  class Config final : public CertificateProviderFactory::Config {
    public:
     y_absl::string_view name() const override;
 

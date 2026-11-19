@@ -48,17 +48,14 @@ struct Done;
 
 template <>
 struct Done<y_absl::Status> {
-  static y_absl::Status Make() { return y_absl::OkStatus(); }
+  static y_absl::Status Make(bool cancelled) {
+    return cancelled ? y_absl::CancelledError() : y_absl::OkStatus();
+  }
 };
 
 template <>
 struct Done<StatusFlag> {
-  static StatusFlag Make() { return StatusFlag(true); }
-};
-
-template <>
-struct Done<Success> {
-  static Success Make() { return Success{}; }
+  static StatusFlag Make(bool cancelled) { return StatusFlag(!cancelled); }
 };
 
 template <typename Reader, typename Action>
@@ -119,7 +116,7 @@ class ForEach {
   };
 
   TString DebugTag() {
-    return y_absl::StrCat(Activity::current()->DebugTag(), " FOR_EACH[0x",
+    return y_absl::StrCat(GetContext<Activity>()->DebugTag(), " FOR_EACH[0x",
                         reinterpret_cast<uintptr_t>(this), "]: ");
   }
 
@@ -140,7 +137,7 @@ class ForEach {
         reading_next_ = false;
         return PollAction();
       } else {
-        return Done<Result>::Make();
+        return Done<Result>::Make(p->cancelled());
       }
     }
     return Pending();

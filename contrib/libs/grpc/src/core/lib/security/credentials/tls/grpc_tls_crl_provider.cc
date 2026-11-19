@@ -53,15 +53,22 @@ namespace grpc_core {
 namespace experimental {
 
 namespace {
-TString IssuerFromCrl(X509_CRL* crl) {
+// TODO(gtcooke94) Move ssl_transport_security_utils to it's own BUILD target
+// and add this to it.
+y_absl::StatusOr<TString> IssuerFromCrl(X509_CRL* crl) {
   if (crl == nullptr) {
-    return "";
+    return y_absl::InvalidArgumentError("crl cannot be null");
   }
-  char* buf = X509_NAME_oneline(X509_CRL_get_issuer(crl), nullptr, 0);
-  TString ret;
-  if (buf != nullptr) {
-    ret = buf;
+  X509_NAME* issuer = X509_CRL_get_issuer(crl);
+  if (issuer == nullptr) {
+    return y_absl::InvalidArgumentError("crl cannot have null issuer");
   }
+  unsigned char* buf = nullptr;
+  int len = i2d_X509_NAME(issuer, &buf);
+  if (len < 0 || buf == nullptr) {
+    return y_absl::InvalidArgumentError("crl cannot have null issuer");
+  }
+  TString ret(reinterpret_cast<char const*>(buf), len);
   OPENSSL_free(buf);
   return ret;
 }
@@ -103,11 +110,11 @@ y_absl::StatusOr<std::unique_ptr<Crl>> Crl::Parse(y_absl::string_view crl_string
 }
 
 y_absl::StatusOr<std::unique_ptr<CrlImpl>> CrlImpl::Create(X509_CRL* crl) {
-  TString issuer = IssuerFromCrl(crl);
-  if (issuer.empty()) {
-    return y_absl::InvalidArgumentError("Issuer of crl cannot be empty");
+  y_absl::StatusOr<TString> issuer = IssuerFromCrl(crl);
+  if (!issuer.ok()) {
+    return issuer.status();
   }
-  return std::make_unique<CrlImpl>(crl, issuer);
+  return std::make_unique<CrlImpl>(crl, *issuer);
 }
 
 CrlImpl::~CrlImpl() { X509_CRL_free(crl_); }

@@ -42,6 +42,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
     auto maxTables = State_->Configuration->MaxInputTables.Get();
     auto maxSortedTables = State_->Configuration->MaxInputTablesForSortedMerge.Get();
     const bool opOrdered = NYql::HasSetting(op.Settings().Ref(), EYtSettingType::Ordered);
+    const bool bypassMergeWithInputSettings =
+        State_->Configuration->BypassMergeWithInputSettings.Get().GetOrElse(DEFAULT_BYPASS_MERGE_WITH_INPUT_SETTINGS);
     bool hasUpdates = false;
     TVector<TExprBase> updatedSections;
     TSyncMap syncList;
@@ -56,6 +58,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
         const bool hasTakeSkip = NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip);
 
         bool hasPathUpdates = false;
+        auto updatedSettings = section.Settings().Ptr();
         TVector<TYtPath> updatedPaths;
         size_t inputCount = section.Paths().Size();
         if (!hasTableKeyFilters) {
@@ -109,10 +112,13 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
 
                 bool hasIncompatibleSettings = false;
                 TExprNode::TListType innerMergeKeyFiltersValues;
+                TExprNode::TListType innerTakeSkip;
                 for (auto& setting : innerMergeSection.Settings().Ref().Children()) {
                     const auto type = FromString<EYtSettingType>(setting->Child(0)->Content());
                     if (setting->ChildrenSize() == 2 && (type == EYtSettingType::KeyFilter || type == EYtSettingType::KeyFilter2)) {
                         innerMergeKeyFiltersValues.push_back(setting->ChildPtr(1));
+                    } else if (setting->ChildrenSize() == 2 && (type == EYtSettingType::Take || type == EYtSettingType::Skip)) {
+                        innerTakeSkip.push_back(setting);
                     } else {
                         hasIncompatibleSettings = true;
                         break;
@@ -126,9 +132,26 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                     continue;
                 }
 
+                if (!innerTakeSkip.empty()) {
+                    if (!bypassMergeWithInputSettings) {
+                        continue;
+                    }
+
+                    // The limit must still apply to the whole inner section, before any outer filtering.
+                    // Composing it with outer limits or ranges requires a separate rewrite.
+                    if (section.Paths().Size() != 1 || !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>()
+                        || NYql::HasSettingsExcept(section.Settings().Ref(), EYtSettingType::JoinLabel | EYtSettingType::StatColumns
+                            | EYtSettingType::Unordered | EYtSettingType::NonUnique | EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2)
+                        || AnyOf(keyFiltersValues, [](const TExprNode::TPtr& keyFilter) { return keyFilter->ChildrenSize() > 0; }))
+                    {
+                        continue;
+                    }
+                }
+
+                const bool hasCombinedTakeSkip = hasTakeSkip || !innerTakeSkip.empty();
                 auto mergeOutRowSpec = TYqlRowSpecInfo(innerMerge.Output().Item(0).RowSpec());
                 const bool sortedMerge = mergeOutRowSpec.IsSorted();
-                if (hasTakeSkip && sortedMerge && NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+                if (hasCombinedTakeSkip && sortedMerge && NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
                     continue;
                 }
 
@@ -151,7 +174,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
 
                 const bool unordered = IsUnorderedOutput(path.Table().Cast<TYtOutput>());
                 if (innerMergeSection.Paths().Size() > 1) {
-                    if (hasTakeSkip && sortedMerge) {
+                    if (hasCombinedTakeSkip && sortedMerge) {
                         continue;
                     }
                     // Only YtMap can change semantic if substitute single sorted input by multiple sorted ones.
@@ -173,6 +196,15 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                     }
                 }
 
+                if (bypassMergeWithInputSettings && section.Paths().Size() == 1 && section.Settings().Empty()
+                    && path.Ranges().Maybe<TCoVoid>() && path.QLFilter().Maybe<TCoVoid>())
+                {
+                    updatedSettings = innerMergeSection.Settings().Ptr();
+                } else if (!innerTakeSkip.empty()) {
+                    auto settings = section.Settings().Ref().ChildrenList();
+                    settings.insert(settings.end(), innerTakeSkip.begin(), innerTakeSkip.end());
+                    updatedSettings = ctx.NewList(section.Settings().Pos(), std::move(settings));
+                }
                 hasPathUpdates = true;
                 updatedPaths.pop_back();
                 TMaybeNode<TExprBase> columns;
@@ -208,7 +240,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
 
                         auto updatedPath = builder.Done();
                         if (unordered) {
-                            updatedPath = MakeUnorderedPath(updatedPath, false, ctx);
+                            updatedPath = MakeUnorderedPath(updatedPath, hasCombinedTakeSkip, ctx);
                         }
 
                         updatedPaths.push_back(updatedPath);
@@ -229,6 +261,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                     .Paths()
                         .Add(updatedPaths)
                     .Build()
+                    .Settings(updatedSettings)
                     .Done());
         } else {
             updatedSections.push_back(section);

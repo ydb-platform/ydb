@@ -10,6 +10,7 @@
 #include <ostream>
 #include <string>
 
+#include "opentelemetry/common/detail/ascii.h"
 #include "opentelemetry/nostd/span.h"
 #include "opentelemetry/sdk/common/global_log_handler.h"
 #include "opentelemetry/trace/trace_id.h"
@@ -18,8 +19,6 @@
 
 namespace
 {
-
-constexpr char kHexDigits[] = "0123456789abcdef";
 
 // TraceState::Set drops the whole tracestate when a value is longer than this,
 // so the entire "ot" value has to fit within it.
@@ -49,7 +48,8 @@ void AppendThresholdHex(std::string &out, uint64_t threshold)
   int trailing_zeros = CountTrailingZeroBits(marked);
   for (int shift = 52; shift >= trailing_zeros - 3; shift -= 4)
   {
-    out.push_back(kHexDigits[(threshold >> shift) & 0xFU]);
+    out.push_back(opentelemetry::common::detail::LowerHexDigit(
+        static_cast<int>((threshold >> shift) & 0xFU)));
   }
 }
 
@@ -58,7 +58,8 @@ void AppendRandomHex(std::string &out, uint64_t value)
 {
   for (int shift = 52; shift >= 0; shift -= 4)
   {
-    out.push_back(kHexDigits[(value >> shift) & 0xFU]);
+    out.push_back(
+        opentelemetry::common::detail::LowerHexDigit(static_cast<int>((value >> shift) & 0xFU)));
   }
 }
 
@@ -69,17 +70,9 @@ bool ParseHex(const std::string &s, std::size_t start, std::size_t len, uint64_t
   uint64_t r = 0;
   for (std::size_t i = 0; i < len; ++i)
   {
-    char c     = s[start + i];
-    int nibble = 0;
-    if (c >= '0' && c <= '9')
-    {
-      nibble = c - '0';
-    }
-    else if (c >= 'a' && c <= 'f')
-    {
-      nibble = c - 'a' + 10;
-    }
-    else
+    const char c     = s[start + i];
+    const int nibble = opentelemetry::common::detail::HexDigitValue(c);
+    if (nibble < 0 || opentelemetry::common::detail::IsAsciiUpper(c))
     {
       return false;
     }

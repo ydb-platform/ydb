@@ -2,6 +2,7 @@
 #include "schemeshard_import_helpers.h"
 
 #include "index/index_utils.h"
+#include "schemeshard__operation_create_cdc_stream.h"
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
 
@@ -580,7 +581,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
         }
     }
 
-    if (topic.has_partitioning_settings()) {
+    if (topic.has_partitioning_settings() && !NCdc::ShouldUseKeyRangeHeartbeats(cdcStreamDescription)) {
         if (isPartitioningAvailable) {
             i64 minActivePartitions =
                 topic.partitioning_settings().min_active_partitions();

@@ -53,7 +53,7 @@ See also [{#T}](yandex-enterprise-database.md).
 || **v26.3** | > | > | > ||
 || v26.3.1.16-rc | 18.09.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.3.1.16-rc` | [See list](../changelog-server.md#26-3-1-16-rc) ||
 || **v26.2** | > | > | > ||
-|| v26.2.1.16 | **TBD** | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.2.1.16` | [See list](../changelog-server.md#26-2-1-16) ||
+|| v26.2.1.16 | **TBD** | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.2.1.16`<br/>[`ydbplatform/local-ydb:26.2.1.16`](https://hub.docker.com/layers/ydbplatform/local-ydb/26.2.1.16/) | [See list](../changelog-server.md#26-2-1-16) ||
 || v26.2.1.14 | 16.09.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.2.1.14` | [See list](../changelog-server.md#26-2-1-14) ||
 || **v26.1** | > | > | > ||
 || v26.1.1.22 | 27.07.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.1.1.22` | [See list](../changelog-server.md#26-1-1-22) ||

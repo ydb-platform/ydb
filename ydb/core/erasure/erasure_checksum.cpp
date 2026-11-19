@@ -28,6 +28,17 @@ std::pair<TIterator, ui64> CalculateXxh3Hash(const TLogoBlobID& id, TErasureType
         it += n;
     }
 
+    switch (erasure.ErasureFamily()) {
+        case TErasureType::ErasureMirror:
+            break;
+        case TErasureType::ErasureParityStripe:
+        case TErasureType::ErasureParityBlock:
+            XXH3_64bits_update(&state, id.GetRaw(), TLogoBlobID::BinarySize);
+            break;
+        default:
+            Y_FAIL("Unknown ErasureFamily, ErasureFamily = %d", erasure.ErasureFamily());
+    }
+
     return {it, XXH3_64bits_digest(&state)};
 }
 

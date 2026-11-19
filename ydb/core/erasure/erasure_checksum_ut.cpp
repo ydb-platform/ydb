@@ -96,6 +96,8 @@ Y_UNIT_TEST_SUITE(TErasureChecksumTest) {
         TDataPartSet parts;
         erasure.SplitData(MakeCrcNoneStubBlobId(payload.size()), payload, parts);
 
+        const bool acceptsWrongId = crcMode == TErasureType::CrcModeNone
+            || erasure.ErasureFamily() == TErasureType::ErasureMirror;
         const auto wrongLogoBlob = TLogoBlobID::Make(2, 1, 1, 0, payload.size(), 0, crcMode);
         const ui32 partsCount = erasure.TotalPartCount();
         for (ui32 i = 0; i < partsCount; ++i) {
@@ -104,10 +106,10 @@ Y_UNIT_TEST_SUITE(TErasureChecksumTest) {
             UNIT_ASSERT(TChecksum::IsValid(partId, erasure, rope));
 
             const TLogoBlobID wrongLogoBlobPartId(wrongLogoBlob, i + 1);
-            UNIT_ASSERT(TChecksum::IsValid(wrongLogoBlobPartId, erasure, rope));
+            UNIT_ASSERT_VALUES_EQUAL(TChecksum::IsValid(wrongLogoBlobPartId, erasure, rope), acceptsWrongId);
 
-            const TLogoBlobID wrongPartId(logoBlob, (partId.PartId() + 1) % partsCount);
-            UNIT_ASSERT(TChecksum::IsValid(wrongPartId, erasure, rope));
+            const TLogoBlobID wrongPartId(logoBlob, partId.PartId() == 1 ? 2 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(TChecksum::IsValid(wrongPartId, erasure, rope), acceptsWrongId);
         }
     }
 

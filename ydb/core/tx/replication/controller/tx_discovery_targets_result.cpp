@@ -73,6 +73,7 @@ public:
                 db.Table<Schema::Targets>().Key(rid, tid).Update(
                     NIceDb::TUpdate<Schema::Targets::Kind>(target.Kind),
                     NIceDb::TUpdate<Schema::Targets::SrcPath>(target.Config->GetSrcPath()),
+                    NIceDb::TUpdate<Schema::Targets::SrcIsImpl>(target.Config->GetSrcIsImpl()),
                     NIceDb::TUpdate<Schema::Targets::DstPath>(target.Config->GetDstPath()),
                     NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda),
                     NIceDb::TUpdate<Schema::Targets::RunAsUser>(runAsUser),

@@ -101,6 +101,7 @@ class TController::TTxInit: public TTxBase {
             const auto srcPath = rowset.GetValue<Schema::Targets::SrcPath>();
             const auto dstPath = rowset.GetValue<Schema::Targets::DstPath>();
             const auto dstState = rowset.GetValue<Schema::Targets::DstState>();
+            const auto srcIsImpl = rowset.GetValue<Schema::Targets::SrcIsImpl>();
             const auto issue = rowset.GetValue<Schema::Targets::Issue>();
             const auto workerSetComplete =
                 rowset.GetValueOrDefault<Schema::Targets::WorkerSetComplete>(false);
@@ -118,7 +119,7 @@ class TController::TTxInit: public TTxBase {
                 config = std::make_shared<TTargetTable::TTableConfig>(srcPath, dstPath);
                 break;
             case TReplication::ETargetKind::IndexTable:
-                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath);
+                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath, srcIsImpl);
                 break;
             case TReplication::ETargetKind::Transfer:
                 config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, replication->GetConfig());

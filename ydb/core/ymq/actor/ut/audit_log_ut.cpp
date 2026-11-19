@@ -61,16 +61,16 @@ public:
 
         auto request = MakeHolder<NKikimrClient::TSqsRequest>();
         request->SetRequestId("cloud-audit-token");
-        request->MutableDeleteQueue()->SetQueueName("missing-queue");
+        // An empty queue name is rejected by the action actor after authorization.
+        request->MutableCreateQueue();
         TAuthActorData data{
             .SQSRequest = std::move(request),
             .HTTPCallback = MakeHolder<TNoopReplyCallback>(),
             .UserSidCallback = [](TString) {},
             .EnableQueueLeader = false,
-            .Action = EAction::DeleteQueue,
+            .Action = EAction::CreateQueue,
             .ExecutorPoolID = 0,
             .CloudID = "cloud",
-            .ResourceID = "missing-queue",
             .Counters = &counters,
             .IAMToken = RawToken,
             .FolderID = "folder",
@@ -79,9 +79,8 @@ public:
             Runtime_.Register(new THttpProxyAuthRequestProxy(std::move(data), {}, EdgeActor_));
             auto response = Runtime_.GrabEdgeEvent<NHttpProxy::TEvYmqCloudAuthResponse>(EdgeActor_);
             UNIT_ASSERT(response->Get()->IsSuccess);
-            Ydb::Ymq::V1::DeleteQueueRequest request;
-            request.set_queue_url("https://ymq.example/cloud/missing-queue");
-            NRpcService::DoLocalRpc<NGRpcService::TEvYmqDeleteQueueRequest>(
+            Ydb::Ymq::V1::CreateQueueRequest request;
+            NRpcService::DoLocalRpc<NGRpcService::TEvYmqCreateQueueRequest>(
                 std::move(request), {}, Nothing(), Nothing(), Runtime_.GetActorSystem(0), {
                     {NYmq::V1::CLOUD_ID, response->Get()->CloudId},
                     {NYmq::V1::FOLDER_ID, response->Get()->FolderId},

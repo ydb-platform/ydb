@@ -312,12 +312,15 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
     Y_UNIT_TEST(CopiesMessagesAcrossPauseAndResume) {
         TTopicMirroringFixture test("[::1]");
         test.WriteAndWait("first", 1);
+        test.WriteAndWait("second", 2);
+        test.CommitAndWaitForConsumerOffset(1);
         test.Exec("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'PAUSED');");
         test.WaitMirror(false);
         test.Exec("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'STANDBY');");
         test.WaitMirror(true);
-        test.WriteAndWait("second", 2);
-        test.CommitAndWaitForConsumerOffset(1);
+        test.WriteAndWait("third", 3);
+        test.CommitAndWaitForConsumerOffset(2);
+        test.CommitAndWaitForConsumerOffset(3);
         test.Exec("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');");
         test.WaitMirror(false);
         test.Exec("DROP ASYNC REPLICATION `/Root/replication`;");

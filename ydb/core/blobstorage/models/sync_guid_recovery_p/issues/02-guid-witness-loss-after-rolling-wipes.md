@@ -1,5 +1,5 @@
-> Historical investigation and evidence. For the reconstructed series, current
-> scope and verification results, see [AUDIT.md](../AUDIT.md).
+> Historical investigation and evidence. For current model scope and commands,
+> see [README.md](../README.md).
 
 # SyncGuidRecovery rejects intact local state after rolling wipes erase peer GUID witnesses
 

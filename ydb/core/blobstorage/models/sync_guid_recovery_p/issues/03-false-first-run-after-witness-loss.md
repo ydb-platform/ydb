@@ -1,5 +1,5 @@
-> Historical investigation and evidence. For the reconstructed series, current
-> scope and verification results, see [AUDIT.md](../AUDIT.md).
+> Historical investigation and evidence. For current model scope and commands,
+> see [README.md](../README.md).
 
 # Existing VDisk can be classified as FirstRun after local loss and erosion of peer GUID witnesses
 

@@ -9,6 +9,8 @@ namespace NKikimr::NSyncer {
 
 // History must intersect every possible Final publication quorum. Requiring a
 // publication quorum of readers would unnecessarily reduce the failure budget.
+// This preserves quorum-backed history across modern recoveries; it cannot
+// reconstruct witnesses already lost before history-capable recovery was enabled.
 inline bool HasGuidHistoryCoverage(const TBlobStorageGroupInfo& info,
         TBlobStorageGroupInfo::TGroupVDisks sources, const TVDiskIdShort& self, bool hasLocalFinal) {
     if (!hasLocalFinal) {

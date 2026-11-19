@@ -305,8 +305,9 @@ IGraphTransformer::TStatus CompileDefaultExpressionLambdas(const TKikimrTableDes
         }
 
         const TString defaultQuery = AssembleDefaultQuery(col.DefaultExpression->ExprText);
+        // Stored DEFAULT text has canonical Query semantics, independent of the write API.
         NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
-            sessionCtx.Query().Type, cluster, defaultQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
+            EKikimrQueryType::Query, cluster, defaultQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
         settingsBuilder.SetFromConfig(sessionCtx.Config());
 
         auto lambda = CompileDefaultExpr(defaultQuery, name, ctx, settingsBuilder, typeCtx.Modules);
@@ -906,8 +907,10 @@ namespace {
             const TString query = isGenerated
                 ? AssembleGeneratedQuery(columnMeta.DefaultExpression->ExprText)
                 : AssembleDefaultQuery(columnMeta.DefaultExpression->ExprText);
+            // Validate DEFAULT using the same canonical dialect used when reloading it for writes.
             NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
-                sessionCtx.Query().Type, cluster, query, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
+                isGenerated ? sessionCtx.Query().Type : EKikimrQueryType::Query,
+                cluster, query, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
             settingsBuilder.SetFromConfig(sessionCtx.Config());
 
             auto lambda = isGenerated
@@ -971,7 +974,17 @@ namespace {
                 return status;
             }
 
-            if (const TTypeAnnotationNode* exprType = lambda->GetTypeAnn();
+            if (!isGenerated && columnAnnType->GetKind() != ETypeAnnotationKind::Pg) {
+                // CREATE metadata can be reused by a later write in the same script. Cache
+                // the full column type, including optionality, just as the reload path does.
+                const auto& columnType = columnMeta.NotNull ? RemoveOptionality(*columnAnnType) : *columnAnnType;
+                if (auto status = CoerceColumnLambdaToColumnType(lambda, emptyRowType, columnType,
+                        columnMeta, ctx, typeCtx);
+                    status != IGraphTransformer::TStatus::Ok)
+                {
+                    return status;
+                }
+            } else if (const TTypeAnnotationNode* exprType = lambda->GetTypeAnn();
                 exprType && !IsSameAnnotation(RemoveOptionality(*columnAnnType), RemoveOptionality(*exprType)))
             {
                 TExprNode::TPtr converted = lambda->TailPtr();

@@ -335,6 +335,73 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;[42u]]]");
     }
 
+    Y_UNIT_TEST_TWIN(DefaultDialectIsStableAcrossApis, CreateThroughTableApi) {
+        TTestFixture fixture;
+        const TString expression = "(RandomNumber(1) * 0ul + 2ul) IN AsList(1ul, NULL)";
+        const auto ddl = DefaultExprDDL(TStringBuilder() << "v Bool DEFAULT " << expression);
+        auto tableClient = fixture.Runner().GetTableClient();
+        if (CreateThroughTableApi) {
+            auto schemeSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+            auto result = schemeSession.ExecuteSchemeQuery(ddl).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        } else {
+            fixture.Exec(ddl);
+        }
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
+
+        // The unmatched value is NULL under the canonical Query dialect. The legacy
+        // Table dialect would produce false, even though both fit the nullable column.
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        auto dataSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        auto dataResult = dataSession.ExecuteDataQuery(
+            "INSERT INTO `/Root/TestTable` (k) VALUES (2);",
+            NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(dataResult.IsSuccess(), dataResult.GetIssues().ToString());
+
+        auto preparedSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        auto prepareResult = preparedSession.PrepareDataQuery(R"(
+            DECLARE $k AS Int32;
+            INSERT INTO `/Root/TestTable` (k) VALUES ($k);
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        auto prepared = prepareResult.GetQuery();
+        auto params = prepared.GetParamsBuilder().AddParam("$k").Int32(3).Build().Build();
+        auto preparedResult = prepared.Execute(
+            NYdb::NTable::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+        UNIT_ASSERT_C(preparedResult.IsSuccess(), preparedResult.GetIssues().ToString());
+
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;#];[2;#];[3;#]]");
+    }
+
+    Y_UNIT_TEST(CreateCommitAndWriteNullableDefaultsInScript) {
+        TTestFixture fixture;
+        NYdb::NScripting::TScriptingClient scriptingClient(fixture.Runner().GetDriver());
+        auto result = scriptingClient.ExecuteYqlScript(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                n Uint64 DEFAULT RandomNumber(1) * 0ul + 42ul,
+                v Bool DEFAULT (RandomNumber(1) * 0ul + 2ul) IN AsList(1ul, NULL),
+                PRIMARY KEY (k),
+                INDEX idx_n GLOBAL SYNC ON (n) COVER (v)
+            );
+            COMMIT;
+            INSERT INTO TestTable (k) VALUES (1);
+            COMMIT;
+            SELECT k, n, v FROM TestTable VIEW idx_n ORDER BY k;
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1u);
+        CompareYson("[[1;[42u];#]]", FormatResultSetYson(result.GetResultSet(0)));
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "n"), DefaultExpr);
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"),
+            "(RandomNumber(1) * 0ul + 2ul) IN AsList(1ul, NULL)");
+
+        // A separate compilation reloads the persisted metadata, rather than the CREATE cache.
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
+        fixture.Check("SELECT k, n, v FROM TestTable ORDER BY k;", "[[1;[42u];#];[2;[42u];#]]");
+        fixture.Check("SELECT k, n, v FROM TestTable VIEW idx_n ORDER BY k;", "[[1;[42u];#];[2;[42u];#]]");
+    }
+
     Y_UNIT_TEST(NonDeterministicFunction) {
         TTestFixture fixture;
         fixture.Exec(DefaultExprDDL("ts Timestamp DEFAULT CurrentUtcTimestamp()"));

@@ -1,5 +1,4 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/ut/indexes/common/kqp_indexes_ttl_ut_common.h>
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -2686,40 +2685,37 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    const TTtlNotAllowedIndexTestConfig VectorTtlNotAllowedConfig{
-        .IndexInCreateTable = R"(INDEX vector_idx GLOBAL USING vector_kmeans_tree ON (Text)
-            WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2),)",
-        .AlterAddIndex = R"(
-            ALTER TABLE TestTable ADD INDEX vector_idx
+    Y_UNIT_TEST(TtlWithVectorIndex) {
+        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        auto db = kikimr.GetQueryClient();
+
+        auto expectSuccess = [&](const std::string& query) {
+            auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+        expectSuccess(R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Text String,
+                Stamp Timestamp,
+                INDEX vector_idx GLOBAL USING vector_kmeans_tree ON (Text)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2),
+                PRIMARY KEY (Key)
+            ) WITH (TTL = Interval("PT1H") ON Stamp);
+        )");
+
+        expectSuccess(R"(ALTER TABLE TestTable SET (TTL = Interval("PT2H") ON Stamp);)");
+
+        expectSuccess(R"(ALTER TABLE TestTable DROP INDEX vector_idx;)");
+
+        expectSuccess(R"(
+            ALTER TABLE TestTable ADD INDEX vector_idx2
                 GLOBAL USING vector_kmeans_tree ON (Text)
                     WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-        )",
-        .ExpectedError = "Table with EIndexTypeGlobalVectorKmeansTree index doesn't support TTL",
-    };
+        )");
 
-    Y_UNIT_TEST(TtlNotAllowed_Both) {
-        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
-        TestTtlNotAllowedBoth(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
-    }
-
-    Y_UNIT_TEST(TtlNotAllowed_AlterTtl) {
-        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
-        TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
-    }
-
-    Y_UNIT_TEST(TtlNotAllowed_AlterIndex) {
-        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
-        TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
-    }
-
-    Y_UNIT_TEST(TtlNotAllowed_AlterTtlIndex) {
-        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
-        TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
-    }
-
-    Y_UNIT_TEST(TtlNotAllowed_AlterIndexTtl) {
-        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
-        TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
+        expectSuccess(R"(ALTER TABLE TestTable DROP INDEX vector_idx2;)");
     }
 
     Y_UNIT_TEST_TWIN(RoundingNoEmptyClusters, Partitioned) {

@@ -55,20 +55,27 @@ public:
         }
 
         const size_t count = (size_t)eraseTx->HasDependents() + (size_t)eraseTx->HasDependencies();
-        if (count != 1) {
+        if (count > 1) {
             return buildUnsuccessfulResult("Distributed erase tx can only have dependents or dependencies, not both");
         }
 
         for (const auto& dependency : eraseTx->GetDependencies()) {
             auto presentRows = DeserializeBitMap<TDynBitMap>(dependency.GetPresentRows());
-            if (request.KeyColumnsSize() == presentRows.Count()) {
-                continue;
+            if (request.KeyColumnsSize() != presentRows.Count()) {
+                return buildUnsuccessfulResult(TStringBuilder() << "Present rows count mismatch"
+                    << ": got " << presentRows.Count()
+                    << ", expected " << request.KeyColumnsSize()
+                );
             }
 
-            return buildUnsuccessfulResult(TStringBuilder() << "Present rows count mismatch"
-                << ": got " << presentRows.Count()
-                << ", expected " << request.KeyColumnsSize()
-            );
+            if (dependency.MainRowIndexesSize()
+                && dependency.MainRowIndexesSize() != request.KeyColumnsSize())
+            {
+                return buildUnsuccessfulResult(TStringBuilder() << "Key row indexes count mismatch"
+                    << ": got " << dependency.MainRowIndexesSize()
+                    << ", expected " << request.KeyColumnsSize()
+                );
+            }
         }
 
         // checked at CheckedExecute stage

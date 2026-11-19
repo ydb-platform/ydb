@@ -5,6 +5,8 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
+#include <variant>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
@@ -218,6 +220,8 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
             }
         }
 
+        FillVectorIndexes(shardInfo.PathId, request);
+
         request.MutableExpiration()->SetColumnId(tableInfo->GetTTLColumnId());
         request.MutableExpiration()->SetWallClockTimestamp(wallClock.GetValue());
         request.MutableExpiration()->SetColumnUnit(settings.GetColumnUnit());
@@ -285,12 +289,13 @@ private:
             Y_ABORT_UNLESS(Self->PathsById.contains(childPathId));
             auto childPath = Self->PathsById.at(childPathId);
 
-            if (!childPath->IsTableIndex() || childPath->Dropped()) {
+            if (!childPath->IsTableIndex() || childPath->Dropped() || !childPath->IsCreateFinished()) {
                 continue;
             }
 
             auto index = GetIndex(childPath);
             if (index->Type == NKikimrSchemeOp::EIndexTypeGlobalAsync
+                || index->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
                 || !DoesIndexSupportTTL(index->Type)) {
                 continue;
             }
@@ -305,6 +310,126 @@ private:
         }
 
         return result;
+    }
+
+    void FillVectorIndexes(
+        const TPathId& mainPathId,
+        NKikimrTxDataShard::TEvConditionalEraseRowsRequest& request
+    ) const {
+        Y_ABORT_UNLESS(Self->PathsById.contains(mainPathId));
+        auto mainPath = Self->PathsById.at(mainPathId);
+
+        Y_ABORT_UNLESS(Self->Tables.contains(mainPathId));
+        auto mainTable = Self->Tables.at(mainPathId);
+
+        const auto mainColumns = MakeColumnNameToId(mainTable->Columns);
+
+        for (const auto& [_, childPathId] : mainPath->GetChildren()) {
+            Y_ABORT_UNLESS(Self->PathsById.contains(childPathId));
+            auto childPath = Self->PathsById.at(childPathId);
+
+            if (!childPath->IsTableIndex() || childPath->Dropped() || !childPath->IsCreateFinished()) {
+                continue;
+            }
+
+            auto index = GetIndex(childPath);
+            if (index->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                continue;
+            }
+
+            // TTL erases posting rows by recomputing cluster ids from the level
+            // table, so it may only touch an index whose level table is complete.
+            // A NotReady vector index is still being filled level by level and is
+            // maintained by the index build itself (snapshot + delta scan).
+            if (index->State != NKikimrSchemeOp::EIndexStateReady
+                && index->State != NKikimrSchemeOp::EIndexStateWriteOnly)
+            {
+                continue;
+            }
+
+            const auto* vectorDescription = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+                &index->SpecializedIndexDescription);
+            if (!vectorDescription) {
+                continue;
+            }
+
+            const auto& indexKeys = index->IndexKeys;
+            if (indexKeys.empty()) {
+                continue;
+            }
+
+            TPathElement::TPtr postingPath;
+            TPathElement::TPtr levelPath;
+            TPathElement::TPtr prefixPath;
+            for (const auto& [__, implPathId] : childPath->GetChildren()) {
+                auto implPath = Self->PathsById.at(implPathId);
+                if (implPath->Dropped()) {
+                    continue;
+                }
+
+                if (implPath->Name == NTableIndex::NKMeans::PostingTable) {
+                    postingPath = implPath;
+                } else if (implPath->Name == NTableIndex::NKMeans::LevelTable) {
+                    levelPath = implPath;
+                } else if (implPath->Name == NTableIndex::NKMeans::PrefixTable) {
+                    prefixPath = implPath;
+                }
+            }
+
+            const bool isPrefixed = indexKeys.size() > 1;
+            if (!postingPath || !levelPath || (isPrefixed && !prefixPath)) {
+                // The index implementation tables are not created yet.
+                continue;
+            }
+
+            if (!Self->Tables.contains(postingPath->PathId)) {
+                continue;
+            }
+            auto postingTable = Self->Tables.at(postingPath->PathId);
+
+            const auto postingColumns = MakeColumnNameToId(postingTable->Columns);
+
+            auto& result = *request.AddVectorIndexes();
+            result.SetOwnerId(postingPath->PathId.OwnerId);
+            result.SetPathId(postingPath->PathId.LocalPathId);
+            result.SetSchemaVersion(postingTable->AlterVersion);
+
+            Y_ABORT_UNLESS(postingColumns.contains(NTableIndex::NKMeans::ParentColumn));
+            result.SetParentColumnId(postingColumns.at(NTableIndex::NKMeans::ParentColumn));
+
+            // The posting table key is (__ydb_parent, main table key columns).
+            for (const ui32 mainKeyId : mainTable->KeyColumnIds) {
+                const auto columnIt = mainTable->Columns.find(mainKeyId);
+                Y_ABORT_UNLESS(columnIt != mainTable->Columns.end());
+                Y_ABORT_UNLESS(postingColumns.contains(columnIt->second.Name));
+
+                auto& keyMap = *result.AddKeyMap();
+                keyMap.SetIndexColumnId(postingColumns.at(columnIt->second.Name));
+                keyMap.SetMainColumnId(mainKeyId);
+            }
+
+            const TString& embedding = indexKeys.back();
+            Y_ABORT_UNLESS(mainColumns.contains(embedding));
+            result.SetEmbeddingColumnId(mainColumns.at(embedding));
+
+            for (size_t i = 0; i + 1 < indexKeys.size(); ++i) {
+                Y_ABORT_UNLESS(mainColumns.contains(indexKeys[i]));
+                result.AddPrefixColumnIds(mainColumns.at(indexKeys[i]));
+                result.AddPrefixColumnNames(indexKeys[i]);
+            }
+
+            result.SetLevelTablePath(TPath::Init(levelPath->PathId, Self).PathString());
+            if (prefixPath) {
+                result.SetPrefixTablePath(TPath::Init(prefixPath->PathId, Self).PathString());
+            }
+
+            const auto& settings = vectorDescription->GetSettings();
+            result.MutableSettings()->CopyFrom(settings.settings());
+            result.SetOverlapClusters(static_cast<ui32>(settings.overlap_clusters()
+                ? settings.overlap_clusters() : NTableIndex::NKMeans::DefaultOverlapClusters));
+            result.SetOverlapRatio(settings.has_overlap_ratio()
+                ? settings.overlap_ratio() : NTableIndex::NKMeans::DefaultOverlapRatio);
+        }
     }
 
     TTableIndexInfo::TPtr GetIndex(TPathElement::TPtr indexPath) const {
@@ -329,6 +454,7 @@ private:
 
     static TVector<std::pair<ui32, ui32>> MakeColumnIds(TTableInfo::TPtr mainTable, TTableIndexInfo::TPtr index, TTableInfo::TPtr indexImplTable) {
         Y_ABORT_UNLESS(DoesIndexSupportTTL(index->Type));
+        Y_ABORT_UNLESS(index->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
         TVector<std::pair<ui32, ui32>> result;
         THashSet<TString> keys;
 

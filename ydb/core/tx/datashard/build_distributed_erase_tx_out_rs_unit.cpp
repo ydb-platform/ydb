@@ -87,7 +87,8 @@ public:
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         const auto& eraseTx = tx->GetDistributedEraseTx();
-        if (!eraseTx->HasDependents()) {
+        if (eraseTx->HasDependencies()) {
+            // Index table transactions are confirmed by the main table transaction.
             return EExecutionStatus::Executed;
         }
 

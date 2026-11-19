@@ -6,6 +6,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard__conditional_erase.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
+#include <ydb/public/api/protos/ydb_table.pb.h>
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
@@ -534,6 +536,433 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         NSchemeShard::CondEraseTestObserver = nullptr;
 
         return lastBatch;
+    }
+
+    Y_UNIT_TEST(ConditionalEraseRequestContainsVectorIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TVector<TEvCondEraseReq::ProtoRecordType> requests;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvCondEraseReq::EventType) {
+                const auto& record = ev->Get<TEvCondEraseReq>()->Record;
+                // Skip requests that raced with the index build.
+                if (record.VectorIndexesSize()) {
+                    requests.push_back(record);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "vectors"
+              Columns { Name: "id" Type: "Uint64" }
+              Columns { Name: "embedding" Type: "String" }
+              Columns { Name: "modified_at" Type: "Timestamp" }
+              KeyColumnNames: ["id"]
+              TTLSettings {
+                Enabled {
+                  ColumnName: "modified_at"
+                  ExpireAfterSeconds: 3600
+                }
+              }
+            }
+            IndexDescription {
+              Name: "idx_vector"
+              KeyColumnNames: ["embedding"]
+              DataColumnNames: ["embedding"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription: {
+                Settings: {
+                  settings: {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                  overlap_clusters: 2
+                  overlap_ratio: 0.1
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        if (requests.empty()) {
+            // Make sure the next conditional erase batch runs after the index
+            // has been created, even if an earlier batch raced with the build.
+            runtime.AdvanceCurrentTime(TDuration::Hours(1));
+
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&requests](IEventHandle&) {
+                return !requests.empty();
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        runtime.SetObserverFunc(prevObserver);
+
+        UNIT_ASSERT(!requests.empty());
+        const auto& request = requests.front();
+
+        UNIT_ASSERT_VALUES_EQUAL(request.VectorIndexesSize(), 1);
+        const auto& vector = request.GetVectorIndexes(0);
+
+        UNIT_ASSERT(vector.GetOwnerId() != 0);
+        UNIT_ASSERT(vector.GetPathId() != 0);
+        UNIT_ASSERT(vector.GetSchemaVersion() != 0);
+        UNIT_ASSERT(vector.GetParentColumnId() != 0);
+        UNIT_ASSERT(vector.GetEmbeddingColumnId() != 0);
+        UNIT_ASSERT_VALUES_EQUAL(vector.PrefixColumnIdsSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(vector.PrefixColumnNamesSize(), 0);
+        UNIT_ASSERT_STRING_CONTAINS(vector.GetLevelTablePath(), "indexImplLevelTable");
+        UNIT_ASSERT(vector.GetPrefixTablePath().empty());
+        UNIT_ASSERT_VALUES_EQUAL(vector.KeyMapSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(vector.GetOverlapClusters(), 2);
+        UNIT_ASSERT_DOUBLES_EQUAL(vector.GetOverlapRatio(), 0.1, 1e-9);
+        UNIT_ASSERT_VALUES_EQUAL(vector.GetSettings().vector_dimension(), 1024);
+    }
+
+    Y_UNIT_TEST(ConditionalEraseSkipsVectorIndexUnderConstruction) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .DataShardStatsReportIntervalSeconds(3600));
+        ui64 txId = 100;
+
+        TVector<TEvCondEraseReq::ProtoRecordType> buildingRequests;
+        TVector<TEvCondEraseReq::ProtoRecordType> readyRequests;
+        bool building = true;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvCondEraseReq::EventType) {
+                (building ? buildingRequests : readyRequests).push_back(ev->Get<TEvCondEraseReq>()->Record);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "modified_at" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings {
+              Enabled {
+                ColumnName: "modified_at"
+                ExpireAfterSeconds: 3600
+                SysSettings {
+                  RunInterval: 900000000
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto tablePathId = GetTablePathId(runtime, "/MyRoot/vectors");
+
+        // Drain the initial run scheduled at table creation.
+        WaitForCondEraseBatch(runtime, tablePathId, TDuration::Minutes(1));
+        WaitForCondErase(runtime);
+
+        auto waitForRequest = [&](TVector<TEvCondEraseReq::ProtoRecordType>& sink, size_t before, TDuration advance) {
+            runtime.AdvanceCurrentTime(advance);
+            runtime.WaitFor("conditional erase request", [&] {
+                return sink.size() > before;
+            });
+        };
+
+        // The build only starts sampling (and thus becomes NotReady) when the
+        // table has rows. Use a future TTL timestamp so that conditional erase
+        // below sees the table but does not actually erase these rows.
+        constexpr ui32 rowCount = 8;
+        TVector<TString> embeddings;
+        embeddings.reserve(rowCount);
+        for (ui32 key = 0; key < rowCount; ++key) {
+            float vector[4] = {float(key + 1), float(key + 2), float(key + 3), float(key + 4)};
+            TString embedding(reinterpret_cast<const char*>(vector), sizeof(vector));
+            embedding.push_back(static_cast<char>(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT));
+            embeddings.push_back(std::move(embedding));
+        }
+
+        const ui64 notExpiredAt = (runtime.GetCurrentTime() + TDuration::Hours(1)).MicroSeconds();
+        TVector<TCell> cells;
+        cells.reserve(rowCount * 3);
+        for (ui32 key = 0; key < rowCount; ++key) {
+            cells.push_back(TCell::Make(key));
+            cells.emplace_back(embeddings[key].data(), embeddings[key].size());
+            cells.push_back(TCell::Make(notExpiredAt));
+        }
+
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/vectors", 0,
+            NKikimrDataEvents::TEvWrite_TOperation::OPERATION_UPSERT,
+            {1, 2, 3}, TSerializedCellMatrix(cells, rowCount, 3), true);
+
+        // Keep the build in the filling state, where the index is NotReady.
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> kmeansBlocker(runtime);
+
+        Ydb::Table::TableIndex index;
+        index.set_name("idx");
+        index.add_index_columns("embedding");
+        auto* vectorSettings = index.mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+        vectorSettings->set_clusters(4);
+        vectorSettings->set_levels(1);
+        vectorSettings->mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        vectorSettings->mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        vectorSettings->mutable_settings()->set_vector_dimension(4);
+
+        const ui64 buildTx = ++txId;
+        TestBuildIndex(runtime, buildTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", index);
+
+        runtime.WaitFor("vector index build to request local kmeans", [&] {
+            return !kmeansBlocker.empty();
+        });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/vectors/idx"), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateNotReady),
+        });
+
+        // The next TTL run happens while the index is still under construction.
+        const size_t beforeBuilding = buildingRequests.size();
+        waitForRequest(buildingRequests, beforeBuilding, TDuration::Minutes(16));
+
+        // While the level table is incomplete TTL must not erase postings:
+        // resolved cluster ids would not match the rows the build is writing.
+        for (const auto& request : buildingRequests) {
+            UNIT_ASSERT_VALUES_EQUAL(request.VectorIndexesSize(), 0);
+        }
+
+        kmeansBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildTx);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/vectors/idx"), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // Disable and re-enable TTL to schedule a fresh run now that the index
+        // is Ready.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            TTLSettings { Disabled {} }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        building = false;
+        readyRequests.clear();
+        const size_t beforeReady = readyRequests.size();
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            TTLSettings {
+              Enabled {
+                ColumnName: "modified_at"
+                ExpireAfterSeconds: 3600
+                SysSettings {
+                  RunInterval: 900000000
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        waitForRequest(readyRequests, beforeReady, TDuration::Minutes(16));
+
+        UNIT_ASSERT(!readyRequests.empty());
+        UNIT_ASSERT_VALUES_EQUAL(readyRequests.front().VectorIndexesSize(), 1);
+
+        runtime.SetObserverFunc(prevObserver);
+    }
+
+    Y_UNIT_TEST(ConditionalEraseRemovesVectorIndexPostings) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const TInstant now = TInstant::ParseIso8601("2020-09-18T18:00:00.000000Z");
+        runtime.UpdateCurrentTime(now);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "ts" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        constexpr ui32 rowCount = 8;
+        const ui64 expiredAt = (now - TDuration::Hours(2)).MicroSeconds();
+
+        TVector<TString> embeddings;
+        embeddings.reserve(rowCount);
+        for (ui32 key = 0; key < rowCount; ++key) {
+            TString embedding;
+            embedding.push_back(static_cast<char>(key + 1));
+            embedding.push_back(static_cast<char>(key + 11));
+            embedding.push_back(static_cast<char>(key + 21));
+            embedding.push_back(static_cast<char>(key + 31));
+            embedding.push_back(static_cast<char>(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8));
+            embeddings.push_back(std::move(embedding));
+        }
+
+        TVector<TCell> cells;
+        cells.reserve(rowCount * 3);
+        for (ui32 key = 0; key < rowCount; ++key) {
+            cells.push_back(TCell::Make(key));
+            cells.emplace_back(embeddings[key].data(), embeddings[key].size());
+            cells.push_back(TCell::Make(expiredAt));
+        }
+
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/vectors", 0,
+            NKikimrDataEvents::TEvWrite_TOperation::OPERATION_UPSERT,
+            {1, 2, 3}, TSerializedCellMatrix(cells, rowCount, 3), true);
+
+        const TString postingPath = "/MyRoot/vectors/idx/indexImplPostingTable";
+        const TString levelPath = "/MyRoot/vectors/idx/indexImplLevelTable";
+
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "idx", {"embedding"});
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/vectors"), rowCount);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, postingPath), rowCount);
+        UNIT_ASSERT(CountRows(runtime, levelPath) > 0);
+
+        bool erased = false;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvCondEraseResp::EventType) {
+                const auto& response = ev->Get<TEvCondEraseResp>()->Record;
+                if (response.GetStatus() == TEvCondEraseResp::ProtoRecordType::OK) {
+                    erased = true;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            TTLSettings {
+              Enabled {
+                ColumnName: "ts"
+                ExpireAfterSeconds: 3600
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        if (!erased) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&erased](IEventHandle&) {
+                return erased;
+            });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+
+        UNIT_ASSERT_C(erased, "Conditional erase did not finish");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/vectors"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, postingPath), 0);
+        // The level table is not a subject for TTL erasure.
+        UNIT_ASSERT(CountRows(runtime, levelPath) > 0);
+    }
+
+    Y_UNIT_TEST(ConditionalEraseRemovesPrefixedVectorIndexPostings) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const TInstant now = TInstant::ParseIso8601("2020-09-18T18:00:00.000000Z");
+        runtime.UpdateCurrentTime(now);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "prefix" Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "ts" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        constexpr ui32 rowCount = 8;
+        constexpr ui32 prefixCount = 2;
+        const ui64 expiredAt = (now - TDuration::Hours(2)).MicroSeconds();
+
+        TVector<TString> embeddings;
+        embeddings.reserve(rowCount);
+        for (ui32 key = 0; key < rowCount; ++key) {
+            TString embedding;
+            embedding.push_back(static_cast<char>(key + 1));
+            embedding.push_back(static_cast<char>(key + 11));
+            embedding.push_back(static_cast<char>(key + 21));
+            embedding.push_back(static_cast<char>(key + 31));
+            embedding.push_back(static_cast<char>(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8));
+            embeddings.push_back(std::move(embedding));
+        }
+
+        TVector<TCell> cells;
+        cells.reserve(rowCount * 4);
+        for (ui32 key = 0; key < rowCount; ++key) {
+            cells.push_back(TCell::Make(key));
+            cells.push_back(TCell::Make(key % prefixCount));
+            cells.emplace_back(embeddings[key].data(), embeddings[key].size());
+            cells.push_back(TCell::Make(expiredAt));
+        }
+
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/vectors", 0,
+            NKikimrDataEvents::TEvWrite_TOperation::OPERATION_UPSERT,
+            {1, 2, 3, 4}, TSerializedCellMatrix(cells, rowCount, 4), true);
+
+        const TString postingPath = "/MyRoot/vectors/idx/indexImplPostingTable";
+        const TString levelPath = "/MyRoot/vectors/idx/indexImplLevelTable";
+        const TString prefixPath = "/MyRoot/vectors/idx/indexImplPrefixTable";
+
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "idx",
+            {"prefix", "embedding"});
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/vectors"), rowCount);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, postingPath), rowCount);
+        UNIT_ASSERT(CountRows(runtime, levelPath) > 0);
+        UNIT_ASSERT(CountRows(runtime, prefixPath) > 0);
+
+        bool erased = false;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvCondEraseResp::EventType) {
+                const auto& response = ev->Get<TEvCondEraseResp>()->Record;
+                if (response.GetStatus() == TEvCondEraseResp::ProtoRecordType::OK) {
+                    erased = true;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            TTLSettings {
+              Enabled {
+                ColumnName: "ts"
+                ExpireAfterSeconds: 3600
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        if (!erased) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&erased](IEventHandle&) {
+                return erased;
+            });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+
+        UNIT_ASSERT_C(erased, "Conditional erase did not finish");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/vectors"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, postingPath), 0);
+        // Level and prefix tables are not a subject for TTL erasure.
+        UNIT_ASSERT(CountRows(runtime, levelPath) > 0);
+        UNIT_ASSERT(CountRows(runtime, prefixPath) > 0);
     }
 
     Y_UNIT_TEST_FLAG(ConditionalErase, EnableConditionalEraseResponseBatching) {

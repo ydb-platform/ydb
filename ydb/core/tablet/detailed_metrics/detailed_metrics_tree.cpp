@@ -36,11 +36,11 @@ namespace NKikimr::NDetailedMetrics {
         return tableGroup->GetSubgroup(DETAILED_METRICS_LABEL, PER_PARTITION_VALUE);
     }
 
-    NMonitoring::TDynamicCounterPtr GetOrCreateTabletGroup(
-        NMonitoring::TDynamicCounterPtr parentGroup, const TTabletKey& tablet)
+    void RegisterTabletGroup(
+        NMonitoring::TDynamicCounterPtr parentGroup, const TTabletKey& tablet, NMonitoring::TDynamicCounterPtr group)
     {
-        return parentGroup->GetSubgroup(TABLET_ID_LABEL, ToString(tablet.first))
-            ->GetSubgroup(FOLLOWER_ID_LABEL, ToString(tablet.second));
+        parentGroup->GetSubgroup(TABLET_ID_LABEL, ToString(tablet.first))
+            ->RegisterSubgroup(FOLLOWER_ID_LABEL, ToString(tablet.second), std::move(group));
     }
 
     NMonitoring::TDynamicCounterPtr GetOrCreateTypeGroup(

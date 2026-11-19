@@ -320,12 +320,16 @@ void TSysViewProcessor::AttachDetailedCounters() {
     }
 
     NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
-    auto group = GetServiceCounters(AppData()->Counters, "ydb_detailed", false)
-        ->GetSubgroup("host", "");
-    if (MonitoringProjectId) {
-        group = group->GetSubgroup("monitoring_project_id", MonitoringProjectId);
+    const auto chain = MakeDetailedCountersChain();
+    auto group = GetServiceCounters(AppData()->Counters, "ydb_detailed", false);
+    for (size_t i = 0; i + 1 < chain.size(); ++i) {
+        group = group->GetSubgroup(chain[i].first, chain[i].second);
     }
-    group->RegisterSubgroup("database", Database, DetailedGroup);
+    group->RegisterSubgroup(chain.back().first, chain.back().second, DetailedGroup);
+    if (DetailedAggregator) {
+        // The budget counts the new prefix labels at once, not on the next tick
+        SetDetailedOutputLimit();
+    }
 }
 
 void TSysViewProcessor::DetachDetailedCounters() {
@@ -334,14 +338,21 @@ void TSysViewProcessor::DetachDetailedCounters() {
     }
 
     NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
-    std::vector<std::pair<TString, TString>> chain{{"host", ""}};
+    GetServiceCounters(AppData()->Counters, "ydb_detailed", false)
+        ->RemoveSubgroupChain(MakeDetailedCountersChain());
+}
+
+NDetailedMetrics::TSubgroupPath TSysViewProcessor::MakeDetailedCountersChain() const {
+    NDetailedMetrics::TSubgroupPath chain{{"host", ""}};
     if (MonitoringProjectId) {
         chain.emplace_back("monitoring_project_id", MonitoringProjectId);
     }
     chain.emplace_back("database", Database);
+    return chain;
+}
 
-    GetServiceCounters(AppData()->Counters, "ydb_detailed", false)
-        ->RemoveSubgroupChain(chain);
+void TSysViewProcessor::SetDetailedOutputLimit() {
+    DetailedAggregator->SetOutputLimit(DetailedMetricsMaxNodeOutputBytes, MakeDetailedCountersChain());
 }
 
 TProcessorDatabaseMetricsAggregator* TSysViewProcessor::GetDetailedAggregator() {
@@ -352,7 +363,10 @@ TProcessorDatabaseMetricsAggregator* TSysViewProcessor::GetDetailedAggregator() 
     // be built and fed on a plain db counters deployment.
     if (!DetailedAggregator && Database && AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
         NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
-        DetailedAggregator = CreateProcessorDatabaseMetricsAggregator(DetailedGroup, Database);
+        // One budget per scrape endpoint: the node's ydb_detailed group
+        DetailedAggregator = CreateProcessorDatabaseMetricsAggregator(DetailedGroup, Database,
+            GetServiceCounters(AppData()->Counters, "ydb_detailed", false));
+        SetDetailedOutputLimit();
     }
     return DetailedAggregator.Get();
 }
@@ -557,6 +571,8 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvApplyCounters::TPtr&) {
     }
 
     if (auto* aggregator = DetailedAggregator.Get()) {
+        // Picks up ICB changes
+        SetDetailedOutputLimit();
         aggregator->RecalculateAllCounters();
     }
 

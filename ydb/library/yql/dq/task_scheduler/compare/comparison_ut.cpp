@@ -144,15 +144,15 @@ public:
     TStageOperation(std::shared_ptr<TGraph> graph, EStage stage)
         : Graph(std::move(graph)), Stage(stage) {}
     void SetTask(std::shared_ptr<TTaskSchedulingHandle> task) { Task = std::move(task); }
-    std::shared_ptr<const std::atomic<bool>> GetAvailability() const override { return Available; }
-    bool IsAvailable() const override { return Available->load(); }
+    std::shared_ptr<const TTaskExecutionLease> GetAvailability() const override { return Available; }
+    bool IsAvailable() const override { return Available->IsAvailable(); }
     bool TryAcquire() override {
-        bool expected = true;
-        return Available->compare_exchange_strong(expected, false);
+        return Available->TryAcquire();
     }
     void Release() override {
-        Available->store(true);
-        Graph->Scheduler->NotifyExecutionAvailable();
+        if (Available->Release()) {
+            Graph->Scheduler->NotifyExecutionAvailable();
+        }
     }
     TTaskSliceResult RunSlice(const TTaskSliceBudget&) override {
         return {.Progress = Execute({}, true)};
@@ -332,7 +332,7 @@ public:
     const EStage Stage;
     std::shared_ptr<TTaskSchedulingHandle> Task;
     bool AnnouncedPark = false;
-    const std::shared_ptr<std::atomic<bool>> Available = std::make_shared<std::atomic<bool>>(true);
+    const std::shared_ptr<TTaskExecutionLease> Available = std::make_shared<TTaskExecutionLease>();
 };
 
 class TStageActor : public TActorBootstrapped<TStageActor> {

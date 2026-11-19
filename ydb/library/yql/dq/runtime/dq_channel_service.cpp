@@ -175,9 +175,6 @@ void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregat
 }
 
 void TLocalBuffer::Push(TDataChunk&& data) {
-    if (auto task = GetOutputTask()) {
-        task->RecordOutputBytes(data.Bytes);
-    }
     if ((!FinishPushed && !Finished.load()) ||
         data.Checkpoint // Checkpoints may be generated after channel finish
     ) {
@@ -187,11 +184,16 @@ void TLocalBuffer::Push(TDataChunk&& data) {
 
         (*Registry->LocalBufferChunks)++;
         *Registry->LocalBufferBytes += data.Bytes;
-        PushDataChunk(std::move(data));
+        const auto bytes = data.Bytes;
+        if (PushDataChunk(std::move(data))) {
+            if (auto task = GetOutputTask()) {
+                task->RecordOutputBytes(bytes);
+            }
+        }
     }
 }
 
-void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
+bool TLocalBuffer::PushDataChunk(TDataChunk&& data) {
     std::lock_guard lock(Mutex);
 
     if (PushStats.CollectBasic()) {
@@ -220,7 +222,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
             // allocate quota before the chunk is counted as inflight to keep InflightBytes always allocated
             if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes, /* isOptional = */ false)) {
                 AbortChannelByMemoryLimit(data.Bytes);
-                return;
+                return false;
             }
             InflightBytes += data.Bytes;
             *Registry->LocalBufferInflightBytes += data.Bytes;
@@ -231,7 +233,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
     } else {
         if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes, /* isOptional = */ false)) {
             AbortChannelByMemoryLimit(data.Bytes);
-            return;
+            return false;
         }
         InflightBytes += data.Bytes;
         *Registry->LocalBufferInflightBytes += data.Bytes;
@@ -253,6 +255,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
 
     ReadyHook.Mark();
     NotifyInput(Finished.load(), freshLocalData);
+    return true;
 }
 
 bool TLocalBuffer::IsFinished() {
@@ -537,7 +540,7 @@ TOutputDescriptor::~TOutputDescriptor() {
     }
 }
 
-void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+bool TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
 
     if (PushStats.CollectBasic()) {
         PushStats.Chunks++;
@@ -550,7 +553,7 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
     if (FinishPushed.load() && !data.ConfirmFinish &&
         !data.Checkpoint // Checkpoint traffic should be handled after finish
     ) {
-        return;
+        return false;
     }
 
     bool spilled = false;
@@ -618,6 +621,7 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
             OnFinishConfirmed();
         }
     }
+    return true;
 }
 
 // The confirmation of the finish is with the session: the channel is complete. Under FlowControlMutex
@@ -1020,13 +1024,15 @@ void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggrega
 }
 
 void TOutputBuffer::Push(TDataChunk&& data) {
-    if (auto task = GetOutputTask()) {
-        task->RecordOutputBytes(data.Bytes);
-    }
     if (!Descriptor->IsTerminatedOrAborted() && (!Descriptor->IsFinished() ||
         data.Checkpoint // Checkpoints may be generated after channel finish
     )) {
-        Descriptor->PushDataChunk(std::move(data), NodeState.get(), Descriptor);
+        const auto bytes = data.Bytes;
+        if (Descriptor->PushDataChunk(std::move(data), NodeState.get(), Descriptor)) {
+            if (auto task = GetOutputTask()) {
+                task->RecordOutputBytes(bytes);
+            }
+        }
     }
 }
 

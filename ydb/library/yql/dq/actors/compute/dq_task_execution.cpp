@@ -1,6 +1,7 @@
 #include "dq_task_execution.h"
 
 #include <util/generic/scope.h>
+#include <util/system/env.h>
 
 namespace NYql::NDq {
 
@@ -11,8 +12,7 @@ TDqTaskExecution::TDqTaskExecution(TIntrusivePtr<IDqTaskRunner> runner, TDqMemor
       Work(workFactory ? workFactory->CreateSchedulableWork() : nullptr), ActorSystem(actorSystem), Endpoint(endpoint) {}
 
 bool TDqTaskExecution::TryAcquire() {
-    bool expected = true;
-    return Available->compare_exchange_strong(expected, false, std::memory_order_acquire);
+    return Available->TryAcquire();
 }
 
 bool TDqTaskExecution::TryAcquireEndpoint() {
@@ -26,11 +26,13 @@ bool TDqTaskExecution::TryAcquireEndpoint() {
 }
 
 void TDqTaskExecution::Release() {
-    Available->store(true, std::memory_order_release);
+    const bool queueWaiting = Available->Release();
     if (EndpointWaiting.exchange(false, std::memory_order_acq_rel)) {
         ActorSystem->Send(Endpoint, new TEvTaskExecutionAvailable());
     }
-    Scheduler->NotifyExecutionAvailable();
+    if (queueWaiting) {
+        Scheduler->NotifyExecutionAvailable();
+    }
 }
 
 void TDqTaskExecution::Retire(bool completed) {
@@ -61,6 +63,13 @@ TTaskSliceResult TDqTaskExecution::RunSlice(const TTaskSliceBudget& budget) {
         cpuUs = grant.CpuUs;
     }
     Y_DEFER { if (Work) { Work->StopExecution(); } };
+    static const bool finishOnce = GetEnv("YDB_DQ_TASK_FINISH_ONCE") == "1";
+    if (finishOnce && Runner->LastFetchStatus == ERunStatus::Finished) {
+        // The previous Run has finished every output. The endpoint still
+        // processes channel acknowledgements and retires the task under its lease.
+        result.Status = static_cast<ui32>(ERunStatus::Finished);
+        return result;
+    }
     auto guard = Runner->BindAllocator();
     TDqOperatorMemoryQuotaScope quotaScope(MemoryQuota ? MemoryQuota->GetOperatorQuota() : nullptr);
     Runner->SetExecutionBudget(cpuUs, budget.Deadline);
@@ -88,6 +97,11 @@ TTaskSliceResult TDqTaskExecution::RunSlice(const TTaskSliceBudget& budget) {
         InlineAllowed.store(false, std::memory_order_release);
     }
     return result;
+}
+
+bool TDqTaskExecution::RefreshInlinePermissionEnabled() {
+    static const bool enabled = GetEnv("YDB_DQ_TASK_REFRESH_INLINE") == "1";
+    return enabled;
 }
 
 void TDqTaskExecution::AllowInlineCompletion(std::shared_ptr<const std::atomic<ui64>> epoch, ui64 checkedEpoch) {

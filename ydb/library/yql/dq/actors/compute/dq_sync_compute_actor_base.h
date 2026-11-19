@@ -29,6 +29,11 @@ public:
     }
 protected:
 
+    bool TryWaitForFirstChannelInput() override {
+        return TaskRunner && this->RuntimeSettings.TaskScheduler->GetSettings().UseWorkerPool
+            && !this->Checkpoints && TaskRunner->TryWaitForFirstChannelInput();
+    }
+
     void InitializeWorkerExecution() override {
         if (this->TaskScheduling && !this->TaskScheduling->ObserveOnly
             && this->RuntimeSettings.TaskScheduler->GetSettings().UseWorkerPool) {

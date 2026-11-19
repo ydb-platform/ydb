@@ -1,3 +1,6 @@
+#include "dq_initial_input.h"
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_input_ready.h>
@@ -441,5 +444,27 @@ Y_UNIT_TEST_SUITE(DqInputUnionReadiness) {
         test.Inputs[1]->FinishInput();
         std::tie(rows, finished) = test.Drain();
         UNIT_ASSERT(finished);
+    }
+}
+
+Y_UNIT_TEST_SUITE(DqTaskInitialInput) {
+    Y_UNIT_TEST(ClassifiesTheDrivingInputOfTheFirstFetch) {
+        auto registry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+        TProgramBuilder pb(env, *registry);
+        const auto one = pb.NewDataLiteral(ui64(1));
+        const auto zero = pb.NewDataLiteral(ui64(0));
+        const auto input = pb.Arg(pb.NewStreamType(pb.NewMultiType({one.GetStaticType()})));
+        const auto flow = pb.ToFlow(input, {});
+        const auto mapped = pb.NarrowMap(flow, [](TRuntimeNode::TList fields) { return fields.front(); });
+        const auto dynamicCount = pb.Arg(one.GetStaticType());
+        UNIT_ASSERT(RequiresFirstChannelInput(input, input.GetNode()));
+        UNIT_ASSERT(RequiresFirstChannelInput(pb.FromFlow(mapped), input.GetNode()));
+        UNIT_ASSERT(RequiresFirstChannelInput(pb.FromFlow(pb.Take(mapped, one)), input.GetNode()));
+        UNIT_ASSERT(!RequiresFirstChannelInput(pb.FromFlow(pb.Take(mapped, zero)), input.GetNode()));
+        UNIT_ASSERT(!RequiresFirstChannelInput(pb.FromFlow(pb.Take(mapped, dynamicCount)), input.GetNode()));
+        UNIT_ASSERT(!RequiresFirstChannelInput(pb.FromFlow(mapped), pb.Arg(input.GetStaticType()).GetNode()));
+        UNIT_ASSERT(!RequiresFirstChannelInput(pb.FromFlow(pb.Skip(mapped, one)), input.GetNode()));
     }
 }

@@ -213,7 +213,7 @@ public:
     void BindStorage(std::shared_ptr<TLocalBuffer>& self, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler();
 
-    void PushDataChunk(TDataChunk&& data);
+    bool PushDataChunk(TDataChunk&& data);
     void NotifyInput(bool force, bool freshLocalData = false);
     void NotifyOutput(bool force);
 
@@ -310,7 +310,7 @@ public:
     }
     ~TOutputDescriptor();
 
-    void PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    bool PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void AddPopChunk(ui64 bytes, ui64 rows);
     void UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     // Adopts genMajor and tells whether the channel may go on at it: false if it is aborted, or is aborted right

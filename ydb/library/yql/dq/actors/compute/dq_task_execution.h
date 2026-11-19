@@ -14,8 +14,8 @@ public:
     TDqTaskExecution(TIntrusivePtr<IDqTaskRunner> runner, TDqMemoryQuota* memoryQuota,
         std::shared_ptr<IDqTaskScheduler> scheduler, std::shared_ptr<TTaskSchedulingHandle> task,
         IDqSchedulableWorkFactoryPtr workFactory, NActors::TActorSystem* actorSystem, NActors::TActorId endpoint);
-    std::shared_ptr<const std::atomic<bool>> GetAvailability() const override { return Available; }
-    bool IsAvailable() const override { return Available->load(std::memory_order_acquire); }
+    std::shared_ptr<const TTaskExecutionLease> GetAvailability() const override { return Available; }
+    bool IsAvailable() const override { return Available->IsAvailable(); }
     bool TryAcquire() override;
     void Release() override;
     bool TryAcquireEndpoint();
@@ -25,6 +25,7 @@ public:
     // Endpoint lease must be held. Allows workers to complete the following slices
     // without the endpoint while the output finish epoch stays at `checkedEpoch`.
     void AllowInlineCompletion(std::shared_ptr<const std::atomic<ui64>> epoch, ui64 checkedEpoch);
+    static bool RefreshInlinePermissionEnabled();
     void DisallowInlineCompletion() { InlineAllowed.store(false, std::memory_order_release); }
 
 private:
@@ -36,7 +37,7 @@ private:
     bool WaitingForQuota = false;
     NActors::TActorSystem* const ActorSystem;
     const NActors::TActorId Endpoint;
-    const std::shared_ptr<std::atomic<bool>> Available = std::make_shared<std::atomic<bool>>(true);
+    const std::shared_ptr<TTaskExecutionLease> Available = std::make_shared<TTaskExecutionLease>();
     std::atomic<bool> EndpointWaiting = false;
     std::atomic<bool> InlineAllowed = false;
     std::shared_ptr<const std::atomic<ui64>> InlineEpoch; // written by the endpoint under the lease

@@ -1,5 +1,6 @@
 #include <library/cpp/json/json_reader.h>
 #include <ydb/library/yql/dq/task_scheduler/worker_pool.h>
+#include <ydb/library/yql/dq/task_scheduler/worker_continuation.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -18,15 +19,13 @@ struct TEvExecuted : TEventLocal<TEvExecuted, EventSpaceBegin(TEvents::ES_PRIVAT
 
 class TExecution : public IDqTaskExecution {
 public:
-    std::shared_ptr<const std::atomic<bool>> GetAvailability() const override { return Available; }
-    bool IsAvailable() const override { return Available->load(); }
+    std::shared_ptr<const TTaskExecutionLease> GetAvailability() const override { return Available; }
+    bool IsAvailable() const override { return Available->IsAvailable(); }
     bool TryAcquire() override {
-        bool expected = true;
-        return Available->compare_exchange_strong(expected, false);
+        return Available->TryAcquire();
     }
     void Release() override {
-        Available->store(true);
-        if (OnAvailable) { OnAvailable(); }
+        if (Available->Release() && OnAvailable) { OnAvailable(); }
     }
     TTaskSliceResult RunSlice(const TTaskSliceBudget& budget) override {
         Budget = budget;
@@ -38,7 +37,7 @@ public:
         Task->Cancel(true);
         System->Send(Edge, new TEvExecuted(Worker, Task->Query, Budget));
     }
-    std::shared_ptr<std::atomic<bool>> Available = std::make_shared<std::atomic<bool>>(true);
+    std::shared_ptr<TTaskExecutionLease> Available = std::make_shared<TTaskExecutionLease>();
     std::shared_ptr<TTaskSchedulingHandle> Task;
     std::function<void()> OnAvailable;
     TActorSystem* System = nullptr;
@@ -48,9 +47,15 @@ public:
 
 struct TQueues {
     TVector<TActorId> Wakeups;
-    std::shared_ptr<TTaskWorkPool> Pool = std::make_shared<TTaskWorkPool>(2,
-        [this](auto worker) { Wakeups.push_back(worker); });
+    TVector<bool> KnownReadyWakeups;
+    std::shared_ptr<TTaskWorkPool> Pool;
     TVector<std::shared_ptr<TExecution>> Executions;
+    explicit TQueues(bool preferConsumers = false, bool preferReadyQueries = false)
+        : Pool(std::make_shared<TTaskWorkPool>(2, [this](auto wakeup) {
+            Wakeups.push_back(wakeup.Actor);
+            KnownReadyWakeups.push_back(wakeup.KnownReady);
+        },
+            NMonitoring::TDynamicCounterPtr{}, preferConsumers, preferReadyQueries)) {}
     ~TQueues() {
         for (const auto& execution : Executions) {
             execution->Task->Cancel();
@@ -76,6 +81,18 @@ struct TQueues {
         claim.Task->Complete({.OutputRows = 1, .RunnerInvoked = true, .BudgetExhausted = again});
         claim.Execution->Release();
         Pool->Finish(claim, cpuUs);
+    }
+    std::shared_ptr<TExecution> AddBlockedTask(TActorId query, ui64 actor, TTaskDependencyId dependency) {
+        auto execution = Add(query, 1, actor);
+        auto claim = Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task == execution->Task && claim->Execution->TryAcquire());
+        const auto generation = claim->Task->TryDispatch();
+        UNIT_ASSERT(generation && claim->Task->Start(*generation));
+        claim->Task->Await(dependency, claim->Task->Observe(dependency));
+        claim->Task->Complete({.RunnerInvoked = true});
+        claim->Execution->Release();
+        Pool->Finish(*claim, 0);
+        return execution;
     }
 };
 
@@ -111,6 +128,70 @@ struct TTestRuntime : TTestActorRuntimeBase {
 } // namespace
 
 Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
+    Y_UNIT_TEST(WakeupClassifiesClaimableWorkWithoutDroppingRechecks) {
+        TQueues t;
+        const auto dependency = InputDependency(42);
+        auto opaque = t.AddBlockedTask(Id(100), 1, dependency);
+        UNIT_ASSERT(!t.Pool->Take(Id(900), 100));
+        opaque->Task->Signal(dependency);
+        UNIT_ASSERT_VALUES_EQUAL(t.KnownReadyWakeups.size(), 1);
+        UNIT_ASSERT(!t.KnownReadyWakeups.back());
+        auto claim = t.Pool->Take(Id(900), 100);
+        UNIT_ASSERT(claim && claim->Task == opaque->Task);
+        t.Run(std::move(*claim), false);
+        UNIT_ASSERT(!t.Pool->Take(Id(900), 100));
+        auto ready = t.Add(Id(200), 1, 2);
+        UNIT_ASSERT_VALUES_EQUAL(t.KnownReadyWakeups.size(), 2);
+        UNIT_ASSERT(t.KnownReadyWakeups.back());
+        claim = t.Pool->Take(Id(900), 100);
+        UNIT_ASSERT(claim && claim->Task == ready->Task);
+        t.Run(std::move(*claim), false);
+    }
+
+    Y_UNIT_TEST(ReadyPriorityCanChooseADifferentQueryWithinTheServiceBand) {
+        for (bool enabled : {false, true}) {
+            TQueues t(false, enabled);
+            const auto dependency = InputDependency(42);
+            auto recheck = t.AddBlockedTask(Id(100), 1, dependency);
+            recheck->Task->Signal(dependency);
+            UNIT_ASSERT(recheck->Task->GetSnapshot().Classification.Readiness == ETaskReadiness::Recheck);
+            auto ready = t.Add(Id(200), 1, 2);
+            auto claim = t.Pool->Take({}, 100);
+            UNIT_ASSERT(claim && claim->Task == (enabled ? ready->Task : recheck->Task));
+            t.Run(std::move(*claim), false);
+        }
+    }
+
+    Y_UNIT_TEST(ReadyPriorityDoesNotOverrideALargerServiceDifference) {
+        TQueues t(false, true);
+        const auto dependency = InputDependency(42);
+        auto recheck = t.AddBlockedTask(Id(100), 1, dependency);
+        auto ready = t.Add(Id(200), 1, 2);
+        auto claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task == ready->Task);
+        t.Run(std::move(*claim), true, 100);
+        recheck->Task->Signal(dependency);
+        claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task == recheck->Task);
+        t.Run(std::move(*claim), false);
+    }
+
+    Y_UNIT_TEST(ReadyPriorityExpiresForAnOldRecheck) {
+        TQueues t(false, true);
+        const auto dependency = InputDependency(42);
+        auto recheck = t.AddBlockedTask(Id(100), 1, dependency);
+        recheck->Task->Signal(dependency);
+        auto ready = t.Add(Id(200), 1, 2);
+        for (ui32 i = 0; i < 64; ++i) {
+            auto claim = t.Pool->Take({}, 100);
+            UNIT_ASSERT(claim && claim->Task == ready->Task);
+            t.Run(std::move(*claim), true, 0);
+        }
+        auto claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task == recheck->Task);
+        t.Run(std::move(*claim), false);
+    }
+
     Y_UNIT_TEST(NearestReadyTaskWinsAcrossRemoteGraphEdges) {
         TQueues t;
         auto graph = std::make_shared<const TQueryTaskGraph>(
@@ -253,6 +334,82 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
         t.Run(std::move(*secondClaim), false);
     }
 
+    Y_UNIT_TEST(ContinuingWorkerClaimsWorkWithoutWakingAnIdleWorker) {
+        TQueues t;
+        UNIT_ASSERT(!t.Pool->Take(Id(900), 100));
+        UNIT_ASSERT(!t.Pool->Take(Id(901), 100));
+        auto execution = t.Add(Id(100), 1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(t.Wakeups.size(), 1);
+        const auto worker = t.Wakeups.front();
+        auto claim = t.Pool->Take(worker, 100);
+        UNIT_ASSERT(claim && claim->Task == execution->Task);
+        {
+            TWorkerContinuationScope continuation(*t.Pool);
+            t.Run(std::move(*claim), true);
+            UNIT_ASSERT_VALUES_EQUAL(t.Wakeups.size(), 1);
+        }
+        claim = t.Pool->Take(worker, 100);
+        UNIT_ASSERT(claim && claim->Task == execution->Task);
+        t.Run(std::move(*claim), false);
+    }
+
+    Y_UNIT_TEST(ExpiredContinuationReschedulesUnclaimedWork) {
+        TQueues t;
+        UNIT_ASSERT(!t.Pool->Take(Id(900), 100));
+        UNIT_ASSERT(!t.Pool->Take(Id(901), 100));
+        auto execution = t.Add(Id(100), 1, 1);
+        const auto worker = t.Wakeups.front();
+        auto claim = t.Pool->Take(worker, 100);
+        UNIT_ASSERT(claim);
+        {
+            TWorkerContinuationScope continuation(*t.Pool);
+            t.Run(std::move(*claim), true);
+            UNIT_ASSERT_VALUES_EQUAL(t.Wakeups.size(), 1);
+        }
+        // The activation has run out of time after completing the slice.
+        // Reschedule must wake a worker rather than strand its ready task.
+        t.Pool->Reschedule(worker);
+        UNIT_ASSERT_VALUES_EQUAL(t.Wakeups.size(), 2);
+        UNIT_ASSERT(t.Wakeups.back() == worker);
+        claim = t.Pool->Take(worker, 100);
+        UNIT_ASSERT(claim && claim->Task == execution->Task);
+        t.Run(std::move(*claim), false);
+    }
+
+    Y_UNIT_TEST(ContinuationLeavesOtherReadyTasksForParallelWorkers) {
+        TQueues t;
+        UNIT_ASSERT(!t.Pool->Take(Id(900), 100));
+        UNIT_ASSERT(!t.Pool->Take(Id(901), 100));
+        {
+            TWorkerContinuationScope continuation(*t.Pool);
+            t.Add(Id(100), 1, 1);
+            UNIT_ASSERT(t.Wakeups.empty());
+            t.Add(Id(200), 1, 2);
+            UNIT_ASSERT_VALUES_EQUAL(t.Wakeups.size(), 1);
+            t.Pool->NotifyAvailable();
+            UNIT_ASSERT_VALUES_EQUAL(t.Wakeups.size(), 1);
+        }
+        auto first = t.Pool->Take(Id(902), 100);
+        auto second = t.Pool->Take(t.Wakeups.front(), 100);
+        UNIT_ASSERT(first && second && first->Task != second->Task);
+        t.Run(std::move(*first), false);
+        t.Run(std::move(*second), false);
+    }
+
+    Y_UNIT_TEST(ContinuationIsLimitedToItsPool) {
+        TQueues current;
+        TQueues other;
+        UNIT_ASSERT(!other.Pool->Take(Id(900), 100));
+        {
+            TWorkerContinuationScope continuation(*current.Pool);
+            other.Add(Id(100), 1, 1);
+            UNIT_ASSERT_VALUES_EQUAL(other.Wakeups.size(), 1);
+        }
+        auto claim = other.Pool->Take(other.Wakeups.front(), 100);
+        UNIT_ASSERT(claim);
+        other.Run(std::move(*claim), false);
+    }
+
     Y_UNIT_TEST(RescheduleParksUntilWorkArrives) {
         TQueues t;
         const auto query = Id(100);
@@ -272,6 +429,49 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
         UNIT_ASSERT(t.Wakeups == TVector<TActorId>({worker, worker}));
         claim = t.Pool->Take(worker, 100);
         UNIT_ASSERT(claim && claim->Task == execution->Task);
+        t.Run(std::move(*claim), false);
+    }
+
+    Y_UNIT_TEST(ConsumerPreferenceCanOverrideResultDistance) {
+        for (bool enabled : {false, true}) {
+            TQueues t(enabled);
+            const auto query = Id(100);
+            auto graph = std::make_shared<const TQueryTaskGraph>(
+                TVector<TTaskGraphNode>{{1, 1, 1, 1, 1}, {2, 2, 1, 1, 1}},
+                TVector<TTaskGraphChannel>{{1, 1, 2}, {2, 2, 0}});
+            t.Pool->RegisterGraph(query, 0, graph, {1, 2});
+            auto consumer = t.Add(query, 1, 1);
+            auto claim = t.Pool->Take({}, 100);
+            UNIT_ASSERT(claim && claim->Execution->TryAcquire());
+            const auto generation = claim->Task->TryDispatch();
+            UNIT_ASSERT(generation && claim->Task->Start(*generation));
+            claim->Task->Complete({.InputRows = 1, .RunnerInvoked = true, .BudgetExhausted = true});
+            claim->Execution->Release();
+            t.Pool->Finish(*claim, 10);
+            auto closer = t.Add(query, 2, 2);
+            claim = t.Pool->Take({}, 100);
+            UNIT_ASSERT(claim && claim->Task == (enabled ? consumer->Task : closer->Task));
+            t.Run(std::move(*claim), false);
+        }
+    }
+
+    Y_UNIT_TEST(ConsumerPreferenceDoesNotOverrideKnownReadiness) {
+        TQueues t(true);
+        const auto query = Id(100);
+        auto consumer = t.Add(query, 1, 1);
+        auto waiting = t.Pool->Take({}, 100);
+        UNIT_ASSERT(waiting && waiting->Execution->TryAcquire());
+        const auto generation = waiting->Task->TryDispatch();
+        UNIT_ASSERT(generation && waiting->Task->Start(*generation));
+        waiting->Task->Await(InputDependency(42), waiting->Task->Observe(InputDependency(42)));
+        waiting->Task->Complete({.RunnerInvoked = true});
+        waiting->Execution->Release();
+        t.Pool->Finish(*waiting, 10);
+        consumer->Task->Signal(InputDependency(42), ETaskPriority::Drain);
+        UNIT_ASSERT(consumer->Task->GetSnapshot().Classification.Readiness == ETaskReadiness::Recheck);
+        auto runnable = t.Add(query, 2, 2);
+        auto claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Task == runnable->Task);
         t.Run(std::move(*claim), false);
     }
 

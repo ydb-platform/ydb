@@ -1,6 +1,8 @@
 #include "dq_tasks_counters.h"
 #include "dq_tasks_runner.h"
+#include <util/system/env.h>
 #include "dq_execution_wait.h"
+#include "dq_initial_input.h"
 
 #include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_watermark_generator_tracker.h>
@@ -154,6 +156,38 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
 }
 
 } // namespace
+
+// Only the first fetch has this contract. A partially consumed Take can
+// finish without pulling its input again.
+bool RequiresFirstChannelInput(TRuntimeNode root, const TNode* input) {
+    while (root.GetNode() != input) {
+        if (root.IsImmediate() || !root.GetNode()->GetType()->IsCallable()) {
+            return false;
+        }
+        const auto& op = static_cast<const TCallable&>(*root.GetNode());
+        if (op.HasResult() || !op.GetInputsCount()) {
+            return false;
+        }
+        const auto name = op.GetType()->GetName();
+        if (name == "Take" && op.GetInputsCount() == 2) {
+            const auto count = op.GetInput(1);
+            if (!count.IsImmediate() || !count.GetStaticType()->IsData()
+                || static_cast<const TDataType*>(count.GetStaticType())->GetSchemeType() != NUdf::TDataType<ui64>::Id
+                || !static_cast<const TDataLiteral*>(count.GetNode())->AsValue().Get<ui64>())
+            {
+                return false;
+            }
+        } else if (name == "ToFlow" || name == "FromFlow") {
+            if (op.GetInputsCount() != 1) {
+                return false;
+            }
+        } else if (name != "NarrowMap") {
+            return false;
+        }
+        root = op.GetInput(0);
+    }
+    return true;
+}
 
 #define LOG(...) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(__VA_ARGS__); } } while (0)
 
@@ -418,6 +452,7 @@ public:
             bool wereChanges = false;
             programRoot = SinglePassVisitCallables(programRoot, explorer, Context.FuncProvider, patternEnv, true, wereChanges);
             if (wereChanges) {
+                RewrittenProgram = true;
                 canBeCached = false;
             }
         }
@@ -617,6 +652,26 @@ public:
         // the input channels of a task are all v1 or all v2, and the v2 ones support TDqInputReadySet
         const bool useReadySet = task.GetDqChannelVersion() >= 2u && Context.ChannelService
             && Context.ChannelService->IsChannelNotificationsEnabled();
+
+        static const bool deferIdentityInput = GetEnv("YDB_DQ_TASK_WAIT_FIRST_INPUT") == "1";
+        if (deferIdentityInput && Scheduling && !Scheduling->ObserveOnly && useReadySet
+            && !RewrittenProgram && task.InputsSize() == 1 && task.GetInputs(0).ChannelsSize()
+            && !task.GetInputs(0).HasTransform() && !task.GetInputs(0).HasSource()
+            && task.OutputsSize() == 1 && task.GetOutputs(0).ChannelsSize() == 1
+            && !task.GetOutputs(0).HasTransform() && !task.GetOutputs(0).HasSink())
+        {
+            // Use the prepared pattern, including on cache hits. A rewritten
+            // pattern is never inserted into the shared cache.
+            const auto& program = static_cast<const TStructLiteral&>(*entry->ProgramNode.GetNode());
+            const auto index = program.GetType()->FindMemberIndex("Program");
+            if (index) {
+                const auto root = program.GetValue(*index);
+                static const bool deferPipelineInput = GetEnv("YDB_DQ_TASK_WAIT_FIRST_PIPELINE") == "1";
+                WaitForFirstInput = deferPipelineInput
+                    ? RequiresFirstChannelInput(root, entry->EntryPoints[0])
+                    : root.GetNode() == entry->EntryPoints[0];
+            }
+        }
 
         bool taskUsesWatermarks = false;
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
@@ -977,7 +1032,7 @@ public:
     }
 
     void DescribeTask(const TDqTaskSettings& task) const {
-        if (!Scheduling) { return; }
+        if (!Scheduling || !Scheduling->Trace) { return; }
         NJson::TJsonValue args(NJson::JSON_MAP);
         args["stage_id"] = StageId;
         args["execution_mode"] = Scheduling->ObserveOnly ? "endpoint" : "scheduled";
@@ -1001,21 +1056,19 @@ public:
             for (const auto& [name, count] : counts) {
                 operators[name] = count;
                 auto item = DescribeTaskOperator(name, count);
-                if (Scheduling->Trace) {
-                    NJson::TJsonValue json(NJson::JSON_MAP);
-                    json["name"] = name;
-                    json["count"] = count;
-                    json["known_contract"] = item.Known;
-                    auto capability = [&](TStringBuf field, bool value) {
-                        json[field] = item.Known ? NJson::TJsonValue(value) : NJson::TJsonValue();
-                    };
-                    capability("consumes", item.Consumes);
-                    capability("accumulates", item.Accumulates);
-                    capability("emits_buffered", item.EmitsBuffered);
-                    capability("spills", item.Spills);
-                    capability("reports_waits", item.ReportsWaits);
-                    traits.AppendValue(std::move(json));
-                }
+                NJson::TJsonValue json(NJson::JSON_MAP);
+                json["name"] = name;
+                json["count"] = count;
+                json["known_contract"] = item.Known;
+                auto capability = [&](TStringBuf field, bool value) {
+                    json[field] = item.Known ? NJson::TJsonValue(value) : NJson::TJsonValue();
+                };
+                capability("consumes", item.Consumes);
+                capability("accumulates", item.Accumulates);
+                capability("emits_buffered", item.EmitsBuffered);
+                capability("spills", item.Spills);
+                capability("reports_waits", item.ReportsWaits);
+                traits.AppendValue(std::move(json));
                 profile.push_back(std::move(item));
             }
             Scheduling->SetOperatorProfile(std::move(profile));
@@ -1031,10 +1084,30 @@ public:
         }
         args["sources"] = std::move(sources);
         args["sinks"] = std::move(sinks);
-        if (Scheduling->Trace) { Scheduling->Trace->Event("task", TaskId, Scheduling->Actor, std::move(args)); }
+        Scheduling->Trace->Event("task", TaskId, Scheduling->Actor, std::move(args));
+    }
+
+    bool TryWaitForFirstChannelInput() override {
+        if (!WaitForFirstInput || !Scheduling->ArmInitialChannelWakeup()) {
+            return false;
+        }
+        // Arm before probing: an event racing with either probe enqueues the
+        // handle, and an event predating the subscription is visible as state.
+        for (const auto& [_, output] : AllocatedHolder->OutputChannels) {
+            if (output->IsFinished() || output->IsEarlyFinished()) {
+                return false;
+            }
+        }
+        for (const auto& [_, input] : AllocatedHolder->InputChannels) {
+            if (input->IsFinished() || !input->Empty()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     ERunStatus Run() final {
+        WaitForFirstInput = false;
         const auto trace = Scheduling ? Scheduling->Trace : nullptr;
         auto channelsBefore = trace ? TraceChannels() : NJson::TJsonValue();
         const int exceptionsBefore = std::uncaught_exceptions();
@@ -1489,6 +1562,8 @@ private:
     TDqComputeActorWatermarks* WatermarksTracker = nullptr;
     TDqWatermarkGeneratorTracker* SourceWatermarksTracker = nullptr;
 
+    bool RewrittenProgram = false;
+    bool WaitForFirstInput = false;
     bool TaskHasEffects = false;
 
     std::unique_ptr<TDqTaskRunnerStats> Stats;

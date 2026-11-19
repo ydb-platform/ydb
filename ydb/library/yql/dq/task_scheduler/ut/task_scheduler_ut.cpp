@@ -32,6 +32,19 @@ struct TManualTask {
 } // namespace
 
 Y_UNIT_TEST_SUITE(DqTaskScheduler) {
+    Y_UNIT_TEST(FirstChannelWakeupCanArriveDuringOrAfterTheInitialProbe) {
+        TManualTask t;
+        UNIT_ASSERT(t.Task->ArmInitialChannelWakeup());
+        t.Task->Signal(InputDependency(42));
+        UNIT_ASSERT_VALUES_EQUAL(t.Enqueues, 1);
+        UNIT_ASSERT(!t.Task->ArmInitialChannelWakeup());
+        t.Task->RequestExecution();
+        UNIT_ASSERT_VALUES_EQUAL(t.Enqueues, 1);
+        t.Start();
+        t.Task->Complete({});
+        UNIT_ASSERT(!t.Task->ArmInitialChannelWakeup());
+    }
+
     Y_UNIT_TEST(OperatorTraitsAreExplicitAndDoNotAssignOneTaskType) {
         const auto join = DescribeTaskOperator("DqBlockHashJoin", 2);
         const auto aggregation = DescribeTaskOperator("BlockCombineHashed");

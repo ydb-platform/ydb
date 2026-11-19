@@ -69,6 +69,12 @@ Y_UNIT_TEST_SUITE(DqDetachedTaskExecution) {
         UNIT_ASSERT_VALUES_EQUAL(state->Destroyed, 1);
         execution->Release();
         UNIT_ASSERT(execution->IsAvailable());
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->AvailableNotifications, 0);
+        UNIT_ASSERT(execution->TryAcquire());
+        UNIT_ASSERT(!execution->GetAvailability()->IsAvailableOrSubscribe());
+        UNIT_ASSERT(!execution->GetAvailability()->IsAvailableOrSubscribe());
+        execution->Release();
+        UNIT_ASSERT(execution->GetAvailability()->IsAvailableOrSubscribe());
         UNIT_ASSERT_VALUES_EQUAL(scheduler->AvailableNotifications, 1);
     }
 }

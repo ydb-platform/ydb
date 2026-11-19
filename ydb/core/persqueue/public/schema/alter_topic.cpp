@@ -291,14 +291,10 @@ TResult ApplyChangesInt(
 
         Ydb::StatusIds_StatusCode status;
         TString error;
-<<<<<<< HEAD
         FillConsumer(consumer, c, status, error, false);
-=======
-        FillConsumer(consumer, *pqTabletConfig, c, status, error, false);
         if (!c.HasReplicateOffsets()) {
             consumer.clear_replicate_offsets();
         }
->>>>>>> 49acd63de6c (Implement replication of rolled back offsets in source topic (#59550))
     }
 
 

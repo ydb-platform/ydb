@@ -40,6 +40,7 @@ SRCS(
     mirrorer_ut.cpp
     topic_timestamp_ut.cpp
     topic_replication_ut.cpp
+    source_topic_mutate_ut.cpp
     topic_ut.cpp
 )
 

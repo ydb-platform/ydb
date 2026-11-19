@@ -43,12 +43,9 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void CreatedHook(const TActorContext& ctx) override;
     bool HandleHook(STFUNC_SIG) override;
 
-<<<<<<< HEAD
-=======
     bool IsTopicMutateDisabled(const TActorContext& ctx) const;
     bool IsConsumerOffsetCommitDisabled(const TString& consumerName, const TActorContext& ctx) const;
 
->>>>>>> 49acd63de6c (Implement replication of rolled back offsets in source topic (#59550))
     void ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
 
     void HandleWakeup(const TActorContext&);
@@ -172,7 +169,9 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     DESCRIBE_HANDLE(HandleGetMaxSeqNoRequest)
     DESCRIBE_HANDLE(HandleSetClientOffsetRequest)
     DESCRIBE_HANDLE(HandleGetClientOffsetRequest)
-    DESCRIBE_HANDLE(HandleWriteRequest)
+    void HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
+                            const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
+                            bool fromMirrorer = false);
     DESCRIBE_HANDLE(HandleUpdateWriteTimestampRequest)
     DESCRIBE_HANDLE(HandleRegisterMessageGroupRequest)
     DESCRIBE_HANDLE(HandleDeregisterMessageGroupRequest)

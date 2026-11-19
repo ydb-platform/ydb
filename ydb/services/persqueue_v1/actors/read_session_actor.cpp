@@ -1983,10 +1983,6 @@ i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEv
     return diff;
 }
 
-<<<<<<< HEAD
-template <bool UseMigrationProtocol>
-void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
-=======
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
     if (!SupportsReplicationMessages) {
@@ -2018,7 +2014,6 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr&
 
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
     if (!ActualPartitionActors.contains(ev->Sender)) {
         return;
     }

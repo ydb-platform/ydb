@@ -365,8 +365,6 @@ struct TPersQueue::TReplyToActor {
     TEventBasePtr Event;
 };
 
-<<<<<<< HEAD
-=======
 bool TPersQueue::IsTopicMutateDisabled(const TActorContext& ctx) const {
     return AppData(ctx)->FeatureFlags.GetEnableSourceTopicMutateRestricted();
 }
@@ -379,7 +377,6 @@ bool TPersQueue::IsConsumerOffsetCommitDisabled(const TString& consumerName, con
     return !consumer || consumer->GetReplicateOffsets();
 }
 
->>>>>>> 49acd63de6c (Implement replication of rolled back offsets in source topic (#59550))
 void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error)
 {
     ReplyPersQueueError(
@@ -1944,16 +1941,8 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
             pipeIter->second.ClientId = cmd.GetClientId();
             pipeIter->second.SessionId = cmd.GetSessionId();
             pipeIter->second.PartitionSessionId = cmd.GetPartitionSessionId();
-<<<<<<< HEAD
-<<<<<<< HEAD
             YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Created session",
                 {"logPrefix", LogPrefix()},
-=======
-            pipeIter->second.ClientActor = sender;
-=======
->>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
-            LOG_D("Created session",
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
                 {"sessionId", cmd.GetSessionId()},
                 {"onPipe", pipeIter->first});
             ctx.Send(MakePQDReadCacheServiceActorId(),
@@ -2053,7 +2042,8 @@ void TPersQueue::FillBatchInfo(
 }
 
 void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
-                                    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
+                                    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
+                                    bool fromMirrorer)
 {
     auto& pqConfig = AppData(ctx)->PQConfig;
 
@@ -2335,6 +2325,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             initialSeqNo,
             TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked
         );
+    event->FromMirrorer = fromMirrorer;
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
@@ -3067,8 +3058,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
-<<<<<<< HEAD
-=======
     if (IsTopicMutateDisabled(ctx)
         && (req.CmdWriteSize() > 0 || req.HasCmdEmitHeartbeat()))
     {
@@ -3095,7 +3084,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         }
     }
 
->>>>>>> dcce6c6f21b (allow commits for consumers with type replication (#59306))
     if (req.HasWriteId()) {
         HandleEventForSupportivePartition(responseCookie, ev, ev->Sender, ctx);
         return;
@@ -3113,7 +3101,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     } else if (req.HasCmdGetClientOffset()) {
         HandleGetClientOffsetRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.CmdWriteSize()) {
-        HandleWriteRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
+        HandleWriteRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, ev->Get()->FromMirrorer);
     } else if (req.HasCmdUpdateWriteTimestamp()) {
         HandleUpdateWriteTimestampRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdRead()) {
@@ -3585,6 +3573,22 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 
     switch (event.GetTxBodyCase()) {
     case NKikimrPQ::TEvProposeTransaction::kData:
+        if (IsTopicMutateDisabled(ctx)
+            && !Txs.contains(event.GetTxId())
+            && !AnyOf(EvProposeTransactionQueue, [&](const auto& pending) {
+                return pending->GetRecord().GetTxId() == event.GetTxId();
+            }))
+        {
+            // Retries of accepted proposals must continue the transaction protocol.
+            const TString reason = "Topic mutations are temporarily disabled";
+            ev->Get()->ExecuteSpan.EndError(reason);
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                       event.GetTxId(),
+                                       NKikimrPQ::TError::ERROR,
+                                       reason,
+                                       ctx);
+            return;
+        }
         HandleDataTransaction(ev->Release(), ctx);
         break;
     case NKikimrPQ::TEvProposeTransaction::kConfig:

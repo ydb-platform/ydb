@@ -186,16 +186,11 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::sh
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-<<<<<<< HEAD
-    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications() && !TopicHolder->IsAsyncReplication) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("Consumer offset commits are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED));
-=======
     if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()
         && !TopicHolder->IsAsyncReplication
         && !TopicHolder->IsReplicationConsumer)
     {
         CloseSessionAndDie("Consumer offset commits are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx);
->>>>>>> 9c1adfe302d (allow commits to replication consumer if enable client modifications … (#60032))
         return;
     }
     // extend the lifetime for PartitionGraph
@@ -1511,6 +1506,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     ui64 deadline = (ctx.Now() + WAIT_DATA - WAIT_DELTA).MilliSeconds();
     event->Record.SetDeadline(deadline);
     event->Record.SetClientId(ClientId);
+    event->Record.SetSessionId(Session);
     if (MaxTimeLagMs) {
         event->Record.SetMaxTimeLagMs(MaxTimeLagMs);
     }
@@ -1563,6 +1559,19 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     WaitDataInfly.erase(it);
     if (!WaitForData)
         return;
+
+    if (record.GetSessionInvalidated()) {
+        YDB_LOG_DEBUG_CTX(ctx, "Session invalidated while waiting for data, close read session",
+            {"partition", Partition},
+            {"session", Session});
+        WaitForData = false;
+        WaitDataInfly.clear();
+        Counters.Errors.Inc();
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
+            TStringBuilder() << "status is not ok: no such session '" << Session << "'",
+            ConvertOldCode(NPersQueue::NErrorCode::READ_ERROR_NO_SESSION)));
+        return;
+    }
 
     if (Counters.WaitsForData) {
         Counters.WaitsForData.Inc();

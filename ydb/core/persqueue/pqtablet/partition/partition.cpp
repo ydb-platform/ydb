@@ -3835,7 +3835,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                 (Parameters->FirstCommitWriteOperations ? BlobEncoder.Head : BlobEncoder.NewHead).PackedSize != 0;
 
             BlobEncoder.NewPartitionedBlob(Partition,
-                                    BlobEncoder.NewHead.Offset,
+                                           BlobEncoder.NewHead.Offset,
                                            "", // SourceId
                                            0,  // SeqNo
                                            0,  // TotalParts
@@ -3928,11 +3928,8 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
                 userInfo.Generation = 0;
                 userInfo.Step = 0;
                 userInfo.PipeClient = {};
-<<<<<<< HEAD
-=======
                 userInfo.ReadSessionActor = {};
                 FailStaleSessionReadRequests(operation.GetConsumer(), ActorContext());
->>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
             }
         }
 
@@ -4699,11 +4696,8 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             userInfo.Generation = 0;
             userInfo.Step = 0;
             userInfo.PipeClient = {};
-<<<<<<< HEAD
-=======
             userInfo.ReadSessionActor = {};
             FailStaleSessionReadRequests(user, ctx);
->>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
         }
 
         PQ_ENSURE(offset <= (ui64)Max<i64>())("Unexpected Offset", offset);
@@ -5165,8 +5159,6 @@ void TPartition::CreateMirrorerActor() {
     );
 }
 
-<<<<<<< HEAD
-=======
 void TPartition::DestroyMirrorer() {
     if (Mirrorer) {
         Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
@@ -5180,7 +5172,6 @@ void TPartition::NotifyMirrorerPersistDone() {
     }
 }
 
->>>>>>> 3ef01186b99 (Move end offset & start offset to mirrored offset (#58014))
 bool TPartition::IsQuotingEnabled() const
 {
     return NPQ::IsQuotingEnabled(AppData()->PQConfig,

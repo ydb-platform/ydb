@@ -11,18 +11,50 @@
 #include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/testing/common/network.h>
 #include <library/cpp/testing/unittest/registar.h>
-<<<<<<< HEAD
-=======
 #include <library/cpp/threading/future/future.h>
 
 #include <util/stream/str.h>
 #include <util/system/mutex.h>
->>>>>>> 49acd63de6c (Implement replication of rolled back offsets in source topic (#59550))
 
 #include <chrono>
 
 namespace NKikimr::NPersQueueTests {
 namespace {
+
+class TObservedMirrorReaderFactory : public NPQ::TPersQueueMirrorReaderFactory {
+public:
+    std::shared_ptr<NYdb::NTopic::IReadSession> GetReadSession(
+        const NKikimrPQ::TMirrorPartitionConfig& config,
+        ui32 partition,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        ui64 maxMemoryUsageBytes,
+        TMaybe<TLog> logger = Nothing()) const override
+    {
+        auto session = TPersQueueMirrorReaderFactory::GetReadSession(
+            config, partition, std::move(credentialsProviderFactory), maxMemoryUsageBytes, std::move(logger));
+        auto released = NThreading::NewPromise<void>();
+        {
+            TGuard<TMutex> guard(Mutex);
+            SessionReleased = released;
+        }
+        // Keep the real SDK session, but signal when the mirrorer releases it.
+        auto* ptr = session.get();
+        return std::shared_ptr<NYdb::NTopic::IReadSession>(ptr,
+            [session = std::move(session), released](auto*) mutable {
+                session.reset();
+                released.SetValue();
+            });
+    }
+
+    NThreading::TFuture<void> GetSessionReleasedFuture() const {
+        TGuard<TMutex> guard(Mutex);
+        return SessionReleased.GetFuture();
+    }
+
+private:
+    mutable TMutex Mutex;
+    mutable NThreading::TPromise<void> SessionReleased = NThreading::NewPromise<void>();
+};
 
 class TTopicReplicationEnv {
 public:
@@ -33,17 +65,12 @@ public:
     NYdb::NTopic::TTopicClient Client;
     std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> Stub;
 
-<<<<<<< HEAD
-    explicit TTopicReplicationEnv(const Tests::TServerSettings& settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings())
-        : Setup("TopicReplication", settings, false)
-=======
     explicit TTopicReplicationEnv(
         bool useTopicApi = false,
         const Tests::TServerSettings& settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings(),
         std::shared_ptr<NPQ::TPersQueueMirrorReaderFactory> factory = std::make_shared<NPQ::TPersQueueMirrorReaderFactory>())
         : Factory(std::move(factory))
         , Setup("TopicReplication", settings, false)
->>>>>>> 7b5fba6ece7 (add possibility to create replication consumer by topic api (#60000))
         , Driver(Setup.MakeDriverConfig())
         , Client(Driver)
         , Stub(Ydb::PersQueue::V1::PersQueueService::NewStub(grpc::CreateChannel(
@@ -51,7 +78,6 @@ public:
         , UseTopicApi(useTopicApi)
     {
         auto& runtime = Setup.GetRuntime();
-        Factory = std::make_shared<NPQ::TPersQueueMirrorReaderFactory>();
         Factory->Initialize(runtime.GetAnyNodeActorSystem(), runtime.GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings());
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
             runtime.GetAppData(node).PersQueueMirrorReaderFactory = Factory.get();
@@ -427,13 +453,7 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(TTopicReplication) {
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-    Y_UNIT_TEST(WriteAfterDisablingActiveReplicationWithConsumerOffsets) {
-=======
     Y_UNIT_TEST(WriteAndCommitAfterDisablingActiveReplicationWithConsumerOffsets) {
->>>>>>> 49acd63de6c (Implement replication of rolled back offsets in source topic (#59550))
         auto settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
         settings.FeatureFlags.SetEnableDstTopicReplicationDisabled(false);
         auto factory = std::make_shared<TObservedMirrorReaderFactory>();
@@ -627,7 +647,6 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         env.WaitForOffsets(destination, 2, 2);
     }
 
->>>>>>> 7b5fba6ece7 (add possibility to create replication consumer by topic api (#60000))
     Y_UNIT_TEST(RejectInvalidReplicationAttributes) {
         TTopicReplicationEnv env;
         const TString path = "/Root/replication_attributes";

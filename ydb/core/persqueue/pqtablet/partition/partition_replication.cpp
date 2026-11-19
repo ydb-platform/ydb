@@ -11,6 +11,14 @@ ui64 GetEffectiveReplicationOffset(ui64 offset, ui64 startOffset, const TUserInf
 } // namespace
 
 void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+    if (AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
+        YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Replication is disabled for topic");
+
+        DestroyMirrorer();
+
+        return;
+    }
+
     if (PendingReplicationData) {
         auto& pending = *(*PendingReplicationData)->Get();
         for (const auto& [consumer, offset] : ev->Get()->OffsetsByConsumers) {
@@ -133,7 +141,7 @@ void TPartition::RestoreReadSessionActor(TUserInfo& userInfo, const TString& ses
     }
     userInfo.ReadSessionActor = readSessionActor;
 
-    LOG_D("Restored read session actor",
+    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Restored read session actor",
         {"consumer", userInfo.User},
         {"readSessionActor", readSessionActor});
 

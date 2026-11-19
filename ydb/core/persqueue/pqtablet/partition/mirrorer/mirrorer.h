@@ -71,14 +71,7 @@ private:
         TRACE_EVENT(NKikimrServices::PQ_MIRRORER);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
-<<<<<<< HEAD
-<<<<<<< HEAD
             HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
-=======
-            HFuncTraced(TEvPQ::TEvReplicationDataAck, Handle);
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
-=======
->>>>>>> 28796270489 (replicate mlp consumer offsets (#57984))
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvPQ::TEvRequestPartitionStatus, RequestSourcePartitionStatus);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);

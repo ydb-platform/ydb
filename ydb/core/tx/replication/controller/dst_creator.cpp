@@ -398,13 +398,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         PipeCache = ev->Get()->Services.LeaderPipeCache;
         if (DropIndexTx.HasDropIndex()) {
             ExecuteSchemeTx(DropIndexTx);
-<<<<<<< HEAD
-        } else if (InitialScan || CreatePlaceholder) {
-=======
-        } else if (SwitchoverTx.HasAlterTable()) {
-            ExecuteSchemeTx(SwitchoverTx);
         } else if (InitialScan || CreatePlaceholder || Kind == TReplication::ETargetKind::Topic) {
->>>>>>> 14db6214eaf ([KIKIMR-27673] Manage topic mirroring through replication lifecycle (#59451))
             CreateDst();
         } else {
             DescribeDstPath();
@@ -930,13 +924,8 @@ public:
             EConsistencyLevel consistency,
             const TString& database,
             bool initialScan,
-<<<<<<< HEAD
-            TReplication::EState desiredState)
-=======
             TReplication::EState desiredState,
-            bool switchover,
             TTopicMirrorSettings&& topicMirror)
->>>>>>> 14db6214eaf ([KIKIMR-27673] Manage topic mirroring through replication lifecycle (#59451))
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -949,15 +938,8 @@ public:
         , Mode(mode)
         , Consistency(consistency)
         , InitialScan(initialScan)
-<<<<<<< HEAD
-        , CreatePlaceholder(!initialScan && desiredState == TReplication::EState::Paused)
-=======
-        , Switchover(switchover)
-        // A switchover destination already exists and holds its data: there is no placeholder to
-        // create for it, paused or not.
         , CreatePlaceholder(kind != TReplication::ETargetKind::Topic
-            && !initialScan && !switchover && desiredState == TReplication::EState::Paused)
->>>>>>> 14db6214eaf ([KIKIMR-27673] Manage topic mirroring through replication lifecycle (#59451))
+            && !initialScan && desiredState == TReplication::EState::Paused)
         , DesiredState(desiredState)
         , TopicMirror(std::move(topicMirror))
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
@@ -1114,10 +1096,7 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
         TReplication::EState desiredState)
 {
-<<<<<<< HEAD
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState);
-=======
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState, switchover, {});
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState, {});
 }
 
 IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
@@ -1127,8 +1106,7 @@ IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const 
 {
     return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, TReplication::ETargetKind::Topic,
         srcPath, dstPath, EReplicationMode::ReadOnly, EConsistencyLevel::Row, database, true,
-        TReplication::EState::Ready, false, std::move(topicMirror));
->>>>>>> 14db6214eaf ([KIKIMR-27673] Manage topic mirroring through replication lifecycle (#59451))
+        TReplication::EState::Ready, std::move(topicMirror));
 }
 
 }

@@ -248,17 +248,9 @@ struct TEvPQ {
         EvTopicSqsActionMetrics,
         EvProcessBatchKeys,
         EvProcessBatchKeysResult,
-<<<<<<< HEAD
-=======
-        EvResetOffsetRequest,
-        EvResetOffsetResponse,
         EvReplicationData,
         EvReplicationDataAck,
-<<<<<<< HEAD
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
-=======
         EvPersistDone,
->>>>>>> 3ef01186b99 (Move end offset & start offset to mirrored offset (#58014))
         EvEnd,
     };
 
@@ -346,6 +338,7 @@ struct TEvPQ {
         bool IsDirectWrite;
         std::optional<ui64> InitialSeqNo;
         EWriteExternalDeduplicationStatus ExternalDeduplicationStatus;
+        bool FromMirrorer = false;
     };
 
     struct TEvReadTimeout : public TEventLocal<TEvReadTimeout, EvReadTimeout> {

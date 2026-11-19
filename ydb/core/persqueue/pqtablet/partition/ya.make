@@ -15,11 +15,7 @@ SRCS(
     partition_mlp.cpp
     partition_monitoring.cpp
     partition_read.cpp
-<<<<<<< HEAD
-=======
     partition_replication.cpp
-    partition_reset_offset.cpp
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
     partition_sourcemanager.cpp
     partition_write.cpp
     sourceid.cpp

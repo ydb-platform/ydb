@@ -378,15 +378,12 @@ struct TMirrorerEnv {
     TPersQueueCounters Counters;
     std::vector<THolder<TEvPersQueue::TEvRequest>> CapturedRequests;
     std::vector<THolder<TEvPQ::TEvPartitionScaleStatusChanged>> CapturedScale;
-<<<<<<< HEAD
+    std::vector<THolder<TEvPQ::TEvReplicationData>> CapturedReplicationData;
     std::vector<THolder<TEvTxProxySchemeCache::TEvNavigateKeySet>> Navigations;
     std::vector<TActorId> NavigationSenders;
     std::vector<THolder<TEvResolveSecret>> SecretRequests;
     TString Database;
     TString TopicPath;
-=======
-    std::vector<THolder<TEvPQ::TEvReplicationData>> CapturedReplicationData;
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
     ui32 ErrorCount = 0;
     ui32 CounterEventCount = 0;
     bool TabletPoisoned = false;
@@ -447,7 +444,6 @@ struct TMirrorerEnv {
         );
 
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
-<<<<<<< HEAD
             if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySet::EventType) {
                 NavigationSenders.push_back(ev->Sender);
                 Navigations.emplace_back(ev->Release<TEvTxProxySchemeCache::TEvNavigateKeySet>());
@@ -455,10 +451,10 @@ struct TMirrorerEnv {
             }
             if (ev->GetTypeRewrite() == TEvResolveSecret::EventType) {
                 SecretRequests.emplace_back(ev->Get<TEvResolveSecret>()->MakeCopy());
-=======
+                return TTestActorRuntime::EEventAction::DROP;
+            }
             if (ev->Recipient == Partition && ev->GetTypeRewrite() == TEvPQ::TEvReplicationData::EventType) {
                 CapturedReplicationData.emplace_back(ev->Release<TEvPQ::TEvReplicationData>());
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
                 return TTestActorRuntime::EEventAction::DROP;
             }
             if (ev->Recipient == Tablet && ev->GetTypeRewrite() == TEvPersQueue::TEvRequest::EventType) {
@@ -484,14 +480,9 @@ struct TMirrorerEnv {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-<<<<<<< HEAD
         auto converter = MakeTopicConverter(Database, TopicPath);
         auto mirrorConfig = options.MirrorConfig;
-=======
-        auto converter = MakeTopicConverter();
-        auto mirrorConfig = MakeMirrorConfig();
         mirrorConfig.SetMirrorConsumerOffsets(options.MirrorConsumerOffsets);
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
         Mirrorer = Runtime.Register(CreateMirrorer(
             TabletId,
             Tablet,

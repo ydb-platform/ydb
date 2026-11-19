@@ -227,11 +227,8 @@ private:
                                const TWriteMsg& p,
                                NPersQueue::NErrorCode::EErrorCode errorCode);
     void CreateMirrorerActor();
-<<<<<<< HEAD
-=======
     void DestroyMirrorer();
     void NotifyMirrorerPersistDone();
->>>>>>> 3ef01186b99 (Move end offset & start offset to mirrored offset (#58014))
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);
@@ -313,6 +310,7 @@ private:
     void ProcessChangeOwnerRequests(const TActorContext& ctx);
     void ProcessHasDataRequests(const TActorContext& ctx);
     bool ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx);
+    void FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx);
     void ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription);
     void ProcessReserveRequests(const TActorContext& ctx);
     void ProcessTimestampRead(const TActorContext& ctx);
@@ -1283,13 +1281,7 @@ private:
 
     ui64 GetStartOffset() const;
     ui64 GetEndOffset() const;
-<<<<<<< HEAD
-=======
     ui64 GetMirroredOffset() const;
-    // EndOffset is the last persisted offset. Accepted writes can sit in NewHead
-    // before persist; ResetOffset must be able to commit up to that exclusive end.
-    ui64 GetAcceptedEndOffset() const;
->>>>>>> 3ef01186b99 (Move end offset & start offset to mirrored offset (#58014))
 
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
     TDeque<NWilson::TTraceId> TxForPersistTraceIds;

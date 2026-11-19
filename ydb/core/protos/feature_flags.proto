@@ -365,18 +365,8 @@ message TFeatureFlags {
     // Allows persisting Waiting for column-table imports with unresolved dependencies.
     // Enable only after the rollback version supports resuming these imports.
     optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
+    optional bool EnableSourceTopicMutateRestricted = 376 [default = false];
+    optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
-<<<<<<< HEAD
-=======
-    optional bool EnableCsDefaultValues = 390 [default = false];
-    optional bool EnableTopicWriteSessionsInitQuoting = 391 [default = false];
-    optional bool EnableAsyncReplicationChecksumCheck = 392 [default = false];
-    optional bool EnableIndexShadowDataRepair = 393 [default = false];
-    // (LOGBROKER-10680). Default false is
-    // the legacy zeroing behaviour that undercounted the consumed
-    // write quota.
-    optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
-    optional bool EnableColumnShardStats = 395 [default = false];
     optional bool EnableTopicReplication = 396 [default = false];
->>>>>>> 14db6214eaf ([KIKIMR-27673] Manage topic mirroring through replication lifecycle (#59451))
 }

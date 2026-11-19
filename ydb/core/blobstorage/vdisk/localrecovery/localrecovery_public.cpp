@@ -596,7 +596,7 @@ namespace NKikimr {
                     IsTinyDisk = m->PDiskParams->IsTinyDisk;
                 }
 
-                LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config);
+                LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config, m->NonceTableSize);
                 LocRecCtx->PDiskCtx->FormatContext = m->FormatContext;
                 LocRecCtx->PDiskCtx->ChunkNonces->Record(m->OwnedChunks, m->OwnedChunkNonces);
 

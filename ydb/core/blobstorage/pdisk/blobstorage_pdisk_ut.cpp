@@ -1025,9 +1025,17 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         w6.Pieces[0]->Abort(actorSystem);
         w6.Pieces[1]->Abort(actorSystem);
 
+        // All writes succeed, but an earlier device operation fails at the fence.
+        TWrite w7 = makeWrite(7, true, 2);
+        w7.Write->PreformattedPiecesInFlight.fetch_add(1);
+        pieceSent(w7)->Exec(actorSystem);
+        pieceSent(w7)->Exec(actorSystem);
+        UNIT_ASSERT(w7.Write->Completion);
+        pieceSent(w7)->Release(actorSystem);
+
         const std::pair<ui64, NKikimrProto::EReplyStatus> expected[] = {
             {1, NKikimrProto::CORRUPTED}, {3, NKikimrProto::CORRUPTED}, {4, NKikimrProto::CORRUPTED},
-            {5, NKikimrProto::OK}, {6, NKikimrProto::CORRUPTED}};
+            {5, NKikimrProto::OK}, {6, NKikimrProto::CORRUPTED}, {7, NKikimrProto::CORRUPTED}};
         for (const auto& [cookie, status] : expected) {
             const THolder<NPDisk::TEvChunkWriteResult> res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
             UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<ui64>(res->Cookie), cookie);

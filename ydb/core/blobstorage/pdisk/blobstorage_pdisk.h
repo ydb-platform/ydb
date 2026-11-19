@@ -212,6 +212,7 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     // Nonce of each chunk in OwnedChunks, same order. Sector i of a chunk has nonce chunk nonce + i.
     // Empty for plain data chunks.
     TVector<ui64> OwnedChunkNonces;
+    ui32 NonceTableSize = 0; // number of addressable chunk indices for sector preparation
     // For building and checking data sectors outside the PDisk (PreformattedSectors writes, RawSectors
     // reads). Null for plain data chunks.
     TFormatContextPtr FormatContext;

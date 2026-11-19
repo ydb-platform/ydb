@@ -751,6 +751,7 @@ public:
             res->DiskFormat = NPDisk::MakeDiskFormatCopy(format);
             if (Impl.FormatContext) {
                 res->FormatContext = Impl.FormatContext;
+                res->NonceTableSize = Impl.TotalChunks;
                 res->OwnedChunkNonces.reserve(res->OwnedChunks.size());
                 for (const TChunkIdx chunkIdx : res->OwnedChunks) {
                     res->OwnedChunkNonces.push_back(Impl.GetChunkNonce(chunkIdx));
@@ -1314,7 +1315,7 @@ public:
                 TImpl::TChunkData& chunk = owner->ChunkData[msg->ChunkIdx];
                 if (msg->PartsPtr && Impl.Corrupted) {
                     const ui64 chunkOffset = (ui64)msg->ChunkIdx * Impl.ChunkSize;
-                    Impl.Corrupted -= {chunkOffset + offset, chunkOffset + offset + msg->PartsPtr->ByteSize()};
+                    Impl.Corrupted -= {chunkOffset + offset, chunkOffset + offset + writtenBlocks * Impl.AppendBlockSize};
                 }
                 // create queue of blocks to write
                 ui32 blockIdx = offset / Impl.AppendBlockSize;

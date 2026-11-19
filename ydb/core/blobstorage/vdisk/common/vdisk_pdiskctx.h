@@ -5,10 +5,10 @@
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_params.h>
 
-#include <util/system/spinlock.h>
-
+#include <atomic>
+#include <memory>
 #include <optional>
-#include <unordered_map>
+#include <vector>
 
 
 namespace NKikimr {
@@ -29,32 +29,45 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TChunkNonces {
     public:
+        explicit TChunkNonces(ui32 chunkCount)
+            : Nonces(chunkCount)
+        {
+            static_assert(std::atomic<ui64>::is_always_lock_free);
+            for (auto& nonce : Nonces) {
+                nonce.store(0, std::memory_order_relaxed);
+            }
+        }
+
         void Record(const TVector<ui32>& chunks, const TVector<ui64>& nonces) {
             if (chunks.size() != nonces.size()) {
                 return; // plain data chunks: no nonces
             }
-            TGuard<TAdaptiveLock> guard(Lock);
             for (size_t i = 0; i < chunks.size(); ++i) {
-                Nonces[chunks[i]] = nonces[i];
+                if (chunks[i] < Nonces.size()) {
+                    Nonces[chunks[i]].store(nonces[i], std::memory_order_relaxed);
+                }
             }
         }
 
         void Forget(ui32 chunkIdx) {
-            TGuard<TAdaptiveLock> guard(Lock);
-            Nonces.erase(chunkIdx);
+            if (chunkIdx < Nonces.size()) {
+                Nonces[chunkIdx].store(0, std::memory_order_relaxed);
+            }
         }
 
         std::optional<ui64> Get(ui32 chunkIdx) const {
-            TGuard<TAdaptiveLock> guard(Lock);
-            if (const auto it = Nonces.find(chunkIdx); it != Nonces.end()) {
-                return it->second;
+            if (chunkIdx < Nonces.size()) {
+                if (const ui64 nonce = Nonces[chunkIdx].load(std::memory_order_relaxed)) {
+                    return nonce;
+                }
             }
             return std::nullopt;
         }
 
     private:
-        TAdaptiveLock Lock;
-        std::unordered_map<ui32, ui64> Nonces;
+        // Fixed at YardInit. A zero nonce or a chunk added after init uses ordinary PDisk writes.
+        // Only the nonce is shared; publishing it does not publish any other actor state.
+        std::vector<std::atomic<ui64>> Nonces;
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -70,21 +83,22 @@ namespace NKikimr {
         const TString PDiskIdString;
         // Set from TEvYardInitResult; null for plain data chunks.
         std::shared_ptr<const NPDisk::TFormatContext> FormatContext;
-        const std::shared_ptr<TChunkNonces> ChunkNonces = std::make_shared<TChunkNonces>();
+        const std::shared_ptr<TChunkNonces> ChunkNonces;
         // VDiskControls.EnableVDiskSectorPreparation, shared with the ICB: read per write.
         TControlWrapper EnableSectorPreparation;
 
-        TPDiskCtx(TIntrusivePtr<TPDiskParams> dsk, TActorId pDiskId, TString pdiskIdString)
+        TPDiskCtx(TIntrusivePtr<TPDiskParams> dsk, TActorId pDiskId, TString pdiskIdString, ui32 chunkCount = 0)
             : Dsk(std::move(dsk))
             , PDiskId(pDiskId)
             , PDiskIdString(pdiskIdString)
+            , ChunkNonces(std::make_shared<TChunkNonces>(chunkCount))
         {}
 
         static TPDiskCtxPtr Create(
                 const TIntrusivePtr<TPDiskParams> &pDiskParams,
-                const TIntrusivePtr<TVDiskConfig> &cfg) {
+                const TIntrusivePtr<TVDiskConfig> &cfg, ui32 chunkCount = 0) {
             auto pdiskCtx = std::make_shared<TPDiskCtx>(pDiskParams, cfg->BaseInfo.PDiskActorID,
-                TStringBuilder() << TActivationContext::ActorSystem()->NodeId << ":" << cfg->BaseInfo.PDiskId);
+                TStringBuilder() << TActivationContext::ActorSystem()->NodeId << ":" << cfg->BaseInfo.PDiskId, chunkCount);
             Y_ABORT_UNLESS(cfg->MaxLogoBlobDataSize < pdiskCtx->Dsk->ChunkSize + 1024u,
                     "Chunk size is too small, check your VDisk settings; "
                     "MaxLogoBlobDataSize=%" PRIu32 " chunkSize=%" PRIu64,

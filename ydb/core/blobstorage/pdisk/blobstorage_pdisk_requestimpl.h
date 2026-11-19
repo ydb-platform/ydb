@@ -571,7 +571,7 @@ public:
     bool ChunkEncrypted = true;
     bool PreformattedSectors = false; // see TEvChunkWrite::PreformattedSectors
     ui64 FirstSectorNonce = 0;
-    // A preformatted write goes to the device in pieces; Completion runs when the last one is done.
+    // A preformatted write goes to the device in pieces; Completion waits for the pieces and, once all are submitted, the device fence.
     std::atomic<ui32> PreformattedPiecesInFlight = 0;
     std::atomic<bool> PreformattedPieceFailed = false;
     ui32 PreformattedPieceCount = 0; // set when the write is cut into pieces

@@ -1086,11 +1086,19 @@ bool TPDisk::ChunkWritePiecePreformatted(TChunkWrite *evChunkWrite, ui32 pieceSh
     const bool last = ++evChunkWrite->PreformattedPiecesSubmitted == evChunkWrite->PreformattedPieceCount;
     if (last) {
         evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
+        // Reserve the fence callback before submitting the last piece: PwriteAsync can complete inline.
+        evChunkWrite->PreformattedPiecesInFlight.fetch_add(1);
     }
+    auto *piece = new TCompletionChunkWritePreformattedPiece(evChunkWrite);
+    piece->CostNs = DriveModel.TimeForSizeNs(pieceSize, evChunkWrite->ChunkIdx, TDriveModel::OP_TYPE_WRITE);
     NWilson::TTraceId traceId = evChunkWrite->Span.GetTraceId();
     BlockDevice->PwriteAsync(static_cast<const ui8*>(buff) + pieceShift, pieceSize, diskOffset,
-        new TCompletionChunkWritePreformattedPiece(evChunkWrite), evChunkWrite->ReqId, &traceId);
+        piece, evChunkWrite->ReqId, &traceId);
     if (last) {
+        // The ordered device completion also reports failures of earlier requests from other writes.
+        auto *fence = new TCompletionChunkWritePreformattedPiece(evChunkWrite);
+        fence->CostNs = 1;
+        BlockDevice->FlushAsync(fence, evChunkWrite->ReqId);
         evChunkWrite->IsReplied = true; // the reply is up to the completions now
     }
     return last;
@@ -2520,6 +2528,7 @@ void TPDisk::FillFormatContext(NPDisk::TEvYardInitResult &result) {
             Cfg->FeatureFlags.GetEnablePDiskDataEncryption());
     }
     result.FormatContext = FormatContextCache;
+    result.NonceTableSize = ChunkState.size();
     result.OwnedChunkNonces.reserve(result.OwnedChunks.size());
     for (TChunkIdx chunkIdx : result.OwnedChunks) {
         result.OwnedChunkNonces.push_back(ChunkState[chunkIdx].Nonce);

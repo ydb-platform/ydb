@@ -814,10 +814,25 @@ Y_UNIT_TEST_SUITE(PDiskMockInterfaces) {
             return ev.release();
         };
 
+        // Both interfaces overwrite the padding of the last sector, but leave the next sector alone.
+        const ui32 tail = firstSector * payloadSize + payload.size();
+        const ui32 next = (firstSector + 2) * payloadSize;
+        mock.State->SetCorruptedArea(chunkIdx, tail, next + 1, true);
+        mock.Send(new NPDisk::TEvChunkWrite(mock.Owner, mock.OwnerRound, chunkIdx, firstSector * payloadSize,
+            new NPDisk::TEvChunkWrite::TAlignedParts(TString(payload)), nullptr, true, 0));
+        UNIT_ASSERT_VALUES_EQUAL(mock.Wait<NPDisk::TEvChunkWriteResult>()->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT(!mock.State->HasCorruptedArea(chunkIdx, tail, next));
+        UNIT_ASSERT(mock.State->HasCorruptedArea(chunkIdx, next, next + 1));
+
+        mock.State->SetCorruptedArea(chunkIdx, tail, next, true);
         mock.Send(sealed(chunkNonce + firstSector + 1));
         UNIT_ASSERT_VALUES_EQUAL(mock.Wait<NPDisk::TEvChunkWriteResult>()->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(mock.State->HasCorruptedArea(chunkIdx, tail, next));
         mock.Send(sealed(chunkNonce + firstSector));
         UNIT_ASSERT_VALUES_EQUAL(mock.Wait<NPDisk::TEvChunkWriteResult>()->Get()->Status, NKikimrProto::OK);
+
+        UNIT_ASSERT(!mock.State->HasCorruptedArea(chunkIdx, tail, next));
+        UNIT_ASSERT(mock.State->HasCorruptedArea(chunkIdx, next, next + 1));
 
         // an ordinary read gets the payload
         const ui32 offset = firstSector * payloadSize + 100;

@@ -1,9 +1,11 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/ymq/actor/actor.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
 #include <ydb/core/ymq/actor/events.h>
@@ -38,6 +40,7 @@ public:
         Runtime_.RegisterService(MakeSqsServiceID(Runtime_.GetNodeId()), EdgeActor_);
         Runtime_.RegisterService(MakeTicketParserID(), EdgeActor_);
         Runtime_.RegisterService(MakeSqsFolderServiceID(), EdgeActor_);
+        Runtime_.RegisterService(MakeTxProxyID(), EdgeActor_);
         Runtime_.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) { return Observe(ev); });
     }
 
@@ -118,6 +121,18 @@ private:
                 }
                 Runtime_.Send(new IEventHandle(ev->Sender, ev->Recipient,
                     new TEvTxProxySchemeCache::TEvNavigateKeySetResult(request->Request.Release())));
+                return NActors::TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            case TEvTxUserProxy::EvProposeTransaction: {
+                const auto* request = ev->Get<TEvTxUserProxy::TEvProposeTransaction>();
+                if (request->Record.GetTransaction().GetModifyScheme().GetOperationType() != NKikimrSchemeOp::ESchemeOpMkDir) {
+                    return NActors::TTestActorRuntimeBase::EEventAction::PROCESS;
+                }
+                // Queue creation first ensures that the cloud account directory exists.
+                auto response = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(
+                    TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAlready);
+                response->Record.SetSchemeShardStatus(NKikimrScheme::StatusAlreadyExists);
+                Runtime_.Send(new IEventHandle(ev->Sender, ev->Recipient, response.Release()));
                 return NActors::TTestActorRuntimeBase::EEventAction::DROP;
             }
             case NFolderService::TEvFolderService::EvGetCloudByFolderRequest: {

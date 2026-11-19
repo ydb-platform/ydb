@@ -389,6 +389,8 @@ class TChecksum final {
 public:
     static bool IsRequired(const TLogoBlobID& id) noexcept;
     static bool IsValid(const TLogoBlobID& id, TErasureType erasure, const TRope& rope);
+    static TRope Append(const TLogoBlobID& id, TErasureType erasure, TRope rope);
+    static TRope Remove(const TLogoBlobID& id, TErasureType erasure, TRope rope);
 };
 
 struct TErasureSplitContext {

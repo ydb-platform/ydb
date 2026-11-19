@@ -6,9 +6,6 @@
 #include <util/system/unaligned_mem.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
-#define XXH_INLINE_ALL
-#include <contrib/libs/xxhash/xxhash.h>
-
 #define MAX_TOTAL_PARTS 8
 #define MAX_LINES_IN_BLOCK 8
 
@@ -126,17 +123,6 @@ static inline TErasureType::ECrcMode GetCrcMode(const TLogoBlobID& id) noexcept 
     }
 }
 
-void PadAndChecksumAtTheEnd(const TLogoBlobID& id, char *data, ui64 dataSize, ui64 bufferSize) {
-    Y_UNUSED(id);
-
-    ui64 marginSize = bufferSize - dataSize - sizeof(ui64);
-    if (marginSize) {
-        memset(data + dataSize, 0, marginSize);
-    }
-    ui64 hash = XXH3_64bits(data, dataSize);
-    memcpy(data + bufferSize - sizeof(ui64), &hash, sizeof(ui64));
-}
-
 class TBlockParams {
 public:
     ui64 DataSize;
@@ -164,6 +150,7 @@ public:
     ui32 TailSize;
 
     ui32 Prime;
+    TErasureType Type;
 
     using TBufferDataPart = TStackVec<ui64*, MAX_TOTAL_PARTS>;
     TBufferDataPart BufferDataPart;
@@ -198,6 +185,7 @@ public:
         TailSize = (ui32)(DataSize % BlockSize);
 
         Prime = type.Prime();
+        Type = type;
 
         Data = nullptr;
     }
@@ -1337,39 +1325,18 @@ public:
         if (inOutPartSet.IsFragment) {
             return;
         }
-        switch (id.CrcMode()) {
-        case TErasureType::CrcModeNone:
-            return;
-        case TErasureType::CrcModeWholePart:
-            if (DataSize) {
-                PadAndChecksumAtTheEnd(id, inOutPartSet.Parts[partIdx].GetDataAt(0), PartUserSize, PartContainerSize);
-            } else {
-                memset(inOutPartSet.Parts[partIdx].GetDataAt(0), 0, PartContainerSize);
-            }
-            return;
-        }
-        ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << id.CrcMode();
+        auto& part = inOutPartSet.Parts[partIdx];
+        const TLogoBlobID partBlobId(id, partIdx + 1);
+        part.OwnedString = TChecksum::Append(partBlobId, Type, std::move(part.OwnedString));
     }
 };
 
-void PadAndCrcParts(const TLogoBlobID& id, const TBlockParams &p, TDataPartSet &inOutPartSet) {
+void PadAndCrcParts(const TLogoBlobID& id, TBlockParams &p, TDataPartSet &inOutPartSet) {
     if (inOutPartSet.IsFragment) {
         return;
     }
-    switch (GetCrcMode(id)) {
-    case TErasureType::CrcModeNone:
-        return;
-    case TErasureType::CrcModeWholePart:
-        if (p.DataSize) {
-            for (ui32 i = 0; i < p.TotalParts; ++i) {
-                PadAndChecksumAtTheEnd(id, inOutPartSet.Parts[i].GetDataAt(0), p.PartUserSize, p.PartContainerSize);
-            }
-        } else {
-            for (ui32 i = 0; i < p.TotalParts; ++i) {
-                memset(inOutPartSet.Parts[i].GetDataAt(0), 0, p.PartContainerSize);
-            }
-        }
-        return;
+    for (ui32 i = 0; i < p.TotalParts; ++i) {
+        p.PadAndCrcPart(id,inOutPartSet, i);
     }
 }
 
@@ -2541,34 +2508,21 @@ void MirrorSplit(const TLogoBlobID& id, const TErasureType &type, TRope& buffer,
     outPartSet.FullDataSize = buffer.size();
     outPartSet.Parts.resize(type.TotalPartCount());
     ui32 parityParts = type.ParityParts();
-    switch (crcMode) {
-    case TErasureType::CrcModeNone:
-        for (ui32 partIdx = 0; partIdx <= parityParts; ++partIdx) {
-            outPartSet.Parts[partIdx].ReferenceTo(buffer);
-            outPartSet.PartsMask |= (1 << partIdx);
-        }
-        outPartSet.MemoryConsumed = buffer.capacity(); //FIXME(innokentii) check how MemoryConsumed actually used
-        return;
-    case TErasureType::CrcModeWholePart:
-        {
-            ui64 partSize = type.PartSize(crcMode, buffer.size());
-            TRcBuf part(buffer);
-            part.GrowBack(partSize - buffer.GetSize());
-            char *dst = part.GetContiguousSpanMut().data();
-            if (buffer.size() || part.size()) {
-                Y_ABORT_UNLESS(part.size() >= buffer.size() + sizeof(ui64), "Part size too small, buffer size# %" PRIu64
-                        " partSize# %" PRIu64, (ui64)buffer.size(), (ui64)partSize);
-                PadAndChecksumAtTheEnd(id, dst, buffer.size(), part.size());
-            }
-            for (ui32 partIdx = 0; partIdx <= parityParts; ++partIdx) {
-                outPartSet.Parts[partIdx].ReferenceTo(part);
-                outPartSet.PartsMask |= (1 << partIdx);
-            }
-            outPartSet.MemoryConsumed = part.GetOccupiedMemorySize(); //FIXME(innokentii) check how MemoryConsumed actually used
-        }
-        return;
+
+    TRope part = buffer;
+    if (TChecksum::IsRequired(id)) {
+        ui64 partSize = type.PartSize(crcMode, buffer.size());
+        TRcBuf extendedPart(part);
+        extendedPart.GrowBack(partSize - part.GetSize());
+        part = extendedPart;
     }
-    ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
+    part = TChecksum::Append(id, type, std::move(part));
+
+    for (ui32 partIdx = 0; partIdx <= parityParts; ++partIdx) {
+        outPartSet.Parts[partIdx].ReferenceTo(part);
+        outPartSet.PartsMask |= (1 << partIdx);
+    }
+    outPartSet.MemoryConsumed = part.GetOccupiedMemorySize(); //FIXME(innokentii) check how MemoryConsumed actually used
 }
 
 template <bool restoreParts, bool restoreFullData>

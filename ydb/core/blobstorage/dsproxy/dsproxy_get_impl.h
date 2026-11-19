@@ -237,9 +237,7 @@ public:
                 DSP_LOG_DEBUG_SX(logCtx, "BPG58", "Got# OK orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
                 if (isFullPart && TChecksum::IsRequired(blobId)) {
                     // The checksum trailer is stored on VDisk, but it is not part of the erasure data.
-                    const ui64 partUserSize = Info->Type.PartUserSize(blobId.BlobSize());
-                    Y_ABORT_UNLESS(partUserSize <= resultBuffer.size());
-                    resultBuffer.Erase(resultBuffer.Position(partUserSize), resultBuffer.End());
+                    resultBuffer = TChecksum::Remove(blobId, Info->Type, std::move(resultBuffer));
                 }
                 if (resultBuffer.GetOccupiedMemorySize() > resultBuffer.size() * 2) {
                     resultBuffer.Compact();

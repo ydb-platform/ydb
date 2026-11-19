@@ -62,4 +62,52 @@ bool TChecksum::IsValid(const TLogoBlobID& id, TErasureType erasure, const TRope
     return hash == expectedChecksum;
 }
 
+TRope TChecksum::Append(const TLogoBlobID& id, TErasureType erasure, TRope rope) {
+    if (!IsRequired(id)) {
+        return rope;
+    }
+    const auto partSize = erasure.PartSize(
+        static_cast<TErasureType::ECrcMode>(id.CrcMode()), id.BlobSize());
+    if (rope.IsEmpty() && partSize == 0) {
+        return rope;
+    }
+
+    const auto partUserSize = erasure.PartUserSize(id.BlobSize());
+    Y_ABORT_UNLESS(rope.size() >= partUserSize,
+                    "Error in TChecksum::Append:"
+                    "blob part size# %" PRIu64 "is less than expected# %" PRIu64,
+                    (ui64)rope.size(), partUserSize);
+
+    auto [it, hash] = CalculateXxh3Hash(id, erasure, rope.Begin());
+    const char* hashBuffer = reinterpret_cast<const char*>(&hash);
+    if (rope.size() == partSize) {
+        TRopeUtils::Memcpy(it, hashBuffer, sizeof(hash));
+    } else if (rope.size() == partUserSize) {
+        rope.Insert(rope.End(), TRcBuf::Copy(hashBuffer, sizeof(hash)));
+    } else {
+        Y_FAIL("buffer is of unsupported size");
+    }
+    return rope;
+}
+
+TRope TChecksum::Remove(const TLogoBlobID& id, TErasureType erasure, TRope rope) {
+    if (!IsRequired(id)) {
+        return rope;
+    }
+    if (rope.IsEmpty() || rope.size() == erasure.PartUserSize(id.BlobSize())) {
+        return rope;
+    }
+    const ui64 partSize = erasure.PartSize(
+        static_cast<TErasureType::ECrcMode>(id.CrcMode()), id.BlobSize());
+    Y_ABORT_UNLESS(
+        rope.size() == partSize,
+        "Error in TChecksum::Remove:"
+        "blob part size# %" PRIu64 "is less than expected# %" PRIu64,
+        (ui64)rope.size(), partSize);
+
+    const ui64 partUserSize = erasure.PartUserSize(id.BlobSize());
+    rope.Erase(rope.Position(partUserSize), rope.End());
+    return rope;
+}
+
 } // namespace NKikimr

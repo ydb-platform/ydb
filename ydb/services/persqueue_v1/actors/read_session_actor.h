@@ -378,6 +378,14 @@ private:
     // once all in-flight direct reads of the partition have been acked.
     void SendWindowExhaustedIfNeeded(TPartitionsMap::iterator it, const TActorContext& ctx);
 
+    // Resolves a partition-actor event to the partition it refers to: the
+    // sender must be a current partition actor, the partition session must
+    // exist by its session-unique AssignId, and the event's topic and
+    // partition ids must match the partition. Returns Partitions.end() for
+    // stale or inconsistent events; callers must ignore it, matching the
+    // other stale-event paths in this actor.
+    TPartitionsMap::iterator ResolvePartitionActorEvent(const TActorId& sender, const TString& topic, ui32 partitionId, ui64 assignId);
+
     void DropPartition(TPartitionsMapIterator& it, const TActorContext& ctx);
     void ReleasePartition(TPartitionsMapIterator& it, bool couldBeReads, const TActorContext& ctx);
     void SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx);

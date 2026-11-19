@@ -2549,25 +2549,29 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev
 }
 
 template <EProtocol Protocol>
-void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx) {
-    if (!ActualPartitionActors.contains(ev->Sender)) {
-        return;
+typename TReadSessionActor<Protocol>::TPartitionsMap::iterator TReadSessionActor<Protocol>::ResolvePartitionActorEvent(const TActorId& sender, const TString& topic, ui32 partitionId, ui64 assignId) {
+    if (!ActualPartitionActors.contains(sender)) {
+        return Partitions.end();
     }
 
+    auto partitionIt = Partitions.find(assignId);
+    if (partitionIt == Partitions.end()) {
+        return Partitions.end();
+    }
+
+    if (partitionIt->second.Topic->GetInternalName() != topic
+            || partitionIt->second.Partition.Partition != partitionId) {
+        return Partitions.end();
+    }
+
+    return partitionIt;
+}
+
+template <EProtocol Protocol>
+void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
 
-    auto it = Topics.find(msg->Topic);
-    if (it == Topics.end()) {
-        return;
-    }
-
-    auto& topic = it->second;
-
-    // Look up by AssignId, mirroring Handle(TEvReadWindowExhausted): Partitions
-    // is a flat map shared by all topics of the session, and the AssignId is
-    // session-unique, so the event cannot be attributed to a partition of
-    // another topic that happens to have the same partition id.
-    auto partitionIt = Partitions.find(msg->AssignId);
+    auto partitionIt = ResolvePartitionActorEvent(ev->Sender, msg->Topic, msg->PartitionId, msg->AssignId);
     if (partitionIt == Partitions.end()) {
         // Stale/late event: the partition may have already been released or the
         // session is shutting down. Ignore it instead of tearing down the whole
@@ -2578,13 +2582,14 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
     }
     auto& partitionInfo = partitionIt->second;
 
-    // Cross-check the identity claimed by the event: a mismatch means a
-    // stale/inconsistent event - drop it before notifying the balancer,
-    // mirroring the check in Handle(TEvReadWindowExhausted).
-    if (partitionInfo.Topic->GetInternalName() != msg->Topic
-            || partitionInfo.Partition.Partition != msg->PartitionId) {
+    // The topic holder for the partition's topic. The partition's topic is
+    // registered in Topics; the guard keeps this handler safe independently of
+    // ResolvePartitionActorEvent.
+    auto topicIt = Topics.find(partitionInfo.Topic->GetInternalName());
+    if (topicIt == Topics.end()) {
         return;
     }
+    auto& topic = topicIt->second;
 
     NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, ClientId, partitionInfo.Partition.Partition, AutoPartitioningSupport, msg->FirstMessage));
 
@@ -2606,7 +2611,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
             for (auto p : msg->ChildPartitionIds) {
                 r->add_child_partition_ids(p);
                 if (ReadWithoutConsumer && topic->Groups.empty()) {
-                    if (!SendLockPartitionToSelf(p, it->first, topic, ctx)) {
+                    if (!SendLockPartitionToSelf(p, partitionInfo.Topic->GetInternalName(), topic, ctx)) {
                         return;
                     }
                 }
@@ -2635,21 +2640,9 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
 
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadWindowExhausted::TPtr& ev, const TActorContext& ctx) {
-    if (!ActualPartitionActors.contains(ev->Sender)) {
-        return;
-    }
-
     auto* msg = ev->Get();
 
-    auto it = Topics.find(msg->Topic);
-    if (it == Topics.end()) {
-        return;
-    }
-
-    // Look up by AssignId: Partitions is a flat map shared by all topics of the
-    // session, so matching on PartitionId alone could attribute the event to a
-    // partition of a different topic that happens to have the same id.
-    auto partitionIt = Partitions.find(msg->AssignId);
+    auto partitionIt = ResolvePartitionActorEvent(ev->Sender, msg->Topic, msg->PartitionId, msg->AssignId);
     if (partitionIt == Partitions.end()) {
         // Stale/late event: the partition may have already been released or the
         // session is shutting down. Ignore it instead of tearing down the whole
@@ -2657,13 +2650,6 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadWindowExhausted::TPt
         return;
     }
     auto& partitionInfo = partitionIt->second;
-
-    // Cross-check the identity of the partition found by AssignId: the AssignId is
-    // session-unique, so a mismatch means a stale/inconsistent event - drop it.
-    if (partitionInfo.Topic->GetInternalName() != msg->Topic
-            || partitionInfo.Partition.Partition != msg->PartitionId) {
-        return;
-    }
 
     // Do NOT update EndOffset and do NOT mark the partition as ReadingFinished.
 

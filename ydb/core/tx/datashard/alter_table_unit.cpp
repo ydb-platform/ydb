@@ -79,6 +79,17 @@ bool FamilySchemaChanged(const TUserTable& oldTable, const TUserTable& newTable)
     return false;
 }
 
+bool HasNewVisibleColumns(const TUserTable& oldTable, const TUserTable& newTable) {
+    for (const auto& [tag, column] : newTable.Columns) {
+        const auto it = oldTable.Columns.find(tag);
+        if (!column.IsBuildInProgress && (it == oldTable.Columns.end() || it->second.IsBuildInProgress)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -289,22 +300,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
     }
 
-    bool schemaChanged = FamilySchemaChanged(*oldInfo, *newInfo);
-    for (const auto& [tag, column] : oldInfo->Columns) {
-        const auto it = newInfo->Columns.find(tag);
-        if (!column.IsBuildInProgress && (it == newInfo->Columns.end() || it->second.IsBuildInProgress)) {
-            schemaChanged = true;
-            break;
-        }
-    }
-    for (const auto& [tag, column] : newInfo->Columns) {
-        const auto it = oldInfo->Columns.find(tag);
-        if (!column.IsBuildInProgress && (it == oldInfo->Columns.end() || it->second.IsBuildInProgress)) {
-            schemaChanged = true;
-            break;
-        }
-    }
-
+    const bool schemaChanged = FamilySchemaChanged(*oldInfo, *newInfo) || HasNewVisibleColumns(*oldInfo, *newInfo) || HasNewVisibleColumns(*newInfo, *oldInfo);
     if (schemaChanged) {
         PersistCdcSchemaChange(DataShard, txc, op, tableId, *newInfo);
     }

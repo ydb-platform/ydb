@@ -193,16 +193,6 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
 
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
-    TVector<TUpdateOp> visibleUpdates;
-    if (GetValueSchema(userTable).HasBuildInProgressColumns) {
-        visibleUpdates.reserve(updates.size());
-        for (const auto& update : updates) {
-            if (!userTable->Columns.at(update.Tag).IsBuildInProgress) {
-                visibleUpdates.push_back(update);
-            }
-        }
-        updates = visibleUpdates;
-    }
     const auto& keyTags = userTable->KeyColumnIds;
     const auto& keyTypes = userTable->KeyColumnTypes;
     TMaybe<TVector<TCell>> keyCells;
@@ -393,7 +383,16 @@ void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& 
         TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     NKikimrChangeExchange::TDataChange body;
-    Serialize(body, rop, key, keyTags, updates);
+    const auto table = Self->GetUserTables().at(tableId.PathId.LocalPathId);
+
+    if (!updates.empty() && GetValueSchema(table).HasBuildInProgressColumns) {
+        Serialize(body, rop, key, keyTags, updates, [&](TTag tag) {
+            return !table->Columns.at(tag).IsBuildInProgress;
+        });
+    } else {
+        Serialize(body, rop, key, keyTags, updates);
+    }
+
     Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body, userCtx);
 }
 

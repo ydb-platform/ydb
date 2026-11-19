@@ -822,12 +822,16 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         }
     };
 
-    template <typename TCallback>
-    void WithScanCollector(TCallback callback, const TShardedTableOptions& options = TShardedTableOptions().Columns({
+    TShardedTableOptions DefaultScanTableOptions() {
+        return TShardedTableOptions().Columns({
             {"a", "Uint32", true, false},
             {"b", "Uint32", true, false},
             {"value", "Uint32", false, false},
-        }))
+        });
+    }
+
+    template <typename TCallback>
+    void WithScanCollector(TCallback callback, const TShardedTableOptions& options = DefaultScanTableOptions())
     {
         TPortManager pm;
         TServer::TPtr server = new TServer(TServerSettings(pm.GetPort(2134), {}, WithProtoSourceIdInfo())
@@ -865,7 +869,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         TSnapshotSink sink;
         TCdcStreamChangeCollector collector(shard, db, sink);
         auto collect = [&](ui32 a, ui32 b, NTable::ERowOp op = NTable::ERowOp::Upsert,
-                TArrayRef<const NTable::TUpdateOp> updates = {}) {
+                TArrayRef<const NTable::TUpdateOp> updates = {})
+        {
             const TVector<TCell> cells{TCell::Make(a), TCell::Make(b)};
             const auto key = NStreamScan::MakeKey(cells, table->KeyColumnTypes);
             return collector.Collect(tableId, op, key, updates, {});
@@ -1001,11 +1006,13 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         NKikimrSchemeOp::TTableDescription alter;
         alter.SetName(original->Name);
         alter.SetTableSchemaVersion(original->GetTableSchemaVersion());
+
         for (const auto tag : {4u, 6u}) {
             auto* column = alter.AddColumns();
             column->SetId(tag);
             column->SetIsBuildInProgress(true);
         }
+
         TUserTable::TPtr building = new TUserTable(*original, alter);
         shard.SetUserTable(tableId.PathId, building);
         return building;
@@ -1141,9 +1148,13 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             values.pop_back(); // The visible Utf8 column is not updated.
             const auto updates = MakeColumnUpdates(*building, values);
 
-            for (const auto mode : {NKikimrSchemeOp::ECdcStreamModeNewImage,
-                    NKikimrSchemeOp::ECdcStreamModeOldImage, NKikimrSchemeOp::ECdcStreamModeNewAndOldImages})
-            {
+            const auto imageModes = {
+                NKikimrSchemeOp::ECdcStreamModeNewImage,
+                NKikimrSchemeOp::ECdcStreamModeOldImage,
+                NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
+            };
+
+            for (const auto mode : imageModes) {
                 TUserTable::TPtr table = new TUserTable(*building);
                 table->CdcStreams.at(streamId).Mode = mode;
                 shard.SetUserTable(tableId.PathId, table);
@@ -1183,10 +1194,15 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
                 auto&, auto& db, auto& sink, auto collect) {
             const auto building = StartBuildingColumns(shard, tableId);
             db.Values = BuildingColumnValues();
-            for (const auto mode : {NKikimrSchemeOp::ECdcStreamModeKeysOnly, NKikimrSchemeOp::ECdcStreamModeUpdate,
-                    NKikimrSchemeOp::ECdcStreamModeNewImage, NKikimrSchemeOp::ECdcStreamModeOldImage,
-                    NKikimrSchemeOp::ECdcStreamModeNewAndOldImages})
-            {
+            const auto modes = {
+                NKikimrSchemeOp::ECdcStreamModeKeysOnly,
+                NKikimrSchemeOp::ECdcStreamModeUpdate,
+                NKikimrSchemeOp::ECdcStreamModeNewImage,
+                NKikimrSchemeOp::ECdcStreamModeOldImage,
+                NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
+            };
+
+            for (const auto mode : modes) {
                 TUserTable::TPtr table = new TUserTable(*building);
                 table->CdcStreams.at(streamId).Mode = mode;
                 shard.SetUserTable(tableId.PathId, table);

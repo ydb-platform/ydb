@@ -6,6 +6,49 @@ namespace NKikimr::NDataShard {
 
 using namespace NTable;
 
+namespace {
+
+template <typename TColumnFilter>
+void SerializeUpdates(NKikimrChangeExchange::TDataChange& out, ERowOp rop,
+    TArrayRef<const TUpdateOp> updates, TColumnFilter includeColumn)
+{
+    NKikimrChangeExchange::TDataChange::TSerializedCells* values;
+    switch (rop) {
+        case ERowOp::Upsert:
+            values = out.MutableUpsert();
+            break;
+        case ERowOp::Erase:
+            out.MutableErase();
+            return;
+        case ERowOp::Reset:
+            values = out.MutableReset();
+            break;
+        default:
+            Y_ENSURE(false, "Unsupported row op: " << static_cast<ui8>(rop));
+    }
+
+    if (updates.empty()) {
+        return;
+    }
+
+    TVector<TCell> cells(Reserve(updates.size()));
+    for (const auto& update : updates) {
+        if (!includeColumn(update.Tag)) {
+            continue;
+        }
+
+        Y_ENSURE(update.Op == ECellOp::Set, "Unexpected cell op: " << update.Op.Raw());
+        values->AddTags(update.Tag);
+        cells.emplace_back(update.AsCell());
+    }
+
+    if (!cells.empty()) {
+        values->SetData(TSerializedCellVec::Serialize(cells));
+    }
+}
+
+} // namespace
+
 void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
         TArrayRef<const TRawTypeValue> in, TArrayRef<const TTag> tags)
 {
@@ -17,24 +60,6 @@ void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
     for (size_t i = 0; i < in.size(); ++i) {
         out.AddTags(tags.at(i));
         cells.emplace_back(in.at(i).AsRef());
-    }
-
-    out.SetData(TSerializedCellVec::Serialize(cells));
-}
-
-void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
-        TArrayRef<const TUpdateOp> in)
-{
-    if (!in) {
-        return;
-    }
-
-    TVector<TCell> cells(Reserve(in.size()));
-    for (const auto& op : in) {
-        Y_ENSURE(op.Op == ECellOp::Set, "Unexpected cell op: " << op.Op.Raw());
-
-        out.AddTags(op.Tag);
-        cells.emplace_back(op.AsCell());
     }
 
     out.SetData(TSerializedCellVec::Serialize(cells));
@@ -60,20 +85,15 @@ void TChangeRecordBodySerializer::Serialize(TDataChange& out, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates)
 {
     SerializeCells(*out.MutableKey(), key, keyTags);
+    SerializeUpdates(out, rop, updates, [](TTag) { return true; });
+}
 
-    switch (rop) {
-    case ERowOp::Upsert:
-        SerializeCells(*out.MutableUpsert(), updates);
-        break;
-    case ERowOp::Erase:
-        out.MutableErase();
-        break;
-    case ERowOp::Reset:
-        SerializeCells(*out.MutableReset(), updates);
-        break;
-    default:
-        Y_ENSURE(false, "Unsupported row op: " << static_cast<ui8>(rop));
-    }
+void TChangeRecordBodySerializer::Serialize(TDataChange& out, ERowOp rop,
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags,
+        TArrayRef<const TUpdateOp> updates, TFunctionRef<bool(TTag)> includeColumn)
+{
+    SerializeCells(*out.MutableKey(), key, keyTags);
+    SerializeUpdates(out, rop, updates, includeColumn);
 }
 
 void TChangeRecordBodySerializer::Serialize(TDataChange& out, ERowOp rop,

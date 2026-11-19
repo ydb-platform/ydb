@@ -1,5 +1,6 @@
 #include "defs.h"
 #include "change_record.h"
+#include "change_record_cdc_serializer.h"
 #include "datashard_distributed_erase.h"
 #include "datashard_impl.h"
 #include "datashard_ut_common_kqp.h"
@@ -13,6 +14,8 @@
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
@@ -7305,6 +7308,138 @@ Y_UNIT_TEST_SUITE(Cdc) {
         UNIT_ASSERT_VALUES_EQUAL_C(created->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
             created->Get()->Record.DebugString());
         return buildId;
+    }
+
+    void CheckColumnBuildRecordFormats(const TChangeRecord& record, const TString& oldValue, const TString& newValue, bool ready) {
+        const auto formats = {
+            NKikimrSchemeOp::ECdcStreamFormatProto,
+            NKikimrSchemeOp::ECdcStreamFormatJson,
+            NKikimrSchemeOp::ECdcStreamFormatDebeziumJson,
+            NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson,
+        };
+
+        for (const auto format : formats) {
+            THolder<IChangeRecordSerializer> serializer(CreateChangeRecordSerializer({
+                .StreamFormat = format,
+                .StreamMode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
+            }));
+
+            NKikimrClient::TPersQueuePartitionRequest::TCmdWrite cmd;
+            serializer->Serialize(cmd, record);
+            NKikimrPQClient::TDataChunk chunk;
+            UNIT_ASSERT(chunk.ParseFromString(cmd.GetData()));
+
+            if (format == NKikimrSchemeOp::ECdcStreamFormatProto) {
+                NKikimrChangeExchange::TChangeRecord proto;
+                UNIT_ASSERT(proto.ParseFromString(chunk.GetData()));
+                UNIT_ASSERT(proto.HasCdcDataChange());
+
+                const auto checkImage = [&](const auto& image, const TString& value) {
+                    UNIT_ASSERT_VALUES_EQUAL(image.TagsSize(), ready ? 2 : 1);
+                    UNIT_ASSERT_VALUES_EQUAL(image.GetTags(0), 2);
+
+                    TSerializedCellVec cells;
+                    UNIT_ASSERT(TSerializedCellVec::TryParse(image.GetData(), cells));
+                    UNIT_ASSERT_VALUES_EQUAL(cells.GetCells().size(), ready ? 2 : 1);
+                    UNIT_ASSERT_VALUES_EQUAL(cells.GetCells()[0].AsBuf(), value);
+
+                    if (ready) {
+                        UNIT_ASSERT_VALUES_EQUAL(image.GetTags(1), 3);
+                        UNIT_ASSERT_VALUES_EQUAL(cells.GetCells()[1].AsBuf(), "built");
+                    }
+                };
+
+                checkImage(proto.GetCdcDataChange().GetOldImage(), oldValue);
+                checkImage(proto.GetCdcDataChange().GetNewImage(), newValue);
+                continue;
+            }
+
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(chunk.GetData(), &json));
+
+            const bool dynamo = format == NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson;
+            const auto attribute = [&](const TString& value) -> NJson::TJsonValue {
+                return dynamo ? NJson::TJsonMap{{"S", value}} : NJson::TJsonValue(value);
+            };
+
+            NJson::TJsonValue expectedOld = NJson::TJsonMap{{"value", attribute(oldValue)}};
+            NJson::TJsonValue expectedNew = NJson::TJsonMap{{"value", attribute(newValue)}};
+
+            if (ready) {
+                expectedOld["extra"] = attribute("built");
+                expectedNew["extra"] = attribute("built");
+            }
+
+            const NJson::TJsonValue* oldImage;
+            const NJson::TJsonValue* newImage;
+
+            if (format == NKikimrSchemeOp::ECdcStreamFormatJson) {
+                oldImage = &json["oldImage"];
+                newImage = &json["newImage"];
+            } else {
+                expectedOld["key"] = attribute("k");
+                expectedNew["key"] = attribute("k");
+                oldImage = dynamo ? &json["dynamodb"]["OldImage"] : &json["payload"]["before"];
+                newImage = dynamo ? &json["dynamodb"]["NewImage"] : &json["payload"]["after"];
+            }
+
+            UNIT_ASSERT_C(*oldImage == expectedOld, "format# " << format << ": " << NJson::WriteJson(json));
+            UNIT_ASSERT_C(*newImage == expectedNew, "format# " << format << ": " << NJson::WriteJson(json));
+        }
+    }
+
+    Y_UNIT_TEST(BuildingDefaultColumnVisibilityInAllFormats) {
+        TTestPqEnv env(TShardedTableOptions().Columns({
+            {"key", "Utf8", true, false},
+            {"value", "Utf8", false, false},
+        }), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson), false);
+
+        auto server = env.GetServer();
+        auto& runtime = *server->GetRuntime();
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(true);
+
+        const auto sender = env.GetEdgeActor();
+        const auto tableId = ResolveTableId(server, sender, "/Root/Table");
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (key, value) VALUES ('k', 'old');");
+        WaitForContent(server, sender, "/Root/Table/Stream", {
+            R"({"update":{},"key":["k"],"newImage":{"value":"old"}})",
+        });
+
+        TBlockEvents<TEvDataShard::TEvUploadRowsResponse> backfill(runtime);
+
+        NKikimrIndexBuilder::TColumnBuildSettings columns;
+        auto* extra = columns.add_column();
+        extra->SetColumnName("extra");
+        extra->mutable_default_from_literal()->mutable_type()->set_type_id(Ydb::Type::UTF8);
+        extra->mutable_default_from_literal()->mutable_value()->set_text_value("built");
+
+        const auto buildId = AsyncBuildDefaultColumns(server, sender, tableId, columns);
+        runtime.WaitFor("pending column backfill", [&] { return !backfill.empty(); });
+
+        TMap<ui64, TChangeRecord> records;
+        auto observeRecords = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRecords>([&](auto& ev) {
+            for (const auto& record : ev->Get()->Records) {
+                if (record->GetKind() == TChangeRecord::EKind::CdcDataChange) {
+                    const auto* change = dynamic_cast<const TChangeRecord*>(record.Get());
+                    UNIT_ASSERT(change);
+                    records.emplace(change->GetOrder(), *change);
+                }
+            }
+        });
+
+        ExecSQL(server, sender, "UPDATE `/Root/Table` SET value = 'during' WHERE key = 'k';");
+        runtime.WaitFor("CDC record during column build", [&] { return !records.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
+        CheckColumnBuildRecordFormats(records.begin()->second, "old", "during", false);
+
+        backfill.Stop().Unblock();
+        WaitTxNotification(server, sender, buildId);
+        ExecSQL(server, sender, "UPDATE `/Root/Table` SET value = 'after' WHERE key = 'k';");
+        runtime.WaitFor("CDC record after column build", [&] { return records.size() >= 2; });
+
+        UNIT_ASSERT_VALUES_EQUAL(records.size(), 2);
+        CheckColumnBuildRecordFormats(records.rbegin()->second, "during", "after", true);
     }
 
     Y_UNIT_TEST_OCTET(BuildingDefaultColumn, Cancel, Reboot, DelayedDelivery) {

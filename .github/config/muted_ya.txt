@@ -11,6 +11,8 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultColumnsCannotBeCombined+E
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_ut TPartitionDirectTest.ShouldReplayAddHostAfterCompaction
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerTests.FetchThrottledAtMinMessages
+ydb/core/persqueue/ut TPartitionTests.ReadLagClampsWhenFirstUnreadWrittenAfterLastRead
+ydb/core/persqueue/ut TPartitionTests.ReadLagEstimateUsesFirstUnreadMessage
 ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/join py3test.sole chunk

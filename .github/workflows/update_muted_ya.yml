@@ -32,8 +32,9 @@ jobs:
       matrix_include: ${{ steps.set-mute-matrix.outputs.matrix_include }}
     steps:
       - name: Checkout branch list and mute files
-        uses: actions/checkout@v5
+        uses: rekby-tmp/bundle-checkout@74b111d51af1bee00b2609ed53e738974f75d7dd # main
         with:
+          bundle-url: https://storage.yandexcloud.net/pg-ext-deploy/ydb-mirror/A5A269B5-E212-4167-916A-A937A0414866/ydb-mirror.bundle
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
           path: config-repo
           sparse-checkout: |
@@ -56,8 +57,9 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: rekby-tmp/bundle-checkout@74b111d51af1bee00b2609ed53e738974f75d7dd # main
         with:
+          bundle-url: https://storage.yandexcloud.net/pg-ext-deploy/ydb-mirror/A5A269B5-E212-4167-916A-A937A0414866/ydb-mirror.bundle
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
 
       - name: Install dependencies
@@ -95,8 +97,9 @@ jobs:
         include: ${{ fromJson(needs.setup.outputs.matrix_include) }}
     steps:
       - name: Checkout workflow branch
-        uses: actions/checkout@v5
+        uses: rekby-tmp/bundle-checkout@74b111d51af1bee00b2609ed53e738974f75d7dd # main
         with:
+          bundle-url: https://storage.yandexcloud.net/pg-ext-deploy/ydb-mirror/A5A269B5-E212-4167-916A-A937A0414866/ydb-mirror.bundle
           token: ${{ secrets.YDBOT_TOKEN }}
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
           fetch-depth: 0
@@ -119,7 +122,7 @@ jobs:
           echo "BUILD_TYPE=${{ matrix.BUILD_TYPE }}" >> "$GITHUB_ENV"
           echo "PR_BRANCH=${{ env.PR_BRANCH_PREFIX }}_${{ matrix.BASE_BRANCH }}_${{ matrix.BUILD_TYPE }}" >> "$GITHUB_ENV"
 
-          git fetch origin "${{ matrix.BASE_BRANCH }}:refs/remotes/origin/${{ matrix.BASE_BRANCH }}"
+          cached-git fetch origin "${{ matrix.BASE_BRANCH }}:refs/remotes/origin/${{ matrix.BASE_BRANCH }}"
           git show "origin/${{ matrix.BASE_BRANCH }}:${{ matrix.MUTED_YA_RELATIVE }}" > base_muted_ya.txt
 
       - name: Collect test history data

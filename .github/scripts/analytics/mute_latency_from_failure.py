@@ -380,7 +380,8 @@ def _git(repo: str, *args: str) -> str:
 
 
 def _git_rc(repo: str, *args: str) -> Tuple[int, str, str]:
-    r = subprocess.run(['git', *args], cwd=repo, capture_output=True, text=True, check=False)
+    # GIT is set by the checkout action; its fetch is served from the shared object cache.
+    r = subprocess.run([os.environ.get('GIT', 'git'), *args], cwd=repo, capture_output=True, text=True, check=False)
     return r.returncode, r.stdout, r.stderr
 
 

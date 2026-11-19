@@ -349,10 +349,11 @@ jobs:
           } >> "$GITHUB_ENV"
         fi
     - name: Checkout
-      uses: actions/checkout@v5
+      uses: rekby-tmp/bundle-checkout@74b111d51af1bee00b2609ed53e738974f75d7dd # main
       env:
         GIT_TRACE: "1"
       with:
+        bundle-url: https://storage.yandexcloud.net/pg-ext-deploy/ydb-mirror/A5A269B5-E212-4167-916A-A937A0414866/ydb-mirror.bundle
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2
         # Fork code is checked out only after the check-running-allowed gate
@@ -519,10 +520,11 @@ jobs:
           } >> "$GITHUB_ENV"
         fi
     - name: Checkout
-      uses: actions/checkout@v5
+      uses: rekby-tmp/bundle-checkout@74b111d51af1bee00b2609ed53e738974f75d7dd # main
       env:
         GIT_TRACE: "1"
       with:
+        bundle-url: https://storage.yandexcloud.net/pg-ext-deploy/ydb-mirror/A5A269B5-E212-4167-916A-A937A0414866/ydb-mirror.bundle
         fetch-depth: 2
     - name: Drop GitHub proxy
       if: vars.GH_PROXY_URL != ''

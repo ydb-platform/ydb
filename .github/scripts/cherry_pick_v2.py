@@ -67,8 +67,9 @@ class ChangesAlreadyAppliedError(Exception):
 def run_git(repo_path: str, cmd: List[str], logger, check=True, stream=False) -> subprocess.CompletedProcess:
     """Run git command. stream=True leaves git output in the Actions log."""
     try:
+        # GIT is set by the checkout action; its fetch is served from the shared object cache.
         result = subprocess.run(
-            ['git'] + cmd,
+            [os.environ.get('GIT', 'git')] + cmd,
             cwd=repo_path,
             capture_output=not stream,
             text=True,
@@ -1025,9 +1026,13 @@ def main():
         proxy = os.environ.get("GH_FETCH_PROXY_URL", "").strip().rstrip("/")
         logger.info("Cloning repository: %s to %s via %s", repo_url, repo_dir, proxy or "direct")
         clone_env = {**os.environ, 'GIT_PROTOCOL': '2'}
+        # With the shared object cache of the checkout action, only the delta of
+        # the default branch comes from GitHub; process_branch fetches the rest.
+        cache = os.environ.get("BUNDLE_CHECKOUT_CACHE", "")
+        clone_args = ['--reference-if-able', cache, '--single-branch', '--no-tags'] if cache else []
         try:
             subprocess.run(
-                ['git', *fetch_proxy_args(), 'clone', repo_url, repo_dir],
+                ['git', *fetch_proxy_args(), 'clone', *clone_args, repo_url, repo_dir],
                 env=clone_env,
                 check=True,
                 text=True,
@@ -1038,11 +1043,14 @@ def main():
             logger.warning("proxied clone failed, retrying on github.com")
             shutil.rmtree(repo_dir, ignore_errors=True)
             subprocess.run(
-                ['git', 'clone', repo_url, repo_dir],
+                ['git', 'clone', *clone_args, repo_url, repo_dir],
                 env=clone_env,
                 check=True,
                 text=True,
             )
+        if cache:
+            # A fetch of any branch keeps updating origin/<branch>, as in a full clone.
+            run_git(repo_dir, ['remote', 'set-branches', 'origin', '*'], logger)
         
         # Process each target branch
         results: list[BackportResult] = []

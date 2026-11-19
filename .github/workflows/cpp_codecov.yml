@@ -319,8 +319,9 @@ jobs:
         suite: ${{ fromJson(needs.detect.outputs.matrix) }}
     steps:
       - name: Checkout measured code
-        uses: actions/checkout@v5
+        uses: rekby-tmp/bundle-checkout@74b111d51af1bee00b2609ed53e738974f75d7dd # main
         with:
+          bundle-url: https://storage.yandexcloud.net/pg-ext-deploy/ydb-mirror/A5A269B5-E212-4167-916A-A937A0414866/ydb-mirror.bundle
           repository: ${{ needs.detect.outputs.checkout_repository }}
           ref: ${{ needs.detect.outputs.checkout_sha }}
           # Build/upload needs only the pinned tree; merge-base history is used
@@ -331,8 +332,9 @@ jobs:
 
       - name: Checkout trusted coverage helpers from workflow source
         if: github.event_name == 'pull_request_target'
-        uses: actions/checkout@v5
+        uses: rekby-tmp/bundle-checkout@74b111d51af1bee00b2609ed53e738974f75d7dd # main
         with:
+          bundle-url: https://storage.yandexcloud.net/pg-ext-deploy/ydb-mirror/A5A269B5-E212-4167-916A-A937A0414866/ydb-mirror.bundle
           ref: ${{ github.workflow_sha }}
           sparse-checkout: |
             .github/actions/run_clang_codecov

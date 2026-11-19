@@ -6,6 +6,7 @@
 #include <ydb/library/actors/interconnect/watchdog_timer.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/vdisk/common/circlebuf.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h>
@@ -147,18 +148,184 @@ namespace NKikimr {
 
 
 
+    enum {
+        EvResumeForce = EventSpaceBegin(TEvents::ES_PRIVATE),
+        EvReplTokenPriority,
+        EvUpdateGroupInfo,
+        EvRefreshGroupStatus,
+        EvGroupStatusTimeout,
+    };
+
+    struct TEvResumeForce : TEventLocal<TEvResumeForce, EvResumeForce> {};
+
+    struct TEvReplTokenPriority : TEventLocal<TEvReplTokenPriority, EvReplTokenPriority> {
+        TReplTokenPriority TokenPriority;
+
+        explicit TEvReplTokenPriority(TReplTokenPriority tokenPriority)
+            : TokenPriority(tokenPriority)
+        {}
+    };
+
+    struct TEvUpdateGroupInfo : TEventLocal<TEvUpdateGroupInfo, EvUpdateGroupInfo> {
+        TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
+
+        explicit TEvUpdateGroupInfo(TIntrusivePtr<TBlobStorageGroupInfo> gInfo)
+            : GInfo(std::move(gInfo))
+        {}
+    };
+
+    class TGroupStatusTracker : public TActorBootstrapped<TGroupStatusTracker> {
+        struct TEvRefresh : TEventLocal<TEvRefresh, EvRefreshGroupStatus> {
+            ui64 Generation;
+
+            explicit TEvRefresh(ui64 generation)
+                : Generation(generation)
+            {}
+        };
+
+        struct TEvTimeout : TEventLocal<TEvTimeout, EvGroupStatusTimeout> {
+            ui64 Generation;
+
+            explicit TEvTimeout(ui64 generation)
+                : Generation(generation)
+            {}
+        };
+
+        const TActorId ParentId;
+        const TVDiskIdShort SelfVDiskId;
+        TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
+        ui64 Generation = 0;
+        std::set<TVDiskIdShort> PendingPeerStatuses;
+        std::set<TVDiskIdShort> HealthyPeerDisks;
+        std::optional<TReplTokenPriority> LastTokenPriority;
+
+        void StartPoll() {
+            ++Generation;
+            PendingPeerStatuses.clear();
+            HealthyPeerDisks.clear();
+
+            for (ui32 i = 0; i < GInfo->GetTotalVDisksNum(); ++i) {
+                const TVDiskID vdiskId = GInfo->GetVDiskId(i);
+                const TVDiskIdShort shortId(vdiskId);
+                if (shortId != SelfVDiskId) {
+                    PendingPeerStatuses.insert(shortId);
+                    Send(GInfo->GetActorId(i), new TEvBlobStorage::TEvVStatus(vdiskId), 0, Generation);
+                }
+            }
+
+            Become(&TThis::StatePolling);
+            if (PendingPeerStatuses.empty()) {
+                CompletePoll();
+            } else {
+                Schedule(TDuration::Seconds(3), new TEvTimeout(Generation));
+            }
+        }
+
+        void CompletePoll() {
+            const auto& topology = GInfo->GetTopology();
+            TBlobStorageGroupInfo::TGroupVDisks failedDisks(&topology, SelfVDiskId);
+            for (const auto& vdisk : GInfo->GetVDisks()) {
+                const TVDiskIdShort shortId = vdisk.VDiskIdShort;
+                if (shortId != SelfVDiskId && !HealthyPeerDisks.contains(shortId)) {
+                    failedDisks += TBlobStorageGroupInfo::TGroupVDisks(&topology, shortId);
+                }
+            }
+
+            const TReplTokenPriority tokenPriority = topology.GetQuorumChecker().GetReplTokenPriority(failedDisks);
+            if (!LastTokenPriority || *LastTokenPriority != tokenPriority) {
+                LastTokenPriority = tokenPriority;
+                Send(ParentId, new TEvReplTokenPriority(tokenPriority));
+            }
+
+            Become(&TThis::StateWaitingRefresh);
+            Schedule(TDuration::Seconds(5), new TEvRefresh(Generation));
+        }
+
+        void Handle(TEvBlobStorage::TEvVStatusResult::TPtr ev) {
+            if (ev->Cookie != Generation) {
+                return;
+            }
+
+            const auto& record = ev->Get()->Record;
+            if (!record.HasVDiskID()) {
+                return;
+            }
+            const TVDiskIdShort shortId(VDiskIDFromVDiskID(record.GetVDiskID()));
+            if (!PendingPeerStatuses.erase(shortId)) {
+                return;
+            }
+            // Older VDisks do not send DurabilityReplicated, so a missing field retains the legacy healthy status.
+            const bool durabilityReplicated = !record.HasDurabilityReplicated() || record.GetDurabilityReplicated();
+            if (record.GetStatus() == NKikimrProto::OK && record.GetJoinedGroup() && record.GetReplicated()
+                    && durabilityReplicated) {
+                HealthyPeerDisks.insert(shortId);
+            }
+            if (PendingPeerStatuses.empty()) {
+                CompletePoll();
+            }
+        }
+
+        void Handle(TEvTimeout::TPtr ev) {
+            if (ev->Get()->Generation == Generation) {
+                CompletePoll();
+            }
+        }
+
+        void Handle(TEvRefresh::TPtr ev) {
+            if (ev->Get()->Generation == Generation) {
+                StartPoll();
+            }
+        }
+
+        void Handle(TEvUpdateGroupInfo::TPtr ev) {
+            GInfo = std::move(ev->Get()->GInfo);
+            StartPoll();
+        }
+
+        void Ignore() {
+        }
+
+        STRICT_STFUNC(StatePolling,
+            hFunc(TEvBlobStorage::TEvVStatusResult, Handle)
+            hFunc(TEvTimeout, Handle)
+            hFunc(TEvRefresh, Handle)
+            hFunc(TEvUpdateGroupInfo, Handle)
+            cFunc(TEvents::TSystem::Poison, PassAway)
+        )
+
+        STRICT_STFUNC(StateWaitingRefresh,
+            hFunc(TEvRefresh, Handle)
+            hFunc(TEvUpdateGroupInfo, Handle)
+            cFunc(TEvBlobStorage::EvVStatusResult, Ignore)
+            cFunc(TEvTimeout::EventType, Ignore)
+            cFunc(TEvents::TSystem::Poison, PassAway)
+        )
+
+    public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_REPL_SCHEDULER;
+        }
+
+        TGroupStatusTracker(TActorId parentId, TVDiskIdShort selfVDiskId,
+                TIntrusivePtr<TBlobStorageGroupInfo> gInfo)
+            : ParentId(parentId)
+            , SelfVDiskId(selfVDiskId)
+            , GInfo(std::move(gInfo))
+        {}
+
+        void Bootstrap() {
+            StartPoll();
+        }
+    };
+
     ////////////////////////////////////////////////////////////////////////////
     // TReplScheduler
     ////////////////////////////////////////////////////////////////////////////
     class TReplScheduler : public TActorBootstrapped<TReplScheduler> {
-        enum {
-            EvResumeForce = EventSpaceBegin(TEvents::ES_PRIVATE),
-        };
-        struct TEvResumeForce : TEventLocal<TEvResumeForce, EvResumeForce> {};
-
         typedef TCircleBuf<TEvReplFinished::TInfoPtr> THistory;
         enum EState {
             Plan,
+            AwaitGroupStatus,
             AwaitToken,
             WaitQueues,
             Replication,
@@ -203,7 +370,12 @@ namespace NKikimr {
         bool UnrecoveredNonphantomBlobs = false;
         bool RequestedReplicationToken = false;
         bool HoldingReplicationToken = false;
+        bool YieldRequested = false;
+        bool EnableReplTokenPriority = false;
         bool CanDropDonor = false;
+
+        TActorId GroupStatusTrackerId;
+        std::optional<TReplTokenPriority> TokenPriority;
 
         TWatchdogTimer<TEvReplCheckProgress> ReplProgressWatchdog;
 
@@ -212,6 +384,7 @@ namespace NKikimr {
         const char *StateToStr(EState state) {
             switch (state) {
                 case Plan:        return "Plan";
+                case AwaitGroupStatus: return "AwaitGroupStatus";
                 case AwaitToken:  return "AwaitToken";
                 case WaitQueues:  return "WaitQueues";
                 case Replication: return "Replication";
@@ -306,6 +479,55 @@ namespace NKikimr {
             NextMinHugeBlobInBytes = ev->Get()->MinHugeBlobInBytes;
         }
 
+        void RequestReplicationToken() {
+            Y_VERIFY_S(State == Plan || State == AwaitGroupStatus,
+                ReplCtx->VCtx->VDiskLogPrefix << " State# " << StateToStr(State));
+            Y_VERIFY_S(!EnableReplTokenPriority || TokenPriority, ReplCtx->VCtx->VDiskLogPrefix);
+            State = AwaitToken;
+            Y_VERIFY_S(!RequestedReplicationToken, ReplCtx->VCtx->VDiskLogPrefix);
+            RequestedReplicationToken = true;
+            if (!Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(
+                    ReplCtx->VDiskCfg->BaseInfo.PDiskId,
+                    EnableReplTokenPriority ? *TokenPriority : DefaultReplTokenPriority,
+                    EnableReplTokenPriority))) {
+                HandleReplToken();
+            }
+        }
+
+        void StartGroupStatusTracking() {
+            Y_VERIFY_S(!GroupStatusTrackerId, ReplCtx->VCtx->VDiskLogPrefix);
+            TokenPriority.reset();
+            ReplCtx->MonGroup.ReplTokenPriority() = DefaultReplTokenPriority;
+            GroupStatusTrackerId = RegisterWithSameMailbox(new TGroupStatusTracker(SelfId(),
+                ReplCtx->VCtx->ShortSelfVDisk, ReplCtx->GInfo));
+        }
+
+        void StopGroupStatusTracking() {
+            if (GroupStatusTrackerId) {
+                Send(GroupStatusTrackerId, new TEvents::TEvPoison);
+                GroupStatusTrackerId = {};
+            }
+            TokenPriority.reset();
+            ReplCtx->MonGroup.ReplTokenPriority() = DefaultReplTokenPriority;
+        }
+
+        void Handle(TEvReplTokenPriority::TPtr ev) {
+            if (ev->Sender != GroupStatusTrackerId) {
+                return;
+            }
+
+            const TReplTokenPriority tokenPriority = ev->Get()->TokenPriority;
+            const bool priorityChanged = !TokenPriority || *TokenPriority != tokenPriority;
+            TokenPriority = tokenPriority;
+            ReplCtx->MonGroup.ReplTokenPriority() = tokenPriority;
+            if (priorityChanged && (RequestedReplicationToken || HoldingReplicationToken)) {
+                Send(MakeBlobStorageReplBrokerID(), new TEvUpdateReplTokenPriority(tokenPriority));
+            }
+            if (State == AwaitGroupStatus) {
+                RequestReplicationToken();
+            }
+        }
+
         void StartReplication() {
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "REPL START"),
                 {"marker", "BSVR14"});
@@ -329,6 +551,11 @@ namespace NKikimr {
             // switch to planning state
             Transition(Relaxation, Plan);
 
+            EnableReplTokenPriority = AppData()->FeatureFlags.GetEnableReplTokenPriority();
+            if (EnableReplTokenPriority) {
+                StartGroupStatusTracking();
+            }
+
             CanDropDonor = true;
             RunRepl(TLogoBlobID());
         }
@@ -339,23 +566,25 @@ namespace NKikimr {
             switch (State) {
                 case Plan:
                     // this is a first quantum of replication, so we have to register it in the broker
-                    State = AwaitToken;
-                    Y_VERIFY_S(!RequestedReplicationToken, ReplCtx->VCtx->VDiskLogPrefix);
-                    if (RequestedReplicationToken) {
-                        YDB_LOG_CRIT("Excessive replication token requested",
-                            {"marker", "BSVR38"},
-                            {"VDiskLogPrefix", ReplCtx->VCtx->VDiskLogPrefix});
-                        break;
-                    }
-                    RequestedReplicationToken = true;
-                    if (!Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(ReplCtx->VDiskCfg->BaseInfo.PDiskId))) {
-                        HandleReplToken();
+                    if (!EnableReplTokenPriority || TokenPriority) {
+                        RequestReplicationToken();
+                    } else {
+                        Transition(Plan, AwaitGroupStatus);
                     }
                     break;
 
                 case Replication:
                     // this is successive quantum, so we just continue as we have the token
-                    Send(ev->Sender, new TEvReplResume);
+                    if (std::exchange(YieldRequested, false)) {
+                        Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+                        Y_VERIFY_S(HoldingReplicationToken, ReplCtx->VCtx->VDiskLogPrefix);
+                        HoldingReplicationToken = false;
+                        ReplCtx->MonGroup.ReplIsHoldingToken() = false;
+                        State = Plan;
+                        RequestReplicationToken();
+                    } else {
+                        Send(ev->Sender, new TEvReplResume);
+                    }
                     break;
 
                 default:
@@ -367,6 +596,7 @@ namespace NKikimr {
             Y_VERIFY_S(RequestedReplicationToken, ReplCtx->VCtx->VDiskLogPrefix);
             RequestedReplicationToken = false;
             HoldingReplicationToken = true;
+            YieldRequested = false;
             ReplCtx->MonGroup.ReplIsHoldingToken() = true;
 
             // switch to replication state
@@ -397,6 +627,26 @@ namespace NKikimr {
                 Transition(WaitQueues, Replication);
                 Send(ReplJobActorId, new TEvReplResume);
                 ResumeForceToken = nullptr;
+            }
+        }
+
+        void Handle(TEvYieldReplToken::TPtr&) {
+            if (!EnableReplTokenPriority || !HoldingReplicationToken) {
+                return;
+            }
+            if (State == WaitQueues) {
+                ++ReplCtx->MonGroup.ReplTokenPreemptions();
+                ResumeForceToken = nullptr;
+                Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+                HoldingReplicationToken = false;
+                ReplCtx->MonGroup.ReplIsHoldingToken() = false;
+                State = Plan;
+                RequestReplicationToken();
+            } else if (State == Replication) {
+                // Count one logical preemption even if the broker repeats the yield request before this quantum ends.
+                if (!std::exchange(YieldRequested, true)) {
+                    ++ReplCtx->MonGroup.ReplTokenPreemptions();
+                }
             }
         }
 
@@ -516,6 +766,7 @@ namespace NKikimr {
                     {"marker", "BSVR17"},
                     {"blobsToReplicate", BlobsToReplicatePtr->GetNumItems()});
                 LastReplEnd = now;
+                YieldRequested = false;
 
                 if (State == WaitQueues || State == Replication) {
                     // release token as we have finished replicating
@@ -526,6 +777,7 @@ namespace NKikimr {
                     ReplCtx->MonGroup.ReplIsHoldingToken() = false;
                 }
                 ResetReplProgressTimer(true);
+                StopGroupStatusTracking();
 
                 Become(&TThis::StateRelax);
                 if (!BlobsToReplicatePtr->IsEmpty()) {
@@ -556,6 +808,13 @@ namespace NKikimr {
             } else {
                 YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"),
                     {"marker", "BSVR18"});
+                if (std::exchange(YieldRequested, false)) {
+                    Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+                    Y_VERIFY_S(HoldingReplicationToken, ReplCtx->VCtx->VDiskLogPrefix);
+                    HoldingReplicationToken = false;
+                    ReplCtx->MonGroup.ReplIsHoldingToken() = false;
+                    State = Plan;
+                }
                 RunRepl(info->KeyPos);
                 timeRemaining = EstimateTimeOfArrival();
             }
@@ -704,6 +963,9 @@ namespace NKikimr {
                 Send(kv.second, msg->Clone());
             }
             ReplCtx->GInfo = msg->NewInfo;
+            if (GroupStatusTrackerId) {
+                Send(GroupStatusTrackerId, new TEvUpdateGroupInfo(ReplCtx->GInfo));
+            }
         }
 
         std::set<TActorId> DonorQueryActors;
@@ -743,9 +1005,12 @@ namespace NKikimr {
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
             hFunc(TEvMinHugeBlobSizeUpdate, Handle)
+            hFunc(TEvReplTokenPriority, Handle)
+            hFunc(TEvYieldReplToken, Handle)
         )
 
         void PassAway() override {
+            StopGroupStatusTracking();
             // forward poison pills to queue actors
             for (const auto& kv : *QueueActorMapPtr) {
                 Send(kv.second, new TEvents::TEvPoison);
@@ -799,6 +1064,8 @@ namespace NKikimr {
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
             hFunc(TEvMinHugeBlobSizeUpdate, Handle)
+            hFunc(TEvReplTokenPriority, Handle)
+            hFunc(TEvYieldReplToken, Handle)
         )
 
     public:
@@ -816,7 +1083,9 @@ namespace NKikimr {
                 ReplCtx->VDiskCfg->ReplMaxTimeToMakeProgress,
                 std::bind(&TThis::ReplStuck, this)
             )
-        {}
+        {
+            ReplCtx->MonGroup.ReplTokenPriority() = DefaultReplTokenPriority;
+        }
     };
 
 

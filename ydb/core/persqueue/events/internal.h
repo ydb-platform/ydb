@@ -692,6 +692,7 @@ struct TEvPQ {
 
         NPersQueue::TTopicConverterPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig Config;
+        TVector<TString> ConsumersToResendOffsets;
     };
 
     struct TEvPartitionConfigChanged : public TEventLocal<TEvPartitionConfigChanged, EvPartitionConfigChanged> {

@@ -147,9 +147,7 @@ public:
     void RequestSourcePartitionStatus(TEvPQ::TEvRequestPartitionStatus::TPtr& ev, const TActorContext& ctx);
     void RequestSourcePartitionStatus();
     void TryUpdateWriteTimetsamp(const TActorContext &ctx);
-    void AddMessagesToQueue(
-        std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>&& messages
-    );
+    void AddMessagesToQueue(std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>&& messages);
     void StartWaitNextReaderEvent(const TActorContext& ctx);
 
 private:

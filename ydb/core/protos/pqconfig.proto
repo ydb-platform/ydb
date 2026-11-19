@@ -434,6 +434,8 @@ message TPQTabletConfig {
         optional uint32 MetricsLevel = 21;
         // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
         optional string MonitoringProjectId = 22;
+
+        optional bool ReplicateOffsets = 23 [default = true];
     }
 
     repeated TConsumer Consumers = 37;

@@ -548,6 +548,8 @@ message TPQTabletConfig {
     optional string SqsCloudId = 46 [default = ""];
     optional string SqsFolderId = 47 [default = ""];
     optional bool SqsExportMetrics = 48 [default = false];
+
+    optional bool WriteEnabled = 51 [default = true];
 }
 
 message THeartbeat {

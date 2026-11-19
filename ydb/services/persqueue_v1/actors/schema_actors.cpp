@@ -51,6 +51,9 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         settings->set_partitions_count(pqDescr.GetTotalGroupCount());
 
         const auto &config = pqDescr.GetPQTabletConfig();
+        if (config.HasWriteEnabled()) {
+            (*settings->mutable_attributes())["_write_enabled"] = config.GetWriteEnabled() ? "true" : "false";
+        }
         if (!config.GetRequireAuthWrite()) {
             (*settings->mutable_attributes())["_allow_unauthenticated_write"] = "true";
         }

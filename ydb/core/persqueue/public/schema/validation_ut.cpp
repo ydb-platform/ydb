@@ -838,6 +838,7 @@ Y_UNIT_TEST(ProcessTopicAttributesInvalidValues) {
 
         expectBad("_allow_unauthenticated_read", "not-bool", "not bool");
         expectBad("_allow_unauthenticated_write", "xx", "not bool");
+        expectBad("_write_enabled", "not-bool", "not bool");
         expectBad("_abc_id", "NaN", "not integer");
         expectBad("_max_partition_storage_size", "-5", "can't be negative");
         expectBad("_max_partition_storage_size", "oops", "not ui64");

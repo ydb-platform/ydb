@@ -647,7 +647,8 @@ class TCdcChangeSenderMain
         Y_ENSURE(entry.PQGroupInfo->Partitioning);
         KeyDesc->Partitioning = std::make_shared<TPartitioning>(entry.PQGroupInfo->Partitioning);
 
-        const bool keyRangeHeartbeats = Stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
+        const bool keyRangeHeartbeats = !topicAutoPartitioning
+            && Stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
         if (topicAutoPartitioning) {
             Y_ENSURE(entry.PQGroupInfo->PartitionChooser);
             SetPartitionResolver(new TBoundaryPartitionResolver(entry.PQGroupInfo->PartitionChooser));
@@ -657,7 +658,7 @@ class TCdcChangeSenderMain
             SetPartitionResolver(new TMd5PartitionResolver(KeyDesc->GetPartitions().size()));
         }
 
-        CreateSenders(keyRangeHeartbeats && !topicAutoPartitioning
+        CreateSenders(keyRangeHeartbeats
             ? MakeIntersectingPartitionIds(KeyDesc->GetPartitions(), ShardKeyRange, entry.PQGroupInfo->Schema)
             : NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
         Become(&TThis::StateMain);

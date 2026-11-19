@@ -6585,6 +6585,16 @@ Y_UNIT_TEST_SUITE(Cdc) {
         InitRoot(server, edgeActor);
         CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions().Shards(2));
 
+        THashMap<ui32, THashSet<TString>> partitionToHeartbeatSources;
+        auto observeHeartbeats = runtime.AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
+            const auto& request = ev->Get()->Record.GetPartitionRequest();
+            for (const auto& write : request.GetCmdWrite()) {
+                if (write.HasHeartbeat()) {
+                    partitionToHeartbeatSources[request.GetPartition()].insert(write.GetSourceId());
+                }
+            }
+        });
+
         WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
             WithKeyRangeHeartbeats(WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson)))));
 
@@ -6597,17 +6607,22 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         // then
         TVector<TVector<std::pair<TString, TString>>> records(2);
-        while (!AllOf(records, [&](const auto& x) { return HasResolvedAfterUpdate(x); })) {
+        for (ui32 attempt = 0; attempt < 60 && !AllOf(records, [&](const auto& x) { return HasResolvedAfterUpdate(x); }); ++attempt) {
             SimulateSleep(server, TDuration::Seconds(1));
             for (ui32 i = 0; i < records.size(); ++i) {
                 records[i] = GetRecords(runtime, edgeActor, "/Root/Table/Stream", i);
             }
         }
 
+        UNIT_ASSERT_C(AllOf(records, [&](const auto& x) { return HasResolvedAfterUpdate(x); }), "no resolved after the update in every partition");
         UNIT_ASSERT(HasKey(records[0], "1"));
         UNIT_ASSERT(!HasKey(records[0], "3000000000"));
         UNIT_ASSERT(HasKey(records[1], "3000000000"));
         UNIT_ASSERT(!HasKey(records[1], "1"));
+        UNIT_ASSERT_VALUES_EQUAL(partitionToHeartbeatSources.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(partitionToHeartbeatSources[0].size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(partitionToHeartbeatSources[1].size(), 1);
+        UNIT_ASSERT_VALUES_UNEQUAL(*partitionToHeartbeatSources[0].begin(), *partitionToHeartbeatSources[1].begin());
     }
 
     Y_UNIT_TEST(InitialScanAndResolvedTimestamps) {

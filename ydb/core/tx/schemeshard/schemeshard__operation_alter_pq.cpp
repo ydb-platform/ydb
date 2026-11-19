@@ -13,6 +13,7 @@
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range_sequence.h>
 #include <ydb/core/persqueue/public/partition_index_generator/partition_index_generator.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/scheme/scheme_types_defs.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -31,8 +32,20 @@ bool CheckTypedSplitBoundary(
         const TString& splitBoundary,
         TString& error)
 {
+    auto parseFullKey = [&](const TString& data, TSerializedCellVec& key) {
+        if (!TSerializedCellVec::TryParse(data, key) || key.GetCells().size() != keySchema.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < keySchema.size(); ++i) {
+            if (NScheme::HasUnexpectedValueSize(key.GetCells()[i], keySchema[i])) {
+                return false;
+            }
+        }
+        return true;
+    };
+
     TSerializedCellVec boundary;
-    if (!TSerializedCellVec::TryParse(splitBoundary, boundary) || boundary.GetCells().size() != keySchema.size()) {
+    if (!parseFullKey(splitBoundary, boundary)) {
         error = "Split boundary is not a full key of the topic key schema";
         return false;
     }
@@ -41,19 +54,32 @@ bool CheckTypedSplitBoundary(
         return true;
     }
 
-    TSerializedCellVec bound;
+    auto compareWith = [&](const TString& data, int& result) {
+        TSerializedCellVec bound;
+        if (!parseFullKey(data, bound)) {
+            return false;
+        }
+        result = CompareTypedCellVectors(boundary.GetCells().data(), bound.GetCells().data(), keySchema.data(), keySchema.size());
+        return true;
+    };
+
+    int result = 0;
     if (keyRange->FromBound) {
-        if (!TSerializedCellVec::TryParse(*keyRange->FromBound, bound) || bound.GetCells().size() != keySchema.size()
-            || CompareTypedCellVectors(boundary.GetCells().data(), bound.GetCells().data(), keySchema.data(), keySchema.size()) <= 0)
-        {
+        if (!compareWith(*keyRange->FromBound, result)) {
+            error = "FromBound of partition is not a full key of the topic key schema";
+            return false;
+        }
+        if (result <= 0) {
             error = "Split boundary is not greater than FromBound of partition";
             return false;
         }
     }
     if (keyRange->ToBound) {
-        if (!TSerializedCellVec::TryParse(*keyRange->ToBound, bound) || bound.GetCells().size() != keySchema.size()
-            || CompareTypedCellVectors(boundary.GetCells().data(), bound.GetCells().data(), keySchema.data(), keySchema.size()) >= 0)
-        {
+        if (!compareWith(*keyRange->ToBound, result)) {
+            error = "ToBound of partition is not a full key of the topic key schema";
+            return false;
+        }
+        if (result >= 0) {
             error = "Split boundary is not less than ToBound of partition";
             return false;
         }
@@ -207,6 +233,14 @@ public:
             return nullptr;
         }
 
+        if (hasKeySchema && alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()
+            && alter.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()
+                != tabletConfig->GetPartitionStrategy().GetPartitionStrategyType())
+        {
+            errStr = "Changing the autopartitioning strategy is not supported for topics with a key schema";
+            return nullptr;
+        }
+
         if (alter.RootPartitionBoundariesSize()) {
             for (const auto& set : alter.GetRootPartitionBoundaries()) {
                 if (!set.HasPartition()) {
@@ -232,6 +266,10 @@ public:
                 }
                 if (!split.HasSplitBoundary()) {
                     errStr = "SplitBoundary must be specified for split operation";
+                    return nullptr;
+                }
+                if (hasKeySchema && split.GetCreateRootLevelSibling()) {
+                    errStr = "Root level siblings are not supported for topics with a key schema";
                     return nullptr;
                 }
             }

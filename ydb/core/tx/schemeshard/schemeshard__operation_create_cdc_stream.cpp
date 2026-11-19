@@ -817,7 +817,9 @@ void DoCreatePqPart(
 
     if (pqParams.ReplicationAutoPartitioning || pqParams.KeyRangeAutoPartitioning) {
         auto * ps = pqConfig.MutablePartitionStrategy();
-        ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+        ps->SetPartitionStrategyType(pqParams.KeyRangeAutoPartitioning
+            ? ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_PAUSED
+            : ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
         ps->SetMinPartitionCount(pqParams.MinPartitionCount);
         ps->SetMaxPartitionCount(pqParams.MaxPartitionCount);
         ps->SetScaleThresholdSeconds(30);
@@ -1015,10 +1017,14 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
 
 } // anonymous
 
+bool IsKeyRangeHeartbeatsRequested(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
+    return IsSupportedByReplication(streamDesc, "supports_key_range_autopartitioning");
+}
+
 bool ShouldUseKeyRangeHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
     return AppData()->FeatureFlags.GetEnableCdcKeyRangeHeartbeats()
         && streamDesc.GetResolvedTimestampsIntervalMs() > 0
-        && IsSupportedByReplication(streamDesc, "supports_key_range_autopartitioning");
+        && IsKeyRangeHeartbeatsRequested(streamDesc);
 }
 
 bool CheckCdcKeyRangeHeartbeatsCanBeUsed(

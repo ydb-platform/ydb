@@ -116,8 +116,6 @@ jobs:
           fi
       - name: checkout
         uses: actions/checkout@v5
-        env:
-          GIT_TRACE: "1"
         with:
           sparse-checkout: |
             .github
@@ -125,12 +123,7 @@ jobs:
       - name: Drop GitHub proxy
         if: vars.GH_PROXY_URL != ''
         shell: bash
-        run: |
-          {
-            echo "GIT_CONFIG_COUNT=0"
-            echo "GIT_CONFIG_KEY_0="
-            echo "GIT_CONFIG_VALUE_0="
-          } >> "$GITHUB_ENV"
+        run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
       - name: install packages
         shell: bash
         run: |

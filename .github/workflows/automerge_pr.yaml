@@ -105,12 +105,6 @@ jobs:
           fi
 
           echo "git pack GitHub $(megabytes "${direct_bytes:-0}") MB, 15s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, 15s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
-          {
-            echo "GH_PROXY_MEASURED=1"
-            echo "GH_PROXY_USED=$use_proxy"
-            echo "GH_PROXY_DIRECT_MBPS=$(megabytes "${direct_tail:-0}")"
-            echo "GH_PROXY_PROXY_MBPS=$(megabytes "${proxy_tail:-0}")"
-          } >> "$GITHUB_ENV"
 
           if [ "$use_proxy" = true ]; then
             {

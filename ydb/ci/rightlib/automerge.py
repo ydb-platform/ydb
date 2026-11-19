@@ -128,39 +128,10 @@ class PrAutomerger:
             self.add_failed_comment(pr, "Unable to push merged revision (failed to schedule retry).")
             self.add_pr_failed_label(pr)
 
-    def fetch_ref_matching_github(self, fetch_args, rev: str, expected: str) -> None:
-        """Fetch a ref and require it to be the commit GitHub API reports.
-
-        A proxy can answer a branch name with a different tip. The commit object
-        hash does not catch that. On mismatch, refetch without the proxy once.
-        """
-        self.git_transfer(*fetch_args)
-        actual = self.git_run("rev-parse", rev).strip()
-        if actual == expected:
-            return
-        if fetch_proxy_args():
-            self.logger.warning("%s is %s, GitHub has %s; refetching without proxy", rev, actual, expected)
-            self.git_run(*fetch_args, stream=True)
-            actual = self.git_run("rev-parse", rev).strip()
-            if actual == expected:
-                return
-        raise RuntimeError(f"{rev} is {actual}, GitHub has {expected}")
-
     def refresh_base_and_merge(self, pr: PullRequest, commit_msg: str) -> bool:
         base_ref = pr.base.ref
-        # Fetch may go through the probe-selected proxy. Tips must match GitHub
-        # before we merge. Push below does not use the proxy.
-        expected_base = self.repo.get_branch(base_ref).commit.sha
-        self.fetch_ref_matching_github(
-            ("fetch", "origin", base_ref),
-            f"origin/{base_ref}",
-            expected_base,
-        )
-        self.fetch_ref_matching_github(
-            ("fetch", "origin", f"pull/{pr.number}/head:PR"),
-            "PR",
-            pr.head.sha,
-        )
+        self.git_run("fetch", "origin", base_ref, proxy=True, stream=True)
+        self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR", proxy=True, stream=True)
         self.git_run("reset", "--hard", f"origin/{base_ref}")
         try:
             self.git_run("merge", "PR", "-m", commit_msg)
@@ -175,7 +146,7 @@ class PrAutomerger:
             repo_url = f"https://github.com/{self.repo_name}.git"
             proxy = os.environ.get("GH_FETCH_PROXY_URL", "").strip().rstrip("/")
             self.logger.info("clone %s via %s", repo_url, proxy or "direct")
-            clone_args = (
+            self.git_run(
                 "clone",
                 "--filter=blob:none",
                 "--single-branch",
@@ -183,17 +154,9 @@ class PrAutomerger:
                 pr.base.ref,
                 repo_url,
                 "merge-repo",
+                proxy=True,
+                stream=True,
             )
-            if fetch_proxy_args():
-                try:
-                    self.git_run(*clone_args, proxy=True, stream=True)
-                except subprocess.CalledProcessError:
-                    # Proxied clone can leave a partial directory; clear before a direct retry.
-                    self.logger.warning("proxied clone failed, retrying on github.com")
-                    shutil.rmtree("merge-repo", ignore_errors=True)
-                    self.git_run(*clone_args, stream=True)
-            else:
-                self.git_run(*clone_args, stream=True)
             os.chdir("merge-repo")
 
             commit_msg = f"Merge pull request #{pr.number} from {pr.head.user.login}/{pr.head.ref}"
@@ -273,7 +236,7 @@ class PrAutomerger:
             capture_output=True,
         )
 
-    def git_run(self, *args, proxy=False, stream=False, check=True):
+    def git_run(self, *args, proxy=False, stream=False):
         cmd = ["git"]
         if proxy:
             cmd.extend(fetch_proxy_args())
@@ -285,11 +248,11 @@ class PrAutomerger:
                 cmd,
                 env={**os.environ, "GIT_TRACE": "1"} if stream else None,
                 capture_output=not stream,
-                check=check,
+                check=True,
             )
         except subprocess.CalledProcessError as e:
-            stdout = (e.stdout or b"").decode() if not stream else ""
-            stderr = (e.stderr or b"").decode() if not stream else ""
+            stdout = (e.stdout or b"").decode()
+            stderr = (e.stderr or b"").decode()
             if stdout:
                 self.logger.error("stdout:\n%s", stdout)
             if stderr:
@@ -305,15 +268,6 @@ class PrAutomerger:
         if stderr:
             self.logger.info("stderr:\n%s", stderr)
         return stdout
-
-    def git_transfer(self, *args, check=True):
-        """Fetch or clone through the proxy, then retry on github.com if that fails."""
-        if fetch_proxy_args():
-            try:
-                return self.git_run(*args, proxy=True, stream=True, check=True)
-            except subprocess.CalledProcessError:
-                self.logger.warning("proxied git failed, retrying on github.com: %s", " ".join(args))
-        return self.git_run(*args, stream=True, check=check)
 
     def git_revparse_head(self):
         return self.git_run("rev-parse", "HEAD").strip()

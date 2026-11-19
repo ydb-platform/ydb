@@ -360,9 +360,9 @@ Y_UNIT_TEST(MultiSelectsInViewOrStatementAfterSelect) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YtCreateView.MinLangVer;
     ExpectFailWithError("create view plato.foo as do begin select 1; select 2; end do",
-                        "<main>:1:52: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
+                        "<main>:1:35: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
     ExpectFailWithError("create view plato.foo as do begin select 1;   $foo = 2; end do",
-                        "<main>:1:54: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
+                        "<main>:1:35: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
 }
 
 Y_UNIT_TEST(ErrorOnMissingCluster) {
@@ -374,9 +374,9 @@ Y_UNIT_TEST(ErrorOnMissingCluster) {
 
 Y_UNIT_TEST(ErrorOnTempView) {
     NSQLTranslation::TTranslationSettings settings;
-    ExpectFailWithError("create view plato.@foo as do begin select 1; end do", "<main>:1:20: Error: Temporary object is not supported\n", settings);
-    ExpectFailWithError("$path = 'foo'; create view plato.@$path as do begin select 1; end do", "<main>:1:35: Error: Temporary object is not supported\n", settings);
-    ExpectFailWithError("drop view plato.@foo", "<main>:1:18: Error: Temporary object is not supported\n", settings);
+    ExpectFailWithError("create view plato.@foo as do begin select 1; end do", "<main>:1:19: Error: Temporary object is not supported\n", settings);
+    ExpectFailWithError("$path = 'foo'; create view plato.@$path as do begin select 1; end do", "<main>:1:34: Error: Temporary object is not supported\n", settings);
+    ExpectFailWithError("drop view plato.@foo", "<main>:1:17: Error: Temporary object is not supported\n", settings);
 }
 
 Y_UNIT_TEST(CreateViewIfNotExists) {

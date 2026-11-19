@@ -41,7 +41,7 @@ public:
     public:
         TModificationGuard(TFilterVisitor& owner)
             : Owner(owner) {
-            AFL_VERIFY(!Owner.Started);
+            YDB_LOG_VERIFY(!Owner.Started);
             Owner.Started = true;
         }
 
@@ -57,7 +57,7 @@ public:
 private:
     template <class TArray>
     arrow::Status VisitImpl(const TArray& array) {
-        AFL_VERIFY(Started);
+        YDB_LOG_VERIFY(Started);
         for (ui32 i = 0; i < array.length(); ++i) {
             FiltersMerged.Add(!array.IsNull(i) && (bool)array.Value(i));
         }
@@ -73,11 +73,12 @@ TConclusion<TExecutionResult> TFilterProcessor::DoExecute(
     } else {
         inputColumns = context.MutableResources().GetAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
     }
-    AFL_VERIFY(inputColumns.size() == 1);
+    YDB_LOG_VERIFY(inputColumns.size() == 1);
     TFilterVisitor filterVisitor;
     for (auto& arr : inputColumns) {
-        AFL_VERIFY(arr->GetRecordsCount() == inputColumns.front()->GetRecordsCount())("arr", arr->GetRecordsCount())(
-                                               "first", inputColumns.front()->GetRecordsCount());
+        YDB_LOG_VERIFY(arr->GetRecordsCount() == inputColumns.front()->GetRecordsCount(),
+            {"arr", arr->GetRecordsCount()},
+            {"first", inputColumns.front()->GetRecordsCount()});
         std::shared_ptr<arrow::Scalar> monoValue;
         const auto isMonoValue = arr->CheckOneValueAccessor(monoValue);
         if (isMonoValue && *isMonoValue) {
@@ -101,8 +102,9 @@ TConclusion<TExecutionResult> TFilterProcessor::DoExecute(
         }
     }
     NArrow::TColumnFilter filter = filterVisitor.ExtractColumnFilter();
-    AFL_VERIFY(filter.GetRecordsCountVerified() == inputColumns.front()->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
-                                                     "input", inputColumns.front()->GetRecordsCount());
+    YDB_LOG_VERIFY(filter.GetRecordsCountVerified() == inputColumns.front()->GetRecordsCount(),
+        {"filter", filter.GetRecordsCountVerified()},
+        {"input", inputColumns.front()->GetRecordsCount()});
     if (context.GetLimit()) {
         context.MutableResources().AddFilter(filter);
         context.MutableResources().CutFilter(context.GetResources().GetRecordsCountRobustVerified(), *context.GetLimit(), context.GetReverse());

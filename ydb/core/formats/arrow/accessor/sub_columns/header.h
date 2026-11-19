@@ -62,7 +62,9 @@ public:
     }
 
     TReadRange GetColumnReadRange(const ui32 idx) const {
-        AFL_VERIFY(idx < (ui32)AddressesProto.GetKeyColumns().size())("count", AddressesProto.GetKeyColumns().size())("idx", idx);
+        YDB_LOG_VERIFY(idx < (ui32)AddressesProto.GetKeyColumns().size(),
+            {"count", AddressesProto.GetKeyColumns().size()},
+            {"idx", idx});
         ui32 idxLocal = 0;
         ui32 predShift = 0;
         for (auto&& i : AddressesProto.GetKeyColumns()) {
@@ -72,7 +74,7 @@ public:
             ++idxLocal;
             predShift += i.GetSize();
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TReadRange(0, 0);
     }
 

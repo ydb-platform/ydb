@@ -23,7 +23,7 @@ private:
 public:
     explicit TAccessorCollectedContainer(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& data)
         : Data(data) {
-        AFL_VERIFY(Data);
+        YDB_LOG_VERIFY(Data);
     }
 
     explicit TAccessorCollectedContainer(const arrow::Datum& data);
@@ -50,7 +50,7 @@ private:
 
 public:
     void TakeSequenceFrom(const TAccessorsCollection& collection) {
-        AFL_VERIFY(ColumnIdsSequence.empty() || ColumnIdsSequence == collection.ColumnIdsSequence);
+        YDB_LOG_VERIFY(ColumnIdsSequence.empty() || ColumnIdsSequence == collection.ColumnIdsSequence);
         ColumnIdsSequence = collection.ColumnIdsSequence;
     }
 
@@ -59,11 +59,11 @@ public:
     }
 
     void AddMarker(const i64 marker) {
-        AFL_VERIFY(Markers.emplace(marker).second);
+        YDB_LOG_VERIFY(Markers.emplace(marker).second);
     }
 
     void RemoveMarker(const i64 marker) {
-        AFL_VERIFY(Markers.erase(marker));
+        YDB_LOG_VERIFY(Markers.erase(marker));
     }
 
     bool IsEmptyFilter() const {
@@ -90,7 +90,7 @@ public:
     }
 
     ui32 GetRecordsCountActualVerified() const {
-        AFL_VERIFY(!!RecordsCountActual);
+        YDB_LOG_VERIFY(!!RecordsCountActual);
         return *RecordsCountActual;
     }
 
@@ -100,7 +100,7 @@ public:
             return Accessors.begin()->second->GetRecordsCount();
         }
         if (UseFilter) {
-            AFL_VERIFY(!!RecordsCountActual);
+            YDB_LOG_VERIFY(!!RecordsCountActual);
             return *RecordsCountActual;
         }
         // Not-applied filter mode: arrays keep their original length once a non-trivial filter is collected. Before that
@@ -108,7 +108,7 @@ public:
         if (RecordsCountActual && Filter->IsTotalAllowFilter()) {
             return *RecordsCountActual;
         }
-        AFL_VERIFY(!!RecordsCountOriginal);
+        YDB_LOG_VERIFY(!!RecordsCountOriginal);
         return *RecordsCountOriginal;
     }
 
@@ -132,7 +132,7 @@ public:
         if (UseFilter == value) {
             return;
         }
-        AFL_VERIFY(Filter->IsTotalAllowFilter());
+        YDB_LOG_VERIFY(Filter->IsTotalAllowFilter());
         UseFilter = value;
     }
 
@@ -173,9 +173,9 @@ public:
     void Upsert(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter);
 
     void AddConstantVerified(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& scalar) {
-        AFL_VERIFY(columnId);
-        AFL_VERIFY(scalar);
-        AFL_VERIFY(Constants.emplace(columnId, scalar).second);
+        YDB_LOG_VERIFY(columnId);
+        YDB_LOG_VERIFY(scalar);
+        YDB_LOG_VERIFY(Constants.emplace(columnId, scalar).second);
     }
 
     class TChunksMerger {
@@ -186,7 +186,7 @@ public:
 
     public:
         void AddChunk(const arrow::Datum& datum) {
-            AFL_VERIFY(!Finished);
+            YDB_LOG_VERIFY(!Finished);
             Chunks.emplace_back(datum);
             if (datum.is_scalar()) {
                 IsScalar = true;
@@ -194,7 +194,7 @@ public:
         }
 
         [[nodiscard]] TConclusion<arrow::Datum> Execute() {
-            AFL_VERIFY(!Finished);
+            YDB_LOG_VERIFY(!Finished);
             Finished = true;
             if (IsScalar) {
                 if (Chunks.size() == 1) {
@@ -283,11 +283,11 @@ public:
 
             arrow::Datum GetDatum(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<arrow::Datum>& scalars) const {
                 if (ArrayIndex) {
-                    AFL_VERIFY(*ArrayIndex < (ui32)batch->num_columns());
+                    YDB_LOG_VERIFY(*ArrayIndex < (ui32)batch->num_columns());
                     return batch->column_data(*ArrayIndex);
                 } else {
-                    AFL_VERIFY(ScalarIndex);
-                    AFL_VERIFY(*ScalarIndex < scalars.size());
+                    YDB_LOG_VERIFY(ScalarIndex);
+                    YDB_LOG_VERIFY(*ScalarIndex < scalars.size());
                     return scalars[*ScalarIndex];
                 }
             }
@@ -301,12 +301,15 @@ public:
 
     public:
         void AddArray(const std::shared_ptr<IChunkedArray>& arr, ui32 columnId) {
-            AFL_VERIFY(!Started);
+            YDB_LOG_VERIFY(!Started);
             if (Arrays.size()) {
-                AFL_VERIFY(ArraysOriginal.back()->GetRecordsCount() == arr->GetRecordsCount())("last", ArraysOriginal.back()->GetRecordsCount())(
-                                                                         "new", arr->GetRecordsCount())("last_type",
-                                                                         ArraysOriginal.back()->GetType())("current_type", arr->GetType())
-                                                                         ("last_column", LastColumnId)("current_column", columnId);
+                YDB_LOG_VERIFY(ArraysOriginal.back()->GetRecordsCount() == arr->GetRecordsCount(),
+                    {"last", ArraysOriginal.back()->GetRecordsCount()},
+                    {"new", arr->GetRecordsCount()},
+                    {"lastType", ArraysOriginal.back()->GetType()},
+                    {"currentType", arr->GetType()},
+                    {"lastColumn", LastColumnId},
+                    {"currentColumn", columnId});
             }
             LastColumnId = columnId;
             ArraysOriginal.emplace_back(arr);
@@ -316,24 +319,24 @@ public:
         }
 
         void AddScalar(const std::shared_ptr<arrow::Scalar>& scalar) {
-            AFL_VERIFY(!Started);
+            YDB_LOG_VERIFY(!Started);
             Scalars.emplace_back(scalar);
             Addresses.emplace_back(TArrayAddress::Scalar(Scalars.size() - 1));
         }
 
         void AddDictionary(const std::shared_ptr<TDictionaryArray>& dictionary, const ui32 index) {
-            AFL_VERIFY(!Started);
-            AFL_VERIFY(Arrays.empty());
-            AFL_VERIFY(!SpecialArgument);
+            YDB_LOG_VERIFY(!Started);
+            YDB_LOG_VERIFY(Arrays.empty());
+            YDB_LOG_VERIFY(!SpecialArgument);
             std::vector<TPart> parts;
             parts.emplace_back(dictionary);
             SpecialArgument.emplace(index, false, std::move(parts));
         }
 
         void AddComposite(const std::vector<std::shared_ptr<IChunkedArray>>& chunks, const ui32 index) {
-            AFL_VERIFY(!Started);
-            AFL_VERIFY(Arrays.empty());
-            AFL_VERIFY(!SpecialArgument);
+            YDB_LOG_VERIFY(!Started);
+            YDB_LOG_VERIFY(Arrays.empty());
+            YDB_LOG_VERIFY(!SpecialArgument);
             std::vector<TPart> parts;
             parts.reserve(chunks.size());
             for (const auto& chunk : chunks) {
@@ -359,8 +362,8 @@ public:
 
         void StartRead(const bool concatenate) {
             Started = true;
-            AFL_VERIFY(!Table);
-            AFL_VERIFY(Arrays.size() || Scalars.size() || SpecialArgument);
+            YDB_LOG_VERIFY(!Table);
+            YDB_LOG_VERIFY(Arrays.size() || Scalars.size() || SpecialArgument);
             if (Arrays.size()) {
                 Table = arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), Arrays);
                 if (concatenate) {
@@ -377,8 +380,8 @@ public:
         }
 
         std::optional<TBatch> ReadNext() {
-            AFL_VERIFY(Started);
-            AFL_VERIFY(!Finished);
+            YDB_LOG_VERIFY(Started);
+            YDB_LOG_VERIFY(!Finished);
             if (SpecialArgument) {
                 if (SpecialArgument->NextPartIndex == SpecialArgument->Parts.size()) {
                     Finished = true;
@@ -406,7 +409,7 @@ public:
                 ConstantsRead = true;
                 return TBatch{ Scalars, nullptr, 0 };
             } else {
-                AFL_VERIFY(Table);
+                YDB_LOG_VERIFY(Table);
                 std::shared_ptr<arrow::RecordBatch> chunk;
                 TStatusValidator::Validate(TableReader->ReadNext(&chunk));
                 if (!chunk) {
@@ -444,7 +447,7 @@ public:
         } else {
             auto itConst = Constants.find(columnId);
             if (!optional) {
-                AFL_VERIFY(itConst != Constants.end());
+                YDB_LOG_VERIFY(itConst != Constants.end());
             } else {
                 if (itConst == Constants.end()) {
                     return;
@@ -501,7 +504,8 @@ public:
 
     const std::shared_ptr<IChunkedArray>& GetAccessorVerified(const ui32 columnId) const {
         auto it = Accessors.find(columnId);
-        AFL_VERIFY(it != Accessors.end())("id", columnId);
+        YDB_LOG_VERIFY(it != Accessors.end(),
+            {"id", columnId});
         return it->second.GetData();
     }
 
@@ -518,7 +522,7 @@ public:
 
     std::shared_ptr<arrow::Field> GetFieldVerified(const ui32 columnId) const {
         auto it = Accessors.find(columnId);
-        AFL_VERIFY(it != Accessors.end());
+        YDB_LOG_VERIFY(it != Accessors.end());
         return std::make_shared<arrow::Field>(::ToString(columnId), it->second->GetDataType());
     }
 

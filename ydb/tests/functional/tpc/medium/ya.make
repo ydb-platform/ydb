@@ -11,10 +11,15 @@ TEST_SRCS(
     test_upload.py
     test_import_csv.py
     test_default_path.py
-    test_tpcc.py
+    test_tpch_wm.py
+    test_wm_oltp.py
+    test_wm_oltp_tpch.py
+    test_wm_oltp_adhoc.py
+    test_clickbench_wm.py
+    test_tpcc_sdk.py
+    test_tpcc_legacy.py
 )
 
-FORK_TESTS()
 FORK_TEST_FILES()
 
 IF (SANITIZER_TYPE)
@@ -37,6 +42,7 @@ ENV(OLTP_WORKLOAD_BINARY="ydb/tests/stress/oltp_workload/oltp_workload")
 
 PEERDIR(
     ydb/tests/functional/tpc/lib
+    ydb/tests/workload_manager/common
 )
 
 DEPENDS(

@@ -46,12 +46,12 @@ public:
     }
 
     const TString& GetSpecialKeysPayloadSafe() const {
-        AFL_VERIFY(SpecialKeysPayload);
+        YDB_LOG_VERIFY(SpecialKeysPayload);
         return *SpecialKeysPayload;
     }
 
     const TString& GetSpecialKeysFullSafe() const {
-        AFL_VERIFY(SpecialKeysFull);
+        YDB_LOG_VERIFY(SpecialKeysFull);
         return *SpecialKeysFull;
     }
 
@@ -72,7 +72,7 @@ public:
         , RawBytes(rawBytes)
         , SpecialKeysFull(specialKeysFull)
         , SpecialKeysPayload(specialKeysPayload) {
-        AFL_VERIFY(!!SpecialKeysPayload == !!SpecialKeysFull);
+        YDB_LOG_VERIFY(!!SpecialKeysPayload == !!SpecialKeysFull);
     }
 };
 

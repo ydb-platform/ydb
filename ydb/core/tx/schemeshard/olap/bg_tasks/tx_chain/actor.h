@@ -50,8 +50,8 @@ public:
     TTxChainActor(const std::shared_ptr<NKikimr::NOlap::NBackground::TSession>& session, const std::shared_ptr<NKikimr::NOlap::NBackground::ITabletAdapter>& adapter)
         : TBase(session, adapter)
     {
-        AFL_VERIFY(!!Session);
-        AFL_VERIFY(!!Adapter);
+        YDB_LOG_VERIFY(!!Session);
+        YDB_LOG_VERIFY(!!Adapter);
     }
 
     STATEFN(StateInProgress) {

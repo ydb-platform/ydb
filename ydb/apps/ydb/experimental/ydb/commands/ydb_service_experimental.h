@@ -17,6 +17,21 @@ public:
     TCommandExperimental();
 };
 
+class TCommandReassignTablets : public TYdbCommand, public TCommandWithOutput {
+public:
+    TCommandReassignTablets();
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    TString StoragePool;
+    ui32 GroupId = 0;
+    ui32 MaxInFlight = 1;
+    ui32 Percent = 100;
+    bool OnRestart = false;
+};
+
 class TCommandStreamQuery : public TYdbCommand
 {
 public:

@@ -571,6 +571,10 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         }
 
         // BlobDepot read path checks integrity of blobs in its backing groups
+        const auto pool = GetBridgeRequestCounters(env, 1);
+        const auto checks = pool->GetSubgroup("operation", "CheckIntegrity")->GetSubgroup("status", "OK")
+            ->GetCounter("completedRequests", true);
+        const auto checksBefore = checks->Val();
         {
             auto relay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
             auto ev = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(id, TInstant::Max(), NKikimrBlobStorage::FastRead);
@@ -582,8 +586,15 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
                 res->Get()->ToString());
             UNIT_ASSERT(res->Get()->ExecutionRelay == relay);
         }
+        UNIT_ASSERT_VALUES_EQUAL(checks->Val(), checksBefore + 1);
 
         // replication sends phantom checks to the physical group with its own generation
+        const auto reads = pool->GetSubgroup("handleClass", "GetAsync")->GetSubgroup("sizeClass", "262144")
+            ->GetCounter("requestBytes", true);
+        const auto writes = pool->GetSubgroup("handleClass", "PutTabletLog")->GetSubgroup("sizeClass", "256")
+            ->GetCounter("requestBytes", true);
+        const auto readBefore = reads->Val();
+        const auto writtenBefore = writes->Val();
         {
             auto ev = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::AsyncRead);
             ev->PhantomCheck = true;
@@ -604,6 +615,8 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
             UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::RACE, res->Get()->ToString());
         }
+        UNIT_ASSERT_VALUES_EQUAL(reads->Val(), readBefore);
+        UNIT_ASSERT_VALUES_EQUAL(writes->Val(), writtenBefore);
 
         checker.Write(groupId);
         checker.CheckAll();

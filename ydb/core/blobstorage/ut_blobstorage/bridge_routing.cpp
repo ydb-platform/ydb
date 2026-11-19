@@ -2,6 +2,7 @@
 #include "bridge_pile_ops.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/bridge/proxy/bridge_proxy.h>
 
@@ -172,6 +173,80 @@ namespace {
 
 Y_UNIT_TEST_SUITE(BridgeRouting) {
 
+    Y_UNIT_TEST(ClientRequestCounters) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto pool = GetBridgeRequestCounters(env, 1);
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TString data(300, 'x');
+        const TLogoBlobID first(100500, 1, 1, 0, data.size(), 0);
+        const TLogoBlobID second(100500, 1, 2, 0, data.size(), 0);
+        const TLogoBlobID missing(100500, 1, 3, 0, 19, 0);
+        const auto put = pool->GetSubgroup("handleClass", "PutUserData")->GetSubgroup("sizeClass", "4096");
+        const auto get = pool->GetSubgroup("handleClass", "GetFast")->GetSubgroup("sizeClass", "256");
+        auto send = [&](IEventBase *ev) {
+            env.Runtime->WrapInActorContext(edge, [&] { SendToBSProxy(edge, groupId, ev); });
+        };
+        auto bunch = std::make_unique<TEvBlobStorage::TEvBunchOfEvents>();
+        for (const auto& id : {first, second}) {
+            bunch->Bunch.emplace_back(new IEventHandle(MakeBlobStorageProxyID(groupId), edge,
+                new TEvBlobStorage::TEvPut(id, data, TInstant::Max(), NKikimrBlobStorage::UserData)));
+        }
+        send(bunch.release());
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(put->GetCounter("requestBytes", true)->Val(), 2 * data.size());
+        UNIT_ASSERT_VALUES_EQUAL(put->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val(), 2);
+
+        TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[2]);
+        queries[0].Set(first, 4, 13);
+        queries[1].Set(missing, 3); // read the remaining 16 bytes
+        send(new TEvBlobStorage::TEvGet(queries, 2, TInstant::Max(), NKikimrBlobStorage::FastRead));
+        const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer.size(), 13);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[1].Status, NKikimrProto::NODATA);
+        UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("requestBytes", true)->Val(), 29);
+        UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("responseBytes", true)->Val(), 13);
+        UNIT_ASSERT_VALUES_EQUAL(get->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val(), 1);
+    }
+
+    Y_UNIT_TEST(LatencyIncludesQueueAndRoutingRestart) {
+        TQueuedRoutingTest test;
+        test.SendGet(1);
+        test.Env.Sim(TDuration::MilliSeconds(1300));
+        test.HoldResults = true;
+        test.MakeRoutingAvailable();
+        WaitUntil(test.Env, [&] { return !test.HeldResults.empty(); }, "dispatched read", TDuration::MilliSeconds(10), 100);
+        // A lagging pile routes the original request back through the service id, to a different bridge proxy.
+        test.HoldResults = false;
+        for (auto& ev : std::exchange(test.HeldResults, {})) {
+            auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
+            msg->Status = NKikimrProto::RACE;
+            msg->RacingGeneration = 0;
+            test.Env.Runtime->Send(ev.release(), 1);
+        }
+        test.CheckSuccess(1);
+        const auto pool = GetBridgeRequestCounters(test.Env, 1);
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetCounter("RoutingRestarts", true)->Val(), 1);
+        const auto get = pool->GetSubgroup("handleClass", "GetFast")->GetSubgroup("sizeClass", "256");
+        UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("requestBytes", true)->Val(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(get->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val(), 1);
+        const auto hist = get->FindHistogram("responseTimeMs");
+        UNIT_ASSERT(hist);
+        const auto snapshot = hist->Snapshot();
+        ui64 samples = 0;
+        for (ui32 i = 0; i < snapshot->Count(); ++i) {
+            samples += snapshot->Value(i);
+            if (snapshot->Value(i)) {
+                UNIT_ASSERT_GE(snapshot->UpperBound(i), 1300);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(samples, 1);
+    }
+
     Y_UNIT_TEST(RestartLimitReturnsError) {
         TQueuedRoutingTest test;
         test.MakeRoutingAvailable();
@@ -202,6 +277,11 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         test.SendGet(2);
         test.CheckSuccess(2);
         test.Env.Sim(TDuration::Seconds(3)); // expired work must not resume or reply twice
+        const auto pool = GetBridgeRequestCounters(test.Env, 1);
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetCounter("RoutingTimeouts", true)->Val(), 1);
+        const auto get = pool->GetSubgroup("handleClass", "GetFast")->GetSubgroup("sizeClass", "256");
+        UNIT_ASSERT_VALUES_EQUAL(get->GetSubgroup("status", "ERROR")->GetCounter("completedRequests", true)->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("requestBytes", true)->Val(), 20);
     }
 
     Y_UNIT_TEST(QueuedDeadlineOvertakesEarlierRequest) {
@@ -574,6 +654,9 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         env.Runtime->FilterFunction = {};
         UNIT_ASSERT(poisoned);
         UNIT_ASSERT_C(res, "restarted request lost when the proxy stopped");
+        const auto put = GetBridgeRequestCounters(env, 1)->GetSubgroup("handleClass", "PutTabletLog")
+            ->GetSubgroup("sizeClass", "256");
+        UNIT_ASSERT_VALUES_EQUAL(put->GetSubgroup("status", "ERROR")->GetCounter("completedRequests", true)->Val(), 1);
     }
 
     // the request restarted as it waits for the pile disconnected keeps the routing wait it has left

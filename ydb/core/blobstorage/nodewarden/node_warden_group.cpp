@@ -331,9 +331,13 @@ namespace NKikimr::NStorage {
             group.GroupResolver = {};
         }
 
+        bool syncersChanged = false;
         for (auto it = WorkingSyncers.lower_bound(TWorkingSyncer{.BridgeProxyGroupId = TGroupId::FromValue(groupId)});
                 it != WorkingSyncers.end() && it->BridgeProxyGroupId.GetRawId() == groupId; ++it) {
-            StartSyncerIfNeeded(const_cast<TWorkingSyncer&>(*it));
+            syncersChanged |= StartSyncerIfNeeded(const_cast<TWorkingSyncer&>(*it));
+        }
+        if (syncersChanged) {
+            UpdateSyncerCounters();
         }
     }
 

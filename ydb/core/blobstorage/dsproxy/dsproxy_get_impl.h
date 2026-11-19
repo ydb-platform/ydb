@@ -107,16 +107,7 @@ public:
     }
 
     ui32 CountRequestBytes() const {
-        ui32 res = 0;
-        for (ui32 k = 0; k < QuerySize; ++k) {
-            const auto& query = Queries[k];
-            ui32 size = query.Size;
-            if (!size) {
-                size = Max<i32>(0, query.Id.BlobSize() - query.Shift);
-            }
-            res += size;
-        }
-        return res;
+        return TEvBlobStorage::TEvGet::CountRequestBytes({Queries.Get(), QuerySize});
     }
 
     ui64 GetReplyBytes() {

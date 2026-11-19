@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/sys_view/common/events.h>
@@ -12,6 +13,11 @@
 
 // helpers shared by bridge tests
 namespace NBridgeTest {
+
+    inline ::NMonitoring::TDynamicCounterPtr GetBridgeRequestCounters(TEnvironmentSetup& env, ui32 nodeId) {
+        return GetServiceCounters(env.Runtime->GetNode(nodeId)->AppData->Counters, "dsproxynode")
+            ->GetSubgroup("subsystem", "bridge_request")->GetSubgroup("storagePool", env.StoragePoolName);
+    }
 
     // nodes of natively bridged cluster: 8 nodes per pile
     inline TNodeLocation GetBridgedLocation(ui32 nodeId) {

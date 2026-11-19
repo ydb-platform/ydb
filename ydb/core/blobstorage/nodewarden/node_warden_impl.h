@@ -937,6 +937,7 @@ namespace NKikimr::NStorage {
         };
 
         std::set<TWorkingSyncer> WorkingSyncers;
+        ::NMonitoring::TDynamicCounterPtr BridgeSyncNodeCounters;
 
         // the parts of HOT_STANDBY piles the local bridge proxies have found missing a write, reported to BSC along
         // with the syncer progress; the value tells whether a blob write may have been lost
@@ -976,8 +977,9 @@ namespace NKikimr::NStorage {
         void Handle(NGroupSyncer::TEvMirror3dcRepairScanResult::TPtr& ev);
 
         void UpdateSyncRateQuoter();
+        void UpdateSyncerCounters();
         void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
-        void StartSyncerIfNeeded(TWorkingSyncer& syncer);
+        bool StartSyncerIfNeeded(TWorkingSyncer& syncer);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenNotifySyncerFinished>> ev);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenStandbyDirty>> ev);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenRegisterBridgeProxy>> ev);

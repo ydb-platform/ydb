@@ -712,6 +712,9 @@ struct TEvBlobStorage {
         ui32 RestartCounter = 0;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
         std::optional<ui32> ForceGroupGeneration;
+        // First receipt of this logical request by a bridge proxy. Restarts keep the original event;
+        // clones sent to the physical groups start with their own request state.
+        TMonotonic BridgeProxyStartTime = TMonotonic::Max();
 
         // Admission hint deciding whether the write this request performs -- the put itself, or the
         // restore a MustRestoreFirst read triggers -- is still accepted when the group is low on
@@ -738,7 +741,7 @@ struct TEvBlobStorage {
             case EvBlock:
                 return "Block";
             case EvCollectGarbage:
-                return "CollectGarbase";
+                return "CollectGarbage";
             case EvDiscover:
                 return "Discover";
             case EvPatch:
@@ -1037,6 +1040,14 @@ struct TEvBlobStorage {
                 return str.Str();
             }
         };
+
+        static ui64 CountRequestBytes(TConstArrayRef<TQuery> queries) {
+            ui64 bytes = 0;
+            for (const auto& query : queries) {
+                bytes += query.Size ? query.Size : Max<i32>(0, query.Id.BlobSize() - query.Shift);
+            }
+            return bytes;
+        }
 
         // todo: replace with queue-like thing
         const ui32 QuerySize;

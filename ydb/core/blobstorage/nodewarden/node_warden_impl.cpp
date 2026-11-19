@@ -436,6 +436,11 @@ void TNodeWarden::PassAway() {
         new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(SelfId()));
 
     NTabletPipe::CloseClient(SelfId(), PipeClientId);
+    WorkingSyncers.clear();
+    UpdateSyncerCounters();
+    if (BridgeSyncNodeCounters) {
+        BridgeSyncNodeCounters->GetCounter("SyncRateLimitBytesPerSecond")->Set(0);
+    }
     StopInvalidGroupProxy();
     TerminateBlobDepotS3Routers();
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyNodeMonActor, {}, nullptr, 0));
@@ -663,6 +668,11 @@ void TNodeWarden::Bootstrap() {
     // create bridge syncer rate quoter
     SyncRateConfigLimit = Cfg->BlobStorageConfig->GetBridgeSyncRateBytesPerSecond();
     SyncRateQuoter = std::make_shared<TReplQuoter>(SyncRateConfigLimit);
+    if (AppData()->BridgeModeEnabled) {
+        BridgeSyncNodeCounters = GetServiceCounters(AppData()->Counters, "bridge|nodewarden");
+        UpdateSyncerCounters();
+        BridgeSyncNodeCounters->GetCounter("SyncRateLimitBytesPerSecond")->Set(SyncRateConfigLimit);
+    }
 
     // start compaction broker
     actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(

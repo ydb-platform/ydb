@@ -10,6 +10,8 @@
 
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h> // for TEvNodeConfigInvokeOnRootResult
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NGroupSyncer {
@@ -19,6 +21,7 @@ namespace NKikimr::NGroupSyncer {
         const TGroupId SourceGroupId;
         const TGroupId TargetGroupId;
         std::shared_ptr<TSyncerDataStats> SyncerDataStats;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PayloadBytesWritten;
         TString LogId;
         NKikimrBridge::TGroupState::EStage Stage;
         bool Finished = false;

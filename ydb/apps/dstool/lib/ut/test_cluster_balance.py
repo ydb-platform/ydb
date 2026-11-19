@@ -46,22 +46,36 @@ def response_to(node, index=0):
     return response
 
 
-@pytest.mark.parametrize('pdisk_type, nodes', [(None, {1, 2, 3}), ('ROT', {1}), ('SSD', {2}), ('NVME', {3})])
-def test_pdisk_type_selection(strategy, pdisk_type, nodes):
-    strategy.args.pdisk_type = pdisk_type
-    for pdisk, media_type in zip(strategy.cluster_info.base_config.PDisk, ('ROT', 'SSD', 'NVME')):
-        pdisk.Type = balance.common.EPDiskType.Value(media_type)
-    strategy = balance.VSlotBalancingStrategy(strategy.args, strategy.cluster_info, strategy.groups_info)
-    strategy.calculate_extra_info()
-    candidates, _ = strategy.list_candidate_vslots()
-    assert {vslot.VSlotId.NodeId for vslot in candidates} == nodes
-    assert strategy.histo == balance.Counter(strategy.cluster_info.pdisk_usage[node, 1] for node in nodes)
+@pytest.mark.parametrize('pdisk_type, expected_groups, expected_histo', [
+    (None, {101, 202, 303}, {6: 1, 5: 1, 2: 1}),
+    ('ROT', {101}, {6: 1}),
+    ('SSD', {202}, {5: 1}),
+    ('NVME', {303}, {2: 1}),
+])
+def test_pdisk_type_selection(strategy, pdisk_type, expected_groups, expected_histo):
+    info = strategy.cluster_info
+    vslots = balance.common.build_vslot_map(info.base_config)
+    for node, media_type, group_id, used_slots in (
+        (1, 'ROT', 101, 6),
+        (2, 'SSD', 202, 5),
+        (3, 'NVME', 303, 2),
+    ):
+        info.pdisk_map[node, 1].Type = balance.common.EPDiskType.Value(media_type)
+        vslots[node, 1, 1].GroupId = group_id
+        info.pdisk_usage[node, 1] = used_slots
+    strategy.groups_info.healthy_groups = {101, 202, 303}
 
-    # Each group in this fixture resides on PDisks of one Type; GroupId equals NodeId.
-    strategy.args.pdisk_type = None
-    strategy.args.group_ids = nodes
-    by_group_ids = balance.VSlotBalancingStrategy(strategy.args, strategy.cluster_info, strategy.groups_info)
-    by_group_ids.calculate_extra_info()
+    by_type_args = SimpleNamespace(**vars(strategy.args))
+    by_type_args.pdisk_type = pdisk_type
+    by_type = balance.VSlotBalancingStrategy(by_type_args, info, strategy.groups_info)
+    by_type.calculate_extra_info()
+    candidates, _ = by_type.list_candidate_vslots()
+    assert {vslot.GroupId for vslot in candidates} == expected_groups
+    assert by_type.histo == expected_histo
+
+    by_group_ids_args = SimpleNamespace(**vars(strategy.args))
+    by_group_ids_args.group_ids = expected_groups
+    by_group_ids = balance.VSlotBalancingStrategy(by_group_ids_args, info, strategy.groups_info)
     assert by_group_ids.list_candidate_vslots()[0] == candidates
 
 

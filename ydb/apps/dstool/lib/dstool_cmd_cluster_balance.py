@@ -48,7 +48,7 @@ def add_options(p):
     g = p.add_mutually_exclusive_group()
     g.add_argument('--storage-pool', type=str, help='Storage pool to balance')
     common.add_group_ids_option(g)
-    p.add_argument('--pdisk-type', choices=common.EPDiskType.keys(), help='Filter candidate VDisks by source PDisk Type')
+    p.add_argument('--pdisk-type', choices=['ROT', 'SSD', 'NVME'], help='Filter candidate VDisks by source PDisk Type')
     p.add_argument('--max-donors-per-pdisk', type=int, default=0, help='Limit number of donors per pdisk')
     p.add_argument('--allow-same-node', action='store_true', help='Allow to relocate vdisks from one group to the same node')
     p.add_argument('--prefer-less-occupied-rack', action='store_true', help='Take into account racks\' free slots picking pdisk from rack with more free slots first')

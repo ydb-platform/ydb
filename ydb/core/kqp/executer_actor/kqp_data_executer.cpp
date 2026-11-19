@@ -25,7 +25,6 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
-#include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
@@ -979,11 +978,6 @@ private:
         }
         ExecuterStateSpan.EndOk();
 
-        if (!GetUserRequestContext()->IsStreamingQuery) {
-            // The reply event dies before shard reads finish. Keep its
-            // registration until this executer completes or aborts the query.
-            AcquiredSnapshotHandle = std::move(msg->SnapshotHandle);
-        }
         SetSnapshot(msg->Snapshot.Step, msg->Snapshot.TxId);
         ImmediateTx = true;
 
@@ -1389,8 +1383,6 @@ private:
 
     // Lock handle for a newly acquired lock
     TLockHandle LockHandle;
-
-    TSnapshotHandle AcquiredSnapshotHandle;
 
     const TDuration WaitCAStatsTimeout;
 

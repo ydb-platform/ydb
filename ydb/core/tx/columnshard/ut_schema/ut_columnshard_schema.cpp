@@ -1113,10 +1113,6 @@ void TestDropMvccAndCleanupWithActiveScan(const bool enableSnapshotsLocking) {
             auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
             registryBuilder->AddSnapshot({}, TRowVersion(writeSnapshot.GetPlanStep(), writeSnapshot.GetTxId()));
             registryBuilder->SetOldestCollectionTime(runtime.GetCurrentTime());
-            const ui64 nowMs = runtime.GetCurrentTime().MilliSeconds();
-            const ui64 promotionMs = TDuration::Seconds(
-                runtime.GetAppData(0).LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds()).MilliSeconds();
-            registryBuilder->SetMinPromotionCutoffStep(nowMs > promotionMs ? nowMs - promotionMs : 0);
             runtime.GetAppData(0).SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build());
         }
 
@@ -1206,10 +1202,6 @@ void TestEmptyDroppedTableCleanupWaitsForReadWindow(const bool enableSnapshotsLo
             registryBuilder->AddSnapshot({}, TRowVersion(snapshot->GetPlanStep(), snapshot->GetTxId()));
         }
         registryBuilder->SetOldestCollectionTime(runtime.GetCurrentTime());
-        const ui64 nowMs = runtime.GetCurrentTime().MilliSeconds();
-        const ui64 promotionMs = TDuration::Seconds(
-            runtime.GetAppData(0).LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds()).MilliSeconds();
-        registryBuilder->SetMinPromotionCutoffStep(nowMs > promotionMs ? nowMs - promotionMs : 0);
         runtime.GetAppData(0).SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build());
     };
 

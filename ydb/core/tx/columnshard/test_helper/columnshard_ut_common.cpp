@@ -33,10 +33,11 @@ using namespace Tests;
 namespace {
 
 // The basic tablet test runtime has no LongTxService to keep a registry fresh, but cleanup that goes
-// through TRegistryScanSnapshotGuard needs a promotion cutoff that advances with
-// the clock. This stand-in is an always-empty registry (border = Max, no
-// snapshots) whose cutoff follows the local producer's configured promotion
-// delay, mirroring a single-node cluster with current collection state.
+// through TRegistryScanSnapshotGuard needs a freshness marker (OldestCollectionTime) that advances
+// with the clock. This stand-in is an always-empty registry (border = Max, no snapshots) whose
+// OldestCollectionTime is the live "now", mirroring a single-node cluster where the local node's
+// collection time is always current. A frozen value (e.g. the default TInstant::Zero()) would
+// collapse the cleanup floor to 0 and nothing would ever be collected.
 class TLiveEmptySnapshotRegistry: public IImmutableSnapshotRegistry {
 public:
     bool HasSnapshot(const NKikimr::TTableId&, const TRowVersion&) const override {
@@ -57,13 +58,6 @@ public:
 
     TInstant GetOldestCollectionTime() const override {
         return AppData()->TimeProvider->Now();
-    }
-
-    ui64 GetMinPromotionCutoffStep() const override {
-        const ui64 nowMs = AppData()->TimeProvider->Now().MilliSeconds();
-        const ui64 promotionMs = TDuration::Seconds(
-            AppData()->LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds()).MilliSeconds();
-        return nowMs > promotionMs ? nowMs - promotionMs : 0;
     }
 };
 
@@ -97,7 +91,7 @@ void TTester::Setup(TTestActorRuntime& runtime, TVector<TIntrusivePtr<NFake::TPr
     SetupTabletServices(runtime, &app, mockDisk, {}, nullptr, false, std::move(dsProxies));
 
     // No LongTxService actor is created in this basic test runtime, so install a stand-in registry with a
-    // live promotion cutoff; otherwise TRegistryScanSnapshotGuard sees a frozen zero cutoff and
+    // live OldestCollectionTime; otherwise TRegistryScanSnapshotGuard sees a frozen Zero freshness and
     // never advances the cleanup floor. Tests that specifically test the registry path
     // (ut_scan_snapshot_guard_integration.cpp) override these settings after calling Setup().
     InstallTimingBasedSnapshotRegistry(runtime);
@@ -117,7 +111,7 @@ void InstallTimingBasedSnapshotRegistry(TTestActorRuntime& runtime) {
         appData.LongTxServiceConfig.SetMaxClockSkewMs(12000);
         // If a real LongTxService is present (e.g. TTestEnv), it may take over this holder once its remote
         // storage is ready. Keep its exchange/rebuild cadence short so the registry it publishes keeps a
-        // fresh promotion cutoff; harmless in runtimes that have no LongTxService.
+        // fresh OldestCollectionTime; harmless in runtimes that have no LongTxService.
         appData.LongTxServiceConfig.SetSnapshotsExchangeIntervalSeconds(1);
         appData.LongTxServiceConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
     }

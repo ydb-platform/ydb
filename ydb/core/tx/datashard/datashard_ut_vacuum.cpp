@@ -124,9 +124,6 @@ Y_UNIT_TEST_SUITE(Vacuum) {
     {
         auto builder = CreateImmutableSnapshotRegistryBuilder();
         builder->SetOldestCollectionTime(runtime.GetCurrentTime());
-        const auto& config = runtime.GetAppData(0).LongTxServiceConfig;
-        builder->SetMinPromotionCutoffStep((runtime.GetCurrentTime()
-            - TDuration::Seconds(config.GetLocalSnapshotPromotionTimeSeconds())).MilliSeconds());
         builder->SetSnapshotBorder(TRowVersion::Max());
         for (const auto& snapshot : snapshots) {
             builder->AddSnapshot({tableId}, snapshot);

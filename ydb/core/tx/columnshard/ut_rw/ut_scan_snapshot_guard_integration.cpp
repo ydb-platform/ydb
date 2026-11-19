@@ -105,21 +105,17 @@ void AssertScanHasSingleMessageValue(TScanContext& context, const NOlap::TSnapsh
 void ConfigureRegistry(TScanContext& context, const std::optional<TRowVersion>& border = std::nullopt,
     const TVector<TRowVersion>& snapshots = {}, const std::optional<TInstant>& oldestCollectionTime = std::nullopt) {
     auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
-    auto& appData = context.Runtime.GetAppData(0);
     if (border) {
         registryBuilder->SetSnapshotBorder(*border);
     }
     if (oldestCollectionTime) {
         registryBuilder->SetOldestCollectionTime(*oldestCollectionTime);
-        const ui64 collectionMs = oldestCollectionTime->MilliSeconds();
-        const ui64 promotionMs = TDuration::Seconds(
-            appData.LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds()).MilliSeconds();
-        registryBuilder->SetMinPromotionCutoffStep(collectionMs > promotionMs ? collectionMs - promotionMs : 0);
     }
     for (const auto& snapshot : snapshots) {
         registryBuilder->AddSnapshot({}, snapshot);
     }
 
+    auto& appData = context.Runtime.GetAppData(0);
     if (!appData.SnapshotRegistryHolder) {
         appData.SnapshotRegistryHolder = CreateImmutableSnapshotRegistryHolder();
     }

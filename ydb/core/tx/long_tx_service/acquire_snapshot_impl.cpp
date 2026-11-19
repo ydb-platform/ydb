@@ -213,18 +213,13 @@ namespace NLongTxService {
         req.DatabaseName = databaseName;
         req.UserRequests.swap(state.PendingUserRequests);
         req.BeginTxRequests.swap(state.PendingBeginTxRequests);
+        Register(new TAcquireSnapshotActor(SelfId(), reqId, databaseName));
         state.ActiveRequests.insert(reqId);
-        StartAcquireSnapshotAttempt(reqId, databaseName);
 
-        // Count the batch once, including any freshness retries it needs.
         if (Settings.Counters) {
             Settings.Counters->AcquireReadSnapshotOutRequests->Inc();
             Settings.Counters->AcquireReadSnapshotOutInFlight->Inc();
         }
-    }
-
-    void TLongTxServiceActor::StartAcquireSnapshotAttempt(ui64 requestId, const TString& databaseName) {
-        Register(new TAcquireSnapshotActor(SelfId(), requestId, databaseName));
     }
 
 } // namespace NLongTxService

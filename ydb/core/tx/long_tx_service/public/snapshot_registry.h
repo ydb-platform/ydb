@@ -30,13 +30,8 @@ public:
 
     virtual TRowVersion GetBorder() const = 0;
 
-    // Oldest collection time across all nodes (local node = now), for freshness diagnostics.
+    // Freshness bound for cleanup: oldest collection time across all nodes (local node = now).
     virtual TInstant GetOldestCollectionTime() const = 0;
-
-    // Minimum inclusive snapshot-step cutoff actually used by the producers.
-    // Younger snapshots may not be published yet. Zero preserves history when
-    // an implementation does not provide this information.
-    virtual ui64 GetMinPromotionCutoffStep() const { return 0; }
 };
 
 class IImmutableSnapshotRegistryHolder : public TThrRefBase {
@@ -59,10 +54,6 @@ public:
     virtual void SetSnapshotBorder(const TRowVersion& version) = 0;
 
     virtual void SetOldestCollectionTime(TInstant oldestCollectionTime) = 0;
-
-    // Optional for existing builders. Registries without this metadata retain
-    // the conservative zero cutoff supplied by the interface above.
-    virtual void SetMinPromotionCutoffStep(ui64) {}
 
     virtual void AddSnapshot(const TVector<NKikimr::TTableId>& tableIds, const TRowVersion& version) = 0;
 

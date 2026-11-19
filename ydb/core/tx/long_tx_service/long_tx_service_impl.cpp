@@ -23,8 +23,6 @@ namespace NLongTxService {
 
 static constexpr size_t MaxAcquireSnapshotInFlight = 4;
 static constexpr TDuration AcquireSnapshotBatchDelay = TDuration::MicroSeconds(100);
-static constexpr ui32 MaxAcquireSnapshotFreshnessRetries = 3;
-static constexpr TDuration AcquireSnapshotRetryDelay = TDuration::MilliSeconds(100);
 static constexpr TDuration RemoteLockTimeout = TDuration::Seconds(15);
 static constexpr bool InterconnectUndeliveryBroken = true;
 
@@ -452,7 +450,9 @@ void TLongTxServiceActor::RegisterRequestedSnapshot(
                              std::move(msg->Orbit)), 0, ev->Cookie);
         return;
     }
-    const ui64 oldestAllowedStep = GetOldestAllowedSnapshotStep();
+    const auto promotionTime =
+        TDuration::Seconds(AppData()->LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds());
+    const ui64 oldestAllowedStep = PromotionCutoffStep(AppData()->TimeProvider->Now(), promotionTime);
     // Older versions may already have been absent from a collection that
     // authorized cleanup. Young versions are protected until publication by
     // the registry freshness floor and its promotion/clock-skew margin.
@@ -478,12 +478,6 @@ void TLongTxServiceActor::RegisterRequestedSnapshot(
     Send(ev->Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, snapshot, std::move(handle),
                          std::move(msg->Orbit)), 0, ev->Cookie);
     return;
-}
-
-ui64 TLongTxServiceActor::GetOldestAllowedSnapshotStep() const {
-    const auto promotionTime =
-        TDuration::Seconds(AppData()->LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds());
-    return PromotionCutoffStep(AppData()->TimeProvider->Now(), promotionTime);
 }
 
 void TLongTxServiceActor::ScheduleAcquireSnapshot(const TString& databaseName, TDatabaseSnapshotState& state) {
@@ -514,13 +508,6 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFlush::TPtr& ev) 
     StartAcquireSnapshotActor(msg->DatabaseName, state);
 }
 
-void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotRetry::TPtr& ev) {
-    const auto requestId = ev->Get()->RequestId;
-    const auto* req = AcquireSnapshotInFlight.FindPtr(requestId);
-    Y_ABORT_UNLESS(req, "Unexpected retry for request that is not inflight");
-    StartAcquireSnapshotAttempt(requestId, req->DatabaseName);
-}
-
 void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& ev) {
     const auto* msg = ev->Get();
     YDB_LOG_DEBUG("Received TEvAcquireSnapshotFinished,",
@@ -534,36 +521,10 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
     auto* state = DatabaseSnapshots.FindPtr(databaseName);
     Y_ABORT_UNLESS(state && state->ActiveRequests.contains(ev->Cookie), "Unexpected database snapshot state");
 
-    auto status = msg->Status;
-    NYql::TIssues issues = msg->Issues;
-    const bool snapshotsLockingEnabled = AppData()->FeatureFlags.GetEnableSnapshotsLocking();
-    if (status == Ydb::StatusIds::SUCCESS && snapshotsLockingEnabled) {
-        const ui64 oldestAllowedStep = GetOldestAllowedSnapshotStep();
-        // Validate in the parent before replying or registering retention:
-        // even a fresh coordinator result may become unsafe while delayed.
-        if (msg->Snapshot.Step < oldestAllowedStep) {
-            YDB_LOG_DEBUG("Acquired snapshot is outside the safe registration window,",
-                {"logPrefix", LogPrefix},
-                {"snapshot", msg->Snapshot},
-                {"minimumStep", oldestAllowedStep},
-                {"freshnessRetries", req->FreshnessRetries});
-            if (req->FreshnessRetries < MaxAcquireSnapshotFreshnessRetries) {
-                ++req->FreshnessRetries;
-                Schedule(AcquireSnapshotRetryDelay, new TEvPrivate::TEvAcquireSnapshotRetry(ev->Cookie));
-                return;
-            }
-            status = Ydb::StatusIds::UNAVAILABLE;
-            issues.AddIssue(TStringBuilder() << "Cannot acquire a snapshot within the safe registration window"
-                                            << " after " << req->FreshnessRetries << " freshness retries"
-                                            << " (retry delay: " << AcquireSnapshotRetryDelay.MilliSeconds() << " ms)"
-                                            << "; snapshot: " << msg->Snapshot << "; minimum step: " << oldestAllowedStep);
-        }
-    }
-
-    if (status == Ydb::StatusIds::SUCCESS) {
+    if (msg->Status == Ydb::StatusIds::SUCCESS) {
         for (auto& userReq : req->UserRequests) {
             NKqp::TSnapshotHandle snapshotHandle;
-            if (snapshotsLockingEnabled) {
+            if (AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
                 TLocalSnapshotInfo snapshotInfo(msg->Snapshot, userReq.Sender, std::move(userReq.TableIds));
                 snapshotHandle = NKqp::TSnapshotHandle(snapshotInfo.AliveFlag);
                 if (!LocalSnapshotsStorage->Insert(std::move(snapshotInfo))) {
@@ -599,11 +560,11 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
         }
     } else {
         for (auto& userReq : req->UserRequests) {
-            LWTRACK(AcquireReadSnapshotFailure, userReq.Orbit, int(status));
-            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(status, issues, std::move(userReq.Orbit)), 0, userReq.Cookie);
+            LWTRACK(AcquireReadSnapshotFailure, userReq.Orbit, int(msg->Status));
+            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(msg->Status, msg->Issues, std::move(userReq.Orbit)), 0, userReq.Cookie);
         }
         for (auto& beginReq : req->BeginTxRequests) {
-            Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(status, issues), 0, beginReq.Cookie);
+            Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(msg->Status, msg->Issues), 0, beginReq.Cookie);
         }
     }
 
@@ -1962,15 +1923,12 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
     auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
     registryBuilder->SetSnapshotBorder(RemoteSnapshotsStorage->GetBorder());
     registryBuilder->SetOldestCollectionTime(RemoteSnapshotsStorage->GetOldestCollectionTime());
-    auto localSnapshots = LocalSnapshotsStorage->View();
-    registryBuilder->SetMinPromotionCutoffStep(
-        RemoteSnapshotsStorage->GetPromotionCutoffStep(localSnapshots.GetMaxSnapshotStep()));
 
     size_t localSnapshotsCount = 0;
     ui64 now = AppData()->TimeProvider->Now().MilliSeconds();
     ui64 oldestSnapshotStep = now;
     ui64 oldestLocalSnapshotStep = now;
-    for (const auto& snapshotInfo : localSnapshots) {
+    for (const auto& snapshotInfo : LocalSnapshotsStorage->View()) {
         registryBuilder->AddSnapshot(snapshotInfo.TableIds, snapshotInfo.Snapshot);
         ++localSnapshotsCount;
         oldestLocalSnapshotStep = std::min(oldestLocalSnapshotStep, snapshotInfo.Snapshot.Step);

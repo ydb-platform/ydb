@@ -22,12 +22,10 @@ namespace {
 
         TImmutableSnapshotRegistry() = default;
         
-        explicit TImmutableSnapshotRegistry(TSnapshotMap&& snapshots, TRowVersion snapshotBorder,
-            TInstant oldestCollectionTime, ui64 minPromotionCutoffStep)
+        explicit TImmutableSnapshotRegistry(TSnapshotMap&& snapshots, TRowVersion snapshotBorder, TInstant oldestCollectionTime)
             : Snapshots(std::move(snapshots))
             , SnapshotBorder(snapshotBorder)
             , OldestCollectionTime(oldestCollectionTime)
-            , MinPromotionCutoffStep(minPromotionCutoffStep)
         {}
 
         ~TImmutableSnapshotRegistry() override = default;
@@ -83,10 +81,6 @@ namespace {
         TInstant GetOldestCollectionTime() const override {
             return OldestCollectionTime;
         }
-
-        ui64 GetMinPromotionCutoffStep() const override {
-            return MinPromotionCutoffStep;
-        }
         
     private:
         const TVector<TRowVersion>& GetSnapshotVersions(const NKikimr::TTableId& tableId) const {
@@ -121,7 +115,6 @@ namespace {
         const TSnapshotMap Snapshots;
         const TRowVersion SnapshotBorder;
         const TInstant OldestCollectionTime;
-        const ui64 MinPromotionCutoffStep = 0;
     };
 
     class TImmutableSnapshotRegistryHolder : public IImmutableSnapshotRegistryHolder {
@@ -158,10 +151,6 @@ namespace {
         void SetOldestCollectionTime(TInstant oldestCollectionTime) override {
             OldestCollectionTime = oldestCollectionTime;
         }
-
-        void SetMinPromotionCutoffStep(ui64 minPromotionCutoffStep) override {
-            MinPromotionCutoffStep = minPromotionCutoffStep;
-        }
         
         void AddSnapshot(const TVector<NKikimr::TTableId>& tableIds, const TRowVersion& version) override {
             if (version >= SnapshotBorder) {
@@ -181,14 +170,12 @@ namespace {
             for (auto& [tableId, versions] : Snapshots) {
                 std::sort(versions.begin(), versions.end());
             }
-            return std::make_unique<TImmutableSnapshotRegistry>(
-                std::move(Snapshots), SnapshotBorder, OldestCollectionTime, MinPromotionCutoffStep);
+            return std::make_unique<TImmutableSnapshotRegistry>(std::move(Snapshots), SnapshotBorder, OldestCollectionTime);
         }
 
     private:
         TRowVersion SnapshotBorder = TRowVersion::Max();
         TInstant OldestCollectionTime;
-        ui64 MinPromotionCutoffStep = 0;
         THashMap<NKikimr::TTableId, TVector<TRowVersion>> Snapshots;
     };
 }

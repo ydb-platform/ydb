@@ -11,7 +11,6 @@ Y_UNIT_TEST_SUITE(TImmutableSnapshotRegistryHolderTest) {
         auto builder = CreateImmutableSnapshotRegistryBuilder();
         builder->SetSnapshotBorder(TRowVersion(100, 0));
         builder->SetOldestCollectionTime(TInstant::MilliSeconds(50));
-        builder->SetMinPromotionCutoffStep(25);
         return std::move(*builder).Build();
     }
 
@@ -29,15 +28,6 @@ Y_UNIT_TEST_SUITE(TImmutableSnapshotRegistryHolderTest) {
         UNIT_ASSERT(registry);
         UNIT_ASSERT(registry.get() != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(registry->GetBorder(), TRowVersion(100, 0));
-        UNIT_ASSERT_VALUES_EQUAL(registry->GetOldestCollectionTime(), TInstant::MilliSeconds(50));
-        UNIT_ASSERT_VALUES_EQUAL(registry->GetMinPromotionCutoffStep(), 25u);
-    }
-
-    Y_UNIT_TEST(MissingPromotionCutoffDefaultsToZero) {
-        auto builder = CreateImmutableSnapshotRegistryBuilder();
-        builder->SetOldestCollectionTime(TInstant::MilliSeconds(1000000));
-        const auto registry = std::move(*builder).Build();
-        UNIT_ASSERT_VALUES_EQUAL(registry->GetMinPromotionCutoffStep(), 0u);
     }
 
     Y_UNIT_TEST(SetNullClearsRegistry) {

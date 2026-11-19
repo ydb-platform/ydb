@@ -145,10 +145,6 @@ private:
     void PublishEmptySnapshotRegistry() {
         auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
         registryBuilder->SetOldestCollectionTime(Runtime.GetCurrentTime());
-        const ui64 nowMs = Runtime.GetCurrentTime().MilliSeconds();
-        const ui64 promotionMs = TDuration::Seconds(
-            Runtime.GetAppData(0).LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds()).MilliSeconds();
-        registryBuilder->SetMinPromotionCutoffStep(nowMs > promotionMs ? nowMs - promotionMs : 0);
         Runtime.GetAppData(0).SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build());
     }
 };

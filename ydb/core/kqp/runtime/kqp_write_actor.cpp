@@ -3298,7 +3298,6 @@ public:
         , Callbacks(args.Callback)
         , Counters(counters)
         , Alloc(args.Alloc)
-        , TxId(std::get<ui64>(args.TxId))
         , TableId(
             Settings.GetTable().GetOwnerId(),
             Settings.GetTable().GetTableId(),
@@ -3307,6 +3306,17 @@ public:
         , UserCtx(userCtx)
     {
         EgressStats.Level = args.StatsLevel;
+
+        if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
+            if (const auto* queryPath = std::get_if<TString>(&args.TxId); queryPath && !queryPath->empty()) {
+                const auto queryCounters = Counters->GetKqpCounters()
+                    ->GetSubgroup("subsystem", "DqSinkTracker")
+                    ->GetSubgroup("sink", "TableSink")
+                    ->GetSubgroup("path", *queryPath);
+                InFlyCheckpoints = queryCounters->GetCounter("InFlyCheckpoints");
+                EgressDataRate = queryCounters->GetCounter("EgressDataRate", true);
+            }
+        }
 
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
             Settings.GetColumns().begin(),
@@ -3501,6 +3511,9 @@ private:
                     WriteTableActor->Write(WriteToken, std::move(data));
                 } else if (std::holds_alternative<NYql::NDqProto::TCheckpoint>(variant)) {
                     CheckpointInProgress = std::get<NYql::NDqProto::TCheckpoint>(std::move(variant));
+                    if (InFlyCheckpoints) {
+                        InFlyCheckpoints->Inc();
+                    }
                     WriteTableActor->FlushBuffers();
                     if (WriteTableActor->IsEmpty()) {
                         DoCheckpoint();
@@ -3589,6 +3602,12 @@ private:
     }
 
     void PassAway() override {
+        if (CheckpointInProgress) {
+            if (InFlyCheckpoints) {
+                InFlyCheckpoints->Dec();
+            }
+            CheckpointInProgress = std::nullopt;
+        }
         if (WriteTableActor) {
             WriteTableActor->Terminate();
         }
@@ -3615,6 +3634,9 @@ private:
     }
 
     void OnMessageAcknowledged(ui64 dataSize) override {
+        if (EgressDataRate) {
+            EgressDataRate->Add(dataSize);
+        }
         EgressStats.Bytes += dataSize;
         EgressStats.Chunks++;
         EgressStats.Splits++;
@@ -3640,6 +3662,9 @@ private:
         YQL_ENSURE(CheckpointInProgress);
         Callbacks->OnAsyncOutputStateSaved({}, OutputIndex, *CheckpointInProgress);
         CheckpointInProgress = std::nullopt;
+        if (InFlyCheckpoints) {
+            InFlyCheckpoints->Dec();
+        }
     }
 
     TString LogPrefix;
@@ -3652,7 +3677,8 @@ private:
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     IDataBatcherPtr Batcher;
 
-    const ui64 TxId;
+    NMonitoring::TDynamicCounters::TCounterPtr InFlyCheckpoints;
+    NMonitoring::TDynamicCounters::TCounterPtr EgressDataRate;
     const TTableId TableId;
     TKqpTableWriteActor* WriteTableActor = nullptr;
     TActorId WriteTableActorId;

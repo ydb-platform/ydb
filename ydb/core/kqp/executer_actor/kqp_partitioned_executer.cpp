@@ -54,6 +54,7 @@ void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGatew
     request.UserTraceId = from.UserTraceId;
     request.TraceId = NWilson::TTraceId(from.TraceId);
     request.OutputChunkMaxSize = from.OutputChunkMaxSize;
+    request.MaxTasksPerStage = from.MaxTasksPerStage;
 }
 
 /**

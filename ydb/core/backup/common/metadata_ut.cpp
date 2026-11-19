@@ -15,12 +15,15 @@ Y_UNIT_TEST_SUITE(BackupMetadataTest) {
     }
 
     Y_UNIT_TEST(IndexEncryptionIVSurvivesRoundTrip) {
-        const auto metadata = TMetadata::Deserialize(R"({"indexes": [
+        const TString input = R"({"indexes": [
             {"export_prefix": "001", "impl_table_prefix": "index/indexImplTable", "iv": "00112233445566778899AABB"},
             {"export_prefix": "002", "impl_table_prefix": "other/indexImplTable"}
-        ]})");
+        ]})";
+
+        const auto metadata = TMetadata::Deserialize(input);
         NJson::TJsonValue json;
         UNIT_ASSERT(NJson::ReadJsonTree(metadata.Serialize(), &json));
+
         const auto& indexes = json["indexes"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 2);
         UNIT_ASSERT(indexes[0].Has("iv"));
@@ -29,9 +32,11 @@ Y_UNIT_TEST_SUITE(BackupMetadataTest) {
     }
 
     Y_UNIT_TEST(InvalidIndexEncryptionIVIsRejected) {
-        UNIT_ASSERT_EXCEPTION(TMetadata::Deserialize(R"({"indexes": [
+        const TString input = R"({"indexes": [
             {"export_prefix": "001", "impl_table_prefix": "index/indexImplTable", "iv": "00"}
-        ]})"), yexception);
+        ]})";
+
+        UNIT_ASSERT_EXCEPTION(TMetadata::Deserialize(input), yexception);
     }
 }
 

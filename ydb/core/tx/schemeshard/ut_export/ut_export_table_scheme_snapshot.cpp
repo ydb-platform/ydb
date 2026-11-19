@@ -67,14 +67,79 @@ struct TExportEnv {
             auto* queue = event->Record.AddQueues();
             queue->SetName("queue_backup");
             queue->MutableLimit()->SetCpu(limit);
-            Runtime.Send(new IEventHandle(
-                Runtime.GetLocalServiceId(NResourceBroker::MakeResourceBrokerID(), nodeIdx),
-                sender, event.Release()), nodeIdx);
+            Runtime.Send(new IEventHandle( Runtime.GetLocalServiceId(NResourceBroker::MakeResourceBrokerID(), nodeIdx), sender, event.Release()), nodeIdx);
             TAutoPtr<IEventHandle> handle;
             const auto* reply = Runtime.GrabEdgeEventRethrow<
                 NResourceBroker::TEvResourceBroker::TEvConfigureResult>(handle);
             UNIT_ASSERT(reply->Record.GetSuccess());
         }
+    }
+
+    static TString RowTableDescription(const TString& name = "Table") {
+        return Sprintf(R"(
+            Name: "%s"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8"   }
+            KeyColumnNames: ["key"]
+        )", name.c_str());
+    }
+
+    void CreateKeyTable(const TString& name) {
+        TestCreateTable(Runtime, ++TxId, "/MyRoot", Sprintf(R"(
+            Name: "%s"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )", name.c_str()));
+        Env.TestWaitNotification(Runtime, TxId);
+    }
+
+    void CreateVectorTable(const TString& name = "Table") {
+        TestCreateTable(Runtime, ++TxId, "/MyRoot", Sprintf(R"(
+            Name: "%s"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )", name.c_str()));
+        Env.TestWaitNotification(Runtime, TxId);
+
+        WriteVectorTableRows(Runtime, TTestTxConfig::SchemeShard, ++TxId, "/MyRoot/" + name, 0, 0, 200);
+    }
+
+    ui64 CreateIndex(const TString& name, const TVector<TString>& keys = {"value"}, const TString& table = "/MyRoot/Table") {
+        const ui64 buildId = ++TxId;
+        TestBuildIndex(Runtime, buildId, TTestTxConfig::SchemeShard, "/MyRoot", table, name, keys);
+        Env.TestWaitNotification(Runtime, buildId);
+        return buildId;
+    }
+
+    ui64 CreateVectorIndex(const TString& table = "/MyRoot/Table") {
+        const ui64 buildId = ++TxId;
+        TestBuildVectorIndex(Runtime, buildId, TTestTxConfig::SchemeShard, "/MyRoot", table, "index", {"embedding"});
+        Env.TestWaitNotification(Runtime, buildId);
+        return buildId;
+    }
+
+    void WriteColumnRows() {
+        const auto description = DescribePath(Runtime, "/MyRoot/Table");
+        const ui64 pathId = description.GetPathId();
+        const ui64 shardId = description.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards(0);
+        auto sender = Runtime.AllocateEdgeActor();
+
+        const std::vector<NArrow::NTest::TTestColumn> schema = {
+            NArrow::NTest::TTestColumn("key", NScheme::TTypeInfo(NScheme::NTypeIds::Uint32)).SetNullable(false),
+            NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)),
+        };
+        const auto data = NTxUT::MakeTestBlob({0, 100}, schema, {}, {"key"});
+
+        ui64 writeId = 0;
+        std::vector<ui64> writeIds;
+        ++TxId;
+
+        NTxUT::WriteData(Runtime, sender, shardId, ++writeId, pathId, data, schema, &writeIds, NEvWrite::EModificationType::Upsert, TxId);
+        const auto step = NTxUT::ProposeCommit(Runtime, sender, shardId, TxId, writeIds, TxId);
+        NTxUT::PlanCommit(Runtime, sender, shardId, step, {TxId});
     }
 
     void CreateTable(bool isColumn = false, bool indexed = false) {
@@ -91,46 +156,27 @@ struct TExportEnv {
             )");
         } else if (indexed) {
             Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
-            TestCreateIndexedTable(Runtime, ++TxId, "/MyRoot", R"(
-                TableDescription {
-                    Name: "Table"
-                    Columns { Name: "key" Type: "Uint32" }
-                    Columns { Name: "value" Type: "Utf8" }
-                    KeyColumnNames: ["key"]
-                }
+            TestCreateIndexedTable(Runtime, ++TxId, "/MyRoot", Sprintf(R"(
+                TableDescription { %s }
                 IndexDescription { Name: "index" KeyColumnNames: ["value"] }
-            )");
+            )", RowTableDescription().c_str()));
         } else {
-            TestCreateTable(Runtime, ++TxId, "/MyRoot", R"(
-                Name: "Table"
-                Columns { Name: "key" Type: "Uint32" }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-            )");
+            TestCreateTable(Runtime, ++TxId, "/MyRoot", RowTableDescription());
         }
         Env.TestWaitNotification(Runtime, TxId);
         if (isColumn) {
-            const auto description = DescribePath(Runtime, "/MyRoot/Table");
-            const ui64 pathId = description.GetPathId();
-            const ui64 shardId = description.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards(0);
-            auto sender = Runtime.AllocateEdgeActor();
-
-            const std::vector<NArrow::NTest::TTestColumn> schema = {
-                NArrow::NTest::TTestColumn("key", NScheme::TTypeInfo(NScheme::NTypeIds::Uint32)).SetNullable(false),
-                NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)),
-            };
-            const auto data = NTxUT::MakeTestBlob({0, 100}, schema, {}, {"key"});
-
-            ui64 writeId = 0;
-            std::vector<ui64> writeIds;
-            ++TxId;
-
-            NTxUT::WriteData(Runtime, sender, shardId, ++writeId, pathId, data, schema, &writeIds, NEvWrite::EModificationType::Upsert, TxId);
-            const auto step = NTxUT::ProposeCommit(Runtime, sender, shardId, TxId, writeIds, TxId);
-            NTxUT::PlanCommit(Runtime, sender, shardId, step, {TxId});
+            WriteColumnRows();
         } else {
             WriteRow(Runtime, ++TxId, "/MyRoot/Table", 0, 1, "before");
         }
+    }
+
+    void CreateIndexedTable() {
+        CreateTable(false, true);
+    }
+
+    void CreateColumnTable() {
+        CreateTable(true);
     }
 
     void CreateChangefeed() {
@@ -147,6 +193,38 @@ struct TExportEnv {
         Env.TestWaitNotification(Runtime, TxId);
     }
 
+    void Reboot() {
+        RebootTablet(Runtime, TTestTxConfig::SchemeShard, Runtime.AllocateEdgeActor());
+    }
+
+    TString ExportPath(ui64 exportId) const {
+        return Sprintf("/MyRoot/export-%lu/0", exportId);
+    }
+
+    TVector<TString> ReadRows(const TString& path) {
+        return ReadShards(Runtime, TTestTxConfig::SchemeShard, path);
+    }
+
+    Ydb::Table::CreateTableRequest ReadScheme(const TString& file = "scheme.pb", const TString& table = "backup") {
+        const auto text = ReadFile(file, table);
+        Ydb::Table::CreateTableRequest scheme;
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(text, &scheme), text);
+        return scheme;
+    }
+
+    auto GetExportEntry(ui64 exportId, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
+        return TestGetExport(Runtime, exportId, "/MyRoot", status).GetResponse().GetEntry();
+    }
+
+    auto GetImportEntry(ui64 importId, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
+        return TestGetImport(Runtime, importId, "/MyRoot", status).GetResponse().GetEntry();
+    }
+
+    void CheckBuildState(ui64 buildId, Ydb::Table::IndexBuildState::State state) {
+        const auto result = TestGetBuildIndex(Runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetIndexBuild().GetState(), state, result.DebugString());
+    }
+
     TString EncryptionSettings() const {
         return Encrypted ? R"(
             encryption_settings {
@@ -161,6 +239,7 @@ struct TExportEnv {
             Runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
         }
         TStringBuilder extraItems;
+
         for (const auto& name : extraTables) {
             extraItems << "items { source_path: \"/MyRoot/" << name << "\" "
                 << (IsFs ? "destination_path" : "destination_prefix") << ": \"" << name << "\" }\n";
@@ -187,14 +266,16 @@ struct TExportEnv {
         return TxId;
     }
 
-    void Import(bool rebootBeforeRestore = false, const TVector<TString>& extraTables = {},
-            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
-            const std::function<void(ui64)>& interrupt = {}) {
+    TString ImportSettings(const TVector<TString>& extraTables) {
         const char* indexPopulationMode = BuildIndexesOnImport ? "INDEX_POPULATION_MODE_BUILD" : "INDEX_POPULATION_MODE_IMPORT";
+        const char* sourceField = Encrypted ? (IsFs ? "source_path_db" : "source_path")
+            : (IsFs ? "source_path" : "source_prefix");
+        const char* source = Encrypted ? "Table" : "backup";
+
         TStringBuilder extraItems;
+
         for (const auto& name : extraTables) {
-            extraItems << "items { " << (IsFs ? (Encrypted ? "source_path_db" : "source_path")
-                : (Encrypted ? "source_path" : "source_prefix")) << ": \"" << name
+            extraItems << "items { " << sourceField << ": \"" << name
                 << "\" destination_path: \"/MyRoot/Restored" << name << "\" }\n";
         }
         const TString request = IsFs
@@ -205,8 +286,7 @@ struct TExportEnv {
                     index_population_mode: %s
                     %s %s
                 }
-            )", Directory.Path().c_str(), Encrypted ? "source_path_db" : "source_path",
-                Encrypted ? "Table" : "backup", indexPopulationMode, extraItems.c_str(), EncryptionSettings().c_str())
+            )", Directory.Path().c_str(), sourceField, source, indexPopulationMode, extraItems.c_str(), EncryptionSettings().c_str())
             : Sprintf(R"(
                 ImportFromS3Settings {
                     endpoint: "localhost:%u"
@@ -215,17 +295,25 @@ struct TExportEnv {
                     index_population_mode: %s
                     %s %s %s
                 }
-            )", Port, Encrypted ? "source_path" : "source_prefix", Encrypted ? "Table" : "backup",
+            )", Port, sourceField, source,
                 indexPopulationMode, extraItems.c_str(), EncryptionSettings().c_str(), Encrypted ? "source_prefix: \"Backup\"" : "");
+        return request;
+    }
+
+    void Import(bool rebootBeforeRestore = false, const TVector<TString>& extraTables = {},
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
+            const std::function<void(ui64)>& interrupt = {})
+    {
         const ui64 importId = TxId + 1;
         bool schemeFailed = false;
         auto schemeResults = Runtime.AddObserver<NSchemeShard::TEvPrivate::TEvImportSchemeReady>([&](const auto& ev) {
             schemeFailed |= ev->Get()->ImportId == importId && !ev->Get()->Success;
         });
+
         TBlockEvents<TEvTxAllocatorClient::TEvAllocateResult> allocations(Runtime, [=](const auto& ev) {
             return rebootBeforeRestore && ev->Cookie == importId;
         });
-        TestImport(Runtime, ++TxId, "/MyRoot", request);
+        TestImport(Runtime, ++TxId, "/MyRoot", ImportSettings(extraTables));
         if (rebootBeforeRestore) {
             // Scheme getter has committed the children and their IVs, but no
             // creation/restore transaction has received its allocated ID yet.
@@ -272,6 +360,12 @@ struct TExportEnv {
             : S3.GetData().contains((Encrypted ? "/Backup/" : "/") + table + "/" + file);
     }
 
+    bool HasExportCompletionMarker() {
+        return !IsFs && AnyOf(S3.GetData(), [](const auto& object) {
+            return object.first.EndsWith("/export_complete.json");
+        });
+    }
+
     void CheckEncryptionIVs() {
         THashMap<TString, TString> files;
         if (IsFs) {
@@ -294,6 +388,7 @@ struct TExportEnv {
         }
         UNIT_ASSERT(!files.empty());
         THashSet<TString> ivs;
+
         for (const auto& [name, data] : files) {
             const auto [plain, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
                 NBackup::TEncryptionKey("0123456789012345"), TBuffer(data.data(), data.size()));
@@ -326,21 +421,25 @@ struct TExportEnv {
     }
 };
 
-void CorruptTableSchemeSnapshot(TExportEnv& t, ui64 pathId, bool topics = false) {
-    LocalMiniKQL(t.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+void UpdateTableSchemeSnapshot(TExportEnv& test, ui64 pathId, const TString& field, const TString& value) {
+    LocalMiniKQL(test.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
         (
             (let key '(
                 '('OwnerPathId (Uint64 '%lu))
                 '('LocalPathId (Uint64 '%lu))
             ))
-            (let value '('%s (String '"!")))
+            (let value '('%s (String '"%s")))
             (return (AsList (UpdateRow 'TableSchemeSnapshots key '(value))))
         )
-    )", TTestTxConfig::SchemeShard, pathId, topics ? "ChangefeedUnderlyingTopics" : "TableDescription"));
+    )", TTestTxConfig::SchemeShard, pathId, field.c_str(), EscapeC(value).c_str()));
 }
 
-NSchemeShard::TExportInfo::EState ReadExportItemState(TExportEnv& t, ui64 exportId, ui32 itemIdx) {
-    const auto result = LocalMiniKQL(t.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+void CorruptTableSchemeSnapshot(TExportEnv& test, ui64 pathId, bool topics = false) {
+    UpdateTableSchemeSnapshot(test, pathId, topics ? "ChangefeedUnderlyingTopics" : "TableDescription", "!");
+}
+
+NSchemeShard::TExportInfo::EState ReadExportItemState(TExportEnv& test, ui64 exportId, ui32 itemIdx) {
+    const auto result = LocalMiniKQL(test.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
         (
             (let range '(
                 '('ExportId (Uint64 '%lu) (Uint64 '%lu))
@@ -354,9 +453,29 @@ NSchemeShard::TExportInfo::EState ReadExportItemState(TExportEnv& t, ui64 export
     return static_cast<NSchemeShard::TExportInfo::EState>(static_cast<ui8>(rows[0]["State"]));
 }
 
-TString CorruptImportMetadata(TExportEnv& t, ui64 importId, bool loseWaitTxId = false) {
+TVector<ui64> ReadExportBackupTxIds(TExportEnv& test, ui64 exportId) {
+    const auto result = LocalMiniKQL(test.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+        (
+            (let range '(
+                '('ExportId (Uint64 '%lu) (Uint64 '%lu))
+                '('Index (Null) (Void))
+            ))
+            (return (AsList (SetResult 'Result (SelectRange 'ExportItems range '('BackupTxId) '()))))
+        )
+    )", exportId, exportId));
+    const auto rows = NClient::TValue::Create(result)[0]["List"];
+    TVector<ui64> txIds;
+
+    for (ui32 i = 0; i < rows.Size(); ++i) {
+        txIds.push_back(static_cast<ui64>(rows[i]["BackupTxId"]));
+    }
+
+    return txIds;
+}
+
+TString CorruptImportMetadata(TExportEnv& test, ui64 importId, bool loseWaitTxId = false) {
     const TString metadata = R"({"indexes":[{"export_prefix":"001","impl_table_prefix":"index/indexImplTable","iv":""}]})";
-    LocalMiniKQL(t.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+    LocalMiniKQL(test.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
         (
             (let key '('('ImportId (Uint64 '%lu)) '('Index (Uint32 '0))))
             (let metadata '('Metadata (String '"%s")))
@@ -364,7 +483,7 @@ TString CorruptImportMetadata(TExportEnv& t, ui64 importId, bool loseWaitTxId = 
         )
     )", importId, EscapeC(metadata).c_str()));
     if (loseWaitTxId) {
-        LocalMiniKQL(t.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+        LocalMiniKQL(test.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
             (
                 (let key '('('ImportId (Uint64 '%lu)) '('Index (Uint32 '0))))
                 (let waitTxId '('WaitTxId (Uint64 '0)))
@@ -372,11 +491,12 @@ TString CorruptImportMetadata(TExportEnv& t, ui64 importId, bool loseWaitTxId = 
             )
         )", importId));
     }
+
     return metadata;
 }
 
-NKikimrMiniKQL::TResult ReadImportItems(TExportEnv& t, ui64 importId) {
-    return LocalMiniKQL(t.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+NKikimrMiniKQL::TResult ReadImportItems(TExportEnv& test, ui64 importId) {
+    return LocalMiniKQL(test.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
         (
             (let range '(
                 '('ImportId (Uint64 '%lu) (Uint64 '%lu))
@@ -413,6 +533,7 @@ struct TDelayedCopy {
             // An old SchemeShard does not request scheme capture.
             auto& copies = *Proposal.front()->Get()->Record.MutableTransaction(0)
                 ->MutableCreateConsistentCopyTables()->MutableCopyTableDescriptions();
+
             for (auto& copy : copies) {
                 copy.ClearCaptureTableSchemeSnapshot();
             }
@@ -423,7 +544,7 @@ struct TDelayedCopy {
 
     void Reboot() {
         Completion.clear();
-        RebootTablet(Test.Runtime, TTestTxConfig::SchemeShard, Test.Runtime.AllocateEdgeActor());
+        Test.Reboot();
         Test.Runtime.WaitFor("consistent copy completion after reboot", [&] { return !Completion.empty(); });
     }
 
@@ -442,7 +563,7 @@ struct TDelayedCopy {
         // The refreshed index items must survive a restart before any backup starts.
         Test.Runtime.WaitFor("backup allocation", [&] { return !allocations.empty(); });
         allocations.clear();
-        RebootTablet(Test.Runtime, TTestTxConfig::SchemeShard, Test.Runtime.AllocateEdgeActor());
+        Test.Reboot();
         allocations.Stop().Unblock();
     }
 };
@@ -454,14 +575,193 @@ enum class ERestart {
     Both,
 };
 
-void RebootTableShards(TExportEnv& t, const TString& path) {
-    const auto description = DescribePrivatePath(t.Runtime, path, true, true);
+void RebootTableShards(TExportEnv& test, const TString& path) {
+    const auto description = DescribePrivatePath(test.Runtime, path, true, true);
     const auto& partitions = description.GetPathDescription().GetTablePartitions();
     UNIT_ASSERT_C(!partitions.empty(), path);
+
     for (const auto& partition : partitions) {
-        RebootTablet(t.Runtime, partition.GetDatashardId(), t.Runtime.AllocateEdgeActor());
+        RebootTablet(test.Runtime, partition.GetDatashardId(), test.Runtime.AllocateEdgeActor());
     }
 }
+
+template <typename TEv>
+THashSet<TString> GetObjectKeys(const TBlockEvents<TEv>& requests) {
+    THashSet<TString> keys;
+
+    for (const auto& request : requests) {
+        keys.insert(TString(request->Get()->Request.GetKey()));
+    }
+
+    return keys;
+}
+
+template <typename TEv>
+THashSet<ui64> GetCancellationTargets(const TBlockEvents<TEv>& requests) {
+    THashSet<ui64> targets;
+
+    for (const auto& request : requests) {
+        targets.insert(request->Get()->Record.GetTargetTxId());
+    }
+
+    return targets;
+}
+
+struct TBackupReplies {
+    TExportEnv& Test;
+    THashSet<ui64> TxIds;
+    TTestActorRuntime::TEventObserverHolder Proposals;
+    TBlockEvents<TEvSchemeShard::TEvModifySchemeTransactionResult> Replies;
+
+    explicit TBackupReplies(TExportEnv& test, bool blockReplies = true)
+        : Test(test)
+        , Proposals(test.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([this](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup()) {
+                TxIds.insert(record.GetTxId());
+            }
+        }))
+        , Replies(test.Runtime, [this, blockReplies](const auto& ev) {
+            return blockReplies && TxIds.contains(ev->Get()->Record.GetTxId());
+        })
+    {}
+
+    void CheckAccepted() {
+        for (const auto& reply : Replies) {
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted);
+        }
+    }
+
+    void DiscardReplies() {
+        Proposals.Remove();
+        Replies.clear();
+        Replies.Stop();
+    }
+
+    void CheckRecoveredTxIds(ui64 exportId) {
+        const auto ids = ReadExportBackupTxIds(Test, exportId);
+        UNIT_ASSERT_VALUES_EQUAL(ids.size(), 2);
+        UNIT_ASSERT_VALUES_UNEQUAL(ids[0], ids[1]);
+        UNIT_ASSERT(TxIds.contains(ids[0]));
+        UNIT_ASSERT(TxIds.contains(ids[1]));
+    }
+};
+
+struct TImportWork {
+    TExportEnv& Test;
+    const bool BuildIndex;
+    ui64 BuildId = 0;
+    TBlockEvents<NWrappers::TEvExternalStorage::TEvGetObjectRequest> DataReads;
+    TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> Scans;
+    TBlockEvents<TEvSchemeShard::TEvCancelTx> RestoreCancellations;
+    TBlockEvents<TEvIndexBuilder::TEvCancelRequest> BuildCancellations;
+
+    TImportWork(TExportEnv& test, bool buildIndex)
+        : Test(test)
+        , BuildIndex(buildIndex)
+        , DataReads(test.Runtime, [this](const auto& ev) {
+            const TString key(ev->Get()->Request.GetKey());
+            return !BuildIndex && (key.EndsWith(".csv") || key.EndsWith(".csv.enc"));
+        })
+        , Scans(test.Runtime, [this](const auto&) { return BuildIndex; })
+        , RestoreCancellations(test.Runtime)
+        , BuildCancellations(test.Runtime)
+    {}
+
+    void WaitForStart() {
+        Test.Runtime.WaitFor("active import work", [&] {
+            return BuildIndex ? !Scans.empty() : GetObjectKeys(DataReads).size() == 2;
+        });
+        if (BuildIndex) {
+            BuildId = Scans.front()->Get()->Record.GetId();
+        }
+    }
+
+    void ClearCancellationRequests() {
+        RestoreCancellations.clear();
+        BuildCancellations.clear();
+    }
+
+    void WaitForCancellation() {
+        Test.Runtime.WaitFor("active import cancellation after recovery", [&] {
+            return BuildIndex ? !BuildCancellations.empty() : GetCancellationTargets(RestoreCancellations).size() == 2;
+        });
+    }
+
+    void Release() {
+        RestoreCancellations.Stop().Unblock();
+        BuildCancellations.Stop().Unblock();
+        DataReads.clear();
+        DataReads.Stop();
+        Scans.clear();
+        Scans.Stop();
+    }
+};
+
+struct TProposedBackups {
+    TExportEnv& Test;
+    ui64 FirstTxId = 0;
+    TBlockEvents<TEvTxAllocatorClient::TEvAllocateResult> Allocations;
+    TBlockEvents<TEvDataShard::TEvSchemaChanged> SchemaChanged;
+    TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletion> Subscriptions;
+    TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> SecondProposal;
+    TBlockEvents<TEvSchemeShard::TEvCancelTxResult> Acknowledgements;
+
+    TProposedBackups(TExportEnv& test, ui64 exportId)
+        : Test(test)
+        , Allocations(test.Runtime, [exportId](const auto& ev) { return ev->Cookie == exportId; })
+        , SchemaChanged(test.Runtime, [this](const auto& ev) {
+            return FirstTxId && ev->Get()->Record.GetTxId() == FirstTxId;
+        })
+        , Subscriptions(test.Runtime, [this](const auto& ev) {
+            return FirstTxId && ev->Get()->Record.GetTxId() == FirstTxId;
+        })
+        , SecondProposal(test.Runtime, [](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup()
+                && record.GetTransaction(0).GetBackup().GetTableName() == "1";
+        })
+        , Acknowledgements(test.Runtime)
+    {}
+
+    void StartFirst() {
+        Test.Runtime.WaitFor("three backup allocations", [&] { return Allocations.size() == 3; });
+        FirstTxId = Allocations.front()->Get()->TxIds.front();
+        Allocations.Unblock(1);
+        Test.Runtime.WaitFor("first backup accepted", [&] { return !Subscriptions.empty(); });
+    }
+
+    ui64 StartSecond() {
+        Allocations.Unblock(1);
+        Test.Runtime.WaitFor("second backup proposed", [&] { return !SecondProposal.empty(); });
+        return SecondProposal.front()->Get()->Record.GetTxId();
+    }
+
+    void FailThird() {
+        Allocations.Stop().Unblock();
+        Test.Runtime.WaitFor("first backup cancellation", [&] { return !Acknowledgements.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(Acknowledgements.front()->Get()->Record.GetTargetTxId(), FirstTxId);
+        Acknowledgements.Unblock(1);
+    }
+
+    void RejectSecond(ui64 txId) {
+        auto proposal = std::move(SecondProposal.front());
+        SecondProposal.pop_front();
+        SecondProposal.Stop();
+
+        auto rejected = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            NKikimrScheme::StatusSchemeError, txId, TTestTxConfig::SchemeShard);
+        rejected->Record.SetReason("Injected proposal rejection");
+        Test.Runtime.Send(new IEventHandle(proposal->Sender, proposal->Recipient, rejected.Release()), 0, true);
+    }
+
+    void AcceptSecond(ui64 txId) {
+        SecondProposal.Stop().Unblock();
+        Test.Runtime.WaitFor("second backup cancellation", [&] {
+            return GetCancellationTargets(Acknowledgements).contains(txId);
+        });
+    }
+};
 
 struct TDelayedDataUpload {
     TExportEnv& Test;
@@ -484,36 +784,36 @@ struct TDelayedDataUpload {
 
     void Reboot(ui64 exportId, const TVector<TString>& implTables) {
         Test.Runtime.WaitFor("all copied tables uploading while index build is active", [&] {
-            THashSet<TString> keys;
-            for (const auto& request : Requests) {
-                keys.insert(TString(request->Get()->Request.GetKey()));
-            }
-            return keys.size() >= implTables.size() + 1;
+            return GetObjectKeys(Requests).size() >= implTables.size() + 1;
         });
         THashSet<TActorId> oldUploaders;
+
         for (const auto& request : Requests) {
             oldUploaders.insert(request->Sender);
         }
         Requests.clear();
-        const TString root = Sprintf("/MyRoot/export-%lu/0", exportId);
+        const TString root = Test.ExportPath(exportId);
         RebootTableShards(Test, root);
+
         for (const auto& implTable : implTables) {
             RebootTableShards(Test, root + "/" + implTable);
         }
-        RebootTablet(Test.Runtime, TTestTxConfig::SchemeShard, Test.Runtime.AllocateEdgeActor());
+
+        Test.Reboot();
         Test.Runtime.WaitFor("data upload from a restored uploader", [&] {
             for (const auto& request : Requests) {
                 if (!oldUploaders.contains(request->Sender)) {
                     return true;
                 }
             }
+
             return false;
         });
     }
 };
 
-auto EmulateLegacyUploader(TExportEnv& t, bool enabled, ui32& oldUploaderTasks) {
-    return t.Runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([enabled, &oldUploaderTasks](auto& ev) {
+auto EmulateLegacyUploader(TExportEnv& test, bool enabled, ui32& oldUploaderTasks) {
+    return test.Runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([enabled, &oldUploaderTasks](auto& ev) {
         auto& record = ev->Get()->Record;
         if (!enabled || record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
             return;
@@ -529,21 +829,23 @@ auto EmulateLegacyUploader(TExportEnv& t, bool enabled, ui32& oldUploaderTasks) 
     });
 }
 
-THashMap<TString, TString> MaterializedIndexPrefixes(TExportEnv& t,
-        const THashSet<TString>& expectedImplTables, const TString& table = "backup", bool expectMetadataIV = true) {
-    const auto metadata = NBackup::TMetadata::Deserialize(t.ReadFile("metadata.json", table));
+THashMap<TString, TString> MaterializedIndexPrefixes(TExportEnv& test,
+        const THashSet<TString>& expectedImplTables, const TString& table = "backup", bool expectMetadataIV = true)
+{
+    const auto metadata = NBackup::TMetadata::Deserialize(test.ReadFile("metadata.json", table));
     UNIT_ASSERT(metadata.GetIndexes());
     UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->size(), expectedImplTables.size());
     THashMap<TString, TString> prefixes;
+
     for (const auto& index : *metadata.GetIndexes()) {
         UNIT_ASSERT_C(expectedImplTables.contains(index.ImplTablePrefix), index.ImplTablePrefix);
         UNIT_ASSERT(prefixes.emplace(index.ImplTablePrefix, index.ExportPrefix).second);
-        UNIT_ASSERT(t.HasFile(index.ExportPrefix + "/scheme.pb", table));
-        UNIT_ASSERT(t.HasFile(index.ExportPrefix + "/data_00.csv", table));
-        if (t.Encrypted) {
+        UNIT_ASSERT(test.HasFile(index.ExportPrefix + "/scheme.pb", table));
+        UNIT_ASSERT(test.HasFile(index.ExportPrefix + "/data_00.csv", table));
+        if (test.Encrypted) {
             UNIT_ASSERT_VALUES_EQUAL(bool(index.IV), expectMetadataIV);
             if (index.IV) {
-                const auto content = t.ReadRawFile(index.ExportPrefix + "/scheme.pb.enc", table);
+                const auto content = test.ReadRawFile(index.ExportPrefix + "/scheme.pb.enc", table);
                 const auto expectedIV = NBackup::TEncryptionIV::Combine(*index.IV,
                     NBackup::EBackupFileType::TableSchema, 0, 0);
                 UNIT_ASSERT_NO_EXCEPTION(NBackup::TEncryptedFileDeserializer::DecryptFullFile(
@@ -551,7 +853,79 @@ THashMap<TString, TString> MaterializedIndexPrefixes(TExportEnv& t,
             }
         }
     }
+
     return prefixes;
+}
+
+TVector<ui64> CreateIndexBuildHistory(TExportEnv& test) {
+    TestCreateTable(test.Runtime, ++test.TxId, "/MyRoot", TExportEnv::RowTableDescription("History"));
+    test.Env.TestWaitNotification(test.Runtime, test.TxId);
+    WriteRow(test.Runtime, ++test.TxId, "/MyRoot/History", 0, 1, "history");
+    TVector<ui64> history;
+
+    for (ui32 i = 0; i < 3; ++i) {
+        const ui64 buildId = test.CreateIndex("history-index", {"value"}, "/MyRoot/History");
+        test.CheckBuildState(buildId, Ydb::Table::IndexBuildState::STATE_DONE);
+        history.push_back(buildId);
+        TestDropTableIndex(test.Runtime, TTestTxConfig::SchemeShard, ++test.TxId, "/MyRoot", R"(
+            TableName: "History"
+            IndexName: "history-index"
+        )");
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+    }
+
+    return history;
+}
+
+void ChangeIndexBackupIV(TExportEnv& test, const TString& prefix) {
+    const auto changeBackupIV = [](const TString& encrypted) {
+        auto [plain, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+            NBackup::TEncryptionKey("0123456789012345"), TBuffer(encrypted.data(), encrypted.size()));
+        // Keep all child files mutually consistent and authenticated, but
+        // make their IV namespace differ from the parent backup's namespace.
+        iv.IV[NBackup::TEncryptionIV::FILE_TYPE_OFFSET] ^= 0x80;
+        const auto foreign = NBackup::TEncryptedFileSerializer::EncryptFullFile("AES-128-GCM",
+            NBackup::TEncryptionKey("0123456789012345"), iv, TStringBuf(plain.Data(), plain.Size()));
+        return TString(foreign.Data(), foreign.Size());
+    };
+    if (test.IsFs) {
+        TVector<TFsPath> files;
+        (test.Directory.Path() / "backup" / prefix).List(files);
+
+        for (const auto& file : files) {
+            if (file.GetPath().EndsWith(".enc")) {
+                const auto content = changeBackupIV(TFileInput(file).ReadAll());
+                TFileOutput(file).Write(content);
+            }
+        }
+    } else {
+        for (auto& [name, content] : test.S3.GetData()) {
+            if (name.StartsWith("/Backup/backup/" + prefix + "/") && name.EndsWith(".enc")) {
+                content = changeBackupIV(content);
+            }
+        }
+    }
+}
+
+void CreateShardedTableWithAsyncIndex(TExportEnv& test, const TString& name) {
+    TestCreateIndexedTable(test.Runtime, ++test.TxId, "/MyRoot", Sprintf(R"(
+        TableDescription {
+            Name: "%s"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        }
+        IndexDescription {
+            Name: "a_async"
+            KeyColumnNames: ["value"]
+            Type: EIndexTypeGlobalAsync
+        }
+    )", name.c_str()));
+    test.Env.TestWaitNotification(test.Runtime, test.TxId);
+    const TString path = "/MyRoot/" + name;
+    WriteRow(test.Runtime, ++test.TxId, path, 0, 1, name + "-before");
+    WriteRow(test.Runtime, ++test.TxId, path, 1, 2147483649u, name + "-second");
 }
 
 struct TIndexBuildExportOptions {
@@ -577,57 +951,63 @@ struct TVectorRebuildExportOptions {
     bool RestartDuringUpload = false;
     bool RetryCopyAfterReplacement = false;
     bool FinishAfterExport = false;
+    bool CorruptSnapshot = false;
 };
 
 void SchemeMatchesDataSnapshot(bool isFs, bool reboot, bool isColumn, bool dropSource) {
-    TExportEnv t(isFs);
-    t.CreateTable(isColumn);
-    TDelayedCopy copy(t);
-    const ui64 exportId = t.Export();
+    TExportEnv test(isFs);
+    if (isColumn) {
+        test.CreateColumnTable();
+    } else {
+        test.CreateTable();
+    }
+
+    TDelayedCopy copy(test);
+
+    const ui64 exportId = test.Export();
     copy.WaitForCopy();
-    UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 1);
 
     if (dropSource) {
         if (isColumn) {
-            TestDropColumnTable(t.Runtime, ++t.TxId, "/MyRoot", "Table");
+            TestDropColumnTable(test.Runtime, ++test.TxId, "/MyRoot", "Table");
         } else {
-            TestDropTable(t.Runtime, ++t.TxId, "/MyRoot", "Table");
+            TestDropTable(test.Runtime, ++test.TxId, "/MyRoot", "Table");
         }
     } else if (isColumn) {
-        TestAlterColumnTable(t.Runtime, ++t.TxId, "/MyRoot", R"(
+        TestAlterColumnTable(test.Runtime, ++test.TxId, "/MyRoot", R"(
             Name: "Table"
             AlterSchema { AddColumns { Name: "extra" Type: "Utf8" } }
         )");
     } else {
-        WriteRow(t.Runtime, ++t.TxId, "/MyRoot/Table", 0, 1, "after");
-        TestAlterTable(t.Runtime, ++t.TxId, "/MyRoot", R"(
+        WriteRow(test.Runtime, ++test.TxId, "/MyRoot/Table", 0, 1, "after");
+        TestAlterTable(test.Runtime, ++test.TxId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "extra" Type: "Utf8" }
         )");
     }
-    t.Env.TestWaitNotification(t.Runtime, t.TxId);
+
+    test.Env.TestWaitNotification(test.Runtime, test.TxId);
 
     copy.Resume(reboot);
-    t.Env.TestWaitNotification(t.Runtime, exportId);
-    TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    test.Env.TestWaitNotification(test.Runtime, exportId);
+    test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
 
-    Ydb::Table::CreateTableRequest scheme;
-    const TString schemeText = t.ReadFile("scheme.pb");
-    UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(schemeText, &scheme), schemeText);
+    const auto scheme = test.ReadScheme();
 
     UNIT_ASSERT_VALUES_EQUAL(scheme.columns_size(), 2);
     UNIT_ASSERT_VALUES_EQUAL(scheme.columns(0).name(), "key");
     UNIT_ASSERT_VALUES_EQUAL(scheme.columns(1).name(), "value");
 
     if (!isColumn) {
-        UNIT_ASSERT_VALUES_EQUAL(t.ReadFile("data_00.csv"), "1,\"before\"\n");
+        UNIT_ASSERT_VALUES_EQUAL(test.ReadFile("data_00.csv"), "1,\"before\"\n");
     } else {
-        UNIT_ASSERT(!t.ReadFile("data_00.csv").empty());
+        UNIT_ASSERT(!test.ReadFile("data_00.csv").empty());
     }
 
-    t.Forget(exportId);
-    RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
-    UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 0);
+    test.Forget(exportId);
+    test.Reboot();
+    UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 0);
 }
 
 enum class ESchemeShardVersionSwitch {
@@ -638,50 +1018,51 @@ enum class ESchemeShardVersionSwitch {
 
 void SchemeAttributeAfterVersionSwitch(bool isFs, ESchemeShardVersionSwitch versionSwitch, const char* expectedAttribute) {
     NSchemeShard::TSchemeShard* schemeShard = nullptr;
-    TExportEnv t(isFs, [&](const TActorId& tablet, TTabletStorageInfo* info) {
+    TExportEnv test(isFs, [&](const TActorId& tablet, TTabletStorageInfo* info) {
         schemeShard = static_cast<NSchemeShard::TSchemeShard*>(CreateFlatTxSchemeShard(tablet, info));
         return schemeShard;
     });
-    t.CreateTable();
+    test.CreateTable();
 
     auto setAttribute = [&](const TString& value) {
-        TestUserAttrs(t.Runtime, ++t.TxId, "/MyRoot", "Table", AlterUserAttrs({{"version_switch", value}}));
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
+        TestUserAttrs(test.Runtime, ++test.TxId, "/MyRoot", "Table", AlterUserAttrs({{"version_switch", value}}));
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
     };
     setAttribute("before");
 
-    TDelayedCopy copy(t);
-    const ui64 exportId = t.Export();
+    TDelayedCopy copy(test);
+
+    const ui64 exportId = test.Export();
     copy.WaitForCopy(versionSwitch != ESchemeShardVersionSwitch::Upgrade);
     const ui64 snapshotCount = versionSwitch == ESchemeShardVersionSwitch::Upgrade ? 0 : 1;
-    UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), snapshotCount);
+    UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), snapshotCount);
 
     setAttribute("after");
-    TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/Table"),
+    TestDescribeResult(DescribePath(test.Runtime, "/MyRoot/Table"),
         {NLs::UserAttrsEqual({{"version_switch", "after"}})});
 
     // Switch while the consistent copy is complete and no backup has been proposed.
     copy.Reboot();
-    UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), snapshotCount);
+    UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), snapshotCount);
     if (versionSwitch == ESchemeShardVersionSwitch::Downgrade) {
-        const auto pathId = DescribePrivatePath(t.Runtime, Sprintf("/MyRoot/export-%lu/0", exportId)).GetPathId();
+        const auto pathId = DescribePrivatePath(test.Runtime, test.ExportPath(exportId)).GetPathId();
         // Model an old SchemeShard ignoring the additive snapshot table on startup.
         // Leave the persisted row intact; only discard the snapshot loaded in memory.
         schemeShard->Tables.at(TPathId(TTestTxConfig::SchemeShard, pathId))->BackupSettings.Clear();
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 1);
     }
     copy.Resume(false);
-    t.Env.TestWaitNotification(t.Runtime, exportId);
+    test.Env.TestWaitNotification(test.Runtime, exportId);
 
-    TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-    Ydb::Table::CreateTableRequest scheme;
-    const TString schemeText = t.ReadFile("scheme.pb");
-    UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(schemeText, &scheme), schemeText);
-    UNIT_ASSERT_C(scheme.attributes().contains("version_switch"), schemeText);
+    test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
+
+    const auto scheme = test.ReadScheme();
+    UNIT_ASSERT_C(scheme.attributes().contains("version_switch"), scheme.DebugString());
     UNIT_ASSERT_VALUES_EQUAL(scheme.attributes().at("version_switch"), expectedAttribute);
-    UNIT_ASSERT_VALUES_EQUAL(t.ReadFile("data_00.csv"), "1,\"before\"\n");
-    UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), snapshotCount);
-    t.Forget(exportId);
+    UNIT_ASSERT_VALUES_EQUAL(test.ReadFile("data_00.csv"), "1,\"before\"\n");
+    UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), snapshotCount);
+
+    test.Forget(exportId);
 }
 
 } // namespace
@@ -690,90 +1071,57 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
 
     Y_UNIT_TEST(CopyIgnoresUnrelatedIndexBuildHistory) {
         NSchemeShard::TSchemeShard* schemeShard = nullptr;
-        TExportEnv t(true, [&](const TActorId& tablet, TTabletStorageInfo* info) {
+        TExportEnv test(true, [&](const TActorId& tablet, TTabletStorageInfo* info) {
             schemeShard = static_cast<NSchemeShard::TSchemeShard*>(CreateFlatTxSchemeShard(tablet, info));
             return schemeShard;
         });
-        t.Runtime.GetAppData().FeatureFlags.SetEnableSystemNamesProtection(false);
-        t.CreateTable();
-        TestBuildIndex(t.Runtime, ++t.TxId, TTestTxConfig::SchemeShard,
-            "/MyRoot", "/MyRoot/Table", "index", {"value"});
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
-        TestCreateTable(t.Runtime, ++t.TxId, "/MyRoot", R"(
-            Name: "History"
-            Columns { Name: "key" Type: "Uint32" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
-        )");
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
-        WriteRow(t.Runtime, ++t.TxId, "/MyRoot/History", 0, 1, "history");
-        TVector<ui64> history;
-        for (ui32 i = 0; i < 3; ++i) {
-            const ui64 buildId = ++t.TxId;
-            TestBuildIndex(t.Runtime, buildId, TTestTxConfig::SchemeShard,
-                "/MyRoot", "/MyRoot/History", "history-index", {"value"});
-            t.Env.TestWaitNotification(t.Runtime, buildId);
-            UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(t.Runtime, TTestTxConfig::SchemeShard,
-                "/MyRoot", buildId).GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
-            history.push_back(buildId);
-            TestDropTableIndex(t.Runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot", R"(
-                TableName: "History"
-                IndexName: "history-index"
-            )");
-            t.Env.TestWaitNotification(t.Runtime, t.TxId);
-        }
+        test.Runtime.GetAppData().FeatureFlags.SetEnableSystemNamesProtection(false);
+        test.CreateTable();
+        test.CreateIndex("index");
+        const auto history = CreateIndexBuildHistory(test);
+
         for (const auto buildId : history) {
             UNIT_ASSERT(schemeShard->IndexBuilds.contains(TIndexBuildId(buildId)));
         }
-        TestCreateTable(t.Runtime, ++t.TxId, "/MyRoot", R"(
-            Name: "Other"
-            Columns { Name: "key" Type: "Uint32" }
-            Columns { Name: "embedding" Type: "String" }
-            Columns { Name: "prefix" Type: "Uint32" }
-            Columns { Name: "value" Type: "String" }
-            KeyColumnNames: ["key"]
-        )");
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
-        WriteVectorTableRows(t.Runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/Other", 0, 0, 200);
-        TestBuildVectorIndex(t.Runtime, ++t.TxId, TTestTxConfig::SchemeShard,
-            "/MyRoot", "/MyRoot/Other", "index", {"embedding"});
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> replacement(t.Runtime, [](const auto& ev) {
+
+        test.CreateVectorTable("Other");
+        test.CreateVectorIndex("/MyRoot/Other");
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> replacement(test.Runtime, [](const auto& ev) {
             const auto& record = ev->Get()->Record;
             return record.TransactionSize() == 1
                 && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveIndex;
         });
-        const ui64 rebuildId = ++t.TxId;
-        TestRebuildVectorIndex(t.Runtime, rebuildId, TTestTxConfig::SchemeShard,
-            "/MyRoot", "/MyRoot/Other", "index", {"embedding"});
-        t.Runtime.WaitFor("unrelated replacement ready", [&] { return !replacement.empty(); });
+        const ui64 rebuildId = ++test.TxId;
+        TestRebuildVectorIndex(test.Runtime, rebuildId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Other", "index", {"embedding"});
+        test.Runtime.WaitFor("unrelated replacement ready", [&] { return !replacement.empty(); });
         const TString temporaryName = Sprintf("__ydb_rebuild_%lu", rebuildId);
-        TestBuildIndex(t.Runtime, ++t.TxId, TTestTxConfig::SchemeShard,
-            "/MyRoot", "/MyRoot/Table", temporaryName, {"value"});
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
+        test.CreateIndex(temporaryName, {"value"});
         replacement.clear();
-        RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
-        t.Runtime.WaitFor("unrelated replacement after restart", [&] { return !replacement.empty(); });
+        test.Reboot();
+        test.Runtime.WaitFor("unrelated replacement after restart", [&] { return !replacement.empty(); });
+
         for (const auto buildId : history) {
             UNIT_ASSERT(schemeShard->IndexBuilds.contains(TIndexBuildId(buildId)));
         }
-        const auto targetRows = ReadShards(t.Runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
+
+        const auto targetRows = test.ReadRows("/MyRoot/Table");
         THashMap<TString, TVector<TString>> targetIndexRows;
+
         for (const TString& name : TVector<TString>{"index", temporaryName}) {
-            targetIndexRows.emplace(name, ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-                "/MyRoot/Table/" + name + "/indexImplTable"));
+            targetIndexRows.emplace(name, test.ReadRows("/MyRoot/Table/" + name + "/indexImplTable"));
         }
-        TestCopyTable(t.Runtime, ++t.TxId, "/MyRoot", "OrdinaryCopy", "/MyRoot/Table");
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
-        TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/OrdinaryCopy"), {NLs::IndexesCount(2)});
-        UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard, "/MyRoot/OrdinaryCopy"), targetRows);
+        TestCopyTable(test.Runtime, ++test.TxId, "/MyRoot", "OrdinaryCopy", "/MyRoot/Table");
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+        TestDescribeResult(DescribePath(test.Runtime, "/MyRoot/OrdinaryCopy"), {NLs::IndexesCount(2)});
+        UNIT_ASSERT_VALUES_EQUAL(test.ReadRows("/MyRoot/OrdinaryCopy"), targetRows);
+
         for (const auto& [name, rows] : targetIndexRows) {
-            UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-                "/MyRoot/OrdinaryCopy/" + name + "/indexImplTable"), rows);
+            UNIT_ASSERT_VALUES_EQUAL(test.ReadRows("/MyRoot/OrdinaryCopy/" + name + "/indexImplTable"), rows);
         }
         for (const bool isBackup : {false, true}) {
             const TString dst = isBackup ? "/MyRoot/BackupCopy" : "/MyRoot/OmittedCopy";
-            TestConsistentCopyTables(t.Runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
+            TestConsistentCopyTables(test.Runtime, ++test.TxId, "/MyRoot", Sprintf(R"(
                 CopyTableDescriptions {
                     SrcPath: "/MyRoot/Table"
                     DstPath: "%s"
@@ -781,44 +1129,43 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
                     IsBackup: %s
                 }
             )", dst.c_str(), isBackup ? "true" : "false"));
-            t.Env.TestWaitNotification(t.Runtime, t.TxId);
-            TestDescribeResult(DescribePrivatePath(t.Runtime, dst), {NLs::IndexesCount(0), NLs::IsBackupTable(isBackup)});
+            test.Env.TestWaitNotification(test.Runtime, test.TxId);
+            TestDescribeResult(DescribePrivatePath(test.Runtime, dst), {NLs::IndexesCount(0), NLs::IsBackupTable(isBackup)});
             if (!isBackup) {
-                UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard, dst), targetRows);
+                UNIT_ASSERT_VALUES_EQUAL(test.ReadRows(dst), targetRows);
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 0);
         UNIT_ASSERT(!replacement.empty());
-        TestDescribeResult(DescribePrivatePath(t.Runtime, "/MyRoot/Other/" + temporaryName), {
+        TestDescribeResult(DescribePrivatePath(test.Runtime, "/MyRoot/Other/" + temporaryName), {
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
         replacement.Stop().Unblock();
-        t.Env.TestWaitNotification(t.Runtime, rebuildId);
-        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(t.Runtime, TTestTxConfig::SchemeShard,
-            "/MyRoot", rebuildId).GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        test.Env.TestWaitNotification(test.Runtime, rebuildId);
+        test.CheckBuildState(rebuildId, Ydb::Table::IndexBuildState::STATE_DONE);
     }
 
     Y_UNIT_TEST(ExportFixturePreservesBackupQueueDefaults) {
-        TExportEnv t(true);
+        TExportEnv test(true);
         const auto config = NResourceBroker::MakeDefaultConfig();
         const auto queue = FindIf(config.GetQueues(), [](const auto& queue) {
             return queue.GetName() == "queue_backup";
         });
         UNIT_ASSERT(queue != config.GetQueues().end());
-        for (ui32 nodeIdx = 0; nodeIdx < t.Runtime.GetNodeCount(); ++nodeIdx) {
-            const auto sender = t.Runtime.AllocateEdgeActor(nodeIdx);
-            t.Runtime.Send(new IEventHandle(
-                t.Runtime.GetLocalServiceId(NResourceBroker::MakeResourceBrokerID(), nodeIdx), sender,
+
+        for (ui32 nodeIdx = 0; nodeIdx < test.Runtime.GetNodeCount(); ++nodeIdx) {
+            const auto sender = test.Runtime.AllocateEdgeActor(nodeIdx);
+            test.Runtime.Send(new IEventHandle( test.Runtime.GetLocalServiceId(NResourceBroker::MakeResourceBrokerID(), nodeIdx), sender,
                 new NResourceBroker::TEvResourceBroker::TEvConfigRequest("queue_backup")), nodeIdx);
-            const auto reply = t.Runtime.GrabEdgeEvent<NResourceBroker::TEvResourceBroker::TEvConfigResponse>(sender);
+            const auto reply = test.Runtime.GrabEdgeEvent<NResourceBroker::TEvResourceBroker::TEvConfigResponse>(sender);
             UNIT_ASSERT(reply->Get()->QueueConfig);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->QueueConfig->GetLimit().GetCpu(), queue->GetLimit().GetCpu());
         }
     }
     Y_UNIT_TEST(BackupCopiesOutsideExportDoNotCaptureScheme) {
-        TExportEnv t(false);
-        t.CreateTable();
-        TestConsistentCopyTables(t.Runtime, ++t.TxId, "/MyRoot", R"(
+        TExportEnv test(false);
+        test.CreateTable();
+        TestConsistentCopyTables(test.Runtime, ++test.TxId, "/MyRoot", R"(
             CopyTableDescriptions {
                 SrcPath: "/MyRoot/Table"
                 DstPath: "/MyRoot/Backup"
@@ -826,14 +1173,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
                 OmitIndexes: true
             }
         )");
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 0);
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 0);
     }
 
     Y_UNIT_TEST(RegularCopyCanCaptureTableSchemeSnapshot) {
-        TExportEnv t(false);
-        t.CreateTable();
-        TestConsistentCopyTables(t.Runtime, ++t.TxId, "/MyRoot", R"(
+        TExportEnv test(false);
+        test.CreateTable();
+        TestConsistentCopyTables(test.Runtime, ++test.TxId, "/MyRoot", R"(
             CopyTableDescriptions {
                 SrcPath: "/MyRoot/Table"
                 DstPath: "/MyRoot/Copy"
@@ -841,20 +1188,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
                 OmitIndexes: true
             }
         )");
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 1);
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 1);
 
-        RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 1);
+        test.Reboot();
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 1);
 
-        TestDropTable(t.Runtime, ++t.TxId, "/MyRoot", "Copy");
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 0);
+        TestDropTable(test.Runtime, ++test.TxId, "/MyRoot", "Copy");
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 0);
     }
 
     Y_UNIT_TEST(OrphanTableSchemeSnapshotIsRemovedAfterReboot) {
-        TExportEnv t(false);
-        LocalMiniKQL(t.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+        TExportEnv test(false);
+        LocalMiniKQL(test.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
             (
                 (let key '(
                     '('OwnerPathId (Uint64 '%lu))
@@ -865,9 +1212,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
                 (return (AsList (UpdateRow 'TableSchemeSnapshots key '(description topics))))
             )
         )", TTestTxConfig::SchemeShard));
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 1);
-        RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 1);
+        test.Reboot();
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 0);
     }
 
     Y_UNIT_TEST_QUAD(AlterSourceAfterCopy, IsFs, Reboot) {
@@ -899,472 +1246,703 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
     }
 
     Y_UNIT_TEST_TWIN(InvalidTableSchemeSnapshotCancelsWholeExport, IsFs) {
-        TExportEnv t(IsFs);
-        t.CreateTable();
-        TestCreateTable(t.Runtime, ++t.TxId, "/MyRoot", R"(
-            Name: "Other"
-            Columns { Name: "key" Type: "Uint32" }
-            KeyColumnNames: ["key"]
-        )");
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
+        TExportEnv test(IsFs);
+        test.CreateTable();
+        test.CreateKeyTable("Other");
 
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export("", {"Other"});
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export("", {"Other"});
         copy.WaitForCopy();
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 2);
-        const auto pathId = DescribePrivatePath(t.Runtime, Sprintf("/MyRoot/export-%lu/0", exportId)).GetPathId();
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 2);
+        const auto pathId = DescribePrivatePath(test.Runtime, test.ExportPath(exportId)).GetPathId();
 
         // A valid protobuf without a table must fail preparation after recovery
-        LocalMiniKQL(t.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
-            (
-                (let key '(
-                    '('OwnerPathId (Uint64 '%lu))
-                    '('LocalPathId (Uint64 '%lu))
-                ))
-                (let description '('TableDescription (String '"")))
-                (return (AsList (UpdateRow 'TableSchemeSnapshots key '(description))))
-            )
-        )", TTestTxConfig::SchemeShard, pathId));
+        UpdateTableSchemeSnapshot(test, pathId, "TableDescription", "");
         copy.Resume(true);
-        t.Env.TestWaitNotification(t.Runtime, exportId);
+        test.Env.TestWaitNotification(test.Runtime, exportId);
 
-        auto result = TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        const auto& entry = result.GetResponse().GetEntry();
+        const auto entry = test.GetExportEntry(exportId, Ydb::StatusIds::CANCELLED);
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
         UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "snapshot");
-        UNIT_ASSERT(!t.HasFile("scheme.pb"));
-        UNIT_ASSERT(!t.HasFile("export_complete.json"));
+        UNIT_ASSERT(!test.HasFile("scheme.pb"));
+        UNIT_ASSERT(!test.HasExportCompletionMarker());
 
-        RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
+        test.Reboot();
 
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        t.Forget(exportId);
+        test.GetExportEntry(exportId, Ydb::StatusIds::CANCELLED);
+
+        test.Forget(exportId);
     }
 
     Y_UNIT_TEST_QUAD(CorruptTableSchemeSnapshotCancelsOnlyItsExport, IsFs, CorruptTopics) {
-        TExportEnv t(IsFs);
+        TExportEnv test(IsFs);
         // Operation timestamps are persisted with second precision.
-        t.Runtime.AdvanceCurrentTime(TDuration::Seconds(1));
-        t.CreateTable();
+        test.Runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        test.CreateTable();
         if (CorruptTopics) {
-            t.CreateChangefeed();
+            test.CreateChangefeed();
         }
 
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export();
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export();
         copy.WaitForCopy();
-        const auto pathId = DescribePrivatePath(t.Runtime, Sprintf("/MyRoot/export-%lu/0", exportId)).GetPathId();
-        CorruptTableSchemeSnapshot(t, pathId, CorruptTopics);
+        const auto pathId = DescribePrivatePath(test.Runtime, test.ExportPath(exportId)).GetPathId();
+        CorruptTableSchemeSnapshot(test, pathId, CorruptTopics);
         copy.Resume(true);
-        t.Env.TestWaitNotification(t.Runtime, exportId);
+        test.Env.TestWaitNotification(test.Runtime, exportId);
 
         const TString error = CorruptTopics ? "changefeed topics" : "table scheme snapshot";
         auto checkCancelled = [&] {
-            const auto result = TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-            const auto& entry = result.GetResponse().GetEntry();
+            const auto entry = test.GetExportEntry(exportId, Ydb::StatusIds::CANCELLED);
             UNIT_ASSERT(entry.HasEndTime());
             UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
             UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), error);
-            UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 1);
         };
         checkCancelled();
-        UNIT_ASSERT(!t.HasFile("scheme.pb"));
-        UNIT_ASSERT(!t.HasFile("export_complete.json"));
-        RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
+        UNIT_ASSERT(!test.HasFile("scheme.pb"));
+        UNIT_ASSERT(!test.HasExportCompletionMarker());
+        test.Reboot();
         checkCancelled();
 
-        const ui64 healthyExportId = t.Export();
-        t.Env.TestWaitNotification(t.Runtime, healthyExportId);
-        TestGetExport(t.Runtime, healthyExportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(t.ReadFile("data_00.csv"), "1,\"before\"\n");
-        TestForgetExport(t.Runtime, ++t.TxId, "/MyRoot", healthyExportId);
-        t.Env.TestWaitNotification(t.Runtime, healthyExportId);
-        TestGetExport(t.Runtime, healthyExportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        const ui64 healthyExportId = test.Export();
+        test.Env.TestWaitNotification(test.Runtime, healthyExportId);
+        test.GetExportEntry(healthyExportId, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(test.ReadFile("data_00.csv"), "1,\"before\"\n");
+        TestForgetExport(test.Runtime, ++test.TxId, "/MyRoot", healthyExportId);
+        test.Env.TestWaitNotification(test.Runtime, healthyExportId);
+        test.GetExportEntry(healthyExportId, Ydb::StatusIds::NOT_FOUND);
         checkCancelled();
-        t.Forget(exportId);
+
+        test.Forget(exportId);
     }
 
     Y_UNIT_TEST_QUAD(CorruptSnapshotCancelsActiveBackupsAcrossRestarts, IsFs, CorruptIndex) {
-        TExportEnv t(IsFs);
-        t.CreateTable(false, true);
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export("include_index_data: true");
+        TExportEnv test(IsFs);
+        test.CreateIndexedTable();
+
+        TDelayedDataUpload upload(test);
+        test.ConfigureBackupConcurrency(2);
+
+        TBlockEvents<TEvSchemeShard::TEvCancelTx> cancellations(test.Runtime);
+
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export("include_index_data: true");
         copy.WaitForCopy();
-        const TString root = Sprintf("/MyRoot/export-%lu/0", exportId);
+        const TString root = test.ExportPath(exportId);
         const TString brokenPath = CorruptIndex ? root + "/index/indexImplTable" : root;
-        const auto pathId = DescribePrivatePath(t.Runtime, brokenPath).GetPathId();
+        const auto pathId = DescribePrivatePath(test.Runtime, brokenPath).GetPathId();
 
-        TDelayedDataUpload upload(t);
-        t.ConfigureBackupConcurrency(2);
         copy.Resume(false);
-        t.Runtime.WaitFor("both copied tables uploading", [&] {
-            THashSet<TString> keys;
-            for (const auto& request : upload.Requests) {
-                keys.insert(TString(request->Get()->Request.GetKey()));
-            }
-            return keys.size() == 2;
+        test.Runtime.WaitFor("both copied tables uploading", [&] {
+            return GetObjectKeys(upload.Requests).size() == 2;
         });
-        CorruptTableSchemeSnapshot(t, pathId);
+        CorruptTableSchemeSnapshot(test, pathId);
 
-        TBlockEvents<TEvSchemeShard::TEvCancelTx> cancellations(t.Runtime);
         for (ui32 restart = 0; restart < 2; ++restart) {
             cancellations.clear();
-            RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
-            t.Runtime.WaitFor("both backup cancellations after recovery", [&] {
-                THashSet<ui64> targets;
-                for (const auto& request : cancellations) {
-                    targets.insert(request->Get()->Record.GetTargetTxId());
-                }
-                return targets.size() == 2;
+            test.Reboot();
+            test.Runtime.WaitFor("both backup cancellations after recovery", [&] {
+                return GetCancellationTargets(cancellations).size() == 2;
             });
-            const auto result = TestGetExport(t.Runtime, exportId, "/MyRoot");
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResponse().GetEntry().GetProgress(),
-                Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
-            UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 2);
-            UNIT_ASSERT(!t.HasFile("export_complete.json"));
+
+            const auto result = test.GetExportEntry(exportId);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
+            UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 2);
+            UNIT_ASSERT(!test.HasExportCompletionMarker());
         }
         cancellations.Stop().Unblock();
         upload.Requests.clear();
         upload.Requests.Stop();
-        t.Env.TestWaitNotification(t.Runtime, exportId);
-        const auto result = TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetResponse().GetEntry().GetIssues(0).message(), "table scheme snapshot");
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 2);
-        t.Forget(exportId);
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+
+        const auto result = test.GetExportEntry(exportId, Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "table scheme snapshot");
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 2);
+
+        test.Forget(exportId);
+    }
+
+    Y_UNIT_TEST_QUAD(BackupAcceptanceRepliesLostBeforeRestart, IsFs, BackupFinished) {
+        TExportEnv test(IsFs);
+        test.Encrypted = true;
+        test.CreateIndexedTable();
+
+        const auto expectedRows = test.ReadRows("/MyRoot/Table");
+        const auto expectedIndex = test.ReadRows("/MyRoot/Table/index/indexImplTable");
+
+        TBackupReplies backups(test);
+        TDelayedDataUpload upload(test);
+        test.ConfigureBackupConcurrency(2);
+
+        const ui64 exportId = test.Export("include_index_data: true");
+        test.Runtime.WaitFor("both accepted backups uploading without acceptance replies", [&] {
+            return GetObjectKeys(upload.Requests).size() == 2 && backups.Replies.size() == 2;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(backups.TxIds.size(), 2);
+        backups.CheckAccepted();
+        UNIT_ASSERT_VALUES_EQUAL(ReadExportBackupTxIds(test, exportId), (TVector<ui64>{0, 0}));
+        if (BackupFinished) {
+            upload.Requests.Stop().Unblock();
+
+            for (const auto txId : backups.TxIds) {
+                test.Env.TestWaitNotification(test.Runtime, txId);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ReadExportBackupTxIds(test, exportId), (TVector<ui64>{0, 0}));
+            UNIT_ASSERT_VALUES_EQUAL(test.ReadFile("data_00.csv"), "1,\"before\"\n");
+            UNIT_ASSERT(!test.HasExportCompletionMarker());
+        }
+        backups.DiscardReplies();
+
+        for (ui32 restart = 0; restart < 2; ++restart) {
+            test.Reboot();
+            if (BackupFinished) {
+                test.Env.TestWaitNotification(test.Runtime, exportId);
+                test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
+                continue;
+            }
+
+            test.Runtime.WaitFor("both backup transaction ids recovered", [&] {
+                const auto ids = ReadExportBackupTxIds(test, exportId);
+                return ids.size() == 2 && ids[0] && ids[1];
+            });
+            backups.CheckRecoveredTxIds(exportId);
+            UNIT_ASSERT(!test.HasExportCompletionMarker());
+        }
+        if (!BackupFinished) {
+            upload.Requests.Stop().Unblock();
+        }
+
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+        test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
+        if (!IsFs) {
+            UNIT_ASSERT(test.S3.GetData().contains("/Backup/export_complete.json"));
+            UNIT_ASSERT(test.HasExportCompletionMarker());
+        }
+
+        test.Import(true);
+        UNIT_ASSERT_VALUES_EQUAL(test.ReadRows("/MyRoot/Restored"), expectedRows);
+        UNIT_ASSERT_VALUES_EQUAL(test.ReadRows("/MyRoot/Restored/index/indexImplTable"), expectedIndex);
+
+        test.Forget(exportId);
+    }
+
+    Y_UNIT_TEST_QUAD(CorruptSnapshotCancelsAcceptedBackupsAcrossRestarts, IsFs, LoseAcceptanceReplies) {
+        TExportEnv test(IsFs);
+        test.Encrypted = true;
+        test.CreateIndexedTable();
+
+        TBackupReplies backups(test, LoseAcceptanceReplies);
+        TDelayedDataUpload upload(test);
+        test.ConfigureBackupConcurrency(2);
+        // Hold the response after the real cancel handler has persisted cancellation.
+        TBlockEvents<TEvSchemeShard::TEvCancelTxResult> acknowledgements(test.Runtime);
+
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export("include_index_data: true");
+        copy.WaitForCopy();
+        const TString root = test.ExportPath(exportId);
+        const auto pathId = DescribePrivatePath(test.Runtime, root + "/index/indexImplTable").GetPathId();
+        copy.Resume(false);
+        test.Runtime.WaitFor("both backups active before damaging the snapshot", [&] {
+            return GetObjectKeys(upload.Requests).size() == 2 && (!LoseAcceptanceReplies || backups.Replies.size() == 2);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(backups.TxIds.size(), 2);
+        if (LoseAcceptanceReplies) {
+            UNIT_ASSERT_VALUES_EQUAL(ReadExportBackupTxIds(test, exportId), (TVector<ui64>{0, 0}));
+            backups.CheckAccepted();
+        }
+        backups.DiscardReplies();
+        CorruptTableSchemeSnapshot(test, pathId);
+
+        for (ui32 restart = 0; restart < 2; ++restart) {
+            acknowledgements.clear();
+            test.Reboot();
+            test.Runtime.WaitFor("both cancellation acknowledgements after recovery", [&] {
+                return GetCancellationTargets(acknowledgements).size() == 2;
+            });
+
+            for (const auto& ack : acknowledgements) {
+                UNIT_ASSERT(backups.TxIds.contains(ack->Get()->Record.GetTargetTxId()));
+                if (!restart) {
+                    UNIT_ASSERT_VALUES_EQUAL(ack->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted);
+                }
+            }
+            backups.CheckRecoveredTxIds(exportId);
+
+            const auto result = test.GetExportEntry(exportId);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
+            UNIT_ASSERT(!test.HasExportCompletionMarker());
+            if (!restart) {
+                RebootTableShards(test, root);
+                RebootTableShards(test, root + "/index/indexImplTable");
+            }
+        }
+        acknowledgements.Stop().Unblock();
+        upload.Requests.clear();
+        upload.Requests.Stop();
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+
+        for (const auto txId : backups.TxIds) {
+            test.Env.TestWaitNotification(test.Runtime, txId);
+        }
+        auto checkCancelled = [&] {
+            const auto result = test.GetExportEntry(exportId, Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "table scheme snapshot");
+            UNIT_ASSERT(!test.HasExportCompletionMarker());
+            UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 2);
+        };
+        checkCancelled();
+        test.Reboot();
+        checkCancelled();
+
+        test.Forget(exportId);
+    }
+
+    Y_UNIT_TEST_TWIN(CorruptColumnTableSnapshotCancelsExport, ActiveBackup) {
+        TExportEnv test(false);
+        test.CreateColumnTable();
+
+        TDelayedDataUpload upload(test);
+
+        TBlockEvents<TEvSchemeShard::TEvCancelTxResult> acknowledgements(test.Runtime);
+
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export();
+        copy.WaitForCopy();
+        const auto pathId = DescribePrivatePath(test.Runtime, test.ExportPath(exportId)).GetPathId();
+        if (ActiveBackup) {
+            copy.Resume(false);
+            test.Runtime.WaitFor("column table data upload", [&] { return !upload.Requests.empty(); });
+        }
+        CorruptTableSchemeSnapshot(test, pathId);
+        if (ActiveBackup) {
+            for (ui32 restart = 0; restart < 2; ++restart) {
+                acknowledgements.clear();
+                test.Reboot();
+                test.Runtime.WaitFor("column table backup cancellation", [&] { return !acknowledgements.empty(); });
+
+                const auto result = test.GetExportEntry(exportId);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
+            }
+        } else {
+            copy.Resume(true);
+        }
+        acknowledgements.Stop().Unblock();
+        upload.Requests.clear();
+        upload.Requests.Stop();
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+
+        const auto result = test.GetExportEntry(exportId, Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "table scheme snapshot");
+        UNIT_ASSERT(!test.HasExportCompletionMarker());
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 1);
+        test.Reboot();
+        test.GetExportEntry(exportId, Ydb::StatusIds::CANCELLED);
+
+        test.Forget(exportId);
+        const ui64 healthyExportId = test.Export();
+        test.Env.TestWaitNotification(test.Runtime, healthyExportId);
+        test.GetExportEntry(healthyExportId, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(test.HasExportCompletionMarker());
+        UNIT_ASSERT(!test.ReadFile("data_00.csv").empty());
+
+        test.Forget(healthyExportId);
     }
 
     Y_UNIT_TEST(CorruptSnapshotDoesNotCancelExportAwaitingOperationMarker) {
-        TExportEnv t(false);
-        t.CreateTable(false, true);
-        const auto expectedIndex = ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-            "/MyRoot/Table/index/indexImplTable");
-        TBlockEvents<NSchemeShard::TEvPrivate::TEvExportCompletionUploadResult> markerReplies(t.Runtime,
+        TExportEnv test(false);
+        test.CreateIndexedTable();
+
+        const auto expectedIndex = test.ReadRows("/MyRoot/Table/index/indexImplTable");
+
+        TBlockEvents<NSchemeShard::TEvPrivate::TEvExportCompletionUploadResult> markerReplies(test.Runtime,
             [](const auto& ev) { return ev->Get()->ItemIdx == Max<ui32>(); });
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export("include_index_data: true");
+
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export("include_index_data: true");
         copy.WaitForCopy();
-        const auto pathId = DescribePrivatePath(t.Runtime, Sprintf("/MyRoot/export-%lu/0", exportId)).GetPathId();
+        const auto pathId = DescribePrivatePath(test.Runtime, test.ExportPath(exportId)).GetPathId();
         copy.Resume(false);
-        t.Runtime.WaitFor("operation completion marker uploaded", [&] { return !markerReplies.empty(); });
-        UNIT_ASSERT_VALUES_EQUAL(ReadExportItemState(t, exportId, 0), NSchemeShard::TExportInfo::EState::Done);
-        UNIT_ASSERT_VALUES_EQUAL(ReadExportItemState(t, exportId, 1), NSchemeShard::TExportInfo::EState::Done);
-        CorruptTableSchemeSnapshot(t, pathId);
+        test.Runtime.WaitFor("operation completion marker uploaded", [&] { return !markerReplies.empty(); });
+        UNIT_ASSERT(test.HasExportCompletionMarker());
+        UNIT_ASSERT_VALUES_EQUAL(ReadExportItemState(test, exportId, 0), NSchemeShard::TExportInfo::EState::Done);
+        UNIT_ASSERT_VALUES_EQUAL(ReadExportItemState(test, exportId, 1), NSchemeShard::TExportInfo::EState::Done);
+        CorruptTableSchemeSnapshot(test, pathId);
 
         markerReplies.clear();
         markerReplies.Stop();
+
         for (ui32 restart = 0; restart < 2; ++restart) {
-            RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
-            t.Env.TestWaitNotification(t.Runtime, exportId);
-            TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+            test.Reboot();
+            test.Env.TestWaitNotification(test.Runtime, exportId);
+            test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
         }
-        t.Import(true);
-        UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-            "/MyRoot/Restored/index/indexImplTable"), expectedIndex);
-        t.Forget(exportId);
+
+        test.Import(true);
+        UNIT_ASSERT_VALUES_EQUAL(test.ReadRows("/MyRoot/Restored/index/indexImplTable"), expectedIndex);
+
+        test.Forget(exportId);
     }
 
     Y_UNIT_TEST_TWIN(MissingChangefeedTopicsCancelsWholeExport, IsFs) {
-        TExportEnv t(IsFs);
-        t.CreateTable();
-        t.CreateChangefeed();
+        TExportEnv test(IsFs);
+        test.CreateTable();
+        test.CreateChangefeed();
 
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export();
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export();
         copy.WaitForCopy();
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 1);
-        const auto pathId = DescribePrivatePath(t.Runtime, Sprintf("/MyRoot/export-%lu/0", exportId)).GetPathId();
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 1);
+        const auto pathId = DescribePrivatePath(test.Runtime, test.ExportPath(exportId)).GetPathId();
 
         // Keep the captured CDC stream, but remove its underlying topic from the snapshot.
-        LocalMiniKQL(t.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
-            (
-                (let key '(
-                    '('OwnerPathId (Uint64 '%lu))
-                    '('LocalPathId (Uint64 '%lu))
-                ))
-                (let topics '('ChangefeedUnderlyingTopics (String '"")))
-                (return (AsList (UpdateRow 'TableSchemeSnapshots key '(topics))))
-            )
-        )", TTestTxConfig::SchemeShard, pathId));
+        UpdateTableSchemeSnapshot(test, pathId, "ChangefeedUnderlyingTopics", "");
         copy.Resume(true);
-        t.Env.TestWaitNotification(t.Runtime, exportId);
+        test.Env.TestWaitNotification(test.Runtime, exportId);
 
-        auto result = TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        const auto& entry = result.GetResponse().GetEntry();
+        const auto entry = test.GetExportEntry(exportId, Ydb::StatusIds::CANCELLED);
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
         UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "changefeed topics");
-        UNIT_ASSERT(!t.HasFile("scheme.pb"));
-        UNIT_ASSERT(!t.HasFile("export_complete.json"));
+        UNIT_ASSERT(!test.HasFile("scheme.pb"));
+        UNIT_ASSERT(!test.HasExportCompletionMarker());
 
-        RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
+        test.Reboot();
 
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        t.Forget(exportId);
+        test.GetExportEntry(exportId, Ydb::StatusIds::CANCELLED);
+
+        test.Forget(exportId);
     }
 
     Y_UNIT_TEST_TWIN(DroppedSourceBeforeCaptureCancelsExport, IsFs) {
-        TExportEnv t(IsFs);
-        t.CreateTable();
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export();
-        t.Runtime.WaitFor("consistent copy proposal", [&] { return !copy.Proposal.empty(); });
+        TExportEnv test(IsFs);
+        test.CreateTable();
 
-        TestDropTable(t.Runtime, ++t.TxId, "/MyRoot", "Table");
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export();
+        test.Runtime.WaitFor("consistent copy proposal", [&] { return !copy.Proposal.empty(); });
+
+        TestDropTable(test.Runtime, ++test.TxId, "/MyRoot", "Table");
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
         copy.Proposal.Stop().Unblock();
-        t.Env.TestWaitNotification(t.Runtime, exportId);
+        test.Env.TestWaitNotification(test.Runtime, exportId);
 
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 0);
-        UNIT_ASSERT(!t.HasFile("scheme.pb"));
-        t.Forget(exportId);
+        test.GetExportEntry(exportId, Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 0);
+        UNIT_ASSERT(!test.HasFile("scheme.pb"));
+
+        test.Forget(exportId);
     }
 
     Y_UNIT_TEST_TWIN(IndexesAndChangefeedsSurviveSourceDrop, IsFs) {
-        TExportEnv t(IsFs);
-        t.CreateTable(false, true);
-        t.CreateChangefeed();
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export("include_index_data: true");
+        TExportEnv test(IsFs);
+        test.CreateIndexedTable();
+        test.CreateChangefeed();
+
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export("include_index_data: true");
         copy.WaitForCopy();
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 2);
-        TestDropTable(t.Runtime, ++t.TxId, "/MyRoot", "Table");
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 2);
+        TestDropTable(test.Runtime, ++test.TxId, "/MyRoot", "Table");
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
 
         copy.Resume(true);
-        t.Env.TestWaitNotification(t.Runtime, exportId);
+        test.Env.TestWaitNotification(test.Runtime, exportId);
 
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        Ydb::Table::CreateTableRequest scheme;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(t.ReadFile("scheme.pb"), &scheme));
+        test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
+
+        const auto scheme = test.ReadScheme();
 
         UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(scheme.indexes(0).name(), "index");
 
-        UNIT_ASSERT(!t.ReadFile("feed/changefeed_description.pb").empty());
-        UNIT_ASSERT(!t.ReadFile("feed/topic_description.pb").empty());
+        UNIT_ASSERT(!test.ReadFile("feed/changefeed_description.pb").empty());
+        UNIT_ASSERT(!test.ReadFile("feed/topic_description.pb").empty());
 
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(t.ReadFile("index/indexImplTable/scheme.pb"), &scheme));
-        UNIT_ASSERT_VALUES_EQUAL(scheme.primary_key_size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(scheme.primary_key(0), "value");
-        UNIT_ASSERT_VALUES_EQUAL(scheme.primary_key(1), "key");
-        t.Forget(exportId);
+        const auto indexScheme = test.ReadScheme("index/indexImplTable/scheme.pb");
+        UNIT_ASSERT_VALUES_EQUAL(indexScheme.primary_key_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(indexScheme.primary_key(0), "value");
+        UNIT_ASSERT_VALUES_EQUAL(indexScheme.primary_key(1), "key");
+
+        test.Forget(exportId);
     }
 
-    void CheckIndexBuildExport(const TIndexBuildExportOptions& options) {
-        UNIT_ASSERT(!options.FinishAfterExport || (!options.FinishBeforeCopy && !options.RestartDuringUpload));
-        TExportEnv t(options.IsFs, &CreateFlatTxSchemeShard, TTestEnvOptions()
-            .RunFakeConfigDispatcher(options.FinishAfterExport).SetupKqpProxy(options.FinishAfterExport));
-        if (options.FinishAfterExport) {
-            for (ui32 nodeIdx = 0; nodeIdx < t.Runtime.GetNodeCount(); ++nodeIdx) {
-                t.Runtime.GetAppData(nodeIdx).TenantName = "/MyRoot";
-            }
-        }
-        t.Encrypted = options.Encrypted;
-        t.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
-        t.CreateTable();
-        const auto expectedTableData = ReadShards(t.Runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
-        if (options.ReadyIndex) {
-            const ui64 readyBuildId = ++t.TxId;
-            TestBuildIndex(t.Runtime, readyBuildId, TTestTxConfig::SchemeShard,
-                "/MyRoot", "/MyRoot/Table", "index", {"value"});
-            t.Env.TestWaitNotification(t.Runtime, readyBuildId);
-            UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(t.Runtime, TTestTxConfig::SchemeShard,
-                "/MyRoot", readyBuildId).GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+    struct TIndexBuildExportScenario {
+        const TIndexBuildExportOptions Options;
+        TExportEnv Test;
+        ui64 BuildId = 0;
+        ui64 ExportId = 0;
+        ui32 ExpectedIndexes = 0;
+        TVector<TString> ExpectedTableData;
+        THashMap<TString, TVector<TString>> ExpectedIndexData;
+        THashSet<TString> ExpectedImplTables;
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> Scans;
+        TBlockEvents<TEvDataShard::TEvBuildIndexProgressResponse> Progress;
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> Apply;
+        TDelayedCopy Copy;
+        TDelayedDataUpload Uploads;
+
+        explicit TIndexBuildExportScenario(const TIndexBuildExportOptions& options)
+            : Options(options)
+            , Test(options.IsFs, &CreateFlatTxSchemeShard, TTestEnvOptions()
+                .RunFakeConfigDispatcher(options.FinishAfterExport).SetupKqpProxy(options.FinishAfterExport))
+            , Scans(Test.Runtime, [this](const auto& ev) { return ev->Get()->Record.GetId() == BuildId; })
+            , Progress(Test.Runtime, [this](const auto& ev) { return ev->Get()->Record.GetId() == BuildId; })
+            , Apply(Test.Runtime, [this](const auto& ev) {
+                const auto& record = ev->Get()->Record;
+                return Options.WaitForApply && record.TransactionSize() == 1
+                    && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild
+                    && record.GetTransaction(0).GetApplyIndexBuild().GetBuildIndexId() == BuildId;
+            })
+            , Copy(Test)
+            , Uploads(Test)
+        {
+            UNIT_ASSERT(!Options.FinishAfterExport || (!Options.FinishBeforeCopy && !Options.RestartDuringUpload));
         }
 
-        const ui64 buildId = ++t.TxId;
-        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> scans(t.Runtime, [buildId](const auto& ev) {
-            return ev->Get()->Record.GetId() == buildId;
-        });
-        TBlockEvents<TEvDataShard::TEvBuildIndexProgressResponse> progress(t.Runtime, [buildId](const auto& ev) {
-            return ev->Get()->Record.GetId() == buildId;
-        });
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> apply(t.Runtime, [&](const auto& ev) {
-            const auto& record = ev->Get()->Record;
-            return options.WaitForApply && record.TransactionSize() == 1
-                && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild
-                && record.GetTransaction(0).GetApplyIndexBuild().GetBuildIndexId() == buildId;
-        });
-        TestBuildIndex(t.Runtime, buildId, TTestTxConfig::SchemeShard,
-            "/MyRoot", "/MyRoot/Table", "building-index", {"value"});
-        t.Runtime.WaitFor("index build scan", [&] { return !scans.empty(); });
-        TestDescribeResult(DescribePrivatePath(t.Runtime, "/MyRoot/Table/building-index"), {
-            NLs::IndexState(NKikimrSchemeOp::EIndexStateWriteOnly),
-        });
-
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export("include_index_data: true");
-        if (options.FinishBeforeCopy) {
-            t.Runtime.WaitFor("consistent copy proposal", [&] { return !copy.Proposal.empty(); });
-            scans.Stop().Unblock();
-            progress.Stop().Unblock();
-            apply.Stop().Unblock();
-            t.Env.TestWaitNotification(t.Runtime, buildId);
-        }
-        copy.WaitForCopy();
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 1 + options.ReadyIndex + options.FinishBeforeCopy);
-        TDelayedDataUpload uploads(t);
-        if (options.RestartDuringUpload) {
-            UNIT_ASSERT(!options.FinishBeforeCopy && options.ReadyIndex && options.Restart == ERestart::None);
-            uploads.StartAndReboot(copy, exportId, {"index/indexImplTable"});
-        } else {
-            uploads.Requests.Stop();
-        }
-
-        if (!options.FinishBeforeCopy) {
-            scans.Stop().Unblock();
-            if (options.WaitForApply) {
-                progress.Stop().Unblock();
-                t.Runtime.WaitFor("index apply before reboot", [&] { return !apply.empty(); });
-            } else {
-                t.Runtime.WaitFor("index scan progress before reboot", [&] { return !progress.empty(); });
-            }
-            if (options.Restart == ERestart::DataShard || options.Restart == ERestart::Both) {
-                progress.clear();
-                RebootTableShards(t, "/MyRoot/Table");
-                RebootTableShards(t, "/MyRoot/Table/building-index/indexImplTable");
-            }
-            if (options.Restart == ERestart::SchemeShard || options.Restart == ERestart::Both) {
-                progress.clear();
-                apply.clear();
-                copy.Reboot();
-            }
-            if (options.Restart != ERestart::None) {
-                if (options.WaitForApply) {
-                    t.Runtime.WaitFor("index apply after reboot", [&] { return !apply.empty(); });
-                } else {
-                    t.Runtime.WaitFor("index scan progress after reboot", [&] { return !progress.empty(); });
+        void Prepare() {
+            if (Options.FinishAfterExport) {
+                for (ui32 nodeIdx = 0; nodeIdx < Test.Runtime.GetNodeCount(); ++nodeIdx) {
+                    Test.Runtime.GetAppData(nodeIdx).TenantName = "/MyRoot";
                 }
             }
-            TestDescribeResult(DescribePrivatePath(t.Runtime, "/MyRoot/Table/building-index"), {
+
+            Test.Encrypted = Options.Encrypted;
+            Test.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+            Test.CreateTable();
+            ExpectedTableData = Test.ReadRows("/MyRoot/Table");
+            if (Options.ReadyIndex) {
+                const ui64 readyBuildId = Test.CreateIndex("index");
+                Test.CheckBuildState(readyBuildId, Ydb::Table::IndexBuildState::STATE_DONE);
+            }
+        }
+
+        void StartBuild() {
+            BuildId = ++Test.TxId;
+            TestBuildIndex(Test.Runtime, BuildId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "building-index", {"value"});
+            Test.Runtime.WaitFor("index build scan", [&] { return !Scans.empty(); });
+            TestDescribeResult(DescribePrivatePath(Test.Runtime, "/MyRoot/Table/building-index"), {
                 NLs::IndexState(NKikimrSchemeOp::EIndexStateWriteOnly),
             });
         }
-        auto finishBuild = [&] {
-            progress.Stop().Unblock();
-            apply.Stop().Unblock();
-            t.Env.TestWaitNotification(t.Runtime, buildId);
-            UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(t.Runtime, TTestTxConfig::SchemeShard,
-                "/MyRoot", buildId).GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
-            UNIT_ASSERT_VALUES_EQUAL(CountRows(t.Runtime, "/MyRoot/Table/building-index/indexImplTable"), 1);
-            if (options.ReadyIndex) {
-                UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-                    "/MyRoot/Table/building-index/indexImplTable"),
-                    ReadShards(t.Runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table/index/indexImplTable"));
+
+        void StartExport() {
+            ExportId = Test.Export("include_index_data: true");
+            if (Options.FinishBeforeCopy) {
+                Test.Runtime.WaitFor("consistent copy proposal", [&] { return !Copy.Proposal.empty(); });
+                Scans.Stop().Unblock();
+                Progress.Stop().Unblock();
+                Apply.Stop().Unblock();
+                Test.Env.TestWaitNotification(Test.Runtime, BuildId);
             }
-            const auto source = DescribePrivatePath(t.Runtime, "/MyRoot/Table", true);
-            const auto index = DescribePrivatePath(t.Runtime, "/MyRoot/Table/building-index/indexImplTable", true);
+            Copy.WaitForCopy();
+            UNIT_ASSERT_VALUES_EQUAL(Test.SnapshotCount(), 1 + Options.ReadyIndex + Options.FinishBeforeCopy);
+            if (Options.RestartDuringUpload) {
+                UNIT_ASSERT(!Options.FinishBeforeCopy && Options.ReadyIndex && Options.Restart == ERestart::None);
+                Uploads.StartAndReboot(Copy, ExportId, {"index/indexImplTable"});
+            } else {
+                Uploads.Requests.Stop();
+            }
+        }
+
+        void RestartBuild() {
+            if (!Options.FinishBeforeCopy) {
+                Scans.Stop().Unblock();
+                if (Options.WaitForApply) {
+                    Progress.Stop().Unblock();
+                    Test.Runtime.WaitFor("index apply before reboot", [&] { return !Apply.empty(); });
+                } else {
+                    Test.Runtime.WaitFor("index scan progress before reboot", [&] { return !Progress.empty(); });
+                }
+                if (Options.Restart == ERestart::DataShard || Options.Restart == ERestart::Both) {
+                    Progress.clear();
+                    RebootTableShards(Test, "/MyRoot/Table");
+                    RebootTableShards(Test, "/MyRoot/Table/building-index/indexImplTable");
+                }
+                if (Options.Restart == ERestart::SchemeShard || Options.Restart == ERestart::Both) {
+                    Progress.clear();
+                    Apply.clear();
+                    Copy.Reboot();
+                }
+                if (Options.Restart != ERestart::None) {
+                    if (Options.WaitForApply) {
+                        Test.Runtime.WaitFor("index apply after reboot", [&] { return !Apply.empty(); });
+                    } else {
+                        Test.Runtime.WaitFor("index scan progress after reboot", [&] { return !Progress.empty(); });
+                    }
+                }
+                TestDescribeResult(DescribePrivatePath(Test.Runtime, "/MyRoot/Table/building-index"), {
+                    NLs::IndexState(NKikimrSchemeOp::EIndexStateWriteOnly),
+                });
+            }
+        }
+
+        void FinishBuild() {
+            Progress.Stop().Unblock();
+            Apply.Stop().Unblock();
+            Test.Env.TestWaitNotification(Test.Runtime, BuildId);
+            Test.CheckBuildState(BuildId, Ydb::Table::IndexBuildState::STATE_DONE);
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(Test.Runtime, "/MyRoot/Table/building-index/indexImplTable"), 1);
+            if (Options.ReadyIndex) {
+                UNIT_ASSERT_VALUES_EQUAL(Test.ReadRows("/MyRoot/Table/building-index/indexImplTable"), Test.ReadRows("/MyRoot/Table/index/indexImplTable"));
+            }
+
+            const auto source = DescribePrivatePath(Test.Runtime, "/MyRoot/Table", true);
+            const auto index = DescribePrivatePath(Test.Runtime, "/MyRoot/Table/building-index/indexImplTable", true);
             UNIT_ASSERT_VALUES_EQUAL(source.GetPathDescription().TablePartitionsSize(), 1);
             UNIT_ASSERT_VALUES_EQUAL(index.GetPathDescription().TablePartitionsSize(), 1);
-            const auto sourceData = ReadTable(t.Runtime,
-                source.GetPathDescription().GetTablePartitions(0).GetDatashardId(),
+            const auto sourceData = ReadTable(Test.Runtime, source.GetPathDescription().GetTablePartitions(0).GetDatashardId(),
                 "Table", {"key"}, {"key", "value"});
-            const auto indexData = ReadTable(t.Runtime,
-                index.GetPathDescription().GetTablePartitions(0).GetDatashardId(),
+            const auto indexData = ReadTable(Test.Runtime, index.GetPathDescription().GetTablePartitions(0).GetDatashardId(),
                 "indexImplTable", {"value", "key"}, {"key", "value"});
             UNIT_ASSERT_VALUES_EQUAL(indexData.DebugString(), sourceData.DebugString());
-        };
-        auto checkActiveBuild = [&] {
-            const auto result = TestGetBuildIndex(t.Runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
+        }
+
+        void CheckActiveBuild() {
+            const auto result = TestGetBuildIndex(Test.Runtime, TTestTxConfig::SchemeShard, "/MyRoot", BuildId);
             const auto state = result.GetIndexBuild().GetState();
             UNIT_ASSERT_C(state == Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA
                 || state == Ydb::Table::IndexBuildState::STATE_APPLYING, result.DebugString());
-            UNIT_ASSERT(options.WaitForApply ? !apply.empty() : !progress.empty());
-            TestDescribeResult(DescribePrivatePath(t.Runtime, "/MyRoot/Table/building-index"), {
+            UNIT_ASSERT(Options.WaitForApply ? !Apply.empty() : !Progress.empty());
+            TestDescribeResult(DescribePrivatePath(Test.Runtime, "/MyRoot/Table/building-index"), {
                 NLs::IndexState(NKikimrSchemeOp::EIndexStateWriteOnly),
             });
-        };
-        if (!options.FinishAfterExport) {
-            finishBuild();
         }
-        THashMap<TString, TVector<TString>> expectedIndexData;
-        for (const TString index : {"index", "building-index"}) {
-            if ((index == "index" && options.ReadyIndex) || (index == "building-index" && options.FinishBeforeCopy)) {
-                expectedIndexData.emplace(index + "/indexImplTable", ReadShards(t.Runtime,
-                    TTestTxConfig::SchemeShard, "/MyRoot/Table/" + index + "/indexImplTable"));
+
+        void RememberIndexData() {
+            for (const TString index : {"index", "building-index"}) {
+                if ((index == "index" && Options.ReadyIndex) || (index == "building-index" && Options.FinishBeforeCopy)) {
+                    ExpectedIndexData.emplace(index + "/indexImplTable", Test.ReadRows("/MyRoot/Table/" + index + "/indexImplTable"));
+                }
             }
         }
-        if (options.FinishAfterExport) {
-            // Use the query path so the write updates both Ready and WriteOnly indexes.
-            const auto sender = t.Runtime.AllocateEdgeActor();
-            auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-            auto& request = *event->Record.MutableRequest();
-            request.SetDatabase("/MyRoot");
-            request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-            request.SetQuery("--!syntax_v1\nUPSERT INTO `/MyRoot/Table` (key, value) VALUES (1u, \"after\"u);");
-            request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.MutableTxControl()->set_commit_tx(true);
-            t.Runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(t.Runtime.GetNodeId()), sender, event.Release()));
-            const auto result = t.Runtime.GrabEdgeEvent<NKqp::TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS,
-                result->Get()->Record.DebugString());
-        } else {
-            WriteRow(t.Runtime, ++t.TxId, "/MyRoot/Table", 0, 1, "after");
+
+        void ChangeSourceData() {
+            if (Options.FinishAfterExport) {
+                // Use the query path so the write updates both Ready and WriteOnly indexes.
+                const auto sender = Test.Runtime.AllocateEdgeActor();
+                auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+                auto& request = *event->Record.MutableRequest();
+                request.SetDatabase("/MyRoot");
+                request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+                request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+                request.SetQuery("--!syntax_v1\nUPSERT INTO `/MyRoot/Table` (key, value) VALUES (1u, \"after\"u);");
+                request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+                request.MutableTxControl()->set_commit_tx(true);
+                Test.Runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(Test.Runtime.GetNodeId()), sender, event.Release()));
+
+                const auto result = Test.Runtime.GrabEdgeEvent<NKqp::TEvKqp::TEvQueryResponse>(sender);
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS, result->Get()->Record.DebugString());
+            } else {
+                WriteRow(Test.Runtime, ++Test.TxId, "/MyRoot/Table", 0, 1, "after");
+            }
         }
 
-        if (options.RestartDuringUpload) {
-            uploads.Reboot(exportId, {"index/indexImplTable"});
-            uploads.Requests.Stop().Unblock();
-        } else if (options.FinishAfterExport) {
-            checkActiveBuild();
-            copy.Resume(false);
-        } else {
-            copy.ResumeWithRebootBeforeBackup(exportId);
-        }
-        t.Env.TestWaitNotification(t.Runtime, exportId);
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        void FinishExport() {
+            if (Options.RestartDuringUpload) {
+                Uploads.Reboot(ExportId, {"index/indexImplTable"});
+                Uploads.Requests.Stop().Unblock();
+            } else if (Options.FinishAfterExport) {
+                CheckActiveBuild();
+                Copy.Resume(false);
+            } else {
+                Copy.ResumeWithRebootBeforeBackup(ExportId);
+            }
 
-        Ydb::Table::CreateTableRequest scheme;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(t.ReadFile("scheme.pb"), &scheme));
-        const ui32 expectedIndexes = options.ReadyIndex + options.FinishBeforeCopy;
-        UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), expectedIndexes);
-        THashSet<TString> indexNames;
-        for (const auto& index : scheme.indexes()) {
-            indexNames.insert(index.name());
-        }
-        UNIT_ASSERT_VALUES_EQUAL(indexNames.contains("index"), options.ReadyIndex);
-        UNIT_ASSERT_VALUES_EQUAL(indexNames.contains("building-index"), options.FinishBeforeCopy);
-        UNIT_ASSERT_VALUES_EQUAL(t.ReadFile("data_00.csv"), "1,\"before\"\n");
-        THashSet<TString> expectedImplTables;
-        if (options.ReadyIndex) {
-            expectedImplTables.insert("index/indexImplTable");
-        }
-        if (options.FinishBeforeCopy) {
-            expectedImplTables.insert("building-index/indexImplTable");
-        }
-        const auto prefixes = MaterializedIndexPrefixes(t, expectedImplTables);
-        for (const auto& [implTable, prefix] : prefixes) {
-            UNIT_ASSERT_VALUES_EQUAL(t.ReadFile(prefix + "/data_00.csv"), "\"before\",1\n");
-        }
-        if (t.Encrypted) {
-            t.CheckEncryptionIVs();
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(t.HasFile("building-index/indexImplTable/scheme.pb"), options.FinishBeforeCopy);
+            Test.Env.TestWaitNotification(Test.Runtime, ExportId);
+            Test.GetExportEntry(ExportId, Ydb::StatusIds::SUCCESS);
         }
 
-        if (options.FinishAfterExport) {
-            checkActiveBuild();
+        void CheckBackup() {
+            const auto scheme = Test.ReadScheme();
+            ExpectedIndexes = Options.ReadyIndex + Options.FinishBeforeCopy;
+            UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), ExpectedIndexes);
+            THashSet<TString> indexNames;
+
+            for (const auto& index : scheme.indexes()) {
+                indexNames.insert(index.name());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(indexNames.contains("index"), Options.ReadyIndex);
+            UNIT_ASSERT_VALUES_EQUAL(indexNames.contains("building-index"), Options.FinishBeforeCopy);
+            UNIT_ASSERT_VALUES_EQUAL(Test.ReadFile("data_00.csv"), "1,\"before\"\n");
+            if (Options.ReadyIndex) {
+                ExpectedImplTables.insert("index/indexImplTable");
+            }
+            if (Options.FinishBeforeCopy) {
+                ExpectedImplTables.insert("building-index/indexImplTable");
+            }
+
+            const auto prefixes = MaterializedIndexPrefixes(Test, ExpectedImplTables);
+
+            for (const auto& [implTable, prefix] : prefixes) {
+                UNIT_ASSERT_VALUES_EQUAL(Test.ReadFile(prefix + "/data_00.csv"), "\"before\",1\n");
+            }
+            if (Test.Encrypted) {
+                Test.CheckEncryptionIVs();
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(Test.HasFile("building-index/indexImplTable/scheme.pb"), Options.FinishBeforeCopy);
+            }
         }
-        t.Import(t.Encrypted && !options.FinishAfterExport);
-        TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/Restored"), {NLs::IndexesCount(expectedIndexes)});
-        UNIT_ASSERT_VALUES_EQUAL(CountRows(t.Runtime, "/MyRoot/Restored"), 1);
-        UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard, "/MyRoot/Restored"), expectedTableData);
-        for (const auto& implTable : expectedImplTables) {
-            UNIT_ASSERT_VALUES_EQUAL(CountRows(t.Runtime, "/MyRoot/Restored/" + implTable), 1);
-            UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-                "/MyRoot/Restored/" + implTable), expectedIndexData.at(implTable));
+
+        void CheckImport() {
+            if (Options.FinishAfterExport) {
+                CheckActiveBuild();
+            }
+
+            Test.Import(Test.Encrypted && !Options.FinishAfterExport);
+            TestDescribeResult(DescribePath(Test.Runtime, "/MyRoot/Restored"), {NLs::IndexesCount(ExpectedIndexes)});
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(Test.Runtime, "/MyRoot/Restored"), 1);
+            UNIT_ASSERT_VALUES_EQUAL(Test.ReadRows("/MyRoot/Restored"), ExpectedTableData);
+
+            for (const auto& implTable : ExpectedImplTables) {
+                UNIT_ASSERT_VALUES_EQUAL(CountRows(Test.Runtime, "/MyRoot/Restored/" + implTable), 1);
+                UNIT_ASSERT_VALUES_EQUAL(Test.ReadRows("/MyRoot/Restored/" + implTable), ExpectedIndexData.at(implTable));
+            }
+            if (Options.FinishAfterExport) {
+                CheckActiveBuild();
+            }
         }
-        if (options.FinishAfterExport) {
-            checkActiveBuild();
+
+        void ForgetExport() {
+            Test.Forget(ExportId);
+            if (Options.FinishAfterExport) {
+                CheckActiveBuild();
+                FinishBuild();
+            }
         }
-        t.Forget(exportId);
-        if (options.FinishAfterExport) {
-            checkActiveBuild();
-            finishBuild();
+
+    };
+
+    void CheckIndexBuildExport(const TIndexBuildExportOptions& options) {
+        TIndexBuildExportScenario scenario(options);
+        scenario.Prepare();
+
+        scenario.StartBuild();
+        scenario.StartExport();
+        scenario.RestartBuild();
+        if (!options.FinishAfterExport) {
+            scenario.FinishBuild();
         }
+
+        scenario.RememberIndexData();
+        scenario.ChangeSourceData();
+        scenario.FinishExport();
+
+        scenario.CheckBackup();
+        scenario.CheckImport();
+        scenario.ForgetExport();
     }
 
     Y_UNIT_TEST_QUAD(IndexBuildUsesCopiedScheme, IsFs, FinishBeforeCopy) {
@@ -1372,8 +1950,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
     }
 
     Y_UNIT_TEST_QUAD(ActiveIndexBuildSurvivesRestart, IsFs, RebootDataShard) {
-        CheckIndexBuildExport({.IsFs = IsFs,
-            .Restart = RebootDataShard ? ERestart::DataShard : ERestart::SchemeShard});
+        CheckIndexBuildExport({.IsFs = IsFs, .Restart = RebootDataShard ? ERestart::DataShard : ERestart::SchemeShard});
     }
 
     Y_UNIT_TEST_TWIN(IndexApplySurvivesRestartDuringExport, IsFs) {
@@ -1385,8 +1962,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
     }
 
     Y_UNIT_TEST_TWIN(EncryptedUnfinishedIndexIsRemovedAfterRestart, IsFs) {
-        CheckIndexBuildExport({.IsFs = IsFs, .Encrypted = true,
-            .Restart = ERestart::Both, .ReadyIndex = false});
+        CheckIndexBuildExport({.IsFs = IsFs, .Encrypted = true, .Restart = ERestart::Both, .ReadyIndex = false});
     }
 
     Y_UNIT_TEST_QUAD(EncryptedIndexBuildUsesCopiedScheme, IsFs, FinishBeforeCopy) {
@@ -1395,19 +1971,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
     }
 
     Y_UNIT_TEST_QUAD(ExportCompletesDuringActiveIndexBuild, IsFs, WaitForApply) {
-        CheckIndexBuildExport({.IsFs = IsFs,
-            .Restart = WaitForApply ? ERestart::SchemeShard : ERestart::Both,
+        CheckIndexBuildExport({.IsFs = IsFs, .Restart = WaitForApply ? ERestart::SchemeShard : ERestart::Both,
             .WaitForApply = WaitForApply, .FinishAfterExport = true});
     }
 
     Y_UNIT_TEST_TWIN(ExportCompletesWithOnlyUnfinishedIndex, IsFs) {
-        CheckIndexBuildExport({.IsFs = IsFs, .Restart = ERestart::Both,
-            .ReadyIndex = false, .FinishAfterExport = true});
+        CheckIndexBuildExport({.IsFs = IsFs, .Restart = ERestart::Both, .ReadyIndex = false, .FinishAfterExport = true});
     }
 
     Y_UNIT_TEST_TWIN(EncryptedExportCompletesDuringActiveIndexBuild, IsFs) {
-        CheckIndexBuildExport({.IsFs = IsFs, .Encrypted = true, .Restart = ERestart::Both,
-            .FinishAfterExport = true});
+        CheckIndexBuildExport({.IsFs = IsFs, .Encrypted = true, .Restart = ERestart::Both, .FinishAfterExport = true});
     }
 
     Y_UNIT_TEST_TWIN(IndexBuildSurvivesExportingShardRestart, IsFs) {
@@ -1415,139 +1988,134 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
     }
 
     Y_UNIT_TEST_QUAD(LegacyIndexBuildUsesCopiedScheme, IsFs, IncludeIndexData) {
-        TExportEnv t(IsFs);
-        t.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
-        t.CreateTable();
-        const ui64 readyBuildId = ++t.TxId;
-        TestBuildIndex(t.Runtime, readyBuildId, TTestTxConfig::SchemeShard,
-            "/MyRoot", "/MyRoot/Table", "index", {"value"});
-        t.Env.TestWaitNotification(t.Runtime, readyBuildId);
+        TExportEnv test(IsFs);
+        test.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+        test.CreateTable();
+        test.CreateIndex("index");
 
-        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> scans(t.Runtime);
-        const ui64 buildId = ++t.TxId;
-        TestBuildIndex(t.Runtime, buildId, TTestTxConfig::SchemeShard,
-            "/MyRoot", "/MyRoot/Table", "building-index", {"value"});
-        t.Runtime.WaitFor("active legacy index build", [&] { return !scans.empty(); });
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> scans(test.Runtime);
+        const ui64 buildId = ++test.TxId;
+        TestBuildIndex(test.Runtime, buildId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "building-index", {"value"});
+        test.Runtime.WaitFor("active legacy index build", [&] { return !scans.empty(); });
 
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export(IncludeIndexData ? "include_index_data: true" : "");
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export(IncludeIndexData ? "include_index_data: true" : "");
         copy.WaitForCopy(false);
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(test.SnapshotCount(), 0);
         scans.Stop().Unblock();
-        t.Env.TestWaitNotification(t.Runtime, buildId);
-        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(t.Runtime, TTestTxConfig::SchemeShard,
-            "/MyRoot", buildId).GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        test.Env.TestWaitNotification(test.Runtime, buildId);
+        test.CheckBuildState(buildId, Ydb::Table::IndexBuildState::STATE_DONE);
 
         copy.ResumeWithRebootBeforeBackup(exportId);
-        t.Env.TestWaitNotification(t.Runtime, exportId);
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        Ydb::Table::CreateTableRequest scheme;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(t.ReadFile("scheme.pb"), &scheme));
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+        test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
+
+        const auto scheme = test.ReadScheme();
         UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), IncludeIndexData ? 1 : 2);
-        UNIT_ASSERT_VALUES_EQUAL(t.ReadFile("data_00.csv"), "1,\"before\"\n");
+        UNIT_ASSERT_VALUES_EQUAL(test.ReadFile("data_00.csv"), "1,\"before\"\n");
         if (IncludeIndexData) {
             UNIT_ASSERT_VALUES_EQUAL(scheme.indexes(0).name(), "index");
-            UNIT_ASSERT_VALUES_EQUAL(t.ReadFile("index/indexImplTable/data_00.csv"), "\"before\",1\n");
-            UNIT_ASSERT(!t.HasFile("building-index/indexImplTable/scheme.pb"));
-            t.Import();
-            TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/Restored"), {NLs::IndexesCount(1)});
-            UNIT_ASSERT_VALUES_EQUAL(CountRows(t.Runtime, "/MyRoot/Restored/index/indexImplTable"), 1);
+            UNIT_ASSERT_VALUES_EQUAL(test.ReadFile("index/indexImplTable/data_00.csv"), "\"before\",1\n");
+            UNIT_ASSERT(!test.HasFile("building-index/indexImplTable/scheme.pb"));
+
+            test.Import();
+            TestDescribeResult(DescribePath(test.Runtime, "/MyRoot/Restored"), {NLs::IndexesCount(1)});
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(test.Runtime, "/MyRoot/Restored/index/indexImplTable"), 1);
         }
-        t.Forget(exportId);
+
+        test.Forget(exportId);
     }
 
     Y_UNIT_TEST_QUAD(LegacyUserIndexWithRebuildPrefix, IsFs, Encrypted) {
-        TExportEnv t(IsFs);
-        t.Encrypted = Encrypted;
-        t.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
-        t.Runtime.GetAppData().FeatureFlags.SetEnableSystemNamesProtection(false);
-        t.CreateTable();
+        TExportEnv test(IsFs);
+        test.Encrypted = Encrypted;
+        test.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+        test.Runtime.GetAppData().FeatureFlags.SetEnableSystemNamesProtection(false);
+        test.CreateTable();
         const TVector<TString> indexNames = {
             "__ydb_rebuild_business", "__ydb_rebuild_", "__ydb_rebuild_12_more",
             "__ydb_rebuild_18446744073709551616", "__ydb_rebuild_01",
         };
         THashMap<TString, TVector<TString>> expectedIndexData;
         THashSet<TString> expectedImplTables;
+
         for (const auto& name : indexNames) {
-            const ui64 buildId = ++t.TxId;
-            TestBuildIndex(t.Runtime, buildId, TTestTxConfig::SchemeShard,
-                "/MyRoot", "/MyRoot/Table", name, {"value"});
-            t.Env.TestWaitNotification(t.Runtime, buildId);
-            expectedIndexData.emplace(name, ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-                "/MyRoot/Table/" + name + "/indexImplTable"));
+            test.CreateIndex(name, {"value"});
+            expectedIndexData.emplace(name, test.ReadRows("/MyRoot/Table/" + name + "/indexImplTable"));
             expectedImplTables.insert(name + "/indexImplTable");
         }
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export("include_index_data: true");
+
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export("include_index_data: true");
         copy.WaitForCopy(false);
         copy.ResumeWithRebootBeforeBackup(exportId);
-        t.Env.TestWaitNotification(t.Runtime, exportId);
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        Ydb::Table::CreateTableRequest scheme;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(t.ReadFile("scheme.pb"), &scheme));
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+        test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
+
+        const auto scheme = test.ReadScheme();
         UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), indexNames.size());
-        const auto prefixes = MaterializedIndexPrefixes(t, expectedImplTables);
+        const auto prefixes = MaterializedIndexPrefixes(test, expectedImplTables);
+
         for (const auto& name : indexNames) {
-            UNIT_ASSERT_VALUES_EQUAL(t.ReadFile(prefixes.at(name + "/indexImplTable") + "/data_00.csv"),
-                "\"before\",1\n");
+            UNIT_ASSERT_VALUES_EQUAL(test.ReadFile(prefixes.at(name + "/indexImplTable") + "/data_00.csv"), "\"before\",1\n");
         }
-        t.Import(t.Encrypted);
+
+        test.Import(test.Encrypted);
+
         for (const auto& name : indexNames) {
-            UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-                "/MyRoot/Restored/" + name + "/indexImplTable"), expectedIndexData.at(name));
+            UNIT_ASSERT_VALUES_EQUAL(test.ReadRows("/MyRoot/Restored/" + name + "/indexImplTable"), expectedIndexData.at(name));
         }
-        t.Forget(exportId);
+
+        test.Forget(exportId);
     }
 
     void CheckLegacyChangedIndex(bool isFs, bool recreate, bool encrypted) {
-        TExportEnv t(isFs);
-        t.Encrypted = encrypted;
-        t.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
-        t.CreateTable();
-        const ui64 buildId = ++t.TxId;
-        TestBuildIndex(t.Runtime, buildId, TTestTxConfig::SchemeShard,
-            "/MyRoot", "/MyRoot/Table", "index", {"value"});
-        t.Env.TestWaitNotification(t.Runtime, buildId);
-        const auto expectedData = ReadShards(t.Runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table/index/indexImplTable");
+        TExportEnv test(isFs);
+        test.Encrypted = encrypted;
+        test.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+        test.CreateTable();
+        test.CreateIndex("index");
+        const auto expectedData = test.ReadRows("/MyRoot/Table/index/indexImplTable");
 
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export("include_index_data: true");
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export("include_index_data: true");
         copy.WaitForCopy(false);
-        TestDropTableIndex(t.Runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot", R"(
+        TestDropTableIndex(test.Runtime, TTestTxConfig::SchemeShard, ++test.TxId, "/MyRoot", R"(
             TableName: "Table"
             IndexName: "index"
         )");
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
         if (recreate) {
-            const ui64 newBuildId = ++t.TxId;
-            TestBuildIndex(t.Runtime, newBuildId, TTestTxConfig::SchemeShard,
-                "/MyRoot", "/MyRoot/Table", "index", {"key", "value"});
-            t.Env.TestWaitNotification(t.Runtime, newBuildId);
-            TestDescribeResult(DescribePrivatePath(t.Runtime, "/MyRoot/Table/index"), {
+            test.CreateIndex("index", {"key", "value"});
+            TestDescribeResult(DescribePrivatePath(test.Runtime, "/MyRoot/Table/index"), {
                 NLs::IndexKeys({"key", "value"}), NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
             });
         }
         copy.ResumeWithRebootBeforeBackup(exportId);
-        t.Env.TestWaitNotification(t.Runtime, exportId);
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        Ydb::Table::CreateTableRequest scheme;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(t.ReadFile("scheme.pb"), &scheme));
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+        test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
+
+        const auto scheme = test.ReadScheme();
         UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(scheme.indexes(0).name(), "index");
         UNIT_ASSERT_VALUES_EQUAL(scheme.indexes(0).index_columns_size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(scheme.indexes(0).index_columns(0), "value");
-        const auto prefixes = MaterializedIndexPrefixes(t, {"index/indexImplTable"});
-        UNIT_ASSERT_VALUES_EQUAL(t.ReadFile(prefixes.at("index/indexImplTable") + "/data_00.csv"), "\"before\",1\n");
+        const auto prefixes = MaterializedIndexPrefixes(test, {"index/indexImplTable"});
+        UNIT_ASSERT_VALUES_EQUAL(test.ReadFile(prefixes.at("index/indexImplTable") + "/data_00.csv"), "\"before\",1\n");
         if (encrypted) {
-            t.CheckEncryptionIVs();
+            test.CheckEncryptionIVs();
         }
-        t.Import(encrypted);
-        TestDescribeResult(DescribePrivatePath(t.Runtime, "/MyRoot/Restored/index"), {
+
+        test.Import(encrypted);
+        TestDescribeResult(DescribePrivatePath(test.Runtime, "/MyRoot/Restored/index"), {
             NLs::IndexKeys({"value"}), NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
-        UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-            "/MyRoot/Restored/index/indexImplTable"), expectedData);
-        t.Forget(exportId);
+        UNIT_ASSERT_VALUES_EQUAL(test.ReadRows("/MyRoot/Restored/index/indexImplTable"), expectedData);
+
+        test.Forget(exportId);
     }
 
     Y_UNIT_TEST_TWIN(LegacyDroppedIndexExportsCopiedData, IsFs) {
@@ -1559,59 +2127,65 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
     }
 
     void CheckEncryptedIndexAfterParentBackupRestart(bool isFs, bool captureScheme, bool pendingMarker = false) {
-        TExportEnv t(isFs);
-        t.Encrypted = true;
-        t.CreateTable(false, true);
-        const auto expectedIndex = ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-            "/MyRoot/Table/index/indexImplTable");
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexBackups(t.Runtime, [pendingMarker](const auto& ev) {
+        TExportEnv test(isFs);
+        test.Encrypted = true;
+        test.CreateIndexedTable();
+
+        const auto expectedIndex = test.ReadRows("/MyRoot/Table/index/indexImplTable");
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexBackups(test.Runtime, [pendingMarker](const auto& ev) {
             const auto& record = ev->Get()->Record;
             return !pendingMarker && record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup()
                 && record.GetTransaction(0).GetBackup().GetTableName() == "indexImplTable";
         });
-        TBlockEvents<NSchemeShard::TEvPrivate::TEvExportCompletionUploadResult> markerReplies(t.Runtime,
+
+        TBlockEvents<NSchemeShard::TEvPrivate::TEvExportCompletionUploadResult> markerReplies(test.Runtime,
             [pendingMarker](const auto& ev) { return pendingMarker && ev->Get()->ItemIdx == 1; });
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export("include_index_data: true");
+
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export("include_index_data: true");
         copy.WaitForCopy(captureScheme);
         copy.Resume(false);
-        t.Runtime.WaitFor("pending index backup or completion marker", [&] {
+        test.Runtime.WaitFor("pending index backup or completion marker", [&] {
             return pendingMarker ? !markerReplies.empty() : !indexBackups.empty();
         });
         bool parentDone = false;
+
         for (ui32 attempt = 0; attempt < 100 && !parentDone; ++attempt) {
-            t.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
-            parentDone = ReadExportItemState(t, exportId, 0) == NSchemeShard::TExportInfo::EState::Done;
+            test.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            parentDone = ReadExportItemState(test, exportId, 0) == NSchemeShard::TExportInfo::EState::Done;
         }
         UNIT_ASSERT(parentDone);
-        const auto metadata = NBackup::TMetadata::Deserialize(t.ReadFile("metadata.json"));
+        const auto metadata = NBackup::TMetadata::Deserialize(test.ReadFile("metadata.json"));
         UNIT_ASSERT(metadata.GetIndexes());
         UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->front().ExportPrefix, "001");
 
-        TestDropTable(t.Runtime, ++t.TxId, "/MyRoot", "Table");
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
+        TestDropTable(test.Runtime, ++test.TxId, "/MyRoot", "Table");
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
         indexBackups.clear();
         indexBackups.Stop();
         markerReplies.clear();
         markerReplies.Stop();
-        RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
-        t.Env.TestWaitNotification(t.Runtime, exportId);
+        test.Reboot();
+        test.Env.TestWaitNotification(test.Runtime, exportId);
         if (captureScheme) {
-            TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-            MaterializedIndexPrefixes(t, {"index/indexImplTable"});
-            t.Import(true);
-            UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-                "/MyRoot/Restored/index/indexImplTable"), expectedIndex);
+            test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
+            MaterializedIndexPrefixes(test, {"index/indexImplTable"});
+
+            test.Import(true);
+            UNIT_ASSERT_VALUES_EQUAL(test.ReadRows("/MyRoot/Restored/index/indexImplTable"), expectedIndex);
         } else {
-            const auto result = TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetResponse().GetEntry().GetIssues(0).message(), "snapshot is missing");
-            UNIT_ASSERT(!t.HasFile("999/scheme.pb"));
-            UNIT_ASSERT(!t.HasFile("export_complete.json"));
-            RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
-            TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            const auto result = test.GetExportEntry(exportId, Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "snapshot is missing");
+            UNIT_ASSERT(!test.HasFile("999/scheme.pb"));
+            UNIT_ASSERT(!test.HasExportCompletionMarker());
+            test.Reboot();
+            test.GetExportEntry(exportId, Ydb::StatusIds::CANCELLED);
         }
-        t.Forget(exportId);
+
+        test.Forget(exportId);
     }
 
     Y_UNIT_TEST_QUAD(EncryptedIndexAfterParentBackupRestart, IsFs, CaptureScheme) {
@@ -1623,239 +2197,202 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
     }
 
     Y_UNIT_TEST_QUAD(EncryptedMaterializedIndexesAcrossTablesAndShards, IsFs, LegacyUploader) {
-        TExportEnv t(IsFs);
-        t.Encrypted = true;
-        t.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+        TExportEnv test(IsFs);
+        test.Encrypted = true;
+        test.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
         ui32 oldUploaderTasks = 0;
-        auto oldUploader = EmulateLegacyUploader(t, LegacyUploader, oldUploaderTasks);
+        auto oldUploader = EmulateLegacyUploader(test, LegacyUploader, oldUploaderTasks);
         THashMap<TString, TVector<TString>> expectedData;
+
         for (const TString name : {"Table", "Other"}) {
-            TestCreateIndexedTable(t.Runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
-                TableDescription {
-                    Name: "%s"
-                    Columns { Name: "key" Type: "Uint32" }
-                    Columns { Name: "value" Type: "Utf8" }
-                    KeyColumnNames: ["key"]
-                    UniformPartitionsCount: 2
-                }
-                IndexDescription {
-                    Name: "a_async"
-                    KeyColumnNames: ["value"]
-                    Type: EIndexTypeGlobalAsync
-                }
-            )", name.c_str()));
-            t.Env.TestWaitNotification(t.Runtime, t.TxId);
+            CreateShardedTableWithAsyncIndex(test, name);
             const TString path = "/MyRoot/" + name;
-            WriteRow(t.Runtime, ++t.TxId, path, 0, 1, name + "-before");
-            WriteRow(t.Runtime, ++t.TxId, path, 1, 2147483649u, name + "-second");
+
             for (const TString index : {"index", "other-index"}) {
-                const ui64 buildId = ++t.TxId;
-                TestBuildIndex(t.Runtime, buildId, TTestTxConfig::SchemeShard,
-                    "/MyRoot", path, index, index == "index" ? TVector<TString>{"value"} : TVector<TString>{"key", "value"});
-                t.Env.TestWaitNotification(t.Runtime, buildId);
-                expectedData.emplace(name + "/" + index,
-                    ReadShards(t.Runtime, TTestTxConfig::SchemeShard, path + "/" + index + "/indexImplTable"));
+                test.CreateIndex(index, index == "index" ? TVector<TString>{"value"} : TVector<TString>{"key", "value"}, path);
+                expectedData.emplace(name + "/" + index, test.ReadRows(path + "/" + index + "/indexImplTable"));
             }
-            expectedData.emplace(name, ReadShards(t.Runtime, TTestTxConfig::SchemeShard, path));
+            expectedData.emplace(name, test.ReadRows(path));
         }
-        t.CreateChangefeed();
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export("include_index_data: true", {"Other"});
+
+        test.CreateChangefeed();
+
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export("include_index_data: true", {"Other"});
         copy.WaitForCopy();
+
         for (const TString name : {"Table", "Other"}) {
-            TestDropTable(t.Runtime, ++t.TxId, "/MyRoot", name);
-            t.Env.TestWaitNotification(t.Runtime, t.TxId);
+            TestDropTable(test.Runtime, ++test.TxId, "/MyRoot", name);
+            test.Env.TestWaitNotification(test.Runtime, test.TxId);
         }
         copy.ResumeWithRebootBeforeBackup(exportId);
-        t.Env.TestWaitNotification(t.Runtime, exportId);
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+        test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
+
         for (const TString table : {"backup", "Other"}) {
-            Ydb::Table::CreateTableRequest scheme;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(t.ReadFile("scheme.pb", table), &scheme));
+            const auto scheme = test.ReadScheme("scheme.pb", table);
             UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), 3);
-            MaterializedIndexPrefixes(t,
-                {"index/indexImplTable", "other-index/indexImplTable"}, table, !LegacyUploader);
-            UNIT_ASSERT(t.HasFile("data_01.csv", table));
-            UNIT_ASSERT(!t.HasFile("a_async/indexImplTable/scheme.pb", table));
-            const auto metadata = NBackup::TMetadata::Deserialize(t.ReadFile("metadata.json", table));
+            MaterializedIndexPrefixes(test, {"index/indexImplTable", "other-index/indexImplTable"}, table, !LegacyUploader);
+            UNIT_ASSERT(test.HasFile("data_01.csv", table));
+            UNIT_ASSERT(!test.HasFile("a_async/indexImplTable/scheme.pb", table));
+            const auto metadata = NBackup::TMetadata::Deserialize(test.ReadFile("metadata.json", table));
             UNIT_ASSERT(metadata.GetChangefeeds());
             UNIT_ASSERT_VALUES_EQUAL(metadata.GetChangefeeds()->size(), table == "backup" ? 1 : 0);
             if (table == "backup") {
                 const auto& feed = metadata.GetChangefeeds()->front();
                 UNIT_ASSERT_VALUES_EQUAL(feed.Name, "feed");
-                UNIT_ASSERT(t.HasFile(feed.ExportPrefix + "/changefeed_description.pb", table));
-                UNIT_ASSERT(t.HasFile(feed.ExportPrefix + "/topic_description.pb", table));
+                UNIT_ASSERT(test.HasFile(feed.ExportPrefix + "/changefeed_description.pb", table));
+                UNIT_ASSERT(test.HasFile(feed.ExportPrefix + "/topic_description.pb", table));
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(bool(oldUploaderTasks), LegacyUploader);
-        t.CheckEncryptionIVs();
-        t.Import(true, {"Other"});
+        test.CheckEncryptionIVs();
+
+        test.Import(true, {"Other"});
+
         for (const TString name : {"Table", "Other"}) {
             const TString path = name == "Table" ? "/MyRoot/Restored" : "/MyRoot/RestoredOther";
-            TestDescribeResult(DescribePath(t.Runtime, path), {NLs::IndexesCount(3)});
-            UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard, path), expectedData.at(name));
+            TestDescribeResult(DescribePath(test.Runtime, path), {NLs::IndexesCount(3)});
+            UNIT_ASSERT_VALUES_EQUAL(test.ReadRows(path), expectedData.at(name));
+
             for (const TString index : {"index", "other-index"}) {
-                UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-                    path + "/" + index + "/indexImplTable"), expectedData.at(name + "/" + index));
+                UNIT_ASSERT_VALUES_EQUAL(test.ReadRows(path + "/" + index + "/indexImplTable"), expectedData.at(name + "/" + index));
             }
-            UNIT_ASSERT_VALUES_EQUAL(CountRows(t.Runtime, path + "/a_async/indexImplTable"), 2);
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(test.Runtime, path + "/a_async/indexImplTable"), 2);
         }
-        t.Forget(exportId);
+
+        test.Forget(exportId);
     }
 
     Y_UNIT_TEST_TWIN(CorruptImportMetadataCancelsOnlyItsImport, IsFs) {
-        TExportEnv t(IsFs);
-        t.Encrypted = true;
+        TExportEnv test(IsFs);
+        test.Encrypted = true;
         // Operation timestamps are persisted with second precision.
-        t.Runtime.AdvanceCurrentTime(TDuration::Seconds(1));
-        t.CreateTable(false, true);
-        const auto expectedIndex = ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-            "/MyRoot/Table/index/indexImplTable");
-        const ui64 exportId = t.Export("include_index_data: true");
-        t.Env.TestWaitNotification(t.Runtime, exportId);
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        test.Runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        test.CreateIndexedTable();
+
+        const auto expectedIndex = test.ReadRows("/MyRoot/Table/index/indexImplTable");
+
+        const ui64 exportId = test.Export("include_index_data: true");
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+        test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
 
         TString brokenMetadata;
-        t.Import(true, {}, Ydb::StatusIds::CANCELLED, [&](ui64 importId) {
-            brokenMetadata = CorruptImportMetadata(t, importId);
+
+        test.Import(true, {}, Ydb::StatusIds::CANCELLED, [&](ui64 importId) {
+            brokenMetadata = CorruptImportMetadata(test, importId);
         });
-        const ui64 failedImportId = t.TxId;
+        const ui64 failedImportId = test.TxId;
         auto checkCancelled = [&] {
-            const auto result = TestGetImport(t.Runtime, failedImportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-            const auto& entry = result.GetResponse().GetEntry();
+            const auto entry = test.GetImportEntry(failedImportId, Ydb::StatusIds::CANCELLED);
             UNIT_ASSERT(entry.HasEndTime());
             UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Invalid index encryption IV size");
-            const auto items = ReadImportItems(t, failedImportId);
+            const auto items = ReadImportItems(test, failedImportId);
             const auto rows = NClient::TValue::Create(items)[0]["List"];
             UNIT_ASSERT_VALUES_EQUAL(rows.Size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(static_cast<TString>(rows[0]["Metadata"]), brokenMetadata);
             UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(rows[1]["ParentIndex"]), 0);
         };
         checkCancelled();
-        RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
+        test.Reboot();
         checkCancelled();
 
         // A healthy import must recover while the damaged operation is still retained.
-        t.Import(true);
-        const ui64 healthyImportId = t.TxId;
-        UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-            "/MyRoot/Restored/index/indexImplTable"), expectedIndex);
+        test.Import(true);
+        const ui64 healthyImportId = test.TxId;
+        UNIT_ASSERT_VALUES_EQUAL(test.ReadRows("/MyRoot/Restored/index/indexImplTable"), expectedIndex);
         checkCancelled();
-        TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", failedImportId);
-        TestGetImport(t.Runtime, failedImportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-        TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", healthyImportId);
-        t.Forget(exportId);
+        TestForgetImport(test.Runtime, ++test.TxId, "/MyRoot", failedImportId);
+        test.GetImportEntry(failedImportId, Ydb::StatusIds::NOT_FOUND);
+        TestForgetImport(test.Runtime, ++test.TxId, "/MyRoot", healthyImportId);
+
+        test.Forget(exportId);
     }
 
     Y_UNIT_TEST_QUAD(CorruptImportMetadataCancelsActiveWorkAcrossRestarts, IsFs, BuildIndex) {
-        TExportEnv t(IsFs);
-        t.Encrypted = true;
-        t.BuildIndexesOnImport = BuildIndex;
-        t.CreateTable(false, true);
-        const ui64 exportId = t.Export(BuildIndex ? "" : "include_index_data: true");
-        t.Env.TestWaitNotification(t.Runtime, exportId);
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        TExportEnv test(IsFs);
+        test.Encrypted = true;
+        test.BuildIndexesOnImport = BuildIndex;
+        test.CreateIndexedTable();
 
-        TBlockEvents<NWrappers::TEvExternalStorage::TEvGetObjectRequest> dataReads(t.Runtime, [](const auto& ev) {
-            const TString key(ev->Get()->Request.GetKey());
-            return !BuildIndex && (key.EndsWith(".csv") || key.EndsWith(".csv.enc"));
-        });
-        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> scans(t.Runtime, [](const auto&) { return BuildIndex; });
-        TBlockEvents<TEvSchemeShard::TEvCancelTx> restoreCancellations(t.Runtime);
-        TBlockEvents<TEvIndexBuilder::TEvCancelRequest> buildCancellations(t.Runtime);
-        ui64 buildId = 0;
+        const ui64 exportId = test.Export(BuildIndex ? "" : "include_index_data: true");
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+        test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
+
+        TImportWork work(test, BuildIndex);
         TString brokenMetadata;
-        t.Import(false, {}, Ydb::StatusIds::CANCELLED, [&](ui64 importId) {
-            t.Runtime.WaitFor("active import work", [&] {
-                if (BuildIndex) {
-                    return !scans.empty();
-                }
-                THashSet<TString> keys;
-                for (const auto& request : dataReads) {
-                    keys.insert(TString(request->Get()->Request.GetKey()));
-                }
-                return keys.size() == 2;
-            });
-            if (BuildIndex) {
-                buildId = scans.front()->Get()->Record.GetId();
-            }
+
+        test.Import(false, {}, Ydb::StatusIds::CANCELLED, [&](ui64 importId) {
+            work.WaitForStart();
+
             // Also emulate a committed proposal whose acceptance reply was lost.
-            brokenMetadata = CorruptImportMetadata(t, importId, true);
+            brokenMetadata = CorruptImportMetadata(test, importId, true);
+
             for (ui32 restart = 0; restart < 2; ++restart) {
-                restoreCancellations.clear();
-                buildCancellations.clear();
-                RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
-                t.Runtime.WaitFor("active import cancellation after recovery", [&] {
-                    if (BuildIndex) {
-                        return !buildCancellations.empty();
-                    }
-                    THashSet<ui64> targets;
-                    for (const auto& request : restoreCancellations) {
-                        targets.insert(request->Get()->Record.GetTargetTxId());
-                    }
-                    return targets.size() == 2;
-                });
-                const auto result = TestGetImport(t.Runtime, importId, "/MyRoot");
-                UNIT_ASSERT_VALUES_EQUAL(result.GetResponse().GetEntry().GetProgress(),
-                    Ydb::Import::ImportProgress::PROGRESS_CANCELLATION);
+                work.ClearCancellationRequests();
+                test.Reboot();
+                work.WaitForCancellation();
+
+                const auto result = test.GetImportEntry(importId);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_CANCELLATION);
             }
-            restoreCancellations.Stop().Unblock();
-            buildCancellations.Stop().Unblock();
-            dataReads.clear();
-            dataReads.Stop();
-            scans.clear();
-            scans.Stop();
+            work.Release();
         });
-        const ui64 importId = t.TxId;
-        const auto result = TestGetImport(t.Runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetResponse().GetEntry().GetIssues(0).message(), "Invalid index encryption IV size");
+
+        const ui64 importId = test.TxId;
+
+        const auto result = test.GetImportEntry(importId, Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "Invalid index encryption IV size");
         if (BuildIndex) {
-            t.Env.TestWaitNotification(t.Runtime, buildId);
-            UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(t.Runtime, TTestTxConfig::SchemeShard,
-                "/MyRoot", buildId).GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLED);
+            test.Env.TestWaitNotification(test.Runtime, work.BuildId);
+            test.CheckBuildState(work.BuildId, Ydb::Table::IndexBuildState::STATE_CANCELLED);
         }
-        RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
-        TestGetImport(t.Runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        const auto items = ReadImportItems(t, importId);
+
+        test.Reboot();
+        test.GetImportEntry(importId, Ydb::StatusIds::CANCELLED);
+        const auto items = ReadImportItems(test, importId);
         const auto rows = NClient::TValue::Create(items)[0]["List"];
         UNIT_ASSERT_VALUES_EQUAL(rows.Size(), BuildIndex ? 1 : 2);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<TString>(rows[0]["Metadata"]), brokenMetadata);
-        TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", importId);
-        t.Forget(exportId);
+        TestForgetImport(test.Runtime, ++test.TxId, "/MyRoot", importId);
+
+        test.Forget(exportId);
     }
 
     Y_UNIT_TEST_TWIN(CorruptMetadataOfFinishedImportDoesNotBlockStartup, IsFs) {
-        TExportEnv t(IsFs);
-        t.Encrypted = true;
-        t.CreateTable(false, true);
-        const auto expectedIndex = ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-            "/MyRoot/Table/index/indexImplTable");
-        const ui64 exportId = t.Export("include_index_data: true");
-        t.Env.TestWaitNotification(t.Runtime, exportId);
-        t.Import();
-        const ui64 importId = t.TxId;
-        CorruptImportMetadata(t, importId);
+        TExportEnv test(IsFs);
+        test.Encrypted = true;
+        test.CreateIndexedTable();
+
+        const auto expectedIndex = test.ReadRows("/MyRoot/Table/index/indexImplTable");
+
+        const ui64 exportId = test.Export("include_index_data: true");
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+
+        test.Import();
+
+        const ui64 importId = test.TxId;
+        CorruptImportMetadata(test, importId);
+
         for (ui32 restart = 0; restart < 2; ++restart) {
-            RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
-            TestGetImport(t.Runtime, importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-                "/MyRoot/Restored/index/indexImplTable"), expectedIndex);
+            test.Reboot();
+            test.GetImportEntry(importId, Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(test.ReadRows("/MyRoot/Restored/index/indexImplTable"), expectedIndex);
         }
-        TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", importId);
-        t.Forget(exportId);
+        TestForgetImport(test.Runtime, ++test.TxId, "/MyRoot", importId);
+
+        test.Forget(exportId);
     }
 
     Y_UNIT_TEST_TWIN(EncryptedIndexRejectsIncorrectMetadataIV, IsFs) {
-        TExportEnv t(IsFs);
-        t.Encrypted = true;
-        t.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
-        t.CreateTable();
-        const ui64 buildId = ++t.TxId;
-        TestBuildIndex(t.Runtime, buildId, TTestTxConfig::SchemeShard,
-            "/MyRoot", "/MyRoot/Table", "index", {"value"});
-        t.Env.TestWaitNotification(t.Runtime, buildId);
+        TExportEnv test(IsFs);
+        test.Encrypted = true;
+        test.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+        test.CreateTable();
+        test.CreateIndex("index");
         ui32 corruptedTasks = 0;
-        auto corruptMetadataIV = t.Runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+        auto corruptMetadataIV = test.Runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
             auto& record = ev->Get()->Record;
             if (record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
                 return;
@@ -1873,350 +2410,445 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
                 ++corruptedTasks;
             }
         });
-        const ui64 exportId = t.Export("include_index_data: true");
-        t.Env.TestWaitNotification(t.Runtime, exportId);
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const ui64 exportId = test.Export("include_index_data: true");
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+        test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_GT(corruptedTasks, 0);
-        const auto metadata = NBackup::TMetadata::Deserialize(t.ReadFile("metadata.json"));
+        const auto metadata = NBackup::TMetadata::Deserialize(test.ReadFile("metadata.json"));
         UNIT_ASSERT(metadata.GetIndexes());
         UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->size(), 1);
         const auto& index = metadata.GetIndexes()->front();
         UNIT_ASSERT(index.IV);
         UNIT_ASSERT_VALUES_EQUAL(index.IV->Size(), NBackup::TEncryptionIV::SIZE);
-        Ydb::Table::CreateTableRequest scheme;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(t.ReadFile(index.ExportPrefix + "/scheme.pb"), &scheme));
-        t.Import(false, {}, Ydb::StatusIds::CANCELLED);
-        const auto result = TestGetImport(t.Runtime, t.TxId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        const auto& entry = result.GetResponse().GetEntry();
+        test.ReadScheme(index.ExportPrefix + "/scheme.pb");
+
+        test.Import(false, {}, Ydb::StatusIds::CANCELLED);
+
+        const auto entry = test.GetImportEntry(test.TxId, Ydb::StatusIds::CANCELLED);
         UNIT_ASSERT_GT(entry.IssuesSize(), 0);
         UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "File is corrupted");
         UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), index.ExportPrefix + "/scheme.pb.enc");
-        t.Forget(exportId);
+
+        test.Forget(exportId);
     }
 
     Y_UNIT_TEST_TWIN(LegacyUploaderRejectsIndexFromAnotherBackup, IsFs) {
-        TExportEnv t(IsFs);
-        t.Encrypted = true;
-        t.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
-        t.CreateTable();
-        const ui64 buildId = ++t.TxId;
-        TestBuildIndex(t.Runtime, buildId, TTestTxConfig::SchemeShard,
-            "/MyRoot", "/MyRoot/Table", "index", {"value"});
-        t.Env.TestWaitNotification(t.Runtime, buildId);
+        TExportEnv test(IsFs);
+        test.Encrypted = true;
+        test.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+        test.CreateTable();
+        test.CreateIndex("index");
         ui32 oldUploaderTasks = 0;
-        auto oldUploader = EmulateLegacyUploader(t, true, oldUploaderTasks);
-        const ui64 exportId = t.Export("include_index_data: true");
-        t.Env.TestWaitNotification(t.Runtime, exportId);
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        auto oldUploader = EmulateLegacyUploader(test, true, oldUploaderTasks);
+
+        const ui64 exportId = test.Export("include_index_data: true");
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+        test.GetExportEntry(exportId, Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_GT(oldUploaderTasks, 0);
-        const auto prefixes = MaterializedIndexPrefixes(t, {"index/indexImplTable"}, "backup", false);
+        const auto prefixes = MaterializedIndexPrefixes(test, {"index/indexImplTable"}, "backup", false);
         const TString prefix = prefixes.at("index/indexImplTable");
-        const auto changeBackupIV = [](const TString& encrypted) {
-            auto [plain, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
-                NBackup::TEncryptionKey("0123456789012345"), TBuffer(encrypted.data(), encrypted.size()));
-            // Keep all child files mutually consistent and authenticated, but
-            // make their IV namespace differ from the parent backup's namespace.
-            iv.IV[NBackup::TEncryptionIV::FILE_TYPE_OFFSET] ^= 0x80;
-            const auto foreign = NBackup::TEncryptedFileSerializer::EncryptFullFile("AES-128-GCM",
-                NBackup::TEncryptionKey("0123456789012345"), iv, TStringBuf(plain.Data(), plain.Size()));
-            return TString(foreign.Data(), foreign.Size());
-        };
-        if (IsFs) {
-            TVector<TFsPath> files;
-            (t.Directory.Path() / "backup" / prefix).List(files);
-            for (const auto& file : files) {
-                if (file.GetPath().EndsWith(".enc")) {
-                    const auto content = changeBackupIV(TFileInput(file).ReadAll());
-                    TFileOutput(file).Write(content);
-                }
-            }
-        } else {
-            for (auto& [name, content] : t.S3.GetData()) {
-                if (name.StartsWith("/Backup/backup/" + prefix + "/") && name.EndsWith(".enc")) {
-                    content = changeBackupIV(content);
-                }
-            }
-        }
-        t.Import(false, {}, Ydb::StatusIds::CANCELLED);
-        const auto result = TestGetImport(t.Runtime, t.TxId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        const auto& entry = result.GetResponse().GetEntry();
+        ChangeIndexBackupIV(test, prefix);
+
+        test.Import(false, {}, Ydb::StatusIds::CANCELLED);
+
+        const auto entry = test.GetImportEntry(test.TxId, Ydb::StatusIds::CANCELLED);
         UNIT_ASSERT_GT(entry.IssuesSize(), 0);
         UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Index encryption IV does not belong to this backup");
-        t.Forget(exportId);
+
+        test.Forget(exportId);
     }
 
-    void CheckVectorRebuildExport(const TVectorRebuildExportOptions& options) {
-        UNIT_ASSERT(!options.FinishAfterExport || (!options.FinishBeforeCopy && !options.RestartDuringUpload
-            && !options.RebootDuringReplacement && !options.LegacyReadyCopy));
-        NSchemeShard::TSchemeShard* schemeShard = nullptr;
-        TExportEnv t(options.IsFs, [&](const TActorId& tablet, TTabletStorageInfo* info) {
-            schemeShard = static_cast<NSchemeShard::TSchemeShard*>(CreateFlatTxSchemeShard(tablet, info));
-            return schemeShard;
-        });
-        t.Encrypted = options.Encrypted;
-        t.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
-        TestCreateTable(t.Runtime, ++t.TxId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key" Type: "Uint32" }
-            Columns { Name: "embedding" Type: "String" }
-            Columns { Name: "prefix" Type: "Uint32" }
-            Columns { Name: "value" Type: "String" }
-            KeyColumnNames: ["key"]
-        )");
-        t.Env.TestWaitNotification(t.Runtime, t.TxId);
-        WriteVectorTableRows(t.Runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/Table", 0, 0, 200);
-        const ui64 buildId = ++t.TxId;
-        TestBuildVectorIndex(t.Runtime, buildId, TTestTxConfig::SchemeShard,
-            "/MyRoot", "/MyRoot/Table", "index", {"embedding"});
-        t.Env.TestWaitNotification(t.Runtime, buildId);
-        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(t.Runtime, TTestTxConfig::SchemeShard,
-            "/MyRoot", buildId).GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
-        WriteVectorTableRows(t.Runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/Table", 0, 200, 400);
+    struct TVectorRebuildExportScenario {
+        const TVectorRebuildExportOptions Options;
+        NSchemeShard::TSchemeShard* SchemeShard = nullptr;
+        TExportEnv Test;
+        ui64 RebuildId = 0;
+        ui64 ExportId = 0;
+        ui64 LiveIndexId = 0;
+        TString TemporaryIndex;
+        TVector<TPathId> OldImplIds;
+        TVector<TString> ExpectedData;
+        const TVector<TString> ImplTables = {"indexImplLevelTable", "indexImplPostingTable"};
+        THashMap<TString, TVector<TString>> ExpectedIndexData;
 
-        const auto expectedData = ReadShards(t.Runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
-        const TVector<TString> implTables = {"indexImplLevelTable", "indexImplPostingTable"};
-        THashMap<TString, TVector<TString>> expectedIndexData;
-        auto rememberIndexData = [&] {
-            expectedIndexData.clear();
-            for (const auto& implTable : implTables) {
-                const TString path = "/MyRoot/Table/index/" + implTable;
-                UNIT_ASSERT_GT(CountRows(t.Runtime, path), 0);
-                expectedIndexData.emplace(implTable, ReadShards(t.Runtime, TTestTxConfig::SchemeShard, path));
-            }
-        };
-        rememberIndexData();
-        const ui64 liveIndexId = DescribePrivatePath(t.Runtime, "/MyRoot/Table/index").GetPathId();
-        TVector<TPathId> oldImplIds;
-        if (options.RetryCopyAfterReplacement) {
-            for (const auto& implTable : implTables) {
-                oldImplIds.emplace_back(TTestTxConfig::SchemeShard,
-                    DescribePrivatePath(t.Runtime, "/MyRoot/Table/index/" + implTable).GetPathId());
-            }
-        }
+        TBlockEvents<TEvDataShard::TEvLocalKMeansRequest> Clustering;
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> Progress;
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> Replacement;
+        TDelayedCopy Copy;
+        TDelayedDataUpload Uploads;
 
-        const ui64 rebuildId = ++t.TxId;
-        TBlockEvents<TEvDataShard::TEvLocalKMeansRequest> clustering(t.Runtime, [rebuildId](const auto& ev) {
-            return ev->Get()->Record.GetId() == rebuildId;
-        });
-        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> progress(t.Runtime, [&](const auto& ev) {
-            return (options.Restart != ERestart::None || options.FinishAfterExport) && !options.BeforeReplacement
-                && ev->Get()->Record.GetId() == rebuildId;
-        });
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> replacement(t.Runtime, [](const auto& ev) {
-            const auto& record = ev->Get()->Record;
-            return record.TransactionSize() == 1
-                && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveIndex
-                && record.GetTransaction(0).GetMoveIndex().GetTablePath() == "/MyRoot/Table";
-        });
-        TestRebuildVectorIndex(t.Runtime, rebuildId, TTestTxConfig::SchemeShard,
-            "/MyRoot", "/MyRoot/Table", "index", {"embedding"});
-        t.Runtime.WaitFor("rebuild clustering", [&] { return !clustering.empty(); });
-        if (options.BeforeReplacement) {
-            clustering.Stop().Unblock();
-            t.Runtime.WaitFor("index replacement", [&] { return !replacement.empty(); });
-        }
-        const TString temporaryIndex = Sprintf("__ydb_rebuild_%lu", rebuildId);
-        TestDescribeResult(DescribePrivatePath(t.Runtime, "/MyRoot/Table/" + temporaryIndex), {
-            NLs::IndexState(options.BeforeReplacement
-                ? NKikimrSchemeOp::EIndexStateReady : NKikimrSchemeOp::EIndexStateWriteOnly),
-        });
-        auto checkOldLiveIndex = [&] {
-            UNIT_ASSERT_VALUES_EQUAL(DescribePrivatePath(t.Runtime, "/MyRoot/Table/index").GetPathId(), liveIndexId);
-            TestDescribeResult(DescribePrivatePath(t.Runtime, "/MyRoot/Table/index"), {
-                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-            });
-            for (const auto& implTable : implTables) {
-                UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-                    "/MyRoot/Table/index/" + implTable), expectedIndexData.at(implTable));
-            }
-        };
-        checkOldLiveIndex();
-
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export("include_index_data: true");
-        if (options.FinishBeforeCopy) {
-            t.Runtime.WaitFor("consistent copy proposal", [&] { return !copy.Proposal.empty(); });
-            UNIT_ASSERT(options.BeforeReplacement);
-            replacement.Stop().Unblock();
-            t.Env.TestWaitNotification(t.Runtime, rebuildId);
-            rememberIndexData();
-        }
-        if (options.RetryCopyAfterReplacement) {
-            UNIT_ASSERT(options.FinishBeforeCopy);
-            t.Runtime.WaitFor("old implementation paths cleaned after replacement", [&] {
-                return AllOf(oldImplIds, [&](const auto& id) { return !schemeShard->PathsById.contains(id); });
-            });
-            const ui64 busyTxId = ++t.TxId;
-            TBlockEvents<TEvDataShard::TEvProposeTransaction> busyShards(t.Runtime, [busyTxId](const auto& ev) {
-                return ev->Get()->Record.GetTxId() == busyTxId;
-            });
-            TestCopyTable(t.Runtime, busyTxId, "/MyRoot", "BusyCopy", "/MyRoot/Table");
-            t.Runtime.WaitFor("competing copy shard proposal", [&] { return !busyShards.empty(); });
-            const ui64 firstCopyTxId = copy.Proposal.front()->Get()->Record.GetTxId();
-            bool rejected = false;
-            auto results = t.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](const auto& ev) {
+        explicit TVectorRebuildExportScenario(const TVectorRebuildExportOptions& options)
+            : Options(options)
+            , Test(options.IsFs, [this](const TActorId& tablet, TTabletStorageInfo* info) {
+                SchemeShard = static_cast<NSchemeShard::TSchemeShard*>(CreateFlatTxSchemeShard(tablet, info));
+                return SchemeShard;
+            })
+            , Clustering(Test.Runtime, [this](const auto& ev) { return ev->Get()->Record.GetId() == RebuildId; })
+            , Progress(Test.Runtime, [this](const auto& ev) {
+                return (Options.Restart != ERestart::None || Options.FinishAfterExport) && !Options.BeforeReplacement
+                    && ev->Get()->Record.GetId() == RebuildId;
+            })
+            , Replacement(Test.Runtime, [](const auto& ev) {
                 const auto& record = ev->Get()->Record;
-                rejected |= record.GetTxId() == firstCopyTxId
-                    && record.GetStatus() == NKikimrScheme::StatusMultipleModifications;
-            });
-            copy.Proposal.Unblock(1);
-            t.Runtime.WaitFor("export copy rejected while source busy", [&] { return rejected; });
-            busyShards.Stop().Unblock();
-            t.Env.TestWaitNotification(t.Runtime, busyTxId);
-            t.Runtime.WaitFor("export retries or terminates", [&] {
-                return !copy.Proposal.empty() || schemeShard->Exports.at(exportId)->IsFinished();
-            });
-            UNIT_ASSERT_C(!schemeShard->Exports.at(exportId)->IsFinished(), schemeShard->Exports.at(exportId)->Issue);
-            UNIT_ASSERT_VALUES_UNEQUAL(copy.Proposal.front()->Get()->Record.GetTxId(), firstCopyTxId);
-        }
-        if (options.LegacyReadyCopy) {
-            UNIT_ASSERT(options.BeforeReplacement && !options.CaptureScheme);
-            auto build = schemeShard->IndexBuilds.at(TIndexBuildId(rebuildId));
-            const auto rebuildName = std::exchange(build->RebuildIndexName, {});
-            // Before the new selector, Ready was sufficient to copy the private
-            // replacement. Restore the builder before any restart or MoveIndex.
-            copy.WaitForCopy(false);
-            build->RebuildIndexName = rebuildName;
-            TestDescribeResult(DescribePrivatePath(t.Runtime,
-                Sprintf("/MyRoot/export-%lu/0/", exportId) + temporaryIndex), {
-                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-            });
-        } else {
-            copy.WaitForCopy(options.CaptureScheme);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), options.CaptureScheme ? 3 : 0);
-        TDelayedDataUpload uploads(t);
-        if (options.RestartDuringUpload) {
-            UNIT_ASSERT(options.Restart == ERestart::None && !options.FinishBeforeCopy);
-            uploads.StartAndReboot(copy, exportId, {"index/indexImplLevelTable", "index/indexImplPostingTable"});
-        } else {
-            uploads.Requests.Stop();
+                return record.TransactionSize() == 1
+                    && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveIndex
+                    && record.GetTransaction(0).GetMoveIndex().GetTablePath() == "/MyRoot/Table";
+            })
+            , Copy(Test)
+            , Uploads(Test)
+        {
+            UNIT_ASSERT(!Options.FinishAfterExport || (!Options.FinishBeforeCopy && !Options.RestartDuringUpload
+                && !Options.RebootDuringReplacement && !Options.LegacyReadyCopy));
         }
 
-        WriteVectorTableRows(t.Runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/Table", 0, 400, 401);
-        if (!options.FinishBeforeCopy) {
-            if (!options.BeforeReplacement) {
-                clustering.Stop().Unblock();
-                if (options.Restart != ERestart::None) {
-                    t.Runtime.WaitFor("rebuild progress before reboot", [&] { return !progress.empty(); });
+        void Prepare() {
+            Test.Encrypted = Options.Encrypted;
+            Test.Runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+            Test.CreateVectorTable();
+            const ui64 buildId = Test.CreateVectorIndex();
+            Test.CheckBuildState(buildId, Ydb::Table::IndexBuildState::STATE_DONE);
+            WriteVectorTableRows(Test.Runtime, TTestTxConfig::SchemeShard, ++Test.TxId, "/MyRoot/Table", 0, 200, 400);
+
+            ExpectedData = Test.ReadRows("/MyRoot/Table");
+
+            RememberIndexData();
+            LiveIndexId = DescribePrivatePath(Test.Runtime, "/MyRoot/Table/index").GetPathId();
+            if (Options.RetryCopyAfterReplacement) {
+                for (const auto& implTable : ImplTables) {
+                    OldImplIds.emplace_back(TTestTxConfig::SchemeShard,
+                        DescribePrivatePath(Test.Runtime, "/MyRoot/Table/index/" + implTable).GetPathId());
                 }
             }
-            if (options.Restart == ERestart::DataShard || options.Restart == ERestart::Both) {
-                progress.clear();
-                RebootTableShards(t, "/MyRoot/Table");
-                for (const auto& implTable : implTables) {
-                    RebootTableShards(t, "/MyRoot/Table/" + temporaryIndex + "/" + implTable);
-                    RebootTableShards(t, "/MyRoot/Table/index/" + implTable);
-                }
-            }
-            if (options.Restart == ERestart::SchemeShard || options.Restart == ERestart::Both) {
-                progress.clear();
-                replacement.clear();
-                copy.Reboot();
-            }
-            if (!options.BeforeReplacement && options.Restart != ERestart::None) {
-                t.Runtime.WaitFor("rebuild progress after reboot", [&] { return !progress.empty(); });
-            }
-            if (options.BeforeReplacement) {
-                t.Runtime.WaitFor("replacement remains blocked after reboot", [&] { return !replacement.empty(); });
-            }
-            checkOldLiveIndex();
         }
-        auto finishRebuild = [&] {
-            if (!options.FinishBeforeCopy) {
-                progress.Stop().Unblock();
-                t.Runtime.WaitFor("index replacement", [&] { return !replacement.empty(); });
-                const ui64 replacementTxId = replacement.front()->Get()->Record.GetTxId();
-                TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> completion(t.Runtime, [&](const auto& ev) {
-                    return options.RebootDuringReplacement && ev->Get()->Record.GetTxId() == replacementTxId;
+
+        void RememberIndexData() {
+            ExpectedIndexData.clear();
+
+            for (const auto& implTable : ImplTables) {
+                const TString path = "/MyRoot/Table/index/" + implTable;
+                UNIT_ASSERT_GT(CountRows(Test.Runtime, path), 0);
+                ExpectedIndexData.emplace(implTable, Test.ReadRows(path));
+            }
+        }
+
+        void StartRebuild() {
+            RebuildId = ++Test.TxId;
+            TestRebuildVectorIndex(Test.Runtime, RebuildId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index", {"embedding"});
+            Test.Runtime.WaitFor("rebuild Clustering", [&] { return !Clustering.empty(); });
+            if (Options.BeforeReplacement) {
+                Clustering.Stop().Unblock();
+                Test.Runtime.WaitFor("index replacement", [&] { return !Replacement.empty(); });
+            }
+            TemporaryIndex = Sprintf("__ydb_rebuild_%lu", RebuildId);
+            TestDescribeResult(DescribePrivatePath(Test.Runtime, "/MyRoot/Table/" + TemporaryIndex), {
+                NLs::IndexState(Options.BeforeReplacement
+                    ? NKikimrSchemeOp::EIndexStateReady : NKikimrSchemeOp::EIndexStateWriteOnly),
+            });
+        }
+
+        void CheckOldLiveIndex() {
+            UNIT_ASSERT_VALUES_EQUAL(DescribePrivatePath(Test.Runtime, "/MyRoot/Table/index").GetPathId(), LiveIndexId);
+            TestDescribeResult(DescribePrivatePath(Test.Runtime, "/MyRoot/Table/index"), {
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            });
+
+            for (const auto& implTable : ImplTables) {
+                UNIT_ASSERT_VALUES_EQUAL(Test.ReadRows("/MyRoot/Table/index/" + implTable), ExpectedIndexData.at(implTable));
+            }
+        }
+
+        void FinishReplacementBeforeCopy() {
+            if (Options.FinishBeforeCopy) {
+                Test.Runtime.WaitFor("consistent copy proposal", [&] { return !Copy.Proposal.empty(); });
+                UNIT_ASSERT(Options.BeforeReplacement);
+                Replacement.Stop().Unblock();
+                Test.Env.TestWaitNotification(Test.Runtime, RebuildId);
+                RememberIndexData();
+            }
+        }
+
+        void RetryBusyCopy() {
+            if (Options.RetryCopyAfterReplacement) {
+                UNIT_ASSERT(Options.FinishBeforeCopy);
+                Test.Runtime.WaitFor("old implementation paths cleaned after replacement", [&] {
+                    return AllOf(OldImplIds, [&](const auto& id) { return !SchemeShard->PathsById.contains(id); });
                 });
-                replacement.Stop().Unblock();
-                if (options.RebootDuringReplacement) {
-                    t.Runtime.WaitFor("replacement commit before reboot", [&] { return !completion.empty(); });
-                    UNIT_ASSERT_VALUES_UNEQUAL(DescribePrivatePath(t.Runtime, "/MyRoot/Table/index").GetPathId(), liveIndexId);
+                const ui64 busyTxId = ++Test.TxId;
+
+                TBlockEvents<TEvDataShard::TEvProposeTransaction> busyShards(Test.Runtime, [busyTxId](const auto& ev) {
+                    return ev->Get()->Record.GetTxId() == busyTxId;
+                });
+                TestCopyTable(Test.Runtime, busyTxId, "/MyRoot", "BusyCopy", "/MyRoot/Table");
+                Test.Runtime.WaitFor("competing copy shard proposal", [&] { return !busyShards.empty(); });
+                const ui64 firstCopyTxId = Copy.Proposal.front()->Get()->Record.GetTxId();
+                bool rejected = false;
+                auto results = Test.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](const auto& ev) {
+                    const auto& record = ev->Get()->Record;
+                    rejected |= record.GetTxId() == firstCopyTxId
+                        && record.GetStatus() == NKikimrScheme::StatusMultipleModifications;
+                });
+                Copy.Proposal.Unblock(1);
+                Test.Runtime.WaitFor("export copy rejected while source busy", [&] { return rejected; });
+                busyShards.Stop().Unblock();
+                Test.Env.TestWaitNotification(Test.Runtime, busyTxId);
+                Test.Runtime.WaitFor("export retries or terminates", [&] {
+                    return !Copy.Proposal.empty() || SchemeShard->Exports.at(ExportId)->IsFinished();
+                });
+                UNIT_ASSERT_C(!SchemeShard->Exports.at(ExportId)->IsFinished(), SchemeShard->Exports.at(ExportId)->Issue);
+                UNIT_ASSERT_VALUES_UNEQUAL(Copy.Proposal.front()->Get()->Record.GetTxId(), firstCopyTxId);
+            }
+        }
+
+        void CaptureCopy() {
+            if (Options.LegacyReadyCopy) {
+                UNIT_ASSERT(Options.BeforeReplacement && !Options.CaptureScheme);
+                auto build = SchemeShard->IndexBuilds.at(TIndexBuildId(RebuildId));
+                const auto rebuildName = std::exchange(build->RebuildIndexName, {});
+                // Before the new selector, Ready was sufficient to Copy the private
+                // Replacement. Restore the builder before any restart or MoveIndex.
+                Copy.WaitForCopy(false);
+                build->RebuildIndexName = rebuildName;
+                TestDescribeResult(DescribePrivatePath(Test.Runtime,
+                    Sprintf("/MyRoot/export-%lu/0/", ExportId) + TemporaryIndex), {
+                    NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                });
+            } else {
+                Copy.WaitForCopy(Options.CaptureScheme);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(Test.SnapshotCount(), Options.CaptureScheme ? 3 : 0);
+            if (Options.CorruptSnapshot) {
+                UNIT_ASSERT(Options.CaptureScheme && Options.Restart != ERestart::None);
+                const auto pathId = DescribePrivatePath(Test.Runtime,
+                    Sprintf("/MyRoot/export-%lu/0/index/indexImplPostingTable", ExportId)).GetPathId();
+                CorruptTableSchemeSnapshot(Test, pathId);
+            }
+        }
+
+        void StartUploads() {
+            if (Options.RestartDuringUpload) {
+                UNIT_ASSERT(Options.Restart == ERestart::None && !Options.FinishBeforeCopy);
+                Uploads.StartAndReboot(Copy, ExportId, {"index/indexImplLevelTable", "index/indexImplPostingTable"});
+            } else {
+                Uploads.Requests.Stop();
+            }
+        }
+
+        void RestartRebuild() {
+            if (!Options.FinishBeforeCopy) {
+                if (!Options.BeforeReplacement) {
+                    Clustering.Stop().Unblock();
+                    if (Options.Restart != ERestart::None) {
+                        Test.Runtime.WaitFor("rebuild progress before reboot", [&] { return !Progress.empty(); });
+                    }
+                }
+                if (Options.Restart == ERestart::DataShard || Options.Restart == ERestart::Both) {
+                    Progress.clear();
+                    RebootTableShards(Test, "/MyRoot/Table");
+
+                    for (const auto& implTable : ImplTables) {
+                        RebootTableShards(Test, "/MyRoot/Table/" + TemporaryIndex + "/" + implTable);
+                        RebootTableShards(Test, "/MyRoot/Table/index/" + implTable);
+                    }
+                }
+                if (Options.Restart == ERestart::SchemeShard || Options.Restart == ERestart::Both) {
+                    Progress.clear();
+                    Replacement.clear();
+                    Copy.Reboot();
+                }
+                if (!Options.BeforeReplacement && Options.Restart != ERestart::None) {
+                    Test.Runtime.WaitFor("rebuild progress after reboot", [&] { return !Progress.empty(); });
+                }
+                if (Options.BeforeReplacement) {
+                    Test.Runtime.WaitFor("replacement remains blocked after reboot", [&] { return !Replacement.empty(); });
+                }
+                CheckOldLiveIndex();
+            }
+        }
+
+        void FinishRebuild() {
+            if (!Options.FinishBeforeCopy) {
+                Progress.Stop().Unblock();
+                Test.Runtime.WaitFor("index replacement", [&] { return !Replacement.empty(); });
+                const ui64 replacementTxId = Replacement.front()->Get()->Record.GetTxId();
+
+                TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> completion(Test.Runtime, [&](const auto& ev) {
+                    return Options.RebootDuringReplacement && ev->Get()->Record.GetTxId() == replacementTxId;
+                });
+                Replacement.Stop().Unblock();
+                if (Options.RebootDuringReplacement) {
+                    Test.Runtime.WaitFor("replacement commit before reboot", [&] { return !completion.empty(); });
+                    UNIT_ASSERT_VALUES_UNEQUAL(DescribePrivatePath(Test.Runtime, "/MyRoot/Table/index").GetPathId(), LiveIndexId);
                     completion.clear();
-                    copy.Reboot();
+                    Copy.Reboot();
                     completion.Stop().Unblock();
                 }
-                t.Env.TestWaitNotification(t.Runtime, rebuildId);
+
+                Test.Env.TestWaitNotification(Test.Runtime, RebuildId);
             }
-            UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(t.Runtime, TTestTxConfig::SchemeShard,
-                "/MyRoot", rebuildId).GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
-            UNIT_ASSERT_VALUES_EQUAL(CountRows(t.Runtime, "/MyRoot/Table/index/indexImplPostingTable"), 400);
-            UNIT_ASSERT_VALUES_UNEQUAL(DescribePrivatePath(t.Runtime, "/MyRoot/Table/index").GetPathId(), liveIndexId);
-            TestDescribeResult(DescribePrivatePath(t.Runtime, "/MyRoot/Table/" + temporaryIndex), {NLs::PathNotExist});
-            if (options.LegacyReadyCopy) {
-                TestForgetBuildIndex(t.Runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", rebuildId);
+
+            Test.CheckBuildState(RebuildId, Ydb::Table::IndexBuildState::STATE_DONE);
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(Test.Runtime, "/MyRoot/Table/index/indexImplPostingTable"), 400);
+            UNIT_ASSERT_VALUES_UNEQUAL(DescribePrivatePath(Test.Runtime, "/MyRoot/Table/index").GetPathId(), LiveIndexId);
+            TestDescribeResult(DescribePrivatePath(Test.Runtime, "/MyRoot/Table/" + TemporaryIndex), {NLs::PathNotExist});
+            if (Options.LegacyReadyCopy) {
+                TestForgetBuildIndex(Test.Runtime, ++Test.TxId, TTestTxConfig::SchemeShard, "/MyRoot", RebuildId);
             }
-        };
-        auto checkActiveRebuild = [&] {
-            const auto result = TestGetBuildIndex(t.Runtime, TTestTxConfig::SchemeShard, "/MyRoot", rebuildId);
+        }
+
+        void CheckActiveRebuild() {
+            const auto result = TestGetBuildIndex(Test.Runtime, TTestTxConfig::SchemeShard, "/MyRoot", RebuildId);
             const auto state = result.GetIndexBuild().GetState();
             UNIT_ASSERT_C(state == Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA
                 || state == Ydb::Table::IndexBuildState::STATE_APPLYING, result.DebugString());
-            UNIT_ASSERT(options.BeforeReplacement ? !replacement.empty() : !progress.empty());
-            checkOldLiveIndex();
-        };
-        if (!options.FinishAfterExport) {
-            finishRebuild();
+            UNIT_ASSERT(Options.BeforeReplacement ? !Replacement.empty() : !Progress.empty());
+            CheckOldLiveIndex();
         }
 
-        if (options.RestartDuringUpload) {
-            // The old live implementation has now been deleted by MoveIndex.
-            uploads.Reboot(exportId, {"index/indexImplLevelTable", "index/indexImplPostingTable"});
-            uploads.Requests.Stop().Unblock();
-        } else if (options.FinishAfterExport) {
-            checkActiveRebuild();
-            copy.Resume(false);
-        } else {
-            copy.ResumeWithRebootBeforeBackup(exportId);
+        void FinishExport() {
+            if (Options.CorruptSnapshot) {
+                Copy.Resume(false);
+            } else if (Options.RestartDuringUpload) {
+                // The old live implementation has now been deleted by MoveIndex.
+                Uploads.Reboot(ExportId, {"index/indexImplLevelTable", "index/indexImplPostingTable"});
+                Uploads.Requests.Stop().Unblock();
+            } else if (Options.FinishAfterExport) {
+                CheckActiveRebuild();
+                Copy.Resume(false);
+            } else {
+                Copy.ResumeWithRebootBeforeBackup(ExportId);
+            }
+
+            Test.Env.TestWaitNotification(Test.Runtime, ExportId);
         }
-        t.Env.TestWaitNotification(t.Runtime, exportId);
-        if (options.LegacyReadyCopy) {
-            const auto result = TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-            const auto& entry = result.GetResponse().GetEntry();
+
+        void CheckCorruptExport() {
+            const auto result = Test.GetExportEntry(ExportId, Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues(0).message(), "table scheme snapshot");
+            UNIT_ASSERT(!Test.HasExportCompletionMarker());
+            UNIT_ASSERT_VALUES_EQUAL(Test.SnapshotCount(), 3);
+            if (Options.FinishAfterExport) {
+                CheckActiveRebuild();
+            }
+
+            Test.Forget(ExportId);
+            if (Options.FinishAfterExport) {
+                CheckActiveRebuild();
+                FinishRebuild();
+            }
+        }
+
+        void CheckHealthyBackupAfterCancellation() {
+            const auto healthyRows = Test.ReadRows("/MyRoot/Table");
+            RememberIndexData();
+            const ui64 healthyExportId = Test.Export("include_index_data: true");
+            Test.Env.TestWaitNotification(Test.Runtime, healthyExportId);
+            Test.GetExportEntry(healthyExportId, Ydb::StatusIds::SUCCESS);
+
+            Test.Import(true);
+            UNIT_ASSERT_VALUES_EQUAL(Test.ReadRows("/MyRoot/Restored"), healthyRows);
+
+            for (const auto& implTable : ImplTables) {
+                UNIT_ASSERT_VALUES_EQUAL(Test.ReadRows("/MyRoot/Restored/index/" + implTable), ExpectedIndexData.at(implTable));
+            }
+
+            Test.Forget(healthyExportId);
+        }
+
+        void CheckRejectedLegacyExport() {
+            const auto entry = Test.GetExportEntry(ExportId, Ydb::StatusIds::CANCELLED);
             UNIT_ASSERT_GT(entry.IssuesSize(), 0);
             UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "temporary rebuild index");
-            t.Forget(exportId);
-            return;
-        }
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        Ydb::Table::CreateTableRequest scheme;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(t.ReadFile("scheme.pb"), &scheme));
-        UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(scheme.indexes(0).name(), "index");
-        UNIT_ASSERT(scheme.indexes(0).has_global_vector_kmeans_tree_index());
-        THashSet<TString> expectedImplTables;
-        for (const auto& implTable : implTables) {
-            expectedImplTables.insert("index/" + implTable);
-            UNIT_ASSERT(!t.HasFile(temporaryIndex + "/" + implTable + "/scheme.pb"));
-        }
-        const auto prefixes = MaterializedIndexPrefixes(t, expectedImplTables);
-        for (const auto& [implTable, prefix] : prefixes) {
-            UNIT_ASSERT(!t.ReadFile(prefix + "/data_00.csv").empty());
-        }
-        if (t.Encrypted) {
-            t.CheckEncryptionIVs();
+
+            Test.Forget(ExportId);
         }
 
-        if (options.FinishAfterExport) {
-            checkActiveRebuild();
+        void CheckBackup() {
+            Test.GetExportEntry(ExportId, Ydb::StatusIds::SUCCESS);
+
+            const auto scheme = Test.ReadScheme();
+            UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(scheme.indexes(0).name(), "index");
+            UNIT_ASSERT(scheme.indexes(0).has_global_vector_kmeans_tree_index());
+            THashSet<TString> expectedImplTables;
+
+            for (const auto& implTable : ImplTables) {
+                expectedImplTables.insert("index/" + implTable);
+                UNIT_ASSERT(!Test.HasFile(TemporaryIndex + "/" + implTable + "/scheme.pb"));
+            }
+
+            const auto prefixes = MaterializedIndexPrefixes(Test, expectedImplTables);
+
+            for (const auto& [implTable, prefix] : prefixes) {
+                UNIT_ASSERT(!Test.ReadFile(prefix + "/data_00.csv").empty());
+            }
+            if (Test.Encrypted) {
+                Test.CheckEncryptionIVs();
+            }
         }
-        t.Import(t.Encrypted && !options.FinishAfterExport);
-        TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/Restored"), {NLs::IndexesCount(1)});
-        UNIT_ASSERT_VALUES_EQUAL(CountRows(t.Runtime, "/MyRoot/Restored"), 400);
-        UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard, "/MyRoot/Restored"), expectedData);
-        for (const auto& implTable : implTables) {
-            UNIT_ASSERT_VALUES_EQUAL(ReadShards(t.Runtime, TTestTxConfig::SchemeShard,
-                "/MyRoot/Restored/index/" + implTable), expectedIndexData.at(implTable));
+
+        void CheckImport() {
+            if (Options.FinishAfterExport) {
+                CheckActiveRebuild();
+            }
+
+            Test.Import(Test.Encrypted && !Options.FinishAfterExport);
+            TestDescribeResult(DescribePath(Test.Runtime, "/MyRoot/Restored"), {NLs::IndexesCount(1)});
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(Test.Runtime, "/MyRoot/Restored"), 400);
+            UNIT_ASSERT_VALUES_EQUAL(Test.ReadRows("/MyRoot/Restored"), ExpectedData);
+
+            for (const auto& implTable : ImplTables) {
+                UNIT_ASSERT_VALUES_EQUAL(Test.ReadRows("/MyRoot/Restored/index/" + implTable), ExpectedIndexData.at(implTable));
+            }
+            if (Options.FinishAfterExport) {
+                CheckActiveRebuild();
+            }
         }
-        if (options.FinishAfterExport) {
-            checkActiveRebuild();
+
+        void ForgetExport() {
+            Test.Forget(ExportId);
+            if (Options.FinishAfterExport) {
+                CheckActiveRebuild();
+                FinishRebuild();
+            }
         }
-        t.Forget(exportId);
-        if (options.FinishAfterExport) {
-            checkActiveRebuild();
-            finishRebuild();
+
+        void StartExport() {
+            ExportId = Test.Export("include_index_data: true");
+            FinishReplacementBeforeCopy();
+            RetryBusyCopy();
+            CaptureCopy();
+        }
+
+        void ChangeSourceData() {
+            WriteVectorTableRows(Test.Runtime, TTestTxConfig::SchemeShard, ++Test.TxId, "/MyRoot/Table", 0, 400, 401);
+        }
+    };
+
+    void CheckVectorRebuildExport(const TVectorRebuildExportOptions& options) {
+        TVectorRebuildExportScenario scenario(options);
+        scenario.Prepare();
+
+        scenario.StartRebuild();
+        scenario.CheckOldLiveIndex();
+        scenario.StartExport();
+        scenario.StartUploads();
+        scenario.ChangeSourceData();
+        scenario.RestartRebuild();
+        if (!options.FinishAfterExport) {
+            scenario.FinishRebuild();
+        }
+        scenario.FinishExport();
+
+        if (options.CorruptSnapshot) {
+            scenario.CheckCorruptExport();
+            scenario.CheckHealthyBackupAfterCancellation();
+        } else if (options.LegacyReadyCopy) {
+            scenario.CheckRejectedLegacyExport();
+        } else {
+            scenario.CheckBackup();
+            scenario.CheckImport();
+            scenario.ForgetExport();
         }
     }
 
@@ -2228,24 +2860,29 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
         CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = BeforeReplacement, .Restart = ERestart::Both});
     }
 
-    Y_UNIT_TEST_QUAD(ExportCompletesDuringActiveVectorRebuild, IsFs, BeforeReplacement) {
+    Y_UNIT_TEST_QUAD(CorruptSnapshotCancelsExportDuringVectorRebuild, IsFs, BeforeReplacement) {
         CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = BeforeReplacement,
-            .Restart = ERestart::Both, .FinishAfterExport = true});
+            .Restart = ERestart::Both, .FinishAfterExport = true, .CorruptSnapshot = true});
+    }
+
+    Y_UNIT_TEST_QUAD(CorruptSnapshotCancelsExportAfterVectorReplacement, IsFs, BeforeReplacement) {
+        CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = BeforeReplacement, .Restart = ERestart::Both, .CorruptSnapshot = true});
+    }
+
+    Y_UNIT_TEST_QUAD(ExportCompletesDuringActiveVectorRebuild, IsFs, BeforeReplacement) {
+        CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = BeforeReplacement, .Restart = ERestart::Both, .FinishAfterExport = true});
     }
 
     Y_UNIT_TEST_TWIN(EncryptedExportCompletesDuringActiveVectorRebuild, IsFs) {
-        CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = true, .Encrypted = true,
-            .Restart = ERestart::Both, .FinishAfterExport = true});
+        CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = true, .Encrypted = true, .Restart = ERestart::Both, .FinishAfterExport = true});
     }
 
     Y_UNIT_TEST_QUAD(LegacyVectorRebuildExportsCopiedIndex, IsFs, BeforeReplacement) {
-        CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = BeforeReplacement, .CaptureScheme = false,
-            .Restart = ERestart::SchemeShard});
+        CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = BeforeReplacement, .CaptureScheme = false, .Restart = ERestart::SchemeShard});
     }
 
     Y_UNIT_TEST_QUAD(EncryptedVectorRebuildExportsCopiedIndex, IsFs, BeforeReplacement) {
-        CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = BeforeReplacement, .Encrypted = true,
-            .Restart = ERestart::Both});
+        CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = BeforeReplacement, .Encrypted = true, .Restart = ERestart::Both});
     }
 
     Y_UNIT_TEST_TWIN(VectorReplacementCommitSurvivesRestart, IsFs) {
@@ -2257,13 +2894,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
     }
 
     Y_UNIT_TEST_TWIN(VectorReplacementBeforeCopyRetriesBusySource, IsFs) {
-        CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = true, .FinishBeforeCopy = true,
-            .RetryCopyAfterReplacement = true});
+        CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = true, .FinishBeforeCopy = true, .RetryCopyAfterReplacement = true});
     }
 
     Y_UNIT_TEST_TWIN(LegacyReadyRebuildCopyIsRejected, IsFs) {
-        CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = true, .CaptureScheme = false,
-            .Restart = ERestart::SchemeShard, .LegacyReadyCopy = true});
+        CheckVectorRebuildExport({.IsFs = IsFs, .BeforeReplacement = true, .CaptureScheme = false, .Restart = ERestart::SchemeShard, .LegacyReadyCopy = true});
     }
 
     Y_UNIT_TEST_QUAD(VectorRebuildSurvivesExportingShardRestart, IsFs, BeforeReplacement) {
@@ -2313,6 +2948,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
         index.SetName("index");
         index.SetType(NKikimrSchemeOp::EIndexTypeGlobal);
         index.AddKeyColumnNames("value");
+
         for (const TString path : {"other/indexImplTable", "index/other", "index"}) {
             error.clear();
             UNIT_ASSERT(!NSchemeShard::ComputeIndexItemSuffix(&snapshot, source, path, true, true, error));
@@ -2321,99 +2957,46 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
     }
 
     Y_UNIT_TEST_TWIN(SchemeFailureWaitsForProposedSibling, RejectProposal) {
-        TExportEnv t(false);
-        t.CreateTable();
+        TExportEnv test(false);
+        test.CreateTable();
+
         for (const TString name : {"Other", "Another"}) {
-            TestCreateTable(t.Runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
-                Name: "%s"
-                Columns { Name: "key" Type: "Uint32" }
-                KeyColumnNames: ["key"]
-            )", name.c_str()));
-            t.Env.TestWaitNotification(t.Runtime, t.TxId);
+            test.CreateKeyTable(name);
         }
 
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export("", {"Other", "Another"});
+        TDelayedCopy copy(test);
+
+        const ui64 exportId = test.Export("", {"Other", "Another"});
         copy.WaitForCopy();
 
-        const auto pathId = DescribePrivatePath(t.Runtime, Sprintf("/MyRoot/export-%lu/2", exportId)).GetPathId();
-        LocalMiniKQL(t.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
-            (
-                (let key '(
-                    '('OwnerPathId (Uint64 '%lu))
-                    '('LocalPathId (Uint64 '%lu))
-                ))
-                (let description '('TableDescription (String '"")))
-                (return (AsList (UpdateRow 'TableSchemeSnapshots key '(description))))
-            )
-        )", TTestTxConfig::SchemeShard, pathId));
+        const auto pathId = DescribePrivatePath(test.Runtime, Sprintf("/MyRoot/export-%lu/2", exportId)).GetPathId();
+        UpdateTableSchemeSnapshot(test, pathId, "TableDescription", "");
 
-        TBlockEvents<TEvTxAllocatorClient::TEvAllocateResult> allocations(t.Runtime, [exportId](const auto& ev) {
-            return ev->Cookie == exportId;
-        });
-
-        ui64 firstBackupTxId = 0;
-        TBlockEvents<TEvDataShard::TEvSchemaChanged> schemaChanged(t.Runtime, [&](const auto& ev) {
-            return firstBackupTxId && ev->Get()->Record.GetTxId() == firstBackupTxId;
-        });
-
-        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletion> subscriptions(t.Runtime, [&](const auto& ev) {
-            return firstBackupTxId && ev->Get()->Record.GetTxId() == firstBackupTxId;
-        });
-
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> secondProposal(t.Runtime, [](const auto& ev) {
-            const auto& record = ev->Get()->Record;
-            return record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup() && record.GetTransaction(0).GetBackup().GetTableName() == "1";
-        });
+        TProposedBackups backups(test, exportId);
 
         copy.Resume(true);
-        t.Runtime.WaitFor("three backup allocations", [&] { return allocations.size() == 3; });
+        backups.StartFirst();
+        const ui64 secondBackupTxId = backups.StartSecond();
+        backups.FailThird();
 
-        firstBackupTxId = allocations.front()->Get()->TxIds.front();
-        allocations.Unblock(1);
-        t.Runtime.WaitFor("first backup accepted", [&] { return !subscriptions.empty(); });
-        allocations.Unblock(1);
-        t.Runtime.WaitFor("second backup proposed", [&] { return !secondProposal.empty(); });
-        const ui64 secondBackupTxId = secondProposal.front()->Get()->Record.GetTxId();
-
-        TBlockEvents<TEvSchemeShard::TEvCancelTxResult> acknowledgements(t.Runtime);
-        allocations.Stop().Unblock();
-        t.Runtime.WaitFor("first backup cancellation", [&] { return !acknowledgements.empty(); });
-        UNIT_ASSERT_VALUES_EQUAL(acknowledgements.front()->Get()->Record.GetTargetTxId(), firstBackupTxId);
-        acknowledgements.Unblock(1);
-
-        const auto cancelling = TestGetExport(t.Runtime, exportId, "/MyRoot");
-        const auto& entry = cancelling.GetResponse().GetEntry();
+        const auto entry = test.GetExportEntry(exportId);
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
         UNIT_ASSERT(!entry.HasEndTime());
 
         if (RejectProposal) {
-            auto proposal = std::move(secondProposal.front());
-            secondProposal.pop_front();
-            secondProposal.Stop();
-
-            auto rejected = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(NKikimrScheme::StatusSchemeError, secondBackupTxId, TTestTxConfig::SchemeShard);
-            rejected->Record.SetReason("Injected proposal rejection");
-            t.Runtime.Send(new IEventHandle(proposal->Sender, proposal->Recipient, rejected.Release()), 0, true);
+            backups.RejectSecond(secondBackupTxId);
         } else {
-            secondProposal.Stop().Unblock();
-            t.Runtime.WaitFor("second backup cancellation", [&] {
-                for (const auto& ack : acknowledgements) {
-                    if (ack->Get()->Record.GetTargetTxId() == secondBackupTxId) {
-                        return true;
-                    }
-                }
-                return false;
-            });
+            backups.AcceptSecond(secondBackupTxId);
         }
 
-        acknowledgements.Stop().Unblock();
-        t.Env.TestWaitNotification(t.Runtime, exportId);
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT(!t.HasFile("export_complete.json"));
+        backups.Acknowledgements.Stop().Unblock();
+        test.Env.TestWaitNotification(test.Runtime, exportId);
+        test.GetExportEntry(exportId, Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT(!test.HasExportCompletionMarker());
 
-        schemaChanged.Stop().Unblock();
-        subscriptions.Stop().Unblock();
-        t.Forget(exportId);
+        backups.SchemaChanged.Stop().Unblock();
+        backups.Subscriptions.Stop().Unblock();
+
+        test.Forget(exportId);
     }
 }

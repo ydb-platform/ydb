@@ -6,6 +6,7 @@
 
 #include <util/system/thread.h>
 #include <util/random/random.h>
+#include <util/string/builder.h>
 
 #include <limits>
 #include <unordered_set>
@@ -124,6 +125,7 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey("", 2), true).NodeId, 2);
         UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey("Three", 0), true).Endpoint, "");
         UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey("", 3), true).NodeId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuilder() << TEndpointKey("One", 1), "{ Endpoint: One, NodeId: 1}");
     }
 
     Y_UNIT_TEST(DiffOnRemove) {
@@ -137,29 +139,49 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
 
     Y_UNIT_TEST(Pessimization) {
         TEndpointElectorSafe elector;
-        elector.SetNewState(std::vector<TEndpointRecord>{{"Two", 2}, {"One", 1}});
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 0);
-        elector.PessimizeEndpoint("One");
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 50);
-        elector.SetNewState(std::vector<TEndpointRecord>{{"Two", 2}});
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 0);
-        elector.PessimizeEndpoint("Two");
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 100);
-    }
-
-    Y_UNIT_TEST(PessimizationRounding) {
-        TEndpointElectorSafe elector;
-        elector.SetNewState(std::vector<TEndpointRecord>{{"One", 0}, {"Two", 0}, {"Three", 0}});
-
-        elector.PessimizeEndpoint("One");
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 33);
-        elector.PessimizeEndpoint("Two");
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 66);
-        elector.PessimizeEndpoint("Two");
-        elector.PessimizeEndpoint("Unknown");
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 66);
-        elector.PessimizeEndpoint("Three");
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 100);
+        ::NMonitoring::TIntGauge count, ratio, active;
+        elector.SetStatCollector({&count, &ratio, &active});
+        for (const ui64 endpointCount : {0, 1, 2, 3, 99, 100, 101, 200, 3, 0}) {
+            std::vector<TEndpointRecord> endpoints;
+            for (ui64 nodeId = 1; nodeId <= endpointCount; ++nodeId) {
+                endpoints.emplace_back("node-" + std::to_string(nodeId), 0, "", nodeId);
+                endpoints.push_back(endpoints.back());
+            }
+            for (const bool byNode : {false, true}) {
+                elector.SetNewState(std::vector<TEndpointRecord>(endpoints));
+                elector.PessimizeNode(0);
+                elector.PessimizeNode(endpointCount + 1);
+                elector.PessimizeEndpoint("unknown");
+                UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(count.Get(), endpointCount);
+                UNIT_ASSERT_VALUES_EQUAL(ratio.Get(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(active.Get(), endpointCount);
+                UNIT_ASSERT_VALUES_EQUAL(bool(elector.GetEndpoint(TEndpointKey())), endpointCount != 0);
+                for (ui64 nodeId = 1; nodeId <= endpointCount; ++nodeId) {
+                    const auto& endpoint = endpoints[2 * (nodeId - 1)].Endpoint;
+                    if (byNode) {
+                        elector.PessimizeNode(nodeId);
+                        elector.PessimizeEndpoint(endpoint);
+                    } else {
+                        elector.PessimizeEndpoint(endpoint);
+                        elector.PessimizeNode(nodeId);
+                    }
+                    elector.PessimizeEndpoint("unknown");
+                    elector.PessimizeNode(endpointCount + 1);
+                    UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), nodeId * 100 / endpointCount);
+                    UNIT_ASSERT_VALUES_EQUAL(count.Get(), endpointCount);
+                    UNIT_ASSERT_VALUES_EQUAL(ratio.Get(), elector.GetPessimizationRatio());
+                    UNIT_ASSERT_VALUES_EQUAL(active.Get(), endpointCount - nodeId);
+                    UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey(nodeId), true).Priority,
+                                             std::numeric_limits<std::int32_t>::max());
+                    ui64 healthy = 0;
+                    elector.ForEachEndpoint([&](ui64, const IObjRegistryHandle&) { ++healthy; }, 0, 0, nullptr);
+                    UNIT_ASSERT_VALUES_EQUAL(healthy, endpointCount - nodeId);
+                    UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey()).Priority,
+                                             nodeId == endpointCount ? std::numeric_limits<std::int32_t>::max() : 0);
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(PessimizeNode) {
@@ -183,27 +205,6 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
 
         elector.PessimizeNode(42);
         UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 66);
-    }
-
-    Y_UNIT_TEST(PessimizeAllNodesInLargePool) {
-        constexpr ui64 endpointCount = 101;
-        std::vector<TEndpointRecord> endpoints;
-        for (ui64 nodeId = 1; nodeId <= endpointCount; ++nodeId) {
-            endpoints.emplace_back("node-" + std::to_string(nodeId) + ":2136", 0, "", nodeId);
-        }
-
-        TEndpointElectorSafe elector;
-        elector.SetNewState(std::move(endpoints));
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 0);
-
-        for (ui64 nodeId = 1; nodeId <= endpointCount; ++nodeId) {
-            elector.PessimizeNode(nodeId);
-            UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey(nodeId), true).Priority,
-                                     std::numeric_limits<std::int32_t>::max());
-        }
-
-        // Every endpoint is pessimized, so discovery must see the whole pool as unhealthy.
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 100);
     }
 
     Y_UNIT_TEST(Election) {
@@ -256,6 +257,13 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
 
     Y_UNIT_TEST(EndpointAssiciationSingleThread) {
         TEndpointElectorSafe elector;
+        const auto objectCounts = [&](const void* tag) {
+            std::map<ui64, size_t> sizes;
+            elector.ForEachEndpoint([&](ui64 nodeId, const IObjRegistryHandle& handle) {
+                UNIT_ASSERT(sizes.emplace(nodeId, handle.Size()).second);
+            }, 0, Max<i32>(), tag);
+            return sizes;
+        };
         elector.SetNewState(std::vector<TEndpointRecord>{{"Two", 2, "", 2}, {"One_A", 10, "", 10}, {"Three", 3, "", 3}, {"One_B", 4, "", 4}});
 
         auto obj1 = std::make_unique<TTestObj>();
@@ -283,14 +291,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         UNIT_ASSERT_VALUES_EQUAL(obj4->ObjectCount(), 1);
 
         {
-            std::map<ui64, size_t> sizes;
-            size_t i = 0;
-            elector.ForEachEndpoint([&sizes, &i](ui64 nodeId, const NYdb::IObjRegistryHandle& handle) {
-                sizes[nodeId] = handle.Size();
-                i++;
-            }, 0, Max<i32>(), nullptr);
+            const auto sizes = objectCounts(nullptr);
             UNIT_ASSERT_VALUES_EQUAL(sizes.size(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(i, 4);
             UNIT_ASSERT_VALUES_EQUAL(sizes.at(2), 1);
             UNIT_ASSERT_VALUES_EQUAL(sizes.at(10), 0);
             UNIT_ASSERT_VALUES_EQUAL(sizes.at(4), 1);
@@ -298,14 +300,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         }
 
         {
-            std::map<ui64, size_t> sizes;
-            size_t i = 0;
-            elector.ForEachEndpoint([&sizes, &i](ui64 nodeId, const NYdb::IObjRegistryHandle& handle) {
-                sizes[nodeId] = handle.Size();
-                i++;
-            }, 0, Max<i32>(), (void*)1);
+            const auto sizes = objectCounts((void*)1);
             UNIT_ASSERT_VALUES_EQUAL(sizes.size(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(i, 4);
             UNIT_ASSERT_VALUES_EQUAL(sizes.at(2), 0);
             UNIT_ASSERT_VALUES_EQUAL(sizes.at(10), 0);
             UNIT_ASSERT_VALUES_EQUAL(sizes.at(4), 1);
@@ -325,14 +321,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         UNIT_ASSERT_VALUES_EQUAL(obj4->HostRemoved(), false);
 
         {
-            std::map<ui64, size_t> sizes;
-            size_t i = 0;
-            elector.ForEachEndpoint([&sizes, &i](ui64 nodeId, const NYdb::IObjRegistryHandle& handle) {
-                sizes[nodeId] = handle.Size();
-                i++;
-            }, 0, Max<i32>(), nullptr);
+            const auto sizes = objectCounts(nullptr);
             UNIT_ASSERT_VALUES_EQUAL(sizes.size(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(i, 4);
             UNIT_ASSERT_VALUES_EQUAL(sizes.at(2), 0);
             UNIT_ASSERT_VALUES_EQUAL(sizes.at(10), 0);
             UNIT_ASSERT_VALUES_EQUAL(sizes.at(4), 1);
@@ -340,7 +330,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         }
 
         obj1.reset(new TTestObj());
-        elector.LinkObjToEndpoint(TEndpointKey("Two", 2), obj1.get(), nullptr);
+        UNIT_ASSERT(elector.LinkObjToEndpoint(TEndpointKey("Three", 3), obj1.get(), nullptr));
+        UNIT_ASSERT(elector.LinkObjToEndpoint(TEndpointKey("Two", 2), obj1.get(), nullptr));
 
         elector.SetNewState(std::vector<TEndpointRecord>{{"Two", 2, "", 2}, {"One_A", 10, "", 10}, {"One_C", 1, "", 1}});
 
@@ -351,14 +342,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         UNIT_ASSERT_VALUES_EQUAL(obj5->HostRemoved(), true);
 
         {
-            std::map<ui64, size_t> sizes;
-            size_t i = 0;
-            elector.ForEachEndpoint([&sizes, &i](ui64 nodeId, const NYdb::IObjRegistryHandle& handle) {
-                sizes[nodeId] = handle.Size();
-                i++;
-            }, 0, Max<i32>(), nullptr);
+            const auto sizes = objectCounts(nullptr);
             UNIT_ASSERT_VALUES_EQUAL(sizes.size(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(i, 3);
             UNIT_ASSERT_VALUES_EQUAL(sizes.at(2), 1);
             UNIT_ASSERT_VALUES_EQUAL(sizes.at(1), 0);
             UNIT_ASSERT_VALUES_EQUAL(sizes.at(10), 0);

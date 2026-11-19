@@ -177,9 +177,7 @@ class CompatibilityReadinessMixin:
             raise AssertionError("readiness data probe returned no rows for %s" % table_name)
 
     def _wait_for_readiness(self, *, probe_data=False):
-        # Process start != gRPC ready (YDBBUGS-867). When the driver must be
-        # (re)created, do it inside the retry loop with a bounded wait so a
-        # single slow ASAN/relwithdebinfo cold start does not fail the test.
+        # Retry create_driver here: node.start() waits for pid, not gRPC.
         reconnect = getattr(self, "recreate_driver", False) or getattr(self, "driver", None) is None
         if getattr(self, "recreate_driver", False):
             self.stop_driver()
@@ -240,8 +238,6 @@ class CompatibilityReadinessMixin:
                         e,
                     )
                     if reconnect:
-                        # Drop a half-open / stale driver so the next attempt
-                        # re-resolves endpoints after gRPC starts listening.
                         self.stop_driver()
                     if self._is_path_creating(e):
                         abandoned.append(table_name)
@@ -319,8 +315,6 @@ class RestartToAnotherVersionFixture(CompatibilityReadinessMixin):
         self.stop_driver()
         self.cluster.update_configurator_and_restart(self.config)
 
-        # create_driver is retried inside readiness: node.start() only waits for
-        # the process, while discovery needs the gRPC port to accept connections.
         logger.info("Waiting for cluster initialization")
         self._wait_for_readiness(probe_data=True)
 

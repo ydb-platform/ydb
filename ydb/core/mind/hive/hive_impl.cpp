@@ -2701,13 +2701,30 @@ void THive::Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr& ev) {
 
 void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
+    const auto previousBridgeTabletPlacement = CurrentConfig.GetBridgeTabletPlacement();
     ClusterConfig = record.GetConfig().GetHiveConfig();
     NodeBrokerEpoch = TDuration::MicroSeconds(record.GetConfig().GetNodeBrokerConfig().GetEpochDuration());
     BuildCurrentConfig();
     YDB_LOG_DEBUG("Handle TEvConsole::TEvConfigNotificationRequest: merged config",
         {"logPrefix", GetLogPrefix()},
         {"config", CurrentConfig});
+    OnBridgeTabletPlacementChanged(previousBridgeTabletPlacement);
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+}
+
+void THive::OnBridgeTabletPlacementChanged(NKikimrConfig::THiveConfig::EBridgeTabletPlacement previous) {
+    if (!BridgeInfo || previous == GetBridgeTabletPlacement()) {
+        return;
+    }
+    // the tablets waiting for a node may fit in the piles that became allowed
+    ProcessWaitQueue();
+    // pending pile drains may now have targets to move tablets to, or nothing left to move
+    ProcessPileDrains();
+    // the tablets in the piles that are not allowed anymore are moved away by the pile drain;
+    // switching to a wider placement needs nothing more: running tablets spread out lazily
+    if (GetBridgeTabletPlacement() == NKikimrConfig::THiveConfig::PRIMARY_PILE_ONLY) {
+        UpdatePiles();
+    }
 }
 
 void THive::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {

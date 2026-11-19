@@ -2602,6 +2602,11 @@ message THiveConfig {
         HIVE_BOOT_STRATEGY_FAST = 1;
     }
 
+    enum EBridgeTabletPlacement {
+        PRIMARY_PILE_ONLY = 0; // tablets run only in the primary pile (followers that must be present in all data centers still run in all synchronized piles)
+        ALL_SYNCHRONIZED_PILES = 1; // tablets run in any synchronized pile
+    }
+
     message TBootPriority {
         optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
         optional double Priority = 2;
@@ -2710,6 +2715,7 @@ message THiveConfig {
     optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
     optional uint64 DataCenterChangeReactionPeriod = 91 [default = 300]; // seconds
     repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
+    optional EBridgeTabletPlacement BridgeTabletPlacement = 99 [default = PRIMARY_PILE_ONLY]; // In bridge mode, which piles tablets may run in. Tablets in piles no longer allowed are moved away.
 }
 
 message THealthCheckConfig {

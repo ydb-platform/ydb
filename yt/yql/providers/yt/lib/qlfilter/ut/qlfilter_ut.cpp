@@ -1,6 +1,9 @@
-#include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
+#include <yt/yql/providers/yt/lib/qlfilter/qlfilter.h>
 
 #include <yql/essentials/ast/yql_expr.h>
+
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
 #include <yql/essentials/utils/parse_double.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -10,6 +13,49 @@
 
 namespace NYql {
 namespace {
+
+Y_UNIT_TEST_SUITE(TQLFilterTest) {
+    Y_UNIT_TEST(SerializesExtractedConjunct) {
+        TExprContext ctx;
+        const auto pos = ctx.AppendPosition({});
+        const auto* boolType = ctx.MakeType<TDataExprType>(EDataSlot::Bool);
+        const auto* rowType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+            ctx.MakeType<TItemExprType>("flag", boolType),
+            ctx.MakeType<TItemExprType>("otherFlag", boolType),
+        });
+        const auto row = ctx.NewArgument(pos, "row");
+        row->SetTypeAnn(rowType);
+        const auto filterRow = ctx.NewArgument(pos, row->Content());
+
+        const auto makeFlag = [&] (TStringBuf name) {
+            auto member = ctx.NewCallable(pos, "Member", {row, ctx.NewAtom(pos, name)});
+            member->SetTypeAnn(boolType);
+            return member;
+        };
+        const auto flag = makeFlag("flag");
+        const auto notFlag = ctx.NewCallable(pos, "Not", {flag});
+        const auto rowComparison = ctx.NewCallable(pos, "==", {flag, makeFlag("otherFlag")});
+
+        const auto disjunction = ctx.NewCallable(pos, "Or", {notFlag, rowComparison});
+        UNIT_ASSERT(!ExtractQLFilterPredicate(disjunction, row, filterRow, pos, ctx));
+
+        const auto conjunction = ctx.NewCallable(pos, "And", {notFlag, rowComparison});
+        auto selected = ExtractQLFilterPredicate(conjunction, row, filterRow, pos, ctx);
+        UNIT_ASSERT(selected);
+        UNIT_ASSERT(selected->IsCallable("Not"));
+        UNIT_ASSERT(selected->Head().IsCallable("Member"));
+        UNIT_ASSERT(selected->Head().HeadPtr() == filterRow);
+
+        auto args = ctx.NewArguments(pos, {filterRow});
+        auto lambda = ctx.NewLambda(pos, std::move(args), std::move(selected));
+        const auto filter = ctx.NewCallable(pos, "YtQLFilter", {ExpandType(pos, *rowType, ctx), std::move(lambda)});
+
+        UNIT_ASSERT(!GenerateInputQuery(filter, /*depthLimit*/ 1));
+        const auto query = GenerateInputQuery(filter, /*depthLimit*/ 2);
+        UNIT_ASSERT(query);
+        UNIT_ASSERT_VALUES_EQUAL(*query, "* WHERE NOT (`flag`)");
+    }
+}
 
 TExprNode::TPtr MakeBool(TExprContext& ctx, TPositionHandle pos, TStringBuf value) {
     return ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, value)});

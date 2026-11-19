@@ -1618,6 +1618,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         // Read SubDomains
         {
+            Self->DatabaseFreezeStates.clear();
+            auto rows = db.Table<Schema::DatabaseFreezes>().Range().Select();
+            if (!rows.IsReady()) {
+                return false;
+            }
+            while (!rows.EndOfSet()) {
+                const TPathId pathId(selfId, rows.GetValue<Schema::DatabaseFreezes::PathId>());
+                auto& state = Self->DatabaseFreezeStates[pathId];
+                Y_ENSURE(state.ParseFromString(rows.GetValue<Schema::DatabaseFreezes::State>()));
+                if (!rows.Next()) {
+                    return false;
+                }
+            }
+        }
+        {
             TSchemeLimits rootLimits = TSchemeShard::DefaultLimits;
 
             if (Self->PathsById.contains(Self->RootPathId()) && Self->IsDomainSchemeShard) {

@@ -2988,7 +2988,7 @@ bool CanPushdownFiltersOverWindow(const TTypeAnnotationContext* types)
 {
     YQL_ENSURE(types);
     static const char OptName[] = "PushdownFiltersOverWindow";
-    return IsOptimizerEnabled<OptName>(*types) && !IsOptimizerDisabled<OptName>(*types);
+    return !IsOptimizerDisabled<OptName>(*types);
 }
 
 } // namespace NYql

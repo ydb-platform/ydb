@@ -93,7 +93,7 @@ def main():
             f"|:--- | ---: | ---: | ---: | ---: |\n"
             f"|ydbd size|**{format_number(main_size_bytes)}** Bytes |**{format_number(current_size_bytes)}** Bytes|**{sign}{human_readable_size_diff}**|**{sign}{diff_perc}%%**|\n"
             f"|ydbd stripped size|**{format_number(main_size_stripped_bytes)}** Bytes|**{format_number(current_size_stripped_bytes)}** Bytes|**{stripped_sign}{human_readable_stripped_size_diff}**|**{stripped_sign}{stripped_diff_perc}%%**|\n\n"
-            f"<sup>*please be aware that the difference is based on comparing your commit and the last completed build from the post-commit, check [comparation]({repo_url}compare/{main_github_sha}..{current_pr_commit_sha})</sup>"
+            f"<sup>*Please be aware that the difference is based on comparing your commit and the last completed build from the post-commit. Check the [comparison]({repo_url}compare/{main_github_sha}..{current_pr_commit_sha}).</sup>"
         )
         print(f"{color};;;{comment}")
     else:

@@ -151,18 +151,18 @@ public:
         return IsValidFlag;
     }
     ui32 GetRecordIndex() const {
-        AFL_VERIFY(IsValidFlag);
+        YDB_LOG_VERIFY(IsValidFlag);
         return RecordIndex;
     }
     ui32 GetKeyIndex() const {
-        AFL_VERIFY(IsValidFlag);
+        YDB_LOG_VERIFY(IsValidFlag);
         return KeyIndex;
     }
 
     // Re-encode the current value to BinaryJson.
     NBinaryJson::TBinaryJson GetValueAsBinaryJson() const {
-        AFL_VERIFY(IsValidFlag);
-        AFL_VERIFY(CurrentValue);
+        YDB_LOG_VERIFY(IsValidFlag);
+        YDB_LOG_VERIFY(CurrentValue);
         return CurrentValue->ToBinaryJson();
     }
 
@@ -170,20 +170,20 @@ public:
         return ValueType;
     }
     const TJsonValueView& GetValueView() const {
-        AFL_VERIFY(IsValidFlag);
-        AFL_VERIFY(CurrentValue);
+        YDB_LOG_VERIFY(IsValidFlag);
+        YDB_LOG_VERIFY(CurrentValue);
         return *CurrentValue;
     }
     ui32 GetValueSize() const {
-        AFL_VERIFY(IsValidFlag);
-        AFL_VERIFY(CurrentValue);
+        YDB_LOG_VERIFY(IsValidFlag);
+        YDB_LOG_VERIFY(CurrentValue);
         return CurrentValue->GetValueSize();
     }
 
     NJson::TJsonValue GetValue() const;
 
     bool HasValue() const {
-        AFL_VERIFY(IsValidFlag);
+        YDB_LOG_VERIFY(IsValidFlag);
         return CurrentValue.has_value();
     }
     bool operator<(const TGeneralIterator& item) const {
@@ -225,7 +225,7 @@ public:
         startRecordActor(recordIndex);
         for (ui32 iIter = 0; iIter < SortedIterators.size();) {
             auto& itColumn = *SortedIterators[iIter];
-            AFL_VERIFY(recordIndex <= itColumn.GetRecordIndex());
+            YDB_LOG_VERIFY(recordIndex <= itColumn.GetRecordIndex());
             while (itColumn.GetRecordIndex() == recordIndex) {
                 if (itColumn.HasValue()) {
                     kvActor(itColumn.GetKeyIndex(), itColumn.GetValue(), itColumn.IsColumnKey());
@@ -238,7 +238,7 @@ public:
                 std::swap(SortedIterators[iIter], SortedIterators[SortedIterators.size() - 1]);
                 SortedIterators.pop_back();
             } else {
-                AFL_VERIFY(recordIndex < itColumn.GetRecordIndex());
+                YDB_LOG_VERIFY(recordIndex < itColumn.GetRecordIndex());
                 ++iIter;
             }
         }
@@ -251,7 +251,7 @@ public:
                 std::swap(SortedIterators[iIter], SortedIterators[SortedIterators.size() - 1]);
                 SortedIterators.pop_back();
             } else {
-                AFL_VERIFY(recordIndex <= SortedIterators[iIter]->GetRecordIndex());
+                YDB_LOG_VERIFY(recordIndex <= SortedIterators[iIter]->GetRecordIndex());
                 ++iIter;
             }
         }
@@ -311,7 +311,7 @@ public:
         remapOthers.resize(OthersData.GetStats().GetColumnsCount());
         for (ui32 i = 0; i < Addresses.size(); ++i) {
             if (i) {
-                AFL_VERIFY(Addresses[i].GetName() != Addresses[i - 1].GetName());
+                YDB_LOG_VERIFY(Addresses[i].GetName() != Addresses[i - 1].GetName());
             }
             if (Addresses[i].GetIsColumn()) {
                 remapColumns[Addresses[i].GetOriginalIndex()] = i;

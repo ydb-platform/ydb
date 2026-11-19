@@ -325,6 +325,8 @@ protected:
     NSQLTranslation::ESqlMode Mode_;
     bool IsYqlSelectProduced_ = false;
     bool IsPure_ = false;
+    THashSet<TString>* YqlSelectSourceAliases_ = nullptr;
+    bool YqlSelectIsJoin_ = false;
     TYqlNamespace<TReadyCTE>::TPtr CTEs_ = TYqlNamespace<TReadyCTE>::Fork();
 };
 

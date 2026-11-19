@@ -2030,7 +2030,7 @@ Y_UNIT_TEST(CreateTableDefaultAndNotNullInOrderWithComma) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write!") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                       line.find(R"__(('columnConstrains '('('not_null) '('default (Bool '"false")))) '()))))__"));
+                                       line.find(R"__(('columnConstrains '('('not_null) '('default (Bool '"false")) '('defaultSource '('"USE ydb;\n" '"false")))) '()))))__"));
         }
     };
 
@@ -2054,7 +2054,7 @@ Y_UNIT_TEST(CreateTableDefaultAndNotNullReversed) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write!") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                       line.find(R"__('('columnConstrains '('('not_null) '('default (Int32 '"0")))) '()))))__"));
+                                       line.find(R"__('('columnConstrains '('('not_null) '('default (Int32 '"0")) '('defaultSource '('"USE ydb;\n" '"0")))) '()))))__"));
         }
     };
 
@@ -5164,6 +5164,31 @@ Y_UNIT_TEST(AlterTableAlterIndexSetLocalBloomFppIsCorrect) {
         ALTER TABLE table ALTER INDEX idx SET (false_positive_probability = 0.06);
     )sql");
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationBootstrapIsCorrect) {
+    const auto result = SqlToYql(R"(
+        USE ydb;
+        CREATE ASYNC REPLICATION r FOR `src` AS `dst`
+        WITH (CONNECTION_STRING = "grpc://localhost:2135/?database=/local", BOOTSTRAP = "SWITCHOVER");
+    )");
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    UNIT_ASSERT_C(result.Root->ToString().Contains("bootstrap"), result.Root->ToString());
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationBootstrapRequiresString) {
+    ExpectFailWithError(R"(
+        USE ydb;
+        CREATE ASYNC REPLICATION r FOR `src` AS `dst`
+        WITH (CONNECTION_STRING = "grpc://localhost:2135/?database=/local", BOOTSTRAP = TRUE);
+    )", "<main>:4:89: Error: Literal of String type is expected for BOOTSTRAP\n");
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationBootstrapIsNotSupported) {
+    ExpectFailWithError(R"(
+        USE ydb;
+        ALTER ASYNC REPLICATION r SET (BOOTSTRAP = "SWITCHOVER");
+    )", "<main>:3:52: Error: BOOTSTRAP is not supported in ALTER\n");
 }
 
 Y_UNIT_TEST(AlterTableAlterIndexResetReadReplicasSettingsIsNotSupported) {

@@ -18,7 +18,7 @@ public:
     }
     TEntityInitializationContext(const TOperationContext* ssOperationContext)
         : SSOperationContext(ssOperationContext) {
-        AFL_VERIFY(SSOperationContext);
+        YDB_LOG_VERIFY(SSOperationContext);
     }
 };
 
@@ -39,7 +39,7 @@ public:
     template <class T>
     const T& GetOriginalEntityAsVerified() const {
         auto* result = dynamic_cast<const T*>(OriginalEntity);
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return *result;
     }
 
@@ -50,9 +50,9 @@ public:
         : OriginalEntity(originalEntity)
         , SSOperationContext(ssOperationContext)
         , TxId(txId) {
-        AFL_VERIFY(OriginalEntity);
-        AFL_VERIFY(SSOperationContext);
-        AFL_VERIFY(TxId);
+        YDB_LOG_VERIFY(OriginalEntity);
+        YDB_LOG_VERIFY(SSOperationContext);
+        YDB_LOG_VERIFY(TxId);
     }
 };
 
@@ -67,7 +67,7 @@ public:
     TUpdateInitializationContext(const ISSEntity* originalEntity, const TOperationContext* ssOperationContext, const NKikimrSchemeOp::TModifyScheme* modification, const ui64 txId)
         : TBase(originalEntity, ssOperationContext, txId)
         , Modification(modification) {
-        AFL_VERIFY(Modification);
+        YDB_LOG_VERIFY(Modification);
     }
 };
 
@@ -80,7 +80,7 @@ public:
     }
     TEvolutionInitializationContext(TOperationContext* ssOperationContext)
         : SSOperationContext(ssOperationContext) {
-        AFL_VERIFY(SSOperationContext);
+        YDB_LOG_VERIFY(SSOperationContext);
     }
 };
 
@@ -100,8 +100,8 @@ public:
         : ObjectPath(objectPath)
         , SSOperationContext(ssOperationContext)
     {
-        AFL_VERIFY(ObjectPath);
-        AFL_VERIFY(SSOperationContext);
+        YDB_LOG_VERIFY(ObjectPath);
+        YDB_LOG_VERIFY(SSOperationContext);
     }
 };
 
@@ -119,7 +119,7 @@ public:
     }
 
     const NKikimr::NOlap::TSnapshot& GetSnapshotVerified() const {
-        AFL_VERIFY(Snapshot);
+        YDB_LOG_VERIFY(Snapshot);
         return *Snapshot;
     }
 
@@ -128,8 +128,8 @@ public:
         , SSOperationContext(ssOperationContext)
         , Snapshot(ss)
     {
-        AFL_VERIFY(ObjectPath);
-        AFL_VERIFY(SSOperationContext);
+        YDB_LOG_VERIFY(ObjectPath);
+        YDB_LOG_VERIFY(SSOperationContext);
     }
 };
 

@@ -5,7 +5,7 @@ namespace NKikimr::NArrow::NAccessor {
 
 void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstructionData& externalInfo,
     const std::shared_ptr<NArrow::TColumnFilter>& applyFilter, const bool deserialize) {
-    AFL_VERIFY(!OthersData);
+    YDB_LOG_VERIFY(!OthersData);
     auto container = NSubColumns::TConstructor::BuildOthersContainer(blob, Header.GetAddressesProto(), externalInfo, deserialize);
     OthersData = NSubColumns::TOthersData(Header.GetOtherStats(), container.DetachResult());
     if (applyFilter) {
@@ -49,8 +49,8 @@ TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialA
     }
     // A matching path must be loaded before accessor creation.
     // Fetch planning and lookup use the same canonical path resolution.
-    AFL_VERIFY(!headerColumnsResult.DetachResult());
-    AFL_VERIFY(!headerOthersResult.DetachResult());
+    YDB_LOG_VERIFY(!headerColumnsResult.DetachResult());
+    YDB_LOG_VERIFY(!headerOthersResult.DetachResult());
     return NSubColumns::TOthersData::BuildEmptyPathAccessor(recordsCount);
 }
 

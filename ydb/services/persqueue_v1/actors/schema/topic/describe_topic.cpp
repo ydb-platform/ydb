@@ -90,6 +90,14 @@ private:
         }
         result.mutable_self()->Swap(&ev->Get()->SelfEntry);
 
+        const auto& config = ev->Get()->TopicInfo.Info->Description.GetPQTabletConfig();
+        for (const auto& consumer : config.GetConsumers()) {
+            if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+                (*result.mutable_attributes())["_ydb_replication_consumer"] =
+                    NPersQueue::ConvertOldConsumerName(consumer.GetName(), AppData()->PQConfig);
+            }
+        }
+
         absl::flat_hash_map<TString, Ydb::Topic::Consumer*> consumersInfo;
         if (includeStats) {
             const auto& pqConfig = AppData()->PQConfig;

@@ -3,6 +3,7 @@
 #include <ydb/library/yaml_config/tools/util/defaults.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config.h>
+#include <ydb/library/yaml_json/yaml_to_json.h>
 #include "rpc_config_base.h"
 
 #include <ydb/core/base/path.h>
@@ -355,17 +356,23 @@ public:
     {}
 
     bool IsDistconfEnableQuery() const {
-        NKikimrConfig::TAppConfig newConfig;
-        try {
-            auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
-            auto config = shim.StorageConfig
-                ? NFyaml::TDocument::Parse(*shim.StorageConfig)
-                : NFyaml::TDocument::Parse(shim.MainConfig.value_or(TString{"{}"}));
-            newConfig = NYamlConfig::YamlToProto(config.Root(), true, true);
-        } catch (const std::exception&) {
-            return false; // assuming no distconf enabled in this config
+        const auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
+        if (!shim.StorageConfig && !shim.MainConfig) {
+            return false;
         }
-        return newConfig.GetSelfManagementConfig().GetEnabled();
+        const auto& yaml = shim.StorageConfig ? *shim.StorageConfig : *shim.MainConfig;
+        const auto document = YAML::Load(yaml);
+        Y_ENSURE(document.IsMap(), "YAML root must be an object");
+        const auto nested = document["config"];
+        const auto& config = nested || document["metadata"] ? nested : document;
+        Y_ENSURE(config && config.IsMap(), "'config' must be an object");
+        const auto selfManagement = config["self_management_config"];
+        if (!selfManagement || selfManagement.IsNull()) {
+            return false;
+        }
+        Y_ENSURE(selfManagement.IsMap(), "'self_management_config' must be an object");
+        const auto enabled = selfManagement["enabled"];
+        return enabled && NYaml::Yaml2Json(enabled, false).GetBooleanRobust();
     }
 
     std::unique_ptr<IEventBase> ProcessControllerQuery() override {
@@ -526,8 +533,20 @@ public:
             return;
         }
 
-        if (!NKikimr::IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
-            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
+        const auto* userToken = Request_->GetInternalToken().Get();
+        const auto& request = *GetProtoRequest();
+        const auto transform = request.all().config_transform_case();
+        const bool isNodeBootstrap = request.has_seed_node_fetch_requestor() &&
+            request.mode_case() == Ydb::Config::FetchConfigRequest::ModeCase::kAll &&
+            (transform == Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::CONFIG_TRANSFORM_NOT_SET ||
+             transform == Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kNone);
+
+        if (!NKikimr::IsAdministrator(AppData(), userToken) &&
+            !(isNodeBootstrap && NKikimr::IsTokenAllowed(userToken, AppData()->RegisterDynamicNodeAllowedSIDs))) {
+            const char* errorMessage = isNodeBootstrap
+                ? "User is not a cluster administrator and is not authorized to register dynamic nodes."
+                : "User is not a cluster administrator.";
+            self->Reply(Ydb::StatusIds::UNAUTHORIZED, errorMessage,
                   NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
             return;
         }

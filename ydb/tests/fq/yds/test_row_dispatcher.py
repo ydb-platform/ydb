@@ -20,7 +20,7 @@ from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
 
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, delete_stream
-from test_base import YdbTopics
+from ydb.tests.fq.yds.test_base import YdbTopics
 
 COMPUTE_NODE_COUNT = 3
 ROW_DISPATCHER_CONSUMER = 'row_dispatcher_consumer'

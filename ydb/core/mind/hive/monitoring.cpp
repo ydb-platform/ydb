@@ -741,11 +741,7 @@ public:
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     bool ChangeRequest = false;
     std::optional<TString> Status;
-<<<<<<< HEAD
-=======
-    TStringBuilder Changes; // applied changes in "Name: from -> to" form, for the operations log
     std::optional<NKikimrConfig::THiveConfig::EBridgeTabletPlacement> PreviousBridgeTabletPlacement;
->>>>>>> b9ba65f528e (add setting in hive_config to have tablets in non-primary piles (#59308))
 
     TTxMonEvent_Settings(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
         : TBase(hive)
@@ -836,6 +832,7 @@ public:
 
         NJson::TJsonValue jsonOperation;
         auto& configUpdates = jsonOperation["ConfigUpdates"];
+        const auto previousBridgeTabletPlacement = Self->CurrentConfig.GetBridgeTabletPlacement();
 
         UpdateConfig(db, "MaxTabletsScheduled", configUpdates, TSchemeIds::State::MaxTabletsScheduled);
         UpdateConfig(db, "MaxBootBatchSize", configUpdates, TSchemeIds::State::MaxBootBatchSize);
@@ -901,13 +898,7 @@ public:
         UpdateConfig(db, "NodeRestartsForPenalty", configUpdates);
         UpdateConfig(db, "BalanceCountersRefreshFrequency", configUpdates);
         UpdateConfig(db, "DataCenterChangeReactionPeriod", configUpdates);
-<<<<<<< HEAD
-=======
-        UpdateConfig(db, "TabletEventHistorySize", configUpdates);
-        UpdateConfig(db, "NodeEventHistorySize", configUpdates);
-        UpdateConfig(db, "CountersExportMode", configUpdates);
         UpdateConfig(db, "BridgeTabletPlacement", configUpdates);
->>>>>>> b9ba65f528e (add setting in hive_config to have tablets in non-primary piles (#59308))
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -979,7 +970,7 @@ public:
 
         if (ChangeRequest && !Status) {
             Self->BuildCurrentConfig();
-            PreviousBridgeTabletPlacement = previousConfig.GetBridgeTabletPlacement();
+            PreviousBridgeTabletPlacement = previousBridgeTabletPlacement;
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
             Self->ProcessWaitQueue();
         }
@@ -1294,13 +1285,7 @@ public:
         ShowConfig(out, "NodeRestartsForPenalty");
         ShowConfig(out, "BalanceCountersRefreshFrequency");
         ShowConfig(out, "DataCenterChangeReactionPeriod");
-<<<<<<< HEAD
-=======
-        ShowConfig(out, "TabletEventHistorySize");
-        ShowConfig(out, "NodeEventHistorySize");
-        ShowConfig(out, "CountersExportMode");
         ShowConfig(out, "BridgeTabletPlacement");
->>>>>>> b9ba65f528e (add setting in hive_config to have tablets in non-primary piles (#59308))
 
         out << "<div class='row' style='margin-top:40px'>";
         bool allowedMetricsLocalOverridden = !Self->TabletTypeAllowedMetrics.empty();

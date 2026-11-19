@@ -2701,13 +2701,14 @@ void THive::Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr& ev) {
 
 void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
+    const auto previousBridgeTabletPlacement = CurrentConfig.GetBridgeTabletPlacement();
     ClusterConfig = record.GetConfig().GetHiveConfig();
     NodeBrokerEpoch = TDuration::MicroSeconds(record.GetConfig().GetNodeBrokerConfig().GetEpochDuration());
     BuildCurrentConfig();
     YDB_LOG_DEBUG("Handle TEvConsole::TEvConfigNotificationRequest: merged config",
         {"logPrefix", GetLogPrefix()},
         {"config", CurrentConfig});
-    OnBridgeTabletPlacementChanged(previousConfig.GetBridgeTabletPlacement());
+    OnBridgeTabletPlacementChanged(previousBridgeTabletPlacement);
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }
 

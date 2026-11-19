@@ -162,7 +162,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     LogAndTraceJoinTree(ctx, "Optimized join tree", joinTree);
 
     TCompileTraceScope rebuildScope(trace, TCompileTraceLevels::Detail, "Rebuild joins in join order");
-    return ConvertOptimizedTree(joinTree, leaves, cboTree->Pos);
+    return ConvertOptimizedTree(joinTree, leaves, cboTree->Pos, ctx.ExprCtx, props);
 }
 
 } // namespace NKikimr::NKqp

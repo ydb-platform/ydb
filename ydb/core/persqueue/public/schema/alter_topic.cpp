@@ -8,6 +8,8 @@
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -228,15 +230,8 @@ TResult ApplyChangesInt(
         CHECK_CDC;
     }
 
-    auto attributes = request.alter_attributes();
-    TString replicationConsumer;
-    if (auto it = attributes.find("_ydb_replication_consumer"); it != attributes.end()) {
-        replicationConsumer = it->second;
-        attributes.erase(it);
-    }
-
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings consumersAdvancedMonitoringSettings;
-    auto res = ProcessTopicAttributes(attributes, &config, EOperation::Alter, pqConfig.GetTopicsAreFirstClassCitizen(), consumersAdvancedMonitoringSettings);
+    auto res = ProcessTopicAttributes(request.alter_attributes(), &config, EOperation::Alter, pqConfig.GetTopicsAreFirstClassCitizen(), consumersAdvancedMonitoringSettings);
     if (!res) {
         return res;
     }
@@ -290,7 +285,7 @@ TResult ApplyChangesInt(
     const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes();
 
     std::vector<std::pair<bool, Ydb::Topic::Consumer>> consumers;
-    std::vector<TString> replicationConsumers;
+    THashSet<TString> replicationConsumers;
 
     i32 dropped = 0;
     for (const auto& c : pqTabletConfig->GetConsumers()) {
@@ -312,18 +307,14 @@ TResult ApplyChangesInt(
             continue;
 
         if (c.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
-            replicationConsumers.push_back(oldName);
+            replicationConsumers.insert(oldName);
         }
-
         consumers.push_back({false, Ydb::Topic::Consumer{}}); // do not check service type for presented consumers
         auto& consumer = consumers.back().second;
 
         Ydb::StatusIds_StatusCode status;
         TString error;
         FillConsumer(consumer, *pqTabletConfig, c, status, error, false);
-        if (c.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
-            consumer.mutable_streaming_consumer_type();
-        }
     }
 
 
@@ -372,22 +363,19 @@ TResult ApplyChangesInt(
             return result;
         }
     }
-    for (const auto& name : replicationConsumers) {
-        NPQ::GetConsumer(*pqTabletConfig, name)->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
-    }
-    if (!replicationConsumer.empty()) {
-        const auto name = NPersQueue::ConvertNewConsumerName(replicationConsumer, pqConfig);
-        auto* consumer = NPQ::GetConsumer(*pqTabletConfig, name);
-        if (!consumer) {
-            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown _ydb_replication_consumer: " << replicationConsumer};
-        }
-        if (consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-            return {Ydb::StatusIds::BAD_REQUEST, "_ydb_replication_consumer cannot be a shared consumer"};
-        }
-        consumer->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
-    }
     if (auto errorCode = consumersAdvancedMonitoringSettings.CheckForUnknownConsumers(error); errorCode != Ydb::StatusIds::SUCCESS) {
         return {errorCode, std::move(error)};
+    }
+
+    // FillConsumer/AddConsumer cannot carry the internal replication type through
+    // Ydb::Topic::Consumer. Restore it for consumers that survived this alter.
+    for (auto& consumer : *pqTabletConfig->MutableConsumers()) {
+        if (replicationConsumers.contains(consumer.GetName())) {
+            consumer.SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+        }
+    }
+    if (auto result = ApplyReplicationConsumerAttribute(request.alter_attributes(), *pqTabletConfig); !result) {
+        return result;
     }
 
     if (request.has_set_metrics_level()) {

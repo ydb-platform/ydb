@@ -200,10 +200,12 @@ Ydb::Topic::DescribeTopicResult DescribeTopic(
 NKikimrPQ::TPQTabletConfig DescribeTabletConfig(
     NActors::TTestActorRuntime& runtime,
     const TString& path,
-    const TString& database = "/Root")
+    const TString& database = "/Root",
+    bool forceSyncVersion = false)
 {
     auto edge = runtime.AllocateEdgeActor();
-    runtime.Register(NPQ::NDescriber::CreateDescriberActor(edge, database, {path}));
+    runtime.Register(NPQ::NDescriber::CreateDescriberActor(edge, database, {path},
+        {.ForceSyncVersion = forceSyncVersion}));
     auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
     const auto& topic = response->Topics.begin()->second;
@@ -865,6 +867,119 @@ Y_UNIT_TEST(DescribeConsumerUnauthenticatedRejectedWhenRequired) {
     AssertStatus(result, Ydb::StatusIds::UNAUTHORIZED, "Unauthenticated access is forbidden");
 }
 
+Y_UNIT_TEST(ReplicationConsumerAttributeLifecycle) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/replication_consumer_attribute";
+    const TString attribute = "_ydb_replication_consumer";
+
+    auto check = [&](const TString& expected) {
+        // Alter completion may precede the schema-cache notification. Synchronize
+        // before checking both the persisted type and the public description.
+        const auto config = DescribeTabletConfig(runtime, path, "/Root", true);
+        ui32 replicationConsumers = 0;
+        for (const auto& consumer : config.GetConsumers()) {
+            if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+                ++replicationConsumers;
+                UNIT_ASSERT_VALUES_EQUAL(consumer.GetName(), expected);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(replicationConsumers, expected.empty() ? 0 : 1,
+            "Expected replication consumer '" << expected << "': " << config.DebugString());
+
+        const auto description = DescribeTopic(runtime, path);
+        const auto it = description.attributes().find(attribute);
+        if (expected.empty()) {
+            UNIT_ASSERT_C(it == description.attributes().end(), description.DebugString());
+        } else {
+            UNIT_ASSERT_C(it != description.attributes().end(),
+                "Expected replication consumer '" << expected << "': " << description.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(it->second, expected);
+        }
+    };
+    auto alter = [&](const Ydb::Topic::AlterTopicRequest& request) {
+        AssertStatus(DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, request, CreateAlterTopicActor, path), Ydb::StatusIds::SUCCESS);
+    };
+
+    auto createRequest = MakeCreateTopicRequest(path);
+    (*createRequest.mutable_attributes())[attribute] = "user";
+    AssertStatus(DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+        runtime, createRequest, CreateCreateTopicActor, path), Ydb::StatusIds::SUCCESS);
+    check("user");
+
+    // Altering a consumer without the attribute must retain its replication type.
+    Ydb::Topic::AlterTopicRequest request;
+    request.set_path(path);
+    auto* consumer = request.add_alter_consumers();
+    consumer->set_name("user");
+    consumer->mutable_set_read_from()->set_seconds(1);
+    alter(request);
+    check("user");
+    request.clear_alter_consumers();
+
+    // The attribute can name a consumer added in the same request.
+    request.add_add_consumers()->set_name("next");
+    (*request.mutable_alter_attributes())[attribute] = "next";
+    alter(request);
+    check("next");
+    request.clear_add_consumers();
+
+    (*request.mutable_alter_attributes())[attribute] = "";
+    alter(request);
+    check("");
+
+    (*request.mutable_alter_attributes())[attribute] = "user";
+    alter(request);
+    check("user");
+
+    // Dropping and recreating the name must not restore the old designation.
+    request.clear_alter_attributes();
+    request.add_drop_consumers("user");
+    request.add_add_consumers()->set_name("user");
+    alter(request);
+    check("");
+    request.clear_drop_consumers();
+    request.clear_add_consumers();
+
+    (*request.mutable_alter_attributes())[attribute] = "next";
+    alter(request);
+    check("next");
+    request.clear_alter_attributes();
+    request.add_drop_consumers("next");
+    alter(request);
+    check("");
+}
+
+Y_UNIT_TEST(ReplicationConsumerAttributeValidation) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString attribute = "_ydb_replication_consumer";
+    for (const bool shared : {false, true}) {
+        const TString path = shared ? "/Root/replication_shared" : "/Root/replication_unknown";
+        auto request = MakeCreateTopicRequest(path);
+        if (shared) {
+            request.mutable_consumers(0)->mutable_shared_consumer_type();
+        }
+        const TString name = shared ? "user" : "missing";
+        const TString error = shared ? "cannot be a shared consumer" : "Unknown _ydb_replication_consumer";
+        (*request.mutable_attributes())[attribute] = name;
+        AssertStatus(DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+            runtime, request, CreateCreateTopicActor, path), Ydb::StatusIds::BAD_REQUEST, error);
+
+        // An empty value is valid on create and leaves all consumers unchanged.
+        (*request.mutable_attributes())[attribute] = "";
+        AssertStatus(DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+            runtime, request, CreateCreateTopicActor, path), Ydb::StatusIds::SUCCESS);
+        Ydb::Topic::AlterTopicRequest alter;
+        alter.set_path(path);
+        (*alter.mutable_alter_attributes())[attribute] = name;
+        AssertStatus(DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, alter, CreateAlterTopicActor, path), Ydb::StatusIds::BAD_REQUEST, error);
+        UNIT_ASSERT(!DescribeTopic(runtime, path).attributes().contains(attribute));
+    }
+}
+
 Y_UNIT_TEST(DescribeTopicSmokeAndMissing) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
@@ -1202,48 +1317,6 @@ Y_UNIT_TEST(CreateTopicUnknownCodecRejected) {
     auto result = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
         runtime, request, CreateCreateTopicActor, request.path());
     AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "Unknown codec");
-}
-
-Y_UNIT_TEST(AlterReplicationConsumer) {
-    auto setup = CreateSetup();
-    auto& runtime = setup->GetRuntime();
-    runtime.GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
-    const TString path = "/Root/topic_replication_consumer";
-    CreateTopic(runtime, path);
-
-    auto alter = [&](Ydb::Topic::AlterTopicRequest request) {
-        request.set_path(path);
-        auto result = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
-            runtime, request, CreateAlterTopicActor, path);
-        AssertStatus(result, Ydb::StatusIds::SUCCESS);
-    };
-    auto assertReplicationConsumer = [&] {
-        const auto config = DescribeTabletConfig(runtime, path);
-        const auto* consumer = NPQ::GetConsumer(config, "replication");
-        UNIT_ASSERT(consumer);
-        UNIT_ASSERT(consumer->GetImportant());
-        UNIT_ASSERT(consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
-    };
-
-    Ydb::Topic::AlterTopicRequest add;
-    auto* consumer = add.add_add_consumers();
-    consumer->set_name("replication");
-    consumer->set_important(true);
-    (*add.mutable_alter_attributes())["_ydb_replication_consumer"] = "replication";
-    alter(add);
-    assertReplicationConsumer();
-
-    Ydb::Topic::AlterTopicRequest unrelated;
-    unrelated.set_set_partition_write_speed_bytes_per_second(9000);
-    alter(unrelated);
-    assertReplicationConsumer();
-
-    Ydb::Topic::AlterTopicRequest drop;
-    drop.add_drop_consumers("replication");
-    alter(drop);
-    const auto config = DescribeTabletConfig(runtime, path);
-    UNIT_ASSERT(!NPQ::GetConsumer(config, "replication"));
-    UNIT_ASSERT(NPQ::GetConsumer(config, "user"));
 }
 
 Y_UNIT_TEST(CreateTopicSharedConsumer) {

@@ -93,6 +93,7 @@ Ydb::Topic::CreateTopicRequest BuildTopicMirrorRequest(const NYdb::NTopic::TTopi
     request.set_partition_read_without_consumer_speed_bytes_per_second(source.partition_read_without_consumer_speed_bytes_per_second());
     request.set_partition_read_without_consumer_speed_messages_per_second(source.partition_read_without_consumer_speed_messages_per_second());
 
+    request.mutable_attributes()->erase("_ydb_replication_consumer");
     EraseIf(*request.mutable_consumers(), [&](const auto& item) {
         return item.name() == consumer;
     });

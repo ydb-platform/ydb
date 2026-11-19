@@ -2946,7 +2946,14 @@ message THiveConfig {
         optional uint64 DefaultMaximum = 4 [(ParamDescription) = "Node capacity for the resource when the node does not report one. Without it such nodes are ignored when balancing the resource."];
     }
     repeated TNamedResourceSettings NamedResources = 97 [(ParamDescription) = "Settings of named resources (e.g. resource broker queues). Entries override built-in defaults."];
+<<<<<<< HEAD
 >>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
+=======
+
+    optional ECountersExportMode CountersExportMode = 98 [default = COUNTERS_EXPORT_MODE_BASIC, (ParamDescription) = "Which balancing counters Hive and Locals of its nodes export. Each mode includes the previous ones. Per-node counters produce one counter group per node."];
+    optional EBridgeTabletPlacement BridgeTabletPlacement = 99 [default = PRIMARY_PILE_ONLY, (ParamDescription) = "In bridge mode, which piles tablets may run in. Tablets in piles no longer allowed are moved away."];
+    optional bool TrackResourceBrokerUsage = 100 [default = true, (ParamDescription) = "Whether Locals track resource broker queue usage and report it as rb/* named resources. When turned off, Locals stop polling the resource broker and reset the usage and queue limits they have reported."];
+>>>>>>> b2c815257ed (add a setting to disable rb resource aggregation on locals (#59930))
 }
 
 message THealthCheckConfig {

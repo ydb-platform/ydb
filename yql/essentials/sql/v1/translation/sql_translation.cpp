@@ -1723,7 +1723,7 @@ TMaybe<TVector<TEncoding>> ColumnEncoding(const TRule_encoding& node, TTranslati
 }
 
 TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTranslation& ctx) {
-    TNodePtr defaultExpr;
+    TMaybe<TDefaultExpression> defaultExpression;
     TVector<TIdentifier> families;
     TMaybe<TCompression> compression;
     bool nullable = true;
@@ -1827,7 +1827,8 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
                     };
                     ctx.Context().DisableLegacyNotNull = true;
 
-                    defaultExpr = Unwrap(expr.Build(opt.GetRule_expr2()));
+                    auto& defaultValue = defaultExpression.ConstructInPlace();
+                    defaultValue.Expr = Unwrap(expr.Build(opt.GetRule_expr2()));
 
                     if (AnyOf(ctx.Context().Issues.begin(), ctx.Context().Issues.end(), [](const auto& issue) {
                             return issue.GetCode() == TIssuesIds::YQL_MISSING_IS_BEFORE_NOT_NULL;
@@ -1840,9 +1841,12 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
                         return {};
                     }
 
-                    if (!defaultExpr) {
+                    if (!defaultValue.Expr) {
                         return {};
                     }
+
+                    defaultValue.ContextPrefix = ctx.Context().ContextRecreationQuery();
+                    defaultValue.ExprText = ctx.Context().QueryText(opt.GetRule_expr2());
 
                     break;
                 }
@@ -1915,7 +1919,7 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
     }
 
     return TColumnOptions{
-        .DefaultExpr = std::move(defaultExpr),
+        .Default = std::move(defaultExpression),
         .Families = std::move(families),
         .Compression = std::move(compression),
         .Nullable = nullable,
@@ -1935,7 +1939,7 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         return {};
     }
 
-    auto&& [defaultExpr, families, compression, nullable, columnEncoding, generated] = columnOptions.GetRef();
+    auto&& [defaultExpression, families, compression, nullable, columnEncoding, generated] = columnOptions.GetRef();
 
     if (!type) {
         type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
@@ -1950,7 +1954,7 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         .Name = name,
         .Type = std::move(type),
         .Families = families,
-        .DefaultExpr = defaultExpr,
+        .Default = defaultExpression,
         .Compression = compression,
         .Nullable = nullable,
         .Serial = serial,

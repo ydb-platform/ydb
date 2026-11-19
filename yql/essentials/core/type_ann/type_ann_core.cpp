@@ -17017,6 +17017,7 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     Functions["YqlColumnRefOrType"] = &SqlColumnRefWrapper;
     Functions["YqlColumnRefOrDefault"] = &SqlColumnRefWrapper;
     Functions["YqlColumnOrType"] = &YqlColumnOrTypeWrapper;
+    Functions["YqlColumnOrAccess"] = &YqlColumnRefOrAccessWrapper;
     Functions["YqlSubLink"] = &SqlSubLinkWrapper;
     Functions["YqlSelf"] = &SqlSelfWrapper;
     Functions["YqlStar"] = &SqlStarWrapper;

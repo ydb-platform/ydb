@@ -1,7 +1,7 @@
 #pragma once
 
+#include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
-#include <ydb/core/protos/blobstorage_config.pb.h>
 
 #include <expected>
 #include <unordered_map>
@@ -12,7 +12,12 @@ using TDataCenterStates = std::unordered_map<TString, NKikimrBlobStorage::TDataC
 
 // Preserve explicitly supplied states. Unlisted datacenters are included.
 std::expected<TDataCenterStates, TString> ParseDataCenterStates(
-    const NKikimrBlobStorage::TDefineDataCenterStates& command);
-NKikimrBlobStorage::TDefineDataCenterStates SerializeDataCenterStates(const TDataCenterStates& states);
+    const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TDataCenterStates::TDataCenter>& dataCenters);
+
+inline std::expected<TDataCenterStates, TString> ParseDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& states) {
+    return ParseDataCenterStates(states.GetDataCenter());
+}
+
+NKikimrBlobStorage::TDataCenterStates SerializeDataCenterStates(const TDataCenterStates& states);
 
 } // namespace NKikimr

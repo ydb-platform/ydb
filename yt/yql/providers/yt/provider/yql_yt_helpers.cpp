@@ -10,6 +10,7 @@
 #include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yt/yql/providers/yt/opt/yql_yt_key_selector.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
@@ -33,6 +34,7 @@
 #include <library/cpp/yson/node/node_io.h>
 
 #include <util/string/cast.h>
+#include <util/string/builder.h>
 #include <util/string/hex.h>
 #include <util/generic/xrange.h>
 #include <util/generic/utility.h>
@@ -45,6 +47,16 @@ using namespace NNodes;
 using namespace NNodes::NDq;
 
 namespace {
+
+TString BuildNileDeprecationMessage(TStringBuf cluster, TStringBuf userName) {
+    return TStringBuilder() << "Nile is deprecated on cluster " << cluster
+                            << ". Please migrate to YQL, Wile, or another supported tool. "
+                               "If you urgently need to run Nile before migrating, please contact the Nile team "
+                               "(chat: https://telemost.360.yandex.ru/join#148ea32c-d3ff-49be-bdd8-1aa752301f0e, "
+                               "backup: @alekseikalin) to be added to the whitelist. "
+                               "Include the following information: cluster: "
+                            << cluster << ", user: " << userName;
+}
 
 void ScanWorlds(const TExprNode::TPtr& node, TSyncMap& syncList) {
     VisitExpr(node, [&syncList](const TExprNode::TPtr& n) {
@@ -524,6 +536,29 @@ TExprNode::TListType GetNodesToCalculateImpl(const TExprNode::TPtr& input, bool 
 }
 
 } // unnamed
+
+bool ValidateNilePermissions(const TExprNode& node, const TYtState& state, TExprContext& ctx) {
+    if (!state.NileAllowedClusters) {
+        return true;
+    }
+    if (!node.Child(1)->IsAtom()) {
+        if (!ctx.Step.IsDone(TExprStep::ExprEval)) {
+            return true;
+        }
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Nile operation cluster is unresolved after expression evaluation"));
+        return false;
+    }
+    const auto cluster = node.Child(1)->Content();
+    if (node.IsCallable("DataSource") && cluster == NCommon::ALL_CLUSTERS) {
+        return true;
+    }
+    if (state.NileAllowedClusters->contains(cluster)) {
+        return true;
+    }
+    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                       BuildNileDeprecationMessage(cluster, state.Types->OperationOptions.AuthenticatedUser.GetOrElse(TString()))));
+    return false;
+}
 
 TString GetClusterFromSection(const NNodes::TYtSection& section) {
     auto result = DeriveClusterFromSection(section, ERuntimeClusterSelectionMode::Auto);

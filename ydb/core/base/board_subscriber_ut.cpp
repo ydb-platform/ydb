@@ -110,6 +110,8 @@ public:
     void LookupWaitsForLateQuorum();
     void LookupLosesQuorumWhileCollecting();
     void CheckLookupWithMissingReplica(bool silent, bool quorum);
+    void ResubscribeAfterReplicaShutdown();
+    void ResubscribeAfterUndeliveredReconnect();
 
 protected:
     THolder<TTestBasicRuntime> Context;
@@ -131,6 +133,8 @@ class TBoardSubscriberTest : public TBoardSubscriberTestBase {
     UNIT_TEST(LookupWaitsForLateQuorum);
     UNIT_TEST(LookupLosesQuorumWhileCollecting);
     UNIT_TEST(DropByDisconnect);
+    UNIT_TEST(ResubscribeAfterReplicaShutdown);
+    UNIT_TEST(ResubscribeAfterUndeliveredReconnect);
     UNIT_TEST_SUITE_END();
 };
 
@@ -358,6 +362,93 @@ void TBoardSubscriberTestBase::NotAvailableByShutdown() {
 
     auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfoUpdate>(edgeSubscriber);
     UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable);
+}
+
+// One replica of a live subscription shuts down, its node staying connected; the two others keep the subscription
+// alive. The subscription must try that replica again rather than leave it out for good.
+void TBoardSubscriberTestBase::ResubscribeAfterReplicaShutdown() {
+    const TVector<TActorId> replicas = ResolveReplicas();
+    const TActorId replica = replicas[0];
+
+    struct TLookupSent {
+        TActorId Sender;
+        ui64 Cookie;
+    };
+    TVector<TLookupSent> lookups; // sent to the replica
+    TTestBasicRuntime::TEventObserverHolder observer = Context->AddObserver<TEvStateStorage::TEvReplicaBoardLookup>(
+        [&](TEvStateStorage::TEvReplicaBoardLookup::TPtr& ev) {
+            if (ev->Recipient == replica) {
+                lookups.push_back({ev->Sender, ev->Cookie});
+            }
+        });
+
+    const TActorId edgeSubscriber = Context->AllocateEdgeActor(1);
+    CreateSubscriber("path", edgeSubscriber, 1);
+    {
+        TEvStateStorage::TEvBoardInfo::TPtr event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(
+            edgeSubscriber);
+        UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(lookups.size(), 1);
+
+    // the shutdown comes with the cookie of the lookup it answers
+    Context->Send(new IEventHandle(lookups.front().Sender, replica, new TEvStateStorage::TEvReplicaShutdown(), 0,
+        lookups.front().Cookie), 1, true);
+    Context->WaitFor("another lookup of the replica", [&] { return lookups.size() > 1; }, TDuration::Seconds(30));
+}
+
+// One replica of a live subscription shuts down, and the lookup of the reconnect is undelivered, as when the replica
+// actor is not registered yet; the node stays connected. The subscription must try the replica again, and the replica,
+// registered by then, must answer that lookup.
+void TBoardSubscriberTestBase::ResubscribeAfterUndeliveredReconnect() {
+    const TVector<TActorId> replicas = ResolveReplicas();
+    const TActorId replica = replicas[0];
+
+    struct TLookupSent {
+        TActorId Sender;
+        ui64 Cookie;
+    };
+    TVector<TLookupSent> lookups; // sent to the replica
+    bool undelivered = false;
+    TTestBasicRuntime::TEventObserverHolder observer = Context->AddObserver<TEvStateStorage::TEvReplicaBoardLookup>(
+        [&](TEvStateStorage::TEvReplicaBoardLookup::TPtr& ev) {
+            if (ev->Recipient != replica) {
+                return;
+            }
+            lookups.push_back({ev->Sender, ev->Cookie});
+            if (lookups.size() == 2) {
+                // the lookup of the reconnect finds no replica actor
+                undelivered = true;
+                Context->Send(new IEventHandle(ev->Sender, replica, new TEvents::TEvUndelivered(
+                    TEvStateStorage::TEvReplicaBoardLookup::EventType, TEvents::TEvUndelivered::ReasonActorUnknown), 0,
+                    ev->Cookie), 1, true);
+                ev.Reset();
+            }
+        });
+    ui32 answers = 0; // of the replica to the lookups after the undelivered one
+    TTestBasicRuntime::TEventObserverHolder infos = Context->AddObserver<TEvStateStorage::TEvReplicaBoardInfo>(
+        [&](TEvStateStorage::TEvReplicaBoardInfo::TPtr& ev) {
+            if (undelivered && lookups.size() > 2 && ev->Recipient == lookups.back().Sender
+                    && ev->Cookie == lookups.back().Cookie) {
+                ++answers;
+            }
+        });
+
+    const TActorId edgeSubscriber = Context->AllocateEdgeActor(1);
+    CreateSubscriber("path", edgeSubscriber, 1);
+    {
+        TEvStateStorage::TEvBoardInfo::TPtr event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(
+            edgeSubscriber);
+        UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(lookups.size(), 1);
+
+    Context->Send(new IEventHandle(lookups.front().Sender, replica, new TEvStateStorage::TEvReplicaShutdown(), 0,
+        lookups.front().Cookie), 1, true);
+    Context->WaitFor("the lookup of the reconnect", [&] { return undelivered; }, TDuration::Seconds(30));
+    Context->WaitFor("another lookup of the replica after the undelivered one", [&] { return lookups.size() > 2; },
+        TDuration::Seconds(30));
+    Context->WaitFor("the answer of the replica", [&] { return answers > 0; }, TDuration::Seconds(10));
 }
 
 void TBoardSubscriberTestBase::ReconnectReplica() {

@@ -3306,6 +3306,35 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_C(disabledRequest.StartsWith("HTTP/1.1 500"), disabledRequest);
         UNIT_ASSERT_C(disabledRequest.Contains("Evict vdisks is disabled in Sentinel"), disabledRequest);
         env.CheckWalleListTasks(0);
+
+        // Evict VDisks
+        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+        env.SetCmsConfig(config);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
+
+        // Disable VDisks eviction
+        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::DISABLED);
+        env.SetCmsConfig(config);
+        const auto failedCheck = SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction");
+        UNIT_ASSERT_C(failedCheck.StartsWith("HTTP/1.1 500"), failedCheck);
+        UNIT_ASSERT_C(failedCheck.Contains("Evict vdisks is disabled in Sentinel"), failedCheck);
+        env.CheckWalleListTasks("eviction", "in-process", nodeId);
+
+        // The pending task can still be checked and cancelled after a restart.
+        env.RestartCms();
+        env.CheckWalleCheckTask("eviction", TStatus::ERROR);
+        env.CheckWalleListTasks("eviction", "in-process", nodeId);
+        const auto removed = SendWalleHttpRequest(env, HTTP_METHOD_DELETE, "/api/walle/v11/tasks/eviction");
+        UNIT_ASSERT_C(removed.StartsWith("HTTP/1.1 204"), removed);
+        env.CheckWalleListTasks(0);
+
+        // Enable VDisks eviction again; cancellation must have removed the host marker.
+        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+        env.SetCmsConfig(config);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
+        env.CheckWalleRemoveTask("eviction");
     }
 
     Y_UNIT_TEST(WalleDrainDataRequiresSentinel)
@@ -3504,6 +3533,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Check that FAULTY BSC request is sent again
         env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::FAULTY);
+        env.CheckRequest("user", request.GetRequestId(), false, TStatus::DISALLOW_TEMP, 0);
+        env.CheckRejectRequest("user", request.GetRequestId());
     }
 
     Y_UNIT_TEST(EmergencyDuringRollingRestart)

@@ -7,6 +7,10 @@ package Ydb.Query.Benchmark;
 message KqlQueryList {
     uint32 format_version = 1;
     repeated Node nodes = 2;
+    // Version 1 omits these fields and uses derive_column_order=true, ordered_columns=false.
+    // Version 2 carries both fields explicitly for other settings.
+    optional bool derive_column_order = 3;
+    optional bool ordered_columns = 4;
 
     message Node {
         enum Kind {

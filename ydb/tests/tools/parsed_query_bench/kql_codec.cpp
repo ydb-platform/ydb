@@ -1,5 +1,7 @@
 #include "kql_codec.h"
 
+#include <yql/essentials/core/yql_type_annotation.h>
+
 #include <util/generic/yexception.h>
 
 #include <algorithm>
@@ -41,7 +43,7 @@ TWire::Node::Kind WireKind(TExprNode::EType kind) {
 }
 
 ui32 ExportNode(const TExprNode& node, TExprContext& ctx, TWire& output, TNodeMap<ui32>& ids, size_t depth) {
-    Y_ENSURE(depth <= MaxDepth, "KQL graph exceeds depth limit");
+    Y_ENSURE(depth <= MaxDepth, "KQL export graph exceeds depth limit");
     if (const auto it = ids.find(&node); it != ids.end()) {
         return it->second;
     }
@@ -102,17 +104,30 @@ TExprNode::TPtr ImportNode(const TWire::Node& wire, TExprNode::TListType childre
 
 } // namespace
 
-void ExportKqlQueryList(const TExprNode& query, TExprContext& ctx, TWire& output) {
+void ExportKqlQueryList(const TExprNode& query, TExprContext& ctx, const TTypeAnnotationContext& types, TWire& output) {
     CheckQueryList(query);
     output.Clear();
-    output.set_format_version(1);
+    if (types.DeriveColumnOrder && !types.OrderedColumns) {
+        output.set_format_version(1);
+    } else {
+        output.set_format_version(2);
+        output.set_derive_column_order(types.DeriveColumnOrder);
+        output.set_ordered_columns(types.OrderedColumns);
+    }
     TNodeMap<ui32> ids;
     ExportNode(query, ctx, output, ids, 1);
 }
 
-TExprNode::TPtr ImportKqlQueryList(const TWire& input, TExprContext& ctx) {
+TExprNode::TPtr ImportKqlQueryList(const TWire& input, TExprContext& ctx, TTypeAnnotationContext& types) {
     const auto count = static_cast<size_t>(input.nodes_size());
-    Y_ENSURE(input.format_version() == 1 && count && count <= MaxNodes, "Unsupported or invalid KQL graph");
+    const bool legacy = input.format_version() == 1;
+    Y_ENSURE(legacy || input.format_version() == 2, "Unsupported KQL graph version");
+    if (legacy) {
+        Y_ENSURE(!input.has_derive_column_order() && !input.has_ordered_columns(), "Unexpected column-order settings in KQL version 1");
+    } else {
+        Y_ENSURE(input.has_derive_column_order() && input.has_ordered_columns(), "Missing KQL column-order settings");
+    }
+    Y_ENSURE(count && count <= MaxNodes, "Invalid KQL graph size");
     TVector<TExprNode::TPtr> nodes;
     TVector<size_t> depths;
     TVector<bool> used(count, false);
@@ -136,6 +151,8 @@ TExprNode::TPtr ImportKqlQueryList(const TWire& input, TExprContext& ctx) {
     auto root = std::move(nodes.back());
     CheckQueryList(*root);
     CheckArguments(*root);
+    types.DeriveColumnOrder = legacy || input.derive_column_order();
+    types.OrderedColumns = !legacy && input.ordered_columns();
     return root;
 }
 

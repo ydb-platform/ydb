@@ -1355,10 +1355,7 @@ public:
         Y_ENSURE(Config->GetEnableNewRBO() && settings.CompileTrace && settings.CompileTrace->CaptureRboRoots);
         SetupSession(EKikimrQueryType::Query, settings.CompileTrace);
         SetupQueryParameters(settings, EKikimrQueryType::Query);
-        if (settings.YqlSelect && *settings.YqlSelect != NSQLTranslation::EYqlSelect::Disable) {
-            TypesCtx->DeriveColumnOrder = true;
-        }
-        return KqpRunner->PrepareNewRbo(import(*ExprCtx, *SessionCtx), *ExprCtx);
+        return KqpRunner->PrepareNewRbo(import(*ExprCtx, *SessionCtx, *TypesCtx), *ExprCtx);
     }
 
     IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings, NYql::TExprNode::TPtr expr = nullptr) override {

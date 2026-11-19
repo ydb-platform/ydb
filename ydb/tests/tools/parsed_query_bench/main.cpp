@@ -372,6 +372,16 @@ int Run(int argc, const char** argv) {
         Export(ReadFile(argv[first + 1]), argv + first + 2, args - 1, ReadEnvelope(templatePath), engine);
         return 0;
     }
+    if (mode == "--verify" && args == 1) {
+        TRequest request;
+        DecodeRequest(ReadFile(argv[first + 1]), request);
+        Y_ENSURE(GetStage(request) == EStage::Text, "Expected a stock SQL text request");
+        engine.WithSession([&] {
+            const auto result = engine.LowerText(request.query_content().text(), request.parameters(), true);
+            std::cout << "BENCH_RESULT_COLUMNS=" << ResultColumns(result).c_str() << '\n';
+        });
+        return 0;
+    }
     if (mode == "--verify" && (args == 3 || args == 4)) {
         const auto result = Verify(ReadInputs(args, argv + first + 1), engine);
         std::cout << "BENCH_RESULT_COLUMNS=" << ResultColumns(result).c_str() << '\n';
@@ -390,6 +400,7 @@ int Run(int argc, const char** argv) {
         return 0;
     }
     std::cerr << "Usage: parsed_query_legacy_bench [--catalog FILE] [--template FILE] MODE ARGS\n"
+        << "  --verify TEXT.pb\n"
         << "  --export QUERY.sql TEXT.pb ANTLR_AST.pb YQL_AST.pb [KQL.pb]\n"
         << "  --verify TEXT.pb ANTLR_AST.pb YQL_AST.pb [KQL.pb]\n"
         << "  --bench WARMUP REPEATS TEXT.pb ANTLR_AST.pb YQL_AST.pb [KQL.pb]\n"

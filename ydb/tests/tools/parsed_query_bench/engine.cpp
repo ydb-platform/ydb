@@ -308,8 +308,8 @@ void TEngine::ExportKql(const TString& text, const TParameterMap& parameters, Yd
     IKqpHost::TPrepareSettings settings;
     settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
     settings.CompileTrace = MakeIntrusive<TCompileTrace>(NWilson::TTraceId{}, nullptr);
-    settings.CompileTrace->CaptureKqlQuery = [&](const TExprNode& query, TExprContext& ctx) {
-        ExportKqlQueryList(query, ctx, out);
+    settings.CompileTrace->CaptureKqlQuery = [&](const TExprNode& query, TExprContext& ctx, const TTypeAnnotationContext& types) {
+        ExportKqlQueryList(query, ctx, types, out);
         captured = true;
     };
     RunUntil(Compile(*Impl->Host, text, nullptr, parameters, settings), [&] { return captured; }, "BuildKqlQuery");
@@ -320,8 +320,8 @@ TLogicalResult TEngine::LowerKql(const Ydb::Query::Benchmark::KqlQueryList& wire
 {
     TLogicalResult result;
     auto settings = CaptureRoots(result, verify, Impl->Caller);
-    auto compilation = Impl->Host->InspectKqlQuery(settings, [&](TExprContext& ctx, TKikimrSessionContext& session) {
-        auto query = ImportKqlQueryList(wire, ctx);
+    auto compilation = Impl->Host->InspectKqlQuery(settings, [&](TExprContext& ctx, TKikimrSessionContext& session, TTypeAnnotationContext& types) {
+        auto query = ImportKqlQueryList(wire, ctx, types);
         Impl->Catalog->BindTables(query, session, ctx);
         CheckParameterTypes(query, parameters, ctx);
         // BuildKqlQuery receives evaluated expressions. Binding its table references

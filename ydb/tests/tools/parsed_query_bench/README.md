@@ -21,6 +21,8 @@ TKqlQueryList → new RBO pipeline → PlanConverter::ConvertRoot → ComputePar
 
 The grammar input stores main's native token names, contents and positions, including comments, whitespace and EOF. The importer reconstructs the SQL source from token contents and applies leading directives. The parser fingerprint covers the SQL grammar, lexer build definitions and generated protobuf schema. The NewParser benchmark packages the grammar tree with the token fields needed by its own CST importer. Compare request sizes using the serialized files for each implementation.
 
+`--verify TEXT.pb` compiles a public SQL text request through the stock host and prints its ordered result schema at the RBO boundary.
+
 Run a complete four-stage comparison from the repository root. This input needs no table or parameter fixture.
 
 ```sh

@@ -17,8 +17,8 @@ def test_table_and_parameters(tmp_path):
     sql = tmp_path / "query.sql"
     sql.write_text("--!syntax_v1\nSELECT payload AS first, id AS second FROM items WHERE id = $id;")
     columns = [
-        dict(id=1, name="id", type="Int32", not_null=True, generated=False, has_default=False),
-        dict(id=2, name="payload", type="String", not_null=False, generated=False, has_default=False),
+        dict(id=1, name="payload", type="String", not_null=False, generated=False, has_default=False),
+        dict(id=2, name="id", type="Int32", not_null=True, generated=False, has_default=False),
     ]
     table = dict(path="/Root/items", owner_id=1, table_id=1, schema_version=1, storage="row",
                  has_write_indexes=False, key_columns=["id"], columns=columns)
@@ -36,6 +36,10 @@ def test_table_and_parameters(tmp_path):
     parameter.value.int32_value = 123
     template = tmp_path / "template.pb"
     template.write_bytes(request.SerializeToString())
+    stock = subprocess.check_output([tool, "--catalog", catalog, "--verify", template], text=True)
+    label, columns = stock.strip().split("=", 1)
+    assert label == "BENCH_RESULT_COLUMNS"
+    assert [name for name, _ in json.loads(columns)[0]] == ["first", "second"]
     stages = (*STAGES, "kql_query_list")
     inputs = [tmp_path / (stage + ".pb") for stage in stages]
     cmd = [tool, "--catalog", catalog]
@@ -79,6 +83,13 @@ def test_table_and_parameters(tmp_path):
     assert failure.returncode == 1
     assert "Request envelope differs" in failure.stderr
     assert not failure.stdout
+
+    for pragma, expected in [("", ["id", "payload"]), ("PRAGMA OrderedColumns;", ["payload", "id"])]:
+        sql.write_text(pragma + " SELECT * FROM items;")
+        subprocess.run([*cmd, "--export", sql, *inputs], check=True)
+        verified = subprocess.check_output([*cmd, "--verify", *inputs], text=True)
+        schema = json.loads(verified.splitlines()[0].removeprefix("BENCH_RESULT_COLUMNS="))
+        assert [name for name, _ in schema[0]] == expected
 
 
 @pytest.mark.parametrize("stage", [1, 2])

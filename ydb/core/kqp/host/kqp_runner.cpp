@@ -339,7 +339,7 @@ private:
 
         TExprNode::TPtr query = kqlQueryBlocks->Ptr();
         if (const auto* trace = queryCtx->CompileTrace.Get(); trace && trace->CaptureKqlQuery) {
-            trace->CaptureKqlQuery(*query, ctx);
+            trace->CaptureKqlQuery(*query, ctx, TypesCtx);
             return MakeKikimrResultHolder(IKqpHost::TQueryResult{});
         }
         YQL_CLOG(DEBUG, ProviderKqp) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx);

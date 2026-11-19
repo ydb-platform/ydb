@@ -20,6 +20,7 @@
 namespace NYql {
 class TExprNode;
 struct TExprContext;
+struct TTypeAnnotationContext;
 }
 
 namespace NKikimr::NKqp {
@@ -55,7 +56,7 @@ public:
     ~TCompileTrace();
 
     std::function<void()> OnSqlTranslated;
-    std::function<void(const NYql::TExprNode&, NYql::TExprContext&)> CaptureKqlQuery;
+    std::function<void(const NYql::TExprNode&, NYql::TExprContext&, const NYql::TTypeAnnotationContext&)> CaptureKqlQuery;
     std::function<void(const TVector<TIntrusivePtr<TOpRoot>>&, const NYql::TExprNode&, NYql::TExprContext&)> CaptureRboRoots;
 
     bool IsEnabled(ui8 verbosity) const {

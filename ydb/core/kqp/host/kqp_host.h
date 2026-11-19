@@ -98,7 +98,7 @@ public:
     /* Generic queries */
     virtual IAsyncQueryResultPtr PrepareGenericQuery(const TKqpQueryRef& query, const TPrepareSettings& settings, NYql::TExprNode::TPtr expr = nullptr) = 0;
 
-    using TKqlImporter = std::function<NYql::TExprNode::TPtr(NYql::TExprContext&, NYql::TKikimrSessionContext&)>;
+    using TKqlImporter = std::function<NYql::TExprNode::TPtr(NYql::TExprContext&, NYql::TKikimrSessionContext&, NYql::TTypeAnnotationContext&)>;
     virtual IAsyncQueryResultPtr InspectKqlQuery(const TPrepareSettings& settings, const TKqlImporter& import) = 0;
 
     /* Federated queries */

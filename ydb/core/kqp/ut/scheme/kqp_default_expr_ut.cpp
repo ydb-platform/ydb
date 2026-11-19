@@ -422,6 +422,65 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, r IS NOT NULL FROM TestTable;", "[[1;%true]]");
     }
 
+    Y_UNIT_TEST(PreparedWritesUseExecutionTimeDefaults) {
+        TTestFixture fixture;
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                ts Timestamp NOT NULL DEFAULT CurrentUtcTimestamp(),
+                r Uint64 NOT NULL DEFAULT RandomNumber(),
+                observed_ts Timestamp NOT NULL,
+                observed_r Uint64 NOT NULL,
+                PRIMARY KEY (k)
+            );
+        )");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "ts"), "CurrentUtcTimestamp()");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "r"), "RandomNumber()");
+
+        auto tableClient = fixture.Runner().GetTableClient();
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        auto prepareResult = tableSession.PrepareDataQuery(R"(
+            DECLARE $k AS Int32;
+            INSERT INTO `/Root/TestTable` (k, observed_ts, observed_r)
+            VALUES ($k, CurrentUtcTimestamp(), RandomNumber())
+            RETURNING k, ts, r, observed_ts, observed_r;
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        auto prepared = prepareResult.GetQuery();
+        NYdb::NTable::TExecDataQuerySettings settings;
+        settings.KeepInQueryCache(true).CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        // Neither the schema nor the prepared handle changes between executions.
+        for (i32 key : {1, 2}) {
+            auto params = prepared.GetParamsBuilder().AddParam("$k").Int32(key).Build().Build();
+            const auto before = TInstant::Now();
+            auto result = prepared.Execute(
+                NYdb::NTable::TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+            const auto after = TInstant::Now();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetStats());
+            if (key == 2) {
+                UNIT_ASSERT(NYdb::TProtoAccessor::GetProto(*result.GetStats()).compilation().from_cache());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1u);
+            TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("k").GetInt32(), key);
+            const auto timestamp = parser.ColumnParser("ts").GetTimestamp();
+            UNIT_ASSERT_C(before <= timestamp && timestamp <= after,
+                "DEFAULT timestamp outside its execution window: " << before << " <= " << timestamp << " <= " << after);
+            UNIT_ASSERT_VALUES_EQUAL(timestamp, parser.ColumnParser("observed_ts").GetTimestamp());
+            // Zero-argument RandomNumber is a shared execution binding. Equality to this
+            // witness detects a frozen DEFAULT without requiring distinct random draws.
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("r").GetUint64(),
+                parser.ColumnParser("observed_r").GetUint64());
+            UNIT_ASSERT(!parser.TryNextRow());
+            CompareYson(FormatResultSetYson(result.GetResultSet(0)), fixture.QueryYson(
+                TStringBuilder() << "SELECT k, ts, r, observed_ts, observed_r FROM TestTable WHERE k = " << key << ";"));
+        }
+        fixture.Check("SELECT k FROM TestTable ORDER BY k;", "[[1];[2]]");
+    }
+
     Y_UNIT_TEST(NotNullWithNonNullableExpr) {
         TTestFixture fixture;
         fixture.Exec(DefaultExprDDL("ts Timestamp NOT NULL DEFAULT CurrentUtcTimestamp()"));
@@ -595,6 +654,11 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         {
             fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Int64 DEFAULT " << expression));
             AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
+            if (TString(expression).Contains("RuntimeSetting")) {
+                // An unknown host setting and an absent UDF setting both return NULL.
+                fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+                fixture.Check("SELECT k, v FROM TestTable;", "[[1;#]]");
+            }
             fixture.Exec("DROP TABLE TestTable;");
         }
     }
@@ -639,6 +703,18 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         }
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.Check("SELECT k, negative, text FROM TestTable;", R"([[1;[-5];["hello"]]])");
+        auto result = fixture.Runner().GetQueryClient().ExecuteQuery(
+            "SELECT amount, json FROM TestTable;", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        const auto amount = parser.ColumnParser("amount").GetOptionalDecimal();
+        const auto json = parser.ColumnParser("json").GetOptionalJson();
+        UNIT_ASSERT(amount.has_value());
+        UNIT_ASSERT(json.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(amount->ToString(), "1.11");
+        UNIT_ASSERT_VALUES_EQUAL(*json, R"({"k":1})");
+        UNIT_ASSERT(!parser.TryNextRow());
     }
 
     Y_UNIT_TEST_TWIN(NullDefault, Enabled) {
@@ -782,15 +858,13 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
     Y_UNIT_TEST(SingleRowExpressionWithNestedLambdaAccepted) {
         TTestFixture fixture;
-        fixture.Exec(DefaultExprDDL(R"(
-            v Int32 DEFAULT CAST(
-                ListLength(ListMap(AsList(1, 2), ($item) -> { RETURN $item * 2; }))
-                AS Int32
-            )
-        )"));
+        const TString expression = "ListSum(ListMap(AsList(RandomNumber(1), RandomNumber(2)), "
+            "($item) -> { RETURN $item * 0ul + 1ul; }))";
+        fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Uint64 DEFAULT " << expression));
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
 
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
-        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[2]]]");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[2u]]]");
     }
 
     Y_UNIT_TEST(TypeMismatchRejected) {
@@ -1182,6 +1256,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec(DefaultExprDDL("r Uint64 NOT NULL DEFAULT RandomNumber(1)"));
 
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1), (2), (3), (4), (5), (6), (7), (8);");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.QueryUint64("SELECT COUNT(*) FROM TestTable;"), 8u);
 
         UNIT_ASSERT_VALUES_EQUAL_C(fixture.QueryUint64("SELECT COUNT(DISTINCT r) FROM TestTable;"), 1u,
             "RandomNumber() DEFAULT with a constant dependency must be shared between rows of one write");
@@ -1229,22 +1304,91 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         CompareYson(returned, fixture.QueryYson("SELECT k, v FROM TestTable;"));
     }
 
-    Y_UNIT_TEST(RandomDefaultConsistentWithReturningAndIndex) {
-        TTestFixture fixture;
-        fixture.Exec(R"(
+    Y_UNIT_TEST_TWIN(RandomDefaultConsistentWithReturningAndIndex, StreamWrite) {
+        // GENERATED columns require the stream writer; legacy still uses actual random values.
+        TTestFixture fixture(/* featureFlagEnabled */ true, StreamWrite, /* generatedStored */ StreamWrite);
+        const TString generatedColumn = StreamWrite ? "g Uint64 GENERATED ALWAYS AS (v) STORED," : "";
+        const TString generatedCover = StreamWrite ? ", g" : "";
+        const TString columns = TStringBuilder() << "k, a, v" << generatedCover;
+        fixture.Exec(TStringBuilder() << R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
                 a Int32 NOT NULL,
-                v Uint64 DEFAULT RandomNumber(1),
+                v Uint64 NOT NULL DEFAULT RandomNumber(1),
+                )" << generatedColumn
+                << "PRIMARY KEY (k), INDEX idx_a GLOBAL SYNC ON (a) COVER (v" << generatedCover
+                << ")) WITH (PARTITION_AT_KEYS = (2));");
+
+        const auto checkWrite = [&](const std::string& write, const TString& predicate,
+                                    const TString& expectedKeys, ui64 expectedCount) {
+            const TString returned = fixture.QueryYson(TStringBuilder() << write << " RETURNING " << columns << ";");
+            CompareYsonUnordered(returned, fixture.QueryYson(
+                TStringBuilder() << "SELECT " << columns << " FROM TestTable WHERE " << predicate << ";"));
+            CompareYsonUnordered(returned, fixture.QueryYson(
+                TStringBuilder() << "SELECT " << columns << " FROM TestTable VIEW idx_a WHERE " << predicate << ";"));
+            fixture.Check(TStringBuilder() << "SELECT k, a FROM TestTable WHERE " << predicate << " ORDER BY k;", expectedKeys);
+            if (StreamWrite) {
+                fixture.Check(TStringBuilder() << "SELECT COUNT(*) FROM TestTable WHERE " << predicate << " AND v = g;",
+                    TStringBuilder() << "[[" << expectedCount << "u]]");
+            }
+        };
+        checkWrite("INSERT INTO TestTable (k, a) VALUES (1, 10), (2, 20), (3, 30)",
+            "k <= 3", "[[1;10];[2;20];[3;30]]", 3);
+        checkWrite("INSERT INTO TestTable (k, a) SELECT k + 10, a + 100 FROM TestTable",
+            "k > 10", "[[11;110];[12;120];[13;130]]", 3);
+        const TString existing = fixture.QueryYson(TStringBuilder() << "SELECT " << columns << " FROM TestTable WHERE k = 1;");
+        checkWrite("UPSERT INTO TestTable (k, a) VALUES (1, 10), (4, 40)",
+            "k IN (1, 4)", "[[1;10];[4;40]]", 2);
+        CompareYson(existing, fixture.QueryYson(TStringBuilder() << "SELECT " << columns << " FROM TestTable WHERE k = 1;"));
+        fixture.Check("SELECT k, a FROM TestTable ORDER BY k;",
+            "[[1;10];[2;20];[3;30];[4;40];[11;110];[12;120];[13;130]]");
+    }
+
+    Y_UNIT_TEST_TWIN(RandomDefaultKeyConsistentWithReturningAndIndex, StreamWrite) {
+        TTestFixture fixture(/* featureFlagEnabled */ true, StreamWrite);
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Uint64 NOT NULL DEFAULT RandomNumber(1),
+                a Int32 NOT NULL,
+                v Uint64 NOT NULL DEFAULT RandomNumber(2),
                 PRIMARY KEY (k),
                 INDEX idx_a GLOBAL SYNC ON (a) COVER (v)
             );
         )");
+        // A constant dependency may be shared between rows, so use a single-row write.
+        const TString returned = fixture.QueryYson("INSERT INTO TestTable (a) VALUES (10) RETURNING k, a, v;");
+        CompareYson(returned, fixture.QueryYson("SELECT k, a, v FROM TestTable;"));
+        CompareYson(returned, fixture.QueryYson("SELECT k, a, v FROM TestTable VIEW idx_a;"));
+        fixture.Check("SELECT a FROM TestTable;", "[[10]]");
+    }
 
-        const TString returned = fixture.QueryYson(
-            "INSERT INTO TestTable (k, a) VALUES (1, 10), (2, 20), (3, 30) RETURNING k, a, v;");
-        CompareYsonUnordered(returned, fixture.QueryYson("SELECT k, a, v FROM TestTable ORDER BY k;"));
-        CompareYsonUnordered(returned, fixture.QueryYson("SELECT k, a, v FROM TestTable VIEW idx_a ORDER BY a;"));
+    Y_UNIT_TEST_TWIN(ExplicitNullBypassesFailingDefault, StreamWrite) {
+        TTestFixture fixture(/* featureFlagEnabled */ true, StreamWrite);
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v Uint64 DEFAULT Ensure(RandomNumber(1), false, "default evaluated"),
+                PRIMARY KEY (k),
+                INDEX idx_v GLOBAL SYNC ON (v)
+            );
+        )");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"),
+            R"(Ensure(RandomNumber(1), false, "default evaluated"))");
+        fixture.Check("INSERT INTO TestTable (k, v) VALUES (1, NULL) RETURNING k, v;", "[[1;#]]");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;#]]");
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v;", "[[1;#]]");
+        fixture.Check("UPSERT INTO TestTable (k, v) VALUES (2, NULL) RETURNING k, v;", "[[2;#]]");
+        for (const auto* write : {
+            "UPSERT INTO TestTable (k, v) VALUES (1, NULL)",
+            "REPLACE INTO TestTable (k, v) VALUES (1, NULL)",
+            "UPDATE TestTable SET v = NULL WHERE k = 1",
+            "UPDATE TestTable ON (k, v) VALUES (1, NULL)"})
+        {
+            fixture.Exec("UPSERT INTO TestTable (k, v) VALUES (1, 7ul);");
+            fixture.Check(TStringBuilder() << write << " RETURNING k, v;", "[[1;#]]");
+            fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;#];[2;#]]");
+            fixture.Check("SELECT k, v FROM TestTable VIEW idx_v ORDER BY k;", "[[1;#];[2;#]]");
+        }
     }
 
     Y_UNIT_TEST(WithSecondaryIndex) {
@@ -1315,8 +1459,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;[8u]]]");
     }
 
-    // DROP DEFAULT needs nothing from the request beyond empty_default, so it keeps working, and
-    // the schema version bump must invalidate the compiled plan of the earlier INSERT
+    // DROP DEFAULT removes the persisted default. Prepared-plan invalidation is checked below.
     Y_UNIT_TEST(DropDefaultAffectsNewWrites) {
         TTestFixture fixture;
         fixture.Exec(ValueTableDDL());
@@ -1333,7 +1476,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;#]]");
     }
 
-    Y_UNIT_TEST(PreparedInsertIsRecompiledAfterDefaultChange) {
+    Y_UNIT_TEST_TWIN(PreparedInsertIsRecompiledAfterDefaultChange, DropDefault) {
         TTestFixture fixture;
         fixture.Exec(ValueTableDDL());
 
@@ -1356,10 +1499,17 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         };
 
         executePrepared(1);
-        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT 8ul;");
+        if (DropDefault) {
+            fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;");
+            const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
+            UNIT_ASSERT_C(!column.HasDefaultFromExpression() && !column.HasDefaultFromLiteral(), column.ShortDebugString());
+        } else {
+            fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT 8ul;");
+        }
         executePrepared(2);
 
-        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;[8u]]]");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;",
+            DropDefault ? "[[1;[42u]];[2;#]]" : "[[1;[42u]];[2;[8u]]]");
     }
 
     Y_UNIT_TEST(AlterOnGeneratedColumnRejected) {

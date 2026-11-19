@@ -198,11 +198,15 @@ public:
     bool ReleaseReference(const TSnapshotKey& key, NTable::TDatabase& db, TInstant now);
 
     bool AddSnapshot(NTable::TDatabase& db, const TSnapshotKey& key, const TString& name, ui64 flags, TDuration timeout);
+    void AddTableChecksumSnapshot(
+        NTable::TDatabase& db, const TSnapshotKey& key, const TString& name, const TActorContext& ctx);
     bool RemoveSnapshot(NTable::TDatabase& db, const TSnapshotKey& key);
     bool CleanupRemovedSnapshots(NTable::TDatabase& db);
 
     void InitSnapshotExpireTime(const TSnapshotKey& key, TInstant now);
     bool RefreshSnapshotExpireTime(const TSnapshotKey& key, TInstant now);
+    void ConfirmChecksumSnapshotOwner(ui64 operationId, TInstant now);
+    void ReleaseChecksumSnapshots(NTable::TDatabase& db, ui64 operationId);
 
     TDuration CleanupTimeout() const;
     bool RemoveExpiredSnapshots(TInstant now, TTransactionContext& txc);
@@ -212,7 +216,7 @@ public:
     void PersistUpdateSnapshotFlags(NIceDb::TNiceDb& db, const TSnapshotKey& key);
     void PersistRemoveAllSnapshots(NIceDb::TNiceDb& db);
 
-    void Fix_KIKIMR_14259(NTable::TDatabase& db);
+    void CleanupRowVersionsBelowLowWatermark(NTable::TDatabase& db);
 
     // Optional additional cleanup of every user table, subject to retention and
     // local acquisitions. A watermark can contain retained points below it; it

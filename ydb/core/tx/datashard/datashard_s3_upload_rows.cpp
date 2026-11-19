@@ -1,17 +1,27 @@
 #include "datashard_txs.h"
+#include "datashard_pipeline.h"
 
 namespace NKikimr::NDataShard {
 
-TDataShard::TTxS3UploadRows::TTxS3UploadRows(TDataShard* ds, TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev)
+TDataShard::TTxS3UploadRows::TTxS3UploadRows(
+    TDataShard* ds, TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, TActorId sender)
     : TBase(ds)
     , TCommonUploadOps(ev, false, false)
+    , Sender(sender)
 {
     ++Self->DatabaseFreezeLocalWrites;
 }
 
 bool TDataShard::TTxS3UploadRows::Execute(TTransactionContext& txc, const TActorContext&) {
-    auto mvccVersion = Self->GetMvccVersion();
-    
+    const auto* request = GetRequest();
+    if (!Self->IsActiveS3Import(request->TxId, request->Record.GetTableId(), Sender)) {
+        Cancelled = true;
+        return true;
+    }
+    auto op = Self->Pipeline.FindOp(request->TxId);
+    // Write every batch at the restore transaction's planned version
+    const auto mvccVersion = Self->GetMvccVersion(op.Get());
+
     // NOTE: will not throw TNeedGlobalTxId since we set breakLocks to false
     if (!TCommonUploadOps::Execute(Self, txc, mvccVersion,
             /* globalTxId */ 0, /* volatile read dependencies */ nullptr))
@@ -34,6 +44,11 @@ bool TDataShard::TTxS3UploadRows::Execute(TTransactionContext& txc, const TActor
 
 void TDataShard::TTxS3UploadRows::Complete(const TActorContext&) {
     --Self->DatabaseFreezeLocalWrites;
+    if (Cancelled) {
+        Self->Send(Sender, new TEvDataShard::TEvS3UploadRowsResponse(
+                               Self->TabletID(), NKikimrTxDataShard::TError::EXECUTION_CANCELLED));
+        return;
+    }
     TActorId target;
     THolder<IEventBase> event;
     ui64 cookie;

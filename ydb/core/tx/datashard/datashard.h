@@ -3,6 +3,8 @@
 #include "datashard_s3_download.h"
 #include "datashard_s3_upload.h"
 
+#include <ydb/core/backup/common/table_checksum.h>
+
 #include <ydb/core/tablet_flat/util_basics.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/data_events/events.h>
@@ -415,6 +417,9 @@ namespace TEvDataShard {
 
         EvDeltaKMeansRequest,
         EvDeltaKMeansResponse,
+
+        EvStoreBackupChecksumRequest,
+        EvStoreBackupChecksumResponse,
 
         EvEnd
     };
@@ -1356,6 +1361,31 @@ namespace TEvDataShard {
             , TxId(txId)
         {
         }
+    };
+
+    struct TEvStoreBackupChecksumRequest
+        : public TEventLocal<TEvStoreBackupChecksumRequest, EvStoreBackupChecksumRequest> {
+        ui64 TxId;
+        NBackup::TTableChecksum Checksum;
+
+        TEvStoreBackupChecksumRequest(ui64 txId, NBackup::TTableChecksum checksum)
+            : TxId(txId)
+            , Checksum(std::move(checksum))
+        {}
+    };
+
+    struct TEvStoreBackupChecksumResponse
+        : public TEventLocal<TEvStoreBackupChecksumResponse, EvStoreBackupChecksumResponse> {
+        NBackup::TTableChecksum Checksum;
+        TString Error;
+
+        explicit TEvStoreBackupChecksumResponse(NBackup::TTableChecksum checksum)
+            : Checksum(std::move(checksum))
+        {}
+
+        explicit TEvStoreBackupChecksumResponse(TString error)
+            : Error(std::move(error))
+        {}
     };
 
     struct TEvStoreS3UploadId

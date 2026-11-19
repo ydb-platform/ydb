@@ -19,6 +19,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     const TExportInfo& exportInfo
 );
 
+void FillTableChecksumRequest(NKikimrSchemeOp::TBackupTask& task, const TString& database, const TString& tablePath);
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,

@@ -64,6 +64,7 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
     }
     Y_ENSURE(DataShard.GetUserTables().contains(tableId));
     ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
+    const bool checksumSnapshot = snapshot.GetTableChecksumExportId() != 0;
 
     for (auto &snapshot : op->InputSnapshots()) {
         auto* txSnapshot = dynamic_cast<TTxTableSnapshotContext*>(snapshot.Get());
@@ -82,6 +83,10 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
 
         // New format, wrap in an additional protobuf layer
         NKikimrTxDataShard::TSnapshotTransferReadSet rs;
+        // Record protocol participation even if a previously retained pin was lost
+        if (checksumSnapshot) {
+            rs.SetSupportsTableChecksumSnapshots(true);
+        }
         TSnapshotManager::SerializeRemovedRowVersions(txc.DB.GetRemovedRowVersions(localTableId),
             *rs.MutableRemovedRowVersions());
 

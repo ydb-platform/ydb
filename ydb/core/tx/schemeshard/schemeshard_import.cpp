@@ -409,9 +409,9 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
         );
     }
 
-    db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
-        NIceDb::TUpdate<Schema::ImportItems::Metadata>(item.Metadata.Serialize())
-    );
+    db.Table<Schema::ImportItems>()
+        .Key(importInfo.Id, itemIdx)
+        .Update(NIceDb::TUpdate<Schema::ImportItems::Metadata>(item.Metadata.Serialize()));
 
     db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::Changefeeds>(item.Changefeeds)
@@ -522,6 +522,46 @@ bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
         default:
             return true;
     }
+}
+
+void TSchemeShard::Handle(NBackup::TEvTableChecksum::TEvResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressImport(ev), ctx);
+}
+
+void TSchemeShard::PrepareImportChecksum(
+    TImportInfo& info, ui32 itemIdx, TRowVersion snapshot, const TActorContext& ctx) {
+    auto& item = info.Items.at(itemIdx);
+    if (!item.ChecksumActor) {
+        item.ChecksumActor = ctx.Register(NBackup::CreateTableChecksumQuery(SelfId(), info.Id, itemIdx,
+            TPath::Init(info.DomainPathId, this).PathString(), item.DstPathName, true, TTableId(item.DstPathId),
+            TabletID(), snapshot, item.Metadata.GetTableChecksum()->Algorithm));
+        RunningTableChecksumQueries.insert(item.ChecksumActor);
+    }
+}
+
+void TSchemeShard::Handle(NBackup::TEvTableChecksum::TEvPrepareChecksum::TPtr& ev, const TActorContext& ctx) {
+    const auto& request = *ev->Get();
+    const auto info = Imports.Value(request.OperationId, nullptr);
+    if (ev->Sender != SelfId() || !info || info->State != TImportInfo::EState::Waiting ||
+        request.ItemIdx >= info->Items.size() || !request.Snapshot.Step || !request.Snapshot.TxId) {
+        return;
+    }
+    auto& item = info->Items[request.ItemIdx];
+    if (item.State != TImportInfo::EState::Transferring || !info->ShouldValidateTableChecksum() ||
+        !item.Metadata.GetTableChecksum().has_value() || item.ChecksumSnapshot != request.Snapshot) {
+        return;
+    }
+    const auto restoreTxId = TTxId(request.Snapshot.TxId);
+    if (item.WaitTxId != InvalidTxId && item.WaitTxId != restoreTxId) {
+        return;
+    }
+    if (item.WaitTxId == InvalidTxId) {
+        const auto it = TxIdToImport.find(restoreTxId);
+        if (it == TxIdToImport.end() || it->second != std::pair{ info->Id, request.ItemIdx }) {
+            return;
+        }
+    }
+    PrepareImportChecksum(*info, request.ItemIdx, request.Snapshot, ctx);
 }
 
 } // NSchemeShard

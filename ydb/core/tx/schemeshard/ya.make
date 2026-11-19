@@ -71,6 +71,7 @@ RECURSE_FOR_TESTS(
     ut_set_column_constraint_reboots
     ut_set_column_constraint
     ut_stats
+    ut_table_checksum
     ut_streaming_query
     ut_streaming_query_reboots
     ut_subdomain
@@ -375,6 +376,7 @@ PEERDIR(
     ydb/core/audit
     ydb/core/base
     ydb/core/backup/common
+    ydb/core/backup/query
     ydb/core/backup/regexp
     ydb/core/blob_depot
     ydb/core/blobstorage/base

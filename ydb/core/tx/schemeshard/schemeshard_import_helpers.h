@@ -3,6 +3,7 @@
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/backup/query/table_checksum.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -21,6 +22,9 @@ TString MakeIndexBuildUid(const TImportInfo& importInfo, ui32 itemIdx);
 bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx);
 
 class TSchemeShard;
+
+THolder<NBackup::TEvTableChecksum::TEvPrepareChecksum> MakeImportChecksumPrepareRequest(
+    TSchemeShard* ss, TImportInfo& info, ui32 itemIdx, TRowVersion snapshot);
 
 bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain);
 

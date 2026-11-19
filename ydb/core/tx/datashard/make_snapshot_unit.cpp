@@ -2,6 +2,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#include <ydb/core/backup/common/table_checksum_snapshot.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -41,7 +43,7 @@ bool TMakeSnapshotUnit::IsReadyToExecute(TOperation::TPtr op) const
 
 EExecutionStatus TMakeSnapshotUnit::Execute(TOperation::TPtr op,
                                             TTransactionContext &txc,
-                                            const TActorContext &)
+                                            const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
@@ -61,6 +63,15 @@ EExecutionStatus TMakeSnapshotUnit::Execute(TOperation::TPtr op,
             tableId = snapshot.GetTableId().GetTableId();
         }
         Y_ENSURE(DataShard.GetUserTables().contains(tableId));
+        if (snapshot.GetTableChecksumExportId()) {
+            const TSnapshotKey key(DataShard.GetPathOwnerId(), tableId, op->GetStep(), op->GetTxId());
+            const NBackup::TTableChecksumSnapshotOwner owner{ DataShard.GetCurrentSchemeShardId(),
+                snapshot.GetTableChecksumExportId(), false };
+            DataShard.GetSnapshotManager().AddTableChecksumSnapshot(txc.DB, key, owner.ToString(), ctx);
+            // Protect C from later immediate writes before freezing the copy
+            DataShard.PromoteImmediatePostExecuteEdges(
+                TRowVersion(op->GetStep(), op->GetTxId()), TDataShard::EPromotePostExecuteEdges::RepeatableRead, txc);
+        }
         ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
         const auto& openTxs = txc.DB.GetOpenTxs(localTableId);
         TIntrusivePtr<TTableSnapshotContext> snapContext

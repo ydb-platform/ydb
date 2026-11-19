@@ -5,7 +5,89 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/json_reader.h>
 
+#include <util/string/cast.h>
+#include <util/string/builder.h>
+#include <util/string/ascii.h>
+
 namespace NKikimr::NBackup {
+
+namespace {
+
+    NJson::TJsonValue SerializeTableChecksum(const TTableChecksum& checksum) {
+        NJson::TJsonMap result;
+        result["version"] = TTableChecksum::Version;
+        if (checksum.Error) {
+            result["error"]["code"] = checksum.Error->Code;
+            result["error"]["message"] = checksum.Error->Message;
+        } else {
+            Y_ENSURE(!checksum.Algorithm.empty(), "table checksum algorithm is empty");
+            result["algorithm"] = checksum.Algorithm;
+            result["count"] = ToString(checksum.Count);
+            result["hash"] = checksum.Hash;
+        }
+        return result;
+    }
+
+    std::optional<TTableChecksum> ParseTableChecksum(const NJson::TJsonValue& value) {
+        Y_ENSURE(value.IsMap(), "table_checksum must be an object");
+        const auto& version = value["version"];
+        Y_ENSURE(version.IsUInteger(), "table_checksum.version must be an unsigned integer");
+        // Unsupported versions may use a different payload layout
+        if (version.GetUIntegerSafe() != TTableChecksum::Version) {
+            return std::nullopt;
+        }
+        if (value.Has("error")) {
+            Y_ENSURE(
+                !value.Has("count") && !value.Has("hash"), "table_checksum cannot contain both a value and an error");
+            const auto& error = value["error"];
+            Y_ENSURE(error.IsMap() && error["code"].IsString() && error["message"].IsString(),
+                "table_checksum.error must contain code and message strings");
+            Y_ENSURE(!error["code"].GetStringSafe().empty() && !error["message"].GetStringSafe().empty(),
+                "table_checksum.error code and message must not be empty");
+            return TTableChecksum{ .Error = TTableChecksum::TError{ .Code = error["code"].GetStringSafe(),
+                                       .Message = error["message"].GetStringSafe() } };
+        }
+        const auto& algorithm = value["algorithm"];
+        Y_ENSURE(algorithm.IsString() && !algorithm.GetStringSafe().empty(),
+            "table_checksum.algorithm must be a nonempty string");
+        const auto& countText = value["count"];
+        Y_ENSURE(countText.IsString(), "table_checksum.count must be a decimal string");
+        const auto& text = countText.GetStringSafe();
+        Y_ENSURE(!text.empty(), "empty table_checksum.count");
+        for (const char c : text) {
+            Y_ENSURE(c >= '0' && c <= '9', "invalid table_checksum.count");
+        }
+        ui64 count;
+        Y_ENSURE(TryFromString(text, count), "table_checksum.count is out of range");
+        const auto& hash = value["hash"];
+        Y_ENSURE(hash.IsString(), "table_checksum.hash must be a hexadecimal string");
+        const auto& hashText = hash.GetStringSafe();
+        Y_ENSURE(!hashText.empty() && hashText.size() % 2 == 0, "invalid table checksum hash length");
+        for (const char c : hashText) {
+            Y_ENSURE(IsAsciiHex(c), "invalid table checksum hash text");
+        }
+        return TTableChecksum{ .Count = count, .Hash = to_upper(hashText), .Algorithm = algorithm.GetStringSafe() };
+    }
+
+} // namespace
+
+TString TTableChecksum::ToString() const {
+    if (Error) {
+        return TStringBuilder() << Error->Code << ": " << Error->Message;
+    }
+    return TStringBuilder() << "algorithm=" << Algorithm << ", count=" << Count << ", hash=" << Hash;
+}
+
+const std::optional<TTableChecksum>& TMetadata::GetTableChecksum() const {
+    return TableChecksum;
+}
+
+TString TMetadata::WithTableChecksum(const TString& metadata, const TTableChecksum& checksum) {
+    NJson::TJsonValue json;
+    Y_ENSURE(NJson::ReadJsonTree(metadata, &json) && json.IsMap(), "invalid table metadata");
+    json["table_checksum"] = SerializeTableChecksum(checksum);
+    return NJson::WriteJson(&json, false);
+}
 
 void TMetadata::AddFullBackup(TFullBackupMetadata::TPtr fb) {
     FullBackups.emplace(fb->SnapshotVts, fb);
@@ -148,10 +230,14 @@ TString TMetadata::Serialize() const {
         m["semaphores"] = std::move(semaphores);
     }
 
+    if (TableChecksum) {
+        m["table_checksum"] = SerializeTableChecksum(*TableChecksum);
+    }
+
     return NJson::WriteJson(&m, false);
 }
 
-TMetadata TMetadata::Deserialize(const TString& metadata) {
+TMetadata TMetadata::Deserialize(const TString& metadata, bool readTableChecksum) {
     NJson::TJsonValue json;
     NJson::ReadJsonTree(metadata, &json);
     const auto& value = json["version"];
@@ -159,6 +245,9 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
     TMetadata result;
     if (json.Has("source_database")) {
         result.SourceDatabase = json["source_database"].GetStringSafe();
+    }
+    if (readTableChecksum && json.Has("table_checksum")) {
+        result.TableChecksum = ParseTableChecksum(json["table_checksum"]);
     }
     if (value.IsUInteger()) {
         result.Version = value.GetUIntegerSafe();

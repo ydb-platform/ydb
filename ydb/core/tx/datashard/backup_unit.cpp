@@ -5,6 +5,7 @@
 #include "export_scan.h"
 #include "export_s3.h"
 
+#include <ydb/core/backup/common/table_checksum_snapshot.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 
 namespace NKikimr {
@@ -12,6 +13,27 @@ namespace NDataShard {
 
 class TBackupUnit : public TBackupRestoreUnitBase<TEvDataShard::TEvCancelBackup> {
     using IBuffer = NExportScan::IBuffer;
+
+    bool IsExportChecksumSnapshot(const TSnapshot* snapshot) const {
+        if (!snapshot || !snapshot->HasFlags(TSnapshot::FlagScheme | TSnapshot::FlagTimeout)) {
+            return false;
+        }
+        const auto owner = NBackup::TTableChecksumSnapshotOwner::Parse(snapshot->Name);
+        return owner && !owner->Importing && owner->SchemeShardId == DataShard.GetCurrentSchemeShardId();
+    }
+
+    bool IsBackupSnapshotReadable(const TSnapshotKey& key, ui32 localTableId, NTable::TDatabase& db) const {
+        const TRowVersion version(key.Step, key.TxId);
+        if (!version.Step || version.Step == Max<ui64>() || !version.TxId) {
+            return false;
+        }
+        const auto& snapshots = DataShard.GetSnapshotManager();
+        if (!snapshots.FindAvailable(key) &&
+            !snapshots.IsSnapshotReadable(db, TTableId(key.OwnerId, key.PathId), version)) {
+            return false;
+        }
+        return !db.GetRemovedRowVersions(localTableId).Contains(version, version.Next());
+    }
 
 protected:
     bool IsRelevant(TActiveTransaction* tx) const override {
@@ -43,6 +65,26 @@ protected:
 
         const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
         Y_ENSURE(txc.DB.GetScheme().GetTableInfo(localTableId));
+
+        const TRowVersion snapshot(backup.GetSnapshotStep(), backup.GetSnapshotTxId());
+        NKikimrSchemeOp::TTableDescription schema;
+        DataShard.GetUserTables().at(tableId)->GetSchema(schema);
+        const TSnapshotKey snapshotKey(DataShard.GetPathOwnerId(), tableId, snapshot.Step, snapshot.TxId);
+        const bool hasChecksumResult = backup.HasTableChecksum() && (backup.GetTableChecksum().HasCount() ||
+                                                                        backup.GetTableChecksum().HasErrorCode());
+        const bool useSnapshot = schema.HasTableChecksumSnapshot() || hasChecksumResult ||
+                                 IsExportChecksumSnapshot(DataShard.GetSnapshotManager().FindAvailable(snapshotKey));
+        if (useSnapshot && !IsBackupSnapshotReadable(snapshotKey, localTableId, txc.DB)) {
+            const TString error = "Retained export snapshot is no longer available on the table copy";
+            auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId());
+            Y_ENSURE(schemeOp);
+            schemeOp->Success = false;
+            schemeOp->Error = error;
+            NIceDb::TNiceDb db(txc.DB);
+            DataShard.PersistSchemeTxResult(db, *schemeOp);
+            Abort(op, ctx, error);
+            return false;
+        }
 
         auto* appData = AppData(ctx);
         const auto& columns = DataShard.GetUserTables().at(tableId)->Columns;
@@ -119,12 +161,15 @@ protected:
             readAheadHi = readAheadHiOverride;
         }
 
-        tx->SetScanTask(DataShard.QueueScan(localTableId, scan.Release(), op->GetTxId(),
-            TScanOptions()
-                .SetResourceBroker(taskName, taskPrio)
-                .SetReadAhead(readAheadLo, readAheadHi)
-                .SetReadPrio(TScanOptions::EReadPrio::Low)
-        ));
+        auto options = TScanOptions()
+                           .SetResourceBroker(taskName, taskPrio)
+                           .SetReadAhead(readAheadLo, readAheadHi)
+                           .SetReadPrio(TScanOptions::EReadPrio::Low);
+        if (useSnapshot) {
+            // The checksum query and the data scan must read the same retained version
+            options.SetSnapshotRowVersion(snapshot);
+        }
+        tx->SetScanTask(DataShard.QueueScan(localTableId, scan.Release(), op->GetTxId(), options));
 
         return true;
     }

@@ -4692,6 +4692,15 @@ void TDataShard::Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& e
     Execute(new TTxDiscardVolatileSnapshot(this, std::move(ev)), ctx);
 }
 
+void TDataShard::Handle(
+    NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev, const TActorContext& ctx) {
+    SnapshotManager.ConfirmChecksumSnapshotOwner(ev->Get()->Record.GetTxId(), ctx.Now());
+}
+
+void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxReleaseChecksumSnapshots(this, ev->Get()->Record.GetTxId()), ctx);
+}
+
 void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
     if (ev->Get()->SourceType == NMemory::TEvConsumerRegister::EventType) {
         // Some embedded runtimes, including tests, have no controller.
@@ -4764,6 +4773,11 @@ void TDataShard::Handle(TEvDataShard::TEvGetS3Upload::TPtr& ev, const TActorCont
 void TDataShard::Handle(TEvDataShard::TEvStoreS3UploadId::TPtr& ev, const TActorContext& ctx)
 {
     Execute(new TTxStoreS3UploadId(this, ev), ctx);
+}
+
+void TDataShard::Handle(TEvDataShard::TEvStoreBackupChecksumRequest::TPtr& ev, const TActorContext& ctx)
+{
+    Execute(new TTxStoreBackupChecksum(this, ev), ctx);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev, const TActorContext& ctx)

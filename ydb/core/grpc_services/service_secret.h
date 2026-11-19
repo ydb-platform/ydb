@@ -9,6 +9,7 @@ class IRequestOpCtx;
 class IFacilityProvider;
 
 void DoDescribeSecretRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoReadSecretRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 
 }
 }

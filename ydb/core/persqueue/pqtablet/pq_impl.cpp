@@ -365,6 +365,21 @@ struct TPersQueue::TReplyToActor {
     TEventBasePtr Event;
 };
 
+<<<<<<< HEAD
+=======
+bool TPersQueue::IsTopicMutateDisabled(const TActorContext& ctx) const {
+    return AppData(ctx)->FeatureFlags.GetEnableSourceTopicMutateRestricted();
+}
+
+bool TPersQueue::IsConsumerOffsetCommitDisabled(const TString& consumerName, const TActorContext& ctx) const {
+    if (!ReplicationEnabled(Config) || AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
+        return false;
+    }
+    const auto* consumer = GetConsumer(Config, consumerName);
+    return !consumer || consumer->GetReplicateOffsets();
+}
+
+>>>>>>> 49acd63de6c (Implement replication of rolled back offsets in source topic (#59550))
 void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error)
 {
     ReplyPersQueueError(
@@ -3062,6 +3077,13 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
+    if (req.HasCmdSetClientOffset()
+        && IsConsumerOffsetCommitDisabled(req.GetCmdSetClientOffset().GetClientId(), ctx)) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                   "Commits for consumer are disabled");
+        return;
+    }
+
     if (IsTopicMutateDisabled(ctx)
         && req.HasCmdSetClientOffset())
     {
@@ -3724,6 +3746,21 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     }
 
     EnsureCanonical(txBody);
+
+    if (txBody.GetImmediate()) {
+        for (const auto& operation : txBody.GetOperations()) {
+            if ((HasKafkaReadCommit(operation)
+                    || (HasTopicReadCommit(operation) && !GetReadOnlyCheckCommitedToFinish(operation)))
+                && IsConsumerOffsetCommitDisabled(GetReadConsumer(operation), ctx)) {
+                SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                           event.GetTxId(),
+                                           NKikimrPQ::TError::BAD_REQUEST,
+                                           "Commits for consumer are disabled",
+                                           ctx);
+                return;
+            }
+        }
+    }
 
     const bool hasDeferredFinalize = HasDeferredPublicationFinalizeOperation(txBody);
     if (hasDeferredFinalize) {
@@ -4824,6 +4861,11 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
         }
 
         if (HasTopicReadCommit(operation)) {
+            if (!GetReadOnlyCheckCommitedToFinish(operation)
+                && IsConsumerOffsetCommitDisabled(GetReadConsumer(operation), ctx)) {
+                forcePredicateFalse = true;
+            }
+
             event->AddOperation(GetReadConsumer(operation),
                                 GetReadCommitOffsetsBegin(operation),
                                 GetReadCommitOffsetsEnd(operation),
@@ -4833,6 +4875,9 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                                 GetReadSessionId(operation));
         }
         if (HasKafkaReadCommit(operation)) {
+            if (IsConsumerOffsetCommitDisabled(GetReadConsumer(operation), ctx)) {
+                forcePredicateFalse = true;
+            }
             Y_VALIDATE(operation.GetRead().GetKafka().HasCommitOffsetsEnd(),
                 "kafka read commit operation without CommitOffsetsEnd");
             event->AddKafkaOffsetCommitOperation(GetReadConsumer(operation), GetReadCommitOffsetsEnd(operation));

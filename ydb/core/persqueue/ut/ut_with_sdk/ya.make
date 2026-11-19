@@ -16,6 +16,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
+    library/cpp/http/simple
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/persqueue/public/mlp/ut/common

@@ -469,6 +469,16 @@ void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, co
             {"logPrefix", NPQ_LOG_PREFIX});
 
         StartInit(ctx);
+    } else if (!ev->Get()->ConsumersToResendOffsets.empty()) {
+        for (const auto& consumer : ev->Get()->ConsumersToResendOffsets) {
+            auto it = ReplicatedOffsetsByConsumers.find(consumer);
+            if (it != ReplicatedOffsetsByConsumers.end()) {
+                // A queued upstream update is newer than the last value sent to the partition.
+                OffsetsByConsumers.try_emplace(consumer, it->second);
+                ReplicatedOffsetsByConsumers.erase(it);
+            }
+        }
+        TryToSendReplicationData(ctx);
     }
 }
 
@@ -804,9 +814,7 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     ctx.Send(TabletActorId, request.Release());
 }
 
-void TMirrorer::AddMessagesToQueue(
-    std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages
-) {
+void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
         if (NYdb::NTopic::IsReplicationServiceMessage(offset, msg.GetMessageMeta()->Fields)) {
@@ -816,8 +824,7 @@ void TMirrorer::AddMessagesToQueue(
                 LOG_D("Received replication data", {"replicationData", replicationData.DebugString()});
 
                 for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
-                    auto& pendingOffset = OffsetsByConsumers[consumer];
-                    pendingOffset = Max(pendingOffset, offset);
+                    OffsetsByConsumers[consumer] = offset;
                 }
             } else {
                 LOG_E("Failed to parse replication service message", {"payloadSize", msg.GetData().size()});

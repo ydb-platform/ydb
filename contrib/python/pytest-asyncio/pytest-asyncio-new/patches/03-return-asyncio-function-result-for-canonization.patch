@@ -1,0 +1,11 @@
+--- contrib/python/pytest-asyncio/pytest-asyncio-new/pytest_asyncio/plugin.py	(index)
++++ contrib/python/pytest-asyncio/pytest-asyncio-new/pytest_asyncio/plugin.py	(working tree)
+@@ -902,7 +902,7 @@
+     @functools.wraps(func)
+     def inner(*args, **kwargs):
+         coro = func(*args, **kwargs)
+-        runner.run(coro, context=context)
++        return runner.run(coro, context=context)
+ 
+     return inner
+ 

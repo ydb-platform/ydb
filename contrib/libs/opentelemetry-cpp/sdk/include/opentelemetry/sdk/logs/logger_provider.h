@@ -45,7 +45,7 @@ public:
           std::make_unique<instrumentationscope::ScopeConfigurator<LoggerConfig>>(
               instrumentationscope::ScopeConfigurator<LoggerConfig>::Builder(
                   LoggerConfig::Default())
-                  .Build())) noexcept;
+                  .Build()));
 
   /**
    * Initialize a new logger provider.
@@ -62,19 +62,19 @@ public:
           std::make_unique<instrumentationscope::ScopeConfigurator<LoggerConfig>>(
               instrumentationscope::ScopeConfigurator<LoggerConfig>::Builder(
                   LoggerConfig::Default())
-                  .Build())) noexcept;
+                  .Build()));
 
   /**
    * Initialize a new logger provider. A processor must later be assigned
    * to this logger provider via the AddProcessor() method.
    */
-  explicit LoggerProvider() noexcept;
+  explicit LoggerProvider();
 
   /**
    * Initialize a new logger provider with a specified context
    * @param context The owned logger configuration/pipeline for this provider.
    */
-  explicit LoggerProvider(std::unique_ptr<LoggerContext> context) noexcept;
+  explicit LoggerProvider(std::unique_ptr<LoggerContext> context);
 
   LoggerProvider(const LoggerProvider &)            = delete;
   LoggerProvider(LoggerProvider &&)                 = delete;
@@ -144,6 +144,11 @@ private:
   std::vector<std::shared_ptr<opentelemetry::sdk::logs::Logger>> loggers_;
   std::shared_ptr<LoggerContext> context_;
   std::mutex lock_;
+  // Allocated during provider construction so GetLogger can return it without allocating.
+  nostd::shared_ptr<opentelemetry::logs::Logger> noop_logger_;
+  // Cleared on the first GetLogger construction failure. Later uncached GetLogger
+  // calls return the preallocated noop without retrying construction.
+  bool initialized_{false};
 };
 }  // namespace logs
 }  // namespace sdk

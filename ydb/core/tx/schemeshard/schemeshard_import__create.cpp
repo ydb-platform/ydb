@@ -282,6 +282,9 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         }
 
         const TPath domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
+        if (domainPath.IsResolved() && Self->IsDatabaseFreezeBlocking(domainPath.Base()->PathId)) {
+            return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for imports");
+        }
         {
             TPath::TChecker checks = domainPath.Check();
             checks
@@ -733,36 +736,117 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
+    // An index of such a type built from the restored data may differ from the source one
+    // (clustering, fulltext segment compaction), so its impl table stays importing and the
+    // replication refuses to attach it.
+    static bool IsBuiltIndexType(NKikimrSchemeOp::EIndexType type) {
+        switch (type) {
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    // Tables that are marked as imported together with the item's table. An impl table is marked
+    // together with its whole index, and the index impl tables are marked by the base table item
+    // only: an impl table alter creates a new index version, and the index schema version must match
+    // every impl table version, so they are all altered in one transaction.
     TVector<TPathId> GetImportItemTablePaths(const TImportInfo& importInfo, ui32 itemIdx) const {
         const auto& item = importInfo.Items.at(itemIdx);
-        TVector<TPathId> result{item.DstPathId};
-        THashSet<TPathId> childTables;
-        for (auto childIdx : item.ChildItems) {
-            childTables.insert(importInfo.Items.at(childIdx).DstPathId);
+        const auto path = TPath::Init(item.DstPathId, Self);
+
+        if (path.Parent().IsTableIndex()) {
+            return {};
         }
 
-        const auto path = TPath::Init(item.DstPathId, Self);
+        // An index restored from the dump was created together with its table, while one built from
+        // the restored data was created by the builder in a separate transaction.
+        const auto tableCreateTxId = path.Base()->CreateTxId;
+
+        TVector<TPathId> result{item.DstPathId};
         for (const auto& [name, indexId] : path.Base()->GetChildren()) {
             const auto index = TPath::Init(indexId, Self);
-            if (index.IsDeleted() || (!index.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)
-                    && !index.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique))) {
+            if (index.IsDeleted() || !index.IsTableIndex({}, false)) {
                 continue;
             }
-            const auto impl = index.Child(NTableIndex::ImplTable);
-            // Materialized indexes finalize through their own items. Built indexes
-            // have no item and finalize together with their source table.
-            if (impl.IsResolved() && !impl.IsDeleted() && !childTables.contains(impl.Base()->PathId)
-                    && Self->Tables.at(impl.Base()->PathId)->IsAsyncReplica()) {
-                result.push_back(impl.Base()->PathId);
+            const auto& indexInfo = Self->Indexes.at(index.Base()->PathId);
+            if (!NTableIndex::HasReplicatedImplTables(indexInfo->Type)) {
+                continue;
+            }
+            const bool builtInImport = index.Base()->CreateTxId != tableCreateTxId;
+            if (IsBuiltIndexType(indexInfo->Type) && builtInImport) {
+                // Its impl tables stay importing, so the replication refuses to attach the index.
+                continue;
+            }
+            for (const auto& implTable : NTableIndex::GetImplTables(indexInfo->Type, indexInfo->IndexKeys)) {
+                const auto impl = index.Child(TString{implTable});
+                if (!impl.IsResolved() || impl.IsDeleted() || !Self->Tables.contains(impl.Base()->PathId)) {
+                    continue;
+                }
+                if (Self->Tables.at(impl.Base()->PathId)->IsAsyncReplica()) {
+                    result.push_back(impl.Base()->PathId);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    TVector<TPathId> GetImportItemTablesToFinalize(const TImportInfo& importInfo, ui32 itemIdx) const {
+        TVector<TPathId> result;
+        for (const auto& pathId : GetImportItemTablePaths(importInfo, itemIdx)) {
+            if (!TPath::Init(pathId, Self).IsUnderOperation() &&
+                Self->Tables.at(pathId)->ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING) {
+                result.push_back(pathId);
             }
         }
         return result;
     }
 
+    static bool AreChildItemsDone(const TImportInfo& importInfo, const TImportInfo::TItem& item) {
+        return AllOf(item.ChildItems, [&](ui32 childIdx) {
+            return childIdx < importInfo.Items.size()
+                && importInfo.Items.at(childIdx).State == EState::Done;
+        });
+    }
+
+    void FinishFinalizeImport(TImportInfo& importInfo, ui32 itemIdx, NIceDb::TNiceDb& db) {
+        auto& item = importInfo.Items.at(itemIdx);
+        if (item.ReplicationConfig) {
+            item.ReplicationConfig->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+        }
+        item.State = EState::Done;
+        Self->PersistImportItemState(db, importInfo, itemIdx);
+    }
+
+    // A child item has been imported, so its base table may be ready to finalize now.
+    void KickParentFinalize(TImportInfo& importInfo, ui32 itemIdx) {
+        for (ui32 parentIdx : xrange(importInfo.Items.size())) {
+            const auto& parent = importInfo.Items.at(parentIdx);
+            if (parentIdx == itemIdx || parent.State != EState::FinalizeImport
+                || parent.WaitTxId != InvalidTxId
+                || !AreChildItemsDone(importInfo, parent))
+            {
+                continue;
+            }
+            if (std::find(parent.ChildItems.begin(), parent.ChildItems.end(), itemIdx) != parent.ChildItems.end()) {
+                AllocateTxId(importInfo, parentIdx);
+            }
+        }
+    }
+
     void FinalizeImport(TImportInfo& importInfo, ui32 itemIdx, TTxId txId) {
         auto& item = importInfo.Items.at(itemIdx);
         auto propose = MakeModifySchemeTransaction(Self, txId, importInfo);
-        for (const auto& pathId : GetImportItemTablePaths(importInfo, itemIdx)) {
+        for (const auto& pathId : GetImportItemTablesToFinalize(importInfo, itemIdx)) {
             const auto& table = Self->Tables.at(pathId);
             auto& tx = *propose->Record.AddTransaction();
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
@@ -780,12 +864,19 @@ private:
     void FinishImportItem(TImportInfo& importInfo, ui32 itemIdx) {
         auto& item = importInfo.Items.at(itemIdx);
         // An unspecified store type denotes a row table, just as in CreateTablePropose.
-        if (item.Table && item.Table->store_type() != Ydb::Table::STORE_TYPE_COLUMN
-                && Self->Tables.at(item.DstPathId)->IsImportingReplica()) {
-            item.State = EState::FinalizeImport;
-            AllocateTxId(importInfo, itemIdx);
-        } else {
+        if (!item.Table || item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN ||
+            !Self->Tables.at(item.DstPathId)->IsImportingReplica())
+        {
             item.State = EState::Done;
+        } else if (TPath::Init(item.DstPathId, Self).Parent().IsTableIndex()) {
+            // Index impl tables are marked together with their base table: it waits for all of them.
+            item.State = EState::Done;
+        } else {
+            item.State = EState::FinalizeImport;
+            // The whole table is marked only when all its impl tables have been imported.
+            if (AreChildItemsDone(importInfo, item)) {
+                AllocateTxId(importInfo, itemIdx);
+            }
         }
     }
 
@@ -1431,6 +1522,17 @@ private:
                 break;
             }
         }
+
+        // An item resumed after a restart may be finished already (e.g. its finalization was
+        // applied before the restart), so the import may be done without any notification.
+        if (importInfo->State == EState::Waiting && AllDone(CountItemsByState(importInfo->Items))) {
+            importInfo->State = EState::Done;
+            importInfo->EndTime = TAppData::TimeProvider->Now();
+
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistImportState(db, *importInfo);
+            SendNotificationsIfFinished(importInfo);
+        }
     }
 
     void Resume(TImportInfo::TPtr importInfo, ui32 itemIdx, TTransactionContext& txc, const TActorContext& ctx) {
@@ -1469,6 +1571,17 @@ private:
                 case EState::CreateChangefeed:
                 case EState::FinalizeImport:
                     if (item.WaitTxId == InvalidTxId) {
+                        if (item.State == EState::FinalizeImport) {
+                            // Nothing to mark (already done by a retry) or the impl tables are still
+                            // being imported: the base table is finalized once all of them are done.
+                            if (GetImportItemTablesToFinalize(*importInfo, itemIdx).empty()) {
+                                FinishFinalizeImport(*importInfo, itemIdx, db);
+                                break;
+                            }
+                            if (!AreChildItemsDone(*importInfo, item)) {
+                                break;
+                            }
+                        }
                         if (!IsCreatedByQuery(item) || item.PreparedCreationQuery) {
                             AllocateTxId(*importInfo, itemIdx);
                         } else {
@@ -2309,10 +2422,7 @@ private:
                         == NKikimrSchemeOp::TTableReplicationConfig::IMPORTED;
             });
             if (imported) {
-                if (item.ReplicationConfig) {
-                    item.ReplicationConfig->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
-                }
-                item.State = EState::Done;
+                FinishFinalizeImport(*importInfo, itemIdx, db);
             } else {
                 AllocateTxId(*importInfo, itemIdx);
             }
@@ -2412,6 +2522,11 @@ private:
 
         default:
             return SendNotificationsIfFinished(importInfo);
+        }
+
+        if (item.State == EState::Done) {
+            // The base table is marked as imported only when all its impl tables are imported.
+            KickParentFinalize(*importInfo, itemIdx);
         }
 
         const auto stateCounts = CountItemsByState(importInfo->Items);

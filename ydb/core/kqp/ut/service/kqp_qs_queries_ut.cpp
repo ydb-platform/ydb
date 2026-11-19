@@ -2646,7 +2646,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
 
-            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:17: Error: At function: KiReadTable!\n        <main>:2:17: Error: Cannot find table 'db.[/Root/.sys/show_create]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions., code: 2003\n",
+            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:31: Error: At function: KiReadTable!\n        <main>:2:31: Error: Cannot find table 'db.[/Root/.sys/show_create]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions., code: 2003\n",
                 result.GetIssues().ToString());
         }
 
@@ -2656,7 +2656,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
 
-            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:17: Error: At function: KiReadTable!\n        <main>:2:17: Error: Cannot find table 'db.[/Root/.sys/show_create]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions., code: 2003\n",
+            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:31: Error: At function: KiReadTable!\n        <main>:2:31: Error: Cannot find table 'db.[/Root/.sys/show_create]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions., code: 2003\n",
                 result.GetIssues().ToString());
         }
 
@@ -2826,42 +2826,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             );
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-    }
-
-    Y_UNIT_TEST(DdlExecuteScript) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetEnableScriptExecutionOperations(true);
-
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetQueryClient();
-
-        const TString sql = R"sql(
-            CREATE TABLE TestDdlExecuteScript (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            );
-        )sql";
-
-        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-        UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
-
-        NYdb::NOperation::TOperationClient client(kikimr.GetDriver());
-        TMaybe<NYdb::NQuery::TScriptExecutionOperation> readyOp;
-        while (true) {
-            auto op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(scriptExecutionOperation.Id()).GetValueSync();
-            if (op.Ready()) {
-                readyOp = std::move(op);
-                break;
-            }
-            UNIT_ASSERT_C(op.Status().IsSuccess(), TStringBuilder() << op.Status().GetStatus() << ":" << op.Status().GetIssues().ToString());
-            Sleep(TDuration::MilliSeconds(10));
-        }
-        UNIT_ASSERT_C(readyOp->Status().IsSuccess(), readyOp->Status().GetIssues().ToString());
-        UNIT_ASSERT_EQUAL_C(readyOp->Metadata().ExecStatus, EExecStatus::Completed, readyOp->Status().GetIssues().ToString());
     }
 
     Y_UNIT_TEST(DdlMixedDml) {

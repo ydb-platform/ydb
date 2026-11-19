@@ -170,7 +170,7 @@ def mangle(name):
     return ''.join('{}{}'.format(len(s), s) for s in name.split('.'))
 
 
-def parse_pyx_includes(filename, path, source_root, seen=None, py3=True, root_relative=False):
+def parse_pyx_includes(filename, path, source_root, seen=None, py3=True, root_relative=False, resource_cython=False):
     """
     Yields (root relative name, path) of the files textually included into the cython source.
     Arcadia root relative includes belong to another module and are yielded only on root_relative demand.
@@ -204,26 +204,42 @@ def parse_pyx_includes(filename, path, source_root, seen=None, py3=True, root_re
             incname, incpath = normpath(file_dirname, incfile), normpath(path_dirname, incfile)
             yield (incname, incpath)
             # search for includes in the included files
-            for e in parse_pyx_includes(incname, incpath, source_root, seen, py3, root_relative):
-                yield e
-        else:
-            # There might be arcadia root or cython relative include.
-            # Don't treat such file as missing, because there must be PEERDIR on py_library
-            # which contains it.
-            cython_dir = "/contrib/tools/cython/" if py3 else "/contrib/tools/cython_py2/"
-            for base_dir in [
+            for e in parse_pyx_includes(
+                incname,
+                incpath,
                 source_root,
-                source_root + cython_dir + "Cython/Includes",
-            ]:
+                seen,
+                py3=py3,
+                root_relative=root_relative,
+                resource_cython=resource_cython,
+            ):
+                yield e
+        elif root_relative or not resource_cython:
+            # Root-relative textual includes belong to another project module.
+            # Only legacy mode validates files from the source compiler inventory.
+            include_dirs = [source_root]
+            if not resource_cython:
+                cython_dir = "/contrib/tools/cython/" if py3 else "/contrib/tools/cython_py2/"
+                include_dirs.append(source_root + cython_dir + "Cython/Includes")
+            for base_dir in include_dirs:
                 if os.path.exists(normpath(base_dir, incfile)):
                     if root_relative and base_dir == source_root:
                         incname, incpath = os.path.normpath(incfile), '${ARCADIA_ROOT}/' + incfile
                         yield (incname, incpath)
-                        for e in parse_pyx_includes(incname, incpath, source_root, seen, py3, root_relative):
+                        for e in parse_pyx_includes(
+                            incname,
+                            incpath,
+                            source_root,
+                            seen,
+                            py3=py3,
+                            root_relative=root_relative,
+                            resource_cython=resource_cython,
+                        ):
                             yield e
                     break
             else:
-                ymake.report_configure_error("'{}' includes missing file: {} ({})".format(path, incfile, abs_path))
+                if not resource_cython:
+                    ymake.report_configure_error("'{}' includes missing file: {} ({})".format(path, incfile, abs_path))
 
 
 def has_pyx(args):
@@ -244,7 +260,14 @@ def is_cython_coverage_enabled(unit, pyxs, py3):
         filename = rootrel_arc_src(path, unit)
         if coverage.should_be_covered(unit, filters, filename):
             return True
-        for include, _ in parse_pyx_includes(filename, path, source_root, None, py3, root_relative=True):
+        for include, _ in parse_pyx_includes(
+            filename,
+            path,
+            source_root,
+            py3=py3,
+            root_relative=True,
+            resource_cython=unit.get('_USE_RESOURCE_CYTHON') == 'yes',
+        ):
             if coverage.should_be_covered(unit, filters, include):
                 return True
     return False
@@ -579,7 +602,13 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
                 else:
                     cpp_files2res.add((filename + with_ext + out_suffix, path + with_ext + out_suffix))
                 # used includes
-                for entry in parse_pyx_includes(filename, path, unit.resolve('$S'), None, py3):
+                for entry in parse_pyx_includes(
+                    filename,
+                    path,
+                    unit.resolve('$S'),
+                    py3=py3,
+                    resource_cython=unit.get('_USE_RESOURCE_CYTHON') == 'yes',
+                ):
                     py_files2res.add(entry)
                     include_arc_rel = entry[0]
                     include_map[filename].add(include_arc_rel)

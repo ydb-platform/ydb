@@ -34,6 +34,11 @@ public:
         YDB_LOG_DEBUG("Complete",
             {"configured", Self->CdcAggregatorStream.has_value()});
 
+        if (Self->CdcAggregatorStream) {
+            if (const auto& currentHeartbeat = Self->CdcAggregatorStream->GetCurrentHeartbeat()) {
+                Self->BroadcastHeartbeat(*currentHeartbeat, ctx);
+            }
+        }
         Self->SwitchToWork(ctx);
     }
 };

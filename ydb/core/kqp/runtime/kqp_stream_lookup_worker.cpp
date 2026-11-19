@@ -3,7 +3,7 @@
 #include "kqp_vector_index_levels_cache.h"
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
-#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/mkql/type_info.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/range_ops.h>

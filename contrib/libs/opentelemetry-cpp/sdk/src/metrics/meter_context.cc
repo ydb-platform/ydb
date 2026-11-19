@@ -94,7 +94,7 @@ MeterContext::MeterContext(
     ,
     ExemplarFilterType exemplar_filter_type
 #endif
-    ) noexcept
+    )
     : resource_{resource},
       views_(std::move(views)),
       sdk_start_ts_{std::chrono::system_clock::now()},
@@ -119,6 +119,19 @@ const instrumentationscope::ScopeConfigurator<MeterConfig> &MeterContext::GetMet
     const noexcept
 {
   return *meter_configurator_;
+}
+
+void MeterContext::SetMeterConfigurator(
+    std::unique_ptr<instrumentationscope::ScopeConfigurator<MeterConfig>>
+        meter_configurator) noexcept
+{
+  if (!meter_configurator)
+  {
+    OTEL_INTERNAL_LOG_ERROR(
+        "[MeterContext::SetMeterConfigurator] meter_configurator must not be null, ignoring.");
+    return;
+  }
+  meter_configurator_ = std::move(meter_configurator);
 }
 
 bool MeterContext::ForEachMeter(

@@ -36,23 +36,6 @@ def kikimr():
 
 
 class TestMapping(TestYdsBase):
-    def test_mapping(self, kikimr):
-        sql = R'''
-            select 101;
-        '''
-        a_client = FederatedQueryClient("a_folder@a_cloud", streaming_over_kikimr=kikimr)
-        b_client = FederatedQueryClient("b_folder@b_cloud", streaming_over_kikimr=kikimr)
-        a_query_id = a_client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        a_client.wait_query_status(a_query_id, fq.QueryMeta.COMPLETED)
-        kikimr.tenants["/alpha"].stop()
-        a_query_id = a_client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        for _ in range(10):
-            b_query_id = b_client.create_query("b", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-            b_client.wait_query_status(b_query_id, fq.QueryMeta.COMPLETED)
-        assert a_client.describe_query(a_query_id).result.query.meta.status == fq.QueryMeta.STARTING
-        kikimr.tenants["/alpha"].start()
-        a_client.wait_query_status(a_query_id, fq.QueryMeta.COMPLETED)
-
     def test_idle(self, kikimr):
         sql = "select 107"
         a_client = FederatedQueryClient("a_folder@a_cloud", streaming_over_kikimr=kikimr)
@@ -164,62 +147,3 @@ class TestMapping(TestYdsBase):
         assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(1, "DQ_COMPUTE_ACTOR") == 0))
         c_client.abort_query(query_id)
         c_client.wait_query(query_id)
-
-    def test_mapping_with_row_dispatcher(self, kikimr):
-        self.init_topics("test_mapping_with_rd1", create_output=False)
-        sql = R'''SELECT Data FROM yds1.`{input_topic}` LIMIT 1'''.format(input_topic=self.input_topic)
-
-        b_client = FederatedQueryClient("b_folder@b_cloud", streaming_over_kikimr=kikimr)
-        b_client.create_yds_connection(
-            "yds1", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        query_id = b_client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        kikimr.tenants["/beta"].wait_completed_checkpoints(
-            query_id, kikimr.tenants["/beta"].get_completed_checkpoints(query_id) + 2
-        )
-        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(1, "YQ_RUN_ACTOR") == 1))
-        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(1, "DQ_COMPUTE_ACTOR") > 0))
-        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(1, "FQ_ROW_DISPATCHER_SESSION") > 0))
-        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(2, "DQ_COMPUTE_ACTOR") == 0))
-        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(2, "FQ_ROW_DISPATCHER_SESSION") == 0))
-        b_client.abort_query(query_id)
-        b_client.wait_query(query_id)
-
-        c_client = FederatedQueryClient("c_folder@c_cloud", streaming_over_kikimr=kikimr)
-        self.init_topics("test_mapping_with_rd2", create_output=False)
-        sql = R'''SELECT Data FROM yds2.`{input_topic}` LIMIT 1'''.format(input_topic=self.input_topic)
-        c_client.create_yds_connection(
-            "yds2", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        query_id = c_client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        kikimr.tenants["/beta"].wait_completed_checkpoints(
-            query_id, kikimr.tenants["/beta"].get_completed_checkpoints(query_id) + 2
-        )
-        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(2, "YQ_RUN_ACTOR") == 1))
-        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(2, "DQ_COMPUTE_ACTOR") > 0))
-        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(2, "FQ_ROW_DISPATCHER_SESSION") > 0))
-        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(1, "DQ_COMPUTE_ACTOR") == 0))
-        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(1, "FQ_ROW_DISPATCHER_SESSION") == 0))
-        c_client.abort_query(query_id)
-        c_client.wait_query(query_id)
-
-        self.init_topics("test_mapping_with_rd3", create_output=False)
-        sql = R'''SELECT Data FROM yds3.`{input_topic}` LIMIT 1'''.format(input_topic=self.input_topic)
-        d_client = FederatedQueryClient("d_folder@d_cloud", streaming_over_kikimr=kikimr)
-        d_client.create_yds_connection(
-            "yds3", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        query_id = d_client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        kikimr.tenants["/beta"].wait_completed_checkpoints(
-            query_id, kikimr.tenants["/beta"].get_completed_checkpoints(query_id) + 2
-        )
-        assert self.wait_until(
-            lambda: kikimr.tenants["/beta"].get_actor_count(1, "YQ_RUN_ACTOR") == 1
-            or kikimr.tenants["/beta"].get_actor_count(2, "YQ_RUN_ACTOR") == 1
-        )
-        assert self.wait_until(
-            lambda: kikimr.tenants["/beta"].get_actor_count(1, "FQ_ROW_DISPATCHER_SESSION") == 1
-            or kikimr.tenants["/beta"].get_actor_count(2, "FQ_ROW_DISPATCHER_SESSION") == 1
-        )
-        d_client.abort_query(query_id)
-        d_client.wait_query(query_id)

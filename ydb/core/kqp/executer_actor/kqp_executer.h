@@ -1,12 +1,15 @@
 #pragma once
 
+#include <ydb/core/kqp/common/simple/tx_request.h>
+#include <ydb/core/kqp/common/events/stream.h>
+
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
-#include <ydb/core/kqp/common/kqp_current_query_stats.h>
+#include <ydb/core/kqp/common/simple/current_query_stats.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/kqp/common/buffer/events.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/executer_actor/kqp_partition_helper.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver_events.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
@@ -30,8 +33,7 @@ struct TEvKqpExecuter {
         {}
     };
 
-    struct TEvTxRequest : public TEventPB<TEvTxRequest, NKikimrKqp::TEvExecuterTxRequest,
-        TKqpExecuterEvents::EvTxRequest> {};
+    using TEvTxRequest = TEvKqpExecuterTxRequest;
 
     struct TEvTxResponse : public TEventLocal<TEvTxResponse, TKqpExecuterEvents::EvTxResponse> {
         NKikimrKqp::TEvExecuterTxResponse Record;
@@ -97,34 +99,9 @@ struct TEvKqpExecuter {
         }
     };
 
-    struct TEvStreamData : public TEventPBWithArena<TEvStreamData, NKikimrKqp::TEvExecuterStreamData, TKqpExecuterEvents::EvStreamData> {
-        using TBaseEv = TEventPBWithArena<TEvStreamData, NKikimrKqp::TEvExecuterStreamData, TKqpExecuterEvents::EvStreamData>;
-        using TBaseEv::TEventPBBase;
-
-        TEvStreamData() = default;
-        explicit TEvStreamData(TIntrusivePtr<NActors::TProtoArenaHolder> arena)
-            : TEventPBBase(std::move(arena))
-        {}
-    };
-
-    struct TEvStreamDataAck : public TEventPB<TEvStreamDataAck, NKikimrKqp::TEvExecuterStreamDataAck,
-        TKqpExecuterEvents::EvStreamDataAck>
-    {
-        friend class TEventPBBase;
-        explicit TEvStreamDataAck(ui64 seqno, ui64 channelId)
-        {
-            Record.SetSeqNo(seqno);
-            Record.SetChannelId(channelId);
-        }
-
-    private:
-        // using a little hack to hide default empty constructor
-        TEvStreamDataAck() = default;
-    };
-
-    // deprecated event, remove in the future releases.
-    struct TEvExecuterProgress : public TEventPB<TEvExecuterProgress, NKikimrKqp::TEvExecuterProgress,
-            TKqpExecuterEvents::EvProgress> {};
+    using TEvStreamData = TEvKqpExecuterStreamData;
+    using TEvStreamDataAck = TEvKqpExecuterStreamDataAck;
+    using TEvExecuterProgress = TEvKqpExecuterProgress;
 
     struct TEvTableResolveStatus : public TEventLocal<TEvTableResolveStatus,
         TKqpExecuterEvents::EvTableResolveStatus>

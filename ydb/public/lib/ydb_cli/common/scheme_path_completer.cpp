@@ -202,9 +202,9 @@ void RunSchemeCompletion(
     if (root && TStringBuf(root).StartsWith('/')) {
         listPath = TString(root);
     } else if (root) {
-        listPath = database + "/" + root;
+        listPath = database.empty() || database.StartsWith('/') ? database + "/" + root : TString(root);
     } else {
-        listPath = database;
+        listPath = !database.empty() && !database.StartsWith('/') ? TString(".") : database;
     }
 
     auto settings = NScheme::TListDirectorySettings();

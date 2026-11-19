@@ -96,7 +96,8 @@ namespace {
         for (const auto& table : ret.Entries) {
             TStringBuilder dstPathBuilder;
             if (dstPath) { // It is not recommended to use this path for encrypted exports, because it shows real database structure in S3
-                dstPathBuilder << dstPath << TStringBuf(table.Name).RNextTok(srcPath);
+                Y_ENSURE(TStringBuf(table.Name).StartsWith(srcPath));
+                dstPathBuilder << dstPath << TStringBuf(table.Name).SubStr(srcPath.size());
             }
             result.emplace_back(table.Name, dstPathBuilder);
         }
@@ -361,7 +362,9 @@ void TCommandExportBase::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
 
     for (auto& item : Items) {
-        if (CommonSourcePath && item.Source && item.Source[0] != '/') {
+        if (CommonSourcePath && item.Source && item.Source[0] != '/'
+            && (config.Database.empty() || config.Database.StartsWith('/')
+                || !CommonDestinationPrefix || !ExclusionPatterns.empty())) {
             item.Source = CommonSourcePath + "/" + item.Source;
         }
         NConsoleClient::AdjustPath(item.Source, config);
@@ -444,7 +447,8 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     const bool expandItems = (!CommonDestinationPrefix || !ExclusionPatterns.empty());
     if (expandItems && settings.Item_.empty()) {
         constexpr bool isFs = std::is_same_v<TSettings, NExport::TExportToFsSettings>;
-        settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
+        const TString rootPath = !config.Database.empty() && !config.Database.StartsWith('/') ? TString(".") : config.Database;
+        settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : rootPath, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
     }
 
     const auto driver = CreateDriver(config);
@@ -459,6 +463,20 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
 
     if (expandItems) {
         ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
+        if (!config.Database.empty() && !config.Database.StartsWith('/')
+            && CommonSourcePath && !CommonSourcePath.StartsWith('/')) {
+            TStringBuf sourceRoot(CommonSourcePath);
+            while (sourceRoot.ChopSuffix("/")) {
+            }
+            for (auto& item : settings.Item_) {
+                TStringBuf source(item.Src);
+                if (source.SkipPrefix(sourceRoot) && (source.empty() || source.StartsWith('/'))) {
+                    while (source.SkipPrefix("/")) {
+                    }
+                    item.Src = source.empty() ? TString(".") : TString(source);
+                }
+            }
+        }
         if (settings.Item_.empty()) {
             if (!ExclusionPatterns.empty()) {
                 Cerr << "No items to export after applying exclude filters" << Endl;

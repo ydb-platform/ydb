@@ -45,6 +45,9 @@ namespace NConsoleClient {
     }
 
     void AdjustPath(TString& path, const TClientCommand::TConfig& config) {
+        if (!config.Database.empty() && !config.Database.StartsWith('/')) {
+            return;
+        }
         if (path.StartsWith('/')) {
             if (!path.StartsWith(config.Database)) {
                 throw TMisuseException() << "Provided path \"" << path << "\" starts with '/'. "

@@ -1,3 +1,4 @@
+* When the database path is relative, the YDB CLI passes resource paths to the server without prepending the database.
 * Cluster administration commands that allow omitting `--database` now reject tenant paths. Specify a root domain such as `/Root`, or omit the connection database.
 * `ydb scheme rmdir --recursive` now removes objects in parallel. Added `--in-flight` option to set the maximum number of objects removed at the same time (default: 16).
 * Workload imports with `--file-output-path` now skip database post-import actions such as index building and statistics collection.

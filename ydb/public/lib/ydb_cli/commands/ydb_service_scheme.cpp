@@ -3,6 +3,7 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 #include <ydb/public/lib/ydb_cli/common/describe.h>
+#include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
@@ -82,6 +83,9 @@ void TCommandRemoveDirectory::Config(TConfig& config) {
 void TCommandRemoveDirectory::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
+    if (Path.StartsWith('/') && NConsoleClient::NormalizePath(Path).empty()) {
+        throw TMisuseException() << "Cannot remove the cluster root";
+    }
     if (InFlight == 0) {
         throw TMisuseException() << "--in-flight must be greater than 0";
     }

@@ -52,7 +52,7 @@ struct TTestContext : public TBaseProviderContext {
 };
 
 template <typename TProviderContext = TTestContext>
-std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimizerNode>& root, const TOptimizerHints& hints = {}, bool shuffleElimination = false) {
+std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimizerNode>& root, const TOptimizerHints& hints = {}, bool shuffleElimination = false, bool completeNonInnerConditions = true) {
     auto ctx = TProviderContext();
     NYql::TExprContext dummyCtx;
 
@@ -75,6 +75,7 @@ std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimiz
         }
     }
     TCBOSettings settings{};
+    settings.EnableNonInnerJoinConditionCompletion = completeNonInnerConditions;
     auto optimizer =
         std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, settings, dummyCtx, shuffleElimination, orderings));
 
@@ -643,6 +644,21 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
             auto inner = std::static_pointer_cast<TJoinOptimizerNode>(root->LeftArg);
             UNIT_ASSERT_VALUES_EQUAL(inner->RightArg->Labels().front(), "A");
             UNIT_ASSERT_VALUES_EQUAL(inner->LeftArg->Labels().size(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(ConditionCompletionIsOptInForNewRbo) {
+        for (bool shuffle : {false, true}) {
+            auto makeQuery = [] {
+                return Join(LeftJoin("A", "B", "A.k=B.a"), "C", "A.k=C.a,B.x=C.x");
+            };
+            const auto hints = TOptimizerHints::Parse("JoinOrder((A C) B)");
+            auto legacy = std::static_pointer_cast<TJoinOptimizerNode>(Enumerate(makeQuery(), hints, shuffle, false));
+            auto newRbo = std::static_pointer_cast<TJoinOptimizerNode>(Enumerate(makeQuery(), hints, shuffle, true));
+            // Legacy CBO retains its original ON-key completion; only NewRBO
+            // restores the displaced equality after null extension.
+            UNIT_ASSERT(legacy->PostJoinConditions.empty());
+            UNIT_ASSERT(!newRbo->PostJoinConditions.empty());
         }
     }
 

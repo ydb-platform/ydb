@@ -35,7 +35,7 @@ class TKqpOlapCompileContext {
 public:
     TKqpOlapCompileContext(const TCoArgument& row, const TKikimrTableMetadata& tableMeta,
         NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames,
-        TExprContext &exprCtx, TTypeAnnotationContext& typesCtx)
+        TExprContext &exprCtx, TTypeAnnotationContext& typesCtx, bool newRboEnabled)
         : Row(row)
         , MaxColumnId(0)
         , ReadProto(readProto)
@@ -44,6 +44,7 @@ public:
         , TypesCtx(typesCtx)
         , YqlKernelsFuncRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone())
         , YqlKernelRequestBuilder(nullptr)
+        , NewRboEnabled(newRboEnabled)
     {
         NKikimr::NMiniKQL::FillStaticModules(*YqlKernelsFuncRegistry);
         YqlKernelRequestBuilder = std::make_unique<TKernelRequestBuilder>(*YqlKernelsFuncRegistry);
@@ -262,6 +263,8 @@ public:
         KqpColumnNameToProjectionId.emplace(columnName, id);
     }
 
+    bool IsNewRboEnabled() const { return NewRboEnabled; }
+
     bool GetProjectionKernelIdForColumn(const std::string &columnName, ui32 &id) {
         if (KqpColumnNameToProjectionId.contains(columnName)) {
             id = KqpColumnNameToProjectionId[columnName];
@@ -292,6 +295,7 @@ private:
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> YqlKernelsFuncRegistry;
     std::unique_ptr<TKernelRequestBuilder> YqlKernelRequestBuilder;
     THashMap<std::string, ui32> KqpColumnNameToProjectionId;
+    const bool NewRboEnabled;
 };
 
 std::unordered_map<std::string, EAggFunctionType> TKqpOlapCompileContext::AggFuncTypesMap = {
@@ -1016,7 +1020,7 @@ std::vector<TAggColInfo> CollectAggregationInfos(const TKqpOlapAgg& aggNode, TKq
         auto opType = aggKqp.Type().StringValue();
         if (opType != "count" || (opType == "count" && colInfo.BaseColName != "*")) {
             ui32 projectionId;
-            if (ctx.GetProjectionKernelIdForColumn(colInfo.BaseColName, projectionId)) {
+            if (ctx.IsNewRboEnabled() && ctx.GetProjectionKernelIdForColumn(colInfo.BaseColName, projectionId)) {
                 colInfo.BaseColId = projectionId;
             } else {
                 colInfo.BaseColId = GetOrCreateColumnId(aggKqp.Column(), ctx);
@@ -1236,11 +1240,11 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
 
 void CompileOlapProgram(const TCoLambda& lambda, const TKikimrTableMetadata& tableMeta,
     NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames,
-    TExprContext &exprCtx, TTypeAnnotationContext& typesCtx)
+    TExprContext &exprCtx, TTypeAnnotationContext& typesCtx, bool newRboEnabled)
 {
     YQL_ENSURE(lambda.Args().Size() == 1);
 
-    TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx, typesCtx);
+    TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx, typesCtx, newRboEnabled);
 
     CompileOlapProgramImpl(lambda.Body(), ctx);
     CompileFinalProjection(ctx);

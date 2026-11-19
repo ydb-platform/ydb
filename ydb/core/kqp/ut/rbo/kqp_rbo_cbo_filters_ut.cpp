@@ -7,8 +7,8 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpRboCboFilters) {
-    Y_UNIT_TEST(RestoresPredicatesInBothOptimizers) {
-        for (bool newRbo : {false, true}) {
+    Y_UNIT_TEST(RestoresPredicatesInNewRbo) {
+        for (bool newRbo : {true}) {
             NKikimrConfig::TAppConfig config;
             config.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
             config.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);

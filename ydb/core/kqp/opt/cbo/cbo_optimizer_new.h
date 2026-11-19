@@ -424,6 +424,8 @@ struct TCBOSettings {
     ui32 CBOTimeout = 1'000ULL; // 1s
     ui32 CBOHardTimeout = UINT32_MAX; // disabled by default
     ui32 ShuffleEliminationJoinNumCutoff = 14;
+    // Backport: keep legacy CBO behavior unless called by NewRBO.
+    bool EnableNonInnerJoinConditionCompletion = false;
 };
 
 class IOptimizerFactory: private TNonCopyable {

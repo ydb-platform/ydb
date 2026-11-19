@@ -566,7 +566,7 @@ std::vector<std::string> GetResultColumnNames(const NKikimr::NMiniKQL::TType* re
 template <class T>
 void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResultType,
     const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyOpReadOlapRanges& readProto, TExprContext &ctx,
-    TTypeAnnotationContext& typesCtx)
+    TTypeAnnotationContext& typesCtx, bool newRboEnabled)
 {
     if (NYql::HasSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames)) {
         auto groupByKeys = NYql::GetSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames);
@@ -578,7 +578,7 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
         }
     }
     auto resultColNames = GetResultColumnNames(miniKqlResultType);
-    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx, typesCtx);
+    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx, typesCtx, newRboEnabled);
 }
 
 THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& secretNames) {
@@ -1040,7 +1040,7 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
+                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx, Config->GetEnableNewRBO());
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
             } else if (auto maybeReadBlockTableRanges = node.Maybe<TKqpBlockReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadBlockTableRanges.Cast();
@@ -1053,7 +1053,7 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
+                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx, Config->GetEnableNewRBO());
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
             } else if (auto maybeDqSourceWrapBase = node.Maybe<TDqSourceWrapBase>()) {

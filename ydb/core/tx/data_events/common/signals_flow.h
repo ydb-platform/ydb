@@ -6,8 +6,6 @@ namespace NKikimr::NEvWrite {
 
 enum class EWriteStage {
     Created = 0,
-    Queued,
-    Started,
     BuildBatch,
     WaitFlush,
     SlicesConstruction,

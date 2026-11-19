@@ -75,9 +75,8 @@ TConfig ParseConfig(const TString& yaml) {
     if (root["alter_concurrency"]) {
         result.AlterConcurrency = Integer(root["alter_concurrency"], "alter_concurrency");
     }
-    // The executor uses signed worker indices.
-    Y_ENSURE(result.CreateConcurrency <= std::numeric_limits<int>::max()
-        && result.AlterConcurrency <= std::numeric_limits<int>::max(), "Concurrency exceeds the executor limit");
+    Y_ENSURE(ui64(result.CreateConcurrency) + result.AlterConcurrency <= MAX_IN_FLIGHT_OPERATIONS,
+        "create_concurrency + alter_concurrency must not exceed " << MAX_IN_FLIGHT_OPERATIONS);
     if (root["tables"]) {
         result.Tables = ParseGroup(root["tables"], "tables");
     }

@@ -6,6 +6,8 @@
 
 namespace NYdbWorkload::NScheme {
 
+inline constexpr ui32 MAX_IN_FLIGHT_OPERATIONS = 256;
+
 enum class EObjectType { Table, Topic };
 
 struct TGroupConfig {

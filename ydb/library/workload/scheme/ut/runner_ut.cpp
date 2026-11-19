@@ -4,8 +4,10 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
+#include <util/system/event.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -19,7 +21,7 @@ class TClient final : public IClient {
 public:
     void PrepareDirectory(const TString&) override { ++Directories; }
 
-    void Create(const TObject& object) override {
+    NThreading::TFuture<void> Create(const TObject& object) override {
         Enter(object, true);
         Y_DEFER { Leave(object, true); };
         if (BeforeCreate) {
@@ -30,9 +32,10 @@ public:
         Y_ENSURE(!Present.contains(object.Path), "Duplicate create");
         Present[object.Path] = false;
         ++Creates;
+        return NThreading::MakeFuture();
     }
 
-    EObjectState Inspect(const TObject& object) override {
+    NThreading::TFuture<EObjectState> Inspect(const TObject& object) override {
         if (BeforeInspect) {
             BeforeInspect(object);
         }
@@ -40,12 +43,12 @@ public:
         ++Inspects;
         Y_ENSURE(object.Path != InvalidPath, "Invalid schema");
         if (!Present.contains(object.Path)) {
-            return EObjectState::Missing;
+            return NThreading::MakeFuture(EObjectState::Missing);
         }
-        return Present.at(object.Path) ? EObjectState::WithBatch : EObjectState::WithoutBatch;
+        return NThreading::MakeFuture(Present.at(object.Path) ? EObjectState::WithBatch : EObjectState::WithoutBatch);
     }
 
-    void Alter(const TObject& object, bool add) override {
+    NThreading::TFuture<void> Alter(const TObject& object, bool add) override {
         Enter(object, false);
         Y_DEFER { Leave(object, false); };
         if (BeforeAlter) {
@@ -63,6 +66,7 @@ public:
             ++Drops;
         }
         BatchSizes.insert(object.AlterBatchSize);
+        return NThreading::MakeFuture();
     }
 
     void Enter(const TObject& object, bool create) {
@@ -132,9 +136,58 @@ topics: {count: 2, partitions: 2, alter_batch_size: 3}
 )");
 }
 
+class TDeferredClient final : public IClient {
+public:
+    void PrepareDirectory(const TString&) override {}
+
+    NThreading::TFuture<void> Create(const TObject&) override {
+        ++Creates;
+        return Start();
+    }
+
+    NThreading::TFuture<EObjectState> Inspect(const TObject& object) override {
+        return NThreading::MakeFuture(object.Path == "load/table_0" || object.Path == "load/topic_0"
+            ? EObjectState::WithoutBatch : EObjectState::Missing);
+    }
+
+    NThreading::TFuture<void> Alter(const TObject&, bool) override {
+        ++Alters;
+        return Start();
+    }
+
+    ui32 Creates = 0;
+    ui32 Alters = 0;
+    TManualEvent AllStarted;
+    NThreading::TPromise<void> Completion = NThreading::NewPromise<void>();
+
+private:
+    NThreading::TFuture<void> Start() {
+        if (Creates + Alters == 5) {
+            AllStarted.Signal();
+        }
+        return Completion.GetFuture();
+    }
+};
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(SchemeWorkloadRunner) {
+    Y_UNIT_TEST(SingleThreadStartsBothKindsWhileResponsesArePending) {
+        const auto config = Config();
+        TDeferredClient client;
+        std::atomic<bool> cancelled = false;
+        std::jthread complete([&] {
+            // Unblock the test on timeout even if the scheduler waits on the first request.
+            client.AllStarted.Wait(5000);
+            cancelled = true;
+            client.Completion.SetValue();
+        });
+        TRunner runner(config, client, [&] { return cancelled.load(); }, 1);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(runner.Run(TDuration::Seconds(10)), yexception, "interrupted");
+        UNIT_ASSERT_VALUES_EQUAL(client.Creates, 3);
+        UNIT_ASSERT_VALUES_EQUAL(client.Alters, 2);
+    }
+
     Y_UNIT_TEST(CreateConcurrencyAndBothTypes) {
         const auto config = Config();
         TClient client;

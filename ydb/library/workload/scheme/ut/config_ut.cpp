@@ -74,6 +74,17 @@ topics: {count: 3, partitions: 16, alter_batch_size: 4}
         }
     }
 
+    Y_UNIT_TEST(EnforcesCombinedWorkerLimit) {
+        const TString yaml = "path: load\ntables: {count: 500, partitions: 1}\nalter_concurrency: 128\n";
+        const auto config = ParseConfig(yaml + "create_concurrency: 128\n");
+        UNIT_ASSERT_VALUES_EQUAL(config.CreateConcurrency, 128);
+        UNIT_ASSERT_VALUES_EQUAL(config.AlterConcurrency, 128);
+        for (const TString& concurrency : {"129", "100000", "4294967295"}) {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(ParseConfig(yaml + "create_concurrency: " + concurrency),
+                yexception, "create_concurrency + alter_concurrency must not exceed 256");
+        }
+    }
+
     Y_UNIT_TEST(RejectsUnknownMissingDuplicateAndMultipleDocuments) {
         for (const TString& yaml : {
             "path: load",

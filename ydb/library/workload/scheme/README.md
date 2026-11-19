@@ -23,7 +23,7 @@ topics:
 
 ```bash
 ydb -e grpc://localhost:2135 -d /local workload scheme init --config scheme.yaml
-ydb -e grpc://localhost:2135 -d /local workload scheme run --config scheme.yaml --seconds 60
+ydb -e grpc://localhost:2135 -d /local workload scheme run --config scheme.yaml --seconds 60 --threads 10
 ```
 
 `path` is relative to the database. Either object group can be omitted; at least one is required.
@@ -35,6 +35,9 @@ The example prepares 20 tables and 10 topics, then creates the remaining 80 tabl
 Omit `init` to start from an empty directory; prepare the full target to run ALTER traffic only.
 
 CREATE and ALTER concurrency limits are independent and shared across both object types.
+The sum of `create_concurrency` and `alter_concurrency` must not exceed 256.
+Both commands accept `-t` / `--threads` (1 to 256, default 10) to set the size of the worker pool.
+Workers start operations asynchronously. The concurrency limits apply to unfinished operations and can exceed the worker pool size.
 For example, limits of 16 and 32 allow up to 48 mutations in flight, subject to available objects.
 An object becomes available for ALTER immediately after its CREATE succeeds, without waiting for other CREATEs.
 Concurrency does not prescribe a fixed operation ratio or strict CREATE/ALTER alternation.

@@ -25,6 +25,8 @@ public:
         TYdbCommand::Config(config);
         config.SetFreeArgsNum(0);
         config.Opts->AddLongOption("config", "Workload YAML configuration file.").Required().RequiredArgument("PATH").StoreResult(&ConfigPath_);
+        config.Opts->AddLongOption('t', "threads", "Number of workload threads for preparing and starting operations.")
+            .DefaultValue(NYdbWorkload::NScheme::DEFAULT_WORKLOAD_THREADS).StoreResult(&Threads_);
         if (!Init_) {
             config.Opts->AddLongOption('s', "seconds", "Duration of CREATE/ALTER traffic after schema validation; waits for outstanding requests afterwards.")
                 .DefaultValue(60).StoreResult(&Seconds_);
@@ -34,7 +36,9 @@ public:
     void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         WorkloadConfig_ = NYdbWorkload::NScheme::ParseConfig(TFileInput(ConfigPath_).ReadAll());
-        Y_ENSURE(Seconds_ > 0, "--seconds must be positive");
+        if (!Init_) {
+            Y_ENSURE(Seconds_ > 0, "--seconds must be positive");
+        }
     }
 
     int Run(TConfig& config) override {
@@ -44,7 +48,7 @@ public:
         const ui64 concurrency = Init_ ? WorkloadConfig_.CreateConcurrency
             : ui64(WorkloadConfig_.CreateConcurrency) + WorkloadConfig_.AlterConcurrency;
         auto client = CreateSchemeWorkloadClient(driver, config.Database, std::min<ui64>(concurrency, WorkloadConfig_.ObjectCount()));
-        NYdbWorkload::NScheme::TRunner runner(WorkloadConfig_, *client, [] { return IsInterrupted(); });
+        NYdbWorkload::NScheme::TRunner runner(WorkloadConfig_, *client, [] { return IsInterrupted(); }, Threads_);
         const auto started = TMonotonic::Now();
         const auto print = [&] {
             const auto counters = runner.Statistics();
@@ -72,6 +76,7 @@ private:
     const bool Init_;
     TString ConfigPath_;
     ui32 Seconds_ = 60;
+    ui32 Threads_ = NYdbWorkload::NScheme::DEFAULT_WORKLOAD_THREADS;
     NYdbWorkload::NScheme::TConfig WorkloadConfig_;
 };
 

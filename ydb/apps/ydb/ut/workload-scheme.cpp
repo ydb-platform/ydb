@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE_F(YdbWorkloadScheme, TSchemeWorkloadFixture) {
 
     Y_UNIT_TEST(RunWithoutInitCreatesAndAltersBothTypes) {
         WriteConfig("tables: {count: 2, initial_count: 1, partitions: 2, alter_batch_size: 3}\ntopics: {count: 2, initial_count: 1, partitions: 3, alter_batch_size: 2}");
-        const auto output = Run();
+        const auto output = RunYdb({"workload", "scheme", "run"}, {"--config", ConfigPath, "--seconds", "5", "-t", "1"});
         UNIT_ASSERT_STRING_CONTAINS(output, "CreateTable\t2\n");
         UNIT_ASSERT_STRING_CONTAINS(output, "CreateTopic\t2\n");
         UNIT_ASSERT(!output.Contains("AddColumns\t0\n"));

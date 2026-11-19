@@ -7,7 +7,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/yaml-cpp
-    library/cpp/threading/local_executor
+    library/cpp/threading/future
     library/cpp/time_provider
 )
 

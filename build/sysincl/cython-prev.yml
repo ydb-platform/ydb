@@ -9,3 +9,13 @@
 - source_filter: "^contrib/tools/cython/Cython/Utility"
   includes:
     - internal/pycore_frame.h: contrib/libs/python/Include_prev/internal/pycore_frame.h
+
+# The selected Python supplies optional headers induced by Cython.
+- source_filter: "^contrib/tools/cython/induced_deps[.]h$"
+  includes:
+  - internal/pycore_frame.h: contrib/libs/python/Include_prev/internal/pycore_frame.h
+
+# Python 2 keeps the current include directory even with USE_PYTHON3_PREV.
+- source_filter: "^contrib/tools/cython_py2/induced_deps[.]h$"
+  includes:
+  - internal/pycore_frame.h: contrib/libs/python/Include/internal/pycore_frame.h

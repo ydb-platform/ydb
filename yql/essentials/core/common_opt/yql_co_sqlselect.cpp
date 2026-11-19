@@ -2,6 +2,7 @@
 
 #include "yql_co_yqlselect.h"
 
+#include <yql/essentials/core/type_ann/type_ann_impl.h>
 #include <yql/essentials/core/type_ann/type_ann_pg.h>
 #include <yql/essentials/core/type_ann/type_ann_yql.h>
 #include <yql/essentials/core/type_ann/type_ann_yql_flatten.h>
@@ -2675,13 +2676,18 @@ TExprNode::TPtr BuildProjectionLambda(
                             auto rightColumnName = order.AddColumn(logicalName);
 
                             auto listBuilder = parent.List(index++);
+                            listBuilder.Add(0, ctx.NewAtom(x->Pos(), rightColumnName));
                             if (auto* columnNode = overrideColumns.FindPtr(columnName)) {
                                 // we never get here while processing SELECTs,
                                 // so no need to add PgCasts due to query combining with UNION ALL et al
-                                listBuilder.Add(0, ctx.NewAtom(x->Pos(), rightColumnName));
                                 addResultItem(listBuilder, 1, *columnNode);
+                            } else if (isYql && !item->GetItemType()->IsPersistable()) {
+                                auto args = x->Tail().HeadPtr();
+                                auto member = ctx.NewCallable(x->Pos(), "Member", {args->HeadPtr(), ctx.NewAtom(x->Pos(), column)});
+                                auto repr = NTypeAnnImpl::MakeRepr(member, item->GetItemType(), ctx).first;
+                                listBuilder.ApplyPartial(1, args, repr ? repr : member).With(0, "row").Seal();
+                                listBuilder.Seal();
                             } else {
-                                listBuilder.Add(0, ctx.NewAtom(x->Pos(), rightColumnName));
                                 addPgCast(listBuilder, 1, rightColumnName, item->GetItemType(),
                                     [&addStructMember, &column] (TExprNodeBuilder& builder, ui32 idx) { addStructMember(builder, idx, column); });
                             }

@@ -1,7 +1,12 @@
 items:
 - name: Overview
+<<<<<<< HEAD
   href: index.md  
 - name: Initialize the driver
+=======
+  href: index.md
+- name: Driver initialization
+>>>>>>> 581d89d3662 (Auto-translate docs from PR #37673 (#51199))
   href: init.md
 - name: Authentication
   items:
@@ -17,33 +22,42 @@ items:
     href: auth-metadata.md
   - name: Using environment variables
     href: auth-env.md
-  - name: Username and password based
+  - name: Using login and password
     href: auth-static.md
 - name: Balancing
   items:
   - name: Overview
     href: balancing.md
-  - name: Random choice
+  - name: Uniform random selection
     href: balancing-random-choice.md
-  - name: Prefer the nearest data center
+  - name: Prefer nearest data center
     href: balancing-prefer-local.md
-  - name: Prefer the specific availability zone
+  - name: Prefer specific availability zone
     href: balancing-prefer-location.md
   - name: Prefer a pile with a specific state
+<<<<<<< HEAD
     href: balancing-prefer-pile.md      
 - name: Running repeat queries
+=======
+    href: balancing-prefer-pile.md
+- name: Retry queries
+>>>>>>> 581d89d3662 (Auto-translate docs from PR #37673 (#51199))
   href: retry.md
-- name: Setting the session pool size
+- name: Set session pool size
   href: session-pool-limit.md
-- name: Upserting data
+- name: Data insertion
   href: upsert.md
-- name: Bulk-upserting data
+- name: Batch data insertion
   href: bulk-upsert.md
 - name: Setting up the transaction execution mode
   href: tx-control.md
+<<<<<<< HEAD
 - name: Vector search
   href: vector-search.md
 - name: Configuring time to live (TTL)
+=======
+- name: TTL configuration
+>>>>>>> 581d89d3662 (Auto-translate docs from PR #37673 (#51199))
   href: ttl.md
 - name: Vector search
   href: vector-search.md

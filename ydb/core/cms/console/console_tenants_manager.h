@@ -865,7 +865,8 @@ public:
     void CreateTenantSubDomain(TTenant::TPtr tenant, const TActorContext &ctx);
     void DeleteTenantSubDomain(TTenant::TPtr tenant, const TActorContext &ctx);
     void ProcessTenantActions(TTenant::TPtr tenant, const TActorContext &ctx);
-    TTenant::TPtr FillOperationStatus(const TString &id, Ydb::Operations::Operation &operation);
+    TTenant::TPtr FillOperationStatus(const TString &id, const TString &token,
+                                      Ydb::Operations::Operation &operation, const TActorContext &ctx);
     void SendTenantNotifications(TTenant::TPtr tenant, TTenant::EAction action,
                                  Ydb::StatusIds::StatusCode code, const TActorContext &ctx);
     void DumpStateHTML(IOutputStream &os);

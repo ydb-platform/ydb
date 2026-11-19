@@ -383,8 +383,23 @@ public:
                 TRpcRequestSettings::Make(settings));
         }
 
-        // The returned future waits for completion. Keep that wait on the
-        // server so OperationTimeout applies without cancelling the durable job.
+        if (!request.alter_attributes().empty()) {
+            return NThreading::MakeFuture(TStatus(EStatus::BAD_REQUEST,
+                NYdb::NIssue::TIssues{NYdb::NIssue::TIssue("freeze cannot be combined with other database changes")}));
+        }
+        if (request.operation_params().has_cancel_after() || request.operation_params().has_forget_after()) {
+            return NThreading::MakeFuture(TStatus(EStatus::UNSUPPORTED,
+                NYdb::NIssue::TIssues{NYdb::NIssue::TIssue("cancel_after and forget_after are not supported for database freeze")}));
+        }
+
+        auto rpcSettings = TRpcRequestSettings::Make(settings);
+        if (settings.OperationTimeout_) {
+            // Leave time for the server's TIMEOUT response before the client deadline.
+            const auto responseMargin = TDeadline::SafeDurationCast(TDuration::MilliSeconds(200));
+            rpcSettings.TryUpdateDeadline(TDeadline::AfterDuration(settings.OperationTimeout_) + responseMargin);
+        }
+        // Prefer server-side waiting. The same deadline also bounds polling
+        // if an endpoint returns a pending operation despite SYNC.
         request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
         auto promise = NThreading::NewPromise<TStatus>();
         auto extractor = [promise](Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
@@ -402,7 +417,7 @@ public:
         Connections_->RunDeferred<Ydb::Cms::V1::CmsService, Ydb::Cms::AlterDatabaseRequest, Ydb::Cms::AlterDatabaseResponse>(
             std::move(request), std::move(extractor),
             &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase,
-            DbDriverState_, INITIAL_DEFERRED_CALL_DELAY, TRpcRequestSettings::Make(settings), true);
+            DbDriverState_, INITIAL_DEFERRED_CALL_DELAY, rpcSettings, true);
         return promise.GetFuture();
     }
 };

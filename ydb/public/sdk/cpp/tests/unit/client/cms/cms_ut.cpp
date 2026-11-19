@@ -26,6 +26,7 @@ namespace {
     class TCmsService: public Ydb::Cms::V1::CmsService::Service {
     public:
         const TReply Reply;
+        std::atomic<ui32> Requests = 0;
         std::atomic<bool> HasFreeze = false;
         std::atomic<bool> Freeze = false;
         std::atomic<int> OperationMode = Ydb::Operations::OperationParams::OPERATION_MODE_UNSPECIFIED;
@@ -38,6 +39,7 @@ namespace {
 
         grpc::Status AlterDatabase(grpc::ServerContext*, const Ydb::Cms::AlterDatabaseRequest* request,
                                    Ydb::Cms::AlterDatabaseResponse* response) override {
+            ++Requests;
             HasFreeze = request->has_freeze();
             Freeze = request->freeze();
             OperationMode = request->operation_params().operation_mode();
@@ -61,14 +63,25 @@ namespace {
     class TOperationService: public Ydb::Operation::V1::OperationService::Service {
     public:
         std::atomic<ui32> Polls = 0;
+        std::atomic<ui32> Cancellations = 0;
+        std::atomic<bool> Ready = true;
 
         grpc::Status GetOperation(grpc::ServerContext*, const Ydb::Operations::GetOperationRequest* request,
                                   Ydb::Operations::GetOperationResponse* response) override {
             ++Polls;
             auto* operation = response->mutable_operation();
             operation->set_id(request->id());
-            operation->set_ready(true);
-            operation->set_status(Ydb::StatusIds::SUCCESS);
+            operation->set_ready(Ready.load());
+            if (operation->ready()) {
+                operation->set_status(Ydb::StatusIds::SUCCESS);
+            }
+            return grpc::Status::OK;
+        }
+
+        grpc::Status CancelOperation(grpc::ServerContext*, const Ydb::Operations::CancelOperationRequest*,
+                                     Ydb::Operations::CancelOperationResponse* response) override {
+            ++Cancellations;
+            response->set_status(Ydb::StatusIds::SUCCESS);
             return grpc::Status::OK;
         }
     };
@@ -144,6 +157,7 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
         TServer server({.HasOperationId = false});
         const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().AlterAttributes({{"test", "value"}}));
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(server.Cms.Requests.load(), 1);
         UNIT_ASSERT(!server.Cms.HasFreeze);
         UNIT_ASSERT_VALUES_EQUAL(server.Cms.OperationMode.load(), static_cast<int>(Ydb::Operations::OperationParams::OPERATION_MODE_UNSPECIFIED));
     }
@@ -188,5 +202,78 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
         const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(true));
         UNIT_ASSERT(!result.IsSuccess());
         UNIT_ASSERT(result.IsTransportError());
+    }
+
+    Y_UNIT_TEST(FreezeWithAttributesIsRejectedBeforeRpc) {
+        for (const bool freeze : {false, true}) {
+            // An empty attribute value requests removal, so it also conflicts.
+            for (const auto* value : {"value", ""}) {
+                TServer server({.HasOperationId = false});
+                const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings()
+                    .Freeze(freeze).AlterAttributes({{"test", value}}));
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+                UNIT_ASSERT(result.GetIssues().ToString().find("freeze cannot be combined") != std::string::npos);
+                UNIT_ASSERT_VALUES_EQUAL(server.Cms.Requests.load(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(server.Operations.Polls.load(), 0);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(UnsupportedFreezeOperationParametersAreRejectedBeforeRpc) {
+        for (const bool freeze : {false, true}) {
+            for (const bool cancel : {false, true}) {
+                TServer server;
+                NYdb::NCms::TAlterDatabaseSettings settings;
+                settings.Freeze(freeze);
+                if (cancel) {
+                    settings.CancelAfter(TDuration::Seconds(1));
+                } else {
+                    settings.ForgetAfter(TDuration::Seconds(1));
+                }
+                const auto result = server.Alter(settings);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::UNSUPPORTED);
+                UNIT_ASSERT(result.GetIssues().ToString().find("cancel_after and forget_after") != std::string::npos);
+                UNIT_ASSERT_VALUES_EQUAL(server.Cms.Requests.load(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(server.Operations.Polls.load(), 0);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(EmptyAttributesDoNotConflictWithFreeze) {
+        for (const bool freeze : {false, true}) {
+            TServer server;
+            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings()
+                .Freeze(freeze).AlterAttributes({}));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(server.Cms.Requests.load(), 1);
+            UNIT_ASSERT(server.Cms.HasFreeze);
+            UNIT_ASSERT_VALUES_EQUAL(server.Cms.Freeze.load(), freeze);
+        }
+    }
+
+    Y_UNIT_TEST(OperationTimeoutBoundsPollingWithoutClientTimeout) {
+        for (const bool freeze : {false, true}) {
+            TServer server({.Pending = true});
+            server.Operations.Ready = false;
+            NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(server.Endpoint).SetDatabase("/Root"));
+            NYdb::NCms::TCmsClient client(driver, NYdb::TCommonClientSettings().DiscoveryMode(NYdb::EDiscoveryMode::Off));
+            // Do not use TServer::Alter: its ClientTimeout would mask the bug.
+            const auto result = client.AlterDatabase("/Root/Database",
+                NYdb::NCms::TAlterDatabaseSettings().Freeze(freeze).OperationTimeout(TDuration::Seconds(1)));
+            const bool completed = result.Wait(TDuration::Seconds(5));
+            // Stop pending polls before asserting so a regression cannot leave
+            // an unbounded request running during test teardown.
+            driver.Stop(true);
+            UNIT_ASSERT_C(completed, "OperationTimeout did not bound polling of the pending freeze operation");
+            const auto status = result.GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED,
+                status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(server.Cms.Requests.load(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(server.Cms.OperationMode.load(), static_cast<int>(Ydb::Operations::OperationParams::SYNC));
+            UNIT_ASSERT_VALUES_EQUAL(server.Cms.OperationTimeoutSeconds.load(), 1);
+            UNIT_ASSERT(server.Operations.Polls.load() > 0);
+            UNIT_ASSERT(!server.Operations.Ready.load());
+            UNIT_ASSERT_VALUES_EQUAL(server.Operations.Cancellations.load(), 0);
+        }
     }
 } // Y_UNIT_TEST_SUITE(CmsFreezeClient)

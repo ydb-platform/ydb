@@ -266,8 +266,13 @@ namespace NKikimr::NConsole {
             if (request.generation() && request.generation() != tenant->Generation) {
                 return fail(Ydb::StatusIds::BAD_REQUEST, "Tenant generation does not match requested generation");
             }
-            if (!request.idempotency_key() && Self->IsDatabaseFreezePending(tenant) && Self->DatabaseFreezeOperations.at(tenant->FreezeEpoch).GetFreeze() == request.freeze())
+            if (Self->IsDatabaseFreezePending(tenant)
+                && Self->DatabaseFreezeOperations.at(tenant->FreezeEpoch).GetFreeze() == request.freeze())
             {
+                if (request.idempotency_key()) {
+                    return fail(Ydb::StatusIds::UNAVAILABLE,
+                                "A database freeze operation for this state is already in progress");
+                }
                 Self->FillDatabaseFreezeOperation(tenant->FreezeEpoch, result);
                 return true;
             }

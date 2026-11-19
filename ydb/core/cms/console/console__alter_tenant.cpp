@@ -61,11 +61,17 @@ public:
             return Error(Ydb::StatusIds::UNAVAILABLE,
                          Sprintf("Database '%s' is busy", path.data()), ctx);
 
-        // Check idempotency key
         if (Self->IsDatabaseFreezePending(Tenant)) {
             return Error(Ydb::StatusIds::UNAVAILABLE, "Database freeze operation is in progress", ctx);
         }
+        if (Tenant->FreezeEpoch) {
+            const auto& freeze = Self->DatabaseFreezeOperations.at(Tenant->FreezeEpoch);
+            if (freeze.GetFreeze() || freeze.GetStatus() != Ydb::StatusIds::SUCCESS) {
+                return Error(Ydb::StatusIds::PRECONDITION_FAILED, "Unfreeze the database before altering it", ctx);
+            }
+        }
 
+        // Check idempotency key
         if (rec.idempotency_key() && Tenant->AlterIdempotencyKey == rec.idempotency_key()) {
             YDB_LOG_DEBUG_CTX(ctx, "Returning success due to idempotency key match");
             auto &operation = *Response->Record.MutableResponse()->mutable_operation();

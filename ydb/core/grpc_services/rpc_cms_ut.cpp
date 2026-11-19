@@ -70,7 +70,7 @@ namespace NKikimr::NGRpcService {
             std::unique_ptr<Ydb::Cms::V1::CmsService::Stub> Cms;
             std::unique_ptr<Ydb::Operation::V1::OperationService::Stub> Operations;
 
-            explicit TEnv(ui32 dynamicNodeCount = 1)
+            explicit TEnv(ui32 dynamicNodeCount = 1, bool externalSubdomain = true)
                 : Kikimr(Settings(dynamicNodeCount))
                 , Server(&Kikimr.GetTestServer())
                 , Runtime(*Server->GetRuntime())
@@ -80,13 +80,16 @@ namespace NKikimr::NGRpcService {
                 , Cms(Ydb::Cms::V1::CmsService::NewStub(Channel))
                 , Operations(Ydb::Operation::V1::OperationService::NewStub(Channel))
             {
-                CreateDatabase(Database);
+                CreateDatabase(Database, "hdd1", externalSubdomain);
             }
 
-            void CreateDatabase(const TString& path, const TString& storageKind = "hdd1") {
+            void CreateDatabase(const TString& path, const TString& storageKind = "hdd1", bool externalSubdomain = true) {
                 using TCreate = TGrpcRequestOperationCall<Ydb::Cms::CreateDatabaseRequest, Ydb::Cms::CreateDatabaseResponse>;
                 Ydb::Cms::CreateDatabaseRequest request;
                 request.set_path(path);
+                if (!externalSubdomain) {
+                    request.mutable_options()->set_disable_external_subdomain(true);
+                }
                 auto* storage = request.mutable_resources()->add_storage_units();
                 storage->set_unit_kind(storageKind);
                 storage->set_count(1);
@@ -108,6 +111,18 @@ namespace NKikimr::NGRpcService {
                     Runtime.SimulateSleep(TDuration::MilliSeconds(100));
                 }
                 UNIT_FAIL("The database " << path << " is not running: " << state.DebugString());
+            }
+
+            Ydb::Cms::GetDatabaseStatusResult DatabaseStatus() {
+                auto request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+                request->Record.MutableRequest()->set_path(Database);
+                Runtime.SendToPipe(MakeConsoleID(), Sender, request.Release(), 0, GetPipeConfigWithRetries());
+                auto response = Runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(Sender);
+                const auto& operation = response->Get()->Record.GetResponse().operation();
+                UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), Ydb::StatusIds::SUCCESS, operation.DebugString());
+                Ydb::Cms::GetDatabaseStatusResult status;
+                UNIT_ASSERT(operation.result().UnpackTo(&status));
+                return status;
             }
 
             Ydb::Operations::Operation Alter(Ydb::Cms::AlterDatabaseRequest request) {
@@ -730,6 +745,12 @@ namespace NKikimr::NGRpcService {
             });
             const auto freeze = env.Freeze(true, Ydb::Operations::OperationParams::ASYNC, "cancelled-key");
             env.Runtime.WaitFor("pending CDC acknowledgement", [&] { return !cdc.empty(); });
+            const auto rejected = env.Freeze(true, Ydb::Operations::OperationParams::ASYNC, "cancelling-thaw");
+            UNIT_ASSERT(rejected.ready());
+            UNIT_ASSERT_VALUES_EQUAL_C(rejected.status(), Ydb::StatusIds::UNAVAILABLE, rejected.DebugString());
+            UNIT_ASSERT(rejected.id().empty());
+            UNIT_ASSERT(!env.Get(freeze.id()).ready());
+            // A rejected request must not reserve its key: it can be used for thaw.
             const auto thaw = env.Freeze(false, Ydb::Operations::OperationParams::ASYNC, "cancelling-thaw");
             UNIT_ASSERT_VALUES_EQUAL(env.Wait(thaw.id()).status(), Ydb::StatusIds::SUCCESS);
             cdc.Stop().Unblock();
@@ -739,6 +760,10 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT(repeated.ready());
             UNIT_ASSERT_VALUES_EQUAL(repeated.status(), Ydb::StatusIds::CANCELLED);
             UNIT_ASSERT_VALUES_EQUAL(env.Freeze(false, Ydb::Operations::OperationParams::ASYNC, "cancelled-key").status(), Ydb::StatusIds::BAD_REQUEST);
+            const auto repeatedThaw = env.Freeze(false, Ydb::Operations::OperationParams::ASYNC, "cancelling-thaw");
+            UNIT_ASSERT_VALUES_EQUAL(repeatedThaw.id(), thaw.id());
+            UNIT_ASSERT(repeatedThaw.ready());
+            UNIT_ASSERT_VALUES_EQUAL(repeatedThaw.status(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT(env.Write("UPSERT INTO `Table` (key, value) VALUES (1, 10);").IsSuccess());
         }
 
@@ -1058,11 +1083,25 @@ namespace NKikimr::NGRpcService {
             const auto failed = env.Freeze(false);
             UNIT_ASSERT_VALUES_EQUAL(env.Wait(failed.id()).status(), Ydb::StatusIds::UNAVAILABLE);
             UNIT_ASSERT(!env.Scheme("CREATE TABLE Other (key Uint32, PRIMARY KEY (key));").IsSuccess());
+            Ydb::Cms::AlterDatabaseRequest attributes;
+            (*attributes.mutable_alter_attributes())["after-thaw"] = "value";
+            const auto generation = env.DatabaseStatus().generation();
+            for (const bool reboot : {false, true}) {
+                if (reboot) {
+                    RebootTablet(env.Runtime, MakeConsoleID(), env.Sender);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(env.Alter(attributes).status(), Ydb::StatusIds::PRECONDITION_FAILED);
+                const auto state = env.DatabaseStatus();
+                UNIT_ASSERT_VALUES_EQUAL(state.generation(), generation);
+                UNIT_ASSERT(!state.attributes().contains("after-thaw"));
+            }
             observer.Remove();
             const auto thaw = env.Freeze(false);
             UNIT_ASSERT_VALUES_EQUAL(env.Wait(thaw.id()).status(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT(env.Scheme("CREATE TABLE Other (key Uint32, PRIMARY KEY (key));").IsSuccess());
             UNIT_ASSERT(env.Write("UPSERT INTO `Table` (key, value) VALUES (1, 10), (2147483648, 20);").IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(env.Alter(attributes).status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(env.DatabaseStatus().attributes().at("after-thaw"), "value");
         }
 
         Y_UNIT_TEST(UnsupportedColumnTableDoesNotFreezeRowTables) {
@@ -1073,8 +1112,186 @@ namespace NKikimr::NGRpcService {
             const auto freeze = env.Freeze(true);
             UNIT_ASSERT_VALUES_EQUAL(env.Wait(freeze.id()).status(), Ydb::StatusIds::UNSUPPORTED);
             UNIT_ASSERT(env.Write("UPSERT INTO `Table` (key, value) VALUES (1, 10);").IsSuccess());
+            Ydb::Cms::AlterDatabaseRequest attributes;
+            (*attributes.mutable_alter_attributes())["after-thaw"] = "value";
+            UNIT_ASSERT_VALUES_EQUAL(env.Alter(attributes).status(), Ydb::StatusIds::PRECONDITION_FAILED);
             const auto thaw = env.Freeze(false);
             UNIT_ASSERT_VALUES_EQUAL(env.Wait(thaw.id()).status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(env.Alter(attributes).status(), Ydb::StatusIds::SUCCESS);
+        }
+
+        Y_UNIT_TEST(FrozenDatabaseRejectsQuotaChangesUntilThaw) {
+            for (const bool externalSubdomain : {false, true}) {
+                TEnv env(1, externalSubdomain);
+                env.CreateTable();
+                UNIT_ASSERT_VALUES_EQUAL(env.TableSchemeShard == Tests::SchemeRoot, !externalSubdomain);
+                const auto freeze = env.Freeze(true);
+                UNIT_ASSERT_VALUES_EQUAL(env.Wait(freeze.id()).status(), Ydb::StatusIds::SUCCESS);
+
+                Ydb::Cms::AlterDatabaseRequest quotas;
+                quotas.set_idempotency_key("quota-after-thaw");
+                quotas.mutable_database_quotas()->set_data_size_hard_quota(1ULL << 40);
+                quotas.mutable_database_quotas()->set_data_size_soft_quota(1ULL << 39);
+                auto* bucket = quotas.mutable_schema_operation_quotas()->add_leaky_bucket_quotas();
+                bucket->set_bucket_size(1000);
+                bucket->set_bucket_seconds(1);
+
+                const auto initial = env.DatabaseStatus();
+                const auto initialScheme = env.Kikimr.GetTestClient().Describe(&env.Runtime, Database);
+                UNIT_ASSERT_C(initialScheme.GetStatus() == NKikimrScheme::StatusSuccess, initialScheme.DebugString());
+                const auto& initialDomain = initialScheme.GetPathDescription().GetDomainDescription();
+                for (const bool reboot : {false, true}) {
+                    if (reboot) {
+                        RebootTablet(env.Runtime, MakeConsoleID(), env.Sender);
+                    }
+                    const auto rejected = env.Alter(quotas);
+                    UNIT_ASSERT(rejected.ready());
+                    UNIT_ASSERT_VALUES_EQUAL_C(rejected.status(), Ydb::StatusIds::PRECONDITION_FAILED, rejected.DebugString());
+                    const auto unchanged = env.DatabaseStatus();
+                    UNIT_ASSERT_VALUES_EQUAL(unchanged.generation(), initial.generation());
+                    UNIT_ASSERT_VALUES_EQUAL(unchanged.database_quotas().SerializeAsString(), initial.database_quotas().SerializeAsString());
+                    UNIT_ASSERT_VALUES_EQUAL(unchanged.schema_operation_quotas().SerializeAsString(), initial.schema_operation_quotas().SerializeAsString());
+                    const auto scheme = env.Kikimr.GetTestClient().Describe(&env.Runtime, Database);
+                    UNIT_ASSERT_C(scheme.GetStatus() == NKikimrScheme::StatusSuccess, scheme.DebugString());
+                    const auto& domain = scheme.GetPathDescription().GetDomainDescription();
+                    UNIT_ASSERT_VALUES_EQUAL(domain.GetDatabaseQuotas().SerializeAsString(),
+                        initialDomain.GetDatabaseQuotas().SerializeAsString());
+                    UNIT_ASSERT_VALUES_EQUAL(domain.GetDeclaredSchemeQuotas().SerializeAsString(),
+                        initialDomain.GetDeclaredSchemeQuotas().SerializeAsString());
+                }
+
+                const auto thaw = env.Freeze(false);
+                UNIT_ASSERT_VALUES_EQUAL(env.Wait(thaw.id()).status(), Ydb::StatusIds::SUCCESS);
+                const auto generation = env.DatabaseStatus().generation();
+                const auto accepted = env.Alter(quotas);
+                UNIT_ASSERT_VALUES_EQUAL_C(accepted.status(), Ydb::StatusIds::SUCCESS, accepted.DebugString());
+                // Ordinary Alter accepts settings before SchemeShard applies them.
+                Ydb::Cms::GetDatabaseStatusResult applied;
+                NKikimrScheme::TEvDescribeSchemeResult scheme;
+                for (ui32 attempt = 0; attempt < 300; ++attempt) {
+                    applied = env.DatabaseStatus();
+                    scheme = env.Kikimr.GetTestClient().Describe(&env.Runtime, Database);
+                    UNIT_ASSERT_C(scheme.GetStatus() == NKikimrScheme::StatusSuccess, scheme.DebugString());
+                    const auto& domain = scheme.GetPathDescription().GetDomainDescription();
+                    if (applied.state() == Ydb::Cms::GetDatabaseStatusResult::RUNNING
+                        && domain.GetDatabaseQuotas().data_size_hard_quota() == (1ULL << 40)
+                        && domain.GetDatabaseQuotas().data_size_soft_quota() == (1ULL << 39)
+                        && domain.GetDeclaredSchemeQuotas().SchemeQuotasSize() == 1
+                        && domain.GetDeclaredSchemeQuotas().GetSchemeQuotas(0).GetBucketSize() == 1000
+                        && domain.GetDeclaredSchemeQuotas().GetSchemeQuotas(0).GetBucketSeconds() == 1)
+                    {
+                        break;
+                    }
+                    env.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+                }
+                UNIT_ASSERT_C(applied.state() == Ydb::Cms::GetDatabaseStatusResult::RUNNING, applied.DebugString());
+                UNIT_ASSERT_VALUES_EQUAL(applied.generation(), generation + 1);
+                UNIT_ASSERT_VALUES_EQUAL(applied.database_quotas().SerializeAsString(), quotas.database_quotas().SerializeAsString());
+                UNIT_ASSERT_VALUES_EQUAL(applied.schema_operation_quotas().SerializeAsString(), quotas.schema_operation_quotas().SerializeAsString());
+                const auto& domain = scheme.GetPathDescription().GetDomainDescription();
+                UNIT_ASSERT_VALUES_EQUAL(domain.GetDatabaseQuotas().data_size_hard_quota(), 1ULL << 40);
+                UNIT_ASSERT_VALUES_EQUAL(domain.GetDatabaseQuotas().data_size_soft_quota(), 1ULL << 39);
+                UNIT_ASSERT_VALUES_EQUAL(domain.GetDeclaredSchemeQuotas().SchemeQuotasSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(domain.GetDeclaredSchemeQuotas().GetSchemeQuotas(0).GetBucketSize(), 1000);
+                UNIT_ASSERT_VALUES_EQUAL(domain.GetDeclaredSchemeQuotas().GetSchemeQuotas(0).GetBucketSeconds(), 1);
+            }
+        }
+
+        Y_UNIT_TEST(PendingFreezeRejectsNewIdempotencyKey) {
+            TEnv env;
+            env.CreateTable(true);
+            TBlockEvents<NPQ::TEvPartitionWriter::TEvWriteRequest> delivery(env.Runtime);
+            UNIT_ASSERT(env.Write("UPSERT INTO `Table` (key, value) VALUES (1, 10);").IsSuccess());
+            env.Runtime.WaitFor("undelivered CDC write", [&] { return !delivery.empty(); });
+            const auto freeze = env.Freeze(true, Ydb::Operations::OperationParams::ASYNC, "pending-freeze");
+            UNIT_ASSERT(!freeze.id().empty());
+            UNIT_ASSERT(!freeze.ready());
+            env.WaitProgress(freeze.id(), "DRAIN_CDC");
+            const auto generation = env.DatabaseStatus().generation();
+
+            for (const bool reboot : {false, true}) {
+                if (reboot) {
+                    RebootTablet(env.Runtime, MakeConsoleID(), env.Sender);
+                    env.WaitProgress(freeze.id(), "DRAIN_CDC");
+                }
+                const auto repeated = env.Freeze(true, Ydb::Operations::OperationParams::ASYNC, "pending-freeze");
+                UNIT_ASSERT_VALUES_EQUAL(repeated.id(), freeze.id());
+                UNIT_ASSERT(!repeated.ready());
+                const auto unkeyed = env.Freeze(true);
+                UNIT_ASSERT_VALUES_EQUAL(unkeyed.id(), freeze.id());
+                UNIT_ASSERT(!unkeyed.ready());
+
+                const auto rejected = env.Freeze(true, Ydb::Operations::OperationParams::ASYNC, "next-freeze");
+                UNIT_ASSERT_C(rejected.ready(), rejected.DebugString());
+                UNIT_ASSERT_VALUES_EQUAL_C(rejected.status(), Ydb::StatusIds::UNAVAILABLE, rejected.DebugString());
+                UNIT_ASSERT(rejected.id().empty());
+                UNIT_ASSERT_VALUES_EQUAL(rejected.issues_size(), 1);
+                UNIT_ASSERT_STRING_CONTAINS(rejected.issues(0).message(), "already in progress");
+                UNIT_ASSERT(!env.Get(freeze.id()).ready());
+                UNIT_ASSERT_VALUES_EQUAL(env.DatabaseStatus().generation(), generation);
+            }
+
+            delivery.Stop().Unblock();
+            UNIT_ASSERT_VALUES_EQUAL(env.Wait(freeze.id()).status(), Ydb::StatusIds::SUCCESS);
+            // Reuse the rejected key after completion: a new epoch must be accepted.
+            const auto next = env.Freeze(true, Ydb::Operations::OperationParams::ASYNC, "next-freeze");
+            UNIT_ASSERT(!next.id().empty());
+            UNIT_ASSERT(next.id() != freeze.id());
+            UNIT_ASSERT_VALUES_EQUAL(env.Wait(next.id()).status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(env.DatabaseStatus().generation(), generation + 1);
+            UNIT_ASSERT_VALUES_EQUAL(env.Freeze(true, Ydb::Operations::OperationParams::ASYNC, "next-freeze").id(), next.id());
+            UNIT_ASSERT_VALUES_EQUAL(env.Freeze(true, Ydb::Operations::OperationParams::ASYNC, "pending-freeze").id(), freeze.id());
+            UNIT_ASSERT_VALUES_EQUAL(env.Get(freeze.id()).status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(env.DatabaseStatus().generation(), generation + 1);
+            const auto thaw = env.Freeze(false);
+            UNIT_ASSERT_VALUES_EQUAL(env.Wait(thaw.id()).status(), Ydb::StatusIds::SUCCESS);
+        }
+
+        Y_UNIT_TEST(PendingThawRejectsNewIdempotencyKey) {
+            TEnv env;
+            env.CreateTable();
+            const auto freeze = env.Freeze(true);
+            UNIT_ASSERT_VALUES_EQUAL(env.Wait(freeze.id()).status(), Ydb::StatusIds::SUCCESS);
+            TBlockEvents<TEvDataShard::TEvDatabaseFreeze> open(env.Runtime, [](const auto& ev) {
+                return ev->Get()->Record.GetStage() == NKikimrTxDataShard::TDatabaseFreezeState::OPEN;
+            });
+            const auto thaw = env.Freeze(false, Ydb::Operations::OperationParams::ASYNC, "pending-thaw");
+            UNIT_ASSERT(!thaw.id().empty());
+            UNIT_ASSERT(!thaw.ready());
+            env.Runtime.WaitFor("pending DataShard thaw", [&] { return !open.empty(); });
+            const auto generation = env.DatabaseStatus().generation();
+
+            for (const bool reboot : {false, true}) {
+                if (reboot) {
+                    RebootTablet(env.Runtime, MakeConsoleID(), env.Sender);
+                }
+                const auto repeated = env.Freeze(false, Ydb::Operations::OperationParams::ASYNC, "pending-thaw");
+                UNIT_ASSERT_VALUES_EQUAL(repeated.id(), thaw.id());
+                UNIT_ASSERT(!repeated.ready());
+                const auto unkeyed = env.Freeze(false);
+                UNIT_ASSERT_VALUES_EQUAL(unkeyed.id(), thaw.id());
+                UNIT_ASSERT(!unkeyed.ready());
+
+                const auto rejected = env.Freeze(false, Ydb::Operations::OperationParams::ASYNC, "next-thaw");
+                UNIT_ASSERT_C(rejected.ready(), rejected.DebugString());
+                UNIT_ASSERT_VALUES_EQUAL_C(rejected.status(), Ydb::StatusIds::UNAVAILABLE, rejected.DebugString());
+                UNIT_ASSERT(rejected.id().empty());
+                UNIT_ASSERT(!env.Get(thaw.id()).ready());
+                UNIT_ASSERT_VALUES_EQUAL(env.DatabaseStatus().generation(), generation);
+            }
+
+            open.Stop().Unblock();
+            UNIT_ASSERT_VALUES_EQUAL(env.Wait(thaw.id()).status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(env.Write("UPSERT INTO `Table` (key, value) VALUES (1, 10);").IsSuccess());
+            const auto next = env.Freeze(false, Ydb::Operations::OperationParams::ASYNC, "next-thaw");
+            UNIT_ASSERT(!next.id().empty());
+            UNIT_ASSERT(next.id() != thaw.id());
+            UNIT_ASSERT_VALUES_EQUAL(env.Wait(next.id()).status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(env.DatabaseStatus().generation(), generation + 1);
+            UNIT_ASSERT_VALUES_EQUAL(env.Freeze(false, Ydb::Operations::OperationParams::ASYNC, "next-thaw").id(), next.id());
+            UNIT_ASSERT_VALUES_EQUAL(env.Freeze(false, Ydb::Operations::OperationParams::ASYNC, "pending-thaw").id(), thaw.id());
+            UNIT_ASSERT_VALUES_EQUAL(env.Get(thaw.id()).status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(env.DatabaseStatus().generation(), generation + 1);
         }
     } // Y_UNIT_TEST_SUITE(CmsDatabaseFreeze)
 

@@ -2648,7 +2648,9 @@ void TTenantsManager::ProcessTenantActions(TTenant::TPtr tenant, const TActorCon
 }
 
 TTenantsManager::TTenant::TPtr TTenantsManager::FillOperationStatus(const TString &id,
-                                                                    Ydb::Operations::Operation &operation)
+                                                                    const TString &token,
+                                                                    Ydb::Operations::Operation &operation,
+                                                                    const TActorContext &ctx)
 {
     operation.set_id(id);
 
@@ -2709,6 +2711,17 @@ TTenantsManager::TTenant::TPtr TTenantsManager::FillOperationStatus(const TStrin
             operation.set_status(Ydb::StatusIds::NOT_FOUND);
         }
     } else if (action == TTenant::SET_FREEZE) {
+        Ydb::StatusIds::StatusCode code;
+        TString error;
+        if (!CheckAccess(token, code, error, ctx)) {
+            operation.set_ready(true);
+            operation.set_status(code);
+            auto issue = operation.add_issues();
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message(error);
+            return nullptr;
+        }
+
         auto it = DatabaseFreezeOperations.find(txId);
         if (it == DatabaseFreezeOperations.end() || it->second.GetPath() != path) {
             operation.set_ready(true);
@@ -3715,7 +3728,8 @@ void TTenantsManager::Handle(TEvConsole::TEvGetOperationRequest::TPtr &ev, const
 
     auto resp = MakeHolder<TEvConsole::TEvGetOperationResponse>();
     auto &operation = *resp->Record.MutableResponse()->mutable_operation();
-    FillOperationStatus(ev->Get()->Record.GetRequest().id(), operation);
+    const auto &rec = ev->Get()->Record;
+    FillOperationStatus(rec.GetRequest().id(), rec.GetUserToken(), operation, ctx);
 
     if (operation.status())
         Counters.Inc(operation.status(), COUNTER_CREATE_RESPONSES);
@@ -3795,7 +3809,7 @@ void TTenantsManager::Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TP
 {
     auto &rec = ev->Get()->Record;
     Ydb::Operations::Operation operation;
-    auto tenant = FillOperationStatus(rec.GetRequest().id(), operation);
+    auto tenant = FillOperationStatus(rec.GetRequest().id(), rec.GetUserToken(), operation, ctx);
 
     if (operation.ready() && operation.status() != Ydb::StatusIds::NOT_FOUND) {
         auto resp = MakeHolder<TEvConsole::TEvOperationCompletionNotification>();

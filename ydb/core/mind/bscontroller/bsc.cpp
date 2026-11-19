@@ -742,7 +742,7 @@ void TBlobStorageController::ReconcileDataCenterStates() {
         return;
     }
     std::expected<TDataCenterStates, TString> desired = ParseDataCenterStates(StorageConfig->GetDataCenterStates());
-    if (!desired || *desired == DataCenterStates) {
+    if (!desired || (HasDataCenterPolicy && *desired == DataCenterStates)) {
         return;
     }
     auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
@@ -1046,6 +1046,13 @@ void TBlobStorageController::SetHostRecords(THostRecordMap hostRecords) {
     if (std::exchange(HostRecords, std::move(hostRecords))) {
         // we already had some host records, so this isn't the first time this function called
         Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
+        if (GroupStateActorId && !DataCenterStates.empty()) {
+            for (const auto& [groupId, group] : GroupMap) {
+                if (group->ErasureSpecies == TErasureType::ErasureMirror3dc) {
+                    UpdateGroupStateActor(groupId);
+                }
+            }
+        }
         return;
     }
 

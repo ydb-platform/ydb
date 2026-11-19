@@ -368,7 +368,7 @@ public:
     const TTopology &GetTopology() const { return *Topology; }
     const TDynamicInfo &GetDynamicInfo() const { return Dynamic; }
     TDynamicInfo::EFailRealmState GetFailRealmState(ui32 failRealmIdx) const {
-        if (Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc || GetTopology().GetTotalFailRealmsNum() != 3) {
+        if (Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
             return NKikimrBlobStorage::TDataCenterState::INCLUDED;
         }
         return Dynamic.Mirror3dcState.FailRealmStates.at(failRealmIdx);

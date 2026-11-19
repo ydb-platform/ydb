@@ -1448,14 +1448,11 @@ struct TEvBlobStorage {
     {
         const ui64 TabletId;
         const TInstant Deadline;
-        // A nonzero threshold requires a startup quorum to attest this block for a read-only group.
-        ui32 RequiredBlockedGeneration = 0;
 
         TEvGetBlock(TCloneEventPolicy, const TEvGetBlock& origin)
             : TEvRequestCommon(CloneEventPolicy, origin)
             , TabletId(origin.TabletId)
             , Deadline(origin.Deadline)
-            , RequiredBlockedGeneration(origin.RequiredBlockedGeneration)
         {}
 
         TEvGetBlock(ui64 tabletId, TInstant deadline)

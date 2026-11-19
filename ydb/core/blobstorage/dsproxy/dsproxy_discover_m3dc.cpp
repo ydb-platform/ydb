@@ -16,14 +16,6 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 // DISCOVER request
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static bool HasZeroEnsuredLayout(const TBlobStorageGroupInfo& info) {
-    if (info.GetTopology().GetTotalFailRealmsNum() != 3) {
-        return false;
-    }
-    std::optional<TMirror3dcGroupLayouts> layouts = GetMirror3dcGroupLayouts(info.GetMirror3dcState().State);
-    return layouts && layouts->Ensured == EMirror3dcLayout::LAYOUT_0;
-}
-
 class TDiscoverVDiskWorker {
     static constexpr ui32 BlobsAtOnce = 100;
 
@@ -269,7 +261,6 @@ public:
 
 private:
     const TIntrusivePtr<TBlobStorageGroupInfo> Info;
-    const bool ProbeSurvivingBlobs;
     TVector<TDiscoverVDiskWorker> VDiskWorkers;
     ui32 NumReadyWorkers = 0;
     TQueue<TDiscoveryState> StateQ;
@@ -278,8 +269,8 @@ public:
     TDiscoverWorker(TIntrusivePtr<TBlobStorageGroupInfo> info, ui64 tabletId, ui32 minGeneration,
             ui32 forceBlockedGeneration)
         : Info(std::move(info))
-        , ProbeSurvivingBlobs(HasZeroEnsuredLayout(*Info))
     {
+        Y_ABORT_UNLESS(Info->GetTopology().GetTotalFailRealmsNum() == 3);
         const ui32 numDisks = Info->GetTotalVDisksNum();
         VDiskWorkers.reserve(numDisks);
         for (ui32 i = 0; i < numDisks; ++i) {
@@ -296,10 +287,6 @@ public:
                 msgs.push_back(std::move(query));
             }
         }
-    }
-
-    bool RequiresDataProbe() const {
-        return ProbeSurvivingBlobs;
     }
 
     bool Apply(TEvBlobStorage::TEvVGetResult *ev) {
@@ -341,14 +328,8 @@ private:
         TBlobStorageGroupInfo::TGroupVDisks failedGroupDisks(&Info->GetTopology());
         for (const TDiscoverVDiskWorker& worker : VDiskWorkers) {
             if (worker.IsErroneous()) {
-                if (ProbeSurvivingBlobs) {
-                    return false; // Any unavailable active index can hide the latest surviving blob.
-                }
                 failedGroupDisks += TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), worker.GetVDiskId());
             }
-        }
-        if (ProbeSurvivingBlobs) {
-            return true;
         }
         return TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*Info, failedGroupDisks);
     }
@@ -407,43 +388,17 @@ private:
                 NumReadyWorkers -= !worker.IsReady();
             }
 
-            if (ProbeSurvivingBlobs) {
-                bool candidate = false;
-                for (NKikimrProto::EReplyStatus status : perDiskStatus) {
-                    if (status != NKikimrProto::OK && status != NKikimrProto::NODATA) {
-                        return false;
-                    }
-                    candidate |= status == NKikimrProto::OK;
-                }
-                if (candidate) {
-                    // With E=0, ingress cannot prove existence. Verify actual bytes through Get.
-                    StateQ.push(TDiscoveryState{maxId, false});
-                }
-                continue;
-            }
-
             TBlobStorageGroupInfo::TSubgroupVDisks failedSubgroupDisks(&Info->GetTopology());
             CollectFailedDisks(perDiskStatus.data(), perDiskStatus.size(), failedSubgroupDisks);
             auto layout = TSubgroupPartLayout::CreateFromIngress(mergedIngress, Info->Type);
-            if (Info->GetTopology().GetTotalFailRealmsNum() == 3) {
-                auto checker = TMirror3dcWriteQuorumChecker::TryCreate(*Info, maxId.Hash());
-                if (!checker || !checker->CheckFailModelForSubgroup(failedSubgroupDisks)) {
-                    return false;
-                }
-                const TBlobStorageGroupInfo::TSubgroupVDisks none(&Info->GetTopology());
-                bool mustExist = checker->CheckEnsuredLayout(layout, none);
-                if (mustExist || checker->CheckEnsuredLayout(layout, failedSubgroupDisks)) {
-                    StateQ.push(TDiscoveryState{maxId, mustExist});
-                }
-            } else {
-                const auto& checker = Info->GetQuorumChecker();
-                if (!checker.CheckFailModelForSubgroup(failedSubgroupDisks)) {
-                    return false;
-                }
-                auto state = checker.GetBlobState(layout, failedSubgroupDisks);
-                if (state & (TBlobStorageGroupInfo::EBSF_FULL | TBlobStorageGroupInfo::EBSF_RECOVERABLE)) {
-                    StateQ.push(TDiscoveryState{maxId, bool(state & TBlobStorageGroupInfo::EBSF_FULL)});
-                }
+            auto checker = TMirror3dcWriteQuorumChecker::TryCreate(*Info, maxId.Hash());
+            if (!checker || !checker->CheckFailModelForSubgroup(failedSubgroupDisks)) {
+                return false;
+            }
+            const TBlobStorageGroupInfo::TSubgroupVDisks none(&Info->GetTopology());
+            bool mustExist = checker->CheckEnsuredLayout(layout, none);
+            if (mustExist || checker->CheckEnsuredLayout(layout, failedSubgroupDisks)) {
+                StateQ.push(TDiscoveryState{maxId, mustExist});
             }
         }
 
@@ -459,9 +414,6 @@ private:
                     break;
 
                 case NKikimrProto::ERROR:
-                case NKikimrProto::NOT_YET:
-                case NKikimrProto::CORRUPTED:
-                case NKikimrProto::VDISK_ERROR_STATE:
                     failedSubgroupDisks += TBlobStorageGroupInfo::TSubgroupVDisks(&Info->GetTopology(), i);
                     break;
 
@@ -493,7 +445,6 @@ class TBlobStorageGroupMirror3dcDiscoverRequest : public TBlobStorageGroupReques
     // quorum tracker for EvVGetBlock queries
     TGroupQuorumTracker GetBlockTracker;
     bool GetBlockFinished = false;
-    ui32 GetBlockRepliesRemaining = 0;
 
     // number of in flight requests of all kind
     ui32 RequestsInFlight = 0;
@@ -553,7 +504,6 @@ public:
                 std::unique_ptr<TEvBlobStorage::TEvVGetBlock> query = std::make_unique<TEvBlobStorage::TEvVGetBlock>(TabletId, vd, Deadline);
 
                 DSP_LOG_DEBUG_S("DSPDM06", "sending TEvVGetBlock# " << query->ToString());
-                ++GetBlockRepliesRemaining;
 
                 SendToQueue(std::move(query), 0);
                 ++RequestsInFlight;
@@ -618,7 +568,7 @@ public:
                 GetInFlight = true;
                 Y_ABORT_UNLESS(ResultBlobId.PartId() == 0);
                 auto query = std::make_unique<TEvBlobStorage::TEvGet>(ResultBlobId, 0U, 0U, Deadline,
-                        NKikimrBlobStorage::Discover, true, !ReadBody && !Worker->RequiresDataProbe(),
+                        NKikimrBlobStorage::Discover, true, !ReadBody,
                         TEvBlobStorage::TEvGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
                 query->IsInternal = true;
 
@@ -758,35 +708,16 @@ public:
             status = NKikimrProto::OK; // assume OK for quorum tracker
         }
 
-        Y_ABORT_UNLESS(GetBlockRepliesRemaining);
-        --GetBlockRepliesRemaining;
-        if (Worker->RequiresDataProbe()) {
-            // E=0 cannot provide an ensured-layout quorum. Collect every active disk instead.
-            if (status != NKikimrProto::OK) {
-                return ReplyAndDie(NKikimrProto::ERROR);
-            }
-            if (!GetBlockRepliesRemaining) {
-                GetBlockFinished = true;
-                TryToSatisfyRequest();
-            }
-            return;
-        }
-
         switch (NKikimrProto::EReplyStatus quorumStatus = GetBlockTracker.ProcessReply(vdisk, status)) {
             case NKikimrProto::OK:
-                if (!GetBlockRepliesRemaining) {
-                    GetBlockFinished = true;
-                    TryToSatisfyRequest();
-                }
+                GetBlockFinished = true;
+                TryToSatisfyRequest();
                 break;
 
             case NKikimrProto::ERROR:
                 return ReplyAndDie(NKikimrProto::ERROR);
 
             case NKikimrProto::UNKNOWN:
-                if (!GetBlockRepliesRemaining) {
-                    return ReplyAndDie(NKikimrProto::ERROR);
-                }
                 break;
 
             default:

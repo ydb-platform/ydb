@@ -11,11 +11,29 @@ namespace NKikimr::NBsController {
 
 using TFailRealmStates = std::array<EMirror3dcFailRealmState, 3>;
 
+using TExcludedRealms = std::array<bool, 3>;
+
+inline std::optional<TMirror3dcGroupConfiguration> NextDataCenterTransition(
+        const TMirror3dcGroupConfiguration& current, const TExcludedRealms& excluded) {
+    // Return available realms first when the target swaps two data centers.
+    for (bool takeDown : {false, true}) {
+        for (ui32 realm = 0; realm < excluded.size(); ++realm) {
+            if (excluded[realm] == takeDown && IsDown(current.Realms[realm]) != takeDown) {
+                if (auto next = ChangeMirror3dcRealmAvailability(current, realm, takeDown)) {
+                    return next;
+                }
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 struct TGroupReplicationInfo {
     ui32 Generation = 0;
     std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
     TFailRealmStates States;
     std::optional<EMirror3dcGroupState> GroupState;
+    std::optional<TExcludedRealms> TargetExcluded;
     struct TVDisk {
         TVDiskID Id;
         TActorId ActorId;

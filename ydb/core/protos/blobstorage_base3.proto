@@ -83,36 +83,96 @@ message TSerialManagementStage {
 }
 
 // Mirror-3-dc group states and physical realm roles are persisted with the group generation.
-// The active states, layouts and transitions are specified in YDB RFC 192:
-// https://github.com/ydb-platform/ydb-rfc/blob/09d4c7cb542b83d81c443dd467e68d4ddf4c1443/192_mirror_3_dc_group_state.md
 // I = Included, P = Pending, R = Recovering, X = Excluded.
+// D is the replication target, W the write layout, E the guaranteed layout for confirmed blobs.
+// DC_SOLO_DISASTER is read-only. At a crossing (=), the horizontal and vertical paths continue independently.
+//
+//   +--------------------------------+               +--------------------------------+               +--------------------------------+
+//   |             NORMAL             |               |           DC_FAILURE           |               |        DC_SOLO_DISASTER        |
+//   | I/I/I                          |<------------->| I/I/P                          |<------------->| I/P/P                          |
+//   | D: 1+1+1                       |               | D: 1+1+1                       |               | D: 1+1+1                       |
+//   | W: 1+1+1 OR 2+2                |               | W: 1+1+1 OR 2+2                |               | W: 1+1+1 OR 2+2                |
+//   | E: 1+1+1 OR 2+2                |               | E: 1+1+1 OR 2+2                |               | E: 1+1+1 OR 2+2                |
+//   +--------------------------------+               +--------------------------------+               +--------------------------------+
+//                   ^                                                |                                                |
+//                   |                                                |                                                |
+//                   |                                                |                                                |
+//                   |                                                |                                                |
+//                   |                                                v                                                v
+//   +--------------------------------+               +--------------------------------+               +--------------------------------+               +--------------------------------+
+//   |        DC_RECOVERY_INV1        |               |        DC_FAILURE_INV1         |               |          DC_SOLO_INV1          |               | DC_SOLO_RECOVERY_INV1_PENDING  |
+//   | I/I/R                          |<------------->| I/I/X                          |-------------->| I/X/X                          |<------------->| I/R/X                          |
+//   | D: 1+1+1                       |               | D: 1+1                         |               | D: 1                           |               | D: 1+1                         |
+//   | W: 1+1+1 OR 2+2                |<-------+      | W: 2+2                         |<-+            | W: 2                           |<---------+    | W: 2                           |
+//   | E: 1+1                         |<---+   |      | E: 1+1                         |<-=---+        | E: 1                           |      +---=--->| E: 1                           |
+//   +--------------------------------+    |   |      +--------------------------------+  |   |        +--------------------------------+      |   |    +--------------------------------+
+//                                         |   |                      |                   |   |                        |                       |   |                    |
+//                                         |   |                      |                   |   |                        |                       |   |                    |
+//                                         |   |                      |                   |   |                        |                       |   |                    |
+//                                         |   |                      |                   |   |                        |                       |   |                    v
+//                                         |   |                      |                   |   |                        |                       |   |    +--------------------------------+
+//                                         |   |                      |                   |   |                        |                       |   |    |     DC_SOLO_RECOVERY_INV1      |
+//                                         |   |                      |                   |   |                        |                       |   +----| I/R/X                          |
+//                                         |   |                      |                   |   |                        |                       |        | D: 1+1                         |
+//                                         |   |                      |                   |   |                        |                       |        | W: 2+2                         |
+//                                         |   |                      |                   |   +------------------------=-----------------------=--------| E: 1                           |
+//                                         |   |                      |                   |                            |                       |        +--------------------------------+
+//                                         |   |                      |                   |                            |                       |
+//                                         |   |                      |                   |                            |                       |
+//                                         |   |                      |                   |                            |                       |
+//                                         |   |                      v                   |                            v                       |
+//                                         |   |      +--------------------------------+  |            +--------------------------------+      |
+//                                         |   |      |    DC_FAILURE_INV2_PENDING     |  |            |      DC_SOLO_INV2_PENDING      |      |
+//                                         |   |      | I/I/X                          |--=----------->| I/X/X                          |      |
+//                                         |   +------| D: 2+2                         |  |            | D: 2                           |------+
+//                                         |          | W: 2+2                         |  |            | W: 2                           |
+//                                         |          | E: 1+1                         |  |            | E: 1                           |
+//                                         |          +--------------------------------+  |            +--------------------------------+
+//                                         |                          |                   |                            |
+//                                         |                          |                   |                            |
+//                                         |                          |                   |                            |
+//                                         |                          |                   |                            |
+//                                         |                          v                   |                            v
+//                                         |          +--------------------------------+  |            +--------------------------------+               +--------------------------------+
+//                                         |          |        DC_FAILURE_INV2         |  |            |          DC_SOLO_INV2          |               | DC_SOLO_RECOVERY_INV2_PENDING  |
+//                                         |          | I/I/X                          |--=----------->| I/X/X                          |<------------->| I/R/X                          |
+//                                         +----------| D: 2+2                         |  |            | D: 2                           |               | D: 1+1                         |
+//                                                    | W: 2+2                         |  |            | W: 2                           |<--------+     | W: 2                           |
+//                                                    | E: 2+2                         |  |            | E: 2                           |         |     | E: 2                           |
+//                                                    +--------------------------------+  |            +--------------------------------+         |     +--------------------------------+
+//                                                                                        |                                                       |                     |
+//                                                                                        |                                                       |                     |
+//                                                                                        |                                                       |                     |
+//                                                                                        |                                                       |                     |
+//                                                                                        |                                                       |                     v
+//                                                                                        |                                                       |     +--------------------------------+
+//                                                                                        |                                                       |     |     DC_SOLO_RECOVERY_INV2      |
+//                                                                                        |                                                       +-----| I/R/X                          |
+//                                                                                        |                                                             | D: 1+1                         |
+//                                                                                        |                                                             | W: 2+2                         |
+//                                                                                        +-------------------------------------------------------------| E: 2                           |
+//                                                                                                                                                      +--------------------------------+
+//
 message TGroupState {
     enum EState {
-        NORMAL = 0;                                 // I/I/I.
+        NORMAL = 0;  // I/I/I.
 
-        DC_FAILURE = 17;                            // I/I/P.
-        DC_FAILURE_INV1 = 2;                        // I/I/X.
-        DC_FAILURE_INV2_PENDING = 13;               // I/I/X.
-        DC_FAILURE_INV2 = 3;                        // I/I/X.
+        DC_FAILURE = 1;  // I/I/P.
+        DC_FAILURE_INV1 = 2;  // I/I/X.
+        DC_FAILURE_INV2_PENDING = 3;  // I/I/X.
+        DC_FAILURE_INV2 = 4;  // I/I/X.
 
-        DC_RECOVERY_INV1 = 5;                       // I/I/R.
+        DC_RECOVERY_INV1 = 5;  // I/I/R.
 
-        DC_SOLO_DISASTER = 18;                      // I/P/P, read-only.
-        DC_SOLO_INV1 = 7;                           // I/X/X.
-        DC_SOLO_INV2_PENDING = 14;                  // I/X/X.
-        DC_SOLO_INV2 = 8;                           // I/X/X.
+        DC_SOLO_DISASTER = 6;  // I/P/P.
+        DC_SOLO_INV1 = 7;  // I/X/X.
+        DC_SOLO_INV2_PENDING = 8;  // I/X/X.
+        DC_SOLO_INV2 = 9;  // I/X/X.
 
-        DC_SOLO_RECOVERY_INV1_PENDING = 15;         // I/R/X.
-        DC_SOLO_RECOVERY_INV1 = 10;                 // I/R/X.
-        DC_SOLO_RECOVERY_INV2_PENDING = 16;         // I/R/X.
-        DC_SOLO_RECOVERY_INV2 = 11;                 // I/R/X.
-
-        // Old configurations keep their original roles and copy guarantees until recovery.
-        LEGACY_DC_FAILURE = 1;                      // I/I/X.
-        DC_FAILURE_INV1_PENDING = 12;               // I/I/X.
-        DC_RECOVERY = 4;                            // I/I/R.
-        LEGACY_DC_SOLO_DISASTER = 6;                // I/X/X.
-        DC_SOLO_RECOVERY = 9;                       // I/R/X.
+        DC_SOLO_RECOVERY_INV1_PENDING = 10;  // I/R/X.
+        DC_SOLO_RECOVERY_INV1 = 11;  // I/R/X.
+        DC_SOLO_RECOVERY_INV2_PENDING = 12;  // I/R/X.
+        DC_SOLO_RECOVERY_INV2 = 13;  // I/R/X.
     }
 }
 

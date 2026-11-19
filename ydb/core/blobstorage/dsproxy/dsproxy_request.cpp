@@ -805,60 +805,9 @@ namespace NKikimr {
 
     void TBlobStorageGroupRequestActor::BootstrapImpl() {
         GetActiveCounter()->Inc();
-        if (!BootstrapCheck()) {
-            return;
+        if (BootstrapCheck()) {
+            Bootstrap();
         }
-        if (ReadBlock) {
-            if (Info->IsMirror3dcReadOnly()) {
-                auto request = std::make_unique<TEvBlobStorage::TEvGetBlock>(ReadBlock->TabletId, ReadBlock->Deadline);
-                request->RequiredBlockedGeneration = ReadBlock->Generation;
-                request->ForceGroupGeneration = Info->GroupGeneration;
-                Send(ProxyActorId, request.release(), 0, 0, Span.GetTraceId());
-            } else {
-                auto request = std::make_unique<TEvBlobStorage::TEvBlock>(ReadBlock->TabletId, ReadBlock->Generation,
-                    ReadBlock->Deadline, TWriteSource::SkeletonForceBlock);
-                request->IsIdempotent = true;
-                request->ForceGroupGeneration = Info->GroupGeneration;
-                request->DataKind = DataKind;
-                Send(ProxyActorId, request.release(), 0, 0, Span.GetTraceId());
-            }
-            Become(&TThis::StateWaitForReadBlock);
-            return;
-        }
-        Bootstrap();
-    }
-
-    void TBlobStorageGroupRequestActor::SetReadBlock(ui64 tabletId, ui32 generation, TInstant deadline) {
-        if (generation && Info->Type.GetErasure() == TErasureType::ErasureMirror3dc
-                && Info->GetMirror3dcState().State != NKikimrBlobStorage::TGroupState::NORMAL) {
-            ReadBlock = std::make_unique<TReadBlock>(TReadBlock{tabletId, generation, deadline});
-        }
-    }
-
-    STATEFN(TBlobStorageGroupRequestActor::StateWaitForReadBlock) {
-        if (ProcessEvent(ev)) {
-            return;
-        }
-        switch (ev->GetTypeRewrite()) {
-            case TEvBlobStorage::EvGetBlockResult:
-                return FinishReadBlock(*ev->Get<TEvBlobStorage::TEvGetBlockResult>());
-            case TEvBlobStorage::EvBlockResult:
-                return FinishReadBlock(*ev->Get<TEvBlobStorage::TEvBlockResult>());
-        }
-    }
-
-    void TBlobStorageGroupRequestActor::FinishReadBlock(const TEvBlobStorage::TEvResultCommon& result) {
-        if (result.Status == NKikimrProto::OK) {
-            return Bootstrap();
-        }
-        if (result.Status == NKikimrProto::RACE) {
-            AccountRacingGeneration(result.RacingGeneration);
-            if (!ForceGroupGeneration) {
-                return RestartAfterRace();
-            }
-        }
-        ErrorReason = result.ErrorReason;
-        ReplyAndDie(result.Status);
     }
 
     TActorId TBlobStorageGroupRequestActor::GetVDiskActorId(const TVDiskIdShort &shortId) const {
@@ -934,28 +883,26 @@ namespace NKikimr {
                 << " Type# " << type);
             return done(NKikimrProto::RACE, "forced group generation mismatch");
         } else {
-            RestartAfterRace();
-        }
-        return true;
-    }
-
-    void TBlobStorageGroupRequestActor::RestartAfterRace() {
-        Y_DEBUG_ABORT_UNLESS(RestartCounter < 100);
-        auto q = RestartQuery(RestartCounter + 1);
-        if (q->Type() != TEvBlobStorage::EvBunchOfEvents) {
-            SetExecutionRelay(*q, std::exchange(ExecutionRelay, {}));
-            // A restarted request keeps its admission hint. Batched puts carry one per event.
-            auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(q.get());
-            Y_DEBUG_ABORT_UNLESS(common);
-            if (common) {
-                common->DataKind = DataKind;
+            Y_DEBUG_ABORT_UNLESS(RestartCounter < 100);
+            auto q = RestartQuery(RestartCounter + 1);
+            if (q->Type() != TEvBlobStorage::EvBunchOfEvents) {
+                SetExecutionRelay(*q, std::exchange(ExecutionRelay, {}));
+                // Restarting rebuilds the request field by field, so carry the admission hint over
+                // here rather than in each RestartQuery: a request must not become user data just
+                // because it raced with a group reconfiguration. The put path is exempt because it
+                // restarts as a bunch of events, each already carrying its own kind.
+                auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(q.get());
+                Y_DEBUG_ABORT_UNLESS(common);
+                if (common) {
+                    common->DataKind = DataKind;
+                }
             }
+            ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];
+            const TActorId& proxyId = MakeBlobStorageProxyID(Info->GroupID);
+            TActivationContext::Send(new IEventHandle(nodeWardenId, Source, q.release(), 0, Cookie, &proxyId, Span.GetTraceId()));
         }
-        ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];
-        TActorId proxyId = MakeBlobStorageProxyID(Info->GroupID);
-        TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        TActivationContext::Send(new IEventHandle(nodeWardenId, Source, q.release(), 0, Cookie, &proxyId, Span.GetTraceId()));
         PassAway();
+        return true;
     }
 
     bool TBlobStorageGroupRequestActor::ProcessEvent(TAutoPtr<IEventHandle>& ev, bool suppressCommonErrors) {
@@ -1232,12 +1179,6 @@ namespace NKikimr {
 
             using T = std::decay_t<decltype(ev)>;
 
-            if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVGet>) {
-                if (ReadBlock) {
-                    // The group has confirmed the block. Reads from Pending must have no write side effect.
-                    ev.Record.ClearForceBlockTabletData();
-                }
-            }
             if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVPut>) {
                 userChecksumming = ev.Record.HasChecksum();
             }

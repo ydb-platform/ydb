@@ -41,10 +41,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor {
         }
         ++Responses;
 
-        bool needsReplicatedDisk = Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
-            && (!record.GetJoinedGroup() || !record.GetReplicated());
-        auto quorumStatus = needsReplicatedDisk && status == NKikimrProto::OK ? NKikimrProto::ERROR : status;
-        switch (QuorumTracker.ProcessReply(vdisk, quorumStatus)) {
+        switch (QuorumTracker.ProcessReply(vdisk, status)) {
             case NKikimrProto::OK:
                 if (Responses == Requests) {
                     ReplyAndDie(NKikimrProto::OK);
@@ -56,9 +53,6 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor {
                 break;
 
             default:
-                if (Responses == Requests) {
-                    ReplyAndDie(NKikimrProto::ERROR);
-                }
                 break;
         }
     }
@@ -123,7 +117,7 @@ public:
         Become(&TBlobStorageGroupStatusRequest::StateWait);
 
         if (Requests == 0) {
-            ReplyAndDie(NKikimrProto::ERROR);
+            ReplyAndDie(NKikimrProto::OK);
         }
     }
 

@@ -38,8 +38,6 @@ class TMirror3dcPutStrategy : public TStrategyBase {
                 return {{0, 1, 1}, {1, 0, 1}, {1, 1, 0}};
             case L::LAYOUT_22:
                 return {{0, 2, 2}, {2, 0, 2}, {2, 2, 0}};
-            case L::LAYOUT_0:
-                return {{0, 0, 0}};
             case L::LAYOUT_1:
                 return {{0, 0, 1}, {0, 1, 0}, {1, 0, 0}};
             case L::LAYOUT_2:
@@ -190,8 +188,7 @@ public:
                 sent |= situation == TSituation::Sent ? bit : 0;
             }
         }
-        if (checker->GetEnsuredLayout() != EMirror3dcLayout::LAYOUT_0
-                && !checker->CheckFailModelForSubgroup(failed)) {
+        if (!checker->CheckFailModelForSubgroup(failed)) {
             return EStrategyOutcome::Error("Mirror-3-dc write exceeds the ensured failure model");
         }
         if (check(present)) {

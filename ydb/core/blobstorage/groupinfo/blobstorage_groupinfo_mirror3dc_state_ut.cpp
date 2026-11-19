@@ -16,23 +16,18 @@ struct TStateCase {
     ELayout Durability;
     ELayout Expected;
 };
-// RFC 192 layout expectations, including wire compatibility with persisted legacy states.
+// RFC 192 layout expectations, for all group states.
 constexpr TStateCase Cases[] = {
     {TGroupState::NORMAL, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::INCLUDED}, ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_111_22},
-    {TGroupState::DC_RECOVERY, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::RECOVERING}, ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_11_2},
     {TGroupState::DC_RECOVERY_INV1, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::RECOVERING}, ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_11},
-    {TGroupState::DC_FAILURE, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::PENDING}, ELayout::LAYOUT_22, ELayout::LAYOUT_111, ELayout::LAYOUT_111_22},
-    {TGroupState::LEGACY_DC_FAILURE, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, ELayout::LAYOUT_22, ELayout::LAYOUT_0, ELayout::LAYOUT_11_2},
+    {TGroupState::DC_FAILURE, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::PENDING}, ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_111_22},
     {TGroupState::DC_FAILURE_INV1, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_11},
     {TGroupState::DC_FAILURE_INV2, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, ELayout::LAYOUT_22, ELayout::LAYOUT_22, ELayout::LAYOUT_22},
-    {TGroupState::DC_SOLO_DISASTER, {TFailRealm::INCLUDED, TFailRealm::PENDING, TFailRealm::PENDING}, ELayout::LAYOUT_22, ELayout::LAYOUT_111, ELayout::LAYOUT_111_22},
-    {TGroupState::LEGACY_DC_SOLO_DISASTER, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED}, ELayout::LAYOUT_2, ELayout::LAYOUT_0, ELayout::LAYOUT_0},
+    {TGroupState::DC_SOLO_DISASTER, {TFailRealm::INCLUDED, TFailRealm::PENDING, TFailRealm::PENDING}, ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_111_22},
     {TGroupState::DC_SOLO_INV1, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED}, ELayout::LAYOUT_2, ELayout::LAYOUT_1, ELayout::LAYOUT_1},
     {TGroupState::DC_SOLO_INV2, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED}, ELayout::LAYOUT_2, ELayout::LAYOUT_2, ELayout::LAYOUT_2},
-    {TGroupState::DC_SOLO_RECOVERY, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED}, ELayout::LAYOUT_2, ELayout::LAYOUT_1, ELayout::LAYOUT_0},
     {TGroupState::DC_SOLO_RECOVERY_INV1, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED}, ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_1},
     {TGroupState::DC_SOLO_RECOVERY_INV2, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED}, ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_2},
-    {TGroupState::DC_FAILURE_INV1_PENDING, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_11_2},
     {TGroupState::DC_FAILURE_INV2_PENDING, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, ELayout::LAYOUT_22, ELayout::LAYOUT_22, ELayout::LAYOUT_11},
     {TGroupState::DC_SOLO_RECOVERY_INV1_PENDING, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED}, ELayout::LAYOUT_2, ELayout::LAYOUT_11, ELayout::LAYOUT_1},
     {TGroupState::DC_SOLO_RECOVERY_INV2_PENDING, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED}, ELayout::LAYOUT_2, ELayout::LAYOUT_11, ELayout::LAYOUT_2},
@@ -40,8 +35,8 @@ constexpr TStateCase Cases[] = {
 };
 
 static_assert([] {
-    for (int value = TGroupState::EState_MIN; value <= TGroupState::EState_MAX; ++value) {
-        const auto roles = GetMirror3dcRealmStates(static_cast<EMirror3dcGroupState>(value));
+    for (const auto& test : Cases) {
+        const auto roles = GetMirror3dcRealmStates(test.State);
         if (!roles || !std::is_sorted(roles->begin(), roles->end())) {
             return false;
         }
@@ -52,7 +47,7 @@ static_assert([] {
 
 Y_UNIT_TEST_SUITE(TGroupStateTest) {
     Y_UNIT_TEST(PoliciesAndPhysicalPermutations) {
-        UNIT_ASSERT_VALUES_EQUAL(std::size(Cases), TGroupState::EState_MAX + 1);
+        UNIT_ASSERT_VALUES_EQUAL(std::size(Cases), TGroupState::EState_descriptor()->value_count());
         for (const auto& test : Cases) {
             const auto policy = GetMirror3dcGroupLayouts(test.State);
             UNIT_ASSERT(policy);
@@ -79,8 +74,6 @@ Y_UNIT_TEST_SUITE(TGroupStateTest) {
     }
 
     Y_UNIT_TEST(PersistedProtobufStatesRoundTrip) {
-        static_assert(TGroupState::LEGACY_DC_FAILURE == 1);
-        static_assert(TGroupState::LEGACY_DC_SOLO_DISASTER == 6);
         NKikimrBlobStorage::TFailRealmStates empty;
         UNIT_ASSERT(!empty.HasGroupState()); // Older records still take the migration path.
         for (const auto& test : Cases) {
@@ -98,42 +91,10 @@ Y_UNIT_TEST_SUITE(TGroupStateTest) {
         }
     }
 
-    Y_UNIT_TEST(LegacyFailureRetainsItsGuarantees) {
-        const TMirror3dcFailRealmStates realms{TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::INCLUDED};
-        const TMirror3dcGroupConfiguration failure{TGroupState::LEGACY_DC_FAILURE, realms};
-        const TMirror3dcGroupConfiguration pending{TGroupState::DC_FAILURE_INV1_PENDING, realms};
-        UNIT_ASSERT(IsValidMirror3dcGroupConfiguration(failure));
-        UNIT_ASSERT(IsValidMirror3dcGroupConfiguration(pending));
-        UNIT_ASSERT(!IsMirror3dcReplicationTarget(failure.State, TFailRealm::INCLUDED));
-        UNIT_ASSERT(IsMirror3dcReplicationTarget(pending.State, TFailRealm::INCLUDED));
-        UNIT_ASSERT(!RecoveringComplete(failure));
-        const auto completed = RecoveringComplete(pending);
-        UNIT_ASSERT(completed && completed->State == TGroupState::DC_FAILURE_INV1);
-        UNIT_ASSERT((completed->Realms == TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::INCLUDED}));
-        UNIT_ASSERT(IsAllowedMirror3dcGroupTransition(failure, pending));
-        UNIT_ASSERT(IsAllowedMirror3dcGroupTransition(pending, *completed));
-        UNIT_ASSERT(!IsAllowedMirror3dcGroupTransition(failure, *completed));
-    }
-
-    Y_UNIT_TEST(FirstFailureBeforePendingRealmRollout) {
-        const TMirror3dcGroupConfiguration normal;
-        const auto failure = TakeDownFailRealm(normal, 1, /*enablePendingRealm=*/false);
-        UNIT_ASSERT(failure && failure->State == TGroupState::LEGACY_DC_FAILURE);
-        UNIT_ASSERT(failure->Realms[1] == TFailRealm::EXCLUDED);
-        UNIT_ASSERT(IsAllowedMirror3dcGroupTransition(normal, *failure, /*enablePendingRealm=*/false));
-        UNIT_ASSERT(!IsAllowedMirror3dcGroupTransition(normal, *failure));
-        const auto returned = ReturnFailRealm(*failure, 1);
-        UNIT_ASSERT(returned && returned->State == TGroupState::DC_RECOVERY);
-        const auto second = TakeDownFailRealm(*failure, 2, /*enablePendingRealm=*/false);
-        UNIT_ASSERT(second && second->State == TGroupState::LEGACY_DC_SOLO_DISASTER);
-        UNIT_ASSERT(second->Realms[1] == TFailRealm::EXCLUDED && second->Realms[2] == TFailRealm::EXCLUDED);
-    }
 
     Y_UNIT_TEST(AllowedEdgesHaveValidPolicies) {
         UNIT_ASSERT(IsAllowedMirror3dcGroupTransition(TGroupState::DC_FAILURE, TGroupState::DC_FAILURE_INV1));
-        UNIT_ASSERT(!IsAllowedMirror3dcGroupTransition(TGroupState::DC_FAILURE, TGroupState::DC_FAILURE_INV1_PENDING));
         UNIT_ASSERT(IsAllowedMirror3dcGroupTransition(TGroupState::DC_SOLO_DISASTER, TGroupState::DC_SOLO_INV1));
-        UNIT_ASSERT(!IsAllowedMirror3dcGroupTransition(TGroupState::DC_SOLO_DISASTER, TGroupState::DC_SOLO_RECOVERY));
         for (const auto& edge : Mirror3dcAllowedGroupTransitions) {
             UNIT_ASSERT(GetMirror3dcGroupLayouts(edge.From));
             UNIT_ASSERT(GetMirror3dcGroupLayouts(edge.To));
@@ -230,8 +191,8 @@ Y_UNIT_TEST_SUITE(TGroupStateTest) {
     }
 
     Y_UNIT_TEST(SoloRecoveryHasTwoSystemStages) {
-        const TMirror3dcGroupConfiguration initial{TGroupState::DC_SOLO_RECOVERY, {TFailRealm::EXCLUDED, TFailRealm::RECOVERING, TFailRealm::INCLUDED}};
-        const auto pending = RecoveringComplete(initial);
+        const TMirror3dcGroupConfiguration initial{TGroupState::DC_SOLO_INV1, {TFailRealm::EXCLUDED, TFailRealm::EXCLUDED, TFailRealm::INCLUDED}};
+        const auto pending = ReturnFailRealm(initial, 1);
         UNIT_ASSERT(pending && pending->State == TGroupState::DC_SOLO_RECOVERY_INV1_PENDING);
         UNIT_ASSERT((pending->Realms == TMirror3dcFailRealmStates{TFailRealm::EXCLUDED, TFailRealm::RECOVERING, TFailRealm::INCLUDED}));
         UNIT_ASSERT(GetMirror3dcGroupLayouts(pending->State)->Write == ELayout::LAYOUT_2);
@@ -245,8 +206,8 @@ Y_UNIT_TEST_SUITE(TGroupStateTest) {
     }
 
     Y_UNIT_TEST(ReplicationTargetsFollowTheGraph) {
-        for (const auto state : {TGroupState::LEGACY_DC_FAILURE, TGroupState::DC_FAILURE_INV1, TGroupState::DC_FAILURE_INV2,
-                TGroupState::LEGACY_DC_SOLO_DISASTER, TGroupState::DC_SOLO_INV1, TGroupState::DC_SOLO_INV2}) {
+        for (const auto state : {TGroupState::DC_FAILURE_INV1, TGroupState::DC_FAILURE_INV2,
+                TGroupState::DC_SOLO_INV1, TGroupState::DC_SOLO_INV2}) {
             for (const auto realm : {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED, TFailRealm::PENDING}) {
                 UNIT_ASSERT(!IsMirror3dcReplicationTarget(state, realm));
             }
@@ -261,8 +222,6 @@ Y_UNIT_TEST_SUITE(TGroupStateTest) {
             UNIT_ASSERT(IsMirror3dcReplicationTarget(state, TFailRealm::INCLUDED));
             UNIT_ASSERT(!IsMirror3dcReplicationTarget(state, TFailRealm::PENDING));
         }
-        UNIT_ASSERT(IsMirror3dcReplicationTarget(TGroupState::DC_RECOVERY, TFailRealm::INCLUDED));
-        UNIT_ASSERT(IsMirror3dcReplicationTarget(TGroupState::DC_RECOVERY, TFailRealm::RECOVERING));
         UNIT_ASSERT(GetMirror3dcReadLayout(TGroupState::DC_SOLO_INV2_PENDING) == ELayout::LAYOUT_1);
     }
 }

@@ -4,8 +4,6 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_operation_broker.h>
-#include <ydb/core/blobstorage/vdisk/syncer/guid_proxyobtain.h>
-#include <ydb/core/blobstorage/vdisk/syncer/guid_recovery.h>
 #include <ydb/core/blobstorage/vdisk/syncer/syncer_job_task.h>
 #include <ydb/core/blobstorage/vdisk/syncer/syncer_job_actor.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_scheduler.h>
@@ -16,7 +14,6 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
-#include <util/generic/scope.h>
 
 namespace {
 
@@ -702,70 +699,6 @@ namespace {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
-
-    Y_UNIT_TEST(CommittedGuidRestartsWithOnlySoloRealmAvailable) {
-        using TState = NKikimrBlobStorage::TGroupState;
-        using TRole = NKikimrBlobStorage::TDataCenterState;
-        for (auto state : {TState::DC_SOLO_INV1, TState::DC_SOLO_INV2}) {
-            TEnvironmentSetup env({.NodeCount = 9, .Erasure = TBlobStorageGroupType::ErasureMirror3dc});
-            env.CreateBoxAndPool(1, 1);
-            env.Sim(TDuration::Minutes(1));
-            ui32 groupId = env.GetGroups().front();
-            NKikimrBlobStorage::TConfigRequest config;
-            config.SetIgnoreGroupFailModelChecks(true);
-            config.SetIgnoreDegradedGroupsChecks(true);
-            auto* definition = config.AddCommand()->MutableDefineGroupState()->AddGroups();
-            definition->SetGroupId(groupId);
-            definition->SetGroupState(state);
-            for (ui32 realm = 0; realm < 3; ++realm) {
-                definition->AddFailRealmStates(realm == 0 ? TRole::INCLUDED : TRole::EXCLUDED);
-            }
-            auto response = env.Invoke(config);
-            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-            env.Sim(TDuration::Seconds(5));
-
-            auto info = env.GetGroupInfo(groupId);
-            ui32 availableDisks = state == TState::DC_SOLO_INV1 ? 3 : 2;
-            TVector<TTargetVDisk> targets;
-            THashSet<TActorId> unavailable;
-            for (ui32 order = 0; order < info->GetTotalVDisksNum(); ++order) {
-                auto id = info->GetVDiskId(order);
-                auto service = info->GetActorId(order);
-                if (id.FailRealm == 0 && targets.size() < availableDisks) {
-                    auto [nodeId, pdiskId, vslotId] = DecomposeVDiskServiceId(service);
-                    targets.push_back({groupId, id, service, pdiskId});
-                } else {
-                    unavailable.insert(service);
-                }
-            }
-            UNIT_ASSERT_VALUES_EQUAL(targets.size(), availableDisks);
-
-            THashSet<TActorId> recoveryActors;
-            THashSet<TActorId> recovered;
-            Y_DEFER { env.Runtime->FilterFunction = nullptr; };
-            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
-                if (unavailable.contains(ev->Recipient)) {
-                    return false;
-                }
-                if (ev->GetTypeRewrite() == TEvBlobStorage::EvVDiskGuidObtained) {
-                    const auto& id = ev->Get<TEvVDiskGuidObtained>()->VDiskId;
-                    if (id.GroupID.GetRawId() == groupId && id.GroupGeneration == info->GroupGeneration) {
-                        recoveryActors.insert(ev->GetRecipientRewrite());
-                    }
-                }
-                if (ev->GetTypeRewrite() == TEvBlobStorage::EvVDiskGuidRecovered && recoveryActors.contains(ev->Sender)) {
-                    UNIT_ASSERT(ev->Get<TEvVDiskGuidRecovered>()->Outcome.Decision == NSyncer::EDecision::Good);
-                    recovered.insert(ev->Sender);
-                }
-                return true;
-            };
-            for (const auto& target : targets) {
-                RestartVDisk(env, target);
-            }
-            WaitUntil(env, [&] { return recovered.size() == targets.size(); }, "restarted VDisks did not confirm their persisted GUIDs");
-            WaitForVDisksToGetRunning(env, targets);
-        }
-    }
 
     // A dynamically assigned empty VDisk must acquire the startup data sync token before
     // RecoverLostData starts full sync, not only later when it enters StandardMode.

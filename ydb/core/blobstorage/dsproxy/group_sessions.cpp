@@ -117,7 +117,7 @@ bool TGroupSessions::GoodToGo(const TBlobStorageGroupInfo& info, bool waitForAll
     if (waitForAllVDisks) {
         return connected.GetNumSetItems() == topology.GetTotalVDisksNum();
     }
-    if (info.Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc && topology.GetTotalFailRealmsNum() == 3) {
+    if (info.Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
         return TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, connected);
     }
     return topology.GetQuorumChecker().CheckQuorumForGroup(connected);

@@ -163,8 +163,6 @@ struct TAccelerationParams {
     ui32 MaxNumOfSlowDisks = DefaultMaxNumOfSlowDisks;
 };
 
-struct TBlobStorageGroupMultiGetParameters;
-
 class TBlobStorageGroupRequestActor : public TActor<TBlobStorageGroupRequestActor> {
 public:
     template<typename TEv>
@@ -233,16 +231,6 @@ public:
         , DoSendDeathNote(params.Common.DoSendDeathNote)
         , EnableStorageRetroTraceCollectionSlowRequests(params.Common.EnableStorageRetroTraceCollectionSlowRequests)
     {
-        using TEvent = std::remove_pointer_t<decltype(params.Common.Event)>;
-        // MultiGet forwards the force-block requirement to its child Get requests.
-        if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet> && !std::is_same_v<TGroupRequestParameters, TBlobStorageGroupMultiGetParameters>) {
-            if (const auto& block = params.Common.Event->ForceBlockTabletData) {
-                SetReadBlock(block->Id, block->Generation, params.Common.Event->Deadline);
-            }
-        } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvRange> || std::is_same_v<TEvent, TEvBlobStorage::TEvDiscover>) {
-            const auto& request = *params.Common.Event;
-            SetReadBlock(request.TabletId, request.ForceBlockedGeneration, request.Deadline);
-        }
         if (NWilson::TSpan* parentWilsonSpan = ParentSpan.GetWilsonSpanPtr()) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
             Span = NWilson::TSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(parentTraceId.GetVerbosity(),
@@ -351,17 +339,6 @@ protected:
     THashMap<ui32, TActorId> NodeSubscriptions;
 
 private:
-    struct TReadBlock {
-        ui64 TabletId;
-        ui32 Generation;
-        TInstant Deadline;
-    };
-    std::unique_ptr<TReadBlock> ReadBlock;
-    void SetReadBlock(ui64 tabletId, ui32 generation, TInstant deadline);
-    STFUNC(StateWaitForReadBlock);
-    void FinishReadBlock(const TEvBlobStorage::TEvResultCommon& result);
-    void RestartAfterRace();
-
     const TActorId Source;
     const ui64 Cookie;
     TMessageRelevanceOwner RelevanceOwner;

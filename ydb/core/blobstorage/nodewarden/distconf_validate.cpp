@@ -536,7 +536,7 @@ namespace NKikimr::NStorage {
             }
             auto normalized = config;
             try {
-                if (ApplyStaticDataCenterStates(&normalized, config.GetDataCenterStates(), /*enablePendingRealm=*/true)) {
+                if (ApplyStaticDataCenterStates(&normalized, config.GetDataCenterStates())) {
                     return "Static group roles do not match authoritative DC states";
                 }
             } catch (const yexception& error) {

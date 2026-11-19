@@ -60,7 +60,7 @@ void CheckCase(const TMirror3dcGroupState& states, const TCopies& copies, bool e
                 }
             }
             UNIT_ASSERT_VALUES_EQUAL(checker->CheckQuorumForSubgroup(disks), expected);
-            UNIT_ASSERT_VALUES_EQUAL(checker->CheckQuorumForLayout(parts), expected);
+            UNIT_ASSERT_VALUES_EQUAL(checker->CheckWriteQuorumForLayout(parts), expected);
         }
     } while (std::next_permutation(permutation.begin(), permutation.end()));
 }
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
 
         const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
         std::optional<TMirror3dcWriteQuorumChecker> checker = TryCreateChecker(
-            {NKikimrBlobStorage::TGroupState::DC_RECOVERY, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}},
+            {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}},
             EMirror3dcLayout::LAYOUT_111_22, EMirror3dcLayout::LAYOUT_111_22);
         UNIT_ASSERT(checker);
         TSubgroupPartLayout parts;
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 5), 0);
 
         checker = TryCreateChecker(
-            {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}},
+            {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}},
             EMirror3dcLayout::LAYOUT_22, EMirror3dcLayout::LAYOUT_11_2);
         TSubgroupPartLayout degraded;
         degraded.AddItem(0, 0, type);
@@ -182,10 +182,11 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     }
 
     Y_UNIT_TEST(DurabilityLimitsTargetDiskIndexWithinRealm) {
-        for (EMirror3dcGroupState state : {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING}) {
-            const ui32 requiredCopies = state == NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING ? 1 : 2;
+        for (EMirror3dcGroupState state : {NKikimrBlobStorage::TGroupState::DC_FAILURE, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING}) {
+            const bool pendingRealm = state == NKikimrBlobStorage::TGroupState::DC_FAILURE;
+            const ui32 requiredCopies = pendingRealm ? 1 : 2;
             TBlobStorageGroupInfo info = MakeInfo({state,
-                {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}});
+                {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, pendingRealm ? TDataCenterState::PENDING : TDataCenterState::EXCLUDED}});
             for (ui32 hash = 0; hash < 3; ++hash) {
                 std::optional<TMirror3dcWriteQuorumChecker> checker = TryCreateChecker(info, hash);
                 UNIT_ASSERT(checker);
@@ -213,8 +214,8 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
 
         const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
         const std::optional<TMirror3dcWriteQuorumChecker> checker = TryCreateChecker(
-            {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}},
-            EMirror3dcLayout::LAYOUT_22, EMirror3dcLayout::LAYOUT_0);
+            {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}},
+            EMirror3dcLayout::LAYOUT_22, EMirror3dcLayout::LAYOUT_1);
         UNIT_ASSERT(checker);
         TSubgroupPartLayout parts;
         UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 0), 0);
@@ -227,27 +228,25 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 4), 0);
     }
     Y_UNIT_TEST(OneCopyDurabilityStillReplicatesRecoveringRealm) {
-        for (const auto state : {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY,
-                NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING}) {
-            TBlobStorageGroupInfo info = MakeInfo({state, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}});
-            std::optional<TMirror3dcWriteQuorumChecker> checker = TryCreateChecker(info, 0);
-            UNIT_ASSERT(checker);
-            TBlobStorageGroupInfo::TVDiskIds subgroup;
-            info.PickSubgroup(0, &subgroup, nullptr);
-            TSubgroupPartLayout parts;
-            ui32 recoveringPart = 3;
-            for (ui32 part = 0; part < 3; ++part) {
-                if (subgroup[part].FailRealm == 0) {
-                    parts.AddItem(part, part, info.Type);
-                } else if (subgroup[part].FailRealm == 1) {
-                    recoveringPart = part;
-                }
+        const auto state = NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING;
+        TBlobStorageGroupInfo info = MakeInfo({state, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}});
+        std::optional<TMirror3dcWriteQuorumChecker> checker = TryCreateChecker(info, 0);
+        UNIT_ASSERT(checker);
+        TBlobStorageGroupInfo::TVDiskIds subgroup;
+        info.PickSubgroup(0, &subgroup, nullptr);
+        TSubgroupPartLayout parts;
+        ui32 recoveringPart = 3;
+        for (ui32 part = 0; part < 3; ++part) {
+            if (subgroup[part].FailRealm == 0) {
+                parts.AddItem(part, part, info.Type);
+            } else if (subgroup[part].FailRealm == 1) {
+                recoveringPart = part;
             }
-            UNIT_ASSERT(recoveringPart < 3);
-            UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, recoveringPart), 1u << recoveringPart);
-            parts.AddItem(recoveringPart, recoveringPart, info.Type);
-            UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, recoveringPart + 3), 0);
         }
+        UNIT_ASSERT(recoveringPart < 3);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, recoveringPart), 1u << recoveringPart);
+        parts.AddItem(recoveringPart, recoveringPart, info.Type);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, recoveringPart + 3), 0);
     }
 
     Y_UNIT_TEST(PrimaryStateSelectsPolicyForIdenticalRealmTuple) {
@@ -330,6 +329,45 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
             UNIT_ASSERT_VALUES_EQUAL(TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(info, failed),
                 legacy.CheckFailModelForGroup(failed));
         }
+    }
+
+    Y_UNIT_TEST(UncertainDisksCanHideEnsuredLayoutInTargetRealms) {
+        using G = NKikimrBlobStorage::TGroupState;
+        using DC = NKikimrBlobStorage::TDataCenterState;
+        using Q = TMirror3dcWriteQuorumChecker;
+        const TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 2, 3, 3);
+        const auto* top = &info.GetTopology();
+        TBlobStorageGroupInfo::TGroupVDisks uncertain(top);
+
+        const TMirror3dcGroupConfiguration solo{G::DC_SOLO_INV1, {DC::EXCLUDED, DC::EXCLUDED, DC::INCLUDED}};
+        uncertain += {top, TVDiskIdShort(0, 0, 0)};
+        uncertain += {top, TVDiskIdShort(1, 1, 0)};
+        UNIT_ASSERT(!Q::CanHideEnsuredLayout(solo, uncertain));
+        uncertain += {top, TVDiskIdShort(2, 0, 0)};
+        UNIT_ASSERT(Q::CanHideEnsuredLayout(solo, uncertain));
+
+        const TMirror3dcGroupConfiguration soloInv2{G::DC_SOLO_INV2, solo.Realms};
+        uncertain += {top, TVDiskIdShort(2, 0, 1)}; // Another VDisk in the same fail domain.
+        UNIT_ASSERT(!Q::CanHideEnsuredLayout(soloInv2, uncertain));
+        uncertain += {top, TVDiskIdShort(2, 1, 0)};
+        UNIT_ASSERT(Q::CanHideEnsuredLayout(soloInv2, uncertain));
+    }
+
+    Y_UNIT_TEST(UncertainDisksNeedOnlyFitTheTargetReadLayout) {
+        using G = NKikimrBlobStorage::TGroupState;
+        using DC = NKikimrBlobStorage::TDataCenterState;
+        using Q = TMirror3dcWriteQuorumChecker;
+        const TMirror3dcGroupConfiguration target{G::DC_FAILURE_INV1, {DC::INCLUDED, DC::EXCLUDED, DC::INCLUDED}};
+        const auto info = MakeInfo({target.State, target.Realms});
+        const auto* top = &info.GetTopology();
+        TBlobStorageGroupInfo::TGroupVDisks uncertain(top);
+        uncertain += {top, TVDiskIdShort(0, 0, 0)};
+        uncertain += {top, TVDiskIdShort(0, 1, 0)};
+        uncertain += {top, TVDiskIdShort(1, 2, 0)};
+        UNIT_ASSERT(!Q::CheckFailModelForGroup(info, uncertain)); // Only one available position in realm 0 of some subgroups.
+        UNIT_ASSERT(!Q::CanHideEnsuredLayout(target, uncertain));
+        uncertain += {top, TVDiskIdShort(2, 0, 0)};
+        UNIT_ASSERT(Q::CanHideEnsuredLayout(target, uncertain)); // E = 1+1 in realms 0 and 2.
     }
 
     Y_UNIT_TEST(GroupFailuresUseEnsuredRealmRoles) {
@@ -472,11 +510,6 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     }
 
     Y_UNIT_TEST(BlobCompletenessUsesWriteInsteadOfEnsured) {
-        // W = 2+2, E = 1+1 OR 2: meeting either minimum guarantee is not enough for FULL.
-        CheckBlobStateCase({NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {1, 1, 0}, {}, TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY);
-        CheckBlobStateCase({NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {2, 0, 0}, {}, TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY);
-        CheckBlobStateCase({NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY);
-        CheckBlobStateCase({NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {2, 2, 0}, {}, TBlobStorageGroupInfo::EBS_FULL);
         // W = 2+2, E = 1+1: FULL still requires two copies in both I realms.
         CheckBlobStateCase({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {2, 0, 0}, {}, TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY);
         CheckBlobStateCase({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {1, 1, 0}, {}, TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY);
@@ -514,8 +547,6 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     }
 
     Y_UNIT_TEST(FailureToleranceDependsOnEnsuredLayout) {
-        // E = 1+1 OR 2: two uncertain disks in one I are excessive; E = 1+1 tolerates them.
-        CheckBlobStateCase({NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {1, 2, 0}, {2, 0, 3}, TBlobStorageGroupInfo::EBS_DISINTEGRATED);
         CheckBlobStateCase({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {1, 2, 0}, {2, 0, 3}, TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY);
         // E = 2+2: 2+1 uncertain disks are tolerated, 2+2 are excessive; X is ignored.
         CheckBlobStateCase({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {1, 1, 0}, {2, 1, 3}, TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY);
@@ -532,10 +563,6 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     }
 
     Y_UNIT_TEST(AbsenceRequiresExcludingEveryEnsuredLayout) {
-        // E = 1+1 OR 2: a single uncertain disk cannot hide E; either two in I or one per I can.
-        CheckBlobStateCase({NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {}, {1, 0, 0}, TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY);
-        CheckBlobStateCase({NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {}, {2, 0, 0}, TBlobStorageGroupInfo::EBS_DISINTEGRATED);
-        CheckBlobStateCase({NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {}, {1, 1, 0}, TBlobStorageGroupInfo::EBS_DISINTEGRATED);
         // E = 1+1: uncertainty confined to one I cannot hide the whole layout.
         CheckBlobStateCase({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {}, {3, 0, 0}, TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY);
         CheckBlobStateCase({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {}, {1, 1, 0}, TBlobStorageGroupInfo::EBS_DISINTEGRATED);
@@ -572,6 +599,8 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         CheckBlobStateCase(readOnly, {}, {0, 1, 3}, TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY);
 
         for (TMirror3dcGroupState state : {failure, readOnly}) {
+            CheckCase(state, {1, 1, 1}, false);
+            CheckBlobStateCase(state, {1, 1, 1}, {}, TBlobStorageGroupInfo::EBS_FULL);
             TBlobStorageGroupInfo info = MakeInfo(state);
             for (ui32 hash = 0; hash < 3; ++hash) {
                 auto checker = TryCreateChecker(info, hash);
@@ -631,33 +660,29 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
 
     Y_UNIT_TEST(FailedRealmDoesNotCount) {
         // W = 2+2 in I/I: both realms have two copies.
-        CheckCase({NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {2, 2, 0}, true);
-        // W = 2+2 in I/I: the second I has only one copy; X cannot supplement it.
-        CheckCase({NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {2, 1, 3}, false);
-        // W = 2+2 in I/I: one copy in each I is insufficient; X is ignored.
-        CheckCase({NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {1, 1, 3}, false);
-        // W = 2+2 in I/I: three copies in one I cannot replace the missing second realm.
-        CheckCase({NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {3, 0, 3}, false);
-        // W = 2+2 in I/I: both realms have two copies despite different old-blob guarantees.
         CheckCase({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {2, 2, 0}, true);
+        // W = 2+2 in I/I: the second I has only one copy; X cannot supplement it.
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {2, 1, 3}, false);
+        // W = 2+2 in I/I: one copy in each I is insufficient; X is ignored.
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {1, 1, 3}, false);
+        // W = 2+2 in I/I: three copies in one I cannot replace the missing second realm.
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {3, 0, 3}, false);
         // W = 2+2 in I/I: the I guarantees do not replace actual copies of this write.
         CheckCase({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {1, 1, 0}, false);
     }
 
     Y_UNIT_TEST(RecoveryNeedsBothNormalRealms) {
-        // I/I/R (DC_RECOVERY):      W = 1+1+1 OR 2+2.
         // I/I/R (DC_RECOVERY_INV1): W = 1+1+1 OR 2+2.
-        for (const auto state : {NKikimrBlobStorage::TGroupState::DC_RECOVERY, NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1}) {
-            // W = 1+1+1 OR 2+2: 1+1+1 is satisfied across I/I/R.
-            CheckCase({state, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {1, 1, 1}, true);
-            // W = 1+1+1 OR 2+2: 2+2 is satisfied by both I realms, without R.
-            CheckCase({state, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {2, 2, 0}, true);
-            // W = 1+1+1 OR 2+2: I/R cannot provide 2+2 instead of I/I; 1+1+1 is also missing.
-            CheckCase({state, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {2, 0, 2}, false);
-            CheckBlobStateCase({state, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {2, 0, 2}, {}, TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY);
-            // W = 1+1+1 OR 2+2: no copy in R for 1+1+1, and only one in the second I for 2+2.
-            CheckCase({state, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {2, 1, 0}, false);
-        }
+        const auto state = NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1;
+        // W = 1+1+1 OR 2+2: 1+1+1 is satisfied across I/I/R.
+        CheckCase({state, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {1, 1, 1}, true);
+        // W = 1+1+1 OR 2+2: 2+2 is satisfied by both I realms, without R.
+        CheckCase({state, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {2, 2, 0}, true);
+        // W = 1+1+1 OR 2+2: I/R cannot provide 2+2 instead of I/I; 1+1+1 is also missing.
+        CheckCase({state, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {2, 0, 2}, false);
+        CheckBlobStateCase({state, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {2, 0, 2}, {}, TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY);
+        // W = 1+1+1 OR 2+2: no copy in R for 1+1+1, and only one in the second I for 2+2.
+        CheckCase({state, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {2, 1, 0}, false);
     }
 
     Y_UNIT_TEST(SoloUsesWriteLayoutNotEnsuredLayout) {
@@ -697,7 +722,6 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
             {EMirror3dcLayout::LAYOUT_11, {1, 0, 3}, false},
             {EMirror3dcLayout::LAYOUT_22, {2, 2, 0}, true},
             {EMirror3dcLayout::LAYOUT_22, {2, 0, 2}, false},
-            {EMirror3dcLayout::LAYOUT_0, {0, 0, 0}, true},
             {EMirror3dcLayout::LAYOUT_1, {1, 0, 0}, true},
             {EMirror3dcLayout::LAYOUT_1, {0, 0, 3}, false},
             {EMirror3dcLayout::LAYOUT_2, {2, 0, 0}, true},
@@ -712,7 +736,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
 
     Y_UNIT_TEST(RecoveringRealmsOnlyFillMissingNormalRealms) {
         CheckCase({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, {2, 0, 2}, true, EMirror3dcLayout::LAYOUT_22);
-        CheckCase({NKikimrBlobStorage::TGroupState::DC_RECOVERY, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {2, 0, 2}, false, EMirror3dcLayout::LAYOUT_22);
+        CheckCase({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {2, 0, 2}, false, EMirror3dcLayout::LAYOUT_22);
         CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {2, 2, 0}, true, EMirror3dcLayout::LAYOUT_22);
         CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {1, 1, 0}, true, EMirror3dcLayout::LAYOUT_11);
         CheckCase({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {0, 3, 3}, false, EMirror3dcLayout::LAYOUT_11);
@@ -731,7 +755,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         UNIT_ASSERT(!TryCreateChecker(states, EMirror3dcLayout::LAYOUT_111_22, static_cast<EMirror3dcLayout>(8)));
         UNIT_ASSERT(!TryCreateChecker(states, static_cast<EMirror3dcLayout>(-1), EMirror3dcLayout::LAYOUT_111_22));
         UNIT_ASSERT(!TryCreateChecker(states, static_cast<EMirror3dcLayout>(8), EMirror3dcLayout::LAYOUT_111_22));
-        UNIT_ASSERT(!TryCreateChecker(TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, EMirror3dcLayout::LAYOUT_0, EMirror3dcLayout::LAYOUT_0));
+        UNIT_ASSERT(!TryCreateChecker(TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, EMirror3dcLayout::LAYOUT_1, EMirror3dcLayout::LAYOUT_1));
     }
 
     Y_UNIT_TEST(OnlyCorrectPartsOnDistinctDisksCount) {

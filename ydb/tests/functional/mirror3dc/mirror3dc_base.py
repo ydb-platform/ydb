@@ -30,7 +30,6 @@ class Mirror3dcTestBase(unittest.TestCase):
         config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             nodes=9,
-            extra_feature_flags=['enable_mirror3dc_pending_realm'],
             additional_log_configs=self.ADDITIONAL_LOG_CONFIGS,
             use_in_memory_pdisks=self.USE_IN_MEMORY_PDISKS,
             dynamic_storage_pools=[dict(
@@ -96,8 +95,10 @@ class Mirror3dcTestBase(unittest.TestCase):
         excluded = self.excluded_dcs.copy()
         if state == self.DC_STATES.EXCLUDED:
             excluded.add(dc)
+            matching_roles = (self.DC_STATES.PENDING, self.DC_STATES.EXCLUDED)
         elif state == self.DC_STATES.INCLUDED:
             excluded.discard(dc)
+            matching_roles = (self.DC_STATES.RECOVERING, self.DC_STATES.INCLUDED)
         else:
             raise ValueError(f'Unsupported DC state: {state}')
         request = msgbus_pb2.TBlobStorageConfigRequest(Domain=1)
@@ -117,8 +118,16 @@ class Mirror3dcTestBase(unittest.TestCase):
         self.assertTrue(response.Status[0].Success, str(response))
         self.excluded_dcs = excluded
         if check_generation:
-            # Repair may already have published its own next generation.
-            self.assertGreater(self.get_group().GroupGeneration, before.GroupGeneration)
+            before_role, = [realm.State for realm in before.FailRealms if realm.DataCenter == dc]
+
+            def check_dc_applied():
+                group = self.get_group()
+                roles = {realm.DataCenter: realm.State for realm in group.FailRealms}
+                self.assertIn(roles[dc], matching_roles, str(group))
+                if before_role not in matching_roles:
+                    self.assertGreater(group.GroupGeneration, before.GroupGeneration, str(group))
+
+            retry_assertions(check_dc_applied, timeout_seconds=240, step_seconds=1)
 
     def recovered_realm_states(self):
         return {
@@ -151,6 +160,9 @@ class Mirror3dcTestBase(unittest.TestCase):
         self.assertTrue(response.Status[0].Success, str(response))
 
     def check_group_state(self, expected_state, expected_realms):
+        return self.check_group_states((expected_state,), expected_realms)
+
+    def check_group_states(self, expected_states, expected_realms):
         group = self.get_group()
         realms = group.FailRealms
         self.assertTrue(group.HasField('Mirror3dcState'), str(group))
@@ -161,10 +173,11 @@ class Mirror3dcTestBase(unittest.TestCase):
             self.GROUP_STATES.EState.Name(group.Mirror3dcState),
             [(realm.DataCenter, self.DC_STATES.EState.Name(realm.State)) for realm in realms],
         )
-        self.assertEqual(group.Mirror3dcState, expected_state, str(group))
+        self.assertIn(group.Mirror3dcState, expected_states, str(group))
         self.assertEqual(len(realms), 3, str(group))
         self.assertEqual({realm.DataCenter for realm in realms}, set(self.data_centers), str(group))
         self.assertEqual({realm.DataCenter: realm.State for realm in realms}, expected_realms, str(group))
+        return group.Mirror3dcState
 
     def wait_for_group_state(self, expected_state, expected_realms):
         retry_assertions(
@@ -174,14 +187,14 @@ class Mirror3dcTestBase(unittest.TestCase):
     def wait_for_two_copy_recovery(self, _pause_writes=None):
         self.assertEqual(len(self.excluded_dcs), 1)
         states = self.recovered_realm_states()
-        current = self.get_group().Mirror3dcState
-        if current == self.GROUP_STATES.DC_FAILURE:
-            self.wait_for_group_state(self.GROUP_STATES.DC_FAILURE_INV1, states)
-            current = self.GROUP_STATES.DC_FAILURE_INV1
+        ready_states = (
+            self.GROUP_STATES.DC_FAILURE_INV1,
+            self.GROUP_STATES.DC_FAILURE_INV2_PENDING,
+            self.GROUP_STATES.DC_FAILURE_INV2,
+        )
+        current = retry_assertions(lambda: self.check_group_states(ready_states, states), timeout_seconds=240)
         if current == self.GROUP_STATES.DC_FAILURE_INV1:
             self.define_group_state(self.GROUP_STATES.DC_FAILURE_INV2_PENDING, states)
-        else:
-            self.assertIn(current, (self.GROUP_STATES.DC_FAILURE_INV2_PENDING, self.GROUP_STATES.DC_FAILURE_INV2))
         self.wait_for_group_state(self.GROUP_STATES.DC_FAILURE_INV2, states)
 
     def return_dc(self, dc):

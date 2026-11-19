@@ -9,7 +9,7 @@ Y_UNIT_TEST_SUITE(TDSProxyStatus) {
     Y_UNIT_TEST(SpaceForNewWritesAndStartupQuorum) {
         using G = NKikimrBlobStorage::TGroupState;
         using DC = NKikimrBlobStorage::TDataCenterState;
-        auto check = [](const TMirror3dcGroupState& config, unsigned eligibleIncludedDisks,
+        auto check = [](const TMirror3dcGroupState& config, unsigned healthyIncludedDisksPerRealm,
                 NKikimrProto::EReplyStatus expected, float expectedSpace) {
             TTestBasicRuntime runtime;
             SetupRuntime(runtime);
@@ -26,8 +26,9 @@ Y_UNIT_TEST_SUITE(TDSProxyStatus) {
                 TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
                 auto role = config.FailRealmStates[disk.FailRealm];
                 UNIT_ASSERT(!IsExcluded(role));
-                bool replicated = !IsIncluded(role) || disk.FailDomain < eligibleIncludedDisks;
-                auto reply = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, disk, true, replicated, false, 1);
+                bool healthy = !IsIncluded(role) || disk.FailDomain < healthyIncludedDisksPerRealm;
+                auto status = healthy ? NKikimrProto::OK : NKikimrProto::ERROR;
+                auto reply = std::make_unique<TEvBlobStorage::TEvVStatusResult>(status, disk, true, /*replicated=*/false, false, 1);
                 reply->Record.SetApproximateFreeSpaceShare(IsIncluded(role) ? 0.5f : 0.125f);
                 runtime.Send(new IEventHandle(request->Sender, request->Recipient, reply.release(), 0, request->Cookie), 0);
             }

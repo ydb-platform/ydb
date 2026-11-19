@@ -274,7 +274,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
         const TCase cases[] = {
             {{NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, {1, 1, 1}, {2, 2, 2}}, // W = 1+1+1 OR 2+2.
             {{NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {1, 1, 1}, {2, 2, 1}}, // Union of 1+1+1 and 2+2 in I/I.
-            {{NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {2, 2, 0}, {3, 3, 0}}, // W = 2+2, expand to 3+3.
+            {{NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {2, 2, 0}, {3, 3, 0}}, // W = 2+2, expand to 3+3.
             {{NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, {2, 2, 0}, {3, 3, 0}},
             {{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {2, 0, 0}, {3, 0, 0}},
             {{NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {2, 0, 0}, {3, 0, 0}},
@@ -325,7 +325,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
     }
 
     Y_UNIT_TEST(RecoveryCannotReplaceAnAvailableNormalRealm) {
-        TTest t({NKikimrBlobStorage::TGroupState::DC_RECOVERY, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}});
+        TTest t({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}});
         t.Set({2, 0, 2}, TBlobState::ESituation::Present);
         UNIT_ASSERT(t.Run(TEvBlobStorage::TEvPut::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
         t.Expect({0, 1, 0}); // Complete 1+1+1, not 2+2 in I/R.
@@ -408,7 +408,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
     Y_UNIT_TEST(EveryFailureMaskTerminatesAccordingToWriteQuorumAndFailureModel) {
         // 512 binary failure masks, not a Cartesian product of all reply statuses.
         for (const auto states : {TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}},
-                TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::LEGACY_DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}}) {
+                TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}}, TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}}) {
             for (auto tactic : {TEvBlobStorage::TEvPut::TacticMaxThroughput, TEvBlobStorage::TEvPut::TacticMinLatency}) {
                 for (ui32 errors = 0; errors < 512; ++errors) {
                     TTest t(states);

@@ -51,8 +51,7 @@ void TestQuorumResponse(TBlobStorageGroupType::EErasureSpecies erasure) {
 
         NKikimrProto::EReplyStatus status = tracker.ProcessReply(vdisk, NKikimrProto::OK);
 
-        const bool mirror3dc = erasure == TBlobStorageGroupType::ErasureMirror3dc;
-        if (status == NKikimrProto::OK && (!mirror3dc || responsesNeeded == requests.size())) {
+        if (status == NKikimrProto::OK) {
             TAutoPtr<IEventHandle> resultHandle;
             auto result = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetBlockResult>(resultHandle);
             UNIT_ASSERT(result);
@@ -60,7 +59,7 @@ void TestQuorumResponse(TBlobStorageGroupType::EErasureSpecies erasure) {
             UNIT_ASSERT_VALUES_EQUAL(result->TabletId, tabletId);
 
             UNIT_ASSERT_VALUES_EQUAL(result->BlockedGeneration, responsesNeeded);
-            UNIT_ASSERT_VALUES_EQUAL(responsesNeeded == requests.size(), mirror3dc);
+            UNIT_ASSERT(responsesNeeded < requests.size());
             return;
         }
     }
@@ -166,7 +165,7 @@ void TestMaxAllowedFailures(TBlobStorageGroupType::EErasureSpecies erasure) {
 
         NKikimrProto::EReplyStatus status = tracker.ProcessReply(vdisk, diskStatus);
 
-        if (status == NKikimrProto::OK && (!isMirror3dc || i + 1 == requests.size())) {
+        if (status == NKikimrProto::OK) {
             TAutoPtr<IEventHandle> resultHandle;
             auto result = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetBlockResult>(resultHandle);
             UNIT_ASSERT(result);

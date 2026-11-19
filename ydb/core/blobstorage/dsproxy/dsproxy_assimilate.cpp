@@ -1,6 +1,5 @@
 #include "dsproxy.h"
 
-#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 
 namespace NKikimr {
@@ -415,12 +414,7 @@ public:
 
         auto& info = PerVDiskInfo[orderNumber];
         Y_ABORT_UNLESS(!info.HasItemsToMerge());
-        bool requireReplicated = IncludePartPlacement && Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
-            && Info->IsFailRealmReadable(vdiskId.FailRealm)
-            && (HasMirror3dcPendingRealm(Info->GetMirror3dcState().State) || AppData()->FeatureFlags.GetEnableMirror3dcPendingRealm());
-        if (record.GetStatus() == NKikimrProto::OK && requireReplicated && !record.GetReplicated()) {
-            info.ErrorReason = TStringBuilder() << vdiskId << ": VDisk replication is incomplete";
-        } else if (record.GetStatus() == NKikimrProto::OK) {
+        if (record.GetStatus() == NKikimrProto::OK) {
             info.PushDataFromMessage(record, *this, Info->Type, Reverse, orderNumber);
             if (info.HasItemsToMerge()) {
                 Heap.push_back(&info);
@@ -445,7 +439,6 @@ public:
 
         const TBlobStorageGroupInfo::TTopology *top = &Info->GetTopology();
         TBlobStorageGroupInfo::TGroupVDisks disksWithData(top);
-        bool allActiveDisksResponded = true;
         for (ui32 i = 0; i < PerVDiskInfo.size(); ++i) {
             TPerVDiskInfo& info = PerVDiskInfo[i];
             if (info.Excluded) {
@@ -453,29 +446,20 @@ public:
             }
             if (info.HasItemsToMerge() || info.Finished()) {
                 disksWithData += {top, top->GetVDiskId(i)};
-            } else {
-                allActiveDisksResponded = false;
             }
         }
         bool isMirror3dc = Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc;
-        const TMirror3dcGroupState& state = Info->GetMirror3dcState();
-        std::optional<TMirror3dcGroupLayouts> layouts = GetMirror3dcGroupLayouts(state.State);
-        bool requireAllActiveDisks = isMirror3dc && layouts && layouts->Ensured == EMirror3dcLayout::LAYOUT_0
-            && top->GetTotalFailRealmsNum() == state.FailRealmStates.size()
-            && IsValidMirror3dcGroupConfiguration({state.State, state.FailRealmStates});
 
         bool hasQuorum;
-        if (requireAllActiveDisks) {
-            hasQuorum = allActiveDisksResponded;
-        } else if (isMirror3dc) {
+        if (isMirror3dc) {
             hasQuorum = TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*Info, ~disksWithData);
         } else {
             hasQuorum = Info->GetQuorumChecker().CheckQuorumForGroup(disksWithData);
         }
         if (!hasQuorum) {
             bool emptyResult = Result->Blocks.empty() && Result->Barriers.empty() && Result->Blobs.empty();
-            if (requireAllActiveDisks || emptyResult) {
-                // For E=0 every active stream is required. An empty successful page would signal end of scan.
+            if (emptyResult) {
+                // An empty successful page would signal end of scan.
                 ReplyAndDie(NKikimrProto::ERROR);
             } else {
                 // answer with what we have already collected

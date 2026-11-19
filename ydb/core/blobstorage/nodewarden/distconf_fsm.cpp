@@ -4,8 +4,6 @@
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
-#include <ydb/core/base/feature_flags.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/config/validation/validators.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/retro_tracing/collector/retro_span_deserialization.h>
@@ -20,11 +18,6 @@ namespace NKikimr::NStorage {
     namespace {
         bool IsBootstrapProposition(const NKikimrBlobStorage::TStorageConfig& config) {
             return config.GetGeneration() == 1 && config.HasPrevConfig() && !config.GetPrevConfig().GetGeneration();
-        }
-
-        bool UsesPendingRealm(const NKikimrBlobStorage::TGroupInfo& group) {
-            return HasMirror3dcPendingRealm(group.GetMirror3dcState()) || std::ranges::any_of(group.GetRings(),
-                [](const auto& ring) { return IsPending(ring.GetState()); });
         }
     }
 
@@ -1473,20 +1466,6 @@ namespace NKikimr::NStorage {
 
             if (auto error = TransformConfigBeforeCommit(configToPropose)) {
                 return error;
-            }
-
-            if (!AppData()->FeatureFlags.GetEnableMirror3dcPendingRealm()) {
-                THashSet<ui32> groupsWithPendingRealms;
-                for (const auto& group : StorageConfig->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
-                    if (UsesPendingRealm(group)) {
-                        groupsWithPendingRealms.insert(group.GetGroupID());
-                    }
-                }
-                for (const auto& group : configToPropose->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
-                    if (UsesPendingRealm(group) && !groupsWithPendingRealms.contains(group.GetGroupID())) {
-                        return TStringBuilder() << "group# " << group.GetGroupID() << " requires EnableMirror3dcPendingRealm";
-                    }
-                }
             }
 
             UpdateFingerprint(configToPropose);

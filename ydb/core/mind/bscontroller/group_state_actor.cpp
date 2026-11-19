@@ -1,5 +1,4 @@
 #include "group_state.h"
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/syncer/syncer.h>
@@ -32,15 +31,23 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     static constexpr ui32 GroupsPerRound = 64;
     static constexpr ui32 MaxRunningRepairs = 16;
     static constexpr TDuration PollInterval = TDuration::Seconds(5);
+    enum class EStage {
+        ConfirmConfig,
+        Repair,
+        CheckPromotion,
+        Propose,
+    };
+
     struct TGroup {
         TGroupReplicationInfo Info;
-        TVector<bool> ConfigApplied;
+        TMirror3dcGroupConfiguration Next;
+        TVector<bool> ConfirmedDisks;
         ui32 Pending = 0;
         ui64 ProposalCookie = 0;
         ui64 RepairCookie = 0;
         ui32 RepairNode = 0;
         ui32 NextRepairDisk = 0;
-        bool ReadyToPromote = false;
+        EStage Stage = EStage::ConfirmConfig;
 
         bool RequiresStartupConfirmation(ui32 realm) const {
             return WaitForRecoveringVDiskStartup(*Info.GroupState) && IsRecovering(Info.States[realm]);
@@ -56,7 +63,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     std::map<ui64, ui32> Proposals;
     std::map<ui64, ui32> RunningRepairs;
     std::map<ui32, ui32> RepairNodeSubscriptions;
-    std::set<ui32> ConfigConfirmationGroups;
+    std::set<ui32> StatusPollGroups;
     std::set<ui32> RepairGroups;
     TVector<ui32> ActiveGroups;
     ui32 Cursor = 0;
@@ -111,8 +118,13 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
 
     void Handle(TEvGroupState::TEvUpdate::TPtr& ev) {
         const TEvGroupState::TEvUpdate& message = *ev->Get();
+        if (auto it = Groups.find(message.GroupId); it != Groups.end() && message.Info
+                && it->second.Info.Generation == message.Info->Generation
+                && it->second.Info.TargetExcluded == message.Info->TargetExcluded) {
+            return;
+        }
         EraseQueries(message.GroupId);
-        ConfigConfirmationGroups.erase(message.GroupId);
+        StatusPollGroups.erase(message.GroupId);
         RepairGroups.erase(message.GroupId);
         if (const auto it = Groups.find(message.GroupId); it != Groups.end()) {
             ClearRepair(&it->second, true);
@@ -120,49 +132,56 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             Groups.erase(it);
         }
         std::optional<TMirror3dcGroupConfiguration> config = message.Info ? GetConfiguration(*message.Info) : std::nullopt;
-        if (config && config->State != NKikimrBlobStorage::TGroupState::NORMAL
-                && message.Info->Topology && !message.Info->VDisks.empty() && RecoveringComplete(*config)) {
+        if (config && message.Info->Topology && !message.Info->VDisks.empty()) {
+            auto policyStep = message.Info->TargetExcluded ? NextDataCenterTransition(*config, *message.Info->TargetExcluded) : std::nullopt;
+            auto next = policyStep ? policyStep : RecoveringComplete(*config);
+            if (!next) {
+                return;
+            }
             TGroup& group = Groups[message.GroupId];
             group.Info = *message.Info;
-            group.ConfigApplied.resize(group.Info.VDisks.size());
-            ConfigConfirmationGroups.insert(message.GroupId);
+            group.Next = *next;
+            if (policyStep) {
+                group.Stage = EStage::Propose;
+                RepairGroups.insert(message.GroupId);
+                ProposeState(message.GroupId, &group);
+                return;
+            }
+            group.ConfirmedDisks.resize(group.Info.VDisks.size());
+            StatusPollGroups.insert(message.GroupId);
         }
     }
 
-    bool HasConfigQuorum(ui32 groupId, const TGroup& group) const {
+    bool HasStatusQuorum(ui32 groupId, const TGroup& group) const {
+        const TBlobStorageGroupInfo::TTopology* topology = group.Info.Topology.get();
+        TBlobStorageGroupInfo::TGroupVDisks uncertain(topology);
+        for (ui32 index = 0; index < group.Info.VDisks.size(); ++index) {
+            if (!group.ConfirmedDisks[index]) {
+                const TVDiskID& disk = group.Info.VDisks[index].Id;
+                if (group.Stage == EStage::ConfirmConfig && group.RequiresStartupConfirmation(disk.FailRealm)) {
+                    return false;
+                }
+                uncertain |= TBlobStorageGroupInfo::TGroupVDisks(topology, TVDiskIdShort(disk));
+            }
+        }
+        if (group.Stage == EStage::CheckPromotion) {
+            // Every placement allowed by the next E must include at least one confirmed VDisk.
+            return !TMirror3dcWriteQuorumChecker::CanHideEnsuredLayout(group.Next, uncertain);
+        }
         TBlobStorageGroupInfo::TDynamicInfo dynamic(TGroupId::FromValue(groupId), group.Info.Generation);
         dynamic.Mirror3dcState = {*group.Info.GroupState, group.Info.States};
-        dynamic.ServiceIdForOrderNumber.resize(group.Info.Topology->GetTotalVDisksNum());
+        dynamic.ServiceIdForOrderNumber.resize(topology->GetTotalVDisksNum());
         TBlobStorageGroupInfo info(group.Info.Topology, std::move(dynamic), TString(), {}, NPDisk::DEVICE_TYPE_UNKNOWN);
-        TBlobStorageGroupInfo::TGroupVDisks applied(&info.GetTopology());
-        bool allActiveDisksApplied = true;
-        for (ui32 index = 0; index < group.Info.VDisks.size(); ++index) {
-            const TVDiskID& disk = group.Info.VDisks[index].Id;
-            if (info.IsFailRealmExcluded(disk.FailRealm)) {
-                continue;
-            }
-            if (group.RequiresStartupConfirmation(disk.FailRealm) && !group.ConfigApplied[index]) {
-                return false;
-            }
-            if (group.ConfigApplied[index]) {
-                applied |= TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), TVDiskIdShort(disk));
-            } else {
-                allActiveDisksApplied = false;
-            }
-        }
-        if (GetMirror3dcGroupLayouts(*group.Info.GroupState)->Ensured == EMirror3dcLayout::LAYOUT_0) {
-            return allActiveDisksApplied;
-        }
-        return TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(info, ~applied);
+        return TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(info, uncertain);
     }
 
     void StartRepair(ui32 groupId, TGroup* group) {
-        Y_ABORT_UNLESS(!group->RepairCookie && !group->ProposalCookie && !group->ReadyToPromote);
+        Y_ABORT_UNLESS(!group->RepairCookie && !group->ProposalCookie && group->Stage == EStage::Repair);
         ui32 diskIndex = group->NextRepairDisk;
-        while (!group->ConfigApplied[diskIndex]) {
-            diskIndex = (diskIndex + 1) % group->ConfigApplied.size();
+        while (!group->ConfirmedDisks[diskIndex]) {
+            diskIndex = (diskIndex + 1) % group->ConfirmedDisks.size();
         }
-        group->NextRepairDisk = (diskIndex + 1) % group->ConfigApplied.size();
+        group->NextRepairDisk = (diskIndex + 1) % group->ConfirmedDisks.size();
         group->RepairNode = group->Info.VDisks[diskIndex].ActorId.NodeId();
         group->RepairCookie = ++NextCookie;
         RunningRepairs.emplace(group->RepairCookie, groupId);
@@ -177,24 +196,20 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         Send(MakeBlobStorageNodeWardenID(group->RepairNode), request.release(), flags, group->RepairCookie);
     }
 
-    void CheckCompletion(ui32 groupId, TGroup* group) {
-        if (group->ProposalCookie || !group->ReadyToPromote) {
+    void ProposeState(ui32 groupId, TGroup* group) {
+        if (group->ProposalCookie) {
             return;
         }
-        std::optional<TMirror3dcGroupConfiguration> config = GetConfiguration(group->Info);
-        std::optional<TMirror3dcGroupConfiguration> next = config ? RecoveringComplete(*config) : std::nullopt;
-        if (!next) {
-            return;
-        }
-        Y_ABORT_UNLESS(IsAllowedMirror3dcGroupTransition(config->State, next->State));
+        const TMirror3dcGroupConfiguration& next = group->Next;
+        Y_ABORT_UNLESS(IsAllowedMirror3dcGroupTransition(*group->Info.GroupState, next.State));
         using TDefinition = NKikimrBlobStorage::TDefineGroupState::TGroupDefinition;
         std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> request =
             std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         TDefinition* definition = request->Record.MutableRequest()->AddCommand()->MutableDefineGroupState()->AddGroups();
         definition->SetGroupId(groupId);
         definition->SetExpectedGroupGeneration(group->Info.Generation);
-        definition->SetGroupState(next->State);
-        for (EMirror3dcFailRealmState state : next->Realms) {
+        definition->SetGroupState(next.State);
+        for (EMirror3dcFailRealmState state : next.Realms) {
             definition->AddFailRealmStates(state);
         }
         group->ProposalCookie = ++NextCookie;
@@ -202,21 +217,26 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         Send(ControllerId, request.release(), 0, group->ProposalCookie);
     }
 
-    void ConfirmConfig(ui32 groupId, TGroup* group) {
-        if (HasConfigQuorum(groupId, *group)) {
-            EraseQueries(groupId);
-            group->Pending = 0;
-            ConfigConfirmationGroups.erase(groupId);
-            group->ReadyToPromote = WaitForRecoveringVDiskStartup(*group->Info.GroupState);
-            RepairGroups.insert(groupId);
+    void FinishStatusRound(ui32 groupId, TGroup* group) {
+        if (!HasStatusQuorum(groupId, *group)) {
+            return;
         }
+        EraseQueries(groupId);
+        group->Pending = 0;
+        if (group->Stage == EStage::CheckPromotion) {
+            ProposeState(groupId, group);
+            return;
+        }
+        StatusPollGroups.erase(groupId);
+        group->Stage = WaitForRecoveringVDiskStartup(*group->Info.GroupState) ? EStage::Propose : EStage::Repair;
+        RepairGroups.insert(groupId);
     }
 
     void RunRepairs() {
         for (ui32 groupId : RepairGroups) {
             TGroup& group = Groups.at(groupId);
-            if (group.ReadyToPromote) {
-                CheckCompletion(groupId, &group);
+            if (group.Stage == EStage::Propose) {
+                ProposeState(groupId, &group);
             } else if (!group.RepairCookie && !group.ProposalCookie && RunningRepairs.size() < MaxRunningRepairs) {
                 StartRepair(groupId, &group);
             }
@@ -227,25 +247,35 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         for (ui32 groupId : ActiveGroups) {
             if (auto it = Groups.find(groupId); it != Groups.end() && it->second.Pending) {
                 it->second.Pending = 0;
-                ConfirmConfig(groupId, &it->second);
+                FinishStatusRound(groupId, &it->second);
             }
         }
         ActiveGroups.clear();
         Queries.clear();
         QueryCookiesByGroup.clear();
-        if (!ConfigConfirmationGroups.empty()) {
-            auto it = ConfigConfirmationGroups.lower_bound(Cursor);
-            ui32 count = Min<ui32>(GroupsPerRound, ConfigConfirmationGroups.size());
+        if (!StatusPollGroups.empty()) {
+            auto it = StatusPollGroups.lower_bound(Cursor);
+            ui32 count = Min<ui32>(GroupsPerRound, StatusPollGroups.size());
             for (ui32 index = 0; index < count; ++index) {
-                if (it == ConfigConfirmationGroups.end()) {
-                    it = ConfigConfirmationGroups.begin();
+                if (it == StatusPollGroups.end()) {
+                    it = StatusPollGroups.begin();
                 }
-                ui32 groupId = *it;
+                ui32 groupId = *it++;
                 TGroup& group = Groups.at(groupId);
+                if (group.ProposalCookie) {
+                    continue;
+                }
+                const bool checkPromotion = group.Stage == EStage::CheckPromotion;
+                if (checkPromotion) {
+                    // Health must come from one round after repair, including on proposal retries.
+                    group.ConfirmedDisks.assign(group.Info.VDisks.size(), false);
+                }
                 ActiveGroups.push_back(groupId);
                 for (ui32 disk = 0; disk < group.Info.VDisks.size(); ++disk) {
                     const TGroupReplicationInfo::TVDisk& vdisk = group.Info.VDisks[disk];
-                    if (!group.ConfigApplied[disk] && !IsExcluded(group.Info.States[vdisk.Id.FailRealm])) {
+                    ui32 realm = vdisk.Id.FailRealm;
+                    bool pollRealm = checkPromotion ? IsReadable(group.Next.Realms[realm]) : !IsExcluded(group.Info.States[realm]);
+                    if (pollRealm && !group.ConfirmedDisks[disk]) {
                         ui64 cookie = ++NextCookie;
                         Queries.emplace(cookie, TQuery{groupId, disk});
                         QueryCookiesByGroup[groupId].push_back(cookie);
@@ -253,9 +283,8 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
                         Send(vdisk.ActorId, new TEvBlobStorage::TEvVStatus(vdisk.Id), 0, cookie);
                     }
                 }
-                ++it;
             }
-            Cursor = it == ConfigConfirmationGroups.end() ? *ConfigConfirmationGroups.begin() : *it;
+            Cursor = it == StatusPollGroups.end() ? *StatusPollGroups.begin() : *it;
         }
         RunRepairs();
         Schedule(PollInterval, new TEvents::TEvWakeup);
@@ -284,18 +313,13 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         const NKikimrBlobStorage::TEvVStatusResult& record = ev->Get()->Record;
         TVDiskID reported = record.HasVDiskID() ? VDiskIDFromVDiskID(record.GetVDiskID()) : TVDiskID();
         const TVDiskID& expected = group.Info.VDisks[query.Disk].Id;
-        group.ConfigApplied[query.Disk] = record.HasVDiskID() && reported == expected
-            && record.GetStatus() == NKikimrProto::OK;
         EMirror3dcFailRealmState role = group.Info.States[expected.FailRealm];
-        const bool useStartupQuorum = AppData()->FeatureFlags.GetEnableMirror3dcPendingRealm()
-            || HasMirror3dcPendingRealm(*group.Info.GroupState);
-        if (useStartupQuorum || group.RequiresStartupConfirmation(expected.FailRealm)) {
-            bool ready = record.GetJoinedGroup() && record.GetReplicated();
-            group.ConfigApplied[query.Disk] = group.ConfigApplied[query.Disk] && ready
-                && (!record.GetIsReadOnly() || IsPending(role));
-        }
+        bool allowReadOnly = group.Stage == EStage::CheckPromotion || IsPending(role);
+        group.ConfirmedDisks[query.Disk] = record.HasVDiskID() && reported == expected
+            && record.GetStatus() == NKikimrProto::OK && record.GetJoinedGroup() && record.GetReplicated()
+            && (!record.GetIsReadOnly() || allowReadOnly);
         if (!--group.Pending) {
-            ConfirmConfig(query.GroupId, &group);
+            FinishStatusRound(query.GroupId, &group);
             RunRepairs();
         }
     }
@@ -313,9 +337,12 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
                 || result.GetGeneration() != group.Info.Generation) {
             return;
         }
-        group.ReadyToPromote = result.GetStatus() == NKikimrProto::OK;
         ClearRepair(&group, false);
-        CheckCompletion(groupId, &group);
+        if (result.GetStatus() == NKikimrProto::OK) {
+            group.Stage = EStage::CheckPromotion;
+            RepairGroups.erase(groupId);
+            StatusPollGroups.insert(groupId);
+        }
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {

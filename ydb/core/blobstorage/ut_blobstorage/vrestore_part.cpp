@@ -23,16 +23,17 @@ namespace {
             TIngress Ingress;
         };
 
-        TEnvironmentSetup Env;
+        TEnvironmentSetup Env{{
+            .NodeCount = 9,
+            .VDiskReplPausedAtStart = true,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+        }};
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         const TString Data = TString(1024, 'x');
         const TLogoBlobID FullId{1, 1, 1, 0, ui32(Data.size()), 0};
         std::array<TVDiskResponse, 9> VDiskResponses;
 
-        explicit TFixture(TFeatureFlags flags = {})
-            : Env({.NodeCount = 9, .VDiskReplPausedAtStart = true, .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
-                .FeatureFlags = std::move(flags)})
-        {
+        TFixture() {
             Env.Runtime->FilterFunction = [this](ui32, std::unique_ptr<IEventHandle>& ev) {
                 if (ev->GetTypeRewrite() == TEvBlobStorage::EvProxyQueueState) {
                     const auto* recipient = Env.Runtime->GetActor(ev->GetRecipientRewrite());
@@ -199,10 +200,8 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
         UNIT_ASSERT(!fixture.Read(8, 3));
     }
 
-    Y_UNIT_TEST(SoloDisasterPlacementNeedsReplicatedSources) {
-        TFeatureFlags flags;
-        flags.SetEnableMirror3dcPendingRealm(true);
-        TFixture f(std::move(flags));
+    Y_UNIT_TEST(SoloDisasterPlacementCanReadWorkingDisksBeforeReplDone) {
+        TFixture f;
         ui32 included = f.VDisk(2).FailRealm;
         for (ui32 disk : {2u, 5u, 8u}) {
             TVDiskID id = f.VDisk(disk);
@@ -225,13 +224,11 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
             return response->Get()->Status;
         };
         UNIT_ASSERT_VALUES_EQUAL(scan(false), NKikimrProto::OK);
-        UNIT_ASSERT_VALUES_EQUAL(scan(true), NKikimrProto::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(scan(true), NKikimrProto::OK);
     }
 
     Y_UNIT_TEST(SoloDisasterRepairsConfirmedBlobFromPendingRealms) {
-        TFeatureFlags flags;
-        flags.SetEnableMirror3dcPendingRealm(true);
-        TFixture f(std::move(flags));
+        TFixture f;
         f.Env.CommenceReplication();
         // A legal NORMAL write placed both pairs outside the future Included realm.
         for (ui32 disk : {0u, 1u, 3u, 4u}) {

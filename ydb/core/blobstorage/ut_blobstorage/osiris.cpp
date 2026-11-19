@@ -657,7 +657,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         NKikimrBlobStorage::TDefineGroupState::TGroupDefinition* definition =
             request.AddCommand()->MutableDefineGroupState()->AddGroups();
         definition->SetGroupId(groupId);
-        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING);
+        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
         request.SetIgnoreGroupFailModelChecks(true);
         definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::INCLUDED);
         definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::INCLUDED);
@@ -819,7 +819,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
                 UNIT_ASSERT_VALUES_EQUAL(record.GetDurabilityReplicated(), durabilityReplicated);
             }
         };
-        states = {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING,
+        states = {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1,
             {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}};
         applyStates();
         const TString data(4096, 'U');
@@ -885,7 +885,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         UNIT_ASSERT_C(copies[0] >= 2 && copies[1] >= 2, "Replication must materialize D=2+2 after the group-state upgrades");
         // A downgrade also changes D (2+2 -> 1+1) and starts a new pass.
         osirisDone = replDone = 0;
-        states.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING;
+        states.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1;
         applyStates();
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
@@ -897,7 +897,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         UNIT_ASSERT_VALUES_EQUAL(heldOsirisDone.size(), 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 0);
         checkReplicationFlags(false);
-        states.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING;
+        states.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1;
         applyStates();
         checkReplicationFlags(false);
         holdOsirisDone = false;

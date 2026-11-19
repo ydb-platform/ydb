@@ -1,6 +1,5 @@
 #include "distconf_invoke.h"
 
-#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 
@@ -11,7 +10,7 @@ namespace NKikimr::NStorage {
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
     bool ApplyStaticDataCenterStates(NKikimrBlobStorage::TStorageConfig *config,
-            const NKikimrBlobStorage::TDataCenterStates& command, bool enablePendingRealm) {
+            const NKikimrBlobStorage::TDataCenterStates& command) {
         auto states = ParseDataCenterStates(command);
         Y_ENSURE(states, states.error());
         THashMap<ui32, TString> dataCenters;
@@ -52,7 +51,7 @@ namespace NKikimr::NStorage {
                     continue;
                 }
                 Y_ENSURE(++changes == 1, "Only one static fail realm may change availability at a time");
-                auto next = excluded[realm] ? TakeDownFailRealm(current, realm, enablePendingRealm) : ReturnFailRealm(current, realm);
+                auto next = excluded[realm] ? TakeDownFailRealm(current, realm) : ReturnFailRealm(current, realm);
                 Y_ENSURE(next, "Invalid static mirror-3-dc transition");
                 current = *next;
             }
@@ -81,7 +80,7 @@ namespace NKikimr::NStorage {
         RunCommonChecks();
         auto config = *Self->StorageConfig;
         try {
-            if (!ApplyStaticDataCenterStates(&config, command, AppData()->FeatureFlags.GetEnableMirror3dcPendingRealm())) {
+            if (!ApplyStaticDataCenterStates(&config, command)) {
                 return StartDataCenterReconciliation();
             }
         } catch (const yexception& error) {

@@ -117,10 +117,6 @@ class TMirror3dcRepairSyncer : public TActorBootstrapped<TMirror3dcRepairSyncer>
                     return;
                 }
             }
-            // Before P can become X, every Included realm must hold a copy of each live blob.
-            if (HasMirror3dcPendingRealm(Info->GetMirror3dcState().State) && blob.HasData && !checker->HasCopyInEachIncludedRealm(layout)) {
-                return Finish(NKikimrProto::ERROR);
-            }
             Blobs.pop_front();
         }
         ReadPage();
@@ -190,10 +186,6 @@ public:
         }
         const TMirror3dcGroupState& state = Info->GetMirror3dcState();
         if (!IsValidMirror3dcGroupConfiguration({state.State, state.FailRealmStates})) {
-            return Finish(NKikimrProto::ERROR);
-        }
-        std::optional<TMirror3dcGroupLayouts> layouts = GetMirror3dcGroupLayouts(state.State);
-        if (layouts->Durability == EMirror3dcLayout::LAYOUT_0) {
             return Finish(NKikimrProto::ERROR);
         }
         Become(&TThis::StateWork);

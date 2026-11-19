@@ -32,11 +32,11 @@ class TMirror3dcWriteQuorumChecker {
         std::array<ui32, 3> recovering{};
         for (ui32 realm = 0; realm < 3; ++realm) {
             EMirror3dcFailRealmState role = Realms[realm];
-            bool primary = participants == EParticipants::Read ? IsReadable(role) : IsIncluded(role);
-            if (!primary && !(participants == EParticipants::Write && IsRecovering(role))) {
+            bool participates = participants == EParticipants::Read ? IsReadable(role) : IsWritable(role);
+            if (!participates) {
                 continue;
             }
-            auto& counts = primary ? normal : recovering;
+            std::array<ui32, 3>& counts = IsRecovering(role) ? recovering : normal;
             for (ui32 minimum = 0; minimum <= 2; ++minimum) {
                 counts[minimum] += copies[realm] >= minimum;
             }
@@ -59,8 +59,6 @@ class TMirror3dcWriteQuorumChecker {
                 return check(2, 1);
             case EMirror3dcLayout::LAYOUT_22:
                 return check(2, 2);
-            case EMirror3dcLayout::LAYOUT_0:
-                return check(0, 0); // No minimum copy guarantee.
             case EMirror3dcLayout::LAYOUT_1:
                 return check(1, 1);
             case EMirror3dcLayout::LAYOUT_2:
@@ -97,13 +95,24 @@ class TMirror3dcWriteQuorumChecker {
             case EMirror3dcLayout::LAYOUT_11_2:
             case EMirror3dcLayout::LAYOUT_11:
             case EMirror3dcLayout::LAYOUT_22:
-            case EMirror3dcLayout::LAYOUT_0:
             case EMirror3dcLayout::LAYOUT_1:
             case EMirror3dcLayout::LAYOUT_2:
             case EMirror3dcLayout::LAYOUT_111:
                 return true;
         }
         return false;
+    }
+
+    static std::array<ui32, 3> CountFailedDomainsByRealm(const TBlobStorageGroupInfo::TGroupVDisks& disks) {
+        using TFailDomains = TBlobStorageGroupInfo::TGroupFailDomains;
+        const TFailDomains domains = TFailDomains::CreateFromGroupDiskSet(disks, TFailDomains::EDiskCondition::ANY);
+        std::array<ui32, 3> counts{};
+        for (ui32 realm = 0; realm < counts.size(); ++realm) {
+            for (const auto& domain : disks.GetTopology()->FailRealms[realm].FailDomains) {
+                counts[realm] += domains[domain.FailDomainOrderNumber];
+            }
+        }
+        return counts;
     }
 
     static std::array<ui32, 3> CountParts(const TSubgroupPartLayout& parts) {
@@ -123,6 +132,18 @@ class TMirror3dcWriteQuorumChecker {
     }
 
 public:
+    static bool CanHideEnsuredLayout(const TMirror3dcGroupConfiguration& config,
+            const TBlobStorageGroupInfo::TGroupVDisks& uncertainDisks) {
+        const auto& topology = *uncertainDisks.GetTopology();
+        if (topology.GType.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc
+                || topology.GetTotalFailRealmsNum() != 3 || !IsValidMirror3dcGroupConfiguration(config)) {
+            return true;
+        }
+        const TMirror3dcGroupLayouts layouts = *GetMirror3dcGroupLayouts(config.State);
+        const TMirror3dcWriteQuorumChecker checker(config.Realms, layouts.Write, layouts.Ensured, config.State);
+        return checker.CheckCounts(CountFailedDomainsByRealm(uncertainDisks), layouts.Ensured, EParticipants::Read);
+    }
+
     static bool CheckFailModelForGroup(const TBlobStorageGroupInfo& info,
             const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) {
         const auto& topology = info.GetTopology();
@@ -140,17 +161,7 @@ public:
         }
         TMirror3dcGroupLayouts layouts = *GetMirror3dcGroupLayouts(state);
         TMirror3dcWriteQuorumChecker checker(realms, layouts.Write, GetMirror3dcReadLayout(state), state);
-        TBlobStorageGroupInfo::TGroupFailDomains failedDomains = TBlobStorageGroupInfo::TGroupFailDomains::CreateFromGroupDiskSet(
-            failedDisks, TBlobStorageGroupInfo::TGroupFailDomains::EDiskCondition::ANY);
-        std::array<ui32, 3> uncertain{};
-        for (ui32 realm = 0; realm < 3; ++realm) {
-            if (!IsExcluded(realms[realm])) {
-                for (const TBlobStorageGroupInfo::TFailDomain& domain : topology.FailRealms[realm].FailDomains) {
-                    uncertain[realm] += failedDomains[domain.FailDomainOrderNumber];
-                }
-            }
-        }
-        return checker.HasStartupQuorum(uncertain);
+        return checker.HasStartupQuorum(CountFailedDomainsByRealm(failedDisks));
     }
 
     static bool CheckQuorumForFullSync(const TBlobStorageGroupInfo& info,
@@ -165,25 +176,7 @@ public:
         if (!IsValidMirror3dcGroupConfiguration({state, groupState.FailRealmStates})) {
             return false;
         }
-        if (GetMirror3dcGroupLayouts(state)->Ensured != EMirror3dcLayout::LAYOUT_0) {
-            return CheckFailModelForGroup(info, ~syncedDisks);
-        }
-        // E=0 cannot prove completeness by intersection. Collect every surviving normal source.
-        bool hasNormalSource = false;
-        for (ui32 realm = 0; realm < 3; ++realm) {
-            if (info.IsFailRealmExcluded(realm) || info.IsFailRealmRecovering(realm)) {
-                continue;
-            }
-            hasNormalSource = true;
-            for (const TBlobStorageGroupInfo::TFailDomain& domain : topology.FailRealms[realm].FailDomains) {
-                for (const TBlobStorageGroupInfo::TVDiskInfo& disk : domain.VDisks) {
-                    if (!syncedDisks[disk.OrderNumber]) {
-                        return false;
-                    }
-                }
-            }
-        }
-        return hasNormalSource;
+        return CheckFailModelForGroup(info, ~syncedDisks);
     }
 
     EMirror3dcLayout GetWriteLayout() const {
@@ -246,17 +239,15 @@ public:
     }
 
     bool CheckQuorumForLayout(const TSubgroupPartLayout& parts) const {
-        return CheckCounts(CountParts(parts), WriteLayout, EParticipants::Write);
+        // Existing copies in Pending realms still contribute to the blob layout.
+        if (HasMirror3dcPendingRealm(State)) {
+            return CheckCounts(CountParts(parts), WriteLayout, EParticipants::Read);
+        }
+        return CheckWriteQuorumForLayout(parts);
     }
 
-    bool HasCopyInEachIncludedRealm(const TSubgroupPartLayout& parts) const {
-        auto copies = CountParts(parts);
-        for (ui32 realm = 0; realm < Realms.size(); ++realm) {
-            if (IsIncluded(Realms[realm]) && !copies[realm]) {
-                return false;
-            }
-        }
-        return true;
+    bool CheckWriteQuorumForLayout(const TSubgroupPartLayout& parts) const {
+        return CheckCounts(CountParts(parts), WriteLayout, EParticipants::Write);
     }
 
     bool CheckEnsuredLayout(const TSubgroupPartLayout& parts, const TBlobStorageGroupInfo::TSubgroupVDisks& unknownDisks) const {
@@ -355,25 +346,14 @@ public:
             }
         }
 
-        if (EnsuredLayout == EMirror3dcLayout::LAYOUT_0 && hasCopy) {
-            return CheckQuorumForLayout(parts) ? TBlobStorageGroupInfo::EBS_FULL : TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY;
-        } else if (EnsuredLayout == EMirror3dcLayout::LAYOUT_0) {
-            return TBlobStorageGroupInfo::EBS_DISINTEGRATED;
-        }
-
         // Absence is proved only if no minimum guaranteed layout fits on uncertain disks.
-        // E is a lower bound, not the actual placement. With E=0, even all NODATA replies
-        // cannot distinguish a blob that never existed from one whose copies were all lost.
         if (CheckCounts(uncertain, EnsuredLayout, EParticipants::Read)) {
             return TBlobStorageGroupInfo::EBS_DISINTEGRATED;
         } else if (!hasCopy) {
             return TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
         }
 
-        bool full = State == NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER
-            ? CheckCounts(CountParts(parts), EnsuredLayout, EParticipants::Read)
-            : CheckQuorumForLayout(parts);
-        return full ? TBlobStorageGroupInfo::EBS_FULL : TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY;
+        return CheckQuorumForLayout(parts) ? TBlobStorageGroupInfo::EBS_FULL : TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY;
     }
 };
 

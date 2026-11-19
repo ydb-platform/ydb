@@ -7,6 +7,6 @@
 
 namespace NKikimr {
 
-    IActor *CreateAssimilationActor(THullDsSnap&& snap, TEvBlobStorage::TEvVAssimilate::TPtr& ev, TVDiskID vdiskId, bool replicated);
+    IActor *CreateAssimilationActor(THullDsSnap&& snap, TEvBlobStorage::TEvVAssimilate::TPtr& ev, TVDiskID vdiskId);
 
 } // NKikimr

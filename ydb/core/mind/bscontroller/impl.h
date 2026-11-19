@@ -1722,6 +1722,7 @@ private:
     TTabletResponsivenessPinger* ResponsivenessPinger;
     using TDataCenterStates = std::unordered_map<TString, NKikimrBlobStorage::TDataCenterState::EState>;
     TDataCenterStates DataCenterStates;
+    bool HasDataCenterPolicy = false;
     void ReconcileDataCenterStates();
     void RetryDataCenterStates();
     bool DataCenterRetryScheduled = false;
@@ -1862,7 +1863,7 @@ private:
     void UpdateSystemViews();
 
     struct TValidateConfigUpdatesParameters {
-        bool RecoveryConfirmed = false;
+        bool FromGroupStateActor = false;
         bool SuppressFailModelChecking = false;
         bool SuppressDegradedGroupsChecking = false;
         bool SuppressDisintegratedGroupsChecking = false;
@@ -2102,6 +2103,7 @@ public:
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
     TActorId GroupStateActorId;
+    std::optional<TExcludedRealms> GetTargetExcludedRealms(const TGroupInfo& group) const;
     void UpdateGroupStateActor(TGroupId groupId);
 
     TActorId ClusterBalanceActorId;

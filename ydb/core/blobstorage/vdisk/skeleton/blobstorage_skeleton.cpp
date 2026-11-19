@@ -1373,6 +1373,9 @@ namespace NKikimr {
                     auto requiredTabletGeneration = ev->Get()->Record.GetForceBlockTabletData().GetGeneration();
                     ui32 blockedTabletGeneration = 0;
                     if (!Hull->GetBlocked(tabletId, &blockedTabletGeneration) || blockedTabletGeneration < requiredTabletGeneration) {
+                        if (Config->BaseInfo.ReadOnly || !GInfo->IsWriteTargetRealm(SelfVDiskId.FailRealm)) {
+                            return ReplyError(NKikimrProto::ERROR, "VDisk cannot advance the tablet block", ev, ctx, now);
+                        }
                         // block vdisk and do a get from it
                         auto actor = CreateBlockAndGetActor(
                             std::move(ev),
@@ -1905,7 +1908,7 @@ namespace NKikimr {
                 // replies must not become visible after the bridge syncer has taken a snapshot without them.
                 PendingAssimilations.emplace_back(*lsn, ev.Release());
             } else {
-                const TActorId actorId = RunInBatchPool(ctx, CreateAssimilationActor(Hull->GetIndexSnapshot(), ev, SelfVDiskId, ReplDone));
+                const TActorId actorId = RunInBatchPool(ctx, CreateAssimilationActor(Hull->GetIndexSnapshot(), ev, SelfVDiskId));
                 ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
         }

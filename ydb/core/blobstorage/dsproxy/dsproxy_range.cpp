@@ -388,9 +388,6 @@ public:
             SendQueryToVDisk(id, From, To);
         }
 
-        if (!NumVGetsPending) {
-            return ReplyAndDie(NKikimrProto::ERROR);
-        }
         Become(&TBlobStorageGroupRangeRequest::StateWait);
     }
 

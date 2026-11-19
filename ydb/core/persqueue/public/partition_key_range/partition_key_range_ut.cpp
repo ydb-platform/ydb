@@ -15,6 +15,11 @@ TMaybe<TSerializedCellVec> MakeBound(std::initializer_list<ui64> values) {
     return TSerializedCellVec(TSerializedCellVec::Serialize(cells));
 }
 
+TMaybe<TSerializedCellVec> MakeNullPaddedBound(ui64 value) {
+    const TVector<TCell> cells = {TCell::Make<ui64>(value), TCell()};
+    return TSerializedCellVec(TSerializedCellVec::Serialize(cells));
+}
+
 TPartitionKeyRange MakeKeyRange(TMaybe<TSerializedCellVec> fromBound, TMaybe<TSerializedCellVec> toBound) {
     TPartitionKeyRange range;
     range.FromBound = std::move(fromBound);
@@ -110,6 +115,30 @@ Y_UNIT_TEST_SUITE(TPartitionKeyRangeIntersectsTest) {
 
         // when
         const bool intersects = Intersects(lhs, rhs, Uint64PairKey);
+
+        // then
+        UNIT_ASSERT(intersects);
+    }
+
+    Y_UNIT_TEST(ShouldNotIntersectWhenNullPaddedBoundStartsAtExclusiveBoundPrefix) {
+        // given
+        const auto shardRange = MakeKeyRange(MakeBound({100}), MakeBound({200}));
+        const auto partitionRange = MakeKeyRange(MakeNullPaddedBound(200), Nothing());
+
+        // when
+        const bool intersects = Intersects(shardRange, partitionRange, Uint64PairKey);
+
+        // then
+        UNIT_ASSERT(!intersects);
+    }
+
+    Y_UNIT_TEST(ShouldIntersectWhenNullPaddedRangeHasSameBoundsAsPrefixRange) {
+        // given
+        const auto shardRange = MakeKeyRange(MakeBound({100}), MakeBound({200}));
+        const auto partitionRange = MakeKeyRange(MakeNullPaddedBound(100), MakeNullPaddedBound(200));
+
+        // when
+        const bool intersects = Intersects(shardRange, partitionRange, Uint64PairKey);
 
         // then
         UNIT_ASSERT(intersects);

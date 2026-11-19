@@ -4,6 +4,29 @@
 
 namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
+namespace {
+
+// Resolve the exact node in one pinned policy version. If requested, also
+// collect the CPU limit of the existing prefix even when the leaf is missing.
+NStatic::TPoolPtr ResolveStaticPool(const TPool& pool, ui64* cpuLimit = nullptr) {
+    if (const auto* parent = pool.GetParent()) {
+        const auto node = NStatic::GetPool(ResolveStaticPool(*parent, cpuLimit), std::get<TPoolId>(pool.GetId()));
+        if (cpuLimit && node) {
+            *cpuLimit = Min(*cpuLimit, node->GetCpuLimit());
+        }
+        return node;
+    }
+    const auto* root = dynamic_cast<const TRoot*>(&pool);
+    Y_ENSURE(root, "Pool is not attached to the scheduler root");
+    const auto tree = root->GetStaticTree();
+    if (cpuLimit) {
+        *cpuLimit = Min(tree->TotalCpuLimit, tree->GetCpuLimit());
+    }
+    return tree;
+}
+
+} // namespace
+
 ///////////////////////////////////////////////////////////////////////////////
 // TTreeElement
 ///////////////////////////////////////////////////////////////////////////////
@@ -89,29 +112,9 @@ bool TQuery::GetAllowMinFairShare() const {
 }
 
 ui64 TQuery::GetCpuLimit() const {
-    const auto* parent = GetParent();
-    if (!parent) {
-        return Infinity();
-    }
-
-    TVector<TPoolId> path;
-    while (parent->GetParent()) {
-        path.push_back(std::get<TPoolId>(parent->GetId()));
-        parent = parent->GetParent();
-    }
-    const auto* root = dynamic_cast<const TRoot*>(parent);
-    Y_ENSURE(root, "Query is not attached to the scheduler root");
-
-    // Pin one policy version, including when a retained runtime path has no static counterpart.
-    const auto tree = root->GetStaticTree();
-    ui64 limit = Min(tree->TotalCpuLimit, tree->GetCpuLimit());
-    NStatic::TPoolPtr pool = tree;
-    for (auto it = path.rbegin(); it != path.rend(); ++it) {
-        pool = NStatic::GetPool(pool, *it);
-        if (!pool) {
-            break;
-        }
-        limit = Min(limit, pool->GetCpuLimit());
+    ui64 limit = Infinity();
+    if (const auto* parent = GetParent()) {
+        ResolveStaticPool(*parent, &limit);
     }
     return limit;
 }
@@ -204,23 +207,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters)
 }
 
 NStatic::TPoolPtr TPool::GetStaticPool() const {
-    TVector<TPoolId> path;
-    const TPool* pool = this;
-    while (pool->GetParent()) {
-        path.push_back(std::get<TPoolId>(pool->GetId()));
-        pool = pool->GetParent();
-    }
-    const auto* root = dynamic_cast<const TRoot*>(pool);
-    Y_ENSURE(root, "Pool is not attached to the scheduler root");
-    const auto tree = root->GetStaticTree();
-    if (path.empty()) {
-        return tree;
-    }
-    NStatic::TPoolPtr node = NStatic::GetDatabase(tree, path.back());
-    for (size_t i = path.size() - 1; i > 0; --i) {
-        node = NStatic::GetPool(node, path[i - 1]);
-    }
-    return node;
+    return ResolveStaticPool(*this);
 }
 
 TStaticAttributes TPool::GetConfiguredAttributes() const {

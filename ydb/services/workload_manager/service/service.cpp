@@ -111,6 +111,8 @@ public:
         EnabledResourcePoolsOnServerless =
             event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
         EnableResourcePoolsCounters = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsCounters();
+        // TODO: On disable, clear WM pool policy and subscriptions in the scheduler, preserving live query accounting.
+        // Ignore late updates from old subscriptions and rediscover pools on enable as on first startup.
         if (EnabledResourcePools) {
             LOG_I("Resource pools was enabled");
             InitializeWorkloadService();

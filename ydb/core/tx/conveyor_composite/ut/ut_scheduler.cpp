@@ -240,10 +240,10 @@ namespace NKikimr::NConveyorComposite {
 
             void SendQueryResponse(const NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr& query) {
                 auto database = Runtime.GrabEdgeEvent<NKqp::NScheduler::TEvAddDatabase>(Scheduler);
-                auto pool = Runtime.GrabEdgeEvent<NKqp::NScheduler::TEvAddPool>(Scheduler);
                 auto request = Runtime.GrabEdgeEvent<NKqp::NScheduler::TEvAddQuery>(Scheduler);
                 UNIT_ASSERT_VALUES_EQUAL(database->Get()->DatabaseId, "database");
-                UNIT_ASSERT_VALUES_EQUAL(pool->Get()->PoolId, "pool");
+                UNIT_ASSERT_VALUES_EQUAL(request->Get()->DatabaseId, "database");
+                UNIT_ASSERT_VALUES_EQUAL(request->Get()->PoolId, "pool");
                 UNIT_ASSERT_VALUES_EQUAL(request->Cookie, request->Get()->QueryId);
                 auto response = std::make_unique<NKqp::NScheduler::TEvQueryResponse>();
                 response->Query = query;
@@ -1060,7 +1060,7 @@ namespace NKikimr::NConveyorComposite {
                 UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 4);
                 UNIT_ASSERT_VALUES_EQUAL(fixture.Adds[0], 1);
                 UNIT_ASSERT_VALUES_EQUAL(fixture.Removes[0], 1);
-                UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 4);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 3);
             }
         }
 
@@ -1101,7 +1101,7 @@ namespace NKikimr::NConveyorComposite {
             fixture.UnregisterProcess(3);
             fixture.WaitFor([&] { return fixture.Removes[0] == 1; });
             UNIT_ASSERT_VALUES_EQUAL(fixture.Adds[0], 1);
-            UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 4);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 3);
         }
 
         /* Scenario:
@@ -1340,7 +1340,7 @@ namespace NKikimr::NConveyorComposite {
             fixture.UnregisterProcess(5);
             fixture.Submit(service, 0); // Default processes must remain usable after migration cleanup.
             fixture.WaitFor([&] { return service.Val() == 3; });
-            UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 3);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 2);
             UNIT_ASSERT_VALUES_EQUAL(fixture.Removes[identity.QueryId], 0);
         }
 

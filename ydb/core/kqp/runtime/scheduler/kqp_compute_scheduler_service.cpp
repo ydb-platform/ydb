@@ -159,6 +159,9 @@ public:
             YDB_LOG_ERROR("Rejected invalid database weight", {"database", ev->Get()->DatabaseId}, {"weight", weight});
             return;
         }
+        if (const auto* database = Configuration->GetDatabase(ev->Get()->DatabaseId); database && database->GetWeight() == weight) {
+            return;
+        }
         const NHdrf::TStaticAttributes attrs{.Weight = weight};
         Configuration->GetOrCreateDatabase(ev->Get()->DatabaseId).SetAttributes(attrs);
         PublishConfiguration();
@@ -173,30 +176,34 @@ public:
     }
 
     void Handle(TEvAddPool::TPtr& ev) {
-        const auto& databaseId = ev->Get()->DatabaseId;
-        const auto& poolId = ev->Get()->PoolId;
-        const auto weight = ev->Get()->Weight;
+        const auto& msg = *ev->Get();
+        EnsurePoolRegistered(msg.DatabaseId, msg.PoolId, msg.Params, msg.Weight);
+    }
+
+    void EnsurePoolRegistered(const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& params = {}, double weight = 1.) {
         if (!IsValidWeight(weight) || poolId.empty()) {
             YDB_LOG_ERROR("Rejected invalid pool registration", {"database", databaseId}, {"pool", poolId}, {"weight", weight});
             return;
         }
-        if (!CheckPoolPercentages(databaseId, poolId, ev->Get()->Params)) {
+        if (!CheckPoolPercentages(databaseId, poolId, params)) {
+            return;
+        }
+        const NHdrf::TFullPoolId fullPoolId{databaseId, poolId};
+        if (!PoolSubscribtions.emplace(fullPoolId, false).second) {
             return;
         }
 
         NHdrf::TStaticAttributes attrs{.Weight = weight};
-        SetCpuAttributes(ev->Get()->Params, attrs);
-        SetMemoryAttributes({databaseId, poolId}, ev->Get()->Params, attrs);
+        SetCpuAttributes(params, attrs);
+        SetMemoryAttributes(fullPoolId, params, attrs);
 
         YDB_LOG_DEBUG("Add",
             {"pool", databaseId},
             {"poolId", poolId},
             {"attrs", attrs});
 
-        if (PoolSubscribtions.emplace(NHdrf::TFullPoolId{.DatabaseId=databaseId, .PoolId=poolId}, false).second) {
-            ApplyPoolConfig(databaseId, poolId, attrs);
-            Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
-        }
+        ApplyPoolConfig(databaseId, poolId, attrs);
+        Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
     }
 
     void Handle(TEvRemovePool::TPtr&) {
@@ -249,12 +256,14 @@ public:
 
     void Handle(TEvAddQuery::TPtr& ev) {
         const auto& databaseId = ev->Get()->DatabaseId;
-        const auto& poolId = ev->Get()->PoolId;
+        const auto& poolId = ev->Get()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : ev->Get()->PoolId;
         const auto& queryId = ev->Get()->QueryId;
 
         auto response = MakeHolder<TEvQueryResponse>();
+        // Register both in one actor turn so a pool update cannot remove policy between them.
+        EnsurePoolRegistered(databaseId, poolId);
         if (Scheduler->IsEnabled()) {
-            auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId);
+            auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId, queryId);
             response->Query = query;
             YDB_LOG_DEBUG("Add",
                 {"query", databaseId},

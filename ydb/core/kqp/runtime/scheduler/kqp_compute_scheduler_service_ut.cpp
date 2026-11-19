@@ -68,6 +68,72 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         UNIT_ASSERT_VALUES_EQUAL(pool->GetConfiguredAttributes().GetReadLimit(), TDuration::MilliSeconds(500));
     }
 
+    Y_UNIT_TEST(OnlyChangedDatabaseWeightsPublishPolicy) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
+            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()), NScheduler::TOptions{});
+        runtime.GetAppData().KqpComputeScheduler = scheduler;
+        const auto service = runtime.Register(CreateKqpComputeSchedulerService(TDuration::Hours(1)));
+        const auto sender = runtime.AllocateEdgeActor();
+        auto add = [&](double weight) {
+            auto ev = MakeHolder<NScheduler::TEvAddDatabase>("db");
+            ev->Weight = weight;
+            runtime.Send(new IEventHandle(service, sender, ev.Release()), 0, true);
+            return scheduler->GetStaticTree();
+        };
+        const auto first = add(1);
+        UNIT_ASSERT(first->GetDatabase("db"));
+        UNIT_ASSERT(add(1) == first);
+        const auto changed = add(2);
+        UNIT_ASSERT(changed != first);
+        UNIT_ASSERT_VALUES_EQUAL(changed->GetDatabase("db")->GetWeight(), 2);
+        UNIT_ASSERT(add(2) == changed);
+    }
+
+    Y_UNIT_TEST_TWIN(QueryRegistersPoolAfterRemoval, DefaultPool) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
+            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            NScheduler::TOptions{.MemoryEnabled = false});
+        runtime.GetAppData().KqpComputeScheduler = scheduler;
+        const auto wm = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NWorkloadManager::MakeServiceId(runtime.GetNodeId()), wm);
+        const auto service = runtime.Register(CreateKqpComputeSchedulerService(TDuration::Hours(1)));
+        const auto sender = runtime.AllocateEdgeActor();
+        const TString poolId = DefaultPool ? NResourcePool::DEFAULT_POOL_ID : "pool";
+        auto expectSubscription = [&] {
+            auto ev = runtime.GrabEdgeEvent<NWorkloadManager::TEvSubscribeOnPoolChanges>(wm);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DatabaseId, "db");
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->PoolId, poolId);
+        };
+        runtime.Send(new IEventHandle(service, sender, new NScheduler::TEvAddPool("db", poolId)), 0, true);
+        expectSubscription();
+        auto remove = [&] {
+            runtime.Send(new IEventHandle(service, wm,
+                new NWorkloadManager::TEvUpdatePoolInfo("db", poolId, std::nullopt, std::nullopt)), 0, true);
+        };
+        remove();
+        expectSubscription();
+        remove();
+        UNIT_ASSERT(!scheduler->GetStaticTree()->GetDatabase("db")->GetPool(poolId));
+
+        auto add = MakeHolder<NScheduler::TEvAddQuery>();
+        add->DatabaseId = "db";
+        if (!DefaultPool) {
+            add->PoolId = poolId;
+        }
+        add->QueryId = 42;
+        runtime.Send(new IEventHandle(service, sender, add.Release()), 0, true);
+        auto response = runtime.GrabEdgeEvent<NScheduler::TEvQueryResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Cookie, 42);
+        UNIT_ASSERT(response->Get()->Query);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Query->GetFullPoolId().PoolId, poolId);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Query->GetFullPoolId().DatabaseId, "db");
+        expectSubscription();
+    }
+
     Y_UNIT_TEST_TWIN(NewPoolSnapshotPrecedesQueryResponse, MemoryEnabled) {
         // The runtime pool may be new, or already created by memory accounting or reads.
         for (ui32 precreated : {0u, 1u, 2u}) {
@@ -413,7 +479,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryLimit(), 500_MB);
         UNIT_ASSERT_VALUES_EQUAL(pool->GetConfiguredAttributes().GetMemoryLimit(), 150_MB);
 
-        // the pool is added once more without the settings (as the node service does it): the limits are kept
+        // Adding an already registered pool without settings must retain its limits.
         runtime.Send(new IEventHandle(service, sender, new NScheduler::TEvAddPool("db", "pool")));
         runtime.SimulateSleep(TDuration::MilliSeconds(10));
         UNIT_ASSERT_VALUES_EQUAL(pool->GetConfiguredAttributes().GetMemoryLimit(), 150_MB);

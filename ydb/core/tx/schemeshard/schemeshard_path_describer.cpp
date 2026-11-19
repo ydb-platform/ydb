@@ -255,6 +255,7 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
                 return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
@@ -1036,6 +1037,13 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
 
     if (subDomainInfo->GetSmallBlobsQuotaExceeded()) {
         entry->MutableDomainState()->SetSmallBlobsQuotaExceeded(true);
+    }
+
+    // Quotas of an external subdomain are enforced by its tenant schemeshard,
+    // the parent schemeshard only keeps a stub without the actual usage and state.
+    const auto tenantSchemeShardId = subDomainInfo->GetTenantSchemeShardID();
+    if (tenantSchemeShardId == InvalidTabletId || tenantSchemeShardId == Self->SelfTabletId()) {
+        subDomainInfo->FillDiskSpaceQuotaUsage(*entry->MutableDiskSpaceQuotaUsage());
     }
 
     if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {

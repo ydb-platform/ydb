@@ -49,7 +49,7 @@ public:
     }
 
     ui32 GetRecordsCount() const {
-        AFL_VERIFY(RecordsCount);
+        YDB_LOG_VERIFY(RecordsCount);
         return *RecordsCount;
     }
 
@@ -71,7 +71,7 @@ public:
     }
 
     ui64 num_rows() const {
-        AFL_VERIFY(RecordsCount);
+        YDB_LOG_VERIFY(RecordsCount);
         return *RecordsCount;
     }
 
@@ -80,7 +80,7 @@ public:
     }
 
     const std::shared_ptr<NAccessor::IChunkedArray>& GetColumnVerified(const ui32 idx) const {
-        AFL_VERIFY(idx < Columns.size());
+        YDB_LOG_VERIFY(idx < Columns.size());
         return Columns[idx];
     }
 

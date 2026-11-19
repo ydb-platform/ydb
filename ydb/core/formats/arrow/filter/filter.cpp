@@ -21,28 +21,33 @@ TColumnFilter::TSlicesIterator::TSlicesIterator(const TColumnFilter& owner, cons
     : Owner(owner)
     , StartIndex(start)
     , Count(count) {
-    AFL_VERIFY(!!StartIndex == !!Count);
-    AFL_VERIFY(Owner.GetFilter().size());
+    YDB_LOG_VERIFY(!!StartIndex == !!Count);
+    YDB_LOG_VERIFY(Owner.GetFilter().size());
     if (StartIndex) {
-        AFL_VERIFY(*StartIndex + *Count <= owner.GetRecordsCountVerified())("start", *StartIndex)("count", *count)("size", owner.GetRecordsCount());
+        YDB_LOG_VERIFY(*StartIndex + *Count <= owner.GetRecordsCountVerified(),
+            {"start", *StartIndex},
+            {"count", *count},
+            {"size", owner.GetRecordsCount()});
     }
 }
 
 TColumnFilter::TApplyContext& TColumnFilter::TApplyContext::Slice(const ui32 start, const ui32 count) {
-    AFL_VERIFY(!StartPos && !Count);
+    YDB_LOG_VERIFY(!StartPos && !Count);
     StartPos = start;
     Count = count;
     return *this;
 }
 
 ui32 TColumnFilter::TSlicesIterator::GetSliceSize() const {
-    AFL_VERIFY(IsValid());
+    YDB_LOG_VERIFY(IsValid());
     if (!StartIndex) {
         return *CurrentIterator;
     } else {
         const ui32 startIndex = GetStartIndex();
         const ui32 finishIndex = std::min<ui32>(CurrentStartIndex + *CurrentIterator, *StartIndex + *Count);
-        AFL_VERIFY(startIndex < finishIndex)("start", startIndex)("finish", finishIndex);
+        YDB_LOG_VERIFY(startIndex < finishIndex,
+            {"start", startIndex},
+            {"finish", finishIndex});
         return finishIndex - startIndex;
     }
 }
@@ -53,14 +58,14 @@ void TColumnFilter::TSlicesIterator::Start() {
     CurrentIterator = Owner.GetFilter().begin();
     if (StartIndex) {
         while (IsValid() && CurrentStartIndex + *CurrentIterator < *StartIndex) {
-            AFL_VERIFY(Next());
+            YDB_LOG_VERIFY(Next());
         }
-        AFL_VERIFY(IsValid());
+        YDB_LOG_VERIFY(IsValid());
     }
 }
 
 bool TColumnFilter::TSlicesIterator::Next() {
-    AFL_VERIFY(IsValid());
+    YDB_LOG_VERIFY(IsValid());
     CurrentIsFiltered = !CurrentIsFiltered;
     CurrentStartIndex += *CurrentIterator;
     ++CurrentIterator;
@@ -125,12 +130,12 @@ TString TColumnFilter::TIterator::DebugString() const {
 
 std::shared_ptr<arrow::BooleanArray> TColumnFilter::BuildArrowFilter(
     const ui32 expectedSize, const std::optional<ui32> startPos, const std::optional<ui32> count) const {
-    AFL_VERIFY(!!startPos == !!count);
+    YDB_LOG_VERIFY(!!startPos == !!count);
     auto& simpleFilter = BuildSimpleFilter();
     arrow::BooleanBuilder builder;
     auto res = builder.Reserve(count.value_or(expectedSize));
     if (startPos) {
-        AFL_VERIFY(*startPos + *count <= simpleFilter.size());
+        YDB_LOG_VERIFY(*startPos + *count <= simpleFilter.size());
         Y_VERIFY_OK(builder.AppendValues(simpleFilter.begin() + *startPos, simpleFilter.begin() + *startPos + *count));
     } else {
         Y_VERIFY_OK(builder.AppendValues(simpleFilter));
@@ -210,13 +215,15 @@ namespace {
 void VerifyFilterSize(const TColumnFilter& filter, const ui32 recordsCount, const TColumnFilter::TApplyContext& context) {
     if (!filter.IsEmpty()) {
         if (context.HasSlice()) {
-            AFL_VERIFY(filter.GetRecordsCountVerified() >= *context.GetStartPos() + *context.GetCount())(
-                                                                                    "filter_size", filter.GetRecordsCountVerified())(
-                                                                                    "start", context.GetStartPos())("count", context.GetCount());
+            YDB_LOG_VERIFY(filter.GetRecordsCountVerified() >= *context.GetStartPos() + *context.GetCount(),
+                {"filterSize", filter.GetRecordsCountVerified()},
+                {"start", context.GetStartPos()},
+                {"count", context.GetCount()});
             AFL_VERIFY(*context.GetCount() == (size_t)recordsCount)("count", context.GetCount())("batch_size", recordsCount);
         } else {
-            AFL_VERIFY(filter.GetRecordsCountVerified() == (size_t)recordsCount)("filter_size", filter.GetRecordsCountVerified())(
-                                                             "batch_size", recordsCount);
+            YDB_LOG_VERIFY(filter.GetRecordsCountVerified() == (size_t)recordsCount,
+                {"filterSize", filter.GetRecordsCountVerified()},
+                {"batchSize", recordsCount});
         }
     }
 }
@@ -285,7 +292,7 @@ public:
     }
 
     void ApplySlicesFilter(TColumnFilter::TSlicesIterator slices) override {
-        AFL_VERIFY(slices.GetRecordsCount() == Batch->num_rows());
+        YDB_LOG_VERIFY(slices.GetRecordsCount() == Batch->num_rows());
         std::vector<std::shared_ptr<arrow::RecordBatch>> slicesData;
         for (slices.Start(); slices.IsValid(); slices.Next()) {
             if (!slices.IsFiltered()) {
@@ -346,7 +353,7 @@ void TColumnFilter::Apply(const ui32 expectedRecordsCount, std::vector<arrow::Da
     }
     if (IsTotalDenyFilter()) {
         for (auto&& d : datums) {
-            AFL_VERIFY(d);
+            YDB_LOG_VERIFY(d);
             switch (d->kind()) {
                 case arrow::Datum::ARRAY:
                     *d = d->array()->Slice(0, 0);
@@ -361,13 +368,13 @@ void TColumnFilter::Apply(const ui32 expectedRecordsCount, std::vector<arrow::Da
                     *d = d->table()->Slice(0, 0);
                     break;
                 default:
-                    AFL_VERIFY(false);
+                    YDB_LOG_VERIFY(false);
             }
         }
     } else {
         auto filter = BuildArrowFilter(expectedRecordsCount);
         for (auto&& d : datums) {
-            AFL_VERIFY(d);
+            YDB_LOG_VERIFY(d);
             *d = TStatusValidator::GetValid(arrow::compute::Filter(*d, filter));
         }
     }
@@ -617,7 +624,7 @@ TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter
                 ++itExt;
             }
         }
-        AFL_VERIFY(itSelf == Filter.end() && itExt == extFilter.Filter.cend());
+        YDB_LOG_VERIFY(itSelf == Filter.end() && itExt == extFilter.Filter.cend());
         TColumnFilter result = TColumnFilter::BuildAllowFilter();
         std::swap(resultFilter, result.Filter);
         std::swap(curCurrent, result.LastValue);
@@ -631,13 +638,16 @@ TColumnFilter::TIterator TColumnFilter::GetBegin(const bool reverse, const ui32 
 }
 
 TColumnFilter::TIterator TColumnFilter::GetIterator(const bool reverse, const ui32 expectedSize, const ui64 startOffset) const {
-    AFL_VERIFY(expectedSize >= startOffset);
+    YDB_LOG_VERIFY(expectedSize >= startOffset);
     if (IsTotalAllowFilter()) {
         return TIterator(reverse, expectedSize, true, startOffset);
     } else if (IsTotalDenyFilter()) {
         return TIterator(reverse, expectedSize, false, startOffset);
     } else {
-        AFL_VERIFY(expectedSize == GetRecordsCountVerified())("expected", expectedSize)("count", GetRecordsCountVerified())("reverse", reverse);
+        YDB_LOG_VERIFY(expectedSize == GetRecordsCountVerified(),
+            {"expected", expectedSize},
+            {"count", GetRecordsCountVerified()},
+            {"reverse", reverse});
         return TIterator(reverse, Filter, GetStartValue(reverse), startOffset);
     }
 }
@@ -676,7 +686,7 @@ void TColumnFilter::Append(const TColumnFilter& filter) {
 
 std::optional<ui32> TColumnFilter::GetRecordsCount() const {
     if (Filter.size()) {
-        AFL_VERIFY(RecordsCount);
+        YDB_LOG_VERIFY(RecordsCount);
         return RecordsCount;
     } else {
         return std::nullopt;
@@ -684,26 +694,29 @@ std::optional<ui32> TColumnFilter::GetRecordsCount() const {
 }
 
 ui32 TColumnFilter::GetRecordsCountVerified() const {
-    AFL_VERIFY(Filter.size());
-    AFL_VERIFY(RecordsCount);
+    YDB_LOG_VERIFY(Filter.size());
+    YDB_LOG_VERIFY(RecordsCount);
     return RecordsCount;
 }
 
 ui32 TColumnFilter::GetFilteredCountVerified() const {
     const std::optional<ui32> result = GetFilteredCount();
-    AFL_VERIFY(!!result);
+    YDB_LOG_VERIFY(!!result);
     return *result;
 }
 
 TColumnFilter TColumnFilter::Slice(const ui32 offset, const ui32 count) const {
-    AFL_VERIFY(count);
+    YDB_LOG_VERIFY(count);
     if (IsTotalAllowFilter()) {
         return TColumnFilter::BuildAllowFilter();
     }
     if (IsTotalDenyFilter()) {
         return TColumnFilter::BuildDenyFilter();
     }
-    AFL_VERIFY(offset + count <= GetRecordsCountVerified())("offset", offset)("count", count)("records_count", GetRecordsCountVerified());
+    YDB_LOG_VERIFY(offset + count <= GetRecordsCountVerified(),
+        {"offset", offset},
+        {"count", count},
+        {"recordsCount", GetRecordsCountVerified()});
     std::vector<ui32> chunks;
     ui32 index = 0;
     bool currentValue = GetStartValue();
@@ -719,7 +732,7 @@ TColumnFilter TColumnFilter::Slice(const ui32 offset, const ui32 count) const {
     for (auto&& i : Filter) {
         const ui32 nextIndex = index + i;
         if (index >= offset + count) {
-            AFL_VERIFY(countFilter == count);
+            YDB_LOG_VERIFY(countFilter == count);
             return buildResult(std::move(chunks), currentValue, count);
         } else if (nextIndex > offset) {
             chunks.emplace_back(std::min(nextIndex, offset + count) - std::max(index, offset));
@@ -728,8 +741,11 @@ TColumnFilter TColumnFilter::Slice(const ui32 offset, const ui32 count) const {
         currentValue = !currentValue;
         index = nextIndex;
     }
-    AFL_VERIFY(countFilter == count);
-    AFL_VERIFY(offset + count <= index)("index", index)("offset", offset)("count", count);
+    YDB_LOG_VERIFY(countFilter == count);
+    YDB_LOG_VERIFY(offset + count <= index,
+        {"index", index},
+        {"offset", offset},
+        {"count", count});
     return buildResult(std::move(chunks), currentValue, count);
 }
 
@@ -754,7 +770,10 @@ bool TColumnFilter::CheckSlice(const ui32 offset, const ui32 count) const {
         currentValue = !currentValue;
         index = nextIndex;
     }
-    AFL_VERIFY(offset + count <= index)("index", index)("offset", offset)("count", count);
+    YDB_LOG_VERIFY(offset + count <= index,
+        {"index", index},
+        {"offset", offset},
+        {"count", count});
     return false;
 }
 
@@ -789,12 +808,14 @@ TColumnFilter TColumnFilter::Cut(const ui32 totalRecordsCount, const ui32 limit,
             result.Add(false, totalRecordsCount - limit);
         }
     } else {
-        AFL_VERIFY(GetRecordsCountVerified() == totalRecordsCount)("total", GetRecordsCountVerified())("ext", totalRecordsCount);
+        YDB_LOG_VERIFY(GetRecordsCountVerified() == totalRecordsCount,
+            {"total", GetRecordsCountVerified()},
+            {"ext", totalRecordsCount});
         ui32 cutCount = 0;
         bool currentValue = reverse ? LastValue : GetStartValue();
         const auto scan = [&](auto begin, auto end) {
             for (auto it = begin; it != end; ++it) {
-                AFL_VERIFY(cutCount <= limit);
+                YDB_LOG_VERIFY(cutCount <= limit);
                 if (currentValue) {
                     if (cutCount < limit) {
                         if (limit <= cutCount + *it) {

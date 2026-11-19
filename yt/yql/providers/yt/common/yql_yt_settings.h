@@ -316,6 +316,7 @@ public:
     NCommon::TConfSetting<double, Static> JoinMergeUnsortedFactor; // (>=0.0)
     NCommon::TConfSetting<bool, Static> JoinMergeForce;
     NCommon::TConfSetting<NSize::TSize, Static> MapJoinLimit;
+    NCommon::TConfSetting<NSize::TSize, Static> BlockMapJoinLimit;
     NCommon::TConfSetting<ui64, Static> MapJoinShardMinRows;
     NCommon::TConfSetting<ui64, Static> MapJoinShardCount; // [1-10]
     NCommon::TConfSetting<bool, Static> MapJoinUseFlow;

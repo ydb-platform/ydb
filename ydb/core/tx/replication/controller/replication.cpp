@@ -717,6 +717,16 @@ const NKikimrReplication::TReplicationLocationConfig& TReplication::GetLocation(
     return Impl->Config.GetLocation();
 }
 
+bool IsSwitchover(const NKikimrReplication::TReplicationConfig& config) {
+    return config.GetBootstrap() == NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER;
+}
+
+TReplication::EState InitialReplicationState(const NKikimrReplication::TReplicationConfig& config) {
+    return config.GetInitialScan() || IsSwitchover(config)
+        ? TReplication::EState::Ready
+        : TReplication::EState::Paused;
+}
+
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrReplication::TReplicationConfig::TargetCase, stream, value) {

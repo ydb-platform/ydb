@@ -295,7 +295,9 @@ void InitViewerGroupsJsonHandler(TJsonHandlers& jsonHandlers) {
         .Method = "get",
         .Tag = "storage",
         .Summary = "NBS storage discovery",
-        .Description = "Configured is true when the cluster has a DDisk pool, false when there are none, and null when configuration is unknown.",
+        .Description = "Configured is true when the cluster has a DDisk pool, false when there are none, "
+            "and null when an older controller does not report this information. "
+            "A controller request timeout returns HTTP 504.",
     });
     jsonHandlers.AddHandler("/storage/nbs", new THttpHandler<TStorageNbsDiscovery>(yaml));
 }

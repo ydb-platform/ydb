@@ -815,24 +815,32 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResp
     return RequestBSControllerPools();
 }
 
-TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVSlots() {
-    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+static auto MakeBSControllerVSlotsRequest(bool includeDDiskPoolNames) {
     auto request = std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>();
+    if (includeDDiskPoolNames) {
+        request->Record.SetIncludeDDiskPoolNames(true);
+    }
+    return request;
+}
+
+TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVSlots(bool includeDDiskPoolNames) {
+    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+    auto request = MakeBSControllerVSlotsRequest(includeDDiskPoolNames);
     return MakeRequestToPipe<NSysView::TEvSysView::TEvGetVSlotsResponse>(pipeClient, request.release());
 }
 
-TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::MakeCachedRequestBSControllerVSlots() {
+TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::MakeCachedRequestBSControllerVSlots(bool includeDDiskPoolNames) {
     if (UseCache && Viewer) {
         bool needUpdate = false;
         auto cachedData = Viewer->SharedCacheState->StorageVSlots.GetFromCache(CachedDataMaxAge, needUpdate);
         if (needUpdate) {
-            UpdateSharedCacheTablet(GetBSControllerId(), std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>());
+            UpdateSharedCacheTablet(GetBSControllerId(), MakeBSControllerVSlotsRequest(includeDDiskPoolNames));
         }
         if (cachedData) {
             return cachedData;
         }
     }
-    return RequestBSControllerVSlots();
+    return RequestBSControllerVSlots(includeDDiskPoolNames);
 }
 
 TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> TViewerPipeClient::RequestBSControllerPDisks() {

@@ -97,6 +97,7 @@ class TJsonNodes : public TViewerPipeClient {
     bool DatabaseBoardInfoProcessed = false;
     bool ResourceBoardInfoProcessed = false;
     bool PDisksProcessed = false;
+    bool DDiskPoolNamesChecked = false;
     bool DDiskStoragePoolsProcessed = false;
     bool DDiskGroupsProcessed = false;
 
@@ -365,11 +366,14 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         bool HasUnavailableDDisk() const {
-            return std::ranges::any_of(DDisks, [](const auto& entry) {
-                using TState = NKikimrWhiteboard::TDDiskStateInfo;
+            using TState = NKikimrWhiteboard::TDDiskStateInfo;
+            const auto unavailable = [](TState::EComponentStatus status) {
+                return status == TState::Broken || status == TState::Initializing;
+            };
+            return std::ranges::any_of(DDisks, [unavailable](const auto& entry) {
                 const auto& disk = entry.second;
-                return (disk.HasDDiskStatus() && disk.GetDDiskStatus() != TState::Ready)
-                    || (disk.HasPersistentBufferStatus() && disk.GetPersistentBufferStatus() != TState::Ready);
+                return (disk.HasDDiskStatus() && unavailable(disk.GetDDiskStatus()))
+                    || (disk.HasPersistentBufferStatus() && unavailable(disk.GetPersistentBufferStatus()));
             });
         }
 
@@ -1133,6 +1137,10 @@ class TJsonNodes : public TViewerPipeClient {
         return !IsNodeFieldHiddenFromStrictDatabaseUsers(field);
     }
 
+    bool NeedsDDiskPoolNames() {
+        return FieldsRequested.test(+ENodeFields::DDisks) && ShouldRenderNodeField(ENodeFields::DDisks);
+    }
+
     bool IsNodeFieldRequestedForResponse(ENodeFields field) {
         return ShouldRenderNodeField(field)
             && FieldsAvailable.test(+field)
@@ -1452,20 +1460,12 @@ public:
         if (!FilterStoragePools.empty()) {
             StoragePoolsResponse = MakeCachedRequestBSControllerPools();
             GroupsResponse = MakeCachedRequestBSControllerGroups();
-            VSlotsResponse = MakeCachedRequestBSControllerVSlots();
+            VSlotsResponse = MakeCachedRequestBSControllerVSlots(NeedsDDiskPoolNames());
             FilterStorageStage = EFilterStorageStage::Pools;
         } else if (!FilterGroupIds.empty() || FieldsRequired.test(+ENodeFields::VDisks)
                 || FieldsRequired.test(+ENodeFields::DDisks)) {
-            VSlotsResponse = MakeCachedRequestBSControllerVSlots();
+            VSlotsResponse = MakeCachedRequestBSControllerVSlots(NeedsDDiskPoolNames());
             FilterStorageStage = EFilterStorageStage::VSlots;
-        }
-        if (FieldsRequested.test(+ENodeFields::DDisks) && ShouldRenderNodeField(ENodeFields::DDisks)) {
-            if (!StoragePoolsResponse) {
-                StoragePoolsResponse = MakeCachedRequestBSControllerPools();
-            }
-            if (!GroupsResponse) {
-                GroupsResponse = MakeCachedRequestBSControllerGroups();
-            }
         }
         if (With != EWith::Everything || (!FilterDatabase && Type == EType::Storage)) {
             if (!PDisksResponse) {
@@ -2204,7 +2204,7 @@ public:
                         GroupsResponse = MakeCachedRequestBSControllerGroups();
                     }
                     if (!VSlotsResponse) {
-                        VSlotsResponse = MakeCachedRequestBSControllerVSlots();
+                        VSlotsResponse = MakeCachedRequestBSControllerVSlots(NeedsDDiskPoolNames());
                     }
                 }
             }
@@ -2488,6 +2488,20 @@ public:
             HiveNodeStatsProcessed = true;
         }
 
+        if (!DDiskPoolNamesChecked && NeedsDDiskPoolNames() && VSlotsResponse && VSlotsResponse->IsDone()) {
+            DDiskPoolNamesChecked = true;
+            // Old controllers and VSlot snapshots cached by legacy requests can omit the names.
+            if (VSlotsResponse->IsOk() && std::ranges::any_of(VSlotsResponse->Get()->Record.GetEntries(), [](const auto& entry) {
+                    return entry.GetInfo().GetDDisk() && !entry.GetInfo().HasStoragePoolName();
+                })) {
+                if (!StoragePoolsResponse && !DDiskStoragePoolsProcessed) {
+                    StoragePoolsResponse = MakeCachedRequestBSControllerPools();
+                }
+                if (!GroupsResponse && !DDiskGroupsProcessed) {
+                    GroupsResponse = MakeCachedRequestBSControllerGroups();
+                }
+            }
+        }
         if (IncludeDDisks && StoragePoolsResponse && StoragePoolsResponse->IsDone() && !DDiskStoragePoolsProcessed) {
             if (StoragePoolsResponse->IsOk()) {
                 for (const auto& entry : StoragePoolsResponse->Get()->Record.GetEntries()) {
@@ -3682,8 +3696,15 @@ public:
             jsonBatch->SetHasStaticNodes(batch.HasStaticNodes);
         }
         json.SetVersion(Viewer->GetCapabilityVersion("/viewer/nodes"));
-        json.SetFieldsAvailable(GetFieldsAvailableForResponse().to_string());
-        json.SetFieldsRequired(GetFieldsRequiredForResponse().to_string());
+        const auto fieldsRequired = GetFieldsRequiredForResponse();
+        const bool includeDDiskBit = fieldsRequired.test(+ENodeFields::DDisks);
+        // Serialize the legacy bitset width unless the request includes DDisks.
+        const auto formatFields = [includeDDiskBit](const TFieldsType& fields) {
+            const auto mask = fields.to_string();
+            return includeDDiskBit ? mask : mask.substr(mask.size() - +ENodeFields::DDisks);
+        };
+        json.SetFieldsAvailable(formatFields(GetFieldsAvailableForResponse()));
+        json.SetFieldsRequired(formatFields(fieldsRequired));
         if (NeedFilter) {
             json.SetNeedFilter(true);
         }
@@ -3835,8 +3856,9 @@ public:
                             ddisk.SetPDiskId(key.GetPDiskId());
                             ddisk.SetDDiskSlotId(key.GetVSlotId());
                             ddisk.SetGroupId(entry.GetInfo().GetGroupId());
-                            const auto group = DDiskGroupPools.find(ddisk.GetGroupId());
-                            if (group != DDiskGroupPools.end()) {
+                            if (entry.GetInfo().HasStoragePoolName()) {
+                                ddisk.SetStoragePoolName(entry.GetInfo().GetStoragePoolName());
+                            } else if (const auto group = DDiskGroupPools.find(ddisk.GetGroupId()); group != DDiskGroupPools.end()) {
                                 const auto pool = DDiskStoragePoolNames.find(group->second);
                                 if (pool != DDiskStoragePoolNames.end()) {
                                     ddisk.SetStoragePoolName(pool->second);
@@ -4001,6 +4023,8 @@ public:
                         filter nodes:
                           * `missing` — nodes with missing disks
                           * `space` — nodes with disk space problems
+                        With DDisks enabled, `missing` accounts for DDisk and Persistent Buffer components
+                        in Initializing or Broken state. `space` uses available occupancy samples.
                         Forbidden for database-level tokens (403 if present).
                     required: false
                     type: string

@@ -1,3 +1,4 @@
+#include <util/string/subst.h>
 #pragma once
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -60,6 +61,13 @@ static constexpr std::array<const char*, 3> BenchmarkSchemaPathPrefix{R"(data/)"
 static constexpr std::array<const char*, 3> BenchmarkSchemaPath{R"(schema/tpch.sql)", R"(schema/tpcds.sql)", R"(schema/clickbench.sql)"};
 
 static constexpr std::array<const char*, 3> BenchmarkQueryPath{R"(data/yql-tpch/q)", R"(data/yql-tpcds/q)", R"(data/yql-clickbench/q)"};
+
+// Keep release benchmark files unchanged; relocate table paths for the fixture.
+inline TString ReadBenchmarkQuery(EBenchType type, ui32 queryId, const TString& tablePathPrefix) {
+    TString query = GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+    SubstGlobal(query, type == TPCDS ? "/Root/test/ds/" : "/Root/", tablePathPrefix + "/");
+    return query;
+}
 
 inline NKikimrKqp::TKqpSetting MakeTPCHStatsSetting() {
     NKikimrKqp::TKqpSetting statsSetting;

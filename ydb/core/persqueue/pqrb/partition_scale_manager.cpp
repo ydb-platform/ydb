@@ -299,6 +299,11 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
         }
     }
     if (node->DirectChildren.empty()) {
+        if (!splitParameters.SplitBoundary && BalancerConfig.HasKeySchema) {
+            LOG_D("Split request without boundary for topic with key schema", {"partition", partitionId});
+            return {.Split = Nothing(), .Remove = true};
+        }
+
         auto from = node->From;
         auto to = node->To;
         auto mid = splitParameters.SplitBoundary.GetOrElse(MiddleOf(from, to));

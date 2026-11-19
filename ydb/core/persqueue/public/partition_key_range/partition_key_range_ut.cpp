@@ -144,3 +144,98 @@ Y_UNIT_TEST_SUITE(TPartitionKeyRangeIntersectsTest) {
         UNIT_ASSERT(intersects);
     }
 }
+
+namespace {
+
+TString MakeKey(std::initializer_list<ui64> values) {
+    TVector<TCell> cells;
+    for (const ui64 value : values) {
+        cells.push_back(TCell::Make<ui64>(value));
+    }
+    return TSerializedCellVec::Serialize(cells);
+}
+
+} // anonymous
+
+Y_UNIT_TEST_SUITE(TPartitionKeyRangeChooseSplitBoundaryTest) {
+    Y_UNIT_TEST(ShouldChooseWeightedMedianKeyWhenKeysAreDistinct) {
+        // given
+        const TVector<TWeightedKey> keys = {
+            {MakeKey({4}), 1},
+            {MakeKey({1}), 1},
+            {MakeKey({3}), 1},
+            {MakeKey({2}), 1},
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(keys, MakeKeyRange(Nothing(), Nothing()), Uint64Key);
+
+        // then
+        UNIT_ASSERT(boundary);
+        UNIT_ASSERT_VALUES_EQUAL(*boundary, MakeKey({3}));
+    }
+
+    Y_UNIT_TEST(ShouldCompareKeysByTypeWhenBytesOrderDiffers) {
+        // given
+        const TVector<TWeightedKey> keys = {
+            {MakeKey({1}), 1},
+            {MakeKey({256}), 1},
+            {MakeKey({2}), 1},
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(keys, MakeKeyRange(Nothing(), Nothing()), Uint64Key);
+
+        // then
+        UNIT_ASSERT(boundary);
+        UNIT_ASSERT_VALUES_EQUAL(*boundary, MakeKey({256}));
+    }
+
+    Y_UNIT_TEST(ShouldNotChooseBoundaryWhenAllKeysAreEqual) {
+        // given
+        const TVector<TWeightedKey> keys = {
+            {MakeKey({5}), 10},
+            {MakeKey({5}), 20},
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(keys, MakeKeyRange(Nothing(), Nothing()), Uint64Key);
+
+        // then
+        UNIT_ASSERT(!boundary);
+    }
+
+    Y_UNIT_TEST(ShouldChooseKeyAboveFromBoundWhenLowestKeyIsHeaviest) {
+        // given
+        const TVector<TWeightedKey> keys = {
+            {MakeKey({10}), 100},
+            {MakeKey({11}), 1},
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(keys, MakeKeyRange(MakeBound({10}), Nothing()), Uint64Key);
+
+        // then
+        UNIT_ASSERT(boundary);
+        UNIT_ASSERT_VALUES_EQUAL(*boundary, MakeKey({11}));
+    }
+
+    Y_UNIT_TEST(ShouldIgnoreKeysOutsideRangeOrWithWrongSize) {
+        // given
+        const TVector<TWeightedKey> keys = {
+            {MakeKey({5}), 100},
+            {MakeKey({12}), 1},
+            {MakeKey({15}), 1},
+            {MakeKey({20}), 100},
+            {MakeKey({13, 1}), 100},
+            {"not a key", 100},
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(keys, MakeKeyRange(MakeBound({10}), MakeBound({20})), Uint64Key);
+
+        // then
+        UNIT_ASSERT(boundary);
+        UNIT_ASSERT_VALUES_EQUAL(*boundary, MakeKey({15}));
+    }
+}

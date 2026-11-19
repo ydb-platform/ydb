@@ -1,5 +1,6 @@
 #include "autopartitioning_manager.h"
 
+#include <deque>
 #include <memory>
 #include <type_traits>
 
@@ -89,6 +90,7 @@ public:
             Min<size_t>(DEFAULT_NUM_SKETCHES, config.GetPartitionStrategy().GetScaleThresholdSeconds()),
             TDuration::Seconds(config.GetPartitionStrategy().GetScaleThresholdSeconds())),
         MaxUsagePerSec(maxUsagePerSec)
+        , KeyTypes(MakePartitionKeyTypes(config))
     {
         RecreateSumMetric();
     }
@@ -145,6 +147,13 @@ protected:
 
         SourceIdCounter.Use(sourceIdHashStr, now);
 
+        if (!KeyTypes.empty()) {
+            if (key) {
+                AddKeySample(key, delta, now);
+            }
+            return;
+        }
+
         const auto& keyRange = GetKeyRange();
 
         if (key && IsInKeyRange(key, keyRange)) {
@@ -164,6 +173,10 @@ protected:
         }
 
         CleanUp();
+
+        if (!KeyTypes.empty()) {
+            return ChooseKeySplitBoundary();
+        }
 
         if (PerSourceMetrics.size() < 2) {
             return std::nullopt;
@@ -197,6 +210,9 @@ protected:
         auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
         if (AppData()->FeatureFlags.GetEnableTopicPartitionSplitBasedOnKllSketch()) {
             canSplit = canSplit || KeysManager.MoreThanOneKey(now - TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
+        }
+        if (!KeyTypes.empty()) {
+            canSplit = HasDistinctKeySamples(now);
         }
 
         auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
@@ -349,7 +365,53 @@ protected:
         return *KeyRange;
     }
 
+    struct TKeySample {
+        TString Key;
+        ui64 Weight = 0;
+        TInstant Timestamp;
+    };
+
+    void AddKeySample(const TString& key, ui64 weight, TInstant now) {
+        if (KeySamples.size() == MaxKeySamples) {
+            KeySamples.pop_front();
+        }
+        KeySamples.push_back({key, weight, now});
+    }
+
+    TInstant GetKeySamplesDeadline(TInstant now) const {
+        return now - TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds());
+    }
+
+    bool HasDistinctKeySamples(TInstant now) const {
+        const auto deadline = GetKeySamplesDeadline(now);
+        const TString* first = nullptr;
+        for (const auto& sample : KeySamples) {
+            if (sample.Timestamp < deadline) {
+                continue;
+            }
+            if (!first) {
+                first = &sample.Key;
+            } else if (sample.Key != *first) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::optional<TString> ChooseKeySplitBoundary() {
+        const auto deadline = GetKeySamplesDeadline(TAppData::TimeProvider->Now());
+        TVector<TWeightedKey> keys;
+        keys.reserve(KeySamples.size());
+        for (const auto& sample : KeySamples) {
+            if (sample.Timestamp >= deadline) {
+                keys.push_back({sample.Key, sample.Weight});
+            }
+        }
+        return ChooseSplitBoundary(keys, TPartitionKeyRange::Parse(GetKeyRange()), KeyTypes);
+    }
+
     static constexpr auto DEFAULT_NUM_SKETCHES = 100;
+    static constexpr size_t MaxKeySamples = 256;
 
     const NKikimrPQ::TPQTabletConfig& Config;
     const ETag Tag;
@@ -363,6 +425,8 @@ protected:
     TLastCounter<TString> SourceIdCounter;
     TInstant LastCleanUp;
     ui64 MaxUsagePerSec;
+    const TVector<NScheme::TTypeInfo> KeyTypes;
+    std::deque<TKeySample> KeySamples;
 };
 
 class TBytesAutopartitioningManager : public TWindowedAutopartitioningManager {

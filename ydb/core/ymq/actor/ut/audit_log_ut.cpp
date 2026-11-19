@@ -1,0 +1,168 @@
+#include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/ymq/actor/actor.h>
+#include <ydb/core/ymq/actor/auth_multi_factory.h>
+#include <ydb/core/ymq/actor/events.h>
+#include <ydb/core/ymq/actor/serviceid.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/algorithm.h>
+
+namespace NKikimr::NSQS {
+namespace {
+
+const TString RawToken = "raw-token-with-secret-signature";
+const TString SanitizedToken = "token-without-signature";
+
+class TNoopReplyCallback final : public IReplyCallback {
+    void DoSendReply(const NKikimrClient::TSqsResponse&) override {}
+};
+
+class TAuditLogRuntime {
+public:
+    explicit TAuditLogRuntime(const TString& sanitizedToken)
+        : Token_(MakeIntrusive<NACLib::TUserToken>("audit-user", TVector<TString>{}))
+    {
+        Token_->SetSanitizedToken(sanitizedToken);
+        Runtime_.AuditLogBackends = Tests::CreateTestAuditLogBackends(AuditLines_);
+        Runtime_.Initialize(TAppPrepare().Unwrap());
+        Runtime_.GetAppData().SqsConfig.SetRequestTimeoutMs(0);
+        EdgeActor_ = Runtime_.AllocateEdgeActor();
+        Runtime_.RegisterService(MakeSqsServiceID(Runtime_.GetNodeId()), EdgeActor_);
+        Runtime_.RegisterService(MakeTicketParserID(), EdgeActor_);
+        Runtime_.RegisterService(MakeSqsFolderServiceID(), EdgeActor_);
+        Runtime_.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) { return Observe(ev); });
+    }
+
+    std::string RunLocal(const TString& ticket) {
+        NKikimrClient::TSqsRequest request;
+        request.SetRequestId("local-audit-token");
+        auto* createUser = request.MutableCreateUser();
+        createUser->MutableAuth()->SetUserName("audit-account");
+        createUser->MutableAuth()->SetMaskedToken("masked-token");
+        createUser->MutableCredentials()->SetOAuthToken(ticket);
+        // An empty user name is rejected after authorization.
+        Runtime_.Register(CreateActionActor(request, MakeHolder<TNoopReplyCallback>()));
+        return WaitForAuditLine();
+    }
+
+    std::string RunCloud() {
+        auto& config = Runtime_.GetAppData().SqsConfig;
+        config.SetYandexCloudMode(true);
+        config.SetYandexCloudFolderServiceAddress("folder-service");
+        TCloudAuthCounters counters(config, MakeIntrusive<::NMonitoring::TDynamicCounters>());
+
+        auto request = MakeHolder<NKikimrClient::TSqsRequest>();
+        request->SetRequestId("cloud-audit-token");
+        request->MutableDeleteQueue()->SetQueueName("missing-queue");
+        TAuthActorData data{
+            .SQSRequest = std::move(request),
+            .HTTPCallback = MakeHolder<TNoopReplyCallback>(),
+            .UserSidCallback = [](TString) {},
+            .EnableQueueLeader = false,
+            .Action = EAction::DeleteQueue,
+            .ExecutorPoolID = 0,
+            .CloudID = "cloud",
+            .ResourceID = "missing-queue",
+            .Counters = &counters,
+            .IAMToken = RawToken,
+            .FolderID = "folder",
+        };
+        Runtime_.Register(new TCloudAuthRequestProxy(std::move(data), {}));
+        return WaitForAuditLine();
+    }
+
+private:
+    NActors::TTestActorRuntimeBase::EEventAction Observe(TAutoPtr<IEventHandle>& ev) {
+        switch (ev->GetTypeRewrite()) {
+            case TSqsEvents::EvGetConfiguration: {
+                auto response = MakeHolder<TSqsEvents::TEvConfiguration>();
+                response->UserExists = true;
+                response->SchemeCache = EdgeActor_;
+                Runtime_.Send(new IEventHandle(ev->Sender, ev->Recipient, response.Release()));
+                return NActors::TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            case TEvTicketParser::EvAuthorizeTicket: {
+                const auto* request = ev->Get<TEvTicketParser::TEvAuthorizeTicket>();
+                UNIT_ASSERT_VALUES_EQUAL(request->Ticket, RawToken);
+                Runtime_.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new TEvTicketParser::TEvAuthorizeTicketResult(request->Ticket, Token_)));
+                return NActors::TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            case TEvTxProxySchemeCache::EvNavigateKeySet: {
+                auto* request = ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySet>();
+                for (auto& entry : request->Request->ResultSet) {
+                    entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+                }
+                Runtime_.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new TEvTxProxySchemeCache::TEvNavigateKeySetResult(request->Request.Release())));
+                return NActors::TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            case NFolderService::TEvFolderService::EvGetCloudByFolderRequest: {
+                auto response = MakeHolder<NFolderService::TEvFolderService::TEvGetCloudByFolderResponse>();
+                response->FolderId = "folder";
+                response->CloudId = "cloud";
+                Runtime_.Send(new IEventHandle(ev->Sender, ev->Recipient, response.Release()));
+                return NActors::TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            default:
+                return NActors::TTestActorRuntimeBase::EEventAction::PROCESS;
+        }
+    }
+
+    std::string WaitForAuditLine() {
+        Runtime_.WaitFor("YMQ audit record", [&] {
+            return AnyOf(AuditLines_, [](const auto& line) { return line.find("component=ymq") != std::string::npos; });
+        }, TDuration::Seconds(10));
+        const auto line = Tests::FindAuditLine(AuditLines_, "component=ymq");
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_C(line.find(RawToken.c_str()) == std::string::npos, line);
+        return line;
+    }
+
+private:
+    std::vector<std::string> AuditLines_;
+    NActors::TTestBasicRuntime Runtime_;
+    TActorId EdgeActor_;
+    TIntrusivePtr<NACLib::TUserToken> Token_;
+};
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(YmqAuditLog) {
+    Y_UNIT_TEST(LocalAuthorizationPreservesSanitizedToken) {
+        TAuditLogRuntime runtime(SanitizedToken);
+        const auto line = runtime.RunLocal(RawToken);
+        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "sanitized_token=" << SanitizedToken);
+    }
+
+    Y_UNIT_TEST(LocalTokenWithoutSanitizedValueIsWrittenAsNone) {
+        TAuditLogRuntime runtime({});
+        const auto line = runtime.RunLocal(RawToken);
+        UNIT_ASSERT_STRING_CONTAINS(line, "sanitized_token={none}");
+    }
+
+    Y_UNIT_TEST(MissingTokenIsWrittenAsNone) {
+        TAuditLogRuntime runtime({});
+        const auto line = runtime.RunLocal({});
+        UNIT_ASSERT_STRING_CONTAINS(line, "sanitized_token={none}");
+    }
+
+    Y_UNIT_TEST(CloudAuthorizationPreservesSanitizedToken) {
+        TAuditLogRuntime runtime(SanitizedToken);
+        const auto line = runtime.RunCloud();
+        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "sanitized_token=" << SanitizedToken);
+    }
+
+    Y_UNIT_TEST(CloudTokenWithoutSanitizedValueIsWrittenAsNone) {
+        TAuditLogRuntime runtime({});
+        const auto line = runtime.RunCloud();
+        UNIT_ASSERT_STRING_CONTAINS(line, "sanitized_token={none}");
+    }
+}
+
+} // namespace NKikimr::NSQS

@@ -536,6 +536,7 @@ private:
             AUDIT_PART("component", "ymq")
             AUDIT_PART("request_id", requestId)
             AUDIT_PART("subject", (UserSID_ ? UserSID_ : EmptyValue))
+            AUDIT_PART("sanitized_token", (SanitizedToken_ ? SanitizedToken_ : EmptyValue))
             AUDIT_PART("account", UserName_)
             AUDIT_PART("cloud_id", UserName_, Cfg().GetYandexCloudMode())
             AUDIT_PART("folder_id", Response_.GetFolderId(), Cfg().GetYandexCloudMode())
@@ -722,6 +723,7 @@ private:
         FolderId_ = request.GetAuth().GetFolderId();
         UserSID_ = request.GetAuth().GetUserSID();
         MaskedToken_ = request.GetAuth().GetMaskedToken();
+        SanitizedToken_ = request.GetAuth().GetSanitizedToken();
         AuthType_ = request.GetAuth().GetAuthType();
 
         if (request.GetAuth().HasSourceAddress()) {
@@ -914,6 +916,7 @@ private:
         } else {
             UserToken_ = ev->Get()->Token;
             Y_ABORT_UNLESS(UserToken_);
+            SanitizedToken_ = UserToken_->GetSanitizedToken();
         }
 
         OnAuthCheckMessage();
@@ -1058,6 +1061,7 @@ protected:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken_;
     TString UserSID_; // identifies the client who sent this request
     TString MaskedToken_;
+    TString SanitizedToken_;
     TString AuthType_;
 
     bool UserExists_ = false;

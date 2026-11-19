@@ -151,7 +151,7 @@ public:
         OutForeign = OverlapClusters > 1 && request.GetOverlapOutForeign();
 
         const auto& embedding = request.GetEmbeddingColumn();
-        const auto& data = request.GetDataColumns();
+        const auto data = MakeUploadDataColumns(table, embedding, request.GetDataColumns(), request.GetIndexType());
         ScanTags = MakeScanTags(table, embedding, data, toBuild, EmbeddingPos, DataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
         OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data, {}, OutForeign));
@@ -514,7 +514,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         if (request.GetTabletId() != TabletID()) {
             badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
         }
-        if (!IsStateActive()) {
+        if (!IsStateActive() || IsUserTableWriteBlocked()) {
             badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
         }
         const auto pathId = TPathId::FromProto(request.GetPathId());
@@ -609,4 +609,3 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

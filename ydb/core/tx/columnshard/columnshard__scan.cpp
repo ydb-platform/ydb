@@ -7,7 +7,7 @@
 #include "engines/reader/transaction/tx_scan.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/common/events/scan.h>
 #include <ydb/core/protos/kqp.pb.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -32,7 +32,7 @@ void TColumnShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContex
         {"readable", maxReadVersion},
         {"tabletID", TabletID()});
 
-    if (!ScanGate.PassSnapshot(ev, readVersion, maxReadVersion)) {
+    if (!ScanGate.PassReadableSnapshot(ev, readVersion, maxReadVersion)) {
         WaitPlanStep(readVersion.GetPlanStep());
         return;
     }
@@ -44,7 +44,7 @@ void TColumnShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContex
         return;
     }
     NOlap::NReader::TScanTarget target = targetConclusion.DetachResult();
-    if (!ScanGate.PassLoadedPortions(ev, GetIndexOptional(), target)) {
+    if (!ScanGate.PassLoadedPortions(ev, target)) {
         return;
     }
 
@@ -61,7 +61,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActo
         TablesManager.BuildTableMetadataAccessor(
             "internal_request", request.GetPathId().GetInternalPathId(), request.GetPathId().GetSchemeShardLocalPathId(), readSnapshot),
         request.RangesFilter ? request.RangesFilter : std::make_shared<NOlap::TPKRangesFilter>(NOlap::TPKRangesFilter::BuildEmpty()) };
-    if (!ScanGate.PassLoadedPortions(ev, GetIndexOptional(), target)) {
+    if (!ScanGate.PassLoadedPortions(ev, target)) {
         return;
     }
     Execute(new NOlap::NReader::TTxInternalScan(this, ev, std::move(target)), ctx);

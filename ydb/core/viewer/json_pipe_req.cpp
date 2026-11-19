@@ -1026,7 +1026,7 @@ void TViewerPipeClient::RequestTxProxyDescribe(const TString& path, const NKikim
 void TViewerPipeClient::RequestStateStorageEndpointsLookup(const TString& path) {
     RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                    SelfId(),
-                                                   EBoardLookupMode::Second));
+                                                   EBoardLookupMode::SecondWithAllReplies));
     ++DataRequests;
 }
 
@@ -1034,7 +1034,7 @@ TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> TViewerPipeCl
     TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, "BoardLookupActor-Endpoints"));
     RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                    SelfId(),
-                                                   EBoardLookupMode::Second, {}, cookie));
+                                                   EBoardLookupMode::SecondWithAllReplies, {}, cookie));
     if (response.Span) {
         response.Span.Attribute("path", path);
     }

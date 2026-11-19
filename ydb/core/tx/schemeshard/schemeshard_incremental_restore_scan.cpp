@@ -27,6 +27,10 @@ public:
         , OperationId(operationId)
     {}
 
+    TTxType GetTxType() const override {
+        return TXTYPE_PROGRESS_INCREMENTAL_RESTORE;
+    }
+
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxProgressIncrementalRestore::Execute",
             {"operationId", OperationId},
@@ -1517,6 +1521,10 @@ public:
         , Ev(ev)
     {}
 
+    TTxType GetTxType() const override {
+        return TXTYPE_PROGRESS_INCREMENTAL_RESTORE;
+    }
+
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
         const ui64 originalOpId = Ev->Cookie;
 
@@ -1695,6 +1703,10 @@ public:
         : TBase(self)
         , Ev(std::move(ev))
     {}
+
+    TTxType GetTxType() const override {
+        return TXTYPE_INCREMENTAL_RESTORE_SHARD_RESPONSE;
+    }
 
     bool Execute(NTabletFlatExecutor::TTransactionContext&, const TActorContext& ctx) override {
         const auto& rec = Ev->Get()->Record;

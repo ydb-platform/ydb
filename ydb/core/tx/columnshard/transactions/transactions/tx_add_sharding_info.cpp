@@ -6,7 +6,7 @@
 namespace NKikimr::NColumnShard {
 
 bool TTxAddShardingInfo::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    AFL_VERIFY(!!SnapshotVersion);
+    YDB_LOG_VERIFY(!!SnapshotVersion);
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ShardingInfo>()
         .Key(PathId.GetRawValue(), ShardingVersion)
@@ -16,7 +16,7 @@ bool TTxAddShardingInfo::Execute(TTransactionContext& txc, const TActorContext& 
 }
 
 void TTxAddShardingInfo::Complete(const TActorContext& /*ctx*/) {
-    AFL_VERIFY(!!SnapshotVersion);
+    YDB_LOG_VERIFY(!!SnapshotVersion);
     NOlap::TGranuleShardingInfo info(GranuleShardingLogic, *SnapshotVersion, ShardingVersion, PathId);
     Self->MutableIndexAs<NOlap::TColumnEngineForLogs>().AddShardingInfo(info);
 }

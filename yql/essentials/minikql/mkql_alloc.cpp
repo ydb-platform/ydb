@@ -1,4 +1,7 @@
 #include "mkql_alloc.h"
+#ifndef MKQL_DISABLE_UDF_SERVICE_DISPATCH
+    #include "mkql_udf_service.h"
+#endif
 
 #include <yql/essentials/public/udf/udf_value.h>
 
@@ -210,6 +213,10 @@ void TScopedAlloc::Acquire() {
         }
         PrevState_ = TlsAllocState;
         TlsAllocState = &MyState_;
+#ifndef MKQL_DISABLE_UDF_SERVICE_DISPATCH
+        UdfSymbolsExchange_ = GetUdfServiceSymbolsExchange();
+        PreviousUdfSymbols_ = UdfSymbolsExchange_(&GetUdfServiceSymbols());
+#endif
         PgAcquireThreadContext(MyState_.MainContext);
     } else {
         Y_ABORT_UNLESS(TlsAllocState == &MyState_, "Mismatch allocator in thread");
@@ -226,6 +233,11 @@ void TScopedAlloc::Release() {
             PgAcquireThreadContext(PrevState_->MainContext);
         }
         PrevState_ = nullptr;
+#ifndef MKQL_DISABLE_UDF_SERVICE_DISPATCH
+        UdfSymbolsExchange_(PreviousUdfSymbols_);
+        UdfSymbolsExchange_ = nullptr;
+        PreviousUdfSymbols_ = nullptr;
+#endif
     }
 }
 

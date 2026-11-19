@@ -77,6 +77,8 @@ struct TDescribeSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TAccessRights AccessRights;
     bool ForceSyncVersion = false;
+    // Legacy callers opt out; the resolver still checks the global feature flag.
+    bool EnableRelativePaths = true;
     // Topic strings are already scheme paths (discovery primary/secondary).
     // Do not run ResolveName, which rewrites legacy paths under LbUserDatabaseRoot.
     bool ResolvedPaths = false;

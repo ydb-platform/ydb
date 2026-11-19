@@ -31,6 +31,27 @@
             "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.3"
         }
     ],
+    "test_canonical_requests.Test.test_cluster_balance_group_slots[balanced]": {
+        "uri": "file://test_canonical_requests.Test.test_cluster_balance_group_slots_balanced_/results.txt"
+    },
+    "test_canonical_requests.Test.test_cluster_balance_group_slots[dry_run]": {
+        "uri": "file://test_canonical_requests.Test.test_cluster_balance_group_slots_dry_run_/results.txt"
+    },
+    "test_canonical_requests.Test.test_cluster_balance_group_slots[full]": {
+        "uri": "file://test_canonical_requests.Test.test_cluster_balance_group_slots_full_/results.txt"
+    },
+    "test_canonical_requests.Test.test_cluster_balance_group_slots[move]": {
+        "uri": "file://test_canonical_requests.Test.test_cluster_balance_group_slots_move_/results.txt"
+    },
+    "test_canonical_requests.Test.test_cluster_balance_group_slots[rejected]": {
+        "uri": "file://test_canonical_requests.Test.test_cluster_balance_group_slots_rejected_/results.txt"
+    },
+    "test_canonical_requests.Test.test_cluster_balance_group_slots[retry]": {
+        "uri": "file://test_canonical_requests.Test.test_cluster_balance_group_slots_retry_/results.txt"
+    },
+    "test_canonical_requests.Test.test_cluster_balance_group_slots[unhealthy]": {
+        "uri": "file://test_canonical_requests.Test.test_cluster_balance_group_slots_unhealthy_/results.txt"
+    },
     "test_canonical_requests.Test.test_cluster_balance_mismatching_size_in_units": [
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_balance_mismatching_size_in_units/results.txt"

@@ -1,6 +1,6 @@
 #include "manager.h"
 
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 
 #include <algorithm>
 #include <numeric>

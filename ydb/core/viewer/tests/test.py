@@ -605,6 +605,7 @@ class TestViewer(object):
 
         replace_with_values.update({'CpuUsage',
                                     'DiskSpaceUsage',
+                                    'DiskSpaceQuotaUsage',
                                     'Address',
                                     'Port',
                                     'port',
@@ -1235,6 +1236,35 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def test_viewer_tenantinfo_disk_space_quota(cls):
+        # not canonized: usage depends on the data written by other tests
+        for name in cls.databases:
+            tenants = []
+            for _ in range(15):
+                result = cls.get_viewer("/viewer/tenantinfo", {'database': name, 'storage': 'true'})
+                tenants = [t for t in result.get('TenantInfo', []) if t.get('Name') == name]
+                if tenants and 'DiskSpaceQuotaUsage' in tenants[0]:
+                    break
+                time.sleep(1)
+            assert tenants, "no TenantInfo for %s in /viewer/tenantinfo response" % name
+            tenant = tenants[0]
+            usage = tenant.get('DiskSpaceQuotaUsage')
+            assert usage is not None, "no DiskSpaceQuotaUsage for %s: %s" % (name, tenant)
+            assert usage.get('Mode') == 'MODE_OVERALL', usage
+            entries = usage.get('Entries', [])
+            assert len(entries) == 1, usage
+            assert 'Usage' in entries[0], usage
+            assert int(entries[0].get('SoftQuota', 0)) == 0, usage
+            assert int(entries[0].get('HardQuota', 0)) == 0, usage
+            # DomainState contains only the flags that are set, and nothing blocks writes here
+            for flag in ('DiskQuotaExceeded', 'StorageSpaceExhausted', 'SmallBlobsQuotaExceeded'):
+                assert not tenant.get('DomainState', {}).get(flag, False), tenant['DomainState']
+            # no quotas configured, so there is no limit
+            for tables_storage in tenant.get('TablesStorage', []):
+                for key in ('Limit', 'SoftQuota', 'HardQuota'):
+                    assert key not in tables_storage, tenant['TablesStorage']
+
+    @classmethod
     def test_viewer_healthcheck(cls):
         result = cls.get_viewer_db_normalized("/viewer/healthcheck")
         result = cls.normalize_result_healthcheck(result)
@@ -1422,7 +1452,7 @@ class TestViewer(object):
     def test_pqrb_tablet(cls):
         response_create_topic = cls.call_viewer("/viewer/query", {
             'database': cls.dedicated_db,
-            'query': 'CREATE TOPIC topic1(CONSUMER consumer1)',
+            'query': 'CREATE TOPIC IF NOT EXISTS topic1(CONSUMER consumer1)',
             'schema': 'multi'
         })
 
@@ -2317,18 +2347,27 @@ class TestViewer(object):
 
     @classmethod
     def test_storage_stats(cls):
-        result = {}
-        tries = 15
-        while tries > 0:
-            result = cls.get_viewer_normalized("/viewer/storage_stats", {
+        response_create_topic = cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'query': 'CREATE TOPIC IF NOT EXISTS topic1(CONSUMER consumer1)',
+            'schema': 'multi'
+        })
+        assert response_create_topic.get('status') == 'SUCCESS', response_create_topic
+
+        def get_paths_with_storage_stats():
+            result = cls.get_viewer("/viewer/storage_stats", {
                 'database': cls.dedicated_db,
                 'path': '.,table1,topic1',
             })
-            if result['Paths'][2]['Groups'] != 0:
-                break
-            tries -= 1
-            time.sleep(1)
-        return result
+            paths = result.get('Paths', [])
+            assert len(paths) == 3, result
+            for path in paths:
+                for field in ('Groups', 'Media', 'Tablets', 'StorageCount', 'StorageSize'):
+                    assert path.get(field, 0) > 0, path
+            assert paths[1].get('DataSize', 0) > 0, paths[1]
+            return cls.normalize_result(result)
+
+        return retry_assertions(get_paths_with_storage_stats)
 
     @classmethod
     def test_viewer_peers(cls):

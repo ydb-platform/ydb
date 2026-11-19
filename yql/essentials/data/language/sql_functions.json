@@ -1579,6 +1579,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::any_value",
+    "kind": "Agg"
+  },
+  {
     "name": "Spark::asin",
     "kind": "Normal"
   },
@@ -1604,6 +1608,10 @@
   },
   {
     "name": "Spark::base64",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::between",
     "kind": "Normal"
   },
   {
@@ -1707,6 +1715,34 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::current_date",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::current_timestamp",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::current_user",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::day",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::dayofmonth",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::dayofweek",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::dayofyear",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::degrees",
     "kind": "Normal"
   },
@@ -1747,6 +1783,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::first",
+    "kind": "Agg"
+  },
+  {
     "name": "Spark::floor",
     "kind": "Normal"
   },
@@ -1756,6 +1796,10 @@
   },
   {
     "name": "Spark::hex",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::hour",
     "kind": "Normal"
   },
   {
@@ -1789,6 +1833,10 @@
   {
     "name": "Spark::isnull",
     "kind": "Normal"
+  },
+  {
+    "name": "Spark::last",
+    "kind": "Agg"
   },
   {
     "name": "Spark::lcase",
@@ -1863,7 +1911,15 @@
     "kind": "Agg"
   },
   {
+    "name": "Spark::minute",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::mod",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::month",
     "kind": "Normal"
   },
   {
@@ -1923,6 +1979,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::quarter",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::quote",
     "kind": "Normal"
   },
@@ -1964,6 +2024,14 @@
   },
   {
     "name": "Spark::sec",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::second",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::session_user",
     "kind": "Normal"
   },
   {
@@ -2095,7 +2163,23 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::user",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::validate_utf8",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::weekday",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::weekofyear",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::year",
     "kind": "Normal"
   },
   {

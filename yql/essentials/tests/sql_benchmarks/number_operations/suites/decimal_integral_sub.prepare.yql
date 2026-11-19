@@ -1,0 +1,4 @@
+SELECT
+    CAST(index AS Decimal(22, 9)) AS decimal_value,
+    CAST(index / 2 AS Int64) AS integral_value
+FROM Input;

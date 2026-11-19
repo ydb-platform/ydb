@@ -1189,7 +1189,7 @@ TError AttachFindOutput(TError error, const std::string& path)
 
 TDeviceId GetDeviceId(const std::string& path)
 {
-#ifdef _linux_
+#if defined(_linux_) || defined(_darwin_)
     auto deviceId = Stat(path).st_dev;
     return {major(deviceId), minor(deviceId)};
 #else

@@ -87,6 +87,12 @@ def _fallback(instance, node, result) -> None:
         issue.type = "STORAGE_GROUP"
         issue.status = StatusFlag.RED if red else StatusFlag.GREY
         issue.message = "Group failed" if red else "Group has disks with no data"
+        # Retain the static part's decisive VDisk reason, as the server does.
+        # A RED group alone cannot distinguish unavailability from replication.
+        vdisk = result.issue_log.add(
+            id=issue.id + "-vdisk", type="VDISK", status=issue.status, level=ISSUE_LEVEL + 1,
+            message="VDisk is not available" if red else "VDisk has no data")
+        issue.reason.append(vdisk.id)
         result.issue_log.append(issue)
 
 

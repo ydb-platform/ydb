@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/kqp/query_plan/query_plan.h>
+
 #include "kqp_rbo_context.h"
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
@@ -122,6 +124,15 @@ public:
     void RunStage(TOpRoot& root, TRBOContext& ctx) override;
 };
 
+// Remove sorts without a limit whose order nothing above them uses, such as a sort in a subquery
+// whose rows reach an aggregate, a join or a result without ORDER BY. Run before the logical rewrites,
+// so filters and aggregates can move to the reads.
+class TRemoveRedundantSortsStage final: public IRBOStage {
+public:
+    explicit TRemoveRedundantSortsStage(TString stageName);
+    void RunStage(TOpRoot& root, TRBOContext& ctx) override;
+};
+
 /**
  * A rule based optimizer is a collection of rule-based and global stages.
  */
@@ -155,8 +166,6 @@ void ComputePlanLiveness(TOpRoot& root, ELivenessMode mode = ELivenessMode::Loca
 const TUnorderedIUs& GetLiveIn(const IOperator* op, ui32 childIndex);
 const TUnorderedIUs& GetLiveOut(const IOperator* op);
 
-TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan);
-TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "");
 
 } // namespace NKqp
 } // namespace NKikimr

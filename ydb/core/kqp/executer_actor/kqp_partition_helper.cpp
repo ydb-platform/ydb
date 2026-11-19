@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/mkql/type_info.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
@@ -675,6 +675,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
         }
 
         case NKqpProto::TKqpPhyTableOperation::kReadOlapRange: {
+            readSettings.RequireSortedRead = operation.GetReadOlapRange().GetRequireSortedRead();
             if (operation.GetReadOlapRange().GetReverse()) {
                 readSettings.SetSorting(ERequestSorting::DESC);
             } else if (operation.GetReadOlapRange().GetSorted()) {

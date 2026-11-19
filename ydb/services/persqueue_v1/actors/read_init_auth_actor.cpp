@@ -16,8 +16,6 @@ namespace {
 
 TProcessingResult DescribeFailure(const TString& path, NPQ::NDescriber::EStatus status) {
     switch (status) {
-        case NPQ::NDescriber::EStatus::Success:
-            return {};
         case NPQ::NDescriber::EStatus::NotFound:
             return {
                 Ydb::PersQueue::ErrorCode::UNKNOWN_TOPIC,
@@ -30,12 +28,6 @@ TProcessingResult DescribeFailure(const TString& path, NPQ::NDescriber::EStatus 
                 Sprintf("item '%s' is not a topic, Marker# PQ13", path.c_str()),
                 true
             };
-        case NPQ::NDescriber::EStatus::BadRequest:
-            return {
-                Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                Sprintf("path '%s' has unknown/invalid root prefix '%s', Marker# PQ14", path.c_str(), ""),
-                true
-            };
         case NPQ::NDescriber::EStatus::Unauthorized:
         case NPQ::NDescriber::EStatus::UnauthorizedWithDescribeAccess:
             return {
@@ -43,18 +35,13 @@ TProcessingResult DescribeFailure(const TString& path, NPQ::NDescriber::EStatus 
                 Sprintf("topic '%s' describe error, Status# AccessDenied, Marker# PQ1", path.c_str()),
                 true
             };
-        case NPQ::NDescriber::EStatus::UnknownError:
+        default:
             return {
                 Ydb::PersQueue::ErrorCode::ERROR,
                 Sprintf("topic '%s' describe error, Status# Unknown, Marker# PQ1", path.c_str()),
                 true
             };
     }
-    return {
-        Ydb::PersQueue::ErrorCode::ERROR,
-        Sprintf("topic '%s' describe error, Status# Unknown, Marker# PQ1", path.c_str()),
-        true
-    };
 }
 
 } // namespace
@@ -222,40 +209,44 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
     const TString lbRoot = AppData(ctx)->PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
 
     for (const auto& [path, topicInfo] : ev->Get()->Topics) {
-        TString original = path;
+        TVector<TString> originals{path};
         if (secondaryPass) {
             auto mapped = SecondaryToOriginal.find(path);
             AFL_ENSURE(mapped != SecondaryToOriginal.end())("path", path);
-            original = mapped->second;
+            originals = mapped->second;
         }
-        auto it = Topics.find(original);
-        AFL_ENSURE(it != Topics.end())("path", original);
 
-        if (topicInfo.Status == NPQ::NDescriber::EStatus::Success) {
-            if (!ProcessTopicSchemeCacheResponse(topicInfo, it, ctx)) {
-                return;
+        for (const auto& original : originals) {
+            auto it = Topics.find(original);
+            AFL_ENSURE(it != Topics.end())("path", original);
+
+            if (topicInfo.Status == NPQ::NDescriber::EStatus::Success) {
+                if (!ProcessTopicSchemeCacheResponse(topicInfo, it, ctx)) {
+                    return;
+                }
+                continue;
             }
-            continue;
-        }
 
-        // Metacache looks up the legacy primary path first and, on a miss,
-        // retries the modern path under LbUserDatabaseRoot/account.
-        if (!secondaryPass && topicInfo.Status == NPQ::NDescriber::EStatus::NotFound) {
-            if (auto secondary = it->second.DiscoveryConverter->TrySecondaryDiscoveryPath(lbRoot)) {
-                if (*secondary != original) {
-                    SecondaryToOriginal[*secondary] = original;
+            // Metacache looks up the legacy primary path first and, on a miss,
+            // retries the modern path under LbUserDatabaseRoot/account.
+            if (!secondaryPass && topicInfo.Status == NPQ::NDescriber::EStatus::NotFound) {
+                // The input converter is shared with the caller and must not be mutated.
+                auto converter = std::make_shared<NPersQueue::TDiscoveryConverter>(*it->second.DiscoveryConverter);
+                if (auto secondary = converter->TrySecondaryDiscoveryPath(lbRoot); secondary && *secondary != original) {
+                    it->second.DiscoveryConverter = std::move(converter);
+                    SecondaryToOriginal[*secondary].push_back(original);
                     secondaryPaths.insert(*secondary);
                     continue;
                 }
             }
-        }
 
-        auto processResult = DescribeFailure(original, topicInfo.Status);
-        Topics.erase(it);
-        if (Topics.empty() && secondaryPaths.empty()) {
-            TStringBuilder reason;
-            reason << "Discovery for all topics failed. The last error was: " << processResult.Reason;
-            return CloseSession(reason, processResult.ErrorCode, ctx);
+            auto processResult = DescribeFailure(path, topicInfo.Status);
+            Topics.erase(it);
+            if (Topics.empty() && secondaryPaths.empty()) {
+                TStringBuilder reason;
+                reason << "Discovery for all topics failed. The last error was: " << processResult.Reason;
+                return CloseSession(reason, processResult.ErrorCode, ctx);
+            }
         }
     }
 

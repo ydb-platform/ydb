@@ -1,5 +1,6 @@
 #include "kafka_read_session_actor.h"
 #include "kafka_read_session_utils.h"
+#include <ydb/core/base/appdata.h>
 #include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
@@ -465,7 +466,8 @@ void TKafkaReadSessionActor::AuthAndFindBalancers(const TActorContext& ctx) {
         topicConverterFactory
     );
 
-    TopicsToConverter = topicHandler->GetReadTopicsList(TopicsToReadNames, false, Context->DatabasePath);
+    TopicsToConverter = topicHandler->GetReadTopicsList(TopicsToReadNames, false, Context->DatabasePath,
+        NKikimr::AppData()->FeatureFlags.GetEnableRelativePaths());
     if (!TopicsToConverter.IsValid) {
         SendJoinGroupResponseFail(ctx, CorellationId, INVALID_REQUEST, TStringBuilder() << "topicsToConverter is not valid");
         return;

@@ -88,6 +88,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
+    REGISTER_SETTING(*this, OptEnableOlapSortedRead);
     REGISTER_SETTING(*this, OptEnableOlapPushdownAggregate);
     REGISTER_SETTING(*this, OptForceOlapPushdownDistinct);
     REGISTER_SETTING(*this, OptForceOlapPushdownDistinctLimit);

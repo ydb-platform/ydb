@@ -15,14 +15,14 @@ namespace NKikimr::NArrow {
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow::Array>>& keyColumns, const bool andUnique) {
     std::optional<i64> count;
     for (auto&& i : keyColumns) {
-        AFL_VERIFY(i);
+        YDB_LOG_VERIFY(i);
         if (!count) {
             count = i->length();
         } else {
-            AFL_VERIFY(*count == i->length());
+            YDB_LOG_VERIFY(*count == i->length());
         }
     }
-    AFL_VERIFY(count);
+    YDB_LOG_VERIFY(count);
     std::vector<TRawReplaceKey> points;
     points.reserve(*count);
     for (int i = 0; i < *count; ++i) {

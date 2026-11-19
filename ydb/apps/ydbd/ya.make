@@ -56,6 +56,7 @@ PEERDIR(
     ydb/library/yql/udfs/common/hybrid_search
     ydb/library/yql/udfs/common/knn
     ydb/library/yql/udfs/common/roaring
+    ydb/library/yql/udfs/digest
     ydb/library/yql/udfs/statistics_internal
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
@@ -65,7 +66,6 @@ PEERDIR(
     yql/essentials/udfs/common/histogram
     yql/essentials/udfs/common/hyperloglog
     yql/essentials/udfs/common/ip_base
-    yql/essentials/udfs/common/json
     yql/essentials/udfs/common/json2
     yql/essentials/udfs/common/math
     yql/essentials/udfs/common/pire

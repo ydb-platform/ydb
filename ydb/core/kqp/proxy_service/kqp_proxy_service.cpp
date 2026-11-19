@@ -9,24 +9,26 @@
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/base/statestorage.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/common/kqp_current_query_stats.h>
+#include <ydb/core/kqp/common/simple/current_query_stats.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/simple/session_id.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
-#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
+#include <ydb/core/kqp/common/warmup/warmup.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration/pq_checkpoint_provider_integration.h>
+#include <ydb/core/kqp/federated_query/streaming/streaming_query_controller.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
@@ -40,6 +42,7 @@
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/sys_view/common/registry.h>
@@ -335,6 +338,10 @@ public:
             FederatedQuerySetup->CheckpointProviderIntegrations.try_emplace(
                 TString(NYql::PqProviderName),
                 CreatePqCheckpointProviderIntegration(TActivationContext::ActorSystem(), FederatedQuerySetup->PqGatewayFactory->CreatePqGateway(), *FederatedQuerySetup->Driver, FederatedQuerySetup->CredentialsFactory)
+            );
+            FederatedQuerySetup->StreamingQueryControllerFactory = CreateStreamingQueryControllerFactory(
+                FederatedQuerySetup->PqGatewayFactory,
+                FederatedQuerySetup->CheckpointProviderIntegrations
             );
         }
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, VectorIndexLevelsCache);
@@ -852,7 +859,7 @@ public:
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
         auto* proxyRequest = PendingRequests.FindPtr(requestId);
-        AFL_ENSURE(proxyRequest);
+        YDB_LOG_ENSURE(proxyRequest);
         auto& span = proxyRequest->Span;
         span = NWilson::TSpan(TComponentTracingLevels::TQueryProcessor::TopLevel,
             std::move(ev->TraceId), "Query Proxy", NWilson::EFlags::AUTO_END);
@@ -890,6 +897,20 @@ public:
 
         if (!ev->Get()->GetUserRequestContext()) {
             ev->Get()->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(traceId, database, sessionId));
+        }
+
+        const bool isChecksumTable = ev->Get()->IsInternalCall()
+            && ev->Get()->GetRequestType() == NRequestTypes::ChecksumTable
+            && (queryType == NKikimrKqp::QUERY_TYPE_SQL_DML
+                || queryType == NKikimrKqp::QUERY_TYPE_PREPARED_DML
+                || queryType == NKikimrKqp::QUERY_TYPE_AST_DML);
+        ev->Get()->GetUserRequestContext()->ReadHints = isChecksumTable
+            ? NKikimrTxDataShard::TEvRead::HINT_BATCH | NKikimrTxDataShard::TEvRead::HINT_LOW_PRIORITY
+            : 0;
+        if (isChecksumTable) {
+            // This flag is local to the event. Reapply it at each proxy hop before
+            // calculating deadlines, including when the session is on another node.
+            ev->Get()->SetDisableDefaultTimeout(true);
         }
 
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
@@ -2302,8 +2323,8 @@ private:
         if (!FeatureFlags.GetEnableSharedReadingInStreamingQueries() || RowDispatcherService) {
             return;
         }
-        AFL_VERIFY(FederatedQuerySetup);
-        AFL_VERIFY(FeatureFlags.GetEnableStreamingQueries());
+        YDB_LOG_VERIFY(FederatedQuerySetup);
+        YDB_LOG_VERIFY(FeatureFlags.GetEnableStreamingQueries());
 
         const auto& pqGatewayFactory = FederatedQuerySetup->PqGatewayFactory;
         Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");

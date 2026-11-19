@@ -1,4 +1,4 @@
-#include "simple_server.h"
+#include <yt/cpp/mapreduce/tests/native/test_helpers/simple_server.h>
 
 #include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/host_manager.h>

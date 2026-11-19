@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    ydb/core/blobstorage/contracts
     ydb/library/actors/protos
     library/cpp/monlib/service/pages
     ydb/core/base

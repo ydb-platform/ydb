@@ -377,6 +377,7 @@ void TWriteSessionImpl::WriteInternal(
         readyToAccept = TryIssueContinuationTokenImpl();
         FlushWriteIfRequiredImpl();
     }
+    PostSendTask();
     if (readyToAccept) {
         EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
@@ -1092,6 +1093,11 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     Y_ABORT_UNLESS(CurrentBatch.Messages.size() <= MaxBlockMessageCount);
 
     const bool skipCompression = Settings.Codec_ == ECodec::RAW || CurrentBatch.HasCodec();
+    // Preserve ordering before adding a duplicate or decreasing manual sequence number.
+    if (SendImplScheduled && !OriginalMessagesToSend.empty()
+        && CurrentBatch.Messages.front().Id <= OriginalMessagesToSend.back().Id) {
+        SendImpl();
+    }
     if (!skipCompression && Settings.CompressionExecutor_->IsAsync()) {
         MessagesAcquired += static_cast<ui64>(CurrentBatch.Acquire());
     }
@@ -1133,7 +1139,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     }
     CurrentBatch.Reset();
     if (skipCompression) {
-        SendImpl();
+        ScheduleSendImpl();
     }
     return size;
 }
@@ -1317,6 +1323,34 @@ void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& 
     Processor->Write(std::move(clientMessage));
 }
 
+void TWriteSessionImpl::ScheduleSendImpl() {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    if (SendImplScheduled) {
+        return;
+    }
+
+    PendingSendTask = [cbContext = SelfContext] {
+        if (auto self = cbContext->LockShared()) {
+            std::lock_guard guard(self->Lock);
+            self->SendImplScheduled = false;
+            self->SendImpl();
+        }
+    };
+    SendImplScheduled = true;
+}
+
+void TWriteSessionImpl::PostSendTask() {
+    IExecutor::TFunction task;
+    {
+        std::lock_guard guard(Lock);
+        task.swap(PendingSendTask);
+    }
+    if (task) {
+        CompressionExecutor->Post(std::move(task));
+    }
+}
+
 void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1440,6 +1474,7 @@ void TWriteSessionImpl::HandleWakeUpImpl() {
     if (Aborting.load()) {
         return;
     }
+    SendImpl();
     auto callback = [cbContext = SelfContext] (bool ok)
     {
         if (!ok) {
@@ -1447,8 +1482,11 @@ void TWriteSessionImpl::HandleWakeUpImpl() {
         }
 
         if (auto self = cbContext->LockShared()) {
-            std::lock_guard guard(self->Lock);
-            self->HandleWakeUpImpl();
+            {
+                std::lock_guard guard(self->Lock);
+                self->HandleWakeUpImpl();
+            }
+            self->PostSendTask();
         }
     };
 

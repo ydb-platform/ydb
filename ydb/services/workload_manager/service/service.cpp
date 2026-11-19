@@ -5,8 +5,8 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
@@ -722,11 +722,6 @@ IActor* CreateService(NMonitoring::TDynamicCounterPtr counters) {
 
 NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters(NMonitoring::TDynamicCounterPtr rootCounters) {
     return GetServiceCounters(rootCounters, "kqp")->GetSubgroup("subsystem", "workload_manager");
-}
-
-NActors::TActorId MakeServiceId(ui32 nodeId) {
-    const char name[12] = "kqp_workld";
-    return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
 }   // namespace NKikimr::NWorkloadManager

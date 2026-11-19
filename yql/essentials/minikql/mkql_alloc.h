@@ -8,6 +8,9 @@
 #include <yql/essentials/parser/pg_wrapper/interface/context.h>
 #include <yql/essentials/public/udf/udf_allocator.h>
 #include <yql/essentials/public/udf/udf_value.h>
+#ifndef MKQL_DISABLE_UDF_SERVICE_DISPATCH
+    #include <yql/essentials/public/udf/service/dispatch/udf_service_dispatch.h>
+#endif
 
 #include <util/string/builder.h>
 #include <util/system/align.h>
@@ -59,6 +62,7 @@ struct TAllocLocation {
         return 0;
     }
 
+    // NOLINTNEXTLINE(readability-identifier-naming): std::source_location compatibility.
     static TAllocLocation current() {
         return {};
     }
@@ -297,6 +301,11 @@ private:
     TAllocState MyState_;
     size_t AttachedCount_ = 0;
     TAllocState* PrevState_ = nullptr;
+#ifndef MKQL_DISABLE_UDF_SERVICE_DISPATCH
+    // This define must agree across MiniKQL and all TScopedAlloc consumers.
+    NYql::NUdf::TUdfSymbolsExchange UdfSymbolsExchange_ = nullptr;
+    const NYql::NUdf::TStaticSymbols* PreviousUdfSymbols_ = nullptr;
+#endif
 };
 
 class TPagedArena {

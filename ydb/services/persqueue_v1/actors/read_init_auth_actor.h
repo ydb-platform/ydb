@@ -2,12 +2,12 @@
 
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
-
-#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/services/lib/actors/type_definitions.h>
+
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -78,8 +78,8 @@ private:
     const TActorId NewSchemeCache;
     TActorId DescriberId;
     bool SecondaryDescribe = false;
-    // secondary scheme path -> Topics key (primary path)
-    THashMap<TString, TString> SecondaryToOriginal;
+    // secondary scheme path -> Topics keys (primary paths)
+    THashMap<TString, TVector<TString>> SecondaryToOriginal;
 
     const TString ClientId;
     const TString ClientPath;

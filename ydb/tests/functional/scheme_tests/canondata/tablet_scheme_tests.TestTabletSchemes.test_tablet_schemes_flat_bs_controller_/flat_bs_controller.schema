@@ -165,6 +165,11 @@
                 "ColumnId": 34,
                 "ColumnName": "BridgeSyncMaxSyncers",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "AppliedPileOverrides",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -202,7 +207,8 @@
                     31,
                     32,
                     33,
-                    34
+                    34,
+                    35
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1899,6 +1905,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "EstimatedBytesToCopy",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "TargetGroupId",
                 "ColumnType": "Uint32"
@@ -1933,6 +1944,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,

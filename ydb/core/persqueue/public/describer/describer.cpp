@@ -56,7 +56,7 @@ public:
             if (Settings.ResolvedPaths) {
                 resolved = NNameResolver::ResolveSchemePath(DatabasePath, topic);
             } else {
-                resolved = NNameResolver::ResolveName(DatabasePath, topic);
+                resolved = NNameResolver::ResolveName(DatabasePath, topic, {}, {}, Settings.EnableRelativePaths);
             }
             if (!resolved) {
                 LOG_D("Name resolve failed",

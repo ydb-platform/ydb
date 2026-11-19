@@ -25,7 +25,8 @@ struct TResolvedName {
  *   - Otherwise: request database (absolute), or empty if request database is empty
  *
  * First-class citizen (FCC / non-federation) mode:
- *   Names are joined with the request database as-is. Legacy forms (rt3.*, --, @)
+ *   With enableRelativePaths and the feature flag enabled, relative paths are joined
+ *   with the request database; only paths starting with '/' are absolute. Legacy forms (rt3.*, --, @)
  *   are not converted: a leaf like TestSchemeList--test-topic-1 is a literal name.
  *
  * Federation mode (!TopicsAreFirstClassCitizen):
@@ -70,13 +71,14 @@ std::expected<TResolvedName, TString> ResolveName(
     TStringBuf database,
     TStringBuf name,
     TStringBuf localDc = {},
-    TStringBuf dc = {}
+    TStringBuf dc = {},
+    bool enableRelativePaths = false
 );
 
 /**
  * Scheme path that must not be rewritten (legacy primary or modern secondary).
- * Path is only canonized. NavigateDatabase is LbRoot/account when path is under
- * LbUserDatabaseRoot/account/..., otherwise the request database unchanged.
+ * Path is only canonized. In federation mode NavigateDatabase is LbRoot/account when
+ * path is under LbUserDatabaseRoot/account/..., otherwise the request database unchanged.
  */
 TResolvedName ResolveSchemePath(TStringBuf database, TStringBuf path);
 

@@ -5,11 +5,13 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_bridge.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/monitoring/monitoring.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <library/cpp/time_provider/monotonic.h>
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -18,7 +20,7 @@
 namespace NBridgeSkipper {
 
 // The two GetClusterState variants have independent outstanding-call slots.
-enum class EYdbMethod { PlainState, ConnectivityState, SelfCheck, Update };
+enum class EYdbMethod { PlainState, ConnectivityState, SelfCheck, Update, Inventory };
 
 // The metric and log name of a method.
 TString ToString(EYdbMethod method);
@@ -57,6 +59,26 @@ struct TSelfCheckResult {
     std::optional<ui32> ResponderNodeId;
 };
 
+struct TDiscoveredEndpoint {
+    TEndpoint Endpoint;
+    TString Pile;
+    ui32 NodeId = 0;
+};
+
+struct TInventoryResult {
+    TRpcResult Rpc;
+    std::vector<TDiscoveredEndpoint> Endpoints;
+    TString Error;
+};
+
+class TRedactor;
+
+// Raw MainConfig/StorageConfig supply the discovery database with main-first merging;
+// no conventional root name is assumed. Throws without copying server YAML.
+TString DiscoveryDatabase(TStringBuf yaml, TStringBuf storageYaml = {});
+TInventoryResult DecodeInventoryResult(const NYdb::NDiscovery::TListEndpointsResult& result,
+    TRpcResult rpc, const TRedactor& redactor, TStringBuf scheme);
+
 struct TUpdateResult {
     TRpcResult Rpc;
     TPlan Plan;
@@ -84,9 +106,14 @@ public:
     bool IsValid() const override;
 
 private:
+    friend class TRedactor;
+    struct TTokenVersion;
+    std::shared_ptr<TTokenVersion> Capture() const;
+    std::vector<TString> RedactionTokens(const std::shared_ptr<TTokenVersion>& first) const;
     TMaybe<TString> File;
     mutable std::mutex Mutex;
-    TString Current;
+    std::shared_ptr<TTokenVersion> Current;
+    mutable std::map<const TTokenVersion*, std::weak_ptr<TTokenVersion>> Active;
     TTokenLoader Loader;
 };
 
@@ -97,11 +124,14 @@ public:
     explicit TRedactor(std::shared_ptr<const TTokenSource> tokens);
     // A fixed token, for callers without a token file.
     explicit TRedactor(const TLoadedCredentials& credentials);
+    // Covers credentials the SDK may read any time until this request settles.
+    TRedactor ForRequest() const;
     TString Redact(TStringBuf text, size_t limit = 4096) const;
     TString Issues(const NYdb::TStatus& status) const;
 
 private:
     std::shared_ptr<const TTokenSource> Tokens;
+    std::shared_ptr<TTokenSource::TTokenVersion> First;
 };
 
 NYdb::TCommonClientSettings MakePinnedClientSettings(const TEndpoint& endpoint);
@@ -137,6 +167,10 @@ public:
     // True: an attempt was accepted and completed owns its eventual result.
     virtual bool Update(TRpcRequest request, TPlan plan, TUpdateAuthorization authorization,
         std::function<void(TUpdateResult)> completed) = 0;
+    virtual void Discover(TRpcRequest request, std::function<void(TInventoryResult)> completed) = 0;
+    // Owning actor only; removal requires all endpoint invocations to settle.
+    virtual void AddEndpoint(const TEndpoint& endpoint, const TString& pile) = 0;
+    virtual void RemoveEndpoint(const TString& endpoint) = 0;
     // Coordinator only. The actor system must outlive this drain and its callbacks.
     virtual void Stop() = 0;
 };
@@ -146,12 +180,15 @@ using TYdbClock = std::function<TMonotonic()>;
 // Call methods from the owning actor. Completions may run on foreign SDK threads;
 // they own their payload and must marshal it to the actor without accessing it.
 // Completion functions must not throw.
+// When tokens is supplied, that shared source owns credential loading and
+// tokenLoader is ignored. Otherwise tokenLoader belongs to a new private source.
 std::shared_ptr<IYdbClients> CreateYdbClients(
     const TConfig& config,
     const TLoadedCredentials& credentials,
     TYdbClock clock = [] {
         return TMonotonic::Now();
     },
-    TTokenLoader tokenLoader = LoadToken);
+    TTokenLoader tokenLoader = LoadToken,
+    std::shared_ptr<TTokenSource> tokens = {});
 
 } // namespace NBridgeSkipper

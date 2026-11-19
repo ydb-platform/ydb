@@ -2,6 +2,7 @@ YQL_LIBRARY()
 
 SRCS(
     datetime.cpp
+    datetime64.cpp
 )
 
 PEERDIR(

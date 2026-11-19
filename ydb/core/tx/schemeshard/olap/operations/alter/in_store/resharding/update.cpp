@@ -19,7 +19,7 @@ TConclusionStatus TInStoreShardingUpdate::DoStart(const TUpdateStartContext& con
 
 TConclusionStatus TInStoreShardingUpdate::DoInitialize(const TUpdateInitializationContext& context) {
     auto& inStoreTable = context.GetOriginalEntityAsVerified<TInStoreTable>();
-    AFL_VERIFY(context.GetModification()->GetAlterColumnTable().HasReshardColumnTable());
+    YDB_LOG_VERIFY(context.GetModification()->GetAlterColumnTable().HasReshardColumnTable());
     std::shared_ptr<NSharding::IShardingBase> sharding = inStoreTable.GetTableInfoPtrVerified()->GetShardingVerified(inStoreTable.GetTableSchemaVerified());
     TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> alters = std::vector<NKikimrSchemeOp::TAlterShards>();
     auto& storeInfo = *inStoreTable.GetStoreInfo();

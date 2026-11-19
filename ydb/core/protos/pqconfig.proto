@@ -269,6 +269,7 @@ message TMirrorPartitionConfig {
     optional string Database = 8;
     optional bool UseSecureConnection = 9 [default = false];
     reserved 10; // was SyncWriteTime; mirrored topics always sync source write time (PQv1 API)
+    optional bool MirrorConsumerOffsets = 11 [default = false];
 }
 
 message TPartitionConfig {
@@ -379,6 +380,9 @@ message TPQTabletConfig {
         optional uint64 TxStep = 3;
     }
     optional TTopicId Id = 49;
+
+    // Source service-consumer id identifying the replication that created this topic.
+    optional string ReplicationSourceConsumer = 50;
 
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory

@@ -83,6 +83,8 @@ public:
     void Shutdown(const TActorContext& ctx) override;
     bool IsExpectedStreamCreator(const TActorId& actorId) const override;
 
+    TString BuildStreamConsumerName() const override;
+
     void WorkerStatusChanged(ui64 workerId, ui64 status) override;
     bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) override;
 

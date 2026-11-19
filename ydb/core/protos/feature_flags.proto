@@ -458,4 +458,5 @@ message TFeatureFlags {
     optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
     optional bool EnableIndexShadowDataRepair = 393 [default = false];
+    optional bool EnableTopicReplication = 396 [default = false];
 }

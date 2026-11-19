@@ -214,7 +214,7 @@ protected:
         }
         if (!KeyTypes.empty()) {
             canSplit = usagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()
-                && ChooseKeySplitBoundary().has_value();
+                && HasKeySplitBoundary(now);
         }
 
         auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
@@ -383,6 +383,14 @@ protected:
         KeySamples.push_back({key, weight, now});
     }
 
+    bool HasKeySplitBoundary(TInstant now) {
+        if (!KeySplitBoundaryCheckedAt || now - *KeySplitBoundaryCheckedAt >= KeySplitBoundaryCheckInterval) {
+            HasKeySplitBoundaryCached = ChooseKeySplitBoundary().has_value();
+            KeySplitBoundaryCheckedAt = now;
+        }
+        return HasKeySplitBoundaryCached;
+    }
+
     std::optional<TString> ChooseKeySplitBoundary() {
         const auto keyRange = TPartitionKeyRange::TryParse(GetKeyRange());
         if (!keyRange) {
@@ -403,6 +411,7 @@ protected:
     static constexpr auto DEFAULT_NUM_SKETCHES = 100;
     static constexpr size_t MaxKeySamples = 256;
     static constexpr size_t MaxKeySampleSize = 4_KB;
+    static constexpr TDuration KeySplitBoundaryCheckInterval = TDuration::Seconds(1);
 
     const NKikimrPQ::TPQTabletConfig& Config;
     const ETag Tag;
@@ -418,6 +427,8 @@ protected:
     ui64 MaxUsagePerSec;
     const TVector<NScheme::TTypeInfo> KeyTypes;
     std::deque<TKeySample> KeySamples;
+    std::optional<TInstant> KeySplitBoundaryCheckedAt;
+    bool HasKeySplitBoundaryCached = false;
 };
 
 class TBytesAutopartitioningManager : public TWindowedAutopartitioningManager {

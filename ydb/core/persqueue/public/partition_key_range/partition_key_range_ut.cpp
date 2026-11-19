@@ -229,6 +229,7 @@ Y_UNIT_TEST_SUITE(TPartitionKeyRangeChooseSplitBoundaryTest) {
             {MakeKey({15}), 1},
             {MakeKey({20}), 100},
             {MakeKey({13, 1}), 100},
+            {TSerializedCellVec::Serialize(TVector<TCell>{TCell("abc", 3)}), 100},
             {"not a key", 100},
         };
 

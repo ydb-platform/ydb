@@ -2,6 +2,7 @@
 
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_borders.h>
+#include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/lib/sharding/sharding.h>
@@ -214,6 +215,13 @@ std::optional<TString> ChooseSplitBoundary(TConstArrayRef<TWeightedKey> keys, co
     for (const auto& key : keys) {
         TSerializedCellVec cells;
         if (!TSerializedCellVec::TryParse(key.Key, cells) || cells.GetCells().size() != keyTypes.size()) {
+            continue;
+        }
+        bool validSizes = true;
+        for (size_t i = 0; i < keyTypes.size() && validSizes; ++i) {
+            validSizes = !NScheme::HasUnexpectedValueSize(cells.GetCells()[i], keyTypes[i]);
+        }
+        if (!validSizes) {
             continue;
         }
 

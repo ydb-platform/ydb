@@ -257,16 +257,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     // Called from the TEvPing handler only, which sends the status and the tablet metrics afterwards
     void UpdateSettings(const NKikimrLocal::THiveSettings& settings, const TActorContext& ctx) {
-        // Replace the full snapshot. Apply individual settings here when added.
+        // Replace the full snapshot.
         const bool previousTrackResourceBrokerUsage = HiveSettings.GetTrackResourceBrokerUsage();
         HiveSettings.CopyFrom(settings);
-<<<<<<< HEAD
-=======
-        if (HiveSettings.GetCountersExportMode() >= NKikimrConfig::THiveConfig::COUNTERS_EXPORT_MODE_LOCAL_PER_NODE_COUNTERS) {
-            CreateNodeUsageCounters(); // the values appear with the next metrics sent to Hive
-        } else {
-            NodeUsageCounters.reset();
-        }
         if (previousTrackResourceBrokerUsage != HiveSettings.GetTrackResourceBrokerUsage()) {
             if (HiveSettings.GetTrackResourceBrokerUsage()) {
                 StartQueueUsageTracking(ctx);
@@ -295,33 +288,6 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             }
         }
         QueueLimits.clear();
-    }
-
-    void CreateNodeUsageCounters() {
-        if (NodeUsageCounters) {
-            return;
-        }
-        NodeUsageCounters = std::make_unique<TNodeUsageCounters>();
-        TNodeUsageCounters& c = *NodeUsageCounters;
-        auto group = LocalNodeCounters->GetSubgroup("hive_id", ToString(HiveId));
-        c.NodeUsagePercent = group->GetExpiringCounter("Local_NodeUsagePercent");
-        c.NodeCpuUsagePercent = group->GetExpiringCounter("Local_NodeCpuUsagePercent");
-        c.NodeUserPoolUsageUs = group->GetExpiringCounter("Local_NodeUserPoolUsageUs");
-        c.NodeUserPoolLimitUs = group->GetExpiringCounter("Local_NodeUserPoolLimitUs");
-        c.NodeUsageUserPoolPercent = group->GetExpiringCounter("Local_NodeUsageUserPoolPercent");
-        c.NodeMemUsageBytes = group->GetExpiringCounter("Local_NodeMemUsageBytes");
-        c.NodeMemLimitBytes = group->GetExpiringCounter("Local_NodeMemLimitBytes");
-        c.NodeUsageMemPercent = group->GetExpiringCounter("Local_NodeUsageMemPercent");
-        c.NodeResourceMaximumCpuUs = group->GetExpiringCounter("Local_NodeResourceMaximumCpuUs");
-        c.NodeResourceMaximumMemBytes = group->GetExpiringCounter("Local_NodeResourceMaximumMemBytes");
-        c.NodeResourceMaximumNetBytesPerSec = group->GetExpiringCounter("Local_NodeResourceMaximumNetBytesPerSec");
-        c.TabletsUsageCpuUs = group->GetExpiringCounter("Local_TabletsUsageCpuUs");
-        c.TabletsUsageMemBytes = group->GetExpiringCounter("Local_TabletsUsageMemBytes");
-        c.TabletsUsageNetBytesPerSec = group->GetExpiringCounter("Local_TabletsUsageNetBytesPerSec");
-        c.TabletsUsageCpuPercent = group->GetExpiringCounter("Local_TabletsUsageCpuPercent");
-        c.TabletsUsageMemPercent = group->GetExpiringCounter("Local_TabletsUsageMemPercent");
-        c.TabletsUsageNetPercent = group->GetExpiringCounter("Local_TabletsUsageNetPercent");
->>>>>>> b2c815257ed (add a setting to disable rb resource aggregation on locals (#59930))
     }
 
     void TryToRegister(const TActorContext &ctx) {

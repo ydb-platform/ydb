@@ -674,12 +674,8 @@ const TNodeFilter& TTabletInfo::GetNodeFilter() const {
 }
 
 bool TTabletInfo::InitiateStart(TNodeInfo* node) {
-<<<<<<< HEAD
     if (BecomeStarting(node->Id)) {
-=======
-    if (BecomeStarting(node->Id, EHiveEventReason::BootQueue)) {
         CarryOverNamedResources();
->>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
         PostponedStart = {};
         TFullTabletId tabletId = GetFullTabletId();
         Hive.ExecuteStartTablet(tabletId, node->Local, tabletId.first, false);

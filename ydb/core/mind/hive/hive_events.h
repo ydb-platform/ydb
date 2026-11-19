@@ -43,11 +43,7 @@ struct TEvPrivate {
         EvReassignInactiveGroupsComplete,
         EvMoveDataComplete,
         EvLogHangingRequests,
-<<<<<<< HEAD
-=======
         EvCheckNamedResourceEstimates,
-        EvProcessPileDrains,
->>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
         EvEnd
     };
 

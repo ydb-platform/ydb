@@ -128,16 +128,9 @@ protected:
     std::vector<TNodeId>::iterator NextNode;
     std::vector<TFullTabletId> Tablets;
     std::vector<TFullTabletId>::iterator NextTablet;
-<<<<<<< HEAD
-=======
-    TBalancerRunStats RunStats;
-    const ui32 RunId; // see CountTablet
-    using TTabletCounters = TBalancerRunStats::TTabletCounters;
-    using ETabletCounter = TBalancerRunStats::ETabletCounter;
     bool IsNamedResourceBalancer() const {
         return !Settings.NamedResource.empty();
     }
->>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
 
     static constexpr ui64 MAX_TABLETS_PROCESSED = 10;
 
@@ -257,19 +250,13 @@ protected:
         if (Settings.FilterObjectId && tablet->GetObjectId() != *Settings.FilterObjectId) {
             return false;
         }
-<<<<<<< HEAD
-        if (!tablet->HasMetric(Settings.ResourceToBalance)) {
-=======
         if (IsNamedResourceBalancer()) {
             // only the tablets which a move would not interrupt
             const auto* value = tablet->GetResourceValues().NamedResources.Find(Settings.NamedResource);
             if (value == nullptr || !value->IsTransferable()) {
-                CountTablet(tablet, &TTabletCounters::SkippedNoMetric, ETabletCounter::SkippedNoMetric);
                 return false;
             }
         } else if (!tablet->HasMetric(Settings.ResourceToBalance)) {
-            CountTablet(tablet, &TTabletCounters::SkippedNoMetric, ETabletCounter::SkippedNoMetric);
->>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
             return false;
         }
         if (tablet->IsPinnedToNode()) {
@@ -403,20 +390,7 @@ protected:
             THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
             if (std::holds_alternative<TNodeInfo*>(result)) {
                 TNodeInfo* node = std::get<TNodeInfo*>(result);
-<<<<<<< HEAD
                 if (node != tablet->Node && Hive->IsTabletMoveExpedient(*tablet, *node)) {
-=======
-                THive::TMoveExpediency expediency; // not expedient
-                if (node != tablet->Node) {
-                    expediency = Hive->CheckTabletMoveExpediency(*tablet, *node);
-                    if (!expediency.Expedient) {
-                        CountTablet(tablet, &TTabletCounters::RejectedNotExpedient, ETabletCounter::RejectedNotExpedient);
-                    }
-                } else {
-                    CountTablet(tablet, &TTabletCounters::RejectedSameNode, ETabletCounter::RejectedSameNode);
-                }
-                if (expediency.Expedient) {
->>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
                     tablet->MakeBalancerDecision(now);
                     tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                     ++KickInFlight;
@@ -426,43 +400,18 @@ protected:
                         {"tablet", tablet->ToString()},
                         {"sourceNodeId", tablet->Node->Id},
                         {"targetNodeId", node->Id});
-<<<<<<< HEAD
-                    Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id));
-=======
-                    // what the decision was based on: FindBestNode picks the target by GetNodeUsageForTablet,
-                    // CheckTabletMoveExpediency compares the resource stdev over nodes before and after the move
-                    TStringBuilder details;
-                    details << "balancer=" << EBalancerTypeName(Settings.Type);
                     if (IsNamedResourceBalancer()) {
                         const TString& name = Settings.NamedResource;
                         const ui64 value = tablet->GetResourceValues().NamedResources.GetValue(name);
-                        details << " resource=" << name
-                            << " sourceUsage=" << Sprintf("%.3f", tablet->Node->GetNamedResourceUsage(name).value_or(0))
-                            << " targetUsageWithTablet=" << Sprintf("%.3f", node->GetNamedResourceUsage(name, value).value_or(0))
-                            << " tabletValue=" << value;
+                        YDB_LOG_DEBUG("Balancer moving tablet by named resource",
+                            {"logPrefix", GetLogPrefix()},
+                            {"tablet", tablet->ToString()},
+                            {"resource", name},
+                            {"sourceUsage", tablet->Node->GetNamedResourceUsage(name).value_or(0)},
+                            {"targetUsageWithTablet", node->GetNamedResourceUsage(name, value).value_or(0)},
+                            {"tabletValue", value});
                     }
-                    details
-                        << " computeResource=" << EResourceToBalanceName(Settings.ResourceToBalance)
-                        << " sourceUsage=" << Sprintf("%.3f", tablet->Node->GetNodeUsage(Settings.ResourceToBalance))
-                        << " targetUsage=" << Sprintf("%.3f", node->GetNodeUsage(Settings.ResourceToBalance))
-                        << " targetUsageWithTablet=" << Sprintf("%.3f", node->GetNodeUsageForTablet(*tablet))
-                        << " tabletWeight=" << Sprintf("%.3f", tablet->GetWeight(Settings.ResourceToBalance))
-                        << " tabletUsageImpact=" << Sprintf("%.3f", tablet->GetUsageImpact());
-                    if (expediency.Reason == EHiveEventReason::ResourceStDevImproved || expediency.Reason == EHiveEventReason::NamedResourceImproved) {
-                        details << " stdevBefore=" << Sprintf("%.3f", expediency.StDevBefore)
-                            << " stdevAfter=" << Sprintf("%.3f", expediency.StDevAfter);
-                    }
-                    if (!expediency.NamedResource.empty()) {
-                        details << " named=" << expediency.NamedResource
-                            << " namedBefore=" << Sprintf("%.3f", expediency.NamedBefore)
-                            << " namedAfter=" << Sprintf("%.3f", expediency.NamedAfter);
-                    }
-                    details << " movement=" << Movements;
-                    if (Settings.MaxMovements != 0) {
-                        details << "/" << Settings.MaxMovements;
-                    }
-                    Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id), expediency.Reason, std::move(details));
->>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
+                    Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id));
                     Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id));
                     UpdateProgress();
                 }

@@ -8,6 +8,7 @@
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NPQ::NSchema {
@@ -236,10 +237,13 @@ TResult ApplyChangesInt(
         }
 
         const auto name = NPersQueue::ConvertNewConsumerName(marker->second, pqConfig);
-        for (const auto& consumer : pqTabletConfig->GetConsumers()) {
-            if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION && consumer.GetName() != name) {
-                return {Ydb::StatusIds::PRECONDITION_FAILED, "CDC stream already has a replication consumer"};
-            }
+        const auto& consumers = pqTabletConfig->GetConsumers();
+        const auto existing = FindIf(consumers, [&](const auto& consumer) {
+            return consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
+                && consumer.GetName() != name;
+        });
+        if (existing != consumers.end()) {
+            return {Ydb::StatusIds::PRECONDITION_FAILED, "CDC stream already has a replication consumer"};
         }
     }
 

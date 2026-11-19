@@ -362,6 +362,7 @@ std::partial_ordering TFairShareHierarchicalScheduler<TTag>::CompareConsumptions
                     ? nullptr
                     : lhsBucketChildIt->second;
             }
+
             lhsStream = newLhsBucket == nullptr
                 ? 0
                 : (isSlot ? newLhsBucket->SlotWindowSize.load() : newLhsBucket->RequestWindowSize.load());
@@ -374,6 +375,7 @@ std::partial_ordering TFairShareHierarchicalScheduler<TTag>::CompareConsumptions
                     ? nullptr
                     : rhsBucketChildIt->second;
             }
+
             rhsStream = newRhsBucket == nullptr
                 ? 0
                 : (isSlot ? newRhsBucket->SlotWindowSize.load() : newRhsBucket->RequestWindowSize.load());

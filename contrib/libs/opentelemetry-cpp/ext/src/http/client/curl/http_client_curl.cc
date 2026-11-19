@@ -141,6 +141,21 @@ static int deflateInPlace(z_stream *strm, unsigned char *buf, uint32_t len, uint
 void Session::SendRequest(
     std::shared_ptr<opentelemetry::ext::http::client::EventHandler> callback) noexcept
 {
+  if (send_started_.exchange(true, std::memory_order_acq_rel))
+  {
+    // The first request is not finished with this session. Its easy handle names the session in
+    // CURLOPT_PRIVATE and names its operation in every callback it was given, and the message
+    // loop resolves that name to whichever operation the session owns, so a second operation
+    // would be handed the first one's completion. Worse from a handler that sends again from
+    // OnResponse, where the operation being replaced is the one running that handler.
+    if (callback)
+    {
+      callback->OnEvent(opentelemetry::ext::http::client::SessionState::CreateFailed,
+                        "a session carries one request");
+    }
+    return;
+  }
+
   is_session_active_.store(true, std::memory_order_release);
   const auto &url       = host_ + http_request_->uri_;
   auto callback_ptr     = callback.get();
@@ -534,9 +549,7 @@ bool HttpClient::MaybeSpawnBackgroundThread()
               {
                 // Session can not be destroyed when calling PerformCurlMessage
                 auto hold_session = session->shared_from_this();
-                operation->PerformCurlMessage(result);
-
-                if (operation->IsRetryable())
+                if (operation->PerformCurlMessage(result))
                 {
                   self->pending_to_retry_sessions_.push_back(hold_session);
                 }
@@ -622,6 +635,8 @@ bool HttpClient::MaybeSpawnBackgroundThread()
             if (self->doRetrySessions(true))
             {
               still_running = 1;
+              // With wait_for zero, as during shutdown, poll here until a queued retry is due.
+              need_wait_more = true;
             }
 
             // If there is no pending jobs, we can stop the background thread.
@@ -847,7 +862,6 @@ bool HttpClient::doRemoveSessions()
   return has_data;
 }
 
-#ifdef ENABLE_OTLP_RETRY_PREVIEW
 bool HttpClient::doRetrySessions(bool report_all)
 {
   const auto now = std::chrono::system_clock::now();
@@ -884,12 +898,6 @@ bool HttpClient::doRetrySessions(bool report_all)
   report_all = report_all && !pending_to_retry_sessions_.empty();
   return has_data || report_all;
 }
-#else
-bool HttpClient::doRetrySessions(bool /* report_all */)
-{
-  return false;
-}
-#endif  // ENABLE_OTLP_RETRY_PREVIEW
 
 void HttpClient::resetMultiHandle()
 {

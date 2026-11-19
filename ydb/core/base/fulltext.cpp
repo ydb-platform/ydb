@@ -1257,7 +1257,8 @@ void TMultiDeltaReader::SetMaxId(ui64 maxId) {
 void TMultiDeltaReader::Start() {
     Y_ENSURE(!Started);
     Started = true;
-    if (Readers.size() == 1) {
+    if (Readers.size() == 1 && Readers[0].Added) {
+        // Single deleted segment should never happen, don't use OneLeft with it
         OneLeft = true;
     } else {
         for (size_t i = 0; i < Readers.size(); i++) {
@@ -1293,17 +1294,13 @@ void TMultiDeltaReader::Consume(ui32 rdrId, TReaderRef& rdr) {
     }
 }
 
-bool TMultiDeltaReader::Read(ui64& docId, ui32& freq) {
+bool TMultiDeltaReader::Read(ui64& docId, i64& freq) {
     Y_ENSURE(Started);
     if (OneLeft) {
-        if (!Readers[0].Added) {
-            // Single deleted segment = should not happen, but empty
-            ui64 unusedDoc = 0;
-            ui32 unusedFreq = 1;
-            while (Readers[0].Reader->Read(unusedDoc, unusedFreq)) {
-            }
-        }
-        return Readers[0].Reader->Read(docId, freq);
+        ui32 ufreq = 0;
+        bool ok = Readers[0].Reader->Read(docId, ufreq);
+        freq = ufreq;
+        return ok;
     }
     TItem cur = NextItem;
     while (Items.size() > 0) {
@@ -1312,12 +1309,11 @@ bool TMultiDeltaReader::Read(ui64& docId, ui32& freq) {
             // Add frequencies
             cur.Freq += NextItem.Freq;
         } else {
-            if (cur.Freq > 0) {
-                // Finished, item has positive frequency (not canceled by updates)
+            if (cur.Freq != 0) {
+                // Finished, item has non-zero frequency (not self-canceled by updates)
                 // Leave NextItem as is
                 docId = cur.DocId;
-                Y_ENSURE(cur.Freq <= Max<ui32>(), "Merged fulltext frequency exceeds ui32");
-                freq = static_cast<ui32>(cur.Freq);
+                freq = cur.Freq;
                 return true;
             } else {
                 // Scan the next item
@@ -1326,12 +1322,24 @@ bool TMultiDeltaReader::Read(ui64& docId, ui32& freq) {
         }
     }
     NextItem = {};
-    if (cur.Freq > 0) {
-        // Finished, item has positive frequency (not canceled by updates)
+    if (cur.Freq != 0) {
+        // Finished, item has non-zero frequency (not self-canceled by updates)
         docId = cur.DocId;
-        Y_ENSURE(cur.Freq <= Max<ui32>(), "Merged fulltext frequency exceeds ui32");
-        freq = static_cast<ui32>(cur.Freq);
+        freq = cur.Freq;
         return true;
+    }
+    return false;
+}
+
+bool TMultiDeltaReader::ReadPositive(ui64& docId, ui32& ufreq) {
+    bool ok;
+    i64 freq = 0;
+    while (ok = Read(docId, freq)) {
+        if (freq > 0) {
+            Y_ENSURE(freq <= Max<ui32>(), "Merged fulltext frequency exceeds ui32");
+            ufreq = (ui32)freq;
+            return true;
+        }
     }
     return false;
 }

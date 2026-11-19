@@ -8,10 +8,6 @@
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/protos/config.pb.h>
 
-extern "C" {
-#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
-}
-
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -130,16 +126,9 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         return false;
     }
 
-    if (Type.GetTypeId() == NScheme::NTypeIds::Pg) {
-        if (!IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc()))) {
-            errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
-            return false;
-        }
-    } else {
-        if (!IsAllowedType(Type.GetTypeId())) {
-            errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
-            return false;
-        }
+    if (Type.GetTypeId() == NScheme::NTypeIds::Pg || !IsAllowedType(Type.GetTypeId())) {
+        errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported for column tables");
+        return false;
     }
 
     auto arrowTypeResult = NArrow::GetArrowType(Type);
@@ -311,20 +300,6 @@ bool TOlapColumnBase::IsAllowedType(ui32 typeId) {
     }
 
     return true;
-}
-
-bool TOlapColumnBase::IsAllowedPgType(ui32 pgTypeId) {
-    switch (pgTypeId) {
-        case INT2OID:
-        case INT4OID:
-        case INT8OID:
-        case FLOAT4OID:
-        case FLOAT8OID:
-            return true;
-        default:
-            break;
-    }
-    return false;
 }
 
 bool TOlapColumnBase::IsAllowedPkType(ui32 typeId) {

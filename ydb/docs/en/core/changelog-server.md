@@ -37,6 +37,16 @@ The following functionality is not enabled by default.
 
 ## Version 26.2 {#26-2}
 
+### Version 26.2.1.16 {#26-2-1-16}
+
+Release date: **TBD: publication date**.
+
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/56856) CVE-2026-111497 in the Brotli decoder: invalid block switches now cause a format error instead of an internal buffer overflow.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/52566) transactions involving topics getting stuck when planning steps were acknowledged out of order.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/53517) incorrect server revision information in local YDB Docker images: cached builds could report the revision of the previous release.
+
 ### Version 26.2.1.14 {#26-2-1-14}
 
 Release date: September 16, 2026.

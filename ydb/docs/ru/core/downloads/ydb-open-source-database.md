@@ -11,6 +11,7 @@
 || **v26.3** | > | > | > ||
 || v26.3.1.16-rc | 18.09.26 | [Бинарный файл](https://storage.yandexcloud.net/binaries.ydb.tech/release/26.3.1.16-rc/ydbd-26.3.1.16-rc-linux-amd64.tar.gz) | [См. список](../changelog-server.md#26-3-1-16-rc) ||
 || **v26.2** | > | > | > ||
+|| v26.2.1.16 | **TBD** | [Бинарный файл](https://storage.yandexcloud.net/binaries.ydb.tech/release/26.2.1.16/ydbd-26.2.1.16-linux-amd64.tar.gz) | [См. список](../changelog-server.md#26-2-1-16) ||
 || v26.2.1.14 | 16.09.26 | [Бинарный файл](https://storage.yandexcloud.net/binaries.ydb.tech/release/26.2.1.14/ydbd-26.2.1.14-linux-amd64.tar.gz) | [См. список](../changelog-server.md#26-2-1-14) ||
 || **v26.1** | > | > | > ||
 || v26.1.1.22 | 27.07.26 | [Бинарный файл](https://storage.yandexcloud.net/binaries.ydb.tech/release/26.1.1.22/ydbd-26.1.1.22-linux-amd64.tar.gz) | [См. список](../changelog-server.md#26-1-1-22) ||
@@ -52,6 +53,7 @@
 || **v26.3** | > | > | > ||
 || v26.3.1.16-rc | 18.09.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.3.1.16-rc` | [См. список](../changelog-server.md#26-3-1-16-rc) ||
 || **v26.2** | > | > | > ||
+|| v26.2.1.16 | **TBD** | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.2.1.16` | [См. список](../changelog-server.md#26-2-1-16) ||
 || v26.2.1.14 | 16.09.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.2.1.14` | [См. список](../changelog-server.md#26-2-1-14) ||
 || **v26.1** | > | > | > ||
 || v26.1.1.22 | 27.07.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.1.1.22` | [См. список](../changelog-server.md#26-1-1-22) ||
@@ -93,6 +95,7 @@
 || **v26.3** | > | > | > ||
 || v26.3.1.16-rc | 18.09.26 | [https://github.com/ydb-platform/ydb/tree/26.3.1.16-rc](https://github.com/ydb-platform/ydb/tree/26.3.1.16-rc) | [См. список](../changelog-server.md#26-3-1-16-rc) ||
 || **v26.2** | > | > | > ||
+|| v26.2.1.16 | **TBD** | [https://github.com/ydb-platform/ydb/tree/26.2.1.16](https://github.com/ydb-platform/ydb/tree/26.2.1.16) | [См. список](../changelog-server.md#26-2-1-16) ||
 || v26.2.1.14 | 16.09.26 | [https://github.com/ydb-platform/ydb/tree/26.2.1.14](https://github.com/ydb-platform/ydb/tree/26.2.1.14) | [См. список](../changelog-server.md#26-2-1-14) ||
 || **v26.1** | > | > | > ||
 || v26.1.1.22 | 27.07.26 | [https://github.com/ydb-platform/ydb/tree/26.1.1.22](https://github.com/ydb-platform/ydb/tree/26.1.1.22) | [См. список](../changelog-server.md#26-1-1-22) ||

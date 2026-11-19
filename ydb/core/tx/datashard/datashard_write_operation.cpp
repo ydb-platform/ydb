@@ -551,7 +551,40 @@ bool TWriteOperation::RestoreReadSnapshot(const TString& txBody) {
         return false;
     }
     ReadSnapshot = ExtractReadSnapshot(writeRequest->Record);
+    ReadSnapshotNeedsRecoveryCheck = ReadSnapshot.has_value();
     return true;
+}
+
+const TTableId* TWriteOperation::FindUnavailableRecoveredReadSnapshot(TDataShard& self, NTable::TDatabase& db) const {
+    if (!ReadSnapshotNeedsRecoveryCheck || !ReadSnapshot || IsOutRSStored()) {
+        return nullptr;
+    }
+
+    const auto& snapshots = self.GetSnapshotManager();
+    if (*ReadSnapshot >= snapshots.GetLowWatermark()) {
+        return nullptr;
+    }
+
+    // A receiver-only participant in a legacy distributed transaction has no
+    // vote that could abort its peers. Reads such as UPDATE and INSERT make
+    // their shard a sender. A single writer may also abort locally.
+    if (const auto& locks = WriteTx->GetKqpLocks(); locks &&
+        std::ranges::any_of(locks->GetReceivingShards(), [&](ui64 shard) { return shard != TabletId; }) &&
+        (locks->GetOp() != NKikimrDataEvents::TKqpLocks::Commit ||
+         std::ranges::find(locks->GetSendingShards(), TabletId) == locks->GetSendingShards().end()))
+    {
+        return nullptr;
+    }
+
+    for (const auto& operation : WriteTx->GetOperations()) {
+        const auto& tableId = operation.GetTableId();
+        // The recovered operation itself pins the version. This check asks
+        // whether history was already missing when that pin was recovered.
+        if (!snapshots.IsSnapshotReadable(db, tableId, *ReadSnapshot, /* locallyAcquired */ true)) {
+            return &tableId;
+        }
+    }
+    return nullptr;
 }
 
 bool TWriteOperation::TrySetTxBody(const TString& txBody) {
@@ -806,6 +839,8 @@ bool TWriteOperation::OnRestoreMigrated(TDataShard&, const TString& body) {
     if (!TrySetTxBody(body)) {
         return false;
     }
+
+    ReadSnapshotNeedsRecoveryCheck = ReadSnapshot.has_value();
 
     // Make sure event is tracked as soon as possible
     TrackMemory();

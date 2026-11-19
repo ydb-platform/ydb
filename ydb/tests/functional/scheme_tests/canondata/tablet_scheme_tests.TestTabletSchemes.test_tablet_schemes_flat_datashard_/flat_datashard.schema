@@ -173,6 +173,16 @@
                 "ColumnId": 10,
                 "ColumnName": "Cookie",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "ReadSnapshotStep",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "ReadSnapshotTxId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -188,7 +198,9 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,

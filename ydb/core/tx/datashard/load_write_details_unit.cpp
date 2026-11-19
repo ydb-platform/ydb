@@ -45,6 +45,18 @@ EExecutionStatus TLoadWriteDetailsUnit::Execute(TOperation::TPtr op,
     if (!Pipeline.LoadWriteDetails(txc, ctx, writeOp))
         return EExecutionStatus::Restart;
 
+    if (writeOp->FindUnavailableRecoveredReadSnapshot(DataShard, txc.DB)) {
+        // Skip generating a commit vote and waiting for other participants.
+        // ExecuteWrite persists the abort vote in the same transaction that
+        // completes this operation, so restart cannot replay it as a write.
+        op->RewriteExecutionPlan(TVector<EExecutionUnitKind>{
+            EExecutionUnitKind::BuildAndWaitDependencies,
+            EExecutionUnitKind::ExecuteWrite,
+            EExecutionUnitKind::CompleteWrite,
+            EExecutionUnitKind::CompletedOperations,
+        });
+    }
+
     return EExecutionStatus::Executed;
 }
 

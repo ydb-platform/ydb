@@ -13,8 +13,10 @@
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <yql/essentials/ast/yql_ast_escaping.h>
 
 #include <util/generic/hash_set.h>
+#include <util/stream/str.h>
 #include <util/string/printf.h>
 
 #include <iterator>
@@ -1062,6 +1064,114 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionWrite) {
         UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, test.TableA),
             Cancel ? "key = 1, value = 1\nkey = 2, value = 20\n"
                    : "key = 1, value = 3\nkey = 2, value = 20\n");
+    }
+
+    Y_UNIT_TEST_QUAD(LegacyPreparedSnapshotIsCheckedBeforeVoting, Removed, AlwaysVolatile) {
+        TSnapshotRetentionTest test(false, 1, true, TDuration::Seconds(1), false);
+        auto& runtime = test.GetRuntime();
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardWriteAlwaysVolatile(AlwaysVolatile);
+        const auto snapshot = PrepareFinalSnapshotHistory(test, !Removed);
+        const ui64 txId = 100;
+        auto prepare = [&](const TTableId& tableId) {
+            auto request = MakeFinalSnapshotUpdate(tableId, snapshot, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            auto* locks = request->Record.MutableLocks();
+            locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            for (ui64 shard : {test.ShardA, test.ShardB}) {
+                locks->AddSendingShards(shard);
+                locks->AddReceivingShards(shard);
+            }
+            return request;
+        };
+
+        // Persist an ordinary PREPARED record, then give its on-disk fields
+        // the format and body an old binary would have stored for this write.
+        auto request = prepare(test.TableA);
+        TAllocChunkSerializer serializer;
+        UNIT_ASSERT(request->SerializeToArcadiaStream(&serializer));
+        auto info = request->CreateSerializationInfo(false);
+        NKikimrTxDataShard::TSerializedEvent legacyBody;
+        legacyBody.SetIsExtendedFormat(info.IsExtendedFormat);
+        legacyBody.SetEventData(serializer.Release(std::move(info))->GetString());
+        TStringStream bodyAtom;
+        NYql::EscapeArbitraryAtom(legacyBody.SerializeAsString(), '"', &bodyAtom);
+        request->Record.ClearMvccSnapshot();
+        const auto a = Write(runtime, test.Sender, test.ShardA, std::move(request));
+        auto peer = prepare(test.TableB);
+        if constexpr (Removed) {
+            // Give the peer a valid write so its abort depends on A's vote.
+            peer->Record.ClearMvccSnapshot();
+        }
+        const auto b = Write(runtime, test.Sender, test.ShardB, std::move(peer));
+
+        auto patch = std::make_unique<TEvTablet::TEvLocalMKQL>();
+        patch->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(R"___((
+            (let txMainKey '('('TxId (Uint64 '%lu))))
+            (let txDetailsKey '('('TxId (Uint64 '%lu)) '('Origin (Uint64 '%lu))))
+            (return (AsList
+                (UpdateRow 'TxMain txMainKey '('('ReadSnapshotStep) '('ReadSnapshotTxId)))
+                (UpdateRow 'TxDetails txDetailsKey '('('Body (String '%s))))))
+        ))___", txId, txId, test.ShardA, bodyAtom.Str().c_str()));
+        auto patchSender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(test.ShardA, patchSender, patch.release(), 0, GetPipeConfigWithRetries());
+        const auto patched = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(patchSender, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL_C(patched->Get()->Record.GetStatus(), NKikimrProto::OK,
+            patched->Get()->Record.ShortDebugString());
+        RebootTablet(runtime, test.ShardA, test.Sender);
+        test.PublishRegistry();
+        test.RunCleanup();
+        UNIT_ASSERT_VALUES_EQUAL(test.IsRemoved(test.ShardA, snapshot), Removed);
+
+        bool observedVote = false;
+        auto observeReadSets = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](auto& ev) {
+            const auto& rec = ev->Get()->Record;
+            if (rec.GetTxId() == txId && rec.GetTabletSource() == test.ShardA && rec.GetTabletDest() == test.ShardB &&
+                !(rec.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA))
+            {
+                NKikimrTx::TReadSetData data;
+                UNIT_ASSERT(data.ParseFromString(rec.GetReadSet()));
+                const auto expected = Removed ? NKikimrTx::TReadSetData::DECISION_ABORT : NKikimrTx::TReadSetData::DECISION_COMMIT;
+                UNIT_ASSERT_VALUES_EQUAL_C(ui32(data.GetDecision()), ui32(expected), rec.ShortDebugString());
+                observedVote = true;
+            }
+        });
+        SendProposeToCoordinator(runtime, test.Sender, {test.ShardA, test.ShardB}, {
+            .TxId = txId,
+            .Coordinator = a.GetDomainCoordinators(0),
+            .MinStep = Max(a.GetMinStep(), b.GetMinStep()),
+            .MaxStep = Min(a.GetMaxStep(), b.GetMaxStep()),
+        });
+        THashSet<ui64> completed;
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto reply = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(test.Sender, TDuration::Seconds(30));
+            const auto& result = reply->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxId(), txId);
+            UNIT_ASSERT(result.GetOrigin() == test.ShardA || result.GetOrigin() == test.ShardB);
+            UNIT_ASSERT(completed.insert(result.GetOrigin()).second);
+            if constexpr (Removed) {
+                if (result.GetOrigin() == test.ShardA) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+                    UNIT_ASSERT(!result.GetIssues().empty());
+                    UNIT_ASSERT_C(result.GetIssues(0).message().Contains("stale snapshot"), result.ShortDebugString());
+                } else if constexpr (AlwaysVolatile) {
+                    // The peer may already be waiting for a decision after tentative execution.
+                    UNIT_ASSERT_C(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN
+                        || result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, result.ShortDebugString());
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN,
+                        result.ShortDebugString());
+                }
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED,
+                    result.ShortDebugString());
+            }
+        }
+        UNIT_ASSERT(observedVote);
+        for (const auto& [shard, tableId] : {std::make_pair(test.ShardA, test.TableA),
+                                           std::make_pair(test.ShardB, test.TableB)}) {
+            UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, TVector<ui64>{shard}, tableId),
+                Removed ? "key = 1, value = 1\nkey = 2, value = 20\n"
+                        : "key = 1, value = 3\nkey = 2, value = 20\n");
+        }
     }
 
     Y_UNIT_TEST(RetainedSnapshotReadLockIsBrokenByNewerWrite) {

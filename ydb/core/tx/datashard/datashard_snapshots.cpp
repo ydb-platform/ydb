@@ -35,16 +35,14 @@ void TSnapshotManager::Reset() {
 }
 
 bool TSnapshotManager::Reload(NIceDb::TNiceDb& db) {
-    bool ready = true;
-
-    ready &= ReloadSys(db);
-    ready &= ReloadSnapshots(db);
-
-    if (ready) {
-        Self->SetCounter(COUNTER_MVCC_ENABLED, 1);
+    // First-time MVCC migration needs the persistent points before it can
+    // record which legacy history is unavailable.
+    if (!ReloadSnapshots(db) || !ReloadSys(db)) {
+        return false;
     }
 
-    return ready;
+    Self->SetCounter(COUNTER_MVCC_ENABLED, 1);
+    return true;
 }
 
 bool TSnapshotManager::ReloadSys(NIceDb::TNiceDb& db) {
@@ -123,6 +121,10 @@ bool TSnapshotManager::ReloadSys(NIceDb::TNiceDb& db) {
                 SetCompleteEdge(db, nextVersion);
                 SetIncompleteEdge(db, nextVersion);
                 SetImmediateWriteEdge(db, nextVersion);
+                // Legacy rows may be unversioned. Record unavailable history
+                // below the new watermark even when the registry is unready.
+                // Explicit persistent snapshots remain readable.
+                RemoveRowVersions(db.GetDatabase(), TRowVersion::Min(), nextVersion);
                 SetLowWatermark(db, nextVersion);
                 ImmediateWriteEdgeReplied = ImmediateWriteEdge;
             }

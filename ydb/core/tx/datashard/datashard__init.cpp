@@ -357,8 +357,6 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 #undef PRECHARGE_SYS_TABLE
     }
 
-    txc.DB.NoMoreUnprechargedReadsForTx();
-
     // Reads from Sys table
     LOAD_SYS_UI64(db, Schema::Sys_State, Self->State);
     {
@@ -600,6 +598,10 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             Self->Pipeline.AddCandidateUnit(EExecutionUnitKind::PlanQueue);
         // TODO: add propose blockers to blockers list
     }
+
+    // Legacy prepared writes load their read-snapshot pins from individual
+    // TxDetails bodies. Allow those point reads before requiring precharge.
+    txc.DB.NoMoreUnprechargedReadsForTx();
 
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::Snapshots::TableId)) {
         if (!Self->SnapshotManager.Reload(db))

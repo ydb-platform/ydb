@@ -173,6 +173,7 @@ public:
 
     TString GetTxBody() const;
     bool RestoreReadSnapshot(const TString& txBody);
+    const TTableId* FindUnavailableRecoveredReadSnapshot(TDataShard& self, NTable::TDatabase& db) const;
     bool TrySetTxBody(const TString& txBody);
     void SetTxBody(const TString& txBody);
     void ClearTxBody();
@@ -207,7 +208,7 @@ public:
         ArtifactFlags |= OUT_RS_STORED;
     }
 
-    bool IsOutRSStored() {
+    bool IsOutRSStored() const {
         return ArtifactFlags & OUT_RS_STORED;
     }
 
@@ -324,6 +325,7 @@ private:
     // Commit-time operations may read older history while writing at the
     // current/planned version. Keep this pin even when their data is released.
     YDB_ACCESSOR_DEF(std::optional<TRowVersion>, ReadSnapshot);
+    bool ReadSnapshotNeedsRecoveryCheck = false;
 
     ui64 PageFaultCount = 0;
 };

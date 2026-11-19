@@ -8,10 +8,11 @@ SPLIT_FACTOR(10)
 
 TEST_SRCS(
     test_export_import_s3.py
+    test_table_checksum.py
 )
 
 SIZE(LARGE)
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(ram:16 cpu:4)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
@@ -22,6 +23,7 @@ DEPENDS(
 
 PEERDIR(
     contrib/python/boto3
+    library/python/port_manager
     ydb/tests/library
     ydb/tests/library/compatibility
 )

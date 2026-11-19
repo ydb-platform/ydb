@@ -564,18 +564,20 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         ui64 count = 300u;
 
         TString messageBase = "message----";
-        TVector<TString> sentMessages;
+        struct TReadState {
+            TVector<TString> SentMessages;
+            size_t TotalReceived = 0;
+            TAtomic Check = 1;
+        };
+        auto state = std::make_shared<TReadState>();
 
         for (auto i = 0u; i < count; i++) {
-            // sentMessages.emplace_back(messageBase * (i+1) + ToString(i));
-            sentMessages.emplace_back(messageBase * (10 * i + 1));
+            state->SentMessages.emplace_back(messageBase * (10 * i + 1));
         }
 
         NThreading::TPromise<void> checkedPromise = NThreading::NewPromise<void>();
-        auto totalReceived = 0u;
 
         auto f = checkedPromise.GetFuture();
-        TAtomic check = 1;
 
         // Create read session.
         NYdb::NFederatedTopic::TFederatedReadSessionSettings readSettings;
@@ -584,16 +586,17 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(setup->GetTestTopic());
 
-        readSettings.FederatedEventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+        readSettings.FederatedEventHandlers_.SimpleDataHandlers([state, checkedPromise](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
             Cerr << ">>> event from dataHandler: " << DebugString(ev) << Endl;
-            Y_VERIFY_S(AtomicGet(check) != 0, "check is false");
+            Y_VERIFY_S(AtomicGet(state->Check) != 0, "check is false");
             auto& messages = ev.GetMessages();
             for (size_t i = 0u; i < messages.size(); ++i) {
                 auto& message = messages[i];
-                UNIT_ASSERT_VALUES_EQUAL(message.GetData(), sentMessages[totalReceived]);
-                totalReceived++;
+                UNIT_ASSERT_LT(state->TotalReceived, state->SentMessages.size());
+                UNIT_ASSERT_VALUES_EQUAL(message.GetData(), state->SentMessages[state->TotalReceived]);
+                state->TotalReceived++;
             }
-            if (totalReceived == sentMessages.size())
+            if (state->TotalReceived == state->SentMessages.size())
                 checkedPromise.SetValue();
         });
 
@@ -618,13 +621,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
 
         for (auto i = 0u; i < count; i++) {
-            auto res = session->Write(sentMessages[i]);
+            auto res = session->Write(state->SentMessages[i]);
             UNIT_ASSERT(res);
         }
 
         f.GetValueSync();
         ReadSession->Close();
-        AtomicSet(check, 0);
+        AtomicSet(state->Check, 0);
     }
 
     Y_UNIT_TEST(ReadMirrored) {

@@ -1,6 +1,7 @@
 #include "datashard_snapshots.h"
 
 #include "datashard_impl.h"
+#include "datashard_write_operation.h"
 #include "snapshot_retention/snapshot_retention.h"
 
 #include <ydb/core/protos/datashard_config.pb.h>
@@ -468,10 +469,23 @@ bool TSnapshotManager::IsSnapshotReadable(NTable::TDatabase& db, const TTableId&
 
 TRowVersion TSnapshotManager::GetLeastAcquiredPipelineSnapshot() const {
     TRowVersion leastAcquired = TRowVersion::Max();
-    for (const auto& [txId, op] : Self->Pipeline.GetImmediateOps()) {
+    auto acquire = [&](const TOperation::TPtr& op) {
         if (op->IsMvccSnapshotRead()) {
             leastAcquired = Min(leastAcquired, op->GetMvccSnapshot());
         }
+        if (const auto* writeOp = TWriteOperation::TryCastWriteOperation(op)) {
+            if (const auto& snapshot = writeOp->GetReadSnapshot()) {
+                leastAcquired = Min(leastAcquired, *snapshot);
+            }
+        }
+    };
+    for (const auto& [txId, op] : Self->Pipeline.GetImmediateOps()) {
+        acquire(op);
+    }
+    // Prepared transactions need their older read version before planning and
+    // after their validated data has been released, including after a restart.
+    for (const auto& [txId, op] : Self->TransQueue.GetTxsInFly()) {
+        acquire(op);
     }
     return leastAcquired;
 }

@@ -1,4 +1,5 @@
 #include "ut_common/datashard_ut_common.h"
+#include "datashard_failpoints.h"
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/mind/hive/hive.h>
@@ -26,10 +27,12 @@ namespace {
 class TSnapshotRetentionTest {
 public:
     explicit TSnapshotRetentionTest(bool serviceRegistry = false, ui32 nodeCount = 1,
-        bool enableDataShardLocking = true, TDuration promotionTime = TDuration::Seconds(1))
+        bool enableDataShardLocking = true, TDuration promotionTime = TDuration::Seconds(1),
+        std::optional<bool> inMemoryStateMigration = std::nullopt)
     {
         NKikimrConfig::TAppConfig app;
         app.MutableFeatureFlags()->SetEnableSnapshotsLocking(false);
+        app.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
         if (enableDataShardLocking) {
             app.MutableFeatureFlags()->SetEnableDataShardSnapshotLocking(true);
         }
@@ -53,6 +56,9 @@ public:
             .SetDomainPlanResolution(100)
             .SetKeepSnapshotTimeout(TDuration::Seconds(2))
             .SetAppConfig(app);
+        if (inMemoryStateMigration) {
+            settings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(*inMemoryStateMigration);
+        }
         Server = new Tests::TServer(settings);
         auto& runtime = GetRuntime();
         for (ui32 node = 0; node < nodeCount; ++node) {
@@ -216,6 +222,54 @@ std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeSnapshotUpdate(const TTableI
     request->Record.MutableMvccSnapshot()->SetStep(snapshot.Step);
     request->Record.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
     return request;
+}
+
+std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeFinalSnapshotUpdate(const TTableId& tableId,
+    const TRowVersion& snapshot, std::optional<ui64> txId = std::nullopt,
+    NKikimrDataEvents::TEvWrite::ETxMode mode = NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE)
+{
+    // Final SnapshotRW writes carry their original read snapshot without a
+    // LockTxId, and may still have buffered operations that read that history.
+    const std::vector<ui32> columns{1, 2};
+    const std::vector<TCell> cells{
+        TCell::Make(ui32(1)), TCell::Make(ui32(3)),
+        TCell::Make(ui32(2)), TCell::Make(ui32(200)),
+    };
+    auto request = MakeWriteRequest(txId, mode,
+        NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE, tableId, columns, cells);
+    request->Record.SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+    request->Record.MutableMvccSnapshot()->SetStep(snapshot.Step);
+    request->Record.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
+    return request;
+}
+
+TRowVersion PrepareFinalSnapshotHistory(TSnapshotRetentionTest& test, bool retained) {
+    auto& runtime = test.GetRuntime();
+    const auto snapshot = test.WriteVersion(1);
+    runtime.SimulateSleep(TDuration::Seconds(1));
+    ExecSQL(test.Server, test.Sender,
+        "UPSERT INTO `/Root/table-a` (key, value) VALUES (2, 20);"
+        "UPSERT INTO `/Root/table-b` (key, value) VALUES (2, 20);");
+    const auto inserted = AcquireReadSnapshot(runtime, "/Root");
+    // Advance the write horizon beyond the insertion too, so compaction can
+    // remove every version that would distinguish its absence at the snapshot.
+    runtime.SimulateSleep(TDuration::Seconds(1));
+    ExecSQL(test.Server, test.Sender,
+        "UPSERT INTO `/Root/table-a` (key, value) VALUES (2, 20);"
+        "UPSERT INTO `/Root/table-b` (key, value) VALUES (2, 20);");
+    runtime.SimulateSleep(TDuration::Seconds(3));
+    test.PublishRegistry(retained ? TVector<TRowVersion>{snapshot} : TVector<TRowVersion>{},
+        {test.TableA, test.TableB});
+    test.RunCleanup();
+    for (const auto& [shard, tableId] : {std::make_pair(test.ShardA, test.TableA),
+                                       std::make_pair(test.ShardB, test.TableB)}) {
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(shard));
+        UNIT_ASSERT(inserted < test.GetCleanupBoundary(shard));
+        UNIT_ASSERT_VALUES_EQUAL(test.IsRemoved(shard, snapshot), !retained);
+        const auto compaction = CompactTable(runtime, shard, tableId, false);
+        UNIT_ASSERT_VALUES_EQUAL(compaction.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+    }
+    return snapshot;
 }
 
 void TestPersistentAndRegistryRetention(bool registryReleasedFirst) {
@@ -779,6 +833,197 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionRead) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionWrite) {
+    Y_UNIT_TEST_TWIN(FinalSnapshotUpdateAfterCompaction, Retained) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        const auto snapshot = PrepareFinalSnapshotHistory(test, Retained);
+
+        auto request = MakeFinalSnapshotUpdate(test.TableA, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(request->Record.GetLockTxId(), 0u);
+        const auto result = Write(runtime, test.Sender, test.ShardA, std::move(request),
+            Retained ? NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED
+                     : NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+        UNIT_ASSERT(result.GetTxLocks().empty());
+        if constexpr (!Retained) {
+            UNIT_ASSERT(!result.GetIssues().empty());
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("snapshot"), result.ShortDebugString());
+        }
+        const TVector<ui64> shards{test.ShardA};
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, test.TableA),
+            Retained ? "key = 1, value = 3\nkey = 2, value = 20\n"
+                     : "key = 1, value = 1\nkey = 2, value = 20\n");
+        if constexpr (Retained) {
+            // The post-snapshot insert must stay invisible to UPDATE even after
+            // compaction, while the commit itself uses a new write version.
+            UNIT_ASSERT_VALUES_EQUAL(
+                FormatIntReadResult(test.ReadSnapshot(test.ShardA, test.TableA, snapshot).get()), "1, 1\n");
+        }
+    }
+
+    Y_UNIT_TEST(FinalSnapshotUpdatePinsHistoryWhileWaiting) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        const auto snapshot = PrepareFinalSnapshotHistory(test, true);
+        const ui64 txId = 100;
+        TBlockOperationsFailPoint::TGuard blocked([&](ui64 tabletId, ui64 operationTxId) {
+            return tabletId == test.ShardA && operationTxId == txId;
+        });
+        auto request = MakeFinalSnapshotUpdate(test.TableA, snapshot, txId);
+        runtime.SendToPipe(test.ShardA, test.Sender, request.release(), 0, GetPipeConfigWithRetries());
+        runtime.WaitFor("final snapshot UPDATE before execution", [&] { return !blocked.empty(); });
+
+        test.PublishRegistry();
+        test.RunCleanup();
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+        UNIT_ASSERT(test.IsRemoved(test.ShardB, snapshot));
+        const auto compaction = CompactTable(runtime, test.ShardA, test.TableA, false);
+        UNIT_ASSERT_VALUES_EQUAL(compaction.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        blocked.Disable();
+        blocked.Unblock();
+        // Immediate admission happens at execution, after duplicate detection.
+        // The pin preserves history while waiting but cannot replace the
+        // registry registration required when this fresh batch is admitted.
+        const auto result = WaitForWriteCompleted(runtime, test.Sender,
+            NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetTxId(), txId);
+        UNIT_ASSERT(!result.GetIssues().empty());
+        UNIT_ASSERT_C(result.GetIssues(0).message().Contains("snapshot"), result.ShortDebugString());
+        const TVector<ui64> shards{test.ShardA};
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, test.TableA),
+            "key = 1, value = 1\nkey = 2, value = 20\n");
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+    }
+
+    Y_UNIT_TEST_TWIN(RemovedFinalSnapshotUpdateIsRejectedAtPrepare, Volatile) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        const auto snapshot = PrepareFinalSnapshotHistory(test, false);
+        const auto mode = Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
+                                   : NKikimrDataEvents::TEvWrite::MODE_PREPARE;
+        for (const auto& [shard, tableId] : {std::make_pair(test.ShardA, test.TableA),
+                                           std::make_pair(test.ShardB, test.TableB)}) {
+            auto request = MakeFinalSnapshotUpdate(tableId, snapshot, 100, mode);
+            auto* locks = request->Record.MutableLocks();
+            locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            locks->AddSendingShards(test.ShardA);
+            locks->AddSendingShards(test.ShardB);
+            locks->AddReceivingShards(test.ShardA);
+            locks->AddReceivingShards(test.ShardB);
+            const auto rejected = Write(runtime, test.Sender, shard, std::move(request),
+                NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+            UNIT_ASSERT(!rejected.GetIssues().empty());
+            UNIT_ASSERT_C(rejected.GetIssues(0).message().Contains("snapshot"), rejected.ShortDebugString());
+            UNIT_ASSERT(rejected.GetTxLocks().empty());
+            const TVector<ui64> shards{shard};
+            UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, tableId),
+                "key = 1, value = 1\nkey = 2, value = 20\n");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(RetainedFinalSnapshotUpdateCommitsOnTwoShards, Volatile) {
+        TSnapshotRetentionTest test(false, 1, true, TDuration::Seconds(1), Volatile);
+        auto& runtime = test.GetRuntime();
+        const auto snapshot = PrepareFinalSnapshotHistory(test, true);
+        const auto mode = Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
+                                   : NKikimrDataEvents::TEvWrite::MODE_PREPARE;
+        const ui64 txId = 100;
+        ui64 minStep = 0;
+        ui64 maxStep = Max<ui64>();
+        ui64 coordinator = 0;
+        for (const auto& [shard, tableId] : {std::make_pair(test.ShardA, test.TableA),
+                                           std::make_pair(test.ShardB, test.TableB)}) {
+            auto request = MakeFinalSnapshotUpdate(tableId, snapshot, txId, mode);
+            auto* locks = request->Record.MutableLocks();
+            locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            locks->AddSendingShards(test.ShardA);
+            locks->AddSendingShards(test.ShardB);
+            locks->AddReceivingShards(test.ShardA);
+            locks->AddReceivingShards(test.ShardB);
+            const auto prepared = Write(runtime, test.Sender, shard, std::move(request));
+            minStep = Max(minStep, prepared.GetMinStep());
+            maxStep = Min(maxStep, prepared.GetMaxStep());
+            coordinator = prepared.GetDomainCoordinators(0);
+        }
+
+        // Admission at prepare owns the history until the transaction finishes;
+        // registry release must not invalidate either participant's decision.
+        test.PublishRegistry();
+        test.RunCleanup();
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardB, snapshot));
+        if constexpr (Volatile) {
+            // Volatile prepares have no persisted body. Their admitted history
+            // must already be protected when in-memory state is restored.
+            RebootTablet(runtime, test.ShardA, test.Sender);
+            test.RunCleanup();
+            UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+        }
+        SendProposeToCoordinator(runtime, test.Sender, {test.ShardA, test.ShardB}, {
+            .TxId = txId,
+            .Coordinator = coordinator,
+            .MinStep = minStep,
+            .MaxStep = maxStep,
+            .Volatile = Volatile,
+        });
+        THashSet<ui64> completed;
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto result = WaitForWriteCompleted(runtime, test.Sender);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxId(), txId);
+            completed.insert(result.GetOrigin());
+        }
+        UNIT_ASSERT(completed.contains(test.ShardA));
+        UNIT_ASSERT(completed.contains(test.ShardB));
+        for (const auto& [shard, tableId] : {std::make_pair(test.ShardA, test.TableA),
+                                           std::make_pair(test.ShardB, test.TableB)}) {
+            const TVector<ui64> shards{shard};
+            UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, tableId),
+                "key = 1, value = 3\nkey = 2, value = 20\n");
+        }
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+        UNIT_ASSERT(test.IsRemoved(test.ShardB, snapshot));
+    }
+
+    Y_UNIT_TEST_TWIN(PreparedFinalSnapshotSurvivesRegistryReleaseAndRestart, Cancel) {
+        TSnapshotRetentionTest test(false, 1, true, TDuration::Seconds(1), false);
+        auto& runtime = test.GetRuntime();
+        const auto snapshot = PrepareFinalSnapshotHistory(test, true);
+        const ui64 txId = 100;
+        const auto prepared = Write(runtime, test.Sender, test.ShardA,
+            MakeFinalSnapshotUpdate(test.TableA, snapshot, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE));
+
+        test.PublishRegistry();
+        test.RunCleanup();
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+        UNIT_ASSERT(test.IsRemoved(test.ShardB, snapshot));
+        RebootTablet(runtime, test.ShardA, test.Sender);
+        test.RunCleanup();
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+        const auto compaction = CompactTable(runtime, test.ShardA, test.TableA, false);
+        UNIT_ASSERT_VALUES_EQUAL(compaction.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+
+        if constexpr (Cancel) {
+            runtime.SendToPipe(test.ShardA, test.Sender, new TEvDataShard::TEvCancelTransactionProposal(txId),
+                0, GetPipeConfigWithRetries());
+        } else {
+            SendProposeToCoordinator(runtime, test.Sender, {test.ShardA}, {
+                .TxId = txId,
+                .Coordinator = prepared.GetDomainCoordinators(0),
+                .MinStep = prepared.GetMinStep(),
+                .MaxStep = prepared.GetMaxStep(),
+            });
+            const auto result = WaitForWriteCompleted(runtime, test.Sender);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxId(), txId);
+        }
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+        const TVector<ui64> shards{test.ShardA};
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, test.TableA),
+            Cancel ? "key = 1, value = 1\nkey = 2, value = 20\n"
+                   : "key = 1, value = 3\nkey = 2, value = 20\n");
+    }
+
     Y_UNIT_TEST(RetainedSnapshotReadLockIsBrokenByNewerWrite) {
         TSnapshotRetentionTest test;
         auto& runtime = test.GetRuntime();
@@ -906,7 +1151,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionWrite) {
             operation->MutableWriteSeqNum()->SetWriterIndex(0);
             operation->MutableWriteSeqNum()->SetWriteSeqNum(2);
             const auto rejected = Write(runtime, test.Sender, test.ShardA, std::move(request),
-                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+                NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
             UNIT_ASSERT(!rejected.GetIssues().empty());
             UNIT_ASSERT_C(rejected.GetIssues(0).message().Contains("snapshot"), rejected.ShortDebugString());
             UNIT_ASSERT(rejected.GetTxLocks().empty());
@@ -947,7 +1192,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionWrite) {
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
         auto request = MakeSnapshotUpdate(test.TableA, snapshot, lockTxId, runtime.GetNodeId(0), 3);
         const auto rejected = Write(runtime, test.Sender, test.ShardA, std::move(request),
-            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
         UNIT_ASSERT(!rejected.GetIssues().empty());
         UNIT_ASSERT_C(rejected.GetIssues(0).message().Contains("snapshot"), rejected.ShortDebugString());
         UNIT_ASSERT(rejected.GetTxLocks().empty());
@@ -1261,6 +1506,145 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
+    Y_UNIT_TEST_TWIN(KqpFinalSnapshotUpdateWithRemovedHistoryIsAborted, Planned) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        test.WriteVersion(1);
+        const TString sessionId = NKqpHelpers::CreateSessionRPC(runtime, "/Root");
+        TString query = "SELECT key, value FROM `/Root/table-a` WHERE key = 1;";
+        if constexpr (Planned) {
+            query += "SELECT key, value FROM `/Root/table-b` WHERE key = 1;";
+        }
+        query += "UPDATE `/Root/table-a` ON (key, value) VALUES (1u, 3u), (2u, 200u);";
+        if constexpr (Planned) {
+            query += "UPDATE `/Root/table-b` ON (key, value) VALUES (1u, 3u), (2u, 200u);";
+        }
+        const auto makeRequest = [&] {
+            auto request = NKqpHelpers::MakeSimpleRequestRPC(query, sessionId, {}, true);
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_write();
+            return request;
+        };
+
+        TRowVersion snapshot = TRowVersion::Min();
+        auto captureReads = runtime.AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.HasSnapshot() && record.GetTableId().GetOwnerId() == test.TableA.PathId.OwnerId
+                && (record.GetTableId().GetTableId() == test.TableA.PathId.LocalPathId
+                    || record.GetTableId().GetTableId() == test.TableB.PathId.LocalPathId))
+            {
+                const auto readSnapshot = TRowVersion::FromProto(record.GetSnapshot());
+                if (snapshot) {
+                    UNIT_ASSERT_VALUES_EQUAL(readSnapshot, snapshot);
+                }
+                snapshot = readSnapshot;
+            }
+        });
+        TBlockEvents<NEvents::TDataEvents::TEvWrite> writes(runtime, [&](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetLockMode() != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION
+                || record.GetLockTxId())
+            {
+                return false;
+            }
+            for (const auto& operation : record.GetOperations()) {
+                const auto& tableId = operation.GetTableId();
+                if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE
+                    && tableId.GetOwnerId() == test.TableA.PathId.OwnerId
+                    && (tableId.GetTableId() == test.TableA.PathId.LocalPathId
+                        || tableId.GetTableId() == test.TableB.PathId.LocalPathId))
+                {
+                    return true;
+                }
+            }
+            return false;
+        });
+        auto pending = NKqpHelpers::SendRequest(runtime, makeRequest(), "/Root");
+        const size_t participantCount = Planned ? 2 : 1;
+        runtime.WaitFor("KQP final snapshot UPDATE batches before shard admission", [&] {
+            return writes.size() >= participantCount || pending.HasValue() || pending.HasException();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(writes.size(), participantCount);
+        UNIT_ASSERT(snapshot);
+        THashSet<TActorId> writers;
+        THashSet<ui64> tables;
+        for (const auto& ev : writes) {
+            const auto& record = ev->Get()->Record;
+            UNIT_ASSERT(record.HasMvccSnapshot());
+            UNIT_ASSERT_VALUES_EQUAL(record.GetMvccSnapshot().GetStep(), snapshot.Step);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetMvccSnapshot().GetTxId(), snapshot.TxId);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetLockTxId(), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetTxMode() != NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, Planned);
+            UNIT_ASSERT(!record.GetOperations().empty());
+            for (const auto& operation : record.GetOperations()) {
+                UNIT_ASSERT_VALUES_EQUAL(operation.GetType(), NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
+                tables.insert(operation.GetTableId().GetTableId());
+            }
+            writers.insert(ev->Sender);
+        }
+        UNIT_ASSERT(tables.contains(test.TableA.PathId.LocalPathId));
+        UNIT_ASSERT_VALUES_EQUAL(tables.contains(test.TableB.PathId.LocalPathId), Planned);
+        captureReads.Remove();
+
+        // The exact-key reads and final batches are already complete in KQP.
+        // Change only a key they did not read, so a broken read lock cannot
+        // mask the stale-history admission failure on either shard.
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        ExecSQL(test.Server, test.Sender,
+            "UPSERT INTO `/Root/table-a` (key, value) VALUES (2, 20);"
+            "UPSERT INTO `/Root/table-b` (key, value) VALUES (2, 20);");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        ExecSQL(test.Server, test.Sender,
+            "UPSERT INTO `/Root/table-a` (key, value) VALUES (2, 20);"
+            "UPSERT INTO `/Root/table-b` (key, value) VALUES (2, 20);");
+        test.PublishRegistry();
+        test.RunCleanup();
+        for (const auto& [shard, tableId] : {std::make_pair(test.ShardA, test.TableA),
+                                           std::make_pair(test.ShardB, test.TableB)}) {
+            UNIT_ASSERT(test.IsRemoved(shard, snapshot));
+            const auto compacted = CompactTable(runtime, shard, tableId, false);
+            UNIT_ASSERT_VALUES_EQUAL(compacted.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        }
+        UNIT_ASSERT(!pending.HasValue() && !pending.HasException());
+        bool staleWriteRejected = false;
+        auto captureRejectedWrite = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>([&](auto& ev) {
+            if (!writers.contains(ev->GetRecipientRewrite())) {
+                return;
+            }
+            const auto& record = ev->Get()->Record;
+            for (const auto& issue : record.GetIssues()) {
+                if (issue.message().Contains("writes at stale snapshot")) {
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+                    staleWriteRejected = true;
+                }
+            }
+        });
+        writes.Stop().Unblock();
+        const auto failed = NKqpHelpers::AwaitResponse(runtime, pending);
+        captureRejectedWrite.Remove();
+        UNIT_ASSERT(staleWriteRejected);
+        UNIT_ASSERT_VALUES_EQUAL_C(failed.operation().status(), Ydb::StatusIds::ABORTED, failed.ShortDebugString());
+        UNIT_ASSERT_C(failed.operation().ShortDebugString().Contains("stale snapshot"), failed.ShortDebugString());
+        for (const auto& [shard, tableId] : {std::make_pair(test.ShardA, test.TableA),
+                                           std::make_pair(test.ShardB, test.TableB)}) {
+            const TVector<ui64> shards{shard};
+            UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, tableId),
+                "key = 1, value = 1\nkey = 2, value = 20\n");
+        }
+
+        const auto retried = NKqpHelpers::AwaitResponse(runtime,
+            NKqpHelpers::SendRequest(runtime, makeRequest(), "/Root"));
+        UNIT_ASSERT_VALUES_EQUAL_C(retried.operation().status(), Ydb::StatusIds::SUCCESS, retried.ShortDebugString());
+        const TVector<ui64> shardsA{test.ShardA};
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shardsA, test.TableA),
+            "key = 1, value = 3\nkey = 2, value = 200\n");
+        if constexpr (Planned) {
+            const TVector<ui64> shardsB{test.ShardB};
+            UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shardsB, test.TableB),
+                "key = 1, value = 3\nkey = 2, value = 200\n");
+        }
+        NKqpHelpers::CloseSession(runtime, sessionId);
+    }
+
     Y_UNIT_TEST(ExplicitSnapshotSurvivesDelayedPublication) {
         TSnapshotRetentionTest test(true, 2);
         auto& runtime = test.GetRuntime();

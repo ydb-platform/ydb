@@ -1,6 +1,7 @@
 #include "datashard_trans_queue.h"
 #include "datashard_active_transaction.h"
 #include "datashard_impl.h"
+#include "datashard_write_operation.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
@@ -91,6 +92,30 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
             TBasicOpInfo info(txId, kind, flags, maxStep, TInstant::FromValue(received), Self->NextTieBreakerIndex++);
 
             TOperation::TPtr op = NEvWrite::TConvertor::MakeOperation(kind, info, Self->TabletID());
+
+            if (auto* writeOp = TWriteOperation::TryCastWriteOperation(op)) {
+                if (rowset.HaveValue<Schema::TxMain::ReadSnapshotStep>()
+                    && rowset.HaveValue<Schema::TxMain::ReadSnapshotTxId>())
+                {
+                    const TRowVersion snapshot(rowset.GetValue<Schema::TxMain::ReadSnapshotStep>(),
+                        rowset.GetValue<Schema::TxMain::ReadSnapshotTxId>());
+                    if (!snapshot.IsMax()) {
+                        writeOp->SetReadSnapshot(snapshot);
+                    }
+                } else {
+                    // Legacy prepared writes have no separate history pin.
+                    // Restore it before cleanup can run, including transactions
+                    // that are still waiting for a plan and have no loaded body.
+                    auto details = db.Table<Schema::TxDetails>().Key(txId, Self->TabletID())
+                        .Select<Schema::TxDetails::Body>();
+                    if (!details.IsReady()) {
+                        return false;
+                    }
+                    Y_ENSURE(!details.EndOfSet(), "cannot find details for tx=" << txId);
+                    Y_ENSURE(writeOp->RestoreReadSnapshot(details.GetValue<Schema::TxDetails::Body>()),
+                        "cannot restore read snapshot for tx=" << txId);
+                }
+            }
 
             if (rowset.HaveValue<Schema::TxMain::Source>()) {
                 op->SetTarget(rowset.GetValue<Schema::TxMain::Source>());
@@ -247,6 +272,11 @@ void TTransQueue::ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId s
         return;
     }
 
+    TRowVersion readSnapshot = TRowVersion::Max();
+    if (const auto* writeOp = TWriteOperation::TryCastWriteOperation(op)) {
+        readSnapshot = writeOp->GetReadSnapshot().value_or(TRowVersion::Max());
+    }
+
     db.Table<Schema::TxMain>().Key(op->GetTxId()).Update(
         NIceDb::TUpdate<Schema::TxMain::Kind>(op->GetKind()),
         NIceDb::TUpdate<Schema::TxMain::Flags>(op->GetFlags() & preserveFlagsMask),
@@ -254,7 +284,9 @@ void TTransQueue::ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId s
         NIceDb::TUpdate<Schema::TxMain::ReceivedAt>(op->GetReceivedAt().GetValue()),
         NIceDb::TUpdate<Schema::TxMain::Flags64>(op->GetFlags() & preserveFlagsMask),
         NIceDb::TUpdate<Schema::TxMain::Source>(source),
-        NIceDb::TUpdate<Schema::TxMain::Cookie>(op->GetCookie()));
+        NIceDb::TUpdate<Schema::TxMain::Cookie>(op->GetCookie()),
+        NIceDb::TUpdate<Schema::TxMain::ReadSnapshotStep>(readSnapshot.Step),
+        NIceDb::TUpdate<Schema::TxMain::ReadSnapshotTxId>(readSnapshot.TxId));
 
     db.Table<Schema::TxDetails>().Key(op->GetTxId(), Self->TabletID()).Update(
         NIceDb::TUpdate<Schema::TxDetails::Body>(TString(txBody)),

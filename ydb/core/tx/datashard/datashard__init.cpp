@@ -85,10 +85,6 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         bool done = ReadEverything(txc);
 
         if (done && Self->State != TShardState::Offline) {
-            // Persisted removal ranges already describe unavailable history.
-            // Preserve retained gaps while the snapshot registry is rebuilding.
-            Self->SnapshotManager.CleanupUnretainedRowVersions(
-                txc.DB, TRowVersion::Min(), Self->SnapshotManager.GetLowWatermark());
             for (const auto& pr : Self->TableInfos) {
                 pr.second->Fix_KIKIMR_17222(txc.DB);
             }
@@ -154,6 +150,14 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
         if (wasEmpty && Self->TransQueue.GetPlan().size()) {
             Self->Pipeline.AddCandidateUnit(EExecutionUnitKind::PlanQueue);
         }
+    }
+
+    if (Self->State != TShardState::Offline) {
+        // Persisted removal ranges already describe unavailable history.
+        // Wait for both durable and migrated volatile read-snapshot pins before
+        // cleaning retained gaps below the watermark during initialization.
+        Self->SnapshotManager.CleanupUnretainedRowVersions(
+            txc.DB, TRowVersion::Min(), Self->SnapshotManager.GetLowWatermark());
     }
 
     InMemoryStateActorStarted = Self->StartInMemoryStateActor();

@@ -172,6 +172,7 @@ public:
     void FillVolatileTxData(TDataShard* self);
 
     TString GetTxBody() const;
+    bool RestoreReadSnapshot(const TString& txBody);
     bool TrySetTxBody(const TString& txBody);
     void SetTxBody(const TString& txBody);
     void ClearTxBody();
@@ -320,6 +321,9 @@ private:
     YDB_ACCESSOR_DEF(ui64, SubDomainPathId);
     YDB_ACCESSOR_DEF(NKikimrSubDomains::TProcessingParams, ProcessingParams);
     YDB_ACCESSOR_DEF(absl::flat_hash_set<size_t>, DuplicateWriteOpIdxs);
+    // Commit-time operations may read older history while writing at the
+    // current/planned version. Keep this pin even when their data is released.
+    YDB_ACCESSOR_DEF(std::optional<TRowVersion>, ReadSnapshot);
 
     ui64 PageFaultCount = 0;
 };

@@ -22,6 +22,31 @@
 namespace NKikimr {
 namespace NDataShard {
 
+namespace {
+
+std::optional<TRowVersion> ExtractReadSnapshot(const NKikimrDataEvents::TEvWrite& record) {
+    if (record.HasMvccSnapshot() && record.OperationsSize() > 0) {
+        return TRowVersion(record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId());
+    }
+    return std::nullopt;
+}
+
+std::unique_ptr<NEvents::TDataEvents::TEvWrite> DeserializeWriteRequest(const TString& txBody) {
+    NKikimrTxDataShard::TSerializedEvent proto;
+    if (!proto.ParseFromString(txBody)) {
+        return nullptr;
+    }
+
+    TEventSerializationInfo serializationInfo;
+    serializationInfo.IsExtendedFormat = proto.GetIsExtendedFormat();
+
+    TEventSerializedData buffer(proto.GetEventData(), std::move(serializationInfo));
+    return std::unique_ptr<NEvents::TDataEvents::TEvWrite>(
+        static_cast<NEvents::TDataEvents::TEvWrite*>(NEvents::TDataEvents::TEvWrite::Load(&buffer)));
+}
+
+} // namespace
+
 TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev,
         const NWilson::TTraceId& traceId, bool mvccSnapshotRead)
     : KeyValidator(*self)
@@ -463,6 +488,7 @@ void TWriteOperation::FillTxData(TValidatedWriteTx::TPtr writeTx)
 
     Target = writeTx->GetSource();
     WriteTx = writeTx;
+    ReadSnapshot = writeTx->HasOperations() ? writeTx->GetMvccSnapshot() : std::nullopt;
 }
 
 void TWriteOperation::FillTxData(TDataShard* self, const TActorId& target, const TString& txBody, const TVector<TSysTables::TLocksTable::TLock>& locks, ui64 artifactFlags)
@@ -519,25 +545,25 @@ TString TWriteOperation::GetTxBody() const {
     return str;
 }
 
+bool TWriteOperation::RestoreReadSnapshot(const TString& txBody) {
+    auto writeRequest = DeserializeWriteRequest(txBody);
+    if (!writeRequest) {
+        return false;
+    }
+    ReadSnapshot = ExtractReadSnapshot(writeRequest->Record);
+    return true;
+}
+
 bool TWriteOperation::TrySetTxBody(const TString& txBody) {
     Y_ENSURE(!WriteRequest);
 
-    NKikimrTxDataShard::TSerializedEvent proto;
-    const bool success = proto.ParseFromString(txBody);
-    if (!success) {
-        return false;
-    }
-
-    TEventSerializationInfo serializationInfo;
-    serializationInfo.IsExtendedFormat = proto.GetIsExtendedFormat();
-
-    TEventSerializedData buffer(proto.GetEventData(), std::move(serializationInfo));
-    NKikimr::NEvents::TDataEvents::TEvWrite* writeRequest = static_cast<NKikimr::NEvents::TDataEvents::TEvWrite*>(NKikimr::NEvents::TDataEvents::TEvWrite::Load(&buffer));
+    auto writeRequest = DeserializeWriteRequest(txBody);
     if (!writeRequest) {
         return false;
     }
 
-    WriteRequest.reset(writeRequest);
+    ReadSnapshot = ExtractReadSnapshot(writeRequest->Record);
+    WriteRequest = std::move(writeRequest);
     WriteRequestTraceId = NWilson::TTraceId();
     return true;
 }
@@ -558,6 +584,7 @@ bool TWriteOperation::BuildWriteTx(TDataShard* self)
 {
     if (!WriteTx) {
         Y_ENSURE(WriteRequest);
+        ReadSnapshot = ExtractReadSnapshot(WriteRequest->Record);
         WriteTx = std::make_shared<TValidatedWriteTx>(self, GetGlobalTxId(), GetReceivedAt(), *WriteRequest, WriteRequestTraceId, IsMvccSnapshotRead());
     }
     return bool(WriteTx);

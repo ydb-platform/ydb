@@ -41,7 +41,7 @@ bool TCheckWriteUnit::IsReadyToExecute(TOperation::TPtr) const
 }
 
 EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
-                                           TTransactionContext &,
+                                           TTransactionContext &txc,
                                            const TActorContext &ctx)
 {
     Y_ENSURE(!op->IsAborted());
@@ -57,18 +57,39 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
     Y_ENSURE(writeTx);
     Y_ENSURE(writeTx->Ready() || writeTx->RequirePrepare());
 
-    // Snapshot cleanup pins versions of active immediate operations.
-    // Config may force an otherwise valid locked write online after
-    // key validation, where that protection would no longer apply.
-    if (op->IsMvccSnapshotRead() && writeTx->HasOperations() && !op->IsImmediate()) {
-        const TString snapshotError = TStringBuilder()
-            << "Operation " << *op << " cannot write at snapshot " << op->GetMvccSnapshot()
-            << " using a planned transaction at " << DataShard.TabletID();
-        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, snapshotError);
-        op->Abort(EExecutionUnitKind::FinishProposeWrite);
-        YDB_LOG_ERROR_CTX(ctx, "TCheckWriteUnit::Execute: cannot write at snapshot",
-            {"errorMessage", snapshotError});
-        return EExecutionStatus::Executed;
+    if (!op->IsImmediate() && writeTx->HasOperations()) {
+        TString snapshotError;
+        auto snapshotStatus = NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
+        if (op->IsMvccSnapshotRead()) {
+            // Config may force an otherwise valid uncommitted locked write
+            // online after key validation. That execution mode is unsupported.
+            snapshotError = TStringBuilder()
+                << "Operation " << *op << " cannot write at snapshot " << op->GetMvccSnapshot()
+                << " using a planned transaction at " << DataShard.TabletID();
+        } else if (const auto& snapshot = writeOp->GetReadSnapshot();
+            snapshot && *snapshot < DataShard.GetSnapshotManager().GetLowWatermark())
+        {
+            // Final SnapshotRW batches use a read snapshot without LockTxId.
+            // Check it before PREPARED; the queued operation then pins history
+            // until completion, even if its registry registration disappears.
+            for (const auto& operation : writeTx->GetOperations()) {
+                const auto& tableId = operation.GetTableId();
+                if (!DataShard.GetSnapshotManager().IsSnapshotReadable(txc.DB, tableId, *snapshot)) {
+                    snapshotStatus = NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED;
+                    snapshotError = TStringBuilder()
+                        << "Operation " << *op << " writes at stale snapshot " << *snapshot
+                        << " for table " << tableId << " at " << DataShard.TabletID();
+                    break;
+                }
+            }
+        }
+        if (snapshotError) {
+            writeOp->SetError(snapshotStatus, snapshotError);
+            op->Abort(EExecutionUnitKind::FinishProposeWrite);
+            YDB_LOG_ERROR_CTX(ctx, "TCheckWriteUnit::Execute: cannot write at snapshot",
+                {"errorMessage", snapshotError});
+            return EExecutionStatus::Executed;
+        }
     }
 
     // Check if we are out of space and tx wants to update user

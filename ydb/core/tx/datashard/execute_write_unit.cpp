@@ -1005,20 +1005,22 @@ public:
             // Writes such as UPDATE read at the snapshot. Validate history only
             // after classifying duplicate deliveries: already applied operations
             // do not read it again, even when their original snapshot is gone.
-            if (op->IsMvccSnapshotRead()
-                && op->GetMvccSnapshot() < DataShard.GetSnapshotManager().GetLowWatermark())
+            // Planned writes were validated before PREPARED and keep their pin:
+            // they may have already sent COMMIT readsets at this point.
+            if (const auto& snapshot = writeOp->GetReadSnapshot();
+                op->IsImmediate() && snapshot && *snapshot < DataShard.GetSnapshotManager().GetLowWatermark())
             {
-                const auto snapshot = op->GetMvccSnapshot();
                 for (size_t i = 0; i < writeTx->GetOperations().size(); ++i) {
                     if (writeOp->DuplicateWriteOpIdxs.contains(i)) {
                         continue;
                     }
                     const auto& tableId = writeTx->GetOperations()[i].GetTableId();
-                    if (!DataShard.GetSnapshotManager().IsSnapshotReadable(txc.DB, tableId, snapshot)) {
+                    if (!DataShard.GetSnapshotManager().IsSnapshotReadable(txc.DB, tableId, *snapshot)) {
                         const TString snapshotError = TStringBuilder()
-                            << "Operation " << *op << " writes at stale snapshot " << snapshot
+                            << "Operation " << *op << " writes at stale snapshot " << *snapshot
                             << " for table " << tableId << " at " << tabletId;
-                        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, snapshotError);
+                        // The batch is valid, but needs a new transaction snapshot.
+                        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, snapshotError);
                         guardLocks.WriteSeqNumUpdate.Clear();
                         YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD,
                             "TExecuteWriteUnit::Execute: cannot write at snapshot",

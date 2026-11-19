@@ -20,6 +20,10 @@ ENV(NO_KUBER_LOGS=yes)
 
 ENV(WAIT_CLUSTER_ALIVE_TIMEOUT=60)
 
+DEPENDS(
+    ydb/apps/ydb
+)
+
 PEERDIR(
     ydb/tests/functional/lbr/lib
     ydb/tests/functional/tpc/lib

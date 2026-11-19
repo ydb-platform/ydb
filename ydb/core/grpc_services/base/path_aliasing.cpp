@@ -42,7 +42,7 @@ namespace NKikimr::NGRpcService {
             }
         }
         if (appData && appData->FeatureFlags.GetEnableRelativePaths() && resolved.Contains('.')) {
-            auto parts = SplitPath(resolved);
+            auto parts = NKikimr::SplitPath(resolved);
             if (std::erase(parts, TString("."))) {
                 resolved = (resolved.StartsWith('/') ? "/" : "") + JoinPath(parts);
             }

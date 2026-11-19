@@ -509,6 +509,18 @@ namespace NBridgeTest {
         return std::unique_ptr<TResult>(res->Release().Release());
     }
 
+    inline void PutToPileGroup(TEnvironmentSetup& env, ui32 pileGroupId, ui32 nodeId, const TLogoBlobID& id,
+            const TString& data, bool issueKeepFlag = false) {
+        auto res = QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, pileGroupId, nodeId,
+            new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+                .BlobId = id,
+                .Buffer = TRope(data),
+                .Deadline = TInstant::Max(),
+                .IssueKeepFlag = issueKeepFlag,
+            }));
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+    }
+
     // read the blob from the physical group of the pile, so that the bridge proxy can't restore it
     inline NKikimrProto::EReplyStatus ReadFromPileGroup(TEnvironmentSetup& env, ui32 pileGroupId, ui32 nodeId,
             const TLogoBlobID& id, const TString& data) {

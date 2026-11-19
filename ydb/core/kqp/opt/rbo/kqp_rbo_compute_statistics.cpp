@@ -609,6 +609,14 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     for (const auto id : outputIUs) {
         Props.Metadata->HintRelations.Add(id, relation);
     }
+
+    // Pass-through grouping keys keep their source statistics, so joins on them can use NDV
+    for (const auto id : outputIUs) {
+        if (!Aggregations.Keys().Contains(id) && inputMetadata.SourceStatsColumns.Contains(id)) {
+            Props.Metadata->SourceStatsColumns.Add(id);
+        }
+    }
+
     for (const auto id : Aggregations.Keys()) {
         planProps.ColumnLineage.Add(id, TColumnLineageEntry{.SourceAlias = alias, .ColumnName = ::ToString(id), .Relation = relation});
     }

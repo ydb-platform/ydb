@@ -180,6 +180,8 @@ $s = SubqueryExtendFor([1,2,3],$sub);
 PROCESS $s();
 ```
 
+<a id="adding-sorting-to-the-subqueryorderby-template-or-indicating-the-presence-of-this-subqueryassumeorderby"></a>
+
 ## Adding sorting to the SubqueryOrderBy template or indicating the presence of this SubqueryAssumeOrderBy {#subquery-order-by} {#subquery-assume-order-by}
 
 The functions take the following arguments:

@@ -713,7 +713,7 @@ The current implementation uses the original location string when looking up a d
 If the location string begins with `<`, `=`, or `>`, it must be followed by a list index as a decimal number (starting at 0), `first` (the 0th element of the list), or `last` (the last element of the list). Otherwise, location is interpreted as a dictionary key.
 For an empty list, `first` and `last` describe the position beyond the end of the list.
 
-The `MutDown` function is not allowed to create new keys in dictionaries. It can only use the `=` modifier for lists. It generates an error if moving the current node is not possible. The `MutTryDown` function, unlike `MutDown`, returns `false` in the second element of the tuple if moving is not possible.
+The `MutDown` function is not allowed to create new keys in dictionaries. It can only use the `=` modifier for lists. It generates an error if moving the current node is not possible. The `MutTryDown` function returns `false` in the second element of the tuple, for example, if the key or index is missing or the current node is in the `Invalid` or `Deleted` state. It does not suppress all errors: an empty location, an invalid list index, or a mismatch between the original node type and the location type may cause the query to fail.
 If the current node has the `Invalid` or `Deleted` state, the `MutDownOrCreate` function first creates it as an empty list or dictionary, depending on the location type.
 For `MutDownOrCreate`, use a location that matches the current node type: a key for a dictionary, or an index with a modifier for a list. `MutDown` raises an error when the node type does not match the location type.
 

@@ -179,6 +179,8 @@ $s = SubqueryExtendFor([1,2,3],$sub);
 PROCESS $s();
 ```
 
+<a id="dobavlenie-sortirovki-v-shablon-podzaprosa-subqueryorderby-ili-ukazanie-o-nalichii-takovoj-subqueryassumeorderby"></a>
+
 ## Добавление сортировки в шаблон подзапроса SubqueryOrderBy или указание о наличии таковой SubqueryAssumeOrderBy {#subquery-order-by} {#subquery-assume-order-by}
 
 Эти функции принимают аргументы:

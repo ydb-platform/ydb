@@ -2,7 +2,7 @@
 
 {% note info %}
 
-Aggregate functions ignore `NULL` in their arguments, except for `COUNT` when `*` is specified as the argument, as well as `BOOL_AND` / `BOOL_OR` / `BOOL_XOR` functions, in which `NULL` is considered without omissions.
+Most aggregate functions skip `NULL` values. `COUNT(*)` counts all rows, while `BOOL_AND` / `BOOL_OR` / `BOOL_XOR` include `NULL` values. For functions with multiple arguments, the behavior depends on the role of the argument: for example, `MIN_BY` and `MAX_BY` skip rows with `NULL` in the second argument, but may return `NULL` from the first argument.
 
 {% endnote %}
 

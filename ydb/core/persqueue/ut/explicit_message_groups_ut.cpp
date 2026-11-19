@@ -68,7 +68,9 @@ NKikimrPQ::TPQTabletConfig MakeSplitTabletConfig() {
     key.SetName("key");
     key.SetTypeId(NScheme::NTypeIds::Uint64);
 
-    auto addPartition = [&](ui32 id, TMaybe<ui64> fromBound, TMaybe<ui64> toBound, std::initializer_list<ui32> children) {
+    auto addPartition = [&](ui32 id, TMaybe<ui64> fromBound, TMaybe<ui64> toBound,
+            std::initializer_list<ui32> parents, std::initializer_list<ui32> children)
+    {
         for (auto* partition : {config.AddPartitions(), config.AddAllPartitions()}) {
             partition->SetPartitionId(id);
             if (fromBound) {
@@ -77,15 +79,18 @@ NKikimrPQ::TPQTabletConfig MakeSplitTabletConfig() {
             if (toBound) {
                 partition->MutableKeyRange()->SetToBound(SerializeKey(*toBound));
             }
+            for (const ui32 parent : parents) {
+                partition->AddParentPartitionIds(parent);
+            }
             for (const ui32 child : children) {
                 partition->AddChildPartitionIds(child);
             }
         }
     };
 
-    addPartition(0, Nothing(), 200, {1, 2});
-    addPartition(1, Nothing(), 150, {});
-    addPartition(2, 150, 200, {});
+    addPartition(0, Nothing(), 200, {}, {1, 2});
+    addPartition(1, Nothing(), 150, {0}, {});
+    addPartition(2, 150, 200, {0}, {});
     return config;
 }
 

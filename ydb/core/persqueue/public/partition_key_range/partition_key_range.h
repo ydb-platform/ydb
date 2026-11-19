@@ -134,6 +134,7 @@ struct TPartitionKeyRange {
     TMaybe<TSerializedCellVec> ToBound;   // exclusive
 
     static TPartitionKeyRange Parse(const NKikimrPQ::TPartitionKeyRange& proto);
+    static std::optional<TPartitionKeyRange> TryParse(const NKikimrPQ::TPartitionKeyRange& proto);
     void Serialize(NKikimrPQ::TPartitionKeyRange& proto) const;
 
 private:

@@ -95,15 +95,6 @@ struct TPartitionKeyRangeFilter {
     TPartitionKeyRange PartitionKeyRange;
 };
 
-bool TryParseKeyBound(const TString& data, TMaybe<TSerializedCellVec>& bound) {
-    TSerializedCellVec cells;
-    if (!TSerializedCellVec::TryParse(data, cells)) {
-        return false;
-    }
-    bound = std::move(cells);
-    return true;
-}
-
 std::optional<TPartitionKeyRangeFilter> MakePartitionKeyRangeFilter(const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
     if (!tabletConfig.PartitionKeySchemaSize()) {
         return std::nullopt;
@@ -116,16 +107,12 @@ std::optional<TPartitionKeyRangeFilter> MakePartitionKeyRangeFilter(const NKikim
         return std::nullopt;
     }
 
-    TPartitionKeyRange partitionKeyRange;
-    const auto& keyRange = partition->GetKeyRange();
-    if (keyRange.HasFromBound() && !TryParseKeyBound(keyRange.GetFromBound(), partitionKeyRange.FromBound)) {
-        return std::nullopt;
-    }
-    if (keyRange.HasToBound() && !TryParseKeyBound(keyRange.GetToBound(), partitionKeyRange.ToBound)) {
+    auto partitionKeyRange = TPartitionKeyRange::TryParse(partition->GetKeyRange());
+    if (!partitionKeyRange) {
         return std::nullopt;
     }
 
-    return TPartitionKeyRangeFilter{MakePartitionKeyTypes(tabletConfig), std::move(partitionKeyRange)};
+    return TPartitionKeyRangeFilter{MakePartitionKeyTypes(tabletConfig), std::move(*partitionKeyRange)};
 }
 
 } // anonymous

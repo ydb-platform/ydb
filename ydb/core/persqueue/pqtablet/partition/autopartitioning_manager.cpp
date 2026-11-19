@@ -16,6 +16,7 @@
 
 #include <library/cpp/time_provider/time_provider.h>
 
+#include <util/generic/size_literals.h>
 #include <util/generic/strbuf.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
@@ -212,7 +213,8 @@ protected:
             canSplit = canSplit || KeysManager.MoreThanOneKey(now - TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
         }
         if (!KeyTypes.empty()) {
-            canSplit = HasDistinctKeySamples(now);
+            canSplit = usagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()
+                && ChooseKeySplitBoundary().has_value();
         }
 
         auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
@@ -372,34 +374,22 @@ protected:
     };
 
     void AddKeySample(const TString& key, ui64 weight, TInstant now) {
+        if (key.size() > MaxKeySampleSize) {
+            return;
+        }
         if (KeySamples.size() == MaxKeySamples) {
             KeySamples.pop_front();
         }
         KeySamples.push_back({key, weight, now});
     }
 
-    TInstant GetKeySamplesDeadline(TInstant now) const {
-        return now - TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds());
-    }
-
-    bool HasDistinctKeySamples(TInstant now) const {
-        const auto deadline = GetKeySamplesDeadline(now);
-        const TString* first = nullptr;
-        for (const auto& sample : KeySamples) {
-            if (sample.Timestamp < deadline) {
-                continue;
-            }
-            if (!first) {
-                first = &sample.Key;
-            } else if (sample.Key != *first) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     std::optional<TString> ChooseKeySplitBoundary() {
-        const auto deadline = GetKeySamplesDeadline(TAppData::TimeProvider->Now());
+        const auto keyRange = TPartitionKeyRange::TryParse(GetKeyRange());
+        if (!keyRange) {
+            return std::nullopt;
+        }
+
+        const auto deadline = TAppData::TimeProvider->Now() - TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds());
         TVector<TWeightedKey> keys;
         keys.reserve(KeySamples.size());
         for (const auto& sample : KeySamples) {
@@ -407,11 +397,12 @@ protected:
                 keys.push_back({sample.Key, sample.Weight});
             }
         }
-        return ChooseSplitBoundary(keys, TPartitionKeyRange::Parse(GetKeyRange()), KeyTypes);
+        return ChooseSplitBoundary(keys, *keyRange, KeyTypes);
     }
 
     static constexpr auto DEFAULT_NUM_SKETCHES = 100;
     static constexpr size_t MaxKeySamples = 256;
+    static constexpr size_t MaxKeySampleSize = 4_KB;
 
     const NKikimrPQ::TPQTabletConfig& Config;
     const ETag Tag;

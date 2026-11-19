@@ -817,9 +817,7 @@ void DoCreatePqPart(
 
     if (pqParams.ReplicationAutoPartitioning || pqParams.KeyRangeAutoPartitioning) {
         auto * ps = pqConfig.MutablePartitionStrategy();
-        ps->SetPartitionStrategyType(pqParams.KeyRangeAutoPartitioning
-            ? ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_PAUSED
-            : ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+        ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
         ps->SetMinPartitionCount(pqParams.MinPartitionCount);
         ps->SetMaxPartitionCount(pqParams.MaxPartitionCount);
         ps->SetScaleThresholdSeconds(30);

@@ -135,6 +135,26 @@ TPartitionKeyRange TPartitionKeyRange::Parse(const NKikimrPQ::TPartitionKeyRange
     return result;
 }
 
+std::optional<TPartitionKeyRange> TPartitionKeyRange::TryParse(const NKikimrPQ::TPartitionKeyRange& proto) {
+    auto tryParseBound = [](const TString& data, TMaybe<TSerializedCellVec>& bound) {
+        TSerializedCellVec cells;
+        if (!TSerializedCellVec::TryParse(data, cells)) {
+            return false;
+        }
+        bound.ConstructInPlace(std::move(cells));
+        return true;
+    };
+
+    TPartitionKeyRange result;
+    if (proto.HasFromBound() && !tryParseBound(proto.GetFromBound(), result.FromBound)) {
+        return std::nullopt;
+    }
+    if (proto.HasToBound() && !tryParseBound(proto.GetToBound(), result.ToBound)) {
+        return std::nullopt;
+    }
+    return result;
+}
+
 void TPartitionKeyRange::Serialize(NKikimrPQ::TPartitionKeyRange& proto) const {
     if (FromBound) {
         proto.SetFromBound(FromBound->GetBuffer());
@@ -230,6 +250,16 @@ std::optional<TString> ChooseSplitBoundary(TConstArrayRef<TWeightedKey> keys, co
 
     if (!boundary) {
         return std::nullopt;
+    }
+
+    const auto lower = parsed[*boundary - 1].Cells->GetCells();
+    const auto upper = parsed[*boundary].Cells->GetCells();
+    for (size_t prefixSize = 1; prefixSize < keyTypes.size(); ++prefixSize) {
+        TVector<TCell> prefix(upper.begin(), upper.begin() + prefixSize);
+        prefix.resize(keyTypes.size());
+        if (CompareTypedCellVectors(prefix.data(), lower.data(), keyTypes.data(), keyTypes.size()) > 0) {
+            return TSerializedCellVec::Serialize(prefix);
+        }
     }
 
     return parsed[*boundary].Cells->GetBuffer();

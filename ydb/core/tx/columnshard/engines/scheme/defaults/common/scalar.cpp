@@ -517,6 +517,9 @@ TConclusion<Ydb::TypedValue> TColumnDefaultScalarValue::SerializeToTypedValue(co
         case arrow::Type::BINARY: {
             const TString bytes = static_cast<const arrow::BinaryScalar&>(*Value).value->ToString();
             if (type.GetTypeId() == NScheme::NTypeIds::JsonDocument) {
+                if (!NBinaryJson::IsValidBinaryJson(bytes)) {
+                    return TConclusionStatus::Fail("Invalid JsonDocument default");
+                }
                 outType->set_type_id(Ydb::Type::JSON_DOCUMENT);
                 value->set_text_value(NBinaryJson::SerializeToJson(bytes));
                 break;

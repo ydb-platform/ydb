@@ -276,8 +276,10 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         CompareYson(R"([[[%true];["xy"];["{}"]]])", SelectYson(db, "SELECT Flag, Payload, Doc FROM `/Root/DefTypes` WHERE Key = 1;"));
     }
 
-    Y_UNIT_TEST(NotNullDefaultOmitMatchesRowTable) {
-        TKikimrRunner kikimr(DefaultsSettings());
+    Y_UNIT_TEST_TWIN(NotNullDefaultOmitMatchesRowTable, CompileTimeDefaults) {
+        auto settings = DefaultsSettings();
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(CompileTimeDefaults);
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
         for (const char* side : {"Ds", "Cs"}) {
             const TString store = TString(side) == "Cs" ? "WITH (STORE = COLUMN)" : "";

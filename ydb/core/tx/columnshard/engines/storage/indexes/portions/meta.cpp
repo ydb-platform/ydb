@@ -1,12 +1,10 @@
 #include "meta.h"
 
-#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
-
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
@@ -29,16 +27,24 @@ TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> TIndexByC
             if (fill) {
                 const auto loader = indexInfo.GetColumnLoaderVerified(i);
                 const auto& features = indexInfo.GetColumnFeaturesVerified(i);
-                auto array = NArrow::TThreadSimpleArraysCache::Get(features.GetArrowField()->type(), fill, recordsCount);
-                auto trivial = std::make_shared<NArrow::NAccessor::TTrivialArray>(array);
-                const auto loadContext = loader->BuildAccessorContext(recordsCount);
-                auto constructed = loader->GetAccessorConstructor()->Construct(trivial, loadContext);
-                if (constructed.IsFail()) {
-                    return TConclusionStatus::Fail(constructed.GetErrorMessage());
+                THashMap<ui32, std::pair<std::shared_ptr<NArrow::NAccessor::IChunkedArray>, NArrow::NAccessor::TBlobWithAdditionalAccessorData>>
+                    serializedBySize;
+                std::vector<std::shared_ptr<IPortionDataChunk>> constChunks;
+                ui16 chunkIdx = 0;
+                for (auto&& chunk : ISnapshotSchema::BuildAbsentColumnChunks(features.GetArrowField()->type(), fill, recordsCount)) {
+                    auto it = serializedBySize.find(chunk->GetRecordsCount());
+                    if (it == serializedBySize.end()) {
+                        const auto loadContext = loader->BuildAccessorContext(chunk->GetRecordsCount());
+                        auto constructed = loader->GetAccessorConstructor()->Construct(chunk, loadContext);
+                        if (constructed.IsFail()) {
+                            return TConclusionStatus::Fail(constructed.GetErrorMessage());
+                        }
+                        auto blobAndMeta = loader->GetAccessorConstructor()->SerializeToBlobAndMeta(*constructed, loadContext);
+                        it = serializedBySize.emplace(chunk->GetRecordsCount(), std::make_pair(*constructed, std::move(blobAndMeta))).first;
+                    }
+                    constChunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
+                        it->second.second.Blob, it->second.first, TChunkAddress(i, chunkIdx++), features, it->second.second.Meta));
                 }
-                auto blobAndMeta = loader->GetAccessorConstructor()->SerializeToBlobAndMeta(*constructed, loadContext);
-                std::vector<std::shared_ptr<IPortionDataChunk>> constChunks = { std::make_shared<NChunks::TChunkPreparation>(
-                    std::move(blobAndMeta.Blob), *constructed, TChunkAddress(i, 0), features, std::move(blobAndMeta.Meta)) };
                 columnReaders.emplace_back(constChunks, loader);
                 continue;
             }

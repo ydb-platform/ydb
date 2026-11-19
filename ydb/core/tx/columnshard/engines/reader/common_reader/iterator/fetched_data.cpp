@@ -8,19 +8,6 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-void TFetchedData::SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& portionSchema,
-    const ISnapshotSchema& resultSchema, const ui32 recordsCount) {
-    for (auto&& i : fields) {
-        const ui32 id = resultSchema.GetColumnId(i->name());
-        if (GetTable().HasColumn(id)) {
-            continue;
-        }
-        const auto fill = ISnapshotSchema::GetAbsentColumnFill(portionSchema, resultSchema, id);
-        MutableTable().AddVerified(
-            id, std::make_shared<NArrow::NAccessor::TTrivialArray>(NArrow::TThreadSimpleArraysCache::Get(i->type(), fill, recordsCount)), true);
-    }
-}
-
 void TFetchedData::AddFetchers(const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchers) {
     for (auto&& i : fetchers) {
         YDB_LOG_VERIFY(Fetchers.emplace(i->GetEntityId(), i).second,

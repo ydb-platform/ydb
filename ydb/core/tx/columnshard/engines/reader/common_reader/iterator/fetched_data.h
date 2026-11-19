@@ -128,9 +128,6 @@ public:
         return GetTable().GetFilteredCount(recordsCount, defLimit);
     }
 
-    void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& portionSchema,
-        const ISnapshotSchema& resultSchema, const ui32 recordsCount);
-
     const std::shared_ptr<NArrow::TColumnFilter>& GetAppliedFilter() const {
         return GetTable().GetAppliedFilter();
     }

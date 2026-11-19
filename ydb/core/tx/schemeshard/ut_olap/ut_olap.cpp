@@ -663,6 +663,29 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {{NKikimrScheme::StatusSchemeError, "Cannot set and drop default value of column 'data' in one request"}});
     }
 
+    Y_UNIT_TEST(InvalidJsonDocumentDefaultRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableCsDefaultValues(true));
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        const TExpectedResult rejected(NKikimrScheme::StatusSchemeError, "Invalid JsonDocument default");
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "doc" Type: "JsonDocument" DefaultValue { Scalar { Bytes: "" } } } }
+        )", {rejected});
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "doc" Type: "JsonDocument" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AlterColumns { Name: "doc" DefaultScalar { Scalar { Bytes: "" } } } }
+        )", {rejected});
+    }
+
     Y_UNIT_TEST_FLAG(PgTypesRejected, EnableTablePgTypes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(EnableTablePgTypes));

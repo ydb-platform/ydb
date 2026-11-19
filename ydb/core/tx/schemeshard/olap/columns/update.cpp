@@ -195,6 +195,10 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
                 "incompatible types for default write: def" + DefaultValue.DebugString() + ", col:" + (*arrowTypeResult)->ToString());
             return false;
         }
+        if (const auto typed = DefaultValue.SerializeToTypedValue(Type); typed.IsFail()) {
+            errors.AddError(typed.GetErrorMessage());
+            return false;
+        }
         CreatedDefaultValue = DefaultValue;
     } else {
         CreatedDefaultValue = NOlap::TColumnDefaultScalarValue();
@@ -330,6 +334,10 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         if (!DefaultValue.IsCompatibleType(columnArrowType)) {
             errors.AddError(
                 "incompatible types for default write: def" + DefaultValue.DebugString() + ", col:" + columnArrowType->ToString());
+            return false;
+        }
+        if (const auto typed = DefaultValue.SerializeToTypedValue(Type); typed.IsFail()) {
+            errors.AddError(typed.GetErrorMessage());
             return false;
         }
     }

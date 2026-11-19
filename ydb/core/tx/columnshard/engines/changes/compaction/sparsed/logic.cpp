@@ -14,14 +14,15 @@ namespace NKikimr::NOlap::NCompaction {
 void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergingContext) {
     Inputs = input;
     ui32 idx = 0;
+    const auto outputDefault = Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()).GetDefaultValue().GetValue();
     for (auto&& p : Inputs) {
+        std::shared_ptr<arrow::Scalar> fill = Context.GetDefaultValue();
+        const auto& portionSchemas = mergingContext.GetPortionSchemas();
+        const bool hasPortionSchema = idx < portionSchemas.size() && portionSchemas[idx] && Context.GetSchemaInfo();
+        if (hasPortionSchema) {
+            fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchemas[idx], *Context.GetSchemaInfo(), Context.GetColumnId());
+        }
         if (!p) {
-            std::shared_ptr<arrow::Scalar> fill = Context.GetDefaultValue();
-            const auto& portionSchemas = mergingContext.GetPortionSchemas();
-            if (idx < portionSchemas.size() && portionSchemas[idx] && Context.GetSchemaInfo()) {
-                fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchemas[idx], *Context.GetSchemaInfo(), Context.GetColumnId());
-            }
-            const auto outputDefault = Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()).GetDefaultValue().GetValue();
             if (!NArrow::ScalarEqualsNullable(fill, outputDefault)) {
                 const auto& containers = mergingContext.GetInputContainers();
                 const ui32 rows = idx < containers.size() && containers[idx] ? containers[idx]->num_rows() : 0;
@@ -62,8 +63,6 @@ void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor
                 }
                 if (current->GetType() == EType::SparsedArray) {
                     const auto sparsed = std::static_pointer_cast<NArrow::NAccessor::TSparsedArray>(current);
-                    const auto outputDefault =
-                        Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()).GetDefaultValue().GetValue();
                     if (!NArrow::ScalarEqualsNullable(sparsed->GetDefaultValue(), outputDefault)) {
                         current = std::make_shared<NArrow::NAccessor::TTrivialChunkedArray>(sparsed->GetChunkedArray());
                     }
@@ -71,7 +70,9 @@ void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor
             };
             expand(expand, item);
         };
-        materializeMismatched(p);
+        if (!hasPortionSchema || !NArrow::ScalarEqualsNullable(fill, outputDefault)) {
+            materializeMismatched(p);
+        }
         Cursors.emplace_back(TSparsedChunkCursor(p, Context.GetLoader(), idx++));
     }
 }

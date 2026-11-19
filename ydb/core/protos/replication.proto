@@ -37,6 +37,12 @@ message TReplicationDefaults {
     optional uint32 ConsumerAvailabilityPeriodSeconds = 6 [default = 86400]; // 1d
     optional uint32 SourceOffsetCommitIntervalMilliSeconds = 7 [default = 1000];
     optional bool EnableDataLossDetection = 8 [default = true];
+    // Enable on the destination only after all source clusters support __omit_backup.
+    // Keep false until the minimum supported source version supports the attribute.
+    optional bool EnableOmitBackupAttribute = 9 [default = false];
+    // Enable only after all source servers preserve read-response/status ordering.
+    // Requires EnableDataLossDetection; read when a worker is created.
+    optional bool EnableStatusBasedDataLossDetection = 10 [default = false];
 }
 
 message TStaticCredentials {
@@ -156,6 +162,22 @@ message TReplicationConfig {
         // transfer  specified objects
         TTransferSpecific TransferSpecific = 8;
     }
+
+    // How the destination tables get their initial contents. Named explicitly rather than encoded
+    // in InitialScan, which says only whether a scan happens and not who creates the destination.
+    enum EBootstrapMode {
+        BOOTSTRAP_MODE_UNSPECIFIED = 0;
+        // The controller creates the destination tables and copies the rows (InitialScan = true).
+        BOOTSTRAP_MODE_SCAN = 1;
+        // The controller creates placeholders; the operator fills them and hands over with
+        // STANDBY (InitialScan = false).
+        BOOTSTRAP_MODE_IMPORT = 2;
+        // The destination tables already exist and already hold the data, as the old primary's do
+        // after a planned role switchover: the controller demotes each one to a read-only replica
+        // in place and copies nothing. Cluster administrators only.
+        BOOTSTRAP_MODE_SWITCHOVER = 3;
+    }
+    optional EBootstrapMode Bootstrap = 13;
 
     reserved 6; // InitialSync
 }
@@ -532,6 +554,7 @@ message TSchemaChange {
             COMPRESSION_UNSPECIFIED = 0;
             COMPRESSION_OFF = 1;
             COMPRESSION_LZ4 = 2;
+            COMPRESSION_ZSTD = 3;
         }
 
         enum ECacheMode {
@@ -544,6 +567,7 @@ message TSchemaChange {
         optional string Media = 2;
         optional ECompression Compression = 3;
         optional ECacheMode CacheMode = 4;
+        optional uint32 CompressionLevel = 5 [default = 1];
     }
 
     message TIndex {

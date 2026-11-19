@@ -92,6 +92,43 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
             new TEvYdbProxy::TEvRenameTablesRequest({}, {}));
     }
 
+    Y_UNIT_TEST(ShutdownRepliesToPendingDeleteSession) {
+        bool replied = false;
+        {
+            TEnv<> env(true, NTestHelpers::ERuntimeMode::Simulated);
+            auto& runtime = env.GetRuntime();
+            NYdb::NTable::TTableClient client(env.GetDriver());
+            auto session = env.RunCall([&] {
+                return client.CreateSession().GetValueSync().GetSession();
+            });
+
+            TAutoPtr<IEventHandle> pending;
+            auto captured = NThreading::NewPromise();
+            auto observer = runtime.AddObserver<NGRpcService::TEvProxyRuntimeEvent>(
+                [&](NGRpcService::TEvProxyRuntimeEvent::TPtr& ev) {
+                    if (ev->Get()->GetRpcMethodName().EndsWith("/DeleteSession")) {
+                        UNIT_ASSERT(!pending);
+                        pending.Reset(ev.Release());
+                        captured.SetValue();
+                    }
+                });
+            env.RunCall([&] {
+                session.Close();
+                captured.GetFuture().GetValueSync();
+            });
+            observer.Remove();
+
+            auto* request = dynamic_cast<NGRpcService::IRequestProxyCtx*>(pending->GetBase());
+            UNIT_ASSERT(request);
+            request->SetRespHook([&replied](NGRpcService::TRespHookCtx::TPtr ctx) {
+                replied = true;
+                ctx->Pass();
+            });
+            runtime.Send(pending.Release());
+        }
+        UNIT_ASSERT_C(replied, "Shutdown did not reply to the accepted DeleteSession request");
+    }
+
     Y_UNIT_TEST(MakeDirectory) {
         TEnv env;
         // ok

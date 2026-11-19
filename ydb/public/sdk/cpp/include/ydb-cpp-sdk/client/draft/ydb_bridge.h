@@ -67,6 +67,7 @@ enum class EPileState {
     SUSPENDED = 5,
     DISCONNECTED = 6,
     INACTIVE = 7,
+    HOT_STANDBY = 8, // Best-effort writes outside quorums; rejoin before promotion.
 };
 
 struct TPileStateUpdate {

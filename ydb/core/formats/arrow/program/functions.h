@@ -39,7 +39,7 @@ public:
         if (const auto* accessor = std::get_if<std::shared_ptr<NAccessor::IChunkedArray>>(&Data)) {
             return *accessor;
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return Default<std::shared_ptr<NAccessor::IChunkedArray>>();
     }
 
@@ -47,7 +47,7 @@ public:
         if (const auto* scalar = std::get_if<std::shared_ptr<arrow::Scalar>>(&Data)) {
             return *scalar;
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return Default<std::shared_ptr<arrow::Scalar>>();
     }
 
@@ -432,7 +432,7 @@ private:
 
     TConclusion<std::shared_ptr<arrow::Scalar>> GetKernelOutputForNullInput(
         const TAccessorsCollection::TChunkedArguments::TBatch& batch) const {
-        AFL_VERIFY(batch.Dictionary);
+        YDB_LOG_VERIFY(batch.Dictionary);
         std::vector<arrow::Datum> nullArguments = batch.Arguments;
         const auto nullInputType = GetKernelType(batch.Dictionary->GetDictionary()->type());
         auto nullArgument = arrow::MakeArrayFromScalar(*arrow::MakeNullScalar(nullInputType), 1);
@@ -460,7 +460,7 @@ public:
         : TBase(needConcatenation)
         , Function(kernelsFunction)
         , FunctionOptions(functionOptions) {
-        AFL_VERIFY(Function);
+        YDB_LOG_VERIFY(Function);
     }
 
     TConclusion<TFunctionResult> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override {

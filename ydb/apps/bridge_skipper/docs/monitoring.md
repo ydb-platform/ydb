@@ -228,7 +228,8 @@ plans and updates are native JSON objects and an absent plan is JSON null.
 | `plaintext_token` | Warning at startup: a token is configured with `grpc://` endpoints |
 | `token_reloaded` | Info with `category` `credentials`, written to stderr as a raw JSON line: a re-read token file changed; no token bytes or path |
 | `view_change` | `generation`, `states`, `explanation`: Initial for the first selected view (not counted), otherwise Explained or Unexplained; Unexplained warns |
-| `configured_endpoint_ignored` | Warning: `endpoint`, `pile`; the configured pile is absent from the selected view |
+| `endpoint_discovered` | Info: `endpoint`, `pile`; learned address awaiting its own SelfCheck identity verification |
+| `configured_endpoint_ignored` | Warning: `endpoint`, `pile`; the configured pile is absent, inactive or disconnected in the selected view |
 | `decision` | `kind`, `reason`, `plan`; one info record per change of any of them |
 | `mutation_sent` | `invocation_id`, `expected_generation`, `endpoint`, `update` |
 | `mutation_outcome` | `invocation_id`, `expected_generation`, `endpoint`, exact `status`, `outcome`, redacted `issues` |
@@ -271,3 +272,12 @@ plans, receipts and process-local rejection latches, while mode/high-water/pendi
 restore from schema 3. Operation lookup retains 1000 completed attempts plus
 endpoint-bounded in-flight attempts; 404 means unavailable, never cancelled or
 proven unsent. Retain service logs externally for a complete incident record.
+
+Endpoint discovery uses RPC metric method `endpoint_inventory` for the complete
+FetchConfig/ListEndpoints refresh. Discovery errors are exposed in the source
+endpoint's `last_error`; `INVALID_DISCOVERY_CONFIG`,
+`DISCOVERY_CONFIG_UNAVAILABLE`, `DISCOVERY_INVENTORY_TOO_LARGE` and
+`INVALID_DISCOVERY_ENDPOINT` reject the refresh without changing pile states.
+`ENDPOINT_NODE_MISMATCH` excludes a learned endpoint whose SelfCheck node ID does
+not match its advertisement. Inactive, disconnected and absent piles are hidden
+from `endpoints`; their lifecycle remains visible in `view.piles` until removed.

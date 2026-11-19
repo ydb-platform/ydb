@@ -413,7 +413,7 @@ static void CreateDirs(std::shared_ptr<TVector<TString>> partsHolder, size_t ind
             CreateDirs(partsHolder, index + 1, promise, createDir);
         });
 
-    TString basePath = NKikimr::NKqp::NSchemeHelpers::CombinePath(parts.begin(), parts.begin() + index);
+    TString basePath = NKikimr::CombinePath(parts.begin(), parts.begin() + index);
 
     createDir(basePath, parts[index], partPromise);
 }

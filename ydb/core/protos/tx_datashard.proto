@@ -453,6 +453,7 @@ message TKqpVectorSearchSettings {
 
     // Inconsistent online RO: the reads carry neither a snapshot nor a lock.
     optional bool AllowInconsistentReads = 28;
+    optional NKikimrProto.TPathID HnswIndexId = 29;
 }
 
 message TKqpTaskInfo {
@@ -512,6 +513,15 @@ message TSnapshotTransaction {
     optional TDropVolatileSnapshot DropVolatileSnapshot = 2;
 }
 
+message TMvccRemovedRowVersions {
+    message TRange {
+        // Removed half-open interval [LowerInclusive, UpperExclusive).
+        optional NKikimrProto.TRowVersion LowerInclusive = 1;
+        optional NKikimrProto.TRowVersion UpperExclusive = 2;
+    }
+    repeated TRange Ranges = 1;
+}
+
 message TSnapshotTransferReadSet {
     optional bytes BorrowedSnapshot = 1;
     optional uint64 MinWriteVersionStep = 2;
@@ -525,6 +535,7 @@ message TSnapshotTransferReadSet {
     optional uint64 MvccImmediateWriteEdgeStep = 10;
     optional uint64 MvccImmediateWriteEdgeTxId = 11;
     optional bool WithOpenTxs = 12;
+    optional TMvccRemovedRowVersions RemovedRowVersions = 13;
 }
 
 message TSnapshotTransferInfo {
@@ -931,6 +942,8 @@ message TEvSplitAck {
 message TTableSnapshot {
     optional uint64 TableId = 1; // tableid in term of localDB
     optional bytes SnapshotData = 2;
+    // Presence distinguishes an empty set from snapshots sent by older shards.
+    optional TMvccRemovedRowVersions RemovedRowVersions = 3;
 }
 
 message TPersistentSnapshot {
@@ -1593,6 +1606,7 @@ message TEvEraseRowsRequest {
     repeated bytes KeyColumns = 3; // SerilializedCellVector
     optional uint64 SchemaVersion = 5;
     optional uint64 OverloadSubscribe = 6;
+    optional bool WriteToTableShadow = 7;
 
     oneof Condition {
         TExpirationCondition Expiration = 4;
@@ -1849,6 +1863,8 @@ message TEvLocalKMeansRequest {
     optional bool OverlapOutForeign = 26;
 
     optional NKikimrTx.TKeyRange KeyRange = 27;
+
+    optional NKikimrSchemeOp.EIndexType IndexType = 28 [default = EIndexTypeGlobalVectorKmeansTree];
 }
 
 message TEvLocalKMeansResponse {
@@ -1907,6 +1923,8 @@ message TEvReshuffleKMeansRequest {
     optional bool OverlapOutForeign = 20;
 
     optional NKikimrTx.TKeyRange KeyRange = 21;
+
+    optional NKikimrSchemeOp.EIndexType IndexType = 22 [default = EIndexTypeGlobalVectorKmeansTree];
 }
 
 message TEvReshuffleKMeansResponse {
@@ -2035,9 +2053,75 @@ message TEvPrefixKMeansRequest {
 
     optional bool Adaptive = 25;
     optional uint32 Levels = 26;
+
+    optional NKikimrSchemeOp.EIndexType IndexType = 27 [default = EIndexTypeGlobalVectorKmeansTree];
 }
 
 message TEvPrefixKMeansResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 RequestSeqNoGeneration = 4;
+    optional uint64 RequestSeqNoRound = 5;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 6;
+    repeated Ydb.Issue.IssueMessage Issues = 7;
+
+    reserved 8 to 11;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+
+    optional bytes LastKeyAck = 13;
+}
+
+// Applies main table changes in (FromSnapshot, ToSnapshot] to the shadow copy of
+// a vector index posting table. Changed rows are resolved into clusters via the
+// already built level tables: old posting rows are erased, new ones are inserted,
+// and newly discovered prefixes are added to the prefix table.
+//
+// The scan is queued at ToSnapshot, so the whole row version history down to
+// FromSnapshot has to be retained.
+message TEvDeltaKMeansRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 FromSnapshotTxId = 4;
+    optional uint64 FromSnapshotStep = 5;
+    optional uint64 ToSnapshotTxId = 6;
+    optional uint64 ToSnapshotStep = 7;
+
+    optional uint64 SeqNoGeneration = 8;
+    optional uint64 SeqNoRound = 9;
+
+    optional Ydb.Table.VectorIndexSettings Settings = 10;
+
+    optional string LevelName = 11;
+    optional string OutputName = 12;
+    // Empty for a non-prefixed index.
+    optional string PrefixName = 13;
+    // Number of leading index key columns forming the prefix, 0 for a non-prefixed index.
+    optional uint32 PrefixColumns = 14;
+
+    optional string EmbeddingColumn = 15;
+    repeated string DataColumns = 16;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 17;
+    optional string DatabaseName = 18;
+
+    optional uint32 OverlapClusters = 19;
+    optional double OverlapRatio = 20;
+
+    optional NKikimrTx.TKeyRange KeyRange = 21;
+
+    // Names of the index prefix columns, in the index key order. Empty for a
+    // non-prefixed index; when empty, PrefixColumns leading table key columns are used.
+    repeated string PrefixColumnNames = 22;
+}
+
+message TEvDeltaKMeansResponse {
     optional uint64 Id = 1;
 
     optional uint64 TabletId = 2;
@@ -2975,6 +3059,7 @@ message TEvInMemoryStateResponse {
 // Once the operation is done, any deleted data not used initially
 // will be included in garbage collection requests for the blobstorage.
 // Note: deleted data may still be used for a while, e.g. for history for MVCC.
+// Completion does not invalidate retained snapshots or wait for their release.
 message TEvVacuum {
     optional uint64 VacuumGeneration = 1; // increasing sequence
 }

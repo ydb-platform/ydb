@@ -59,6 +59,8 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
 
 void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeInfo, const TCell& cell);
 
+// Converts a complete ACL state. For a present input, an omitted
+// interrupt_inheritance field is interpreted as false.
 bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
     const TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest>& in,
     TString& error);

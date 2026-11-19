@@ -1,7 +1,9 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/bscontroller/indir.h>
 #include <ydb/core/mind/bscontroller/impl.h>
@@ -622,6 +624,79 @@ namespace {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
+    Y_UNIT_TEST(DistconfOwnsDataCenterStates) {
+        using TDataCenter = NKikimrBlobStorage::TDataCenterState;
+        TTestActorRuntimeBase::TEventFilter previousFilter;
+        TDataCenterStatesEnv env;
+        auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+        const auto baseConfig = FetchBaseConfig(&env);
+        auto countRealmsInDc2 = [](const TBaseConfig& snapshot, TDataCenter::EState state) {
+            ui32 count = 0;
+            for (const auto& group : snapshot.GetGroup()) {
+                for (const auto& realm : group.GetFailRealms()) {
+                    if (realm.GetDataCenter() == "2" && realm.GetState() == state) {
+                        ++count;
+                    }
+                }
+            }
+            return count;
+        };
+        const ui32 realmsInDc2 = countRealmsInDc2(baseConfig, TDataCenter::INCLUDED);
+        UNIT_ASSERT_VALUES_EQUAL(realmsInDc2, 4); // one realm in each mirror-3-dc group
+        for (const auto& host : baseConfig.GetNode()) {
+            auto *node = config->AddAllNodes();
+            node->SetNodeId(host.GetNodeId());
+            node->SetHost(host.GetHostKey().GetFqdn());
+            node->SetPort(host.GetHostKey().GetIcPort());
+            node->MutableLocation()->CopyFrom(host.GetLocation());
+        }
+        auto *dc = config->MutableDataCenterStates()->AddDataCenter();
+        dc->SetName("2");
+        dc->SetState(TDataCenter::EXCLUDED);
+        dc = config->MutableDataCenterStates()->AddDataCenter();
+        dc->SetName("1");
+        dc->SetState(TDataCenter::INCLUDED);
+
+        previousFilter = env.Runtime->SetEventFilter([config, &previousFilter](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                auto *message = event->Get<TEvNodeWardenStorageConfig>();
+                message->Config = config;
+                message->SelfManagementEnabled = true;
+            }
+            return previousFilter(runtime, event);
+        });
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        const TInstant deadline = env.Runtime->GetCurrentTime() + env.Timeout;
+        for (;;) {
+            const ui32 excluded = countRealmsInDc2(FetchBaseConfig(&env), TDataCenter::EXCLUDED);
+            if (excluded == realmsInDc2) {
+                break;
+            }
+            UNIT_ASSERT_C(env.Runtime->GetCurrentTime() < deadline,
+                "After restart BSC excluded " << excluded << " of " << realmsInDc2 << " realms in DC 2");
+            env.Runtime->SimulateSleep(TDuration::Seconds(1));
+        }
+        env.CheckStates(env.ReadGroups(), TDataCenter::EXCLUDED);
+
+        auto request = env.Define({{"1", TDataCenter::INCLUDED}, {"2", TDataCenter::EXCLUDED}});
+        auto *command = request.MutableCommand(0)->MutableDefineDataCenterStates();
+        auto result = env.Invoke(request);
+        UNIT_ASSERT_C(result.GetSuccess(), result.DebugString());
+        UNIT_ASSERT(ParseDataCenterStates(result.GetAppliedDataCenterStates()).value() == ParseDataCenterStates(command->GetDataCenter()).value());
+        auto repeated = env.Invoke(request);
+        UNIT_ASSERT(repeated.GetSuccess());
+        UNIT_ASSERT(ParseDataCenterStates(repeated.GetAppliedDataCenterStates()).value() == ParseDataCenterStates(command->GetDataCenter()).value());
+        command->MutableDataCenter(1)->SetState(TDataCenter::INCLUDED);
+        UNIT_ASSERT(!env.Invoke(request).GetSuccess());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        command->MutableDataCenter(1)->SetState(TDataCenter::EXCLUDED);
+        auto afterRestart = env.Invoke(request);
+        UNIT_ASSERT(afterRestart.GetSuccess());
+        UNIT_ASSERT(ParseDataCenterStates(afterRestart.GetAppliedDataCenterStates()).value() == ParseDataCenterStates(command->GetDataCenter()).value());
+        env.CheckStates(env.ReadGroups(), TDataCenter::EXCLUDED);
+        env.Runtime->SetEventFilter(previousFilter);
+    }
+
     Y_UNIT_TEST(GroupStateSatellitePromotesAndPersists) {
         using TFailRealm = TDataCenterStatesEnv::TFailRealm;
         TDataCenterStatesEnv env([](TTestActorRuntime& runtime) {
@@ -661,6 +736,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
         const std::array<TFailRealm::EState, 3> initial{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED};
         ui32 probes = 0;
+        ui32 repairs = 0;
+        std::unique_ptr<IEventHandle> pendingRepair;
         TTestActorRuntimeBase::TEventFilter previousFilter;
         previousFilter = env.Runtime->SetEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == TEvBlobStorage::EvVStatus) {
@@ -676,12 +753,43 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                     return true;
                 }
             }
+            if (event->GetTypeRewrite() == NGroupSyncer::TEvRunMirror3dcRepair::EventType) {
+                const auto& request = event->Get<NGroupSyncer::TEvRunMirror3dcRepair>()->Record;
+                if (request.GetGroupId() == groupId) {
+                    UNIT_ASSERT(!request.GetCancel());
+                    UNIT_ASSERT(!pendingRepair);
+                    ++repairs;
+                    pendingRepair.reset(event.Release());
+                    return true;
+                }
+            }
             return previousFilter(runtime, event);
         });
+        auto completeRepair = [&](EMirror3dcGroupState expectedState) {
+            for (ui32 attempt = 0; attempt < 10 && !pendingRepair; ++attempt) {
+                env.Runtime->SimulateSleep(TDuration::Seconds(6));
+            }
+            UNIT_ASSERT(pendingRepair);
+            const NKikimrBlobStorage::TGroupInfo pending = env.ReadGroups().at(groupId);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(pending.GetMirror3dcState()), ui32(expectedState));
+            const auto& request = pendingRepair->Get<NGroupSyncer::TEvRunMirror3dcRepair>()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(request.GetGeneration(), pending.GetGroupGeneration());
+            env.Runtime->SimulateSleep(TDuration::Seconds(12));
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), pending.SerializeAsString());
+            std::unique_ptr<NGroupSyncer::TEvRunMirror3dcRepairResult> result =
+                std::make_unique<NGroupSyncer::TEvRunMirror3dcRepairResult>();
+            result->Record.SetGroupId(groupId);
+            result->Record.SetGeneration(request.GetGeneration());
+            result->Record.SetStatus(NKikimrProto::OK);
+            env.Runtime->Send(new IEventHandle(pendingRepair->Sender, pendingRepair->Recipient,
+                result.release(), 0, pendingRepair->Cookie), 0, true);
+            pendingRepair.reset();
+        };
         auto start = env.SetGroupStates(groupId, initial, NKikimrBlobStorage::TGroupState::DC_FAILURE);
         start.MutableCommand(0)->MutableDefineGroupState()->MutableGroups(0)->SetGroupState(
             NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING);
         UNIT_ASSERT(env.Invoke(start).GetSuccess());
+        completeRepair(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING);
         NKikimrBlobStorage::TGroupInfo promoted;
         for (ui32 attempt = 0; attempt < 10; ++attempt) {
             env.Runtime->SimulateSleep(TDuration::Seconds(6));
@@ -703,6 +811,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             definition->AddFailRealmStates(realm.GetState());
         }
         UNIT_ASSERT(env.Invoke(enable).GetSuccess());
+        completeRepair(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING);
         for (ui32 attempt = 0; attempt < 10; ++attempt) {
             env.Runtime->SimulateSleep(TDuration::Seconds(6));
             promoted = env.ReadGroups().at(groupId);
@@ -716,6 +825,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(ui32(promoted.GetRings(2).GetState()), ui32(TFailRealm::EXCLUDED));
         UNIT_ASSERT_VALUES_EQUAL(promoted.GetGroupGeneration(), initialGeneration + 3);
         UNIT_ASSERT_VALUES_EQUAL(probes, 12);
+        UNIT_ASSERT_VALUES_EQUAL(repairs, 2);
         // A delayed proposal for the previous generation must not overwrite the new state.
         NKikimrBlobStorage::TConfigRequest stale = env.SetGroupStates(groupId, initial, NKikimrBlobStorage::TGroupState::DC_FAILURE);
         stale.MutableCommand(0)->MutableDefineGroupState()->MutableGroups(0)->SetExpectedGroupGeneration(initialGeneration);
@@ -961,7 +1071,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
         NKikimrBlobStorage::TDefineDataCenterStates* command = excludeAll.AddCommand()->MutableDefineDataCenterStates();
         for (const TString& dataCenter : dataCenters) {
-            NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter* item = command->AddDataCenter();
+            NKikimrBlobStorage::TDataCenterStates::TDataCenter* item = command->AddDataCenter();
             item->SetName(dataCenter);
             item->SetState(TDataCenter::EXCLUDED);
         }
@@ -1091,10 +1201,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         using DC = TDataCenterStatesEnv::TDataCenter;
         TDataCenterStatesEnv env;
         const auto before = env.ReadGroups();
+        auto unknownState = env.Define({});
+        // DataCenter { Name: "2" State: 77 }
+        UNIT_ASSERT(unknownState.MutableCommand(0)->MutableDefineDataCenterStates()->ParseFromString(
+            TString("\x0a\x05\x0a\x01" "2" "\x10\x4d", 7)));
         for (const auto& request : {
                 env.Define({{"", DC::EXCLUDED}}),
                 env.Define({{"2", DC::EXCLUDED}, {"2", DC::INCLUDED}}),
-                env.Define({{"2", static_cast<DC::EState>(77)}}),
+                unknownState,
                 env.Define({{"1", DC::EXCLUDED}, {"2", DC::EXCLUDED}})}) {
             UNIT_ASSERT(!env.Invoke(request).GetSuccess());
         }

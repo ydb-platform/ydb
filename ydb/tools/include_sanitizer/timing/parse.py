@@ -1,7 +1,9 @@
 """Parse a single clang ``-ftime-trace`` JSON into compact metrics.
 
 clang emits a Chrome Trace Event file: ``{"traceEvents": [...], ...}``.
-Relevant duration events (``ph == "X"``, ``dur`` in microseconds):
+Duration events use either ``ph == "X"`` with ``dur`` in microseconds,
+or paired ``ph == "b"`` / ``ph == "e"`` with timestamps (Clang 20 Source
+events). Relevant event names:
 
 - ``ExecuteCompiler``       — whole-TU wall time (our TU total).
 - ``Total Frontend``        — parsing + sema (where includes/templates cost).
@@ -20,7 +22,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Iterable, Iterator, Optional
 
 
 # clang time-trace "detail" location forms seen in practice:
@@ -77,6 +79,31 @@ class TuTiming:
     totals: Dict[str, int] = field(default_factory=dict)
 
 
+def duration_events(events: Iterable[dict]) -> Iterator[dict]:
+    """Yield complete durations, including LLVM's async begin/end pairs.
+
+    LLVM writes each async pair together, in completion order, reusing
+    id=0. Preserve that order: sorting by timestamp before pairing can
+    incorrectly match nested includes. Incomplete pairs are ignored.
+    """
+    pending = {}
+    for event in events:
+        phase = event.get("ph")
+        if phase == "X":
+            yield event
+        elif phase in ("b", "e"):
+            key = tuple(event.get(k) for k in ("pid", "tid", "cat", "id"))
+            if phase == "b":
+                pending[key] = event
+            else:
+                begin = pending.pop(key, None)
+                if begin is None:
+                    continue
+                start, end = begin.get("ts"), event.get("ts")
+                if start is not None and end is not None and end >= start:
+                    yield dict(begin, ph="X", dur=end - start)
+
+
 def parse_trace(path: Path, tu_name: Optional[str] = None) -> Optional[TuTiming]:
     try:
         with path.open("r", encoding="utf-8") as fh:
@@ -92,9 +119,7 @@ def parse_trace(path: Path, tu_name: Optional[str] = None) -> Optional[TuTiming]
     frontend_sum = 0
     backend_sum = 0
 
-    for e in events:
-        if e.get("ph") != "X":
-            continue
+    for e in duration_events(events):
         name = e.get("name") or ""
         dur = e.get("dur") or 0
         if name == "ExecuteCompiler":

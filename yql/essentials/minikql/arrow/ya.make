@@ -3,6 +3,8 @@ YQL_LIBRARY()
 SRCS(
     arrow_util.cpp
     mkql_functions.cpp
+    arrow_defs.cpp
+    mkql_bit_utils.cpp
 )
 
 PEERDIR(

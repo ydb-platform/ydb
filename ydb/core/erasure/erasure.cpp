@@ -126,7 +126,7 @@ bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TContiguousSpan& buf
         if (buf.size() == 0) {
                 return true;
         } else {
-            Y_ABORT_UNLESS(buf.size() > sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
+            Y_ABORT_UNLESS(buf.size() >= sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
                     " is less then crcSize# %" PRIu64, (ui64)buf.size(), (ui64)sizeof(ui32));
             ui32 crc = Crc32c(buf.data(), buf.size() - sizeof(ui32));
             ui32 expectedCrc = ReadUnaligned<ui32>(buf.data() + buf.size() - sizeof(ui32));
@@ -144,7 +144,7 @@ bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TRope& rope) {
             if (rope.IsEmpty()) {
                 return true;
             } else {
-                Y_ABORT_UNLESS(rope.size() > sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
+                Y_ABORT_UNLESS(rope.size() >= sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
                         " is less then crcSize# %" PRIu64, (ui64)rope.size(), (ui64)sizeof(ui32));
 
                 size_t bytesRemain = rope.size() - sizeof(ui32);
@@ -1963,6 +1963,7 @@ void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, T
 const std::unordered_map<TErasureType::EErasureSpecies, TString> TErasureType::ErasureNames{{
     {TErasureType::EErasureSpecies::ErasureNone, "none"},
     {TErasureType::EErasureSpecies::Erasure4Plus2Block ,"block-4-2"},
+    {TErasureType::EErasureSpecies::Erasure8Plus2Block ,"block-8-2"},
     {TErasureType::EErasureSpecies::ErasureMirror3dc ,"mirror-3-dc"},
     {TErasureType::EErasureSpecies::Erasure4Plus3Block ,"block-4-3"},
     // {TErasureType::EErasureSpecies::Erasure3Plus3Block ,"block-3-3"},

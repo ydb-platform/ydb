@@ -45,24 +45,28 @@ bool IsValidPredicateToKeep(TMaybeNode<TExprBase> node) {
     return true;
 }
 
-TExprNode::TPtr ApplyPeephole(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, TRBOContext& ctx) {
+// The lambda after peephole takes the row first, then `extraArgs` in the same order.
+TExprNode::TPtr ApplyPeephole(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, const TExprNode::TListType& extraArgs, TRBOContext& ctx) {
     Y_ENSURE(lambdaArg->GetTypeAnn());
-    auto newArg = Build<TCoArgument>(ctx.ExprCtx, input->Pos())
+    const auto pos = input->Pos();
+    auto newArg = Build<TCoArgument>(ctx.ExprCtx, pos)
         .Name("new_arg").Done().Ptr();
     newArg->SetTypeAnn(lambdaArg->GetTypeAnn());
     lambdaArg->CopyConstraints(*newArg);
 
-    // clang-format off
+    TExprNode::TListType args{newArg};
     TVector<const TTypeAnnotationNode *> argTypes{lambdaArg->GetTypeAnn()};
-    auto olapPredicateClosure = Build<TKqpPredicateClosure>(ctx.ExprCtx, input->Pos())
-        .Lambda<TCoLambda>()
-            .Args({newArg})
-            .Body<TExprApplier>()
-                .Apply(TExprBase(input))
-                .With(TExprBase(lambdaArg), TExprBase(newArg))
-            .Build()
-        .Build()
-        .ArgsType(ExpandType(input->Pos(), *ctx.ExprCtx.MakeType<TTupleExprType>(argTypes), ctx.ExprCtx))
+    for (const auto& arg : extraArgs) {
+        Y_ENSURE(arg->GetTypeAnn());
+        args.push_back(arg);
+        argTypes.push_back(arg->GetTypeAnn());
+    }
+    auto body = ctx.ExprCtx.ReplaceNode(std::move(input), *lambdaArg, newArg);
+
+    // clang-format off
+    auto olapPredicateClosure = Build<TKqpPredicateClosure>(ctx.ExprCtx, pos)
+        .Lambda(ctx.ExprCtx.NewLambda(pos, ctx.ExprCtx.NewArguments(pos, std::move(args)), std::move(body)))
+        .ArgsType(ExpandType(pos, *ctx.ExprCtx.MakeType<TTupleExprType>(argTypes), ctx.ExprCtx))
     .Done();
     // clang-format on
 
@@ -81,6 +85,73 @@ TExprNode::TPtr ApplyPeephole(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, 
     Y_ENSURE(afterPeephole);
     YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO OLAP FILTER] After peephole: " << KqpExprToPrettyString(TExprBase(afterPeephole), ctx.ExprCtx);
     return TExprBase(afterPeephole).Cast<TKqpPredicateClosure>().Lambda().Ptr();
+}
+
+// A call the column shard computes itself, as `KqpOlapJsonValue`, `KqpOlapJsonExists` or an ILIKE kernel.
+bool IsNativeOlapCall(const TExprNode::TPtr& node, const TExprNode& lambdaArg) {
+    if (const auto jsonValue = TMaybeNode<TCoJsonValue>(node)) {
+        return CanBePushedAsOlapJsonValue(jsonValue.Cast(), &lambdaArg);
+    }
+    if (const auto jsonExists = TMaybeNode<TCoJsonExists>(node)) {
+        return CanBePushedAsOlapJsonExists(jsonExists.Cast(), &lambdaArg);
+    }
+    return node->IsCallable() && IgnoreCaseSubstringMatchFunctions.contains(node->Content());
+}
+
+struct TNativeOlapCall {
+    TExprNode::TPtr Placeholder;
+    TExprNode::TPtr Call;
+};
+
+// Peephole expands the native calls into UDF calls, which the column shard can only run through `KqpOlapApply`.
+// So each of them becomes a placeholder argument of the same type, as the old optimizer collects predicates before
+// any peephole. A call that reads anything but the row stays, because a placeholder cannot carry other arguments.
+TExprNode::TPtr HideNativeOlapCalls(const TExprNode::TPtr& predicate, const TExprNode& lambdaArg, TExprContext& ctx,
+                                    TVector<TNativeOlapCall>& calls) {
+    TNodeOnNodeOwnedMap replaces;
+    VisitExpr(predicate, [&](const TExprNode::TPtr& node) {
+        if (!IsNativeOlapCall(node, lambdaArg) || !node->GetTypeAnn()) {
+            return true;
+        }
+        if (FindNode(node, [&](const TExprNode::TPtr& child) { return child->IsArgument() && child.Get() != &lambdaArg; }) != nullptr) {
+            return true;
+        }
+        auto placeholder = ctx.NewArgument(node->Pos(), TStringBuilder() << "native_olap_call_" << calls.size());
+        placeholder->SetTypeAnn(node->GetTypeAnn());
+        replaces.emplace(node.Get(), placeholder);
+        calls.push_back({std::move(placeholder), node});
+        return false;
+    });
+    return ctx.ReplaceNodes(TExprNode::TPtr(predicate), replaces);
+}
+
+// Runs the peephole over the predicate with the native calls kept as they are.
+// Returns the row argument of the predicate after the peephole and the predicate itself.
+std::pair<TExprNode::TPtr, TExprNode::TPtr> ApplyPeepholeKeepingNativeOlapCalls(TExprNode::TPtr predicate, TExprNode::TPtr lambdaArg, TRBOContext& ctx) {
+    TVector<TNativeOlapCall> calls;
+    auto hidden = HideNativeOlapCalls(predicate, *lambdaArg, ctx.ExprCtx, calls);
+    TExprNode::TListType placeholders;
+    for (const auto& call : calls) {
+        placeholders.push_back(call.Placeholder);
+    }
+
+    const auto lambda = TCoLambda(ApplyPeephole(std::move(hidden), lambdaArg, placeholders, ctx));
+    if (lambda.Args().Size() != calls.size() + 1) {
+        YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO OLAP FILTER] Unexpected number of lambda arguments after peephole, the native calls are not kept";
+        const auto plainLambda = TCoLambda(ApplyPeephole(std::move(predicate), lambdaArg, {}, ctx));
+        return {plainLambda.Args().Arg(0).Ptr(), plainLambda.Body().Ptr()};
+    }
+
+    // Peephole may rebuild the lambda, so the placeholders are matched by their positions. The calls read the new row argument.
+    const auto rowArg = lambda.Args().Arg(0).Ptr();
+    const TNodeOnNodeOwnedMap rowReplaces{{lambdaArg.Get(), rowArg}};
+    TNodeOnNodeOwnedMap callReplaces(calls.size());
+    for (size_t i = 0; i < calls.size(); ++i) {
+        auto call = ctx.ExprCtx.ReplaceNodes<true>(TExprNode::TListType{calls[i].Call}, rowReplaces).front();
+        callReplaces.emplace(lambda.Args().Arg(i + 1).Raw(), std::move(call));
+    }
+    auto body = ctx.ExprCtx.ReplaceNodes<true>(TExprNode::TListType{lambda.Body().Ptr()}, callReplaces).front();
+    return {rowArg, std::move(body)};
 }
 
 } // anonymous namespace
@@ -120,9 +191,9 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     .Done();
     // clang-format on
 
-    auto lambdaAfterRewrite = TExprBase(ApplyPeephole(predicate.Ptr(), lambda.Args().Arg(0).Ptr(), ctx)).Cast<TCoLambda>();
-    lambdaArg = lambdaAfterRewrite.Args().Arg(0).Ptr();
-    predicate = lambdaAfterRewrite.Body();
+    auto [rowArg, predicateAfterRewrite] = ApplyPeepholeKeepingNativeOlapCalls(predicate.Ptr(), lambda.Args().Arg(0).Ptr(), ctx);
+    lambdaArg = std::move(rowArg);
+    predicate = TExprBase(predicateAfterRewrite);
 
     TOLAPPredicateNode predicateTree;
     predicateTree.ExprNode = predicate.Ptr();
@@ -138,22 +209,42 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     if (pushdownOptions.AllowOlapApply) {
         TVector<TOLAPPredicateNode> remainingAfterApply;
         for (const auto& predicateExprHolder : remaining) {
-            auto lambdaAfterPeephole = TExprBase(ApplyPeephole(predicateExprHolder.ExprNode, lambdaArg, ctx)).Cast<TCoLambda>();
+            // As in the old optimizer, the column shard computes each pushable JSON_VALUE with `KqpOlapJsonValue` and
+            // passes its value into `KqpOlapApply`, instead of the whole JSON column.
+            TVector<TOlapExternalArg> externalArgs;
+            const auto predicateWithExternalArgs =
+                ReplaceJsonValuesWithExternalArgs(predicateExprHolder.ExprNode, *lambdaArg, ctx.ExprCtx, pushdownOptions, externalArgs);
+            TExprNode::TListType externalArgNodes;
+            for (const auto& externalArg : externalArgs) {
+                externalArg.Arg->SetTypeAnn(externalArg.Type);
+                externalArgNodes.push_back(externalArg.Arg);
+            }
+
+            auto lambdaAfterPeephole = TExprBase(ApplyPeephole(predicateWithExternalArgs, lambdaArg, externalArgNodes, ctx)).Cast<TCoLambda>();
             auto lArg = lambdaAfterPeephole.Args().Arg(0);
             auto predicate = lambdaAfterPeephole.Body();
+
+            // Peephole may rebuild the lambda, so external arguments are matched by their positions.
+            YQL_ENSURE(lambdaAfterPeephole.Args().Size() == externalArgs.size() + 1, "Unexpected number of lambda arguments after peephole");
+            TNodeOnNodeOwnedMap externalArgsMap(externalArgs.size());
+            for (size_t i = 0; i < externalArgs.size(); ++i) {
+                externalArgsMap.emplace(lambdaAfterPeephole.Args().Arg(i + 1).Raw(), externalArgs[i].OlapExpression);
+            }
+            const auto applyPushdownOptions = pushdownOptions.WithExternalArgs(&externalArgsMap);
+
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
             CollectPredicates(predicate, predicateTree, &lArg.Ref(), lArg.Ptr()->GetTypeAnn(),
-                pushdownOptions.WithAllowOlapApply(true));
+                applyPushdownOptions.WithAllowOlapApply(true));
 
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
             auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);
             for (const auto& predicate : pushable) {
                 if (predicate.CanBePushed) {
-                    auto pred = PredicatePushdown(TExprBase(predicate.ExprNode), lArg.Ref(), ctx.ExprCtx, input->Pos, pushdownOptions);
+                    auto pred = PredicatePushdown(TExprBase(predicate.ExprNode), lArg.Ref(), ctx.ExprCtx, input->Pos, applyPushdownOptions);
                     pushedPredicates.emplace_back(pred);
                 } else {
-                    auto expr = YqlApplyPushdown(TExprBase(predicate.ExprNode), lArg.Ref(), ctx.ExprCtx, pushdownOptions);
+                    auto expr = YqlApplyPushdown(TExprBase(predicate.ExprNode), lArg.Ref(), ctx.ExprCtx, applyPushdownOptions);
                     TFilterOpsLevels pred(expr);
                     pushedPredicates.emplace_back(pred);
                 }

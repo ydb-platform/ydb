@@ -474,6 +474,26 @@ INode::TPtr CreateGeneratedValue(const TGeneratedColumn& generated, TPosition po
     return node.Q(node.Y(contextText, exprText, node.Q(generated.Stored ? "stored" : "virtual")));
 }
 
+std::pair<INode::TPtr, INode::TPtr> BuildDefaultExpressionSource(
+    const TDefaultExpression& defaultExpr,
+    TPosition pos)
+{
+    const ui32 flags = NYql::TAstNodeFlags::ArbitraryContent | NYql::TAstNodeFlags::UnstableFormat;
+    auto contextText = BuildQuotedAtom(pos, defaultExpr.ContextPrefix, flags);
+    auto exprText = BuildQuotedAtom(pos, defaultExpr.ExprText, flags);
+    return {std::move(contextText), std::move(exprText)};
+}
+
+INode::TPtr CreateSetDefaultValueConstraint(const TDefaultExpression& defaultExpr, TPosition pos, const INode& node) {
+    auto [contextText, exprText] = BuildDefaultExpressionSource(defaultExpr, pos);
+    return node.Q(node.Y(node.Q("setDefaultValue"), defaultExpr.Expr, contextText, exprText));
+}
+
+INode::TPtr CreateDefaultSourceConstraint(const TDefaultExpression& defaultExpr, TPosition pos, const INode& node) {
+    auto [contextText, exprText] = BuildDefaultExpressionSource(defaultExpr, pos);
+    return node.Q(node.Y(node.Q("defaultSource"), node.Q(node.Y(contextText, exprText))));
+}
+
 } // namespace
 
 class TPrepTableKeys: public ITableKeys {
@@ -1353,12 +1373,14 @@ public:
                     columnConstraints = L(columnConstraints, Q(Y(Q("serial"))));
                 }
 
-                if (col.DefaultExpr) {
-                    if (!col.DefaultExpr->Init(ctx, src)) {
+                if (col.Default && col.Default->Expr) {
+                    const auto& defaultExpr = *col.Default;
+                    if (!defaultExpr.Expr->Init(ctx, src)) {
                         return false;
                     }
 
-                    columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
+                    columnConstraints = L(columnConstraints, Q(Y(Q("default"), defaultExpr.Expr)));
+                    columnConstraints = L(columnConstraints, CreateDefaultSourceConstraint(defaultExpr, Pos_, *this));
                 }
 
                 if (col.Generated) {
@@ -1722,12 +1744,14 @@ public:
                     columnConstraints = L(columnConstraints, Q(Y(Q("serial"))));
                 }
 
-                if (col.DefaultExpr) {
-                    if (!col.DefaultExpr->Init(ctx, src)) {
+                if (col.Default && col.Default->Expr) {
+                    const auto& defaultExpr = *col.Default;
+                    if (!defaultExpr.Expr->Init(ctx, src)) {
                         return false;
                     }
 
-                    columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
+                    columnConstraints = L(columnConstraints, Q(Y(Q("default"), defaultExpr.Expr)));
+                    columnConstraints = L(columnConstraints, CreateDefaultSourceConstraint(defaultExpr, Pos_, *this));
                 }
 
                 if (col.Generated) {
@@ -1822,12 +1846,15 @@ public:
                         auto columnDesc = Y();
                         columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
 
-                        YQL_ENSURE(col.DefaultExpr);
-                        if (!col.DefaultExpr->Init(ctx, src)) {
+                        YQL_ENSURE(col.Default);
+                        YQL_ENSURE(col.Default->Expr);
+
+                        const auto& defaultExpr = *col.Default;
+                        if (!defaultExpr.Expr->Init(ctx, src)) {
                             return false;
                         }
 
-                        columnDesc = L(columnDesc, Q(Y(Q("setDefaultValue"), col.DefaultExpr)));
+                        columnDesc = L(columnDesc, CreateSetDefaultValueConstraint(defaultExpr, Pos_, *this));
                         columns = L(columns, Q(columnDesc));
 
                         break;

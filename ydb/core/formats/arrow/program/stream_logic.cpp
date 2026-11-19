@@ -22,7 +22,7 @@ namespace NKikimr::NArrow::NSSA {
 
 TConclusion<TExecutionResult> TStreamLogicProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    AFL_VERIFY(context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce()));
+    YDB_LOG_VERIFY(context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce()));
     return TExecutionResult::Done();
 }
 
@@ -58,7 +58,7 @@ TConclusion<bool> TStreamLogicProcessor::CombineInput(const ui32 inputId, const 
 
 TConclusion<bool> TStreamLogicProcessor::OnInputReady(
     const ui32 inputId, const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    AFL_VERIFY(!context.GetResources().HasMarker(FinishMarker));
+    YDB_LOG_VERIFY(!context.GetResources().HasMarker(FinishMarker));
     const auto& accumulatedResult = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
     std::optional<bool> monoResult;
     if (accumulatedResult) {
@@ -82,10 +82,12 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
             return HandleMonoValue(*isMonoInput.GetResult(), false, accumulatedResult, context);
         }
         if (!accumulatedResult) {
-            AFL_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id())("type", accessorInput->GetDataType()->ToString());
+            YDB_LOG_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id(),
+                {"type", accessorInput->GetDataType()->ToString()});
             context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accessorInput, false);
         } else if (monoResult) {
-            AFL_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id())("type", accessorInput->GetDataType()->ToString());
+            YDB_LOG_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id(),
+                {"type", accessorInput->GetDataType()->ToString()});
             context.MutableResources().Upsert(GetOutputColumnIdOnce(), accessorInput, false);
             return IsFinishAccessor(accessorInput);
         } else {
@@ -95,7 +97,8 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
     } else {
         const auto& scalarInput = context.GetResources().GetConstantScalarVerified(inputId);
         if (!scalarInput->is_valid) {
-            AFL_VERIFY(scalarInput->type->id() == arrow::uint8()->id())("type", scalarInput->type->ToString());
+            YDB_LOG_VERIFY(scalarInput->type->id() == arrow::uint8()->id(),
+                {"type", scalarInput->type->ToString()});
             if (!accumulatedResult) {
                 context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
                     std::make_shared<NAccessor::TTrivialArray>(TStatusValidator::GetValid(arrow::MakeArrayFromScalar(
@@ -156,7 +159,7 @@ public:
         }
         auto s = b.Serialize();
         Kernels = NYql::LoadKernels(s, *Registry, Factory);
-        AFL_VERIFY(Kernels.size() == operations.size() * kernelsPerOperation);
+        YDB_LOG_VERIFY(Kernels.size() == operations.size() * kernelsPerOperation);
 
         for (size_t operationIndex = 0; operationIndex < operations.size(); ++operationIndex) {
             const auto& firstKernel = Kernels[operationIndex * kernelsPerOperation];
@@ -179,7 +182,7 @@ TStreamLogicProcessor::TStreamLogicProcessor(
     } else if (Operation == NKernels::EOperation::Or) {
         Function = std::make_shared<TKernelFunction>(Singleton<TSpecFunctionsOperator>()->GetORKernel());
     } else {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 }
 
@@ -191,7 +194,7 @@ NJson::TJsonValue TStreamLogicProcessor::DoDebugJson() const {
 
 bool TStreamLogicProcessor::IsFinishAccessor(const std::shared_ptr<IChunkedArray>& accessor) const {
     const auto arrChecker = [&](const arrow::Array& arr) {
-        AFL_VERIFY(arr.type()->id() == arrow::uint8()->id());
+        YDB_LOG_VERIFY(arr.type()->id() == arrow::uint8()->id());
         const arrow::UInt8Array& ui8Arr = static_cast<const arrow::UInt8Array&>(arr);
         const ui8* values = ui8Arr.raw_values();
         if (Operation == NKernels::EOperation::And) {
@@ -207,7 +210,8 @@ bool TStreamLogicProcessor::IsFinishAccessor(const std::shared_ptr<IChunkedArray
                 }
             }
         } else {
-            AFL_VERIFY(false)("op", Operation);
+            YDB_LOG_VERIFY(false,
+                {"op", Operation});
         }
         return true;
     };
@@ -234,8 +238,9 @@ TConclusion<std::optional<bool>> TStreamLogicProcessor::GetMonoInput(const std::
 }
 
 TConclusion<bool> TStreamLogicProcessor::GetMonoInput(const std::shared_ptr<arrow::Scalar>& scalar) const {
-    AFL_VERIFY(scalar);
-    AFL_VERIFY(scalar->type->id() == arrow::uint8()->id())("type", scalar->type->ToString());
+    YDB_LOG_VERIFY(scalar);
+    YDB_LOG_VERIFY(scalar->type->id() == arrow::uint8()->id(),
+        {"type", scalar->type->ToString()});
     return static_cast<const arrow::UInt8Scalar*>(scalar.get())->value != 0;
 }
 

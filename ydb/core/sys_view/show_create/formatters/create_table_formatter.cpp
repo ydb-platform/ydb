@@ -1024,6 +1024,11 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
         del = ", ";
     }
 
+    if (familyDesc.HasColumnCodecLevel()) {
+        Stream << del << "COMPRESSION_LEVEL = " << familyDesc.GetColumnCodecLevel();
+        del = ", ";
+    }
+
     if (cacheMode) {
         Stream << del << "CACHE_MODE = " << "\"" << cacheMode << "\"";
     }

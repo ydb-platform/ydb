@@ -10,6 +10,7 @@
 #include "util.h"
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
@@ -431,9 +432,25 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         if (!prevBridgeInfo) {
             changed = true;
         } else {
-            changed = std::size(prevBridgeInfo->Piles) != std::size(BridgeInfo->Piles); // list of piles has changed
+            changed = prevBridgeInfo->IsImplicit != BridgeInfo->IsImplicit ||
+                std::size(prevBridgeInfo->Piles) != std::size(BridgeInfo->Piles); // list of piles has changed
             for (size_t k = 0; !changed && k < std::size(BridgeInfo->Piles); ++k) {
-                changed = prevBridgeInfo->Piles[k].State != BridgeInfo->Piles[k].State;
+                const auto& pile = BridgeInfo->Piles[k];
+                changed = prevBridgeInfo->Piles[k].State != pile.State ||
+                    prevBridgeInfo->Piles[k].IsFreeSlot != pile.IsFreeSlot;
+                const NKikimrBridge::TClusterStateDetails::TPileSyncState* previousSync = nullptr;
+                if (prevStorageConfig) {
+                    for (const auto& sync : prevStorageConfig->GetClusterStateDetails().GetPileSyncState()) {
+                        if (TBridgePileId::FromProto(&sync,
+                                &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId) == pile.BridgePileId) {
+                            previousSync = &sync;
+                            break;
+                        }
+                    }
+                }
+                const auto* currentSync = FindPileSyncState(pile.BridgePileId);
+                changed |= bool(previousSync) != bool(currentSync) || (previousSync && currentSync &&
+                    previousSync->GetBecameUnsyncedGeneration() != currentSync->GetBecameUnsyncedGeneration());
             }
         }
         if (changed) {
@@ -446,6 +463,10 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             if (Loaded) {
                 UpdateDatabaseSpaceOnPileChanges();
             }
+        }
+    } else if (prevBridgeInfo) {
+        for (const auto& [groupId, group] : GroupMap) {
+            SysViewChangedGroups.insert(groupId);
         }
     }
 
@@ -481,6 +502,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     if (Loaded) {
         ApplyStorageConfig();
+        ReconcileDataCenterStates();
     }
 
     ApplyStaticGroupUpdateForSyncers(prevStaticGroups);
@@ -708,6 +730,30 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
     }
 
     return nullptr;
+}
+
+void TBlobStorageController::RetryDataCenterStates() {
+    DataCenterRetryScheduled = false;
+    ReconcileDataCenterStates();
+}
+
+void TBlobStorageController::ReconcileDataCenterStates() {
+    if (!SelfManagementEnabled || !StorageConfig || !StorageConfig->HasDataCenterStates()) {
+        return;
+    }
+    std::expected<TDataCenterStates, TString> desired = ParseDataCenterStates(StorageConfig->GetDataCenterStates());
+    if (!desired || *desired == DataCenterStates) {
+        return;
+    }
+    auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+    auto *command = request->Record.MutableRequest()->AddCommand()->MutableDefineDataCenterStates();
+    command->MutableDataCenter()->CopyFrom(StorageConfig->GetDataCenterStates().GetDataCenter());
+    Send(SelfId(), request.release());
+    if (!DataCenterRetryScheduled) {
+        DataCenterRetryScheduled = true;
+        TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvReconcileDataCenterStates,
+            0, SelfId(), {}, nullptr, 0));
+    }
 }
 
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
@@ -1179,6 +1225,7 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvRetryBridgeGroupModes, HandleRetryBridgeGroupModes);
         cFunc(TEvPrivate::EvCheckBridgeGroupModes, HandleCheckBridgeGroupModes);
         cFunc(TEvPrivate::EvRetrySyncers, HandleRetrySyncers);
+        cFunc(TEvPrivate::EvReconcileDataCenterStates, RetryDataCenterStates);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         hFunc(TEvBlobStorage::TEvControllerDDiskInfoListTablets, Handle);

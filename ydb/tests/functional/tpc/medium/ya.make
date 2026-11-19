@@ -11,13 +11,16 @@ TEST_SRCS(
     test_upload.py
     test_import_csv.py
     test_default_path.py
-    test_workload_manager.py
-    test_tpcc.py
+    test_tpch_wm.py
+    test_wm_oltp.py
+    test_wm_oltp_tpch.py
+    test_wm_oltp_adhoc.py
+    test_clickbench_wm.py
+    test_tpcc_sdk.py
+    test_tpcc_legacy.py
 )
 
-FORK_TESTS()
 FORK_TEST_FILES()
-FORK_SUBTESTS()
 
 REQUIREMENTS(ram:16 cpu:1)
 

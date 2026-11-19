@@ -8,6 +8,8 @@
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -283,6 +285,7 @@ TResult ApplyChangesInt(
     const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes();
 
     std::vector<std::pair<bool, Ydb::Topic::Consumer>> consumers;
+    THashSet<TString> replicationConsumers;
 
     i32 dropped = 0;
     for (const auto& c : pqTabletConfig->GetConsumers()) {
@@ -303,6 +306,9 @@ TResult ApplyChangesInt(
         if (!pqTabletConfig->GetEnableCompactification() && (oldName == NPQ::CLIENTID_COMPACTION_CONSUMER || name == NPQ::CLIENTID_COMPACTION_CONSUMER))
             continue;
 
+        if (c.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            replicationConsumers.insert(oldName);
+        }
         consumers.push_back({false, Ydb::Topic::Consumer{}}); // do not check service type for presented consumers
         auto& consumer = consumers.back().second;
 
@@ -359,6 +365,17 @@ TResult ApplyChangesInt(
     }
     if (auto errorCode = consumersAdvancedMonitoringSettings.CheckForUnknownConsumers(error); errorCode != Ydb::StatusIds::SUCCESS) {
         return {errorCode, std::move(error)};
+    }
+
+    // FillConsumer/AddConsumer cannot carry the internal replication type through
+    // Ydb::Topic::Consumer. Restore it for consumers that survived this alter.
+    for (auto& consumer : *pqTabletConfig->MutableConsumers()) {
+        if (replicationConsumers.contains(consumer.GetName())) {
+            consumer.SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+        }
+    }
+    if (auto result = ApplyReplicationConsumerAttribute(request.alter_attributes(), *pqTabletConfig); !result) {
+        return result;
     }
 
     if (request.has_set_metrics_level()) {
@@ -496,7 +513,8 @@ NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlter
         .Strategy = std::make_unique<TAlterTopicStrategy>(std::move(settings.Request)),
         .IfExists = settings.IfExists,
         .PrepareOnly = settings.PrepareOnly,
-        .Cookie = settings.Cookie
+        .Cookie = settings.Cookie,
+        .EnableRelativePaths = true,
     });
 }
 

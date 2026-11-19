@@ -1178,3 +1178,37 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyConnection) {
 }
 
 }   // namespace NFq
+
+namespace NFq {
+Y_UNIT_TEST_SUITE(TExternalServiceConnectionStorage) {
+    Y_UNIT_TEST(CreateDescribeListAndAccess) {
+        NConfig::TControlPlaneStorageConfig config;
+        config.AddAvailableConnection("EXTERNAL_SERVICE");
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__, config };
+        auto request = TCreateConnectionBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).Build();
+        auto* service = request.mutable_content()->mutable_setting()->mutable_external_service();
+        service->set_protocol(FederatedQuery::ExternalService::HTTP);
+        service->set_endpoint("https://service.test");
+        service->mutable_auth()->mutable_token()->set_token("private-token");
+        (*service->mutable_headers())["X-Api-Key"] = "private-header";
+        const auto [created, createIssues] = bootstrap.CreateConnection(request);
+        UNIT_ASSERT_C(!createIssues, createIssues.ToString());
+        const auto describe = TDescribeConnectionBuilder{}.SetConnectionId(created.connection_id()).Build();
+        const auto [described, describeIssues] = bootstrap.DescribeConnection(describe);
+        UNIT_ASSERT_C(!describeIssues, describeIssues.ToString());
+        const auto& visible = described.connection().content().setting().external_service();
+        UNIT_ASSERT_VALUES_EQUAL(visible.endpoint(), service->endpoint());
+        UNIT_ASSERT(visible.auth().token().token() != "private-token");
+        UNIT_ASSERT(visible.headers().empty());
+        const auto [listed, listIssues] = bootstrap.ListConnections(TListConnectionsBuilder{}.Build());
+        UNIT_ASSERT_C(!listIssues, listIssues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(listed.connection_size(), 1);
+        const auto& listedService = listed.connection(0).content().setting().external_service();
+        UNIT_ASSERT(listedService.auth().token().token() != "private-token");
+        UNIT_ASSERT(listedService.headers().empty());
+        const auto [denied, accessIssues] =
+            bootstrap.DescribeConnection(describe, TPermissions{}, "yandexcloud://test_folder_id_1", "other-user@staff");
+        UNIT_ASSERT(accessIssues);
+    }
+}
+}   // namespace NFq

@@ -489,7 +489,7 @@ TEST(TJsonConsumerTest, SpecialKeys)
     EXPECT_EQ(output, outputStream.Str());
 }
 
-TEST(TJsonConsumerTest, TestStringLengthLimit)
+TEST(TJsonConsumerTest, StringLengthLimit)
 {
     TStringStream outputStream;
     auto config = New<TJsonFormatConfig>();
@@ -506,7 +506,7 @@ TEST(TJsonConsumerTest, TestStringLengthLimit)
     EXPECT_EQ(output, outputStream.Str());
 }
 
-TEST(TJsonConsumerTest, TestAnnotateWithTypes)
+TEST(TJsonConsumerTest, AnnotateWithTypes)
 {
     TStringStream outputStream;
     auto config = New<TJsonFormatConfig>();
@@ -523,7 +523,7 @@ TEST(TJsonConsumerTest, TestAnnotateWithTypes)
     EXPECT_EQ(output, outputStream.Str());
 }
 
-TEST(TJsonConsumerTest, TestAnnotateWithTypesStringify)
+TEST(TJsonConsumerTest, AnnotateWithTypesStringify)
 {
     TStringStream outputStream;
     auto config = New<TJsonFormatConfig>();
@@ -601,7 +601,7 @@ TEST(TJsonConsumerTest, SeveralOptionsFlushBuffer)
     EXPECT_EQ(output, outputStream.Str());
 }
 
-TEST(TJsonConsumerTest, TestPrettyFormat)
+TEST(TJsonConsumerTest, PrettyFormat)
 {
     TStringStream outputStream;
     auto config = New<TJsonFormatConfig>();
@@ -620,7 +620,7 @@ TEST(TJsonConsumerTest, TestPrettyFormat)
     EXPECT_EQ(output, StripInPlace(outputStream.Str()));
 }
 
-TEST(TJsonConsumerTest, TestNodeWeightLimitAccepted)
+TEST(TJsonConsumerTest, NodeWeightLimitAccepted)
 {
     TStringStream outputStream;
     auto config = New<TJsonFormatConfig>();
@@ -640,7 +640,7 @@ TEST(TJsonConsumerTest, TestNodeWeightLimitAccepted)
     EXPECT_EQ(expectedOutput, outputStream.Str());
 }
 
-TEST(TJsonConsumerTest, TestNodeWeightLimitRejected)
+TEST(TJsonConsumerTest, NodeWeightLimitRejected)
 {
     TStringStream outputStream;
     auto consumer = CreateJsonConsumer(&outputStream);
@@ -659,7 +659,7 @@ TEST(TJsonConsumerTest, TestNodeWeightLimitRejected)
     EXPECT_EQ(expectedOutput, outputStream.Str());
 }
 
-TEST(TJsonConsumerTest, TestStringScalarWeightLimitAccepted)
+TEST(TJsonConsumerTest, StringScalarWeightLimitAccepted)
 {
     TStringStream outputStream;
     auto config = New<TJsonFormatConfig>();
@@ -678,7 +678,7 @@ TEST(TJsonConsumerTest, TestStringScalarWeightLimitAccepted)
     EXPECT_EQ(expectedOutput, outputStream.Str());
 }
 
-TEST(TJsonConsumerTest, TestStringScalarWeightLimitRejected)
+TEST(TJsonConsumerTest, StringScalarWeightLimitRejected)
 {
     TStringStream outputStream;
     auto consumer = CreateJsonConsumer(&outputStream);
@@ -690,7 +690,7 @@ TEST(TJsonConsumerTest, TestStringScalarWeightLimitRejected)
     EXPECT_EQ(SurroundWithQuotes(value), outputStream.Str());
 }
 
-TEST(TJsonConsumerTest, TestSetAnnotateWithTypesParameter)
+TEST(TJsonConsumerTest, SetAnnotateWithTypesParameter)
 {
     TStringStream outputStream;
     auto config = New<TJsonFormatConfig>();

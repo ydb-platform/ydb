@@ -7,8 +7,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-FORK_SUBTESTS()
-
 PEERDIR(
     util
     ydb/public/api/grpc

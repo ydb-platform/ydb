@@ -1,3 +1,17 @@
+* Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.
+
+* Added `TOperation::HasMetadata()` to check whether operation metadata is available.
+
+* Fixed node-startup config fetches omitting their seed-node marker when no requestor hosts are supplied.
+
+* Added optional `ClientTimeout` and `Deadline` settings to `TOperationClient::Get()` without cancelling the server operation or changing defaults.
+
+* Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
+
+* Added support for tablet reassignment operation IDs.
+
+## v3.27.0
+
 * Fixed static login credentials failing permanently when the initial Login operation returns a transient service error.
 
 * Added draft `TBridgeClient::Rollback()` to roll a cluster converted into a bridged one back to ordinary mode, and `TBridgeClient::GetRollbackStatus()` to show the progress of the rollback.
@@ -21,6 +35,8 @@
 * Fixed Topic producer retries touching the producer after it was destroyed. Write sessions keep a snapshot of the retry policy and no longer read producer settings from the gRPC thread.
 
 * Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
+
+* Fixed a Topic read session crash (Panic in `OnUserRetrievedEvent`) when an unrecoverable stream read error tore down the session while data events were still queued for delivery; the teardown now releases the accounting for undelivered events exactly once.
 
 ## v3.26.0
 

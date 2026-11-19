@@ -61,6 +61,15 @@ static constexpr std::array<const char*, 3> BenchmarkSchemaPath{R"(schema/tpch.s
 
 static constexpr std::array<const char*, 3> BenchmarkQueryPath{R"(data/yql-tpch/q)", R"(data/yql-tpcds/q)", R"(data/yql-clickbench/q)"};
 
+inline TString ReadBenchmarkQuery(EBenchType type, ui32 queryId, const TString& tablePathPrefix) {
+    return "PRAGMA TablePathPrefix = '" + tablePathPrefix + "';\n"
+        + GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+}
+
+inline TString ReadBenchmarkQuery(EBenchType type, ui32 queryId) {
+    return ReadBenchmarkQuery(type, queryId, type == TPCDS ? "/Root/test/ds" : "/Root");
+}
+
 inline NKikimrKqp::TKqpSetting MakeTPCHStatsSetting() {
     NKikimrKqp::TKqpSetting statsSetting;
     statsSetting.SetName("OptOverrideStatistics");

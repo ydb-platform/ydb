@@ -1,0 +1,24 @@
+{
+  "op_name":"InnerJoin (BlockHash)",
+  "args":
+    [
+      {
+        "op_name":"TableFullScan",
+        "table":"lineitem"
+      },
+      {
+        "op_name":"InnerJoin (BlockHash)",
+        "args":
+          [
+            {
+              "op_name":"TableFullScan",
+              "table":"orders"
+            },
+            {
+              "op_name":"TableFullScan",
+              "table":"customer"
+            }
+          ]
+      }
+    ]
+}

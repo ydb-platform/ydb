@@ -105,6 +105,8 @@ constexpr double B_FACTOR_DEFAULT = 0.75;
 // Threshold below which floating-point settings are treated as "not set".
 constexpr double EPSILON = 1e-6;
 
+ui32 gFulltextPostingReadMaxBytesWithLimit = 1 << 20;
+
 // Sentinel column index used in ResultCellIndices to indicate that the column
 // should be filled with the computed BM25 relevance score rather than a table cell.
 constexpr i32 RELEVANCE_COLUMN_MARKER = -1;
@@ -165,6 +167,7 @@ class TTableReader : public TAtomicRefCount<T> {
     ui64 ReadBytes = 0;
 
     bool UseArrowFormat = false;
+    ui32 ReadMaxBytes = 0;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<NScheme::TTypeInfo> ResultColumnTypes;
     TVector<i32> ResultColumnIds;
@@ -221,6 +224,10 @@ public:
 
     void SetUseArrowFormat(bool useArrowFormat) {
         UseArrowFormat = useArrowFormat;
+    }
+
+    void SetReadMaxBytes(ui32 maxBytes) {
+        ReadMaxBytes = maxBytes;
     }
 
     void SetLockTxId(ui64 lockTxId, ui32 lockNodeId, NKikimrDataEvents::ELockMode lockMode) {
@@ -309,7 +316,7 @@ public:
         auto MaxBytesDefaultQuota = defaultSettings.GetMaxBytes();
 
         record.SetMaxRows(MaxRowsDefaultQuota);
-        record.SetMaxBytes(MaxBytesDefaultQuota);
+        record.SetMaxBytes(ReadMaxBytes ? Min<ui32>(MaxBytesDefaultQuota, ReadMaxBytes) : MaxBytesDefaultQuota);
         record.SetResultFormat(UseArrowFormat ? NKikimrDataEvents::FORMAT_ARROW : NKikimrDataEvents::FORMAT_CELLVEC);
 
         if (!PoolId.empty()) {
@@ -1819,6 +1826,8 @@ struct TReadInfo {
     ui64 Cookie;
     ui64 ShardId;
     ui64 LastSeqNo = 0;  // Last received sequence number (for flow control)
+    ui32 MaxRows = 0;    // Quota to restore on ack; 0 = use default
+    ui32 MaxBytes = 0;   // Quota to restore on ack; 0 = use default
     bool PendingAck = false;
     bool RetryScheduled = false;
 };
@@ -2060,6 +2069,12 @@ public:
         auto request = GetDefaultReadAckSettings();
         request->Record.SetReadId(readId);
         request->Record.SetSeqNo(readInfo.LastSeqNo);
+        if (readInfo.MaxRows) {
+            request->Record.SetMaxRows(readInfo.MaxRows);
+        }
+        if (readInfo.MaxBytes) {
+            request->Record.SetMaxBytes(readInfo.MaxBytes);
+        }
         Counters->SentIteratorAcks->Inc();
         auto shardInfoIt = ReadsByShardId.find(shardId);
         if (shardInfoIt != ReadsByShardId.end()) {
@@ -2089,6 +2104,10 @@ public:
         auto& record = request->Record;
         auto readId = request->Record.GetReadId();
         const bool needToCreatePipe = PipesCreated.insert(shardId).second;
+
+        // Remember the quota to restore it on every ack
+        readInfo.MaxRows = record.GetMaxRows();
+        readInfo.MaxBytes = record.GetMaxBytes();
 
         YDB_LOG_DEBUG("Sending EvRead request from full text source",
             {"logPrefix", this->LogPrefix},
@@ -3002,6 +3021,11 @@ public:
 
         if (Settings->HasLimit() && Settings->GetLimit() > 0) {
             Limit = Settings->GetLimit();
+        }
+
+        // Plain search with LIMIT likely needs only a few documents, so read in small batches.
+        if (Limit > 0 && !MainTableReader->GetWithRelevance() && IndexTableReader->GetIsCompact()) {
+            IndexTableReader->SetReadMaxBytes(gFulltextPostingReadMaxBytesWithLimit);
         }
 
         if (Settings->HasSnapshot()) {

@@ -24,7 +24,7 @@ private:
             return;
         }
 
-        AFL_VERIFY(AllocationGuard);
+        YDB_LOG_VERIFY(AllocationGuard);
         const std::shared_ptr<TBuildDuplicateFilters> task =
             std::make_shared<TBuildDuplicateFilters>(std::move(Request), std::move(objectAddresses), std::move(AllocationGuard));
         NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task);
@@ -39,11 +39,11 @@ public:
         : Request(std::move(request))
         , AllocationGuard(allocationGuard)
     {
-        AFL_VERIFY(allocationGuard);
+        YDB_LOG_VERIFY(allocationGuard);
     }
 
     void OnError(const TString& errorMessage) {
-        AFL_VERIFY(Request.GetGlobalContext().GetOwner());
+        YDB_LOG_VERIFY(Request.GetGlobalContext().GetOwner());
         TActorContext::AsActorContext().Send(
             Request.GetGlobalContext().GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorMessage),
                                                        Request.GetGlobalContext().MakeResultInFlightGuard()));
@@ -65,7 +65,7 @@ private:
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         THashSet<TPortionAddress> portionAddresses;
         for (const ui64 portionId : Request.GetRequiredPortions()) {
-            AFL_VERIFY(portionAddresses.emplace(Request.GetGlobalContext().GetPortion(portionId)->GetAddress()).second);
+            YDB_LOG_VERIFY(portionAddresses.emplace(Request.GetGlobalContext().GetPortion(portionId)->GetAddress()).second);
         }
         auto columnDataManager = Request.GetGlobalContext().GetColumnDataManager();
         auto columns = Request.GetGlobalContext().GetFetchingColumnIds();
@@ -181,9 +181,9 @@ bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
         }
     }
 
-    AFL_VERIFY(intervals.empty() == portionIds.empty());
+    YDB_LOG_VERIFY(intervals.empty() == portionIds.empty());
     if (intervals.empty()) {
-        AFL_VERIFY(Portions.IsDone());
+        YDB_LOG_VERIFY(Portions.IsDone());
         return false;
     }
 

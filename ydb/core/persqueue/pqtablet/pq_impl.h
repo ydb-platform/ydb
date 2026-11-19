@@ -166,6 +166,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat, public TLogPrefix {
     DESCRIBE_HANDLE(HandleDeregisterMessageGroupRequest)
     DESCRIBE_HANDLE(HandleUpdateReadMetricsRequest)
     DESCRIBE_HANDLE(HandleSplitMessageGroupRequest)
+    DESCRIBE_HANDLE(HandleEmitHeartbeatRequest)
 #undef DESCRIBE_HANDLE
 
     void HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
@@ -493,11 +494,6 @@ private:
                                  const TActorContext& ctx);
     void EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig& config) const;
 
-    void AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
-                           const NKikimrPQ::TPQTabletConfig& cfg,
-                           const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
-                           const NKikimrPQ::TPartitions& partitionsData,
-                           const TActorContext& ctx);
 
     void SendToPipe(ui64 tabletId,
                     TDistributedTransaction& tx,

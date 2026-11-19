@@ -10,8 +10,15 @@ bool TGranuleOnlyPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionCont
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     std::vector<TPortionInfo::TPtr> portions;
     if (!db.LoadPortions([&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+            if (portion->GetType() == EPortionType::Written) {
+                const auto& written = static_cast<const TWrittenPortionInfoConstructor&>(*portion);
+                // the uncommitted_portions stage has already loaded them from the operations
+                if (!written.HasCommitSnapshot() && Self->HasInsertedPortion(written.GetPortionIdVerified())) {
+                    return true;
+                }
+            }
             const TIndexInfo& indexInfo = portion->GetSchema(*VersionedIndex)->GetIndexInfo();
-            AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
+            YDB_LOG_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
             portions.emplace_back(portion->Build());
             return true;
         }, Self->GetPathId())) {
@@ -54,10 +61,10 @@ bool TGranuleIndexesReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext
 
 bool TGranuleFinishAccessorsLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
     THashMap<ui64, TPortionDataAccessors> constructors = Context->ExtractConstructors();
-    AFL_VERIFY(Self->GetPortions().size() == constructors.size());
+    YDB_LOG_VERIFY(Self->GetPortions().size() == constructors.size());
     for (auto&& i : Self->GetPortions()) {
         auto it = constructors.find(i.first);
-        AFL_VERIFY(it != constructors.end());
+        YDB_LOG_VERIFY(it != constructors.end());
         auto accessor =
             TPortionAccessorConstructor::BuildForLoading(i.second, it->second.DetachBuildInfo(), std::move(it->second.MutableIndexes()));
         Self->GetDataAccessorsManager()->AddPortion(accessor);
@@ -66,7 +73,7 @@ bool TGranuleFinishAccessorsLoading::DoExecute(NTabletFlatExecutor::TTransaction
 }
 
 bool TGranuleFinishCommonLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
-    AFL_VERIFY(!Started);
+    YDB_LOG_VERIFY(!Started);
     Started = true;
     Self->OnAfterPortionsLoad();
     return true;

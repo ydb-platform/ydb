@@ -76,7 +76,7 @@ public:
             , FinishPosition(finish)
             , ChunkIndex(index)
         {
-            AFL_VERIFY(FinishPosition > StartPosition);
+            YDB_LOG_VERIFY(FinishPosition > StartPosition);
         }
     };
 
@@ -94,7 +94,9 @@ public:
         }
 
         ui32 GetLocalIndex(const ui32 global) const {
-            AFL_VERIFY(Contains(global))("pos", global)("start", GlobalStartPosition);
+            YDB_LOG_VERIFY(Contains(global),
+                {"pos", global},
+                {"start", GlobalStartPosition});
             return global - GlobalStartPosition;
         }
 
@@ -107,13 +109,13 @@ public:
         }
 
         const TCommonChunkAddress& GetAddress(const ui32 index) const {
-            AFL_VERIFY(index < Addresses.size());
+            YDB_LOG_VERIFY(index < Addresses.size());
             return Addresses[index];
         }
 
         void Add(const TCommonChunkAddress& address) {
             if (Addresses.size()) {
-                AFL_VERIFY(address.GetFinishPosition() <= Addresses.back().GetLength());
+                YDB_LOG_VERIFY(address.GetFinishPosition() <= Addresses.back().GetLength());
             }
             Addresses.emplace_back(address);
             GlobalStartPosition += address.GetStartPosition();
@@ -121,7 +123,7 @@ public:
         }
 
         const TCommonChunkAddress& GetLastAddress() const {
-            AFL_VERIFY(Addresses.size());
+            YDB_LOG_VERIFY(Addresses.size());
             return Addresses.back();
         }
 
@@ -145,9 +147,9 @@ public:
             : Array(arr)
             , Address(std::move(address))
         {
-            AFL_VERIFY(Address.GetSize());
-            AFL_VERIFY(Array);
-            AFL_VERIFY(Array->GetRecordsCount());
+            YDB_LOG_VERIFY(Address.GetSize());
+            YDB_LOG_VERIFY(Array);
+            YDB_LOG_VERIFY(Array->GetRecordsCount());
         }
     };
 
@@ -165,8 +167,8 @@ public:
             : Array(arr)
             , Address(address)
         {
-            AFL_VERIFY(arr);
-            AFL_VERIFY(address.GetLength() == (ui32)arr->GetRecordsCount());
+            YDB_LOG_VERIFY(arr);
+            YDB_LOG_VERIFY(address.GetLength() == (ui32)arr->GetRecordsCount());
         }
 
         TLocalChunkedArrayAddress(const std::shared_ptr<IChunkedArray>& arr, const ui32 start, const ui32 chunkIdx)
@@ -192,8 +194,8 @@ public:
             : Array(arr)
             , Address(std::move(address))
         {
-            AFL_VERIFY(Array);
-            AFL_VERIFY(Address.GetSize());
+            YDB_LOG_VERIFY(Array);
+            YDB_LOG_VERIFY(Address.GetSize());
         }
     };
 
@@ -219,7 +221,7 @@ public:
             : Array(arr)
             , Address(address)
         {
-            AFL_VERIFY(address.GetLength() == (ui32)arr->length());
+            YDB_LOG_VERIFY(address.GetLength() == (ui32)arr->length());
         }
     };
 
@@ -241,8 +243,8 @@ public:
             : Array(arr)
             , Position(position)
         {
-            AFL_VERIFY(!!Array);
-            AFL_VERIFY(position < (ui32)Array->length());
+            YDB_LOG_VERIFY(!!Array);
+            YDB_LOG_VERIFY(position < (ui32)Array->length());
         }
 
         const std::partial_ordering Compare(const TAddress& item) const;
@@ -268,7 +270,7 @@ private:
 
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TLocalChunkedArrayAddress(nullptr, 0, 0);
     }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const = 0;
@@ -305,7 +307,7 @@ protected:
                 } else if (position == chunkCurrent->GetFinishPosition() && chunkCurrent->GetChunkIndex() + 1 < accessor.GetChunksCount()) {
                     return accessor.OnArray(chunkCurrent->GetChunkIndex() + 1, position);
                 }
-                AFL_VERIFY(chunkCurrent->GetChunkIndex() < accessor.GetChunksCount());
+                YDB_LOG_VERIFY(chunkCurrent->GetChunkIndex() < accessor.GetChunksCount());
                 startIndex = chunkCurrent->GetChunkIndex();
                 idx = chunkCurrent->GetStartPosition();
             }
@@ -317,7 +319,7 @@ protected:
                 idx = nextIdx;
             }
         } else {
-            AFL_VERIFY(chunkCurrent->GetChunkIndex() > 0);
+            YDB_LOG_VERIFY(chunkCurrent->GetChunkIndex() > 0);
             if (position + 1 == chunkCurrent->GetStartPosition()) {
                 const ui32 chunkIndex = chunkCurrent->GetChunkIndex() - 1;
                 return accessor.OnArray(chunkIndex, chunkCurrent->GetStartPosition() - accessor.GetChunkLength(chunkIndex));
@@ -325,7 +327,9 @@ protected:
 
             ui64 idx = chunkCurrent->GetStartPosition();
             for (i32 i = chunkCurrent->GetChunkIndex() - 1; i >= 0; --i) {
-                AFL_VERIFY(idx >= accessor.GetChunkLength(i))("idx", idx)("length", accessor.GetChunkLength(i));
+                YDB_LOG_VERIFY(idx >= accessor.GetChunkLength(i),
+                    {"idx", idx},
+                    {"length", accessor.GetChunkLength(i)});
                 const ui64 nextIdx = idx - accessor.GetChunkLength(i);
                 if (nextIdx <= position && position < idx) {
                     return accessor.OnArray(i, nextIdx);
@@ -343,9 +347,17 @@ protected:
         if (chunkCurrent) {
             chunkCurrentInfo << chunkCurrent->DebugString();
         }
-        AFL_VERIFY(recordsCountChunks == GetRecordsCount())("pos", position)("count", GetRecordsCount())("chunks_map", sb)(
-            "chunk_current", chunkCurrentInfo)("chunks_count", recordsCountChunks);
-        AFL_VERIFY(false)("pos", position)("count", GetRecordsCount())("chunks_map", sb)("chunk_current", chunkCurrentInfo);
+        YDB_LOG_VERIFY(recordsCountChunks == GetRecordsCount(),
+            {"pos", position},
+            {"count", GetRecordsCount()},
+            {"chunksMap", sb},
+            {"chunkCurrent", chunkCurrentInfo},
+            {"chunksCount", recordsCountChunks});
+        YDB_LOG_VERIFY(false,
+            {"pos", position},
+            {"count", GetRecordsCount()},
+            {"chunksMap", sb},
+            {"chunkCurrent", chunkCurrentInfo});
     }
 
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray(const TColumnConstructionContext& context) const;
@@ -363,7 +375,7 @@ public:
     std::optional<bool> CheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
         const auto result = DoCheckOneValueAccessor(value);
         if (result && *result) {
-            AFL_VERIFY(value);
+            YDB_LOG_VERIFY(value);
         }
         return result;
     }
@@ -393,7 +405,7 @@ public:
 
     template <class TResult, class TActor>
     static std::optional<TResult> VisitDataOwners(const std::shared_ptr<IChunkedArray>& arr, const TActor& actor) {
-        AFL_VERIFY(arr);
+        YDB_LOG_VERIFY(arr);
         std::optional<IChunkedArray::TFullChunkedArrayAddress> arrCurrent;
         for (ui32 currentIndex = 0; currentIndex < arr->GetRecordsCount();) {
             arrCurrent = arr->GetArray(arrCurrent, currentIndex, arr);
@@ -423,7 +435,9 @@ public:
     }
 
     TLocalDataAddress GetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
-        AFL_VERIFY(position < GetRecordsCount())("position", position)("records_count", GetRecordsCount());
+        YDB_LOG_VERIFY(position < GetRecordsCount(),
+            {"position", position},
+            {"recordsCount", GetRecordsCount()});
         return DoGetLocalData(chunkCurrent, position);
     }
 
@@ -436,7 +450,7 @@ public:
         TReader(const std::shared_ptr<IChunkedArray>& data)
             : ChunkedArray(data)
         {
-            AFL_VERIFY(ChunkedArray);
+            YDB_LOG_VERIFY(ChunkedArray);
         }
 
         ui64 GetRecordsCount() const {
@@ -452,17 +466,17 @@ public:
     };
 
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 index) const {
-        AFL_VERIFY(index < GetRecordsCount());
+        YDB_LOG_VERIFY(index < GetRecordsCount());
         return DoGetScalar(index);
     }
 
     std::shared_ptr<arrow::Scalar> GetMaxScalar() const {
-        AFL_VERIFY(GetRecordsCount());
+        YDB_LOG_VERIFY(GetRecordsCount());
         return GetMinMaxScalars().Max();
     }
 
     TMinMax GetMinMaxScalars() const {
-        AFL_VERIFY(GetRecordsCount());
+        YDB_LOG_VERIFY(GetRecordsCount());
         return DoGetMinMaxScalars();
     }
 
@@ -472,7 +486,7 @@ public:
 
     ui64 GetRawSizeVerified() const {
         auto result = GetRawSize();
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 
@@ -482,10 +496,15 @@ public:
 
     std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
     std::shared_ptr<IChunkedArray> ISlice(const ui32 offset, const ui32 count) const {
-        AFL_VERIFY(offset + count <= GetRecordsCount())("offset", offset)("count", count)("records", GetRecordsCount());
+        YDB_LOG_VERIFY(offset + count <= GetRecordsCount(),
+            {"offset", offset},
+            {"count", count},
+            {"records", GetRecordsCount()});
         auto result = DoISlice(offset, count);
-        AFL_VERIFY(result);
-        AFL_VERIFY(result->GetRecordsCount() == count)("records", result->GetRecordsCount())("count", count);
+        YDB_LOG_VERIFY(result);
+        YDB_LOG_VERIFY(result->GetRecordsCount() == count,
+            {"records", result->GetRecordsCount()},
+            {"count", count});
         return result;
     }
 
@@ -499,7 +518,7 @@ public:
             case EType::Dictionary:
                 return true;
             case EType::Undefined:
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             case EType::SerializedChunkedArray:
             case EType::CompositeChunkedArray:
                 return false;

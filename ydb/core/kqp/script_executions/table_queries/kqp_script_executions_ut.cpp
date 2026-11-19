@@ -2,7 +2,7 @@
 #include "kqp_script_executions_impl.h"
 
 #include <ydb/core/base/backtrace.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_execution_retries.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/kqp/script_executions/finalization/kqp_finalize_script_service.h>
@@ -115,7 +115,7 @@ struct TScriptExecutionsYdbSetup {
 
         // Init sdk
         NYdb::TDriverConfig driverCfg;
-        driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << GrpcPort).SetDatabase(Tests::TestDomainName).SetAuthToken(BUILTIN_ACL_ROOT);
+        driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << GrpcPort).SetDatabase(TestDatabase).SetAuthToken(BUILTIN_ACL_ROOT);
         YdbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
         TableClient = MakeHolder<NYdb::NTable::TTableClient>(*YdbDriver);
         auto createSessionResult = TableClient->CreateSession().ExtractValueSync();

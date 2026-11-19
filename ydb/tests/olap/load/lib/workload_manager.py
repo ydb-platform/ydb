@@ -120,15 +120,11 @@ class WorkloadManagerBase(LoadSuiteBase):
         pass
 
     @classmethod
-<<<<<<< HEAD:ydb/tests/olap/load/lib/workload_manager.py
-    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
-=======
     def before_stop_checking(cls):
         pass
 
     @classmethod
-    def after_workload(cls, result: WorkloadRunResult):
->>>>>>> d25fd897524 (Reduce repeated setup in functional TPC tests (#59801)):ydb/tests/workload_manager/common/workload_manager.py
+    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
         pass
 
     def test(self):
@@ -469,12 +465,8 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
             path=cls.get_tpcc_path(),
             warehouses=cls.tpcc_warehouses,
             users=[user],
-<<<<<<< HEAD:ydb/tests/olap/load/lib/workload_manager.py
-            threads=cls.tpcc_threads
-=======
             threads=cls.tpcc_threads,
             warmup=cls.tpcc_warmup,
->>>>>>> d25fd897524 (Reduce repeated setup in functional TPC tests (#59801)):ydb/tests/workload_manager/common/workload_manager.py
         )
         cls._tpcc_thread = Thread(target=cls._tpcc_thread_func)
         cls._tpcc_thread.start()

@@ -576,10 +576,11 @@ private:
     TSourceResult Build(const TRule_select_core& rule, TYqlSelectArgs&& select) {
         auto sourceAliases = YqlSelectSourceAliases_ ? *YqlSelectSourceAliases_ : THashSet<TString>{};
         auto* outerAliases = std::exchange(YqlSelectSourceAliases_, &sourceAliases);
+        const bool outerIsJoin = std::exchange(YqlSelectIsJoin_, false);
         Y_DEFER {
             YqlSelectSourceAliases_ = outerAliases;
+            YqlSelectIsJoin_ = outerIsJoin;
         };
-
         TYqlSetItemArgs setItem;
 
         if (rule.HasBlock1()) {
@@ -870,6 +871,7 @@ private:
     }
 
     TSQLResult<TYqlJoin> Build(const TRule_join_source& rule) {
+        YqlSelectIsJoin_ = !rule.GetBlock3().empty();
         if (rule.HasBlock1()) {
             Token(rule.GetBlock1().GetToken1());
             return Unsupported("ANY");
@@ -1095,15 +1097,26 @@ private:
     }
 
     TSQLResult<TYqlSource> ApplyFlatten(const TRule_flatten_source::TBlock2& block, TYqlSource source) {
+        const TStringBuf sourceAlias = source.Alias
+                                           .Transform([](const TYqlSourceAlias& alias) { return TStringBuf(alias.Name); })
+                                           .GetOrElse(TStringBuf());
+        // FLATTEN expressions see only their own source, even inside a JOIN.
+        THashSet<TString> sourceAliases;
+        if (sourceAlias) {
+            sourceAliases.insert(TString(sourceAlias));
+        }
+        auto* outerAliases = std::exchange(YqlSelectSourceAliases_, &sourceAliases);
+        const bool outerIsJoin = std::exchange(YqlSelectIsJoin_, false);
+        Y_DEFER {
+            YqlSelectSourceAliases_ = outerAliases;
+            YqlSelectIsJoin_ = outerIsJoin;
+        };
         Token(block.GetToken1());
         const TPosition position = Ctx_.Pos();
         switch (block.GetBlock2().GetAltCase()) {
             case TRule_flatten_source_TBlock2_TBlock2::kAlt1: {
                 const auto& alt = block.GetBlock2().GetAlt1();
                 TSqlFlatten flatten(*this);
-                const TStringBuf sourceAlias = source.Alias
-                                                   .Transform([](const TYqlSourceAlias& alias) { return TStringBuf(alias.Name); })
-                                                   .GetOrElse(TStringBuf());
                 auto args = flatten.ParseArgs(sourceAlias, alt.GetRule_flatten_by_arg3());
                 if (!args) {
                     return std::unexpected(args.error());

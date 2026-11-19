@@ -2,6 +2,8 @@
 #include "bootstrapper_impl.h"
 
 #include <ydb/core/base/tablet.h>
+#include <ydb/core/base/bridge.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/appdata.h>
@@ -27,6 +29,11 @@ class TBootstrapper : public TActorBootstrapped<TBootstrapper> {
     THashMap<ui32, size_t> OtherNodesIndex;
 
     TActorId KnownLeaderPipe;
+
+    TBridgeInfo::TPtr CycleBridgeInfo;
+    ui64 CycleClusterStateGeneration = 0;
+    ui64 CycleClusterStateGuid = 0;
+    bool FilterExcludedPiles = false;
 
     TActorId LookOnActorID;
     TActorId FollowerActorID;
@@ -190,6 +197,10 @@ private:
      */
     void BeginNewCycle() {
         ++RoundCounter;
+        CycleBridgeInfo.reset();
+        CycleClusterStateGeneration = 0;
+        CycleClusterStateGuid = 0;
+        FilterExcludedPiles = false;
 
         YDB_LOG_DEBUG("Beginning lookup cycle in state storage",
             {"tabletId", TabletInfo->TabletID},
@@ -205,7 +216,12 @@ private:
     }
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
-        if (ev->Get()->BridgeInfo && !ev->Get()->BridgeInfo->SelfNodePile->IsPrimary) {
+        CycleBridgeInfo = ev->Get()->BridgeInfo;
+        if (const auto& config = ev->Get()->Config; config && config->HasClusterState()) {
+            CycleClusterStateGeneration = config->GetClusterState().GetGeneration();
+            CycleClusterStateGuid = config->GetClusterState().GetGuid();
+        }
+        if (CycleBridgeInfo && !CycleBridgeInfo->SelfNodePile->IsPrimary) {
             Schedule(GetSleepDuration(), new TEvents::TEvWakeup(RoundCounter));
         } else {
             BeginLookup();
@@ -227,8 +243,20 @@ private:
             NKikimrBootstrapper::TEvWatchResult::UNKNOWN, Max<ui64>(), record.GetRound()));
     }
 
+    bool IsNodeInExcludedPile(ui32 nodeId) const {
+        if (!FilterExcludedPiles) {
+            return false;
+        }
+        const auto* pile = CycleBridgeInfo->GetPileForNode(nodeId);
+        return pile && !NBridge::PileStateTraits(pile->State).AllowsConnection;
+    }
+
     void HandleLookup(TEvStateStorage::TEvInfo::TPtr& ev) {
         auto* msg = ev->Get();
+        // A newer or incompatible lookup must not be filtered by the old cycle's pile state.
+        FilterExcludedPiles = CycleBridgeInfo && CycleClusterStateGeneration && CycleClusterStateGuid
+            && msg->ClusterStateGeneration == CycleClusterStateGeneration
+            && msg->ClusterStateGuid == CycleClusterStateGuid;
 
         YDB_LOG_DEBUG("State storage lookup result",
             {"tabletId", TabletInfo->TabletID},
@@ -239,6 +267,9 @@ private:
         switch (msg->Status) {
             case NKikimrProto::OK: {
                 // We have state storage quorum and some known leader
+                if (IsNodeInExcludedPile(msg->CurrentLeader.NodeId())) {
+                    return BeginNewRound();
+                }
                 KnownLeaderPipe = RegisterWithSameMailbox(
                     NTabletPipe::CreateClient(SelfId(), TabletInfo->TabletID, {
                         .RetryPolicy = NTabletPipe::TClientRetryPolicy::WithoutRetries(),
@@ -358,6 +389,12 @@ private:
 
         Round.emplace(OtherNodes.size());
         for (ui32 alienNode : OtherNodes) {
+            if (IsNodeInExcludedPile(alienNode)) {
+                // Keep the peer in total; lifecycle exclusion is not an absent bootstrapper.
+                ApplyAlienState(TActorId(alienNode, 0, 0, 0), NKikimrBootstrapper::TEvWatchResult::DISCONNECTED,
+                    Max<ui64>());
+                continue;
+            }
             Send(MakeBootstrapperID(tabletId, alienNode),
                 new TEvBootstrapper::TEvWatch(tabletId, SelfSeed, RoundCounter),
                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
@@ -365,11 +402,16 @@ private:
         }
 
         Become(&TThis::StateFree);
+        CheckRoundCompletion();
     }
 
     void HandleFree(TEvBootstrapper::TEvWatch::TPtr& ev) {
         const NKikimrBootstrapper::TEvWatch& record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
+
+        if (IsNodeInExcludedPile(ev->Sender.NodeId())) {
+            return HandleUnknown(ev);
+        }
 
         Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(),
             NKikimrBootstrapper::TEvWatchResult::FREE, SelfSeed, record.GetRound()));
@@ -444,6 +486,10 @@ private:
         const size_t alienNodeIdx = AlienIndex(alien.NodeId());
         if (alienNodeIdx == Max<size_t>())
             return true;
+        if (IsNodeInExcludedPile(alien.NodeId()) && state != NKikimrBootstrapper::TEvWatchResult::DISCONNECTED) {
+            // A delayed Watch/result or nondelivery cannot make an excluded peer online or remove it from total.
+            return true;
+        }
 
         // Note: a single alien may be updated multiple times
         auto& alienEntry = Round.value().Aliens.at(alienNodeIdx);

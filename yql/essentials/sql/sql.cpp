@@ -180,14 +180,14 @@ ILexer::TPtr SqlLexer(const TTranslators& translators, const TString& query, NYq
 }
 
 NYql::TAstParseResult SqlASTToYql(const TTranslators& translators, const TString& query,
-                                  const google::protobuf::Message& protoAst, const TSQLHints& hints, const TTranslationSettings& settings) {
+                                  const google::protobuf::Message& protoAst, const TParsedTokenList& tokens, const TTranslationSettings& settings) {
     NYql::TAstParseResult result;
     if (settings.Syntax) {
         auto translator = FindCustomTranslator(translators, *settings.Syntax, result.Issues);
         if (!translator) {
             return result;
         }
-        return translator->TextAndMessageToAst(query, protoAst, hints, settings);
+        return translator->TextAndMessageToAst(query, protoAst, tokens, settings);
     }
 
     switch (settings.SyntaxVersion) {
@@ -204,9 +204,9 @@ NYql::TAstParseResult SqlASTToYql(const TTranslators& translators, const TString
                 return result;
             }
 
-            return translators.V0->TextAndMessageToAst(query, protoAst, hints, settings);
+            return translators.V0->TextAndMessageToAst(query, protoAst, tokens, settings);
         case 1:
-            return translators.V1->TextAndMessageToAst(query, protoAst, hints, settings);
+            return translators.V1->TextAndMessageToAst(query, protoAst, tokens, settings);
         default:
             result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                                                   TStringBuilder() << "Unknown SQL syntax version: " << settings.SyntaxVersion));

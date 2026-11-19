@@ -2,6 +2,7 @@
 #include "distconf_quorum.h"
 
 #include <ydb/core/audit/audit_log.h>
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/util/address_classifier.h>
 
 #include <ydb/library/aclib/aclib.h>
@@ -160,6 +161,9 @@ namespace NKikimr::NStorage {
                     {"selfId", SelfId()},
                     {"command", op.Command});
                 switch (op.Command.GetRequestCase()) {
+                    case TQuery::kApplyDataCenterStates:
+                        return ApplyDataCenterStates(op.Command.GetApplyDataCenterStates());
+
                     case TQuery::kUpdateConfig:
                         return UpdateConfig(op.Command.MutableUpdateConfig());
 
@@ -322,6 +326,14 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::UpdateConfig(TQuery::TUpdateConfig *request) {
         RunCommonChecks();
+        const NKikimrBlobStorage::TStorageConfig& current = *Self->StorageConfig;
+        const NKikimrBlobStorage::TStorageConfig& proposed = request->GetConfig();
+        std::expected<TDataCenterStates, TString> before = ParseDataCenterStates(current.GetDataCenterStates());
+        std::expected<TDataCenterStates, TString> after = ParseDataCenterStates(proposed.GetDataCenterStates());
+        if (current.HasDataCenterStates() != proposed.HasDataCenterStates()
+                || !before || !after || *before != *after) {
+            throw TExError() << "Use ApplyDataCenterStates to change DC availability";
+        }
         StartProposition(request->MutableConfig());
     }
 
@@ -604,6 +616,8 @@ namespace NKikimr::NStorage {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
         } else if (RecoveryProposition && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
             Finish(TResult::RACE, "Configuration was recovered; retry the original operation");
+        } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query); op && op->Command.HasApplyDataCenterStates()) {
+            StartDataCenterReconciliation();
         } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
                    op && op->Command.HasReplaceStorageConfig() && ControllerOp == EControllerOp::OTHER
                    && Self->SelfManagementEnabled) {
@@ -864,18 +878,21 @@ namespace NKikimr::NStorage {
             SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
             return;
         }
-        if (ev->Get()->Record.HasQueryBridgeRollbackStatus()) {
-            if (!IsSelfStatic && ConnectedToStaticNode && StaticNodeSessionId) {
+        if (const auto& record = ev->Get()->Record; !IsSelfStatic && (record.HasQueryBridgeRollbackStatus() ||
+                record.HasRollbackBridge())) {
+            if (ConnectedToStaticNode && StaticNodeSessionId) {
                 // dynamic nodes have no binding of their own, the static node they are subscribed to forwards it
                 ForwardInvokeOnRoot(std::move(ev), ConnectedToStaticNode);
-                return;
-            } else if (!IsSelfStatic) {
+            } else {
                 auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
                 response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM);
-                response->Record.SetErrorReason("No static node connection for rollback status query");
+                response->Record.SetErrorReason("No static node connection for the rollback of the bridged cluster");
                 SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
-                return;
-            } else if (!Halted && !Binding) {
+            }
+            return;
+        }
+        if (ev->Get()->Record.HasQueryBridgeRollbackStatus()) {
+            if (!Halted && !Binding) {
                 // the root collects it; static nodes having binding forward it to the root as usual
                 if (Scepter && StorageConfig) {
                     QueryBridgeRollbackStatus(std::move(ev));

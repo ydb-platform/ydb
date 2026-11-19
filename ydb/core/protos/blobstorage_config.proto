@@ -165,6 +165,13 @@ message TStoragePoolPileOverride {
     TPDiskFilters PDiskFilters = 7;
 }
 
+// Rules BSC follows for its groups. They are adopted from StorageConfig in a BSC transaction, which checks them against
+// the existing groups; rules that do not fit stay unadopted, and BSC keeps following the previous ones.
+message TStoragePoolPileOverrides {
+    repeated TStoragePoolPileOverride Rule = 1;
+    optional uint64 StorageConfigGeneration = 2; // StorageConfig the rules were adopted from; always set
+}
+
 message TDefineStoragePool {
     message TExistingGroups {
         repeated uint32 GroupId = 1;
@@ -735,14 +742,10 @@ message TDeleteSpecificGroups {
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Persistent cluster-wide states of physical DataCenters for dynamic mirror-3-dc groups.
+// Desired physical DC states. In self-managed clusters distconf owns the snapshot.
 message TDefineDataCenterStates {
-    message TDataCenter {
-        optional string Name = 1;
-        optional TDataCenterState.EState State = 2;
-    }
-    // Replaces the entire list. Unlisted DataCenters are INCLUDED.
-    repeated TDataCenter DataCenter = 1;
+    // Replaces the entire list. Unlisted datacenters are INCLUDED.
+    repeated TDataCenterStates.TDataCenter DataCenter = 1;
 }
 
 // Clear the states and publish a new generation of every dynamic mirror-3-dc group (test use only).
@@ -1112,4 +1115,5 @@ message TConfigResponse {
     repeated uint32 GroupsGetDisintegrated = 6;
     repeated uint32 GroupsGetDisintegratedByExpectedStatus = 7;
     bool RollbackSuccess = 8;
+    TDataCenterStates AppliedDataCenterStates = 9;
 }

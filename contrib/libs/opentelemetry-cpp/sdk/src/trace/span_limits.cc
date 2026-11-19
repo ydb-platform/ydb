@@ -1,7 +1,6 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include <cstddef>
 #include <cstdint>
 
 #include "opentelemetry/sdk/common/env_variables.h"
@@ -31,21 +30,13 @@ static constexpr const char *kLinkAttributeCountLimitEnv  = "OTEL_LINK_ATTRIBUTE
 namespace
 {
 
-void UpdateFromEnv(const char *env_var_name, std::uint32_t &limit)
+template <typename LimitType>
+void UpdateFromEnv(const char *env_var_name, LimitType &limit)
 {
   std::uint32_t value{};
   if (opentelemetry::sdk::common::GetUintEnvironmentVariable(env_var_name, value))
   {
-    limit = value;
-  }
-}
-
-void UpdateFromEnv(const char *env_var_name, std::size_t &limit)
-{
-  std::uint32_t value{};
-  if (opentelemetry::sdk::common::GetUintEnvironmentVariable(env_var_name, value))
-  {
-    limit = static_cast<std::size_t>(value);
+    limit = static_cast<LimitType>(value);
   }
 }
 

@@ -92,6 +92,8 @@ IGraphTransformer::TStatus YqlColumnRefOrAccessWrapper(
 IGraphTransformer::TStatus FinalizeYqlColumnRefs(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
+bool IsYqlInSubLink(const TExprNode& input);
+
 IGraphTransformer::TStatus ValidateYqlSubLinkSettings(
     const TExprNode::TPtr& input,
     TContext& ctx,

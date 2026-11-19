@@ -299,6 +299,48 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
             UNIT_ASSERT_EQUAL(rows[i], readRows[i]);
         }
     }
+
+    Y_UNIT_TEST(CopyRecordsKeepsNulls) {
+        std::shared_ptr<arrow::Array> ints;
+        {
+            arrow::Int64Builder builder;
+            UNIT_ASSERT(builder.AppendNull().ok());
+            UNIT_ASSERT(builder.Append(5).ok());
+            UNIT_ASSERT(builder.AppendNull().ok());
+            UNIT_ASSERT(builder.Append(7).ok());
+            UNIT_ASSERT(builder.Finish(&ints).ok());
+        }
+        std::shared_ptr<arrow::Array> strings;
+        {
+            arrow::StringBuilder builder;
+            UNIT_ASSERT(builder.Append("a").ok());
+            UNIT_ASSERT(builder.AppendNull().ok());
+            UNIT_ASSERT(builder.Append("c").ok());
+            UNIT_ASSERT(builder.Append("").ok());
+            UNIT_ASSERT(builder.Finish(&strings).ok());
+        }
+        const std::vector<ui64> indexes = { 0, 1, 3 };
+        {
+            const auto copy = NArrow::CopyRecords(ints, indexes);
+            UNIT_ASSERT(copy->ValidateFull().ok());
+            UNIT_ASSERT_VALUES_EQUAL(copy->length(), 3);
+            UNIT_ASSERT(copy->IsNull(0));
+            UNIT_ASSERT(!copy->IsNull(1));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::Int64Array&>(*copy).Value(1), 5);
+            UNIT_ASSERT(!copy->IsNull(2));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::Int64Array&>(*copy).Value(2), 7);
+        }
+        {
+            const auto copy = NArrow::CopyRecords(strings, indexes);
+            UNIT_ASSERT(copy->ValidateFull().ok());
+            UNIT_ASSERT_VALUES_EQUAL(copy->length(), 3);
+            UNIT_ASSERT(!copy->IsNull(0));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::StringArray&>(*copy).GetString(0), std::string("a"));
+            UNIT_ASSERT(copy->IsNull(1));
+            UNIT_ASSERT(!copy->IsNull(2));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::StringArray&>(*copy).GetString(2), std::string());
+        }
+    }
 }
 
 }

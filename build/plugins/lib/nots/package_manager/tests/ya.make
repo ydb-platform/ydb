@@ -6,6 +6,7 @@ TEST_SRCS(
     test_common_config.py
     test_lockfile.py
     test_package_json.py
+    test_platform.py
     test_utils.py
 )
 
@@ -14,7 +15,7 @@ PEERDIR(
 )
 
 DATA(
-    arcadia/devtools/frontend_build_platform/nots/constants/src/tier0-settings.yaml
+    arcadia/devtools/frontend_build_platform/nots/tier0-settings/src/settings.yaml
 )
 
 END()

@@ -1,8 +1,7 @@
 UNITTEST_FOR(ydb/core/statistics/service)
 
 FORK_SUBTESTS()
-
-SPLIT_FACTOR(60)
+SPLIT_FACTOR(40)
 
 REQUIREMENTS(cpu:1)
 SIZE(MEDIUM)

@@ -44,6 +44,30 @@ bool TTypeAnnotationContext::Initialize(TExprContext& ctx) {
     return *InitializeResult;
 }
 
+bool TTypeAnnotationContext::ValidateProjectSettings(TExprContext& ctx) const {
+    if (!StrictConfigValidation) {
+        return true;
+    }
+    bool valid = true;
+    for (const auto& pragma : ProjectSettings.Pragmas) {
+        bool accepted = AcceptedSqlProjectSettings.contains(pragma.Name);
+        for (const auto& [name, provider] : DataSourceMap) {
+            accepted = accepted || provider->AcceptsProjectSetting(pragma);
+        }
+        for (const auto& provider : DataSinks) {
+            accepted = accepted || provider->AcceptsProjectSetting(pragma);
+        }
+        if (!accepted) {
+            TIssue issue(TPosition(), TStringBuilder()
+                << "Unknown or disallowed project setting " << pragma.Name.Quote() << " (values: " << JoinSeq(", ", pragma.Value) << ")");
+            issue.SetCode(EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, TSeverityIds::S_ERROR);
+            ctx.AddError(issue);
+            valid = false;
+        }
+    }
+    return valid;
+}
+
 bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     THashMap<TString, NLayers::ILayersIntegrationPtr> layersIntegrations;
 
@@ -60,6 +84,10 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
         if (!x->Initialize(ctx)) {
             return false;
         }
+    }
+
+    if (!ValidateProjectSettings(ctx)) {
+        return false;
     }
 
     Y_ENSURE(UserDataStorage);
@@ -558,6 +586,9 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
     } else {
         NSQLTranslation::TTranslationSettings settings;
         settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
+        if (GetProjectSettings()) {
+            settings.ProjectSettings = *GetProjectSettings();
+        }
         settings.File = fullName;
         settings.ClusterMapping = ClusterMapping_;
         ParseTranslationSettings(SqlFlags_, settings);
@@ -694,7 +725,9 @@ IModuleResolver::TPtr TModuleResolver::CreateMutableChild() const {
         throw yexception() << "Module resolver should not contain user data and URL loader";
     }
 
-    return std::make_shared<TModuleResolver>(Translators_, &Modules_, LibsContext_.NextUniqueId, ClusterMapping_, SqlFlags_, OptimizeLibraries_, KnownPackages_, Libs_, FileAliasPrefix_, ModuleChecker_);
+    auto child = std::make_shared<TModuleResolver>(Translators_, &Modules_, LibsContext_.NextUniqueId, ClusterMapping_, SqlFlags_, OptimizeLibraries_, KnownPackages_, Libs_, FileAliasPrefix_, ModuleChecker_);
+    child->SetProjectSettings(GetProjectSettings());
+    return child;
 }
 
 void TModuleResolver::SetFileAliasPrefix(TString&& prefix) {

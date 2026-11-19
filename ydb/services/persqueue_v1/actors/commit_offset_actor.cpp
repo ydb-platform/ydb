@@ -80,7 +80,8 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
         : request->path());
 
     auto topicsList = TopicsHandler->GetReadTopicsList(
-            topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString())
+            topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString()),
+            AppData(ctx)->FeatureFlags.GetEnableRelativePaths()
     );
     if (!topicsList.IsValid) {
         return AnswerError(
@@ -126,7 +127,10 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
     AFL_ENSURE(TopicAndTablets.size() == 1);
     auto& [_, topicInitInfo] = *TopicAndTablets.begin();
 
-    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications() && !topicInitInfo.IsAsyncReplication) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()
+        && !topicInitInfo.IsAsyncReplication
+        && !topicInitInfo.IsReplicationConsumer)
+    {
         Reply(Ydb::StatusIds::PRECONDITION_FAILED,
             NYql::TIssues{NYql::TIssue("Consumer offset commits are disabled")}, ctx);
         return;

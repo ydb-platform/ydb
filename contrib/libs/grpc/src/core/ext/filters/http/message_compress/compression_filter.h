@@ -87,7 +87,8 @@ class ChannelCompression {
   MessageHandle CompressMessage(MessageHandle message,
                                 grpc_compression_algorithm algorithm) const;
   // Decompress one message synchronously.
-  y_absl::StatusOr<MessageHandle> DecompressMessage(MessageHandle message,
+  y_absl::StatusOr<MessageHandle> DecompressMessage(bool is_client,
+                                                  MessageHandle message,
                                                   DecompressArgs args) const;
 
  private:

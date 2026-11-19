@@ -5,6 +5,7 @@ PY_SRCS(
 )
 
 PEERDIR(
+    ydb/core/protos
     ydb/tests/library
     ydb/public/sdk/python
     library/python/monlib

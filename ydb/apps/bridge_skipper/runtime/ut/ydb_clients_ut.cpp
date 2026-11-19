@@ -1,7 +1,10 @@
 #include <ydb/apps/bridge_skipper/runtime/ydb_clients.h>
+#include <ydb/apps/bridge_skipper/http/http.h>
 
 #include <ydb/public/api/grpc/draft/ydb_bridge_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_config_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/protos/draft/ydb_bridge.pb.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 
@@ -61,6 +64,8 @@ struct TWireCapture {
     Ydb::Bridge::GetClusterStateRequest State;
     Ydb::Monitoring::SelfCheckRequest SelfCheck;
     Ydb::Bridge::UpdateClusterStateRequest Update;
+    Ydb::Config::FetchConfigRequest Config;
+    Ydb::Discovery::ListEndpointsRequest Discovery;
     std::chrono::system_clock::time_point Deadline;
     bool DatabaseHeader = false;
     TString AuthTicket;
@@ -70,11 +75,77 @@ struct TWireCapture {
 class TWireService final
     : public Ydb::Bridge::V1::BridgeService::Service
     , public Ydb::Monitoring::V1::MonitoringService::Service
+    , public Ydb::Config::V1::ConfigService::Service
+    , public Ydb::Discovery::V1::DiscoveryService::Service
 {
 public:
     // Answers the next call with this operation status, then SUCCESS again.
     Ydb::StatusIds::StatusCode NextStatus = Ydb::StatusIds::SUCCESS;
     std::atomic<bool> HangSelfCheck{false};
+    std::atomic<bool> SelfCheckEntered{false};
+    bool EchoSelfCheckToken = false;
+    std::atomic<bool> HangDiscovery{false};
+    bool DedicatedStorage = false;
+    bool IncludeHotStandby = false;
+    std::optional<ui16> IpEndpointPort;
+
+    grpc::Status FetchConfig(grpc::ServerContext* context, const Ydb::Config::FetchConfigRequest* request,
+        Ydb::Config::FetchConfigResponse* response) override
+    {
+        std::lock_guard lock(Mutex);
+        Capture.Config = *request;
+        CaptureContext(*context);
+        Ydb::Config::FetchConfigResult result;
+        auto* entry = result.add_config();
+        entry->mutable_identity()->mutable_main();
+        entry->set_config(DedicatedStorage ? "config: {}\n"
+            : "config: {domains_config: {domain: [{name: CustomRoot}]}}\n");
+        if (DedicatedStorage) {
+            auto* storage = result.add_config();
+            storage->mutable_identity()->mutable_storage();
+            storage->set_config("config: {domain_name: DedicatedRoot, domains_config: {explicit_state_storage_config: {}}}\n");
+        }
+        auto* operation = response->mutable_operation();
+        operation->set_ready(true);
+        operation->set_status(DedicatedStorage && request->all().has_add_blob_storage_and_domains_config()
+            ? Ydb::StatusIds::BAD_REQUEST : std::exchange(NextStatus, Ydb::StatusIds::SUCCESS));
+        operation->mutable_result()->PackFrom(result);
+        return grpc::Status::OK;
+    }
+
+    grpc::Status ListEndpoints(grpc::ServerContext* context, const Ydb::Discovery::ListEndpointsRequest* request,
+        Ydb::Discovery::ListEndpointsResponse* response) override
+    {
+        {
+            std::lock_guard lock(Mutex);
+            Capture.Discovery = *request;
+            CaptureContext(*context);
+        }
+        while (HangDiscovery && !context->IsCancelled()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        if (context->IsCancelled()) {
+            return grpc::Status::CANCELLED;
+        }
+        Ydb::Discovery::ListEndpointsResult result;
+        auto* endpoint = result.add_endpoints();
+        endpoint->set_address("new-node");
+        endpoint->set_port(2135);
+        endpoint->set_node_id(12);
+        endpoint->set_bridge_pile_name("new-pile");
+        if (IpEndpointPort) {
+            endpoint->set_address("unresolvable.invalid");
+            endpoint->set_port(*IpEndpointPort);
+            endpoint->set_node_id(77);
+            endpoint->set_bridge_pile_name("a");
+            endpoint->add_ip_v4("127.0.0.1");
+        }
+        auto* operation = response->mutable_operation();
+        operation->set_ready(true);
+        operation->set_status(Ydb::StatusIds::SUCCESS);
+        operation->mutable_result()->PackFrom(result);
+        return grpc::Status::OK;
+    }
 
     TWireCapture ReadCapture() {
         std::lock_guard lock(Mutex);
@@ -101,6 +172,11 @@ public:
         auto* b = result.add_pile_states();
         b->set_pile_name("b");
         b->set_state(Ydb::Bridge::PileState::SYNCHRONIZED);
+        if (IncludeHotStandby) {
+            auto* standby = result.add_pile_states();
+            standby->set_pile_name("standby");
+            standby->set_state(Ydb::Bridge::PileState::HOT_STANDBY);
+        }
         if (request->include_pile_connectivity()) {
             auto* report = result.mutable_pile_connectivity();
             report->set_generation(42);
@@ -120,12 +196,17 @@ public:
         Ydb::Monitoring::SelfCheckResponse* response) override
     {
         Ydb::StatusIds::StatusCode status;
+        TString echoedToken;
         {
             std::lock_guard lock(Mutex);
             Capture.SelfCheck = *request;
             CaptureContext(*context);
+            if (EchoSelfCheckToken) {
+                echoedToken = Capture.AuthTicket;
+            }
             status = std::exchange(NextStatus, Ydb::StatusIds::SUCCESS);
         }
+        SelfCheckEntered = true;
         while (HangSelfCheck && !context->IsCancelled()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
@@ -139,6 +220,9 @@ public:
         auto* operation = response->mutable_operation();
         operation->set_ready(true);
         operation->set_status(status);
+        if (!echoedToken.empty()) {
+            operation->add_issues()->set_message("rejected credential " + std::string(echoedToken.data(), echoedToken.size()));
+        }
         operation->mutable_result()->PackFrom(result);
         return grpc::Status::OK;
     }
@@ -188,6 +272,8 @@ std::unique_ptr<grpc::Server> StartWireServer(TWireService& service, TString& en
     builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);
     builder.RegisterService(static_cast<Ydb::Bridge::V1::BridgeService::Service*>(&service));
     builder.RegisterService(static_cast<Ydb::Monitoring::V1::MonitoringService::Service*>(&service));
+    builder.RegisterService(static_cast<Ydb::Config::V1::ConfigService::Service*>(&service));
+    builder.RegisterService(static_cast<Ydb::Discovery::V1::DiscoveryService::Service*>(&service));
     auto server = builder.BuildAndStart();
     endpoint = "grpc://127.0.0.1:" + ::ToString(port);
     return server;
@@ -241,6 +327,269 @@ void VerifyTokenPreparationExpiry(ui64 preparationSeconds) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
+    Y_UNIT_TEST(DiscoverySupportsDedicatedStorageWithoutDowngrade) {
+        TWireService service;
+        service.DedicatedStorage = true;
+        TString endpoint;
+        auto server = StartWireServer(service, endpoint);
+        const auto config = ParseConfig("cluster_id: test\nendpoints: {a: ['" + endpoint + "']}\n");
+        auto clients = CreateYdbClients(config, TLoadedCredentials{});
+        const auto result = Await<TInventoryResult>([&](auto completed) {
+            clients->Discover({endpoint, "a", 1}, std::move(completed));
+        });
+        UNIT_ASSERT_C(result.Rpc.Success, result.Rpc.Status);
+        UNIT_ASSERT_VALUES_EQUAL(result.Endpoints.size(), 1);
+        const auto capture = service.ReadCapture();
+        UNIT_ASSERT(!capture.Config.all().has_add_blob_storage_and_domains_config());
+        UNIT_ASSERT_VALUES_EQUAL(capture.Discovery.database(), "/DedicatedRoot");
+        clients->Stop();
+    }
+
+    Y_UNIT_TEST(DiscoveryUsesConfiguredDomainAndAuthenticatedPinnedClients) {
+        TWireService service;
+        TString endpoint;
+        auto server = StartWireServer(service, endpoint);
+        const auto config = ParseConfig("cluster_id: test\nendpoints: {a: ['" + endpoint + "']}\n");
+        TLoadedCredentials credentials;
+        credentials.Token = "discovery-token";
+        auto clients = CreateYdbClients(config, credentials);
+        const auto result = Await<TInventoryResult>([&](auto completed) {
+            clients->Discover({endpoint, "a", 7}, std::move(completed));
+        });
+        UNIT_ASSERT_C(result.Rpc.Success, result.Error);
+        UNIT_ASSERT_VALUES_EQUAL(result.Endpoints.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.Endpoints.front().Pile, "new-pile");
+        UNIT_ASSERT_VALUES_EQUAL(result.Endpoints.front().NodeId, 12);
+        UNIT_ASSERT_VALUES_EQUAL(result.Endpoints.front().Endpoint.Uri, "grpc://new-node:2135");
+        const auto capture = service.ReadCapture();
+        UNIT_ASSERT(!capture.Config.all().has_add_blob_storage_and_domains_config());
+        UNIT_ASSERT_VALUES_EQUAL(capture.Config.operation_params().operation_timeout().seconds(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(capture.Discovery.database(), "/CustomRoot");
+        UNIT_ASSERT_VALUES_EQUAL(capture.AuthTicket, "discovery-token");
+        // A newly registered pinned client can be used and is rejected after removal.
+        TWireService second;
+        TString learned;
+        auto other = StartWireServer(second, learned);
+        clients->AddEndpoint(ParseEndpoint(learned), "b");
+        const auto state = Await<TStateResult>([&](auto completed) {
+            clients->GetState({learned, "b", 8}, EYdbMethod::PlainState, std::move(completed));
+        });
+        UNIT_ASSERT(state.Rpc.Success);
+        clients->RemoveEndpoint(learned);
+        const auto removed = Await<TStateResult>([&](auto completed) {
+            clients->GetState({learned, "b", 9}, EYdbMethod::PlainState, std::move(completed));
+        });
+        UNIT_ASSERT_VALUES_EQUAL(removed.Error, "INVALID_RPC_REQUEST");
+        clients->Stop();
+    }
+
+    Y_UNIT_TEST(DiscoveryDeadlineAndConfigFailureSettleTheInventorySlot) {
+        TWireService service;
+        TString endpoint;
+        auto server = StartWireServer(service, endpoint);
+        const auto config = ParseConfig("cluster_id: test\nendpoints: {a: ['" + endpoint + "']}\n");
+        auto clients = CreateYdbClients(config, TLoadedCredentials{});
+        service.NextStatus = Ydb::StatusIds::UNAUTHORIZED;
+        const auto rejected = Await<TInventoryResult>([&](auto completed) {
+            clients->Discover({endpoint, "a", 1}, std::move(completed));
+        });
+        UNIT_ASSERT(!rejected.Rpc.Success);
+        UNIT_ASSERT(rejected.Rpc.SdkStatus == NYdb::EStatus::UNAUTHORIZED);
+        UNIT_ASSERT(rejected.Endpoints.empty());
+        service.HangDiscovery = true;
+        const auto started = std::chrono::steady_clock::now();
+        const auto hung = Await<TInventoryResult>([&](auto completed) {
+            clients->Discover({endpoint, "a", 2}, std::move(completed));
+        });
+        UNIT_ASSERT(!hung.Rpc.Success);
+        UNIT_ASSERT(hung.Rpc.SdkStatus == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
+        UNIT_ASSERT(std::chrono::steady_clock::now() - started < std::chrono::seconds(8));
+        clients->Stop();
+    }
+
+    Y_UNIT_TEST(DiscoveryIpAliasCanReachMonitoringWithoutDns) {
+        TWireService service;
+        TWireService other;
+        TString target;
+        auto targetServer = StartWireServer(other, target);
+        service.IpEndpointPort = ParseEndpoint(target).Port;
+        TString seed;
+        auto server = StartWireServer(service, seed);
+        auto clients = CreateYdbClients(ParseConfig("cluster_id: test\nendpoints: {a: ['" + seed + "']}\n"),
+            TLoadedCredentials{});
+        const auto inventory = Await<TInventoryResult>([&](auto completed) {
+            clients->Discover({seed, "a", 1}, std::move(completed));
+        });
+        UNIT_ASSERT_C(inventory.Rpc.Success, inventory.Rpc.Status);
+        UNIT_ASSERT_VALUES_EQUAL(inventory.Error, "");
+        const auto ip = std::ranges::find_if(inventory.Endpoints, [&](const auto& item) {
+            return item.Endpoint.Uri == target;
+        });
+        UNIT_ASSERT(ip != inventory.Endpoints.end());
+        clients->AddEndpoint(ip->Endpoint, ip->Pile);
+        const auto health = Await<TSelfCheckResult>([&](auto completed) {
+            clients->SelfCheck({ip->Endpoint.Uri, ip->Pile, 2}, std::move(completed));
+        });
+        UNIT_ASSERT_C(health.Rpc.Success, health.Rpc.Status);
+        UNIT_ASSERT(health.ResponderNodeId == ip->NodeId);
+        UNIT_ASSERT(health.Reply && health.Reply->ResponderPile == ip->Pile);
+        clients->Stop();
+    }
+
+    Y_UNIT_TEST(DiscoveryUnsupportedOptionalAliasesKeepOtherPiles) {
+        const TRedactor redactor{TLoadedCredentials{}};
+        for (const TString unsupported : {"fe80::1%eth0", "fe80::1%25eth0", "bad/address"}) {
+            Ydb::Discovery::ListEndpointsResult proto;
+            auto* endpoint = proto.add_endpoints();
+            endpoint->set_address("node-a");
+            endpoint->set_port(2135);
+            endpoint->set_node_id(1);
+            endpoint->set_bridge_pile_name("a");
+            endpoint->add_ip_v6(unsupported);
+            endpoint->add_ip_v6("2001:db8::1");
+            endpoint->add_ip_v4("127.0.0.1");
+            auto* other = proto.add_endpoints();
+            other->set_address("node-b");
+            other->set_port(2135);
+            other->set_node_id(2);
+            other->set_bridge_pile_name("b");
+            const auto decode = [&] {
+                return DecodeInventoryResult(NYdb::NDiscovery::TListEndpointsResult(Status(), proto),
+                    Rpc(EYdbMethod::Inventory), redactor, "grpc");
+            };
+            const auto result = decode();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Error, "", unsupported);
+            std::map<TString, std::pair<TString, ui32>> addresses;
+            for (const auto& item : result.Endpoints) {
+                addresses[item.Endpoint.Uri] = {item.Pile, item.NodeId};
+            }
+            UNIT_ASSERT((addresses == std::map<TString, std::pair<TString, ui32>>{
+                {"grpc://node-a:2135", {"a", 1}}, {"grpc://[2001:db8::1]:2135", {"a", 1}},
+                {"grpc://127.0.0.1:2135", {"a", 1}}, {"grpc://node-b:2135", {"b", 2}}}));
+
+            // Only parsing an optional locator is best effort. Conflicting
+            // advertised identities still reject the complete refresh.
+            proto.mutable_endpoints(1)->add_ip_v4("127.0.0.1");
+            UNIT_ASSERT_VALUES_EQUAL(decode().Error, "INVALID_DISCOVERY_ENDPOINT");
+            UNIT_ASSERT(decode().Endpoints.empty());
+            proto.mutable_endpoints(1)->clear_ip_v4();
+            proto.mutable_endpoints(0)->set_address(unsupported);
+            UNIT_ASSERT_VALUES_EQUAL(decode().Error, "INVALID_DISCOVERY_ENDPOINT");
+            UNIT_ASSERT(decode().Endpoints.empty());
+        }
+    }
+
+    Y_UNIT_TEST(DiscoveryIpExpansionKeepsInventoryBounded) {
+        const TRedactor redactor{TLoadedCredentials{}};
+        Ydb::Discovery::ListEndpointsResult proto;
+        auto* endpoint = proto.add_endpoints();
+        endpoint->set_address("node");
+        endpoint->set_port(2135);
+        endpoint->set_node_id(1);
+        endpoint->set_bridge_pile_name("a");
+        for (size_t i = 0; i < 16384; ++i) {
+            endpoint->add_ip_v6("2001:db8::" + Sprintf("%zx", i));
+        }
+        const auto result = DecodeInventoryResult(NYdb::NDiscovery::TListEndpointsResult(Status(), proto),
+            Rpc(EYdbMethod::Inventory), redactor, "grpc");
+        UNIT_ASSERT_VALUES_EQUAL(result.Error, "DISCOVERY_INVENTORY_TOO_LARGE");
+        UNIT_ASSERT(result.Endpoints.empty());
+    }
+
+    Y_UNIT_TEST(DiscoveryDomainNameFollowsStoragePoolTransformation) {
+        const TString names = "domain_name: Modern, domains_config: {domain: [{name: Old}]}";
+        // Automatic-config defaults create the domain when its list is empty.
+        for (const TString pools : {"", "storage_pool_types: [], ", "storage_pool_types: [{kind: hdd}], "}) {
+            UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {hosts: [{host: localhost}], " + pools
+                + "domain_name: Modern, domains_config: {domain: []}}"), "/Modern");
+            UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {hosts: [{host: localhost}], " + pools
+                + "domains_config: {domain: []}}"), "/Root");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {" + names + "}"), "/Old");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {storage_pool_types: [], " + names + "}"), "/Old");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase(
+            "config: {storage_pool_types: [{kind: hdd}], " + names + "}"), "/Modern");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase(
+            "config: {storage_pool_types: [{kind: hdd}], domains_config: {domain: [{name: Old}]}}"), "/Old");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {" + names + "}",
+            "config: {storage_pool_types: [{kind: hdd}]}"), "/Modern");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {storage_pool_types: [], " + names + "}",
+            "config: {storage_pool_types: [{kind: hdd}]}"), "/Old");
+    }
+
+    Y_UNIT_TEST(DiscoveryIncludesPlaintextIpAliasesAndChecksTheirIdentity) {
+        const TRedactor redactor{TLoadedCredentials{}};
+        Ydb::Discovery::ListEndpointsResult proto;
+        auto* endpoint = proto.add_endpoints();
+        endpoint->set_address("unresolvable.invalid");
+        endpoint->set_port(2135);
+        endpoint->set_node_id(12);
+        endpoint->set_bridge_pile_name("new-pile");
+        endpoint->add_ip_v4("127.0.0.1");
+        endpoint->add_ip_v4("127.0.0.1");
+        endpoint->add_ip_v6("::1");
+        auto decode = [&](TStringBuf scheme = "grpc") {
+            return DecodeInventoryResult(NYdb::NDiscovery::TListEndpointsResult(Status(), proto),
+                Rpc(EYdbMethod::Inventory), redactor, scheme);
+        };
+        const auto result = decode();
+        UNIT_ASSERT_VALUES_EQUAL(result.Error, "");
+        std::set<TString> addresses;
+        for (const auto& item : result.Endpoints) {
+            addresses.insert(item.Endpoint.Uri);
+            UNIT_ASSERT_VALUES_EQUAL(item.NodeId, 12);
+            UNIT_ASSERT_VALUES_EQUAL(item.Pile, "new-pile");
+        }
+        UNIT_ASSERT((addresses == std::set<TString>{"grpc://unresolvable.invalid:2135",
+            "grpc://127.0.0.1:2135", "grpc://[::1]:2135"}));
+        *proto.add_endpoints() = *proto.mutable_endpoints(0);
+        proto.mutable_endpoints(1)->set_address("127.0.0.1");
+        proto.mutable_endpoints(1)->set_node_id(13);
+        UNIT_ASSERT_VALUES_EQUAL(decode().Error, "INVALID_DISCOVERY_ENDPOINT");
+        proto.mutable_endpoints()->RemoveLast();
+        proto.mutable_endpoints(0)->set_ssl(true);
+        const auto tls = decode("grpcs");
+        UNIT_ASSERT_VALUES_EQUAL(tls.Endpoints.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tls.Endpoints.front().Endpoint.Uri, "grpcs://unresolvable.invalid:2135");
+    }
+
+    Y_UNIT_TEST(DiscoveryConfigAndInventoryValidationAreAtomic) {
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domains_config: {domain: [{name: Other}]}}"), "/Other");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {}"), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domain_name: Modern}"), "/Modern");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {}", "config: {domain_name: StorageRoot}"), "/StorageRoot");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domain_name: MainRoot}", "config: {domain_name: StorageRoot}"), "/MainRoot");
+        UNIT_ASSERT_VALUES_EQUAL(DiscoveryDatabase("config: {domains_config: {security_config: {}}}",
+            "config: {domains_config: {domain: [{name: StorageRoot}]}}"), "/Root");
+        for (const TString yaml : {"config: []", "config: {domains_config: {domain: [{name: a}, {name: b}]}}",
+                "config: {domains_config: {domain: [{name: 'bad/path'}]}}", "!!broken secret"})
+        {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(DiscoveryDatabase(yaml), yexception, "INVALID_DISCOVERY_CONFIG");
+        }
+        const TRedactor redactor{TLoadedCredentials{}};
+        Ydb::Discovery::ListEndpointsResult proto;
+        auto* endpoint = proto.add_endpoints();
+        endpoint->set_address("::1");
+        endpoint->set_port(2135);
+        endpoint->set_node_id(1);
+        endpoint->set_bridge_pile_name("a");
+        auto decode = [&] {
+            return DecodeInventoryResult(NYdb::NDiscovery::TListEndpointsResult(Status(), proto), Rpc(EYdbMethod::Inventory), redactor, "grpc");
+        };
+        UNIT_ASSERT_VALUES_EQUAL(decode().Endpoints.front().Endpoint.Uri, "grpc://[::1]:2135");
+        *proto.add_endpoints() = *endpoint;
+        UNIT_ASSERT_VALUES_EQUAL(decode().Endpoints.size(), 1);
+        proto.mutable_endpoints(1)->set_bridge_pile_name("other");
+        UNIT_ASSERT_VALUES_EQUAL(decode().Error, "INVALID_DISCOVERY_ENDPOINT");
+        UNIT_ASSERT(decode().Endpoints.empty());
+        proto.mutable_endpoints(1)->set_address("other-host");
+        UNIT_ASSERT_VALUES_EQUAL(decode().Error, "INVALID_DISCOVERY_ENDPOINT");
+        proto.mutable_endpoints(1)->set_ssl(true);
+        UNIT_ASSERT_VALUES_EQUAL(decode().Endpoints.size(), 1);
+        proto.mutable_endpoints(0)->set_ssl_target_name_override("balancer");
+        UNIT_ASSERT(decode().Endpoints.empty());
+    }
+
     Y_UNIT_TEST(TokenPreparationMustFinishWithinLaunchAuthorization) {
         VerifyTokenPreparationExpiry(31);
     }
@@ -282,6 +631,28 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
         UNIT_ASSERT_VALUES_EQUAL(result.View->Pending->Kind, "REMOVE");
         UNIT_ASSERT_VALUES_EQUAL(result.View->Pending->Error, "retry");
         UNIT_ASSERT(!result.Connectivity);
+    }
+
+    Y_UNIT_TEST(WireStateWithHotStandbyPreservesClusterView) {
+        TWireService service;
+        service.IncludeHotStandby = true;
+        TString endpoint;
+        auto server = StartWireServer(service, endpoint);
+        const auto config = ParseConfig("cluster_id: test\nendpoints: {a: ['" + endpoint + "']}\n");
+        auto clients = CreateYdbClients(config, TLoadedCredentials{});
+        const auto result = Await<TStateResult>([&](auto completed) {
+            clients->GetState({endpoint, "a", 1}, EYdbMethod::PlainState, std::move(completed));
+        });
+        clients->Stop();
+        UNIT_ASSERT_C(result.Rpc.Success, result.Rpc.Status);
+        UNIT_ASSERT_C(result.View, result.Error);
+        UNIT_ASSERT(result.Error.empty());
+        UNIT_ASSERT_VALUES_EQUAL(result.View->Generation, 42);
+        UNIT_ASSERT_VALUES_EQUAL(result.View->Piles.size(), 3);
+        UNIT_ASSERT(result.View->Piles.at("a") == EPileState::Primary);
+        UNIT_ASSERT(result.View->Piles.at("b") == EPileState::Synchronized);
+        UNIT_ASSERT(result.View->Piles.at("standby")
+            == static_cast<EPileState>(Ydb::Bridge::PileState::HOT_STANDBY));
     }
 
     Y_UNIT_TEST(DecodeRejectsDuplicatesUnknownEnumsAndInvalidViewsBeforeMaps) {
@@ -538,6 +909,86 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
         UNIT_ASSERT(next.Reply);
         clients->Stop();
         clients.reset();
+    }
+
+    Y_UNIT_TEST(DelayedReplyRedactsItsTokenAfterTwoRotationsInDiagnosticsAndLogs) {
+        TWireService service;
+        TString endpoint;
+        auto server = StartWireServer(service, endpoint);
+        UNIT_ASSERT(server);
+        TTempFileHandle token;
+        TFileOutput(token.Name()).Write("startup-secret-token\n");
+        const auto config = ParseConfig("cluster_id: test\nendpoints: {a: ['" + endpoint + "']}\n"
+            "auth: {token_file: '" + token.Name() + "'}\n"
+            "timing: {selfcheck_operation_timeout_seconds: 3}\n");
+        auto clients = CreateYdbClients(config, LoadCredentials(config));
+        const TPlan plan{42, {{"a", EPileState::Primary}, {"b", EPileState::Disconnected}}, endpoint};
+        const auto rotate = [&](TStringBuf value) {
+            TFileOutput(token.Name()).Write(value);
+            const auto result = Await<TUpdateResult>([&](auto completed) {
+                clients->Update({endpoint, "a", 1}, plan, {TMonotonic::Max()}, std::move(completed));
+            });
+            UNIT_ASSERT(result.Rpc.Success);
+        };
+        rotate("intermediate-secret-token\n");
+        service.EchoSelfCheckToken = true;
+        service.NextStatus = Ydb::StatusIds::BAD_REQUEST;
+        service.HangSelfCheck = true;
+        auto promise = NThreading::NewPromise<TSelfCheckResult>();
+        auto future = promise.GetFuture();
+        clients->SelfCheck({endpoint, "a", 2}, [promise](auto result) mutable {
+            promise.SetValue(std::move(result));
+        });
+        for (unsigned n = 0; n < 100 && !service.SelfCheckEntered; ++n) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        UNIT_ASSERT(service.SelfCheckEntered);
+        UNIT_ASSERT_VALUES_EQUAL(service.ReadCapture().AuthTicket, "intermediate-secret-token");
+        rotate("final-secret-token\n");
+        UNIT_ASSERT_VALUES_EQUAL(service.ReadCapture().AuthTicket, "final-secret-token");
+        service.HangSelfCheck = false;
+        UNIT_ASSERT(future.Wait(TDuration::Seconds(5)));
+        const auto delayed = future.GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(delayed.Rpc.Status, "BAD_REQUEST");
+        UNIT_ASSERT(!delayed.Rpc.Issues.Contains("intermediate-secret-token"));
+        UNIT_ASSERT(delayed.Rpc.Issues.Contains("[REDACTED]"));
+
+        // The endpoint error and rpc_result log expose the decoded issue text.
+        // Exercise the same public HTTP renderers used by the running process.
+        TSkipperSnapshot snapshot;
+        TEndpointSnapshot failed;
+        failed.Uri = endpoint;
+        failed.Pile = "a";
+        failed.LastError = delayed.Rpc.Status + ": " + delayed.Rpc.Issues;
+        snapshot.Endpoints.push_back(std::move(failed));
+        snapshot.Diagnostics = std::make_shared<TDiagnosticStore>("rotation", "debug");
+        snapshot.Diagnostics->Log("debug", delayed.Rpc.Issues, TInstant::Now());
+        for (const TStringBuf path : {"/api/state", "/api/logs"}) {
+            const auto response = RouteHttpRequest("GET", path, snapshot, TMonotonic::Now(), TInstant::Now());
+            UNIT_ASSERT_VALUES_EQUAL(response.Status, 200);
+            UNIT_ASSERT(!response.Body.Contains("intermediate-secret-token"));
+            UNIT_ASSERT(response.Body.Contains("[REDACTED]"));
+        }
+        clients->Stop();
+    }
+
+    Y_UNIT_TEST(RequestRedactionCoversLateSdkReadsAndReleasesOldCredentials) {
+        TString loaded = "credential-A";
+        auto source = std::make_shared<TTokenSource>(TString("unused"), loaded,
+            [&](const auto&) { return TMaybe<TString>(loaded); });
+        const TRedactor logging(source);
+        std::optional<TRedactor> request(logging.ForRequest());
+        loaded = "credential-A-longer-B";
+        source->Reload();
+        UNIT_ASSERT_VALUES_EQUAL(source->GetAuthInfo(), std::string(loaded.data(), loaded.size()));
+        loaded = "credential-C";
+        source->Reload();
+        const TString text = "credential-A credential-A-longer-B credential-C";
+        UNIT_ASSERT_VALUES_EQUAL(request->Redact(text), "[REDACTED] [REDACTED] [REDACTED]");
+        UNIT_ASSERT_VALUES_EQUAL(logging.Redact(text), "[REDACTED] [REDACTED] [REDACTED]");
+        request.reset();
+        // No completed-request token history is retained by the shared logger.
+        UNIT_ASSERT_VALUES_EQUAL(logging.Redact(text), "credential-A credential-A-longer-B [REDACTED]");
     }
 
     Y_UNIT_TEST(TokenFileIsReReadBeforeUpdateAndAfterUnauthorized) {

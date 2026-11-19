@@ -55,7 +55,7 @@ bool IsSchemaViolationError(const std::exception& ex) {
     return errorException->Error().FindMatching(NYT::NTableClient::EErrorCode::SchemaViolation).has_value();
 }
 
-TEST(TValidateLogicalTypeTest, TestBasicTypes)
+TEST(TValidateLogicalTypeTest, BasicTypes)
 {
     EXPECT_GOOD_TYPE(String(), " foo ");
     EXPECT_GOOD_TYPE(Int64(), " 42 ");
@@ -74,7 +74,7 @@ TEST(TValidateLogicalTypeTest, TestBasicTypes)
     EXPECT_BAD_TYPE(Null(), " 0 ");
 }
 
-TEST(TValidateLogicalTypeTest, TestSimpleOptionalTypes)
+TEST(TValidateLogicalTypeTest, SimpleOptionalTypes)
 {
     EXPECT_GOOD_TYPE(Optional(String()), " foo ");
     EXPECT_GOOD_TYPE(Optional(String()), " # ");
@@ -85,7 +85,7 @@ TEST(TValidateLogicalTypeTest, TestSimpleOptionalTypes)
     EXPECT_BAD_TYPE(Optional(Uint64()), " 42 ");
 }
 
-TEST(TValidateLogicalTypeTest, TestOptionalNull)
+TEST(TValidateLogicalTypeTest, OptionalNull)
 {
     EXPECT_GOOD_TYPE(Optional(Null()), " # ");
     EXPECT_GOOD_TYPE(Optional(Null()), " [#] ");
@@ -100,7 +100,7 @@ TEST(TValidateLogicalTypeTest, TestOptionalNull)
     EXPECT_BAD_TYPE(Optional(Optional(Null())), " [[[]]] ");
 }
 
-TEST(TValidateLogicalTypeTest, TestLogicalTypes)
+TEST(TValidateLogicalTypeTest, LogicalTypes)
 {
     // Int8
     EXPECT_GOOD_TYPE(Int8(), " 127 ");
@@ -158,7 +158,7 @@ TEST(TValidateLogicalTypeTest, TestLogicalTypes)
     EXPECT_BAD_TYPE(Float(), " blah");
 }
 
-TEST(TValidateLogicalTypeTest, TestAnyType)
+TEST(TValidateLogicalTypeTest, AnyType)
 {
     EXPECT_GOOD_TYPE(Yson(), " foo ");
     EXPECT_GOOD_TYPE(Yson(), " 42 ");
@@ -178,7 +178,7 @@ TEST(TValidateLogicalTypeTest, TestAnyType)
 
 constexpr ui16 TzEuropeMoscow = 1;
 
-TEST(TValidateLogicalTypeTest, TestTimezoneType)
+TEST(TValidateLogicalTypeTest, TimezoneType)
 {
     // Simple example.
     auto correctValue = MakeTzString<ui16>(42, TzEuropeMoscow);
@@ -241,7 +241,7 @@ TEST(TValidateLogicalTypeTest, TestTimezoneType)
     EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzTimestamp64>(tooSmallTimestamp64), "Not a valid timezone type");
 }
 
-TEST(TValidateLogicalTypeTest, TestJsonType)
+TEST(TValidateLogicalTypeTest, JsonType)
 {
     EXPECT_GOOD_TYPE(Json(), R"( "\"foo\"" )");
     EXPECT_GOOD_TYPE(Json(), R"( "42" )");
@@ -265,7 +265,7 @@ TEST(TValidateLogicalTypeTest, TestJsonType)
     EXPECT_BAD_TYPE(Json(), R"( "\xFF" )");
 }
 
-TEST(TValidateLogicalTypeTest, TestDecimalType)
+TEST(TValidateLogicalTypeTest, DecimalType)
 {
     EXPECT_GOOD_TYPE(Decimal(3, 2), R"("\x80\x00\x01\x3a")"); // 314
     EXPECT_BAD_TYPE(Decimal(3, 2), R"("\x80\x00\x11\x3a")");
@@ -287,7 +287,7 @@ TEST(TValidateLogicalTypeTest, TestDecimalType)
     EXPECT_BAD_TYPE(Decimal(35, 0), R"("")");
 }
 
-TEST(TValidateLogicalTypeTest, TestOptionalCompositeType)
+TEST(TValidateLogicalTypeTest, OptionalCompositeType)
 {
     const auto optionalOptionalInt = Optional(Optional(Int64()));
     EXPECT_GOOD_TYPE(optionalOptionalInt, " [5] ");
@@ -321,7 +321,7 @@ TEST(TValidateLogicalTypeTest, TestOptionalCompositeType)
     EXPECT_BAD_TYPE(optionalOptionalOptionalAny, " [[]] ");
 }
 
-TEST(TValidateLogicalTypeTest, TestListType)
+TEST(TValidateLogicalTypeTest, ListType)
 {
     const auto listInt = List(Int64());
     EXPECT_GOOD_TYPE(listInt, " [3] ");
@@ -332,7 +332,7 @@ TEST(TValidateLogicalTypeTest, TestListType)
     EXPECT_BAD_TYPE(listInt, " {} ");
 }
 
-TEST(TValidateLogicalTypeTest, TestStructType)
+TEST(TValidateLogicalTypeTest, StructType)
 {
     const auto struct1 = StructLogicalType({
         {"number", "number", Int64()},
@@ -363,7 +363,7 @@ TEST(TValidateLogicalTypeTest, TestStructType)
     EXPECT_BAD_TYPE(struct2, " [ 2 ] ");
 }
 
-TEST(TValidateLogicalTypeTest, TestTupleType)
+TEST(TValidateLogicalTypeTest, TupleType)
 {
     const auto tuple1 = Tuple(Int64(), String(), Optional(String()));
 
@@ -422,17 +422,17 @@ void TestVariantImpl(ELogicalMetatype metatype)
     EXPECT_BAD_TYPE(variant1, "[2; \"false\"]");
 }
 
-TEST(TValidateLogicalTypeTest, TestVariantStructType)
+TEST(TValidateLogicalTypeTest, VariantStructType)
 {
     TestVariantImpl(ELogicalMetatype::VariantStruct);
 }
 
-TEST(TValidateLogicalTypeTest, TestVariantTupleType)
+TEST(TValidateLogicalTypeTest, VariantTupleType)
 {
     TestVariantImpl(ELogicalMetatype::VariantTuple);
 }
 
-TEST(TValidateLogicalTypeTest, TestDictType)
+TEST(TValidateLogicalTypeTest, DictType)
 {
     const auto stringToInt = Dict(String(), Int64());
 
@@ -448,7 +448,7 @@ TEST(TValidateLogicalTypeTest, TestDictType)
     EXPECT_BAD_TYPE(stringToInt, "{foo=0;}"); // <- This is not a dict!
 }
 
-TEST(TValidateLogicalTypeTest, TestTaggedType)
+TEST(TValidateLogicalTypeTest, TaggedType)
 {
     const auto taggedDict = Tagged("tag", Dict(String(), Int64()));
 
@@ -479,7 +479,7 @@ TEST(TValidateLogicalTypeTest, TestTaggedType)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TValidateLogicalTypeTest, TestAggregateStateType)
+TEST(TValidateLogicalTypeTest, AggregateStateType)
 {
     using namespace NLogicalTypeShortcuts;
 

@@ -47,7 +47,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/compilation/events.h>
 #include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/simple/query_id.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/common/simple/settings.h>
@@ -428,7 +428,6 @@ private:
         TString database = "/Root";
         TIntrusiveConstPtr<NACLib::TUserToken> userToken;
         TMaybe<NKikimrKqp::TRlPath> rlPath;
-        TActorId checkpointCoordinator;
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager = std::make_shared<TStubResourceManager>();
         std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> caFactory; // unused on this path
 
@@ -458,7 +457,7 @@ private:
             .ArrayBufferMinFillPercentage = Nothing(),
             .BufferPageAllocSize = Nothing(),
             .Query = nullptr,
-            .CheckpointCoordinator = checkpointCoordinator,
+            .EnableCheckpoints = false,
             .EnableWatermarks = false,
         });
 
@@ -738,7 +737,7 @@ private:
     }
 
     // Sends TEvCompileRequest directly to the compile service and returns the
-    // full TKqpCompileResult (including QueryAst).
+    // full TKqpCompileResult (including the prepared physical query).
     // AddObserver cannot be used here: with UseRealThreads=true, actor-to-actor
     // sends bypass the test-runtime observer hook.
     TKqpCompileResult::TConstPtr CompileQueryFull(const TString& sql) {
@@ -763,7 +762,6 @@ private:
                 TMaybe<TKqpQueryId>(std::move(queryId)),
                 /*keepInCache*/          true,
                 /*isQueryActionPrepare*/ false,
-                /*perStatementResult*/   false,
                 /*deadline*/             TInstant::Max(),
                 /*dbCounters*/           nullptr,
                 // GUCSettings must be non-null: compile actor calls ->ExportToJson().

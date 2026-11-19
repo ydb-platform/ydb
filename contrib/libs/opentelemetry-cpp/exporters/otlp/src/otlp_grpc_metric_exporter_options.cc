@@ -21,12 +21,10 @@ OtlpGrpcMetricExporterOptions::OtlpGrpcMetricExporterOptions()
   ssl_credentials_cacert_path = GetOtlpDefaultMetricsSslCertificatePath();
   ssl_credentials_cacert_as_string = GetOtlpDefaultMetricsSslCertificateString();
 
-#ifdef ENABLE_OTLP_GRPC_SSL_MTLS_PREVIEW
   ssl_client_key_path    = GetOtlpDefaultMetricsSslClientKeyPath();
   ssl_client_key_string  = GetOtlpDefaultMetricsSslClientKeyString();
   ssl_client_cert_path   = GetOtlpDefaultMetricsSslClientCertificatePath();
   ssl_client_cert_string = GetOtlpDefaultMetricsSslClientCertificateString();
-#endif
 
   timeout    = GetOtlpDefaultMetricsTimeout();
   metadata   = GetOtlpDefaultMetricsHeaders();

@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/persqueue_public)
 
-FORK_SUBTESTS()
-
 SRCS(
     replication_attributes_ut.cpp
 )

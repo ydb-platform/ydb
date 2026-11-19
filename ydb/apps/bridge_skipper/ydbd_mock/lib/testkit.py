@@ -65,7 +65,7 @@ class LiveCluster:
         self._http: typing.Optional[aiohttp.ClientSession] = None
 
     def _new_process(self, pile: str) -> MockProcess:
-        state_dir = os.path.join(self.state_root, pile) if self.state_root else None
+        state_dir = os.path.join(self.state_root, self.topo.pile_file_name(pile)) if self.state_root else None
         return MockProcess(self.topo, pile, state_dir=state_dir)
 
     async def start(self) -> "LiveCluster":

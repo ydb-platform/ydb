@@ -511,14 +511,16 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
         UNIT_ASSERT_C(fullSyncRequests[2] > requestsBefore, "F->R must start full sync");
         setStates({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
 
-        // DC_FAILURE_INV1: replicate D=1+1 into the restored realm.
-        setStates({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}});
+        // Establish D=2+2 before publishing the completed invariant. Completed
+        // states do not schedule resurrection of missing copies.
+        setStates({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}});
         waitForReplication(0);
         waitForReplication(2);
+        setStates({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}});
         checkBlob();
 
         // X/X/I: the only readable realm had no copy when the blob was written.
-        setStates({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}});
+        setStates({NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, {TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}});
         checkBlob();
         env.Runtime->FilterFunction = {};
         return;

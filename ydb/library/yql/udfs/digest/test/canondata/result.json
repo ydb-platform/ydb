@@ -1,0 +1,47 @@
+{
+    "test.test[aggregate-Results]": [
+        {
+            "uri": "file://test.test_aggregate-Results_/results.txt"
+        }
+    ],
+    "test.test[aggregate_grouped-Results]": [
+        {
+            "uri": "file://test.test_aggregate_grouped-Results_/results.txt"
+        }
+    ],
+    "test.test[aggregate_invalid_algorithm-Results]": [
+        {
+            "uri": "file://test.test_aggregate_invalid_algorithm-Results_/extracted"
+        }
+    ],
+    "test.test[aggregate_invalid_hash-Results]": [
+        {
+            "uri": "file://test.test_aggregate_invalid_hash-Results_/extracted"
+        }
+    ],
+    "test.test[aggregate_invalid_type-Results]": [
+        {
+            "uri": "file://test.test_aggregate_invalid_type-Results_/extracted"
+        }
+    ],
+    "test.test[aggregate_mismatched_algorithm-Results]": [
+        {
+            "uri": "file://test.test_aggregate_mismatched_algorithm-Results_/extracted"
+        }
+    ],
+    "test.test[aggregate_state-Results]": [
+        {
+            "uri": "file://test.test_aggregate_state-Results_/results.txt"
+        }
+    ],
+    "test.test[aggregate_types-Results]": [
+        {
+            "uri": "file://test.test_aggregate_types-Results_/results.txt"
+        }
+    ],
+    "test.test[canonical_json-Results]": [
+        {
+            "uri": "file://test.test_canonical_json-Results_/results.txt"
+        }
+    ]
+}

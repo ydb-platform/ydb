@@ -185,6 +185,7 @@ SRCS(
     queue_client/helpers.cpp
     queue_client/partition_reader.cpp
     queue_client/producer_client.cpp
+    queue_client/queue_export.cpp
     queue_client/queue_rowset.cpp
 
     ypath/rich_constrained.cpp

@@ -28,7 +28,7 @@ namespace NYT::NApi {
 ////////////////////////////////////////////////////////////////////////////////
 
 using TClusterTag = NObjectClient::TCellTag;
-using TStrongOrderingTagsMap = THashMap<NObjectClient::TCellId, std::vector<std::string>>;
+using TCellIdToStrongOrderingTagSet = THashMap<NObjectClient::TCellId, THashSet<std::string>>;
 
 // Keep in sync with NRpcProxy::NProto::EMasterReadKind.
 // On cache miss request is redirected to next level as follows:
@@ -259,10 +259,11 @@ DEFINE_ENUM(EMaintenanceType,
 );
 
 DEFINE_ENUM(EMaintenanceComponent,
-    ((ClusterNode) (1))
-    ((HttpProxy)   (2))
-    ((RpcProxy)    (3))
-    ((Host)        (4))
+    ((ClusterNode)   (1))
+    ((HttpProxy)     (2))
+    ((RpcProxy)      (3))
+    ((Host)          (4))
+    ((ChunkLocation) (5))
 );
 
 using TMaintenanceId = TGuid;

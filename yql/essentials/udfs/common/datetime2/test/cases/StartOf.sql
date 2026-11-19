@@ -1,4 +1,11 @@
-/* syntax version 1 */
+$rows = [
+    <|ftztimestamp: Just(TzTimestamp("1970-01-01T05:00:00.000000,Europe/Moscow"))|>,
+    <|ftztimestamp: Just(TzTimestamp("2018-12-15T01:02:03.456789,Europe/Moscow"))|>,
+    <|ftztimestamp: Just(TzTimestamp("2105-12-31T16:23:45.000000,GMT"))|>,
+    <|ftztimestamp: Just(TzTimestamp("2106-01-01T01:00:00.000000,Europe/Moscow"))|>,
+    <|ftztimestamp: Just(TzTimestamp("2019-07-24T12:00:00,Europe/Moscow"))|>,
+];
+
 $check = ($arg) -> {
     return <|
         soyear:    DateTime::StartOfYear($arg),
@@ -16,13 +23,11 @@ $check = ($arg) -> {
 };
 
 $typeDispatcher = ($row) -> {
-    $tm = $row.tm;
+    $tm = $row.ftztimestamp;
     return <|
         explicit: $check(DateTime::Split($tm)),
         implicit: $check($tm),
     |>;
 };
 
-$input = SELECT CAST(ftztimestamp as TzTimestamp) as tm FROM Input;
-
-PROCESS $input USING $typeDispatcher(TableRow());
+PROCESS AS_TABLE($rows) USING $typeDispatcher(TableRow());

@@ -7,6 +7,7 @@
 
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
+#include <yt/yql/providers/yt/lib/nile/operation_permission.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/activation/yql_activation.h>
@@ -19,9 +20,9 @@
 namespace NYql {
 
 bool TYtTableDescription::Fill(
-    const TString& cluster, const TString& table, const TQContext& qContext, TExprContext& ctx,
-    IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-    bool allowViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags) {
+    const TString& cluster, const TString& table, TExprContext& ctx,
+    TTypeAnnotationContext& types,
+    bool allowViewIsolation, const NSQLTranslation::TSqlFlags& sqlFlags) {
     const TStructExprType* type = RowSpec ? RowSpec->GetType() : nullptr;
     if (!type) {
         TVector<const TItemExprType*> items;
@@ -34,8 +35,8 @@ bool TYtTableDescription::Fill(
     }
 
     if (!TYtTableDescriptionBase::Fill(TString{YtProviderName}, cluster,
-        table, type, Meta->SqlView, Meta->SqlViewSyntaxVersion, qContext, Meta->Attrs, ctx,
-        moduleResolver, urlListerManager, randomProvider, allowViewIsolation, udfResolver, sqlFlags)) {
+        table, type, Meta->SqlView, Meta->SqlViewSyntaxVersion, Meta->Attrs, ctx,
+        types, allowViewIsolation, sqlFlags)) {
         return false;
     }
     if (QB2RowSpec) {
@@ -253,12 +254,12 @@ void TYtTableDescription::SetConstraintsReady() {
 }
 
 bool TYtTableDescription::FillViews(
-    const TString& cluster, const TString& table, const TQContext& qContext, TExprContext& ctx,
-    IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-    bool allowViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags) {
+    const TString& cluster, const TString& table, TExprContext& ctx,
+    TTypeAnnotationContext& types,
+    bool allowViewIsolation, const NSQLTranslation::TSqlFlags& sqlFlags) {
     return TYtTableDescriptionBase::FillViews(
-        TString{YtProviderName}, cluster, table, Meta->Attrs, qContext, ctx,
-        moduleResolver, urlListerManager, randomProvider, allowViewIsolation, udfResolver, sqlFlags);
+        TString{YtProviderName}, cluster, table, Meta->Attrs, ctx,
+        types, allowViewIsolation, sqlFlags);
 }
 
 const TYtTableDescription& TYtTablesData::GetTable(const TString& cluster, const TString& table, TMaybe<ui32> epoch) const {
@@ -420,7 +421,6 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         Y_UNUSED(functionRegistry);
         Y_UNUSED(randomProvider);
         Y_UNUSED(progressWriter);
-        Y_UNUSED(operationOptions);
         Y_UNUSED(hiddenAborter);
 
         IYtFullCapture::TPtr fullCapture;
@@ -443,6 +443,7 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         TStatWriter statWriter;
         std::tie(ytState, statWriter) = CreateYtNativeState(gateway, userName, sessionId, ytGatewayConfig, typeCtx, optFactory, helper, tablesData, fullCapture, qContext);
         ytState->PlanLimits = planLimits;
+        ytState->NileAllowedClusters = BuildNileOperationPermissions(gatewaysConfig, userName, operationOptions.AttrsYson);
 
         TVector<TAttr> mrJobLabels;
         if (ytGatewayConfig && ytGatewayConfig->HasMrJobLabel()) {

@@ -31,6 +31,7 @@ PEERDIR(
 )
 
 SRCS(
+    iam_core_facility_ut.cpp
     json_proto_conversion_ut.cpp
     sqs_xml_receipt_ut.cpp
     http_ut.cpp

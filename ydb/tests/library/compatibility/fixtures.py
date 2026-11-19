@@ -113,7 +113,132 @@ all_binary_combinations_ids_restart = [
 ]
 
 
-class RestartToAnotherVersionFixture:
+class CompatibilityReadinessMixin:
+    def _new_readiness_table_name(self):
+        self._readiness_seq = getattr(self, "_readiness_seq", 0) + 1
+        return "test_readiness_%d" % self._readiness_seq
+
+    def _execute_scheme_query(self, query, settings):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(
+                query,
+                retry_settings=ydb.RetrySettings(max_retries=1),
+                settings=settings,
+            )
+
+    def _execute_data_query(self, query, settings):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            return session_pool.execute_with_retries(
+                query,
+                retry_settings=ydb.RetrySettings(max_retries=1),
+                settings=settings,
+            )
+
+    @staticmethod
+    def _is_path_already_exists(error):
+        if isinstance(error, ydb.issues.AlreadyExists):
+            return True
+        message = str(error)
+        return "path exist" in message and "creating right now" not in message
+
+    @staticmethod
+    def _is_path_creating(error):
+        return "creating right now" in str(error)
+
+    def _drop_readiness_table(self, table_name, settings, *, best_effort=False):
+        # CREATE can outlive the client timeout; retry DROP to avoid leftover paths.
+        query = "DROP TABLE IF EXISTS `%s`" % table_name
+        deadline = time.time() + 30
+        while True:
+            try:
+                self._execute_scheme_query(query, settings)
+                return
+            except Exception as e:
+                if time.time() >= deadline:
+                    if best_effort:
+                        logger.warning("Failed to drop readiness table %s: %r", table_name, e)
+                        return
+                    raise
+                logger.warning("Drop readiness table %s failed, retrying: %r", table_name, e)
+                time.sleep(2)
+
+    def _probe_data_plane(self, table_name, settings):
+        # Scheme-only probe misses "Failed to resolve tablet" after full restart.
+        self._execute_data_query(
+            "UPSERT INTO `%s` (id) VALUES (1)" % table_name,
+            settings,
+        )
+        result_sets = self._execute_data_query(
+            "SELECT id FROM `%s` WHERE id = 1" % table_name,
+            settings,
+        )
+        rows = result_sets[0].rows if result_sets else []
+        if not rows:
+            raise AssertionError("readiness data probe returned no rows for %s" % table_name)
+
+    def _wait_for_readiness(self, *, probe_data=False):
+        if getattr(self, "recreate_driver", False):
+            self.driver = self.create_driver()
+
+        timeout = 120
+        interval = 2
+        request_timeout = 30
+        settings = (
+            ydb.BaseRequestSettings()
+            .with_timeout(request_timeout)
+            .with_operation_timeout(request_timeout)
+            .with_cancel_after(request_timeout)
+        )
+
+        start_time = time.time()
+        deadline = start_time + timeout
+        last_exception = None
+        attempt = 0
+        table_name = self._new_readiness_table_name()
+        abandoned = []
+        try:
+            while True:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    break
+                attempt += 1
+                query = """
+                CREATE TABLE `%s` (
+                    id Int64 NOT NULL,
+                    PRIMARY KEY (id)
+                ) """ % table_name
+                try:
+                    logger.info("Readiness check attempt %d on %s", attempt, table_name)
+                    try:
+                        self._execute_scheme_query(query, settings)
+                    except Exception as e:
+                        if not self._is_path_already_exists(e):
+                            raise
+                        logger.info("Readiness table %s already exists", table_name)
+                    if probe_data:
+                        self._probe_data_plane(table_name, settings)
+                    self._drop_readiness_table(table_name, settings)
+                    return
+                except Exception as e:
+                    last_exception = e
+                    logger.warning(
+                        "Readiness check attempt %d failed after %.1fs: %r",
+                        attempt,
+                        time.time() - start_time,
+                        e,
+                    )
+                    if self._is_path_creating(e):
+                        abandoned.append(table_name)
+                        table_name = self._new_readiness_table_name()
+                    time.sleep(min(interval, max(0.0, deadline - time.time())))
+        finally:
+            for name in abandoned:
+                self._drop_readiness_table(name, settings, best_effort=True)
+
+        raise last_exception or RuntimeError("readiness check timed out")
+
+
+class RestartToAnotherVersionFixture(CompatibilityReadinessMixin):
     @pytest.fixture(autouse=True, params=all_binary_combinations_restart, ids=all_binary_combinations_ids_restart)
     def base_setup(self, request):
         self.current_binary_paths_index = 0
@@ -165,7 +290,8 @@ class RestartToAnotherVersionFixture:
                 yield
         finally:
             self.stop_driver()
-            self.cluster.stop()
+            # Kill: graceful drain can SIGSEGV after the test body already passed.
+            self.cluster.stop(kill=True)
 
     def change_cluster_version(self):
         self.current_binary_paths_index = (self.current_binary_paths_index + 1) % len(self.all_binary_paths)
@@ -176,11 +302,8 @@ class RestartToAnotherVersionFixture:
         self.cluster.update_configurator_and_restart(self.config)
         self.driver = self.create_driver()
 
-        # TODO: remove sleep
-        # without sleep there are errors like
-        # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)
         logger.info("Waiting for cluster initialization")
-        time.sleep(60)
+        self._wait_for_readiness(probe_data=True)
 
 
 all_binary_combinations_mixed = [
@@ -267,7 +390,7 @@ all_binary_combinations_ids_rolling = [
 ]
 
 
-class RollingUpgradeAndDowngradeFixture:
+class RollingUpgradeAndDowngradeFixture(CompatibilityReadinessMixin):
     recreate_driver = True  # TODO: temporary workaround. We don't want to recreate driver, but not working now
 
     @pytest.fixture(autouse=True, params=all_binary_combinations_rolling, ids=all_binary_combinations_ids_rolling)
@@ -289,88 +412,6 @@ class RollingUpgradeAndDowngradeFixture:
         )
         driver.wait(timeout=60)
         return driver
-
-    def _new_readiness_table_name(self):
-        self._readiness_seq = getattr(self, "_readiness_seq", 0) + 1
-        return "test_readiness_%d" % self._readiness_seq
-
-    def _execute_scheme_query(self, query, settings):
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(
-                query,
-                retry_settings=ydb.RetrySettings(max_retries=1),
-                settings=settings,
-            )
-
-    def _drop_readiness_table(self, table_name, settings):
-        # The probe CREATE can outlive the client timeout. Retry the DROP so the
-        # next roll() step does not collide with a path still in EPathStateCreate.
-        query = "DROP TABLE IF EXISTS `%s`" % table_name
-        deadline = time.time() + 30
-        while True:
-            try:
-                self._execute_scheme_query(query, settings)
-                return
-            except Exception as e:
-                if time.time() >= deadline:
-                    logger.warning("Failed to drop readiness table %s: %r", table_name, e)
-                    return
-                logger.warning("Drop readiness table %s failed, retrying: %r", table_name, e)
-                time.sleep(2)
-
-    def _wait_for_readiness(self):
-        if self.recreate_driver:
-            self.driver = self.create_driver()
-
-        timeout = 120  # seconds
-        interval = 2  # seconds
-        # Scheme ops during a rolling restart often outlive a 10s cancel window
-        # and stay in EPathStateCreate after the client has given up.
-        request_timeout = 30  # seconds
-        settings = (
-            ydb.BaseRequestSettings()
-            .with_timeout(request_timeout)
-            .with_operation_timeout(request_timeout)
-            .with_cancel_after(request_timeout)
-        )
-
-        start_time = time.time()
-        deadline = start_time + timeout
-        last_exception = None
-        attempt = 0
-        # One fixed name across retries collides with the previous iteration's
-        # still-running CREATE/DROP (Overloaded: path exists but creating right now).
-        table_name = self._new_readiness_table_name()
-        while time.time() < deadline:
-            attempt += 1
-            query = """
-            CREATE TABLE `%s` (
-                id Int64 NOT NULL,
-                PRIMARY KEY (id)
-            ) """ % table_name
-            try:
-                logger.info("Readiness check attempt %d on %s", attempt, table_name)
-                self._execute_scheme_query(query, settings)
-                self._drop_readiness_table(table_name, settings)
-                return
-            except Exception as e:
-                message = str(e)
-                if "path exist" in message and "creating right now" not in message:
-                    logger.info("Readiness table %s already exists", table_name)
-                    self._drop_readiness_table(table_name, settings)
-                    return
-                last_exception = e
-                logger.warning(
-                    "Readiness check attempt %d failed after %.1fs: %r",
-                    attempt,
-                    time.time() - start_time,
-                    e,
-                )
-                if "creating right now" in message:
-                    table_name = self._new_readiness_table_name()
-                time.sleep(interval)
-
-        raise last_exception or RuntimeError("readiness check timed out")
 
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))

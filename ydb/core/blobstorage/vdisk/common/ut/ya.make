@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/blobstorage/vdisk/common)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:1)
 

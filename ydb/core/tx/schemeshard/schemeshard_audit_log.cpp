@@ -173,7 +173,9 @@ void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransac
     const auto reason = response.HasReason() ? response.GetReason() : TString();
     for (const auto& operation : request.GetTransaction()) {
         const auto type = operation.GetOperationType();
-        if (NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin == type) {
+        if (NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin == type
+            || (type == NKikimrSchemeOp::ESchemeOpRepairIndexShadowData && operation.GetInternal()))
+        {
             continue;
         }
         AuditLogModifySchemeOperation(operation, status, reason, SS, peerName, userSID, sanitizedToken, txId, TParts());
@@ -186,6 +188,9 @@ void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySch
     // Each TEvModifySchemeTransaction.Transaction is a self sufficient operation and should be logged independently
     // (even if it was packed into a single TxProxy transaction with some other operations).
     for (const auto& operation : request.GetTransaction()) {
+        if (operation.GetOperationType() == NKikimrSchemeOp::ESchemeOpRepairIndexShadowData && operation.GetInternal()) {
+            continue;
+        }
         auto logEntry = MakeAuditLogFragment(operation);
 
         TPath databasePath = DatabasePathFromModifySchemeOperation(SS, operation);

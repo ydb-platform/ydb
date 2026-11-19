@@ -5,8 +5,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from internalize_library import internalize
+from internalize_library import allocate_common_symbols, internalize, read_common_symbols
 
 
 class InternalizeLibraryTest(unittest.TestCase):
@@ -26,7 +27,7 @@ class InternalizeLibraryTest(unittest.TestCase):
         self.run_tool('clang++', '-c', '-g', '-fPIC', *flags, source_path, '-o', object_path)
         return object_path
 
-    def make_archive(self, name, value, split_globals=False):
+    def make_archive(self, name, value, split_globals=False, direct=False):
         entry = self.compile(
             name,
             f'''
@@ -75,8 +76,40 @@ class InternalizeLibraryTest(unittest.TestCase):
         else:
             self.run_tool('llvm-ar', 'rcs', original, entry, terminator, helper, initializer)
         output = self.path / f'{name}.a'
-        internalize(self.toolchain, original, output, name, self.path, [f'GetStaticUdfLibrary_{name}'], globals_archive)
+        if direct:
+            internalize(
+                self.toolchain,
+                None,
+                output,
+                name,
+                self.path,
+                [f'GetStaticUdfLibrary_{name}'],
+                dependency_inputs=[original],
+                global_inputs=[globals_archive],
+            )
+        else:
+            internalize(
+                self.toolchain, original, output, name, self.path, [f'GetStaticUdfLibrary_{name}'], globals_archive
+            )
         return output
+
+    def test_direct_dependencies_preserve_globals_and_lazy_members(self):
+        archive = self.make_archive('direct', 17, split_globals=True, direct=True)
+        # The final archive must remain usable without any input archives or objects.
+        for source in self.path.iterdir():
+            if source != archive and source.suffix in ('.a', '.o'):
+                source.unlink()
+        library = self.path / 'direct.so'
+        self.run_tool('ld.lld', '-shared', '--whole-archive', archive, '-o', library)
+        loaded = ctypes.CDLL(str(library))
+
+        class Descriptor(ctypes.Structure):
+            _fields_ = [('Register', ctypes.CFUNCTYPE(ctypes.c_int)), ('AbiVersion', ctypes.CFUNCTYPE(ctypes.c_int))]
+
+        loaded.GetStaticUdfLibrary_direct.restype = ctypes.POINTER(Descriptor)
+        descriptor = loaded.GetStaticUdfLibrary_direct().contents
+        self.assertEqual(descriptor.Register(), 17)
+        self.assertEqual(descriptor.AbiVersion(), 17)
 
     def test_multiple_udfs_link_and_run(self):
         first = self.make_archive('first', 17)
@@ -110,6 +143,18 @@ class InternalizeLibraryTest(unittest.TestCase):
         sections = self.run_tool('llvm-readelf', '--sections', archive)
         self.assertNotIn('.debug_', sections)
         self.assertNotIn('GROUP', sections)
+
+    def test_debug_sections_are_discarded_before_common_allocation(self):
+        def check_intermediate(tools, source, temporary):
+            sections = self.run_tool('llvm-readelf', '--sections', '--wide', source)
+            self.assertNotIn('.debug', sections)
+            self.assertNotIn('.zdebug', sections)
+            return allocate_common_symbols(tools, source, temporary)
+
+        for split_globals, direct in ((False, False), (True, False), (True, True)):
+            with self.subTest(split_globals=split_globals, direct=direct):
+                with patch('internalize_library.allocate_common_symbols', side_effect=check_intermediate):
+                    self.make_archive('debug', 17, split_globals=split_globals, direct=direct)
 
     def test_cli_from_read_only_directory(self):
         entry = self.compile('readonly', 'extern "C" int GetStaticUdfLibrary_readonly() { return 17; }')
@@ -145,6 +190,90 @@ class InternalizeLibraryTest(unittest.TestCase):
                     self.assertEqual(list((output.parent / work_dir).iterdir()), [])
         finally:
             source_dir.chmod(0o755)
+
+    def test_cli_relative_global_archive(self):
+        entry = self.compile(
+            'relative', 'extern int Helper(); extern "C" int GetStaticUdfLibrary_relative() { return Helper(); }'
+        )
+        helper = self.compile('helper', 'int Helper() { return 17; }')
+        dependency = self.path / 'dependency.a'
+        self.run_tool('llvm-ar', 'rcs', dependency, helper)
+        archive = self.path / 'relative.global.a'
+        self.run_tool('llvm-ar', 'rcs', archive, entry)
+        output = (self.path / 'relative.a').resolve()
+        source_dir = self.path / 'source'
+        source_dir.mkdir()
+        subprocess.run(
+            [
+                sys.executable,
+                Path(__file__).with_name('internalize_library.py').resolve(),
+                '--archiver',
+                (self.tools / 'llvm-ar').resolve(),
+                '--build-root',
+                self.path.resolve(),
+                '--output',
+                output.name,
+                '--output-alias',
+                'alias.a',
+                '--module-name',
+                'relative',
+                '--exports',
+                'GetStaticUdfLibrary_relative',
+                '--work-dir',
+                'tmp',
+                '--global-inputs',
+                archive.name,
+                '--dependency-inputs',
+                dependency.name,
+            ],
+            cwd=source_dir,
+            check=True,
+        )
+        self.assertEqual(self.run_tool('llvm-ar', 't', output).splitlines(), ['module.o'])
+        self.assertTrue((self.path / 'alias.a').samefile(output))
+        self.assertEqual(list(source_dir.iterdir()), [])
+
+    def test_cli_inputs_from_command_file(self):
+        entry = self.compile('вход с пробелами', 'extern "C" int GetStaticUdfLibrary_cmdfile() { return 17; }')
+        output = (self.path / 'cmdfile.a').resolve()
+        command_file = self.path / 'inputs.args'
+        command_file.write_text(
+            '\n'.join(
+                [
+                    '--exports',
+                    'GetStaticUdfLibrary_cmdfile',
+                    '--global-inputs',
+                    str(entry.resolve()),
+                    '--dependency-inputs',
+                ]
+            ),
+            encoding='utf-8',
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                Path(__file__).with_name('internalize_library.py').resolve(),
+                '--archiver',
+                str((self.tools / 'llvm-ar').resolve()),
+                '--output',
+                str(output),
+                '--module-name',
+                'cmdfile',
+                '--work-dir',
+                'tmp',
+                f'@{command_file.resolve()}',
+            ],
+            check=True,
+        )
+        self.assertEqual(self.run_tool('llvm-ar', 't', output).splitlines(), ['module.o'])
+
+    def test_unicode_input_paths(self):
+        self.path /= 'сборка 空间 "quoted"'
+        self.path.mkdir()
+        for direct in (False, True):
+            with self.subTest(direct=direct):
+                archive = self.make_archive('unicode', 17, split_globals=True, direct=direct)
+                self.assertEqual(self.run_tool('llvm-ar', 't', archive).splitlines(), ['module.o'])
 
     def test_missing_entry_point_rejected(self):
         source = self.compile('missing', 'int InternalGlobal = 0;')
@@ -187,11 +316,12 @@ class InternalizeLibraryTest(unittest.TestCase):
         self.assertEqual(loaded.GetStaticUdfLibrary_tls()[0], 17)
 
     def test_dso_handle_comes_from_host(self):
-        for suffix in ('', '.pic'):
-            with self.subTest(suffix=suffix):
-                self.check_dso_handle_comes_from_host(suffix)
+        for direct in (False, True):
+            for suffix in ('', '.pic'):
+                with self.subTest(suffix=suffix, direct=direct):
+                    self.check_dso_handle_comes_from_host(suffix, direct)
 
-    def check_dso_handle_comes_from_host(self, suffix):
+    def check_dso_handle_comes_from_host(self, suffix, direct):
         entry = self.compile(
             'entry',
             '''
@@ -230,9 +360,27 @@ class InternalizeLibraryTest(unittest.TestCase):
         self.run_tool('llvm-ar', 'rcs', globals_archive, entry)
         self.run_tool('llvm-ar', 'rcs', dependencies, begin, end)
         archive = self.path / f'runtime{suffix}.a'
-        internalize(
-            self.toolchain, dependencies, archive, 'runtime', self.path, ['GetStaticUdfLibrary_runtime'], globals_archive
-        )
+        if direct:
+            internalize(
+                self.toolchain,
+                None,
+                archive,
+                'runtime',
+                self.path,
+                ['GetStaticUdfLibrary_runtime'],
+                dependency_inputs=[dependencies],
+                global_inputs=[globals_archive],
+            )
+        else:
+            internalize(
+                self.toolchain,
+                dependencies,
+                archive,
+                'runtime',
+                self.path,
+                ['GetStaticUdfLibrary_runtime'],
+                globals_archive,
+            )
         self.assertEqual(
             self.run_tool('llvm-ar', 't', dependencies).splitlines(),
             [f'crtbegin.c{suffix}.o', f'crtend.c{suffix}.o'],
@@ -263,9 +411,24 @@ class InternalizeLibraryTest(unittest.TestCase):
             }
             ''',
         )
-        library = self.path / f'runtime{suffix}.so'
+        library = self.path / f'runtime{suffix}-{direct}.so'
         self.run_tool('ld.lld', '-shared', '-Bsymbolic', host, archive, '-o', library)
-        self.assertEqual(ctypes.CDLL(str(library)).CheckHandle(), 1)
+        loaded = ctypes.CDLL(str(library))
+        self.assertEqual(loaded.CheckHandle(), 1)
+
+    def test_common_symbol_sizes_and_alignment(self):
+        entry = self.compile(
+            'common_sizes',
+            '''
+            asm(".comm Empty,0,1");
+            char Large[8192] __attribute__((common, aligned(256)));
+            int Initialized = 42;
+            int Function() { return Initialized; }
+            ''',
+            '-x',
+            'c',
+        )
+        self.assertCountEqual(read_common_symbols(self.tools, entry), [('Empty', 1, 0), ('Large', 256, 8192)])
 
     def test_common_storage_is_allocated_before_localization(self):
         entry = self.compile(

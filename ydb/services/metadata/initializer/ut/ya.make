@@ -1,9 +1,5 @@
 UNITTEST_FOR(ydb/services/metadata/initializer)
 
-FORK_SUBTESTS()
-
-SPLIT_FACTOR(60)
-
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

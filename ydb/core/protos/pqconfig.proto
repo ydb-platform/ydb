@@ -2,6 +2,7 @@ import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 
 import "ydb/public/api/protos/annotations/sensitive.proto";
 
+import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_limits.proto";
@@ -33,6 +34,7 @@ message TPartitionMeta {
     optional uint64 EndWriteTimestamp = 5;
     optional uint64 FirstUncompactedOffset = 6; //deprecated
     optional uint64 NextMessageIdDeduplicatorWAL = 7 [default = 1];
+    optional NKikimrProto.TRowVersion LastEmittedHeartbeat = 9;
 }
 
 message TPartitionTxMeta {
@@ -232,6 +234,7 @@ message TPQConfig {
 
     optional TCloudEventsConfig CloudEventsConfig = 61;
     optional uint64 MinOffset = 63;
+    optional uint64 WriteSessionsInitRps = 66 [default = 1000];
 }
 
 message TChannelProfile {
@@ -248,11 +251,16 @@ message TMirrorPartitionConfig {
         message IamCredentials {
             optional string Endpoint = 1;
             optional string ServiceAccountKey = 2 [(Ydb.sensitive) = true];
+            optional string ServiceAccountKeySecretName = 3;
         }
         oneof Credentials {
             string OauthToken = 1 [(Ydb.sensitive) = true];
             string JwtParams = 2 [(Ydb.sensitive) = true];
             IamCredentials Iam = 3;
+            // Secret references require upgraded mirror readers. Mixed-version and
+            // rollback use is unsupported until control-plane admission is available.
+            string OauthTokenSecretName = 4;
+            string JwtParamsSecretName = 5;
         }
     }
 
@@ -377,6 +385,9 @@ message TPQTabletConfig {
     }
     optional TTopicId Id = 49;
 
+    // Source service-consumer id identifying the replication that created this topic.
+    optional string ReplicationSourceConsumer = 50;
+
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory
     repeated uint32 PartitionIds = 3; //will be filled by schemeshard, don't touch. Deprecated by Partitions (id: 31)
@@ -448,6 +459,8 @@ message TPQTabletConfig {
         optional uint32 MetricsLevel = 21;
         // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
         optional string MonitoringProjectId = 22;
+
+        optional bool ReplicateOffsets = 23 [default = true];
     }
 
     repeated TConsumer Consumers = 37;

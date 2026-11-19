@@ -1,4 +1,5 @@
-#include <util/datetime/cputimer.h>
+#include <benchmark/benchmark.h>
+
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -6,85 +7,104 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-#include <util/system/thread.h>
+#include <util/generic/ptr.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NKikimr::NUdf;
 
-const ui32 threadsCount = 10;
-const TString prefix = "VERRRRRRRRY LONG STRING";
+namespace {
 
-int main(int, char**) {
-    try {
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
-        auto randomProvider = CreateDefaultRandomProvider();
-        auto timeProvider = CreateDefaultTimeProvider();
+void CheckResult(const TUnboxedValue& result, const TString& prefix, const TString& suffix) {
+    // With ref locking disabled, immutable string literals are copied into owned values.
+    auto val0 = result.GetElement(0);
+    Y_ENSURE(TStringBuf(val0.AsStringRef()) == prefix);
+    Y_ENSURE(val0.AsStringValue().RefCount() > 0);
+    auto val1 = result.GetElement(1);
+    Y_ENSURE(TStringBuf(val1.AsStringRef()) == prefix);
+    Y_ENSURE(val1.AsStringValue().RefCount() > 0);
+    auto val2 = result.GetElement(2);
+    Y_ENSURE(TStringBuf(val2.AsStringRef()) == prefix + suffix);
+    Y_ENSURE(val2.AsStringValue().RefCount() > 0);
+    auto val3 = result.GetElement(3);
+    Y_ENSURE(TStringBuf(val3.AsStringRef()) == prefix + suffix);
+    Y_ENSURE(val3.AsStringValue().RefCount() > 0);
+}
 
-        TScopedAlloc alloc(__LOCATION__);
-        TTypeEnvironment env(alloc);
-        TProgramBuilder pgmBuilder(env, *functionRegistry);
+struct TSharedPattern {
+    const TString Prefix = "VERRRRRRRRY LONG STRING";
+    TIntrusivePtr<IFunctionRegistry> FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
+    TIntrusivePtr<IRandomProvider> RandomProvider = CreateDefaultRandomProvider();
+    TIntrusivePtr<ITimeProvider> TimeProvider = CreateDefaultTimeProvider();
+    TScopedAlloc Alloc{__LOCATION__};
+    TTypeEnvironment Env{Alloc};
+    TComputationPatternOpts Opts{Alloc.Ref(), Env, GetBuiltinFactory(), FunctionRegistry.Get(),
+                                 NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, "OFF", EGraphPerProcess::Multi};
+    IComputationPattern::TPtr Pattern;
 
-        auto argType = pgmBuilder.NewDataType(EDataSlot::String);
-        auto arg = pgmBuilder.Arg(argType);
-        auto prefixNode = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(prefix);
-        auto concat = pgmBuilder.Concat(prefixNode, arg);
-        auto pgm = pgmBuilder.NewList(argType, {prefixNode, prefixNode, concat, concat});
+    TSharedPattern() {
+        TProgramBuilder builder(Env, *FunctionRegistry);
+        auto argType = builder.NewDataType(EDataSlot::String);
+        auto arg = builder.Arg(argType);
+        auto prefix = builder.NewDataLiteral<NUdf::EDataSlot::String>(Prefix);
+        auto concat = builder.Concat(prefix, arg);
+        auto program = builder.NewList(argType, {prefix, prefix, concat, concat});
         TExploringNodeVisitor explorer;
-        explorer.Walk(pgm.GetNode(), env);
-        TComputationPatternOpts opts(alloc.Ref(), env, GetBuiltinFactory(),
-                                     functionRegistry.Get(), NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, "OFF", EGraphPerProcess::Multi);
-        auto pattern = MakeComputationPattern(explorer, pgm, {arg.GetNode(), pgm.GetNode()}, opts);
+        explorer.Walk(program.GetNode(), Env);
+        Pattern = MakeComputationPattern(explorer, program, {arg.GetNode(), program.GetNode()}, Opts);
+    }
+};
 
-        TSimpleTimer timer;
-        TVector<THolder<TThread>> threads;
-        for (ui32 i = 0; i < threadsCount; ++i) {
-            threads.emplace_back(MakeHolder<TThread>([pattern, opts, randomProvider, timeProvider]() {
-                ui32 iters = 1000000;
-#if defined(_tsan_enabled_)
-                iters /= 100;
-#endif
-                for (ui32 i = 0; i < iters; ++i) {
-                    TScopedAlloc runAlloc(__LOCATION__);
-                    auto graph = pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &runAlloc.Ref()));
-                    TBindTerminator terminator(graph->GetTerminator());
+void RunOperation(TSharedPattern& sharedPattern, ui32 index) {
+    TScopedAlloc runAlloc(__LOCATION__);
+    auto graph = sharedPattern.Pattern->Clone(sharedPattern.Opts.ToComputationOptions(
+        *sharedPattern.RandomProvider, *sharedPattern.TimeProvider, &runAlloc.Ref()));
+    TBindTerminator terminator(graph->GetTerminator());
+    auto param = graph->GetEntryPoint(0, /*require=*/false);
+    auto& ctx = graph->GetContext();
+    TString suffix = ToString(index);
+    param->SetValue(ctx, MakeString(suffix));
+    auto result = graph->GetValue();
+    CheckResult(result, sharedPattern.Prefix, suffix);
+}
 
-                    auto param = graph->GetEntryPoint(0, /*require=*/false);
-                    auto& ctx = graph->GetContext();
-
-                    TString s = ToString(i);
-                    param->SetValue(ctx, MakeString(s));
-
-                    auto resVal = graph->GetValue();
-                    auto val0 = resVal.GetElement(0);
-                    Y_ABORT_UNLESS(TStringBuf(val0.AsStringRef()) == prefix);
-                    Y_ABORT_UNLESS(val0.AsStringValue().RefCount() < 0);
-                    auto val1 = resVal.GetElement(1);
-                    Y_ABORT_UNLESS(TStringBuf(val1.AsStringRef()) == prefix);
-                    Y_ABORT_UNLESS(val1.AsStringValue().RefCount() < 0);
-                    auto val2 = resVal.GetElement(2);
-                    Y_ABORT_UNLESS(TStringBuf(val2.AsStringRef()) == prefix + s);
-                    Y_ABORT_UNLESS(val2.AsStringValue().RefCount() > 0);
-                    auto val3 = resVal.GetElement(3);
-                    Y_ABORT_UNLESS(TStringBuf(val3.AsStringRef()) == prefix + s);
-                    Y_ABORT_UNLESS(val3.AsStringValue().RefCount() > 0);
-                }
-            }));
+class TMtParamFixture: public benchmark::Fixture {
+public:
+    void SetUp(benchmark::State& state) override {
+        if (state.thread_index() == 0) {
+            try {
+                SetupError_.clear();
+                SharedPattern_ = MakeHolder<TSharedPattern>();
+            } catch (...) {
+                SetupError_ = CurrentExceptionMessage();
+            }
         }
+    }
 
-        for (ui32 i = 0; i < threadsCount; ++i) {
-            threads[i]->Start();
+    void TearDown(benchmark::State& state) override {
+        if (state.thread_index() == 0) {
+            SharedPattern_.Reset();
         }
+    }
 
-        for (ui32 i = 0; i < threadsCount; ++i) {
-            threads[i]->Join();
+protected:
+    THolder<TSharedPattern> SharedPattern_;
+    TString SetupError_;
+};
+
+BENCHMARK_DEFINE_F(TMtParamFixture, MeasureMtParam)
+(benchmark::State& state) {
+    ui32 index = 0;
+    // KeepRunning synchronizes setup and teardown across all benchmark workers.
+    while (state.KeepRunning()) {
+        try {
+            Y_ENSURE(SharedPattern_, SetupError_);
+            RunOperation(*SharedPattern_, index++);
+        } catch (...) {
+            state.SkipWithError(CurrentExceptionMessage());
         }
-
-        Cerr << "Elapsed: " << timer.Get() << "\n";
-
-        return 0;
-    } catch (...) {
-        Cerr << "Error: " << CurrentExceptionMessage() << Endl;
-        return 1;
     }
 }
+BENCHMARK_REGISTER_F(TMtParamFixture, MeasureMtParam)->Name("MeasureMtParam")->UseRealTime()->Threads(10);
+
+} // namespace

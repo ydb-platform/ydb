@@ -56,9 +56,11 @@ struct TRBORelOptimizerNode : public TRelOptimizerNode {
 };
 
 struct TRBOProviderContext : public TKqpProviderContext {
-    TRBOProviderContext(const TKqpOptimizeContext& kqpCtx, const int optLevel, bool useBlockHashJoin, const TColumnLineage& lineage)
+    TRBOProviderContext(const TKqpOptimizeContext& kqpCtx, const int optLevel, bool useBlockHashJoin, const TColumnLineage& lineage,
+                        const NYql::TTypeAnnotationContext* typeCtx = nullptr)
         : TKqpProviderContext(kqpCtx, optLevel, useBlockHashJoin)
         , Lineage(lineage)
+        , TypeCtx(typeCtx)
     {}
 
     virtual bool IsJoinApplicable(
@@ -70,6 +72,24 @@ struct TRBOProviderContext : public TKqpProviderContext {
         EJoinKind joinKind
     ) override;
 
+    // With cost-based lookup join, a lookup join costs the lookups of its left rows in the 
+    //  target IsJoinApplicable chose, instead of the right side
+    virtual TOptimizerStatistics ComputeJoinStats(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const TVector<TJoinColumn>& leftJoinKeys,
+        const TVector<TJoinColumn>& rightJoinKeys,
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const override;
+
     const TColumnLineage& Lineage;
+    // Column statistics for the lookup costs, if any
+    const NYql::TTypeAnnotationContext* TypeCtx;
+
+private:
+    // The cost per left row of the target IsJoinApplicable chose, by the right join keys and the join kind. The solver
+    // computes the stats of a join right after checking it is applicable, and the target does not depend on the left side.
+    THashMap<TString, double> LookupCostPerLeftRow;
 };
 }

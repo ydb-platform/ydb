@@ -10,6 +10,11 @@ bool ReferencesUnresolvedSubplan(const TExpression& expr, const TPlanProps& prop
     return expr.GetRawInputIUs().HasAny(props.Subplans.Bindings());
 }
 
+bool IsCostBasedIndexSelectionEnabled(const NOpt::TKqpOptimizeContext& kqpCtx) {
+    const auto& config = *kqpCtx.Config;
+    return config.CostBasedOptimizationLevel.Get().GetOrElse(config.GetDefaultCostBasedOptimizationLevel()) >= 3;
+}
+
 bool JoinOutputsLeft(const TString& joinKind) {
     return joinKind != "RightOnly" && joinKind != "RightSemi";
 }

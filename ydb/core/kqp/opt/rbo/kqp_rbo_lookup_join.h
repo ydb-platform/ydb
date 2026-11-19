@@ -13,7 +13,15 @@ struct TLookupJoinTarget {
     // Set when the target is a non-covering index of this main table: rows found in the index are fetched
     // from the main table by its primary key.
     TIntrusivePtr<NYql::TKikimrTableMetadata> MainTable;
+    // Estimated cost of the lookups for one left row, set when the target is chosen by cost
+    double CostPerLeftRow = 0;
 };
+
+double EstimateRowsPerKeyPrefix(const NYql::TKikimrTableMetadata& meta, size_t prefixLen, double rows, const TString& statsTable,
+                                const NYql::TTypeAnnotationContext* typeCtx);
+
+double EstimateLookupCostPerLeftRow(const NYql::TKikimrTableMetadata& target, const NYql::TKikimrTableMetadata& mainTableMeta,
+                                    bool covering, size_t lookupPrefixLen, double points, const NYql::TTypeAnnotationContext* typeCtx);
 
 // The right side of a lookup join: a read and an optional filter above it.
 struct TLookupJoinRightSide {
@@ -36,9 +44,13 @@ std::optional<THashSet<TString>> GetLookupJoinKeyColumns(const TOpRead& read, co
 // CBO and the rewrite rule both use it, so the rule can rewrite every lookup join the CBO chose.
 // readColumns are the physical columns the read produces; callers name them from whatever they have
 // at hand - the unit registry in the rewrite rule, the column lineage in the CBO.
+// With cost-based lookup join enabled the cheapest target per left row wins instead, which does not depend on the left
+// side, so the CBO and the rule still agree. The choice is cost-based where index selection is; typeCtx gives the column
+// statistics of the costs, if any.
 std::optional<TLookupJoinTarget> ChooseLookupJoinTarget(const TOpRead& read, const TVector<TString>& readColumns,
                                                         const THashSet<TString>& joinKeyColumns, bool innerJoin,
-                                                        const NOpt::TKqpOptimizeContext& kqpCtx);
+                                                        const NOpt::TKqpOptimizeContext& kqpCtx,
+                                                        const NYql::TTypeAnnotationContext* typeCtx);
 
 TExprNode::TPtr BuildTableCallable(const NYql::TKikimrTableMetadata& meta, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 

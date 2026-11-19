@@ -669,11 +669,13 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
         UNIT_ASSERT_C(explained.IsSuccess(), explained.GetIssues().ToString());
         const auto ast = TString{*explained.GetStats()->GetAst()};
 
+        // The cost-based target choice also considers the main table, with or without point prefixes.
         const auto mainLookups = StreamLookupsInto(ast, "/Root/t1");
         if (!AllPointPrefixes) {
-            // The read stays on the index chosen for the predicate, which cannot be probed by the join key.
-            UNIT_ASSERT_C(ast.Contains("/Root/t1/idx_c_x/indexImplTable"), "expected the read redirected to idx_c_x, ast:\n" << ast);
-            UNIT_ASSERT_C(mainLookups.empty(), "expected no lookup into t1, ast:\n" << ast);
+            // idx_c_x, chosen for the predicate, cannot be probed by the join key, but the main table is a target without
+            // point prefixes too: the 2 rows of t2 probe t1 by its primary key instead of reading idx_c_x.
+            UNIT_ASSERT_C(!ast.Contains("/Root/t1/idx_c_x/indexImplTable"), "expected no read of idx_c_x, ast:\n" << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(mainLookups.size(), 1, "expected a lookup join into t1, ast:\n" << ast);
             return;
         }
 
@@ -1146,9 +1148,11 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             const char* ExpectedYson = nullptr;
         };
 
+        // Wide rows (10 KB) make probing 100 rows by key cheaper than hashing the probed table
+        // So the cost-based lookup join target keeps the lookups this test checks.
         const TVector<TCase> cases = {
             {"two lookups by primary key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t2.b AS t2b, t3.c AS t3c
                 FROM `/Root/t1` AS t1
                     INNER JOIN `/Root/t2` AS t2 ON t1.b = t2.a
@@ -1157,7 +1161,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 2},
 
             {"lookup probed by a column of a previous lookup", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t3.c AS t3c, t4.b AS t4b
                 FROM `/Root/t1` AS t1
                     INNER JOIN `/Root/t3` AS t3 ON t1.c = t3.a AND t1.d = t3.b
@@ -1166,7 +1170,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 2},
 
             {"three lookups, a filter and an aggregation", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t4.b AS t4b, COUNT(*) AS cnt, SUM(t1.e * t3.d) AS total
                 FROM `/Root/t1` AS t1
                     INNER JOIN `/Root/t2` AS t2 ON t1.b = t2.a
@@ -1178,7 +1182,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 3},
 
             {"left join chain keeps unmatched rows", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t2.b AS t2b, t3.c AS t3c
                 FROM `/Root/t1` AS t1
                     LEFT JOIN `/Root/t2` AS t2 ON t1.b = t2.a
@@ -1187,14 +1191,14 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 2},
 
             {"aggregation over an unmatched left join", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT COUNT(*) AS total, COUNT(t2.b) AS matched, SUM(t1.e) AS e
                 FROM `/Root/t1` AS t1
                     LEFT JOIN `/Root/t2` AS t2 ON t1.b = t2.a;
             )", 1},
 
             {"key prefix lookup with several matches per key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, COUNT(*) AS cnt, SUM(t3.d) AS total
                 FROM `/Root/t1` AS t1
                     INNER JOIN `/Root/t3` AS t3 ON t1.c = t3.a
@@ -1203,7 +1207,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 1},
 
             {"predicate on the probed side", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t3.c AS t3c
                 FROM `/Root/t1` AS t1
                     INNER JOIN `/Root/t3` AS t3 ON t1.c = t3.a
@@ -1212,7 +1216,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 1},
 
             {"self join by primary key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT x.a AS a, y.e AS e
                 FROM `/Root/t1` AS x
                     INNER JOIN `/Root/t1` AS y ON x.b = y.a
@@ -1220,7 +1224,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 1},
 
             {"point predicate ahead of the join key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t3.c AS t3c
                 FROM `/Root/t1` AS t1
                     INNER JOIN `/Root/t3` AS t3 ON t1.d = t3.b
@@ -1238,7 +1242,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
 
             // Point predicate is ok with 2 points for inner join.
             {"several point predicates ahead of the join key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t3.c AS t3c
                 FROM `/Root/t1` AS t1
                     INNER JOIN `/Root/t3` AS t3 ON t1.d = t3.b
@@ -1247,7 +1251,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 1},
 
             {"null point predicate ahead of the join key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t3.c AS t3c
                 FROM `/Root/t1` AS t1
                     INNER JOIN `/Root/t3` AS t3 ON t1.d = t3.b
@@ -1256,7 +1260,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 1},
 
             {"point predicate on a join key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t3.c AS t3c
                 FROM `/Root/t1` AS t1
                     INNER JOIN `/Root/t3` AS t3 ON t1.c = t3.a AND t1.d = t3.b
@@ -1265,7 +1269,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 1},
 
             {"left join with a point predicate ahead of the join key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t3.c AS t3c
                 FROM `/Root/t1` AS t1
                     LEFT JOIN (SELECT * FROM `/Root/t3` WHERE a = 2) AS t3 ON t1.d = t3.b
@@ -1274,7 +1278,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
 
             // Here is a bug for old optimizer, we cannot use stream lookup join for point predicates > 1 with left joins.
             {"left join with several point predicates ahead of the join key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t3.c AS t3c
                 FROM `/Root/t1` AS t1
                     LEFT JOIN (SELECT * FROM `/Root/t3` WHERE a IN (1, 2)) AS t3 ON t1.d = t3.b
@@ -1284,7 +1288,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
              R"([[4];["p2a"]];[[5];["p1a"]];[[5];["p2a"]];[[6];["p1a"]];[[6];["p2a"]];[[7];["p1a"]];[[7];["p2a"]]])"},
 
             {"semi join from an in subplan", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a
                 FROM `/Root/t1` AS t1
                 WHERE t1.c IN (SELECT a FROM `/Root/t3`)
@@ -1292,7 +1296,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 1},
 
             {"left only join from subselect", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a
                 FROM `/Root/t1` AS t1
                 WHERE t1.a NOT IN (SELECT a FROM `/Root/t2`)
@@ -1301,7 +1305,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
 
             // No optional keys.
             {"left only join on not null columns", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t6 # 100) Bytes(t6 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t6 # 100) Bytes(t6 # 1000000)';
                 SELECT t6.a AS a
                 FROM `/Root/t6` AS t6
                 WHERE t6.a NOT IN (SELECT a FROM `/Root/t6` WHERE b = 2)
@@ -1309,7 +1313,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 1},
 
             {"semi join with a filtered probed side", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a
                 FROM `/Root/t1` AS t1
                 WHERE t1.c IN (SELECT a FROM `/Root/t3` WHERE d >= 30)
@@ -1317,7 +1321,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 1},
 
             {"left only join with a filtered probed side", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a
                 FROM `/Root/t1` AS t1
                 WHERE t1.a NOT IN (SELECT a FROM `/Root/t3` WHERE d >= 30 AND d <= 50)
@@ -1325,7 +1329,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 0},
 
             {"semi join with a point predicate ahead of the join key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a
                 FROM `/Root/t1` AS t1
                 WHERE t1.d IN (SELECT b FROM `/Root/t3` WHERE a = 2)
@@ -1333,7 +1337,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 1},
 
             {"left only join with a point predicate ahead of the join key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a
                 FROM `/Root/t1` AS t1
                 WHERE t1.d NOT IN (SELECT b FROM `/Root/t3` WHERE a = 2)
@@ -1341,7 +1345,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 0},
 
             {"semi join with several point predicates ahead of the join key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a
                 FROM `/Root/t1` AS t1
                 WHERE t1.d IN (SELECT b FROM `/Root/t3` WHERE a IN (1, 2))
@@ -1350,7 +1354,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
              R"([[[1]];[[2]];[[3]];[[4]];[[5]];[[6]];[[7]]])"},
 
             {"left only join with several point predicates ahead of the join key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a
                 FROM `/Root/t1` AS t1
                 WHERE t1.d NOT IN (SELECT b FROM `/Root/t3` WHERE a IN (1, 2))
@@ -1359,7 +1363,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
              R"([])"},
 
             {"join key is not a key prefix", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t3.c AS t3c
                 FROM `/Root/t1` AS t1
                     INNER JOIN `/Root/t3` AS t3 ON t1.d = t3.b
@@ -1368,7 +1372,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
 
             // Need support for cast.
             {"join key types differ", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t2.b AS t2b
                 FROM `/Root/t1` AS t1
                     INNER JOIN `/Root/t2` AS t2 ON t1.f = t2.a
@@ -1376,7 +1380,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 0},
 
             {"inner join with a residual non-key join key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t5.d AS t5d
                 FROM `/Root/t1` AS t1
                     INNER JOIN `/Root/t5` AS t5 ON t1.b = t5.a AND t1.c = t5.b
@@ -1384,7 +1388,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             )", 1},
 
             {"left join with a residual non-key join key", R"(
-                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
+                PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000000) Rows(t2 # 100) Bytes(t2 # 1000000) Rows(t3 # 100) Bytes(t3 # 1000000) Rows(t4 # 100) Bytes(t4 # 1000000) Rows(t5 # 100) Bytes(t5 # 1000000)';
                 SELECT t1.a AS a, t5.d AS t5d
                 FROM `/Root/t1` AS t1
                     LEFT JOIN `/Root/t5` AS t5 ON t1.b = t5.a AND t1.c = t5.b

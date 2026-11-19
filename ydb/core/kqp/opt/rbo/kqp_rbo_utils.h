@@ -29,5 +29,7 @@ TString GetValidJoinKind(const TString& joinKind);
 
 bool SortMatchesKeyOrder(const TVector<TString>& sortColumns, const TVector<TString>& keyColumns, size_t pointPrefixLen);
 
+bool IsCostBasedIndexSelectionEnabled(const NOpt::TKqpOptimizeContext& kqpCtx);
+
 }
 }

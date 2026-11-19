@@ -170,6 +170,7 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
     if (!rightSide) {
         return input;
     }
+
     auto* read = rightSide->Read.Get();
     auto* rightFilter = rightSide->Filter.Get();
     TIntrusivePtr<TOpRead> rewrittenRead;
@@ -197,10 +198,12 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
         readColumns.push_back(props.InfoUnitRegistry.Get(column).GetColumnName());
     }
 
-    const auto target = ChooseLookupJoinTarget(*read, readColumns, *joinKeyColumns, joinKind == "Inner", ctx.KqpCtx);
+    // The same column statistics the CBO costed the targets with, so a cost-based choice gives the target the CBO costed
+    const auto target = ChooseLookupJoinTarget(*read, readColumns, *joinKeyColumns, joinKind == "Inner", ctx.KqpCtx, &ctx.TypeCtx);
     if (!target) {
         return input;
     }
+
     const auto& tableMeta = target->Metadata;
     if (TKqpTable(read->GetTable()).Path().Value() != tableMeta->Name) {
         auto rightOriginalType = read->Type;
@@ -212,7 +215,22 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
     }
 
     const auto table = TKqpTable(read->GetTable());
-    const TOpRead::TPointPrefix* pointPrefix = target->PointPrefix;
+
+    // The points of the chosen prefix are built here, the only place which needs them.
+    // The prediction the target was chosen by may not hold, then the lookup goes without the prefix.
+    std::optional<TOpRead::TPointPrefix::TPoints> points;
+    if (const auto* pointPrefix = target->PointPrefix) {
+        points = pointPrefix->GetPoints(ctx.ExprCtx, ctx.TypeCtx);
+        size_t pointsLimit = ctx.KqpCtx.Config->GetIdxLookupJoinPointsLimit();
+        if (joinKind != "Inner") {
+            pointsLimit = std::min<size_t>(pointsLimit, 1);
+        }
+        if (points && (!points->ExpectedMaxPoints || *points->ExpectedMaxPoints > pointsLimit)) {
+            points.reset();
+        }
+    }
+
+    const TOpRead::TPointPrefix* pointPrefix = points ? target->PointPrefix : nullptr;
     size_t pointPrefixLen = pointPrefix ? pointPrefix->Columns.size() : 0;
 
     auto keys = MatchKeyPrefix(*join, *read, tableMeta->KeyColumnNames, pointPrefixLen, props.InfoUnitRegistry);
@@ -240,8 +258,8 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
     std::optional<TOpTableLookup::TLookupKeyPrefix> prefix;
     if (pointPrefixLen != 0) {
         TOpTableLookup::TLookupKeyPrefix keyPrefix;
-        keyPrefix.Points = pointPrefix->Points;
-        keyPrefix.PointsItemType = pointPrefix->PointsItemType;
+        keyPrefix.Points = points->List;
+        keyPrefix.PointsItemType = points->ItemType;
         keyPrefix.Columns = pointPrefix->Columns;
         for (const auto& key : keys->PrefixKeys) {
             keyPrefix.Equalities.Append(key.LeftIU, key.Column);

@@ -6,6 +6,7 @@
 #include "kqp_rbo_statistics.h"
 
 #include <cstddef>
+#include <functional>
 #include <iterator>
 #include <memory>
 #include <ranges>
@@ -602,12 +603,45 @@ public:
     // extractor settings).
     // Leading key columns of a table pinned by the read predicate to a set of points. A lookup join
     // uses the points as a constant prefix of its lookup keys.
+    // The points are built on demand by the range extractor, so that only the table a lookup join picks pays for it.
     struct TPointPrefix {
-        TString Table;                // path of the main table or of an index implementation table
-        TExprNode::TPtr Points;
+        struct TPoints {
+            TExprNode::TPtr List;
+            const TStructExprType* ItemType = nullptr;
+            TMaybe<size_t> ExpectedMaxPoints;
+        };
+
+        // Nullopt if the extractor does not pin the prefix columns.
+        using TPointsBuilder = std::function<std::optional<TPoints>(TExprContext&, NYql::TTypeAnnotationContext&)>;
+        struct TLazyPoints {
+            TPointsBuilder Builder;
+            std::optional<std::optional<TPoints>> Result;
+        };
+
+        TString Table;                      // path of the main table or of an index implementation table
+        TExprNode::TPtr Points;             // set when the points are built eagerly, otherwise see GetPoints
         const TStructExprType* PointsItemType = nullptr;
-        TVector<TString> Columns;     // physical key columns pinned by the points
-        TMaybe<size_t> ExpectedMaxPoints;
+        TVector<TString> Columns;           // physical key columns pinned by the points
+        TMaybe<size_t> ExpectedMaxPoints;   // Predicted from the read predicate while the points are not built
+        std::shared_ptr<TLazyPoints> Lazy;  // Shared by copies of the prefix, so the points are built once
+        TExprNode::TPtr Predicate;          // The predicate the lazy points are built from
+
+        bool HasPoints() const {
+            return (Points && PointsItemType) || Lazy;
+        }
+
+        std::optional<TPoints> GetPoints(TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx) const {
+            if (Points) {
+                return TPoints{Points, PointsItemType, ExpectedMaxPoints};
+            }
+            if (!Lazy) {
+                return std::nullopt;
+            }
+            if (!Lazy->Result) {
+                Lazy->Result = Lazy->Builder(ctx, typeCtx);
+            }
+            return *Lazy->Result;
+        }
     };
 
     struct TRangeInfo {

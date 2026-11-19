@@ -63,7 +63,7 @@ bool MatchKeyPrefix(const THashSet<TString>& joinKeys, const TVector<TString>& k
 
 bool IsUsablePointPrefix(const TOpRead::TPointPrefix& prefix, const TVector<TString>& keyColumnNames, EJoinKind joinKind,
                          size_t pointsLimit) {
-    if (!prefix.Points || !prefix.PointsItemType || prefix.Columns.empty()) {
+    if (!prefix.HasPoints() || prefix.Columns.empty()) {
         return false;
     }
 
@@ -94,24 +94,47 @@ bool IsSharedRelNode(const std::shared_ptr<IBaseOptimizerNode>& node) {
     return op->Kind == EOperator::Replicate;
 }
 
-bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& node, const TVector<TJoinColumn>& joinColumns, EJoinKind joinKind, const TKqpProviderContext& ctx,
-    const TColumnLineage& lineage) {
+// The key of the lookup cost of a target: the right join keys name the right relation and its columns
+TString MakeLookupCostKey(const TVector<TJoinColumn>& rightJoinKeys, EJoinKind joinKind) {
+    TVector<TString> keys;
+    keys.reserve(rightJoinKeys.size());
+
+    for (const auto& key : rightJoinKeys) {
+        keys.push_back(TStringBuilder() << key.RelName << '.' << key.AttributeName);
+    }
+    std::sort(keys.begin(), keys.end());
+
+    TStringBuilder result;
+    result << static_cast<ui32>(joinKind);
+    for (const auto& key : keys) {
+        result << ',' << key;
+    }
+    return result;
+}
+
+// costPerLeftRow is set when the target is chosen by cost
+bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& node, const TVector<TJoinColumn>& joinColumns, EJoinKind joinKind,
+    const NOpt::TRBOProviderContext& ctx, const TColumnLineage& lineage, std::optional<double>& costPerLeftRow) {
     auto rel = std::static_pointer_cast<TRBORelOptimizerNode>(node);
+
     // The rewrite rule has to be able to rewrite every lookup join chosen here, so both match the right
     // side the same way, including a read already redirected to a non-covering index.
     const auto rightSide = MatchLookupJoinRightSide(rel->Op);
     if (!rightSide) {
         return false;
     }
+
     auto* read = rightSide->Read.Get();
     auto* rightFilter = rightSide->Filter.Get();
     Y_ENSURE(read->Props.Metadata, "Lookup applicability requires Read metadata");
+
     THashSet<TString> rightJoinKeys;
     for (const auto& joinCol : joinColumns) {
         const auto id = GetCBOColumnId(joinCol);
         if (!rel->Op->GetOutputIUs().Contains(id)) {
             return false;
         }
+
         const auto* source = lineage.Find(id);
         if (!source) {
             return false;
@@ -128,9 +151,17 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& no
     }
 
     // The rewrite rule has to be able to rewrite every lookup join chosen here, so both use one chooser.
-    const auto target = ChooseLookupJoinTarget(*read, columns, rightJoinKeys, joinKind == EJoinKind::InnerJoin, ctx.KqpCtx);
+    const auto target = ChooseLookupJoinTarget(*read, columns, rightJoinKeys, joinKind == EJoinKind::InnerJoin, ctx.KqpCtx, ctx.TypeCtx);
     if (target) {
+        if (IsCostBasedIndexSelectionEnabled(ctx.KqpCtx)) {
+            costPerLeftRow = target->CostPerLeftRow;
+        }
         return true;
+    }
+
+    // The rewrite rule builds a lookup join only into a target the chooser gives, so a cost-based choice takes no other
+    if (IsCostBasedIndexSelectionEnabled(ctx.KqpCtx)) {
+        return false;
     }
 
     bool filterSupported = true;
@@ -146,6 +177,7 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& no
 
     const auto& tableMeta = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, table.Path().Value()).Metadata;
     Y_ENSURE(tableMeta);
+
     if (!table.SysView().Value().empty() || tableMeta->Kind == EKikimrTableKind::SysView) {
         // Can't lookup in system views: a read of one is not a datashard read even though it is
         // described as a row storage read.
@@ -176,8 +208,9 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     const TVector<TJoinColumn>& leftJoinKeys,
     const TVector<TJoinColumn>& rightJoinKeys,
     EJoinKind joinKind,
-    TKqpProviderContext& ctx,
-    const TColumnLineage& lineage
+    NOpt::TRBOProviderContext& ctx,
+    const TColumnLineage& lineage,
+    std::optional<double>& costPerLeftRow
 ) {
     Y_UNUSED(leftJoinKeys);
 
@@ -206,7 +239,7 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     //     }
     // }
 
-    return IsLookupJoinApplicableDetailed(std::static_pointer_cast<TRelOptimizerNode>(right), rightJoinKeys, joinKind, ctx, lineage);
+    return IsLookupJoinApplicableDetailed(std::static_pointer_cast<TRelOptimizerNode>(right), rightJoinKeys, joinKind, ctx, lineage, costPerLeftRow);
 }
 
 }
@@ -222,10 +255,17 @@ bool TRBOProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
 
     switch( joinAlgo ) {
         case EJoinAlgoType::LookupJoin: {
-            if ((OptLevel != 3) && (left->Stats.Nrows > 5000)) {
+            const bool costBased = IsCostBasedIndexSelectionEnabled(KqpCtx);
+            // The cost of the lookups decides instead of the size of the left side
+            if (!costBased && (OptLevel != 3) && (left->Stats.Nrows > 5000)) {
                 return false;
             }
-            return IsLookupJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinKind, *this, Lineage);
+            std::optional<double> costPerLeftRow;
+            const bool applicable = IsLookupJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinKind, *this, Lineage, costPerLeftRow);
+            if (applicable && costPerLeftRow) {
+                LookupCostPerLeftRow[MakeLookupCostKey(rightJoinKeys, joinKind)] = *costPerLeftRow;
+            }
+            return applicable;
         }
         // FIXME: Don't pick reverse lookup join yet
         /*
@@ -248,5 +288,32 @@ bool TRBOProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
         default:
             return false;
     }
+}
+
+TOptimizerStatistics TRBOProviderContext::ComputeJoinStats(
+    const TOptimizerStatistics& leftStats,
+    const TOptimizerStatistics& rightStats,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
+    EJoinAlgoType joinAlgo,
+    EJoinKind joinKind,
+    TCardinalityHints::TCardinalityHint* maybeHint) const {
+
+    auto stats = TKqpProviderContext::ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
+
+    // OptLevel 3 forces lookup joins through a negative cost
+    if (joinAlgo != EJoinAlgoType::LookupJoin || OptLevel == 3 || !IsCostBasedIndexSelectionEnabled(KqpCtx)) {
+        return stats;
+    }
+
+    // A hinted lookup join is not checked for applicability, so its target has no cost
+    const auto it = LookupCostPerLeftRow.find(MakeLookupCostKey(rightJoinKeys, joinKind));
+    if (it == LookupCostPerLeftRow.end()) {
+        return stats;
+    }
+
+    // The right side is probed, not read: its cost is replaced by the lookups of every left row
+    stats.Cost = ComputeJoinCost(leftStats, rightStats, stats.Nrows, stats.ByteSize, joinAlgo) + leftStats.Cost + leftStats.Nrows * it->second;
+    return stats;
 }
 }

@@ -233,6 +233,8 @@ struct TKeyMatch {
     std::shared_ptr<TTreeNode> Consumed;
     // The ranges as tuples over the used key prefix when every bound is a literal
     std::optional<TVector<TVector<TPredicateRange>>> Tuples;
+    // Points of the point prefix; an upper bound when disjuncts overlap
+    size_t PointRanges = 0;
 };
 
 TKeyMatch MatchKey(const std::shared_ptr<TTreeNode>& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges);

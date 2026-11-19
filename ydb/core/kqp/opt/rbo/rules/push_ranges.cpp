@@ -248,13 +248,13 @@ std::optional<TOpRead::TPointPrefix> ExtractPointPrefix(size_t pointPrefixLen, c
                                                         const TPredicateExtractorSettings& baseSettings, TRBOContext& rboCtx) {
     const auto& physicalKeyColumns = tableMeta.KeyColumnNames;
     Y_ENSURE(exposedKeyColumns.size() == physicalKeyColumns.size());
+
     // A lookup join needs key columns after the prefix to look up by.
     if (pointPrefixLen == 0 || pointPrefixLen >= exposedKeyColumns.size()) {
         return std::nullopt;
     }
 
     auto& ctx = rboCtx.ExprCtx;
-
     auto settings = baseSettings;
     settings.MergeAdjacentPointRanges = false;
     settings.HaveNextValueCallable = false;
@@ -297,10 +297,78 @@ std::optional<TOpRead::TPointPrefix> ExtractPointPrefix(size_t pointPrefixLen, c
     return prefix;
 }
 
-// Index selection is cost-based from the level the CBO runs for row tables, the only ones with selectable indexes
-bool IsCostBasedIndexSelectionEnabled(const TKqpOptimizeContext& kqpCtx) {
-    const auto& config = *kqpCtx.Config;
-    return config.CostBasedOptimizationLevel.Get().GetOrElse(config.GetDefaultCostBasedOptimizationLevel()) >= 3;
+// Builds the points of a point prefix with an extractor of its own
+std::optional<TOpRead::TPointPrefix::TPoints> BuildPrefixPoints(size_t pointPrefixLen, const TExprNode::TPtr& lambda,
+                                                                const TStructExprType* schemeType, const THashSet<TString>& possibleKeys,
+                                                                const TVector<TString>& exposedPointColumns,
+                                                                const TVector<TString>& physicalPointColumns, const TString& table,
+                                                                const TPredicateExtractorSettings& baseSettings, TExprContext& ctx,
+                                                                TTypeAnnotationContext& typeCtx) {
+    auto settings = baseSettings;
+    settings.MergeAdjacentPointRanges = false;
+    settings.HaveNextValueCallable = false;
+    settings.MaxRanges = Nothing();
+
+    THashSet<TString> keys = possibleKeys;
+    auto extractor = MakePredicateRangeExtractor(settings);
+    if (!extractor->Prepare(lambda, *schemeType, keys, ctx, typeCtx)) {
+        return std::nullopt;
+    }
+
+    const auto result = extractor->BuildComputeNode(exposedPointColumns, ctx, typeCtx);
+    if (!result.ComputeNode || result.PointPrefixLen != pointPrefixLen) {
+        return std::nullopt;
+    }
+
+    TVector<const TItemExprType*> items;
+    items.reserve(pointPrefixLen);
+    for (size_t i = 0; i < pointPrefixLen; ++i) {
+        const auto* columnType = schemeType->FindItemType(exposedPointColumns[i]);
+        if (!columnType) {
+            return std::nullopt;
+        }
+        items.push_back(ctx.MakeType<TItemExprType>(physicalPointColumns[i], columnType));
+    }
+
+    TOpRead::TPointPrefix::TPoints points{
+        .List = BuildPointsList(result, physicalPointColumns, ctx),
+        .ItemType = ctx.MakeType<TStructExprType>(items),
+        .ExpectedMaxPoints = result.ExpectedMaxRanges ? TMaybe<size_t>(*result.ExpectedMaxRanges) : TMaybe<size_t>(),
+    };
+
+    YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Extracted points of " << table << ": " << KqpExprToPrettyString(*points.List, ctx);
+    return points;
+}
+
+// A predicted point prefix: its length and number of points come from the normalized predicate.
+// Its points are built when a lookup join takes it.
+std::optional<TOpRead::TPointPrefix> MakePointPrefix(size_t pointPrefixLen, TMaybe<size_t> expectedMaxPoints, const TExprNode::TPtr& lambda,
+                                                     const TStructExprType* schemeType, const THashSet<TString>& possibleKeys,
+                                                     const TVector<TString>& exposedKeyColumns, const TKikimrTableMetadata& tableMeta,
+                                                     const TPredicateExtractorSettings& settings) {
+    const auto& physicalKeyColumns = tableMeta.KeyColumnNames;
+    Y_ENSURE(exposedKeyColumns.size() == physicalKeyColumns.size());
+
+    // A lookup join needs key columns after the prefix to look up by.
+    if (pointPrefixLen == 0 || pointPrefixLen >= exposedKeyColumns.size()) {
+        return std::nullopt;
+    }
+
+    TOpRead::TPointPrefix prefix;
+    prefix.Table = tableMeta.Name;
+    prefix.Columns.assign(physicalKeyColumns.begin(), physicalKeyColumns.begin() + pointPrefixLen);
+    prefix.ExpectedMaxPoints = expectedMaxPoints;
+    prefix.Predicate = lambda;
+
+    TVector<TString> exposedPointColumns(exposedKeyColumns.begin(), exposedKeyColumns.begin() + pointPrefixLen);
+    prefix.Lazy = std::make_shared<TOpRead::TPointPrefix::TLazyPoints>();
+
+    // Captured by value: the builder runs in a later rule, after this rule's locals are gone
+    prefix.Lazy->Builder = [=, columns = prefix.Columns, table = prefix.Table](TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
+        return BuildPrefixPoints(pointPrefixLen, lambda, schemeType, possibleKeys, exposedPointColumns, columns, table, settings, ctx, typeCtx);
+    };
+
+    return prefix;
 }
 
 // Whether the ranges cover the whole filter predicate, so the extractor pruned it to `true`.
@@ -524,7 +592,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                                         << (normalizedPredicate ? normalizedPredicate->ToString() : TString("<none>"));
     }
 
-    // The extractor results of the candidates, by candidate: every one when rule-based, those built for point prefixes otherwise
+    // The extractor results of the candidates, by candidate, when rule-based; cost-based, the extractor runs for the chosen one only
     TVector<std::optional<IPredicateRangeExtractor::TBuildResult>> built;
     auto matchKey = [&](const TVector<TString>& keyColumns, std::optional<IPredicateRangeExtractor::TBuildResult>& result) {
         if (costBasedSelection) {
@@ -546,30 +614,26 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     const bool allPointPrefixes = kqpCtx.Config->GetEnableLookupJoinPointPrefixes();
     TVector<TOpRead::TPointPrefix> pointPrefixes;
 
-    auto addPointPrefix = [&](const TKikimrTableMetadata& tableMeta, size_t pointPrefixLen, const TVector<TString>& exposedKeyColumns) {
+    // Rule-based, the points are extracted right away. Cost-based, the prefix is predicted on the normalized predicate
+    // and the lookup join which takes it builds its points, so the extractor runs only for the chosen candidate.
+    auto addPointPrefix = [&](const TKikimrTableMetadata& tableMeta, size_t pointPrefixLen, TMaybe<size_t> expectedMaxPoints,
+                              const TVector<TString>& exposedKeyColumns) {
         if (read->GetTableStorageType() != NYql::EStorageType::RowStorage) {
             return;
         }
-        auto prefix = ExtractPointPrefix(pointPrefixLen, lambda.Ptr(), schemeType, possibleKeys, exposedKeyColumns, tableMeta, settings, rboCtx);
+        auto prefix = costBasedSelection
+            ? MakePointPrefix(pointPrefixLen, expectedMaxPoints, lambda.Ptr(), schemeType, possibleKeys, exposedKeyColumns, tableMeta, settings)
+            : ExtractPointPrefix(pointPrefixLen, lambda.Ptr(), schemeType, possibleKeys, exposedKeyColumns, tableMeta, settings, rboCtx);
         if (prefix) {
             pointPrefixes.push_back(std::move(*prefix));
         }
-    };
-
-    // Point prefixes come from what the extractor builds, which the prediction may miss, e.g. for a constant expression.
-    // The build is kept with the candidate, so the extractor runs at most once for each.
-    auto extractedPointPrefixLen = [&](const TVector<TString>& keyColumns, std::optional<IPredicateRangeExtractor::TBuildResult>& result) {
-        if (!result) {
-            result = extractor->BuildComputeNode(keyColumns, ctx, typeCtx);
-        }
-        return result->PointPrefixLen;
     };
 
     std::optional<IPredicateRangeExtractor::TBuildResult> mainBuilt;
     auto mainMatch = matchKey(mainKeyColumns, mainBuilt);
 
     if (allPointPrefixes) {
-        addPointPrefix(mainMeta, extractedPointPrefixLen(mainKeyColumns, mainBuilt), mainKeyColumns);
+        addPointPrefix(mainMeta, mainMatch.PointPrefixLen, mainMatch.PointRanges, mainKeyColumns);
     }
 
     auto mainScore = ScoreKeyOrder(mainMatch, mainKeyColumns.size(), sortColumns, mainKeyColumns, true);
@@ -607,7 +671,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             // A lookup join fetches the rows it finds in a non-covering index from the main table and applies
             // the whole predicate to them, so the index needs neither to cover the read nor the predicate.
             if (allPointPrefixes) {
-                addPointPrefix(*indexMeta, extractedPointPrefixLen(indexKeyColumns, indexBuilt), indexKeyColumns);
+                addPointPrefix(*indexMeta, indexMatch.PointPrefixLen, indexMatch.PointRanges, indexKeyColumns);
             }
 
             if (indexMatch.UsedPrefixLen == 0) {
@@ -655,7 +719,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         // An index whose ranges the extractor builds shorter than matched is rejected; the main table is always accepted
         for (const size_t idx : order) {
             const auto& candidate = candidates[idx];
-            chosen = built[idx] ? std::move(*built[idx]) : extractor->BuildComputeNode(candidate.KeyColumns, ctx, typeCtx);
+            chosen = extractor->BuildComputeNode(candidate.KeyColumns, ctx, typeCtx);
             if (idx == 0 || (chosen.ComputeNode && chosen.UsedPrefixLen >= candidate.Match.UsedPrefixLen)) {
                 winnerIdx = idx;
                 break;
@@ -740,7 +804,8 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Pruned lambda: " << KqpExprToPrettyString(*chosen.PrunedLambda, ctx);
 
     if (!allPointPrefixes) {
-        addPointPrefix(chosenIndexMeta ? *chosenIndexMeta : mainMeta, chosen.PointPrefixLen, chosenKeyColumns);
+        addPointPrefix(chosenIndexMeta ? *chosenIndexMeta : mainMeta, chosen.PointPrefixLen,
+                       chosen.ExpectedMaxRanges ? TMaybe<size_t>(*chosen.ExpectedMaxRanges) : TMaybe<size_t>(), chosenKeyColumns);
     }
 
     TOpRead::TRangeInfo rangeInfo{

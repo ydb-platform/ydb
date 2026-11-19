@@ -1380,6 +1380,27 @@ TKeyMatch MatchDisjunction(const TTreeNode& node, const TVector<TString>& keyCol
     }
 
     result.ExpectedMaxRanges = ranges;
+
+    // Points of the common point prefix: distinct ones when the tuples are known, otherwise summed as an upper bound
+    if (tuples) {
+        TVector<TVector<TPredicateRange>> points;
+        for (const auto& tuple : *tuples) {
+            TVector<TPredicateRange> prefix(tuple.begin(), tuple.begin() + std::min(tuple.size(), result.PointPrefixLen));
+            const bool seen = std::any_of(points.begin(), points.end(), [&](const TVector<TPredicateRange>& other) {
+                return std::equal(other.begin(), other.end(), prefix.begin(), prefix.end(), SameRange);
+            });
+            if (!seen) {
+                points.push_back(std::move(prefix));
+            }
+        }
+        result.PointRanges = points.size();
+    } else {
+        result.PointRanges = 0;
+        for (const auto& match : matches) {
+            result.PointRanges += match.PointRanges;
+        }
+    }
+
     result.Tuples = std::move(tuples);
     result.Consumed = MakeLogicalNode(ELogicalOperator::Or, std::move(consumed));
     return result;
@@ -1470,6 +1491,7 @@ TKeyMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts,
             break;
         }
         ++result.PointPrefixLen;
+        result.PointRanges = ranges;
     }
 
     bool consumedHasResidual = false;

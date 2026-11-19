@@ -45,7 +45,9 @@ bool IsRepeatable(const IOperator& op) {
             return !read.Limit && (!read.RangeInfo ||
                 (IsRepeatable(read.RangeInfo->ComputeNode) &&
                  std::all_of(read.RangeInfo->PointPrefixes.begin(), read.RangeInfo->PointPrefixes.end(),
-                             [](const TOpRead::TPointPrefix& prefix) { return IsRepeatable(prefix.Points); })));
+                             [](const TOpRead::TPointPrefix& prefix) {
+                                 return IsRepeatable(prefix.Points) && IsRepeatable(prefix.Predicate);
+                             })));
         }
         case EOperator::EmptySource:
             return IsRepeatable(CastOperator<TOpEmptySource>(op).Input);

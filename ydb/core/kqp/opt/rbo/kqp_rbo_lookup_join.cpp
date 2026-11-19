@@ -71,7 +71,7 @@ bool IsLookupTable(const TKikimrTableMetadata& meta) {
 
 bool IsUsablePointPrefix(const TOpRead::TPointPrefix& prefix, const TVector<TString>& keyColumnNames, bool innerJoin,
                          size_t pointsLimit) {
-    if (!prefix.Points || !prefix.PointsItemType || prefix.Columns.empty()) {
+    if (!prefix.HasPoints() || prefix.Columns.empty()) {
         return false;
     }
 
@@ -119,7 +119,79 @@ size_t GetLookupKeyPrefixLen(const TVector<TString>& keyColumnNames, size_t poin
     return len;
 }
 
+std::optional<double> GetDistinctCount(const NYql::TTypeAnnotationContext* typeCtx, const TString& table, const TString& column) {
+    if (!typeCtx) {
+        return std::nullopt;
+    }
+
+    const auto tableIt = typeCtx->ColumnStatisticsByTableName.find(table);
+    if (tableIt == typeCtx->ColumnStatisticsByTableName.end() || !tableIt->second) {
+        return std::nullopt;
+    }
+
+    const auto it = tableIt->second->Data.find(column);
+    if (it == tableIt->second->Data.end()) {
+        return std::nullopt;
+    }
+
+    const auto& stats = it->second;
+    if (stats.HyperLogLog && *stats.HyperLogLog > 0) {
+        return stats.HyperLogLog;
+    }
+
+    if (stats.NumUniqueVals && *stats.NumUniqueVals > 0) {
+        return stats.NumUniqueVals;
+    }
+
+    return std::nullopt;
+}
+
+std::pair<double, double> GetRowsAndBytes(const TKikimrTableMetadata& meta, const TKikimrTableMetadata& mainTableMeta) {
+    if (meta.RecordsCount > 0) {
+        return {static_cast<double>(meta.RecordsCount), static_cast<double>(meta.DataSize)};
+    }
+    const double columnShare = mainTableMeta.Columns.empty() ? 1.0
+        : std::min(1.0, static_cast<double>(meta.Columns.size()) / static_cast<double>(mainTableMeta.Columns.size()));
+    return {static_cast<double>(mainTableMeta.RecordsCount), static_cast<double>(mainTableMeta.DataSize) * columnShare};
+}
+
 } // anonymous namespace
+
+double EstimateRowsPerKeyPrefix(const TKikimrTableMetadata& meta, size_t prefixLen, double rows, const TString& statsTable,
+                                const NYql::TTypeAnnotationContext* typeCtx) {
+    const size_t keyLen = meta.KeyColumnNames.size();
+    if (rows <= 1 || keyLen == 0 || prefixLen >= keyLen) {
+        return 1;
+    }
+
+    double distinct = 1;
+    for (size_t i = 0; i < prefixLen; ++i) {
+        const auto ndv = GetDistinctCount(typeCtx, statsTable, meta.KeyColumnNames[i]);
+        if (!ndv) {
+            return std::max(1.0, std::pow(rows, static_cast<double>(keyLen - prefixLen) / static_cast<double>(keyLen)));
+        }
+        distinct *= *ndv;
+    }
+
+    return std::max(1.0, rows / std::min(rows, distinct));
+}
+
+double EstimateLookupCostPerLeftRow(const TKikimrTableMetadata& target, const TKikimrTableMetadata& mainTableMeta, bool covering,
+                                    size_t lookupPrefixLen, double points, const NYql::TTypeAnnotationContext* typeCtx) {
+    const auto [rows, bytes] = GetRowsAndBytes(target, mainTableMeta);
+    const double rowBytes = rows > 0 ? bytes / rows : 0;
+    const double fetched = points * EstimateRowsPerKeyPrefix(target, lookupPrefixLen, rows, mainTableMeta.Name, typeCtx);
+    double cost = 1000.0 * points + 1.0 * fetched * rowBytes;
+
+    if (!covering) {
+        // every row found in the index is looked up in the main table by its primary key
+        const double mainRowBytes = mainTableMeta.RecordsCount > 0
+            ? static_cast<double>(mainTableMeta.DataSize) / static_cast<double>(mainTableMeta.RecordsCount) : 0;
+        cost += fetched * (1000.0 + 1.0 * mainRowBytes);
+    }
+
+    return cost;
+}
 
 std::optional<TLookupJoinRightSide> MatchLookupJoinRightSide(const TIntrusivePtr<IOperator>& input) {
     auto op = input;
@@ -177,7 +249,8 @@ std::optional<THashSet<TString>> GetLookupJoinKeyColumns(const TOpRead& read, co
 
 std::optional<TLookupJoinTarget> ChooseLookupJoinTarget(const TOpRead& read, const TVector<TString>& readColumns,
                                                         const THashSet<TString>& joinKeyColumns, bool innerJoin,
-                                                        const NOpt::TKqpOptimizeContext& kqpCtx) {
+                                                        const NOpt::TKqpOptimizeContext& kqpCtx,
+                                                        const NYql::TTypeAnnotationContext* typeCtx) {
     // Only supports row storage tables.
     if (read.GetTableStorageType() != NYql::EStorageType::RowStorage) {
         return std::nullopt;
@@ -190,17 +263,21 @@ std::optional<TLookupJoinTarget> ChooseLookupJoinTarget(const TOpRead& read, con
 
     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, table.Path().Value());
     Y_ENSURE(tableDesc.Metadata);
+
     // A read redirected to an index is not on the main table, but rows found in another index of the main table
     // are still fetched from the main table.
     const bool redirected = read.RangeInfo.has_value() && !read.RangeInfo->MainTable.empty()
         && read.RangeInfo->MainTable != table.Path().Value();
     const auto& mainTableDesc = redirected ? kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.RangeInfo->MainTable) : tableDesc;
     Y_ENSURE(mainTableDesc.Metadata);
+
     const bool autoIndexSelection = kqpCtx.Config->IsAutoIndexSelectionForIndexLookupJoinEnabled();
     const bool allPointPrefixes = kqpCtx.Config->GetEnableLookupJoinPointPrefixes();
+    const bool costBased = IsCostBasedIndexSelectionEnabled(kqpCtx);
 
     // Without a pushed predicate the read can be redirected to a covering index whose key starts with join keys.
-    if (autoIndexSelection && !read.RangeInfo.has_value()) {
+    // The cost-based choice considers those indexes among the other candidates.
+    if (autoIndexSelection && !costBased && !read.RangeInfo.has_value()) {
         if (auto index = TryToFindBestIndexForRightSide(tableDesc, readColumns, joinKeyColumns); index && IsLookupTable(*index)) {
             return TLookupJoinTarget{index, nullptr, nullptr};
         }
@@ -210,11 +287,13 @@ std::optional<TLookupJoinTarget> ChooseLookupJoinTarget(const TOpRead& read, con
     std::optional<TLookupJoinTarget> best;
     // The longest looked up key prefix wins, and a covering table wins a tie, because it needs a single lookup.
     std::pair<size_t, bool> bestScore;
+
     // Candidates are considered in the order of preference, so the first one wins a tie.
     auto consider = [&](const TIntrusivePtr<TKikimrTableMetadata>& meta, const TOpRead::TPointPrefix* prefix) {
         if (!IsLookupTable(*meta)) {
             return;
         }
+
         if (prefix && !IsUsablePointPrefix(*prefix, meta->KeyColumnNames, innerJoin, pointsLimit)) {
             return;
         }
@@ -231,8 +310,22 @@ std::optional<TLookupJoinTarget> ChooseLookupJoinTarget(const TOpRead& read, con
 
         const size_t pointPrefixLen = prefix ? prefix->Columns.size() : 0;
         const size_t len = GetLookupKeyPrefixLen(meta->KeyColumnNames, pointPrefixLen, joinKeyColumns);
+
         // At least one join key is needed to lookup by.
         if (len == pointPrefixLen) {
+            return;
+        }
+
+        if (costBased) {
+            const double points = prefix && prefix->ExpectedMaxPoints ? static_cast<double>(*prefix->ExpectedMaxPoints) : 1.0;
+            const double cost = EstimateLookupCostPerLeftRow(*meta, *mainTableDesc.Metadata, !mainTable, len, points, typeCtx);
+
+            // Costs closer than the relative epsilon are a tie, so estimation noise does not flip the choice
+            if (best && cost >= best->CostPerLeftRow * (1 - 1e-9)) {
+                return;
+            }
+
+            best = TLookupJoinTarget{meta, prefix, mainTable, cost};
             return;
         }
 
@@ -257,9 +350,10 @@ std::optional<TLookupJoinTarget> ChooseLookupJoinTarget(const TOpRead& read, con
         }
     }
     consider(tableDesc.Metadata, nullptr);
+
     // A read redirected to an index can be probed in the main table instead, which covers every column. It gets
     // no point prefix above unless the predicate pins its key.
-    if (redirected && autoIndexSelection && allPointPrefixes) {
+    if (redirected && autoIndexSelection && (allPointPrefixes || costBased)) {
         consider(mainTableDesc.Metadata, nullptr);
     }
 
@@ -269,6 +363,26 @@ std::optional<TLookupJoinTarget> ChooseLookupJoinTarget(const TOpRead& read, con
         const auto& otherTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, prefix->Table);
         Y_ENSURE(otherTableDesc.Metadata);
         consider(otherTableDesc.Metadata, prefix);
+    }
+
+    // The tables the read predicate restricts need not be the ones the join keys fit
+    // So the cost-based choice also considers every index of the main table without a point prefix.
+    if (costBased && autoIndexSelection) {
+        const auto& mainMeta = *mainTableDesc.Metadata;
+        TVector<TString> indexNames;
+
+        for (const auto& index : mainMeta.Indexes) {
+            if (IsValidIndex(index)) {
+                indexNames.push_back(index.Name);
+            }
+        }
+
+        std::sort(indexNames.begin(), indexNames.end());
+        for (const auto& name : indexNames) {
+            if (const auto indexMeta = mainMeta.GetIndexMetadata(name).first; indexMeta && indexMeta->Name != table.Path().Value()) {
+                consider(indexMeta, nullptr);
+            }
+        }
     }
 
     return best;

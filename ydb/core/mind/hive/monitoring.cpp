@@ -1697,9 +1697,9 @@ public:
             db.Table<Schema::TabletAvailabilityRestrictions>().Key(NodeId, changeType).Update<Schema::TabletAvailabilityRestrictions::MaxCount>(*maxCount);
             Node->SetTabletAvailabilityRestriction(changeType, *maxCount);
         }
-        // Only types the node reports can be reset: for others hive has no idea what "default" means for the node,
-        // and the restriction would be meaningless anyway, since the node can't run them
-        if (resetType != TTabletTypes::TypeInvalid && Node->TabletAvailability.contains(resetType)) {
+        // For types the node does not report, reset can only remove an existing restriction
+        if (resetType != TTabletTypes::TypeInvalid
+            && (Node->TabletAvailability.contains(resetType) || Node->TabletAvailabilityRestrictions.contains(resetType))) {
             ChangeRequest = true;
             eventDetails << "type=" << GetTabletTypeShortName(resetType) << " maxCount=default ";
             NJson::TJsonValue jsonUpdate;

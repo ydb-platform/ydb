@@ -196,8 +196,8 @@ public:
     void SetTabletAvailabilityRestriction(TTabletTypes::EType tabletType, ui64 maxCount);
     // Cycles restricted -> default -> explicitly allowed (overriding DefaultTabletLimit).
     // Explicit allow is stored as a MAX_TABLET_COUNT_DEFAULT_VALUE restriction, so it survives node re-registration.
+    // Types not present in TabletAvailability are never explicitly allowed, their restriction is just removed.
     // Returns true if the type is now explicitly allowed.
-    // Callers should only use it for types present in TabletAvailability.
     bool ResetTabletAvailabilityRestriction(TTabletTypes::EType tabletType);
 
     bool IsAbleToScheduleTablet() const {

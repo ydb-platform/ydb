@@ -444,6 +444,7 @@ public:
     bool EnableBackgroundCompactionServerless = false;
     bool EnableBorrowedSplitCompaction = false;
     bool EnableMoveIndex = true;
+    bool EnableRebuildIndex = true;
     bool EnableAlterDatabaseCreateHiveFirst = false;
     bool EnableStatistics = false;
     bool EnableWasmCompileController = false;

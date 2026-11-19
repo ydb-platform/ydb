@@ -465,6 +465,56 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(8)});
     }
 
+    Y_UNIT_TEST(RebuildVectorIndexFeatureFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        const ui64 schemeShard = TTestTxConfig::SchemeShard;
+        ui64 txId = 100;
+
+        auto setFlag = [&](bool enabled) {
+            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            request->Record.MutableConfig()->MutableFeatureFlags()->SetEnableRebuildIndex(enabled);
+            SetConfig(runtime, schemeShard, std::move(request));
+        };
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        WriteVectorTableRows(runtime, schemeShard, ++txId, "/MyRoot/Table", 0, 0, 200);
+
+        setFlag(false);
+        const ui64 buildTx = ++txId;
+        TestBuildVectorIndex(runtime, buildTx, schemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildTx);
+        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, schemeShard, "/MyRoot", buildTx).GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestRebuildVectorIndex(runtime, ++txId, schemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"embedding"},
+            Ydb::StatusIds::PRECONDITION_FAILED);
+
+        setFlag(true);
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> initiateBlocker(runtime, [](const auto& ev) {
+            const auto& tx = ev->Get()->Record.GetTransaction(0);
+            return tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild
+                && tx.GetInitiateIndexBuild().GetIsRebuild();
+        });
+        const ui64 rebuildTx = ++txId;
+        TestRebuildVectorIndex(runtime, rebuildTx, schemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"embedding"});
+        runtime.WaitFor("rebuild initiation", [&] { return !initiateBlocker.empty(); });
+
+        setFlag(false);
+        initiateBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, rebuildTx);
+        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, schemeShard, "/MyRoot", rebuildTx).GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE);
+    }
+
     void DoRebuildVectorIndex(bool cancel, bool reboot, bool rejectReplacement = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

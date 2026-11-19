@@ -132,6 +132,7 @@ Y_UNIT_TEST_SUITE(Replication)
     {
         // given
         constexpr size_t rowsPerTransaction = 40;
+        constexpr size_t transactionsAfterSplit = 5;
         MainTestCase testCase;
         testCase.CreateSourceTable(R"(
             CREATE TABLE `%s` (
@@ -158,12 +159,13 @@ Y_UNIT_TEST_SUITE(Replication)
                 "Replica shows a partial transaction before split: " << count);
         }
         UNIT_ASSERT_C(attempt < 240, "Topic partition has not split under load");
-        for (size_t i = 0; i < 5; ++i) {
+        for (size_t i = 0; i < transactionsAfterSplit; ++i) {
             UpsertTransaction(testCase, rowsPerTransaction);
         }
 
         // then
         const auto expected = ReadCountAndChecksum(testCase, testCase.SourceTableName);
+        UNIT_ASSERT_VALUES_EQUAL(expected.first, (attempt + transactionsAfterSplit) * rowsPerTransaction);
         std::pair<ui64, ui64> actual;
         for (size_t wait = 0; wait < 300 && actual != expected; ++wait) {
             actual = ReadCountAndChecksum(testCase, testCase.TableName);

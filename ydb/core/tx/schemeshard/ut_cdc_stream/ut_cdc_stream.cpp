@@ -1952,8 +1952,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
         const auto& config = topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
         UNIT_ASSERT_VALUES_EQUAL(config.PartitionKeySchemaSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionStrategy().GetPartitionStrategyType(),
-            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetPartitionStrategy().GetPartitionStrategyType()),
+            static_cast<int>(NKikimrPQ::TPQTabletConfig::CAN_SPLIT));
     }
 
     void AlterStreamTopic(TTestBasicRuntime& runtime, ui64& txId,
@@ -2170,7 +2170,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         // then
         const auto after = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl")
             .GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy();
-        UNIT_ASSERT_VALUES_EQUAL(after.GetPartitionStrategyType(), before.GetPartitionStrategyType());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(after.GetPartitionStrategyType()),
+            static_cast<int>(before.GetPartitionStrategyType()));
     }
 
     Y_UNIT_TEST(ShouldRejectEnablingAutopartitioningWhenTopicHasKeySchema) {
@@ -2194,8 +2195,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
         const auto& config = topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
         UNIT_ASSERT_VALUES_EQUAL(config.PartitionKeySchemaSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionStrategy().GetPartitionStrategyType(),
-            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetPartitionStrategy().GetPartitionStrategyType()),
+            static_cast<int>(NKikimrPQ::TPQTabletConfig::DISABLED));
     }
 
     Y_UNIT_TEST(ShouldKeepKeyRangeHeartbeatsWhenSchemeShardReboots) {

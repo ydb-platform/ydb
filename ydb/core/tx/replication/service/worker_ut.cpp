@@ -1700,7 +1700,7 @@ Y_UNIT_TEST_SUITE(Worker) {
     };
 
     struct TDataEndSetup {
-        TEnv Env;
+        TEnv<> Env;
         TActorId Edge;
         TActorId Reader;
         TActorId Writer;

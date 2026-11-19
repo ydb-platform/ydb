@@ -7859,8 +7859,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(topic.GetTotalGroupCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(topic.GetPQTabletConfig().PartitionKeySchemaSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(
-            topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType(),
-            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+            static_cast<int>(topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()),
+            static_cast<int>(NKikimrPQ::TPQTabletConfig::CAN_SPLIT));
     }
 
     Y_UNIT_TEST(ShouldPartitionTopicByTableShardsWhenImportedChangefeedRequestsKeyRangeHeartbeatsWithFlagOff) {
@@ -7903,8 +7903,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(topic.GetTotalGroupCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(topic.GetPQTabletConfig().PartitionKeySchemaSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(
-            topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType(),
-            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+            static_cast<int>(topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()),
+            static_cast<int>(NKikimrPQ::TPQTabletConfig::DISABLED));
     }
 
     Y_UNIT_TEST_FLAG(ChangefeedTopicWithUnknownFields, EnableDataShardDirectPartImport) {

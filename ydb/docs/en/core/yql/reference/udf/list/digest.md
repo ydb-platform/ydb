@@ -5,6 +5,7 @@ A set of commonly used hash functions.
 ## List of functions
 
 * `Digest::Crc32c(String{Flags::AutoMap}) -> Uint32`
+* `Digest::Crc32(String{Flags::AutoMap}) -> Uint32` Added in the version [YQL 2026.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2026.03.md)
 * `Digest::Crc64(String{Flags::AutoMap}, [Init:Uint64?]) -> Uint64`
 * `Digest::Fnv32(String{Flags::AutoMap}, [Init:Uint32?]) -> Uint32`
 * `Digest::Fnv64(String{Flags::AutoMap}, [Init:Uint64?]) -> Uint64`
@@ -35,7 +36,10 @@ A set of commonly used hash functions.
 * `Digest::FarmHashFingerprint128(String{Flags:AutoMap}) -> Tuple<Uint64,Uint64>`
 * `Digest::SuperFastHash(String{Flags:AutoMap}) -> Uint32`
 * `Digest::Sha1(String{Flags:AutoMap}) -> String`
+* `Digest::Sha224(String{Flags:AutoMap}) -> String` Added in the version [YQL 2026.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2026.03.md)
 * `Digest::Sha256(String{Flags:AutoMap}) -> String`
+* `Digest::Sha384(String{Flags:AutoMap}) -> String` Added in the version [YQL 2026.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2026.03.md)
+* `Digest::Sha512(String{Flags:AutoMap}) -> String` Added in the version [YQL 2025.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.03.md)
 * `Digest::IntHash64(Uint64{Flags:AutoMap}) -> Uint64`
 * `Digest::XXH3(String{Flags:AutoMap}) -> Uint64`
 * `Digest::XXH3_128(String{Flags:AutoMap}) -> Tuple<Uint64,Uint64>`

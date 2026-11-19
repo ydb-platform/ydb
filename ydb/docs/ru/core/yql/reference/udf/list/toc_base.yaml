@@ -13,6 +13,7 @@ items:
 - { name: PostgreSQL,             href: postgres.md }
 - { name: Roaring,                href: roaring.md }
 - { name: Re2,                    href: re2.md }
+- { name: SimplePg,               href: simple_pg.md }
 - { name: String,                 href: string.md }
 - { name: Unicode,                href: unicode.md }
 - { name: Url,                    href: url.md }

@@ -129,6 +129,23 @@ SELECT FormatType(OptionalType(DataType("Bool"))); -- Bool?
 SELECT FormatType(OptionalType(ParseType("List<String?>"))); -- List<String?>?
 ```
 
+## AsOptionalType {#asoptionaltype}
+
+### Сигнатура
+
+```yql
+AsOptionalType(Type)->опциональный Type
+```
+
+Доступна начиная с версии [YQL 2026.01](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2026.01.md). Идемпотентно добавляет в переданный тип возможность содержать `NULL`. Если тип уже является опциональным, PostgreSQL типом или `NULL`, возвращает его без изменений. В отличие от [OptionalType](#optionaltype), не добавляет дополнительный уровень вложенности для уже опциональных типов.
+
+### Примеры
+
+```yql
+SELECT FormatType(AsOptionalType(DataType("Bool"))); -- Bool?
+SELECT FormatType(AsOptionalType(ParseType("Bool?"))); -- Bool?
+```
+
 ## ListType и StreamType {#listtype}
 
 ### Сигнатура
@@ -264,7 +281,7 @@ SELECT FormatType(CallableType(
 )); -- Callable<(String,[Int64?])->Double>
 ```
 
-## GenericType, UnitType и VoidType {#generictype}
+## GenericType, UnitType, VoidType, NullType, EmptyListType, EmptyDictType {#generictype}
 
 ### Сигнатура
 
@@ -272,6 +289,9 @@ SELECT FormatType(CallableType(
 GenericType()->тип
 UnitType()->тип
 VoidType()->тип
+NullType()->тип
+EmptyListType()->тип
+EmptyDictType()->тип
 ```
 
 Возвращают одноименные [специальные типы данных](../types/special.md). Аргументов нет, так как они не параметризуются.
@@ -281,6 +301,25 @@ VoidType()->тип
 ```yql
 SELECT FormatType(VoidType()); -- Void
 ```
+
+## LinearType, DynamicLinearType {#lineartype}
+
+### Сигнатура
+
+```yql
+LinearType(Type)->линейный тип, параметризуемый заданным типом
+```
+
+Функции доступны начиная с версии [YQL 2025.04](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.04.md).
+Возвращает [линейный](../types/linear.md) тип.
+
+### Примеры
+
+```yql
+SELECT FormatType(LinearType(ResourceType("Foo"))); -- Linear<Resource<'Foo'>>
+SELECT FormatType(DynamicLinearType(ResourceType("Foo"))); -- DynamicLinear<Resource<'Foo'>>
+```
+
 
 ## OptionalItemType, ListItemType и StreamItemType {#optionalitemtype}
 
@@ -313,6 +352,42 @@ SELECT FormatType(ListItemType(
 ```yql
 SELECT FormatType(ListItemType(
   ParseTypeHandle("List<Int32>")
+)); -- Int32
+```
+
+{% endif %}
+
+## LinearItemType {#linearitemtype}
+
+### Сигнатура
+
+```yql
+LinearItemType(LinearType)->тип параметра линейного типа
+LinearItemType(DynamicLinearType)->тип параметра линейного типа
+```
+
+Функции доступны начиная с версии [YQL 2025.04](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.04.md).
+Если этим функциям передается тип, то они выполняют действие, обратное [LinearType](#lineartype) или [DynamicLinearType](#lineartype) — возвращают тип параметра линейного типа.
+
+{% if feature_codegen %}
+
+Если этим функциям передается хендл типа, то выполняют действие, обратное [LinearTypeHandle](#lineartypehandle) или [DynamicLinearTypeHandle](#lineartypehandle) — возвращают хендл типа параметра по хендлу линейного типа.
+
+{% endif %}
+
+### Примеры
+
+```yql
+SELECT FormatType(LinearItemType(
+  ParseType("Linear<Int32>")
+)); -- Int32
+```
+
+{% if feature_codegen %}
+
+```yql
+SELECT FormatType(LinearItemType(
+  ParseTypeHandle("Linear<Int32>")
 )); -- Int32
 ```
 
@@ -616,7 +691,9 @@ SELECT FormatType(ListTypeHandle(
 )); -- List<Bool>
 ```
 
-### EmptyListTypeHandle и EmptyDictTypeHandle
+<a id="emptylisttypehandle-i-emptydicttypehandle"></a>
+
+### EmptyListTypeHandle и EmptyDictTypeHandle {#empty-list-dict-type-handle}
 
 #### Сигнатура
 
@@ -856,7 +933,9 @@ SELECT FormatType(VariantTypeHandle(
 )); -- Variant<Int32, String>
 ```
 
-### VoidTypeHandle и NullTypeHandle
+<a id="voidtypehandle-i-nulltypehandle"></a>
+
+### VoidTypeHandle и NullTypeHandle {#void-null-type-handle}
 
 #### Сигнатура
 
@@ -1001,6 +1080,26 @@ LambdaOptionalArgumentsCount(LambdaFunction)->Uint32
 ```yql
 SELECT LambdaOptionalArgumentsCount(($x, $y, $z?)->(if($x,$y,$z)))
 ; -- 1
+```
+
+### LinearTypeHandle и DynamicLinearTypeHandle {#lineartypehandle}
+
+#### Сигнатура
+
+```yql
+LinearTypeHandle(TypeHandle)->хэндл статического линейного типа
+DynamicLinearTypeHandle(TypeHandle)->хэндл динамического линейного типа
+```
+
+Функции доступны начиная с версии [YQL 2025.04](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2025.04.md).
+Функции строят хендл статического или динамического линейного типа по переданному хендлу типа параметра.
+
+#### Примеры
+
+```yql
+SELECT FormatType(LinearTypeHandle(
+    TypeHandle(DataType("Bool"))
+)); -- Linear<Bool>
 ```
 
 {% endif %}

@@ -1,11 +1,12 @@
 # WITHOUT
 
-Excluding columns from the result of `SELECT *`.
+Excluding columns from the result of `SELECT *`. The `IF EXISTS` modifier does not throw an error for missing columns.
 
 ## Examples
 
 ```yql
 SELECT * WITHOUT foo, bar FROM my_table;
+SELECT * WITHOUT IF EXISTS foo, bar FROM my_table;
 ```
 
 ```yql

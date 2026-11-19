@@ -179,3 +179,61 @@ $closure = $makeClosure(2);
 SELECT $closure(1); -- 3
 ```
 
+## PositionOf {#positionof}
+
+### Signature
+
+```yql
+PositionOf(x)->Struct<File:String, Row:Uint32, Column:Uint32>
+```
+
+This function is available since version [YQL 2026.01](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2026.01.md).
+Returns the position of a node in the source text. For named expressions, returns the position of the source node.
+
+#### Example
+
+```yql
+SELECT PositionOf(1); -- ("File": "<main>", "Row": 1, "Column": 19)
+```
+
+## WithIssue {#with_issue}
+
+### Signature
+
+```yql
+WithIssue(x, File:String, Row: Uint32, Column: Uint32, Message:String)->TypeOf(x)
+```
+
+This function is available since version [YQL 2026.01](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2026.01.md).
+Adds a custom frame with the specified position and message to the validation stack. Has no effect if the request is validated successfully.
+Typical use is to bind to a file with a DSL.
+
+#### Example
+
+```yql
+-- decorating the expression
+SELECT WithIssue(
+    1 + "foo", -- to get an error
+    "my_file",
+    100,
+    200,
+    "my_message"
+);
+
+-- decorating a subquery
+DEFINE SUBQUERY $sub() AS
+    SELECT 1 + "foo"; -- to get an error
+END DEFINE;
+
+$sub = ($world)->{
+    return WithIssue(
+        $sub($world),
+        "my_file",
+        100,
+        200,
+        "my_message"
+    );
+};
+
+PROCESS $sub();
+```

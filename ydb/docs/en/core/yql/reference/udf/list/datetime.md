@@ -126,9 +126,28 @@ SELECT
     DateTime::GetDayOfWeekName($tm) as WeekDay; -- "Wednesday"
 ```
 
+## Init/Init64 {#init}
+
+Available since version [YQL 2026.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2026.03.md#datetime-module).
+
+Creates an internal date-time representation. Unspecified or NULL components default to year 1970, month 1, day 1, and zero for all remaining components. An unspecified time zone uses GMT. `Timezone` is accepted only as a named argument. Returns NULL for invalid components or invalid dates.
+
+### List of functions
+
+```yql
+DateTime::Init([ Year:Uint16?, Month:Uint8?, Day:Uint8?, Hour:Uint8?, Minute:Uint8?, Second:Uint8?, Microsecond:Uint32?, Timezone:String? ]) -> Resource<TM>?
+DateTime::Init64([ Year:Int32?, Month:Uint8?, Day:Uint8?, Hour:Uint8?, Minute:Uint8?, Second:Uint8?, Microsecond:Uint32?, Timezone:String? ]) -> Resource<TM64>?
+```
+
+```yql
+SELECT DateTime::MakeTimestamp(DateTime::Init(2024 as Year, 2 as Month, 29 as Day)); -- 2024-02-29T00:00:00Z
+```
+
 ## Update {#update}
 
 Updating one or more components in the [internal representation](#resource). Returns either an updated copy or `NULL`, if an update produces an invalid date or other inconsistencies.
+
+`Timezone` can only be passed as a named argument.
 
 ### List of functions
 
@@ -377,7 +396,7 @@ Get a string representation of a time using an arbitrary formatting string.
 * Signature:
 
   ```text
-  DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?)
+  DateTime::Format(String, [AlwaysWriteFractionalSeconds:Bool?, WriteOffsetWithColon:Bool?])
   -> (Resource<TM64>{Flags:AutoMap}) -> String
   ```
 
@@ -389,8 +408,8 @@ A set of specifiers is implemented for the formatting string:
 * `%d`: 2-digit day
 * `%H`: 2-digit hour
 * `%M`: 2-digit minutes
-* `%S`: 2-digit seconds or `XX.XXXXXX` in the case of non-empty microseconds (only if `alwaysWriteFractionalSeconds` is not set to `True`)
-* `%z`: `+hhmm` or `-hhmm`
+* `%S`: 2-digit seconds or `XX.XXXXXX` in the case of non-empty microseconds (only if `AlwaysWriteFractionalSeconds` is not set to `True`)
+* `%z`: `+hhmm` or `-hhmm` by default; `+hh:mm` or `-hh:mm` when `WriteOffsetWithColon` is `True`.
 * `%Z`: IANA name of the timezone
 * `%b`: A short three-letter English name of the month (Jan)
 * `%B`: A full English name of the month (January)
@@ -425,6 +444,7 @@ Implemented specifiers:
 * `%H`: 2-digit hour
 * `%M`: 2-digit minutes
 * `%S`: Seconds, can also accept microseconds in the formats from `XX` up to `XX.XXXXXX`
+* `%z`: time zone offset in the format `±hh:mm`, `±hhmm`, or `±hh`.
 * `%Z`: The IANA name of the timezone (e.g., GMT)
 * `%b`: A short three-letter case-insensitive English name of the month (e.g., Jan)
 * `%B`: A full case-insensitive English name of the month (January)

@@ -33,6 +33,7 @@ SELECT 1; -- A single-line comment
 ```
 
 In C++ syntax compatibility mode (default), a multiline comment ends with the **nearest** `*/`.
+
 The ANSI SQL syntax compatibility mode accounts for nesting of multiline comments:
 
 ```yql
@@ -45,8 +46,7 @@ SELECT * FROM T; /* this is a comment /* this is a nested comment, without ansi_
 **Keywords** are tokens that have a fixed value in the YQL language. Examples of keywords: `SELECT`, `INSERT`, `FROM`, `ACTION`, and so on. Keywords are case-insensitive, that is, `SELECT` and `SeLEcT` are equivalent to each other.
 The list of keywords is not fixed and is going to expand as the language develops. A keyword can't contain numbers and begin or end with an underscore.
 
-**Identifiers** are tokens that identify the names of tables, columns, and other objects in YQL. Identifiers in YQL are always case-sensitive.
-An identifier can be written in the body of the program without any special formatting, if the identifier:
+**Identifiers** are tokens that identify the names of tables, columns, and other objects in YQL. Identifiers in YQL are always case-sensitive. An identifier can be written in the body of the program without any special formatting, if the identifier:
 
 * Is not a keyword
 * Begins with a Latin letter or underscore
@@ -113,12 +113,9 @@ SELECT * FROM $table
 
 ## SQL hints {#sql-hints}
 
-SQL hints are special settings with which a user can modify a query execution plan
-(for example, enable/disable specific optimizations or force the JOIN execution strategy).
-Unlike [PRAGMA](pragma.md), SQL hints act locally – they are linked to a specific point in the YQL query (normally, after the keyword)
-and affect only the corresponding statement or even a part of it.
-SQL hints are a set of settings "name-value list" and defined inside special comments —
-comments with SQL hints must have `+` as the first character:
+SQL hints are special settings with which a user can modify a query execution plan (for example, enable/disable specific optimizations or force the JOIN execution strategy). Unlike [PRAGMA](pragma.md), SQL hints act locally – they are linked to a specific point in the YQL query (normally, after the keyword) and affect only the corresponding statement or even a part of it.
+
+SQL hints are a set of settings "name-value list" and defined inside special comments — comments with SQL hints must have `+` as the first character:
 
 ```yql
 --+ Name1(Value1 Value2 Value3) Name2(Value4) ...
@@ -187,7 +184,7 @@ In the C++ syntax compatibility mode (default), you can use double quotes instea
 SELECT "string with\n newline, \x0a newline and \" backtick ";
 ```
 
-In ASNI SQL compatibility mode, double quotes are used for IDs, and the only escaping that can be used for string literals is a pair of single quotes:
+In ANSI SQL compatibility mode, double quotes are used for IDs, and the only escaping that can be used for string literals is a pair of single quotes:
 
 ```yql
 --!ansi_lexer

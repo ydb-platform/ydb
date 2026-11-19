@@ -1,5 +1,11 @@
 # Aggregate functions
 
+{% note info %}
+
+Aggregate functions ignore `NULL` in their arguments, except for `COUNT` when `*` is specified as the argument, as well as `BOOL_AND` / `BOOL_OR` / `BOOL_XOR` functions, in which `NULL` is considered without omissions.
+
+{% endnote %}
+
 ## COUNT {#count}
 
 ### Signature
@@ -76,6 +82,7 @@ As an argument, you may use an arbitrary computable expression with a numeric re
 
 Integers are automatically expanded to 64 bits to reduce the risk of overflow.
 
+### Examples
 
 ```yql
 SELECT SUM(value) FROM my_table;
@@ -590,7 +597,6 @@ Percentile values must be in the range from 0.0 to 1.0 inclusive.
 
 ### Examples
 
-
 ```yql
 SELECT
     MEDIAN(numeric_column),
@@ -906,3 +912,47 @@ SELECT
     MULTI_AGGREGATE_BY(nums, AggregationFactory("percentile", 0.9)) as p90
 FROM my_table;
 ```
+
+
+
+## RANDOM_SAMPLE and RANDOM_VALUE
+
+### Signature
+
+This functions are available since version [YQL 2025.04](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.04.md).
+
+```yql
+RANDOM_SAMPLE(T?, limit:Uint64)->List<T>
+RANDOM_SAMPLE(T, limit:Uint64)->List<T>
+RANDOM_VALUE(T)->T
+RANDOM_VALUE(T?)->Optional<T>
+```
+
+Selects up to `limit` random values. `RANDOM_VALUE` is equivalent to `RANDOM_SAMPLE` with `limit=1`, except it returns an element instead of a list. NULL values are ignored. For `N > 0` non-NULL input values, each value is included with probability `min(1, limit/N)`.
+
+{% note info %}
+
+When applied to an empty table with no grouping keys, `RANDOM_SAMPLE` returns an empty list instead of NULL.
+
+{% endnote %}
+
+### Examples
+
+```yql
+SELECT
+   RANDOM_SAMPLE(region, 5) as five_random_regions,
+   RANDOM_VALUE(region) as random_region
+FROM users
+```
+
+{% note warning %}
+
+The final result is non-deterministic (it is impossible to perform two runs that are guaranteed to yield the same result).
+
+{% endnote %}
+
+{% note warning %}
+
+Choose a reasonable `limit` value, as the aggregation function keeps `limit` elements in memory during execution. Using a large `limit` when processing large elements can cause out-of-memory errors.
+
+{% endnote %}

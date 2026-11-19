@@ -263,6 +263,27 @@ UnicodeLiterals is a [scoped](pragma.md#pragmascope) setting.
 When this mode is enabled, a warning will be generated for string literals without suffixes like "foo"/'bar'/@@multiline@@. It can be suppressed by explicitly choosing the suffix `s` for the `String` type, or `u` for the `Utf8` type.
 WarnUntypedStringLiterals is a [scoped](pragma.md#pragmascope) setting.
 
+### RuntimeLogLevel {#runtime-log-level}
+
+| Value type | Default |
+| --- | --- |
+| String, one of `Trace`, `Debug`, `Info`, `Notice`, `Warn`, `Error`, `Fatal` | `Info` |
+
+Allows you to change the logging level of calculations (for example, for UDFs) during query execution or at the stage of declaring the UDF signature.
+
+### SimplePg
+
+`SimplePg`/`DisableSimplePg`
+
+| Value Type | Default |
+| --- | --- |
+| Flag | false |
+
+When enabled, functions from the [SimplePg](../udf/list/simple_pg.md) module are imported into the global function scope.
+When disabled, the `SimplePg::` prefix is ​​required to call them.
+
+`SimplePg` is a [scoped](#pragmascope) setting.
+
 ### AllowDotInAlias
 
 | Value type | Default |
@@ -524,6 +545,11 @@ Selecting a cluster for calculations that don't access tables.
 | Flag | false |
 
 Getting diagnostic information from YQL as an additional result of a query.
+
+### `DebugPositions`
+
+Disable deduplication of expression evaluation that may lead to errors (`Ensure`/`Unwrap` or UDF call).
+This may result in slower query at the cost of increasing the precision of the position that will be tied to a runtime error.
 
 {% endif %}
 

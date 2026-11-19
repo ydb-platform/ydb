@@ -324,6 +324,11 @@ TLogicalResult TEngine::LowerKql(const Ydb::Query::Benchmark::KqlQueryList& wire
         auto query = ImportKqlQueryList(wire, ctx);
         Impl->Catalog->BindTables(query, session, ctx);
         CheckParameterTypes(query, parameters, ctx);
+        // BuildKqlQuery receives evaluated expressions. Binding its table references
+        // supplies the intents and metadata normally collected before that point.
+        ctx.Step.Done(TExprStep::ExprEval);
+        ctx.Step.Done(TExprStep::Intents);
+        ctx.Step.Done(TExprStep::LoadTablesMetadata);
         if (imported) {
             *imported = TMeasurementTime::Now();
         }

@@ -2940,6 +2940,20 @@ bool StoreConsumerSettingsEntry(
         if (!StoreConsumerIntervalSetting(settings.ReceiveMessageDelay, ctx, statement, id, valueExprNode, reset)) {
             return false;
         }
+    } else if (name == "replicate_offsets") {
+        if (settings.ReplicateOffsets) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "Bool") {
+            ctx.Error() << to_upper(id.Name) << " value should be boolean";
+            return false;
+        }
+        settings.ReplicateOffsets = valueExprNode;
     } else {
         ctx.Error() << to_upper(id.Name) << ": unknown option for consumer";
         return false;

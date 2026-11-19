@@ -68,12 +68,10 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
 
         for (const auto& [_, id] : colName2Id) {
             const auto* candidate = effectiveColumn(id);
-            if (!candidate || !candidate->IsGenerated() || IsDropped(*candidate)) {
-                continue;
-            }
-
             NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
-            if (!generatedDesc.ParseFromString(candidate->DefaultValue)) {
+            if (!candidate || IsDropped(*candidate)
+                || !candidate->TryGetDefaultExpression(generatedDesc) || generatedDesc.GetWritable())
+            {
                 continue;
             }
 

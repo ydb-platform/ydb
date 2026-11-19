@@ -655,12 +655,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 }
 
                 for (const auto& [_, srcCol] : source->Columns) {
-                    if (!srcCol.IsGenerated() || srcCol.IsDropped()) {
-                        continue;
-                    }
-
                     NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
-                    if (!generatedDesc.ParseFromString(srcCol.DefaultValue)) {
+                    if (srcCol.IsDropped() || !srcCol.TryGetDefaultExpression(generatedDesc) || generatedDesc.GetWritable()) {
                         continue;
                     }
 
@@ -892,7 +888,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
             for (const auto& [srcColId, srcCol] : source->Columns) {
-                if (!srcCol.IsGenerated() || srcCol.IsDropped()) {
+                NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
+                if (srcCol.IsDropped() || !srcCol.TryGetDefaultExpression(generatedDesc) || generatedDesc.GetWritable()) {
                     continue;
                 }
 
@@ -902,13 +899,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     continue;
                 }
 
-                NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
-                if (generatedDesc.ParseFromString(srcCol.DefaultValue)) {
-                    for (const auto& dependency : generatedDesc.GetDependencyColumnNames()) {
-                        if (dependency == colName) {
-                            errStr = Sprintf("Can't drop column '%s': it is used by generated column '%s'", colName.data(), srcCol.Name.data());
-                            return nullptr;
-                        }
+                for (const auto& dependency : generatedDesc.GetDependencyColumnNames()) {
+                    if (dependency == colName) {
+                        errStr = Sprintf("Can't drop column '%s': it is used by generated column '%s'", colName.data(), srcCol.Name.data());
+                        return nullptr;
                     }
                 }
             }

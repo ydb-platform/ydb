@@ -6,13 +6,10 @@ namespace NKikimr::NDataShard {
 
 using namespace NTable;
 
-namespace {
-
-template <typename TColumnFilter>
-void SerializeUpdates(NKikimrChangeExchange::TDataChange& out, ERowOp rop,
-    TArrayRef<const TUpdateOp> updates, TColumnFilter includeColumn)
+void TChangeRecordBodySerializer::SerializeCells(TDataChange& out, ERowOp rop,
+        TArrayRef<const TUpdateOp> updates, TFunctionRef<bool(TTag)> includeColumn)
 {
-    NKikimrChangeExchange::TDataChange::TSerializedCells* values;
+    TSerializedCells* values;
     switch (rop) {
         case ERowOp::Upsert:
             values = out.MutableUpsert();
@@ -46,8 +43,6 @@ void SerializeUpdates(NKikimrChangeExchange::TDataChange& out, ERowOp rop,
         values->SetData(TSerializedCellVec::Serialize(cells));
     }
 }
-
-} // namespace
 
 void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
         TArrayRef<const TRawTypeValue> in, TArrayRef<const TTag> tags)
@@ -85,7 +80,7 @@ void TChangeRecordBodySerializer::Serialize(TDataChange& out, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates)
 {
     SerializeCells(*out.MutableKey(), key, keyTags);
-    SerializeUpdates(out, rop, updates, [](TTag) { return true; });
+    SerializeCells(out, rop, updates, [](TTag) { return true; });
 }
 
 void TChangeRecordBodySerializer::Serialize(TDataChange& out, ERowOp rop,
@@ -93,7 +88,7 @@ void TChangeRecordBodySerializer::Serialize(TDataChange& out, ERowOp rop,
         TArrayRef<const TUpdateOp> updates, TFunctionRef<bool(TTag)> includeColumn)
 {
     SerializeCells(*out.MutableKey(), key, keyTags);
-    SerializeUpdates(out, rop, updates, includeColumn);
+    SerializeCells(out, rop, updates, includeColumn);
 }
 
 void TChangeRecordBodySerializer::Serialize(TDataChange& out, ERowOp rop,

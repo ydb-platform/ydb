@@ -12,6 +12,8 @@ class TChangeRecordBodySerializer {
     using TDataChange = NKikimrChangeExchange::TDataChange;
     using TSerializedCells = TDataChange::TSerializedCells;
 
+    static void SerializeCells(TDataChange& out, NTable::ERowOp rop,
+        TArrayRef<const NTable::TUpdateOp> updates, TFunctionRef<bool(NTable::TTag)> includeColumn);
     static void SerializeCells(TSerializedCells& out,
         TArrayRef<const TRawTypeValue> in, TArrayRef<const NTable::TTag> tags);
     static void SerializeCells(TSerializedCells& out,

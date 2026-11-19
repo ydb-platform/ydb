@@ -300,7 +300,9 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
     }
 
-    const bool schemaChanged = FamilySchemaChanged(*oldInfo, *newInfo) || HasNewVisibleColumns(*oldInfo, *newInfo) || HasNewVisibleColumns(*newInfo, *oldInfo);
+    const bool schemaChanged = FamilySchemaChanged(*oldInfo, *newInfo)
+        || HasNewVisibleColumns(*oldInfo, *newInfo)
+        || HasNewVisibleColumns(*newInfo, *oldInfo);
     if (schemaChanged) {
         PersistCdcSchemaChange(DataShard, txc, op, tableId, *newInfo);
     }

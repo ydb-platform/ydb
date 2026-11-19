@@ -375,11 +375,11 @@ void BaseCallData::SendMessage::GotPipe(T* pipe_end) {
   switch (state_) {
     case State::kInitial:
       state_ = State::kIdle;
-      Activity::current()->ForceImmediateRepoll();
+      GetContext<Activity>()->ForceImmediateRepoll();
       break;
     case State::kGotBatchNoPipe:
       state_ = State::kGotBatch;
-      Activity::current()->ForceImmediateRepoll();
+      GetContext<Activity>()->ForceImmediateRepoll();
       break;
     case State::kIdle:
     case State::kGotBatch:
@@ -568,7 +568,7 @@ void BaseCallData::SendMessage::WakeInsideCombiner(Flusher* flusher,
       }
       if (completed_status_.ok()) {
         state_ = State::kIdle;
-        Activity::current()->ForceImmediateRepoll();
+        GetContext<Activity>()->ForceImmediateRepoll();
       } else {
         state_ = State::kCancelled;
       }
@@ -676,7 +676,7 @@ void BaseCallData::ReceiveMessage::GotPipe(T* pipe_end) {
       break;
     case State::kBatchCompletedNoPipe:
       state_ = State::kBatchCompleted;
-      Activity::current()->ForceImmediateRepoll();
+      GetContext<Activity>()->ForceImmediateRepoll();
       break;
     case State::kIdle:
     case State::kForwardedBatch:
@@ -739,7 +739,8 @@ void BaseCallData::ReceiveMessage::OnComplete(y_absl::Status status) {
 }
 
 void BaseCallData::ReceiveMessage::Done(const ServerMetadata& metadata,
-                                        Flusher* flusher) {
+                                        Flusher* flusher,
+                                        bool discard_buffered_message) {
   if (grpc_trace_channel.enabled()) {
     gpr_log(GPR_INFO, "%s ReceiveMessage.Done st=%s md=%s",
             base_->LogTag().c_str(), StateString(state_),
@@ -759,16 +760,25 @@ void BaseCallData::ReceiveMessage::Done(const ServerMetadata& metadata,
       state_ = State::kCancelledWhilstForwardingNoPipe;
       break;
     case State::kCompletedWhileBatchCompleted:
-    case State::kBatchCompleted:
-      state_ = State::kCompletedWhileBatchCompleted;
-      break;
+    case State::kBatchCompleted: {
+      if (discard_buffered_message) {
+        state_ = State::kBatchCompletedButCancelled;
+        // Preserve the cancellation status for the message ready callback.
+        completed_status_ = StatusFromMetadata(metadata);
+        if (intercepted_slice_buffer_ != nullptr) {
+          *intercepted_slice_buffer_ = y_absl::nullopt;
+        }
+      } else {
+        state_ = State::kCompletedWhileBatchCompleted;
+      }
+    } break;
     case State::kCompletedWhilePulledFromPipe:
     case State::kCompletedWhilePushedToPipe:
     case State::kPulledFromPipe:
     case State::kPushedToPipe: {
-      auto status_code =
-          metadata.get(GrpcStatusMetadata()).value_or(GRPC_STATUS_UNKNOWN);
-      if (status_code == GRPC_STATUS_OK) {
+      // Transport trailing metadata must not bypass a buffered message. Only
+      // discard it when the call is being torn down or short-circuited.
+      if (!discard_buffered_message) {
         if (state_ == State::kCompletedWhilePulledFromPipe ||
             state_ == State::kPulledFromPipe) {
           state_ = State::kCompletedWhilePulledFromPipe;
@@ -778,12 +788,22 @@ void BaseCallData::ReceiveMessage::Done(const ServerMetadata& metadata,
       } else {
         push_.reset();
         next_.reset();
-        flusher->AddClosure(intercepted_on_complete_,
-                            StatusFromMetadata(metadata), "recv_message_done");
+        completed_status_ = StatusFromMetadata(metadata);
+        if (intercepted_slice_buffer_ != nullptr) {
+          *intercepted_slice_buffer_ = y_absl::nullopt;
+        }
+        flusher->AddClosure(intercepted_on_complete_, completed_status_,
+                            "recv_message_done");
         state_ = State::kCancelled;
       }
     } break;
     case State::kBatchCompletedNoPipe:
+      if (discard_buffered_message) {
+        completed_status_ = StatusFromMetadata(metadata);
+        if (intercepted_slice_buffer_ != nullptr) {
+          *intercepted_slice_buffer_ = y_absl::nullopt;
+        }
+      }
       state_ = State::kBatchCompletedButCancelledNoPipe;
       break;
     case State::kBatchCompletedButCancelled:
@@ -794,6 +814,18 @@ void BaseCallData::ReceiveMessage::Done(const ServerMetadata& metadata,
     case State::kCancelledWhilstForwardingNoPipe:
     case State::kCancelled:
       break;
+  }
+}
+
+bool BaseCallData::ReceiveMessage::IsIdle() const {
+  switch (state_) {
+    case State::kInitial:
+    case State::kIdle:
+    case State::kCancelled:
+    case State::kCancelledWhilstIdle:
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -822,7 +854,6 @@ void BaseCallData::ReceiveMessage::WakeInsideCombiner(Flusher* flusher,
       state_ = State::kCancelled;
       break;
     case State::kBatchCompletedButCancelled:
-    case State::kCompletedWhileBatchCompleted:
       interceptor()->Push()->Close();
       state_ = State::kCancelled;
       flusher->AddClosure(std::exchange(intercepted_on_complete_, nullptr),
@@ -833,6 +864,7 @@ void BaseCallData::ReceiveMessage::WakeInsideCombiner(Flusher* flusher,
       flusher->AddClosure(std::exchange(intercepted_on_complete_, nullptr),
                           completed_status_, "recv_message");
       break;
+    case State::kCompletedWhileBatchCompleted:
     case State::kBatchCompleted:
       if (completed_status_.ok() && intercepted_slice_buffer_->has_value()) {
         if (!allow_push_to_pipe) break;
@@ -1041,6 +1073,14 @@ class ClientCallData::PollContext {
           flusher_, self_->recv_initial_metadata_ == nullptr
                         ? true
                         : self_->recv_initial_metadata_->AllowRecvMessage());
+      if (self_->recv_trailing_state_ ==
+              RecvTrailingState::kCompletedQueuedBehindReceiveMessage &&
+          self_->receive_message()->IsIdle()) {
+        // Release trailing metadata after all in-flight messages have passed
+        // through the filters.
+        self_->recv_trailing_state_ = RecvTrailingState::kComplete;
+        repoll_ = true;
+      }
     }
     if (self_->server_initial_metadata_pipe() != nullptr) {
       if (self_->recv_initial_metadata_->metadata_push_.has_value()) {
@@ -1129,7 +1169,18 @@ class ClientCallData::PollContext {
             self_->send_message()->Done(*md, flusher_);
           }
           if (self_->receive_message() != nullptr) {
-            self_->receive_message()->Done(*md, flusher_);
+            // The promise produced terminal metadata itself, so the call is
+            // being short-circuited and its buffered message must be dropped.
+            self_->receive_message()->Done(*md, flusher_,
+                                           /*discard_buffered_message=*/true);
+            if (!self_->receive_message()->IsIdle()) {
+              // The message pump already ran this poll; drain its callbacks.
+              repoll_ = true;
+            }
+            if (self_->recv_trailing_state_ ==
+                RecvTrailingState::kCompletedQueuedBehindReceiveMessage) {
+              self_->recv_trailing_state_ = RecvTrailingState::kComplete;
+            }
           }
           if (self_->recv_trailing_state_ == RecvTrailingState::kComplete) {
             if (self_->recv_trailing_metadata_ != md.get()) {
@@ -1354,6 +1405,8 @@ const char* ClientCallData::StateString(RecvTrailingState state) {
       return "INITIAL";
     case RecvTrailingState::kQueued:
       return "QUEUED";
+    case RecvTrailingState::kCompletedQueuedBehindReceiveMessage:
+      return "QUEUED_BEHIND_RECEIVE_MESSAGE";
     case RecvTrailingState::kComplete:
       return "COMPLETE";
     case RecvTrailingState::kForwarded:
@@ -1566,7 +1619,8 @@ void ClientCallData::Cancel(grpc_error_handle error, Flusher* flusher) {
     send_message()->Done(*ServerMetadataFromStatus(error), flusher);
   }
   if (receive_message() != nullptr) {
-    receive_message()->Done(*ServerMetadataFromStatus(error), flusher);
+    receive_message()->Done(*ServerMetadataFromStatus(error), flusher,
+                            /*discard_buffered_message=*/true);
   }
 }
 
@@ -1765,6 +1819,7 @@ Poll<ServerMetadataHandle> ClientCallData::PollTrailingMetadata() {
     case RecvTrailingState::kInitial:
     case RecvTrailingState::kQueued:
     case RecvTrailingState::kForwarded:
+    case RecvTrailingState::kCompletedQueuedBehindReceiveMessage:
       // No trailing metadata yet: we are pending.
       // We return that and expect the promise to be repolled later (if it's
       // not cancelled).
@@ -1823,9 +1878,15 @@ void ClientCallData::RecvTrailingMetadataReady(grpc_error_handle error) {
   }
   // Record that we've got the callback.
   GPR_ASSERT(recv_trailing_state_ == RecvTrailingState::kForwarded);
-  recv_trailing_state_ = RecvTrailingState::kComplete;
+  if (receive_message() != nullptr && !receive_message()->IsIdle()) {
+    recv_trailing_state_ =
+        RecvTrailingState::kCompletedQueuedBehindReceiveMessage;
+  } else {
+    recv_trailing_state_ = RecvTrailingState::kComplete;
+  }
   if (receive_message() != nullptr) {
-    receive_message()->Done(*recv_trailing_metadata_, &flusher);
+    receive_message()->Done(*recv_trailing_metadata_, &flusher,
+                            /*discard_buffered_message=*/!error.ok());
   }
   if (send_message() != nullptr) {
     send_message()->Done(*recv_trailing_metadata_, &flusher);
@@ -2139,7 +2200,7 @@ void ServerCallData::StartBatch(grpc_transport_stream_op_batch* b) {
                     .value_or(GRPC_STATUS_UNKNOWN) != GRPC_STATUS_OK) {
           receive_message()->Done(
               *batch->payload->send_trailing_metadata.send_trailing_metadata,
-              &flusher);
+              &flusher, /*discard_buffered_message=*/true);
         }
         if (send_message() != nullptr && !send_message()->IsIdle()) {
           send_trailing_state_ = SendTrailingState::kQueuedBehindSendMessage;
@@ -2241,7 +2302,8 @@ void ServerCallData::Completed(grpc_error_handle error,
     send_message()->Done(*ServerMetadataFromStatus(error), flusher);
   }
   if (receive_message() != nullptr) {
-    receive_message()->Done(*ServerMetadataFromStatus(error), flusher);
+    receive_message()->Done(*ServerMetadataFromStatus(error), flusher,
+                            /*discard_buffered_message=*/true);
   }
 }
 

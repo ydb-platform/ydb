@@ -155,7 +155,7 @@ std::vector<const TIndexChunk*> TPortionChunks::GetIndexChunksPointers(const ui3
     std::vector<const TIndexChunk*> result;
     for (auto&& c : GetIndexesVerified()) {
         if (c.GetIndexId() == indexId) {
-            AFL_VERIFY(c.GetChunkIdx() == result.size());
+            YDB_LOG_VERIFY(c.GetChunkIdx() == result.size());
             result.emplace_back(&c);
         }
     }
@@ -232,19 +232,22 @@ std::vector<TPortionChunks::TPage> TPortionChunks::BuildPages() const {
                 if (c.second.front().Record) {
                     records.emplace_back(c.second.front().Record);
                 } else {
-                    AFL_VERIFY(c.second.front().Index);
+                    YDB_LOG_VERIFY(c.second.front().Index);
                     indexes.emplace_back(c.second.front().Index);
                 }
                 readyCount += c.second.front().RecordsCount;
                 c.second.pop_front();
             }
-            AFL_VERIFY(readyCount == i.first - predCount)("ready", readyCount)("cursor", i.first)("pred_cursor", predCount);
+            YDB_LOG_VERIFY(readyCount == i.first - predCount,
+                {"ready", readyCount},
+                {"cursor", i.first},
+                {"pred_cursor", predCount});
         }
         pages.emplace_back(std::move(records), std::move(indexes), i.first - predCount);
         predCount = i.first;
     }
     for (auto&& i : entities) {
-        AFL_VERIFY(i.second.empty());
+        YDB_LOG_VERIFY(i.second.empty());
     }
     return pages;
 }
@@ -273,7 +276,7 @@ ui64 TPortionChunks::GetMinMemoryForReadColumns(const std::optional<std::set<ui3
         if (!recordsCount && position) {
             recordsCount = position;
         } else {
-            AFL_VERIFY(*recordsCount == position);
+            YDB_LOG_VERIFY(*recordsCount == position);
         }
         if (position) {
             TDelta delta;
@@ -295,11 +298,11 @@ ui64 TPortionChunks::GetMinMemoryForReadColumns(const std::optional<std::set<ui3
             if (columnId) {
                 doFlushColumn();
             }
-            AFL_VERIFY(i.GetColumnId() > columnId);
-            AFL_VERIFY(i.GetChunkIdx() == 0);
+            YDB_LOG_VERIFY(i.GetColumnId() > columnId);
+            YDB_LOG_VERIFY(i.GetChunkIdx() == 0);
             columnId = i.GetColumnId();
         } else {
-            AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1);
+            YDB_LOG_VERIFY(i.GetChunkIdx() == chunkIdx + 1);
         }
         chunkIdx = i.GetChunkIdx();
         TDelta delta;
@@ -317,14 +320,16 @@ ui64 TPortionChunks::GetMinMemoryForReadColumns(const std::optional<std::set<ui3
     TDelta current;
     for (auto&& i : diffByPositions) {
         current += i.second;
-        AFL_VERIFY(current.BlobBytes >= 0);
-        AFL_VERIFY(current.RawBytes >= 0);
+        YDB_LOG_VERIFY(current.BlobBytes >= 0);
+        YDB_LOG_VERIFY(current.RawBytes >= 0);
         if (maxRawBytes < current.RawBytes) {
             maxRawBytes = current.RawBytes;
         }
     }
-    AFL_VERIFY(current.BlobBytes == 0)("real", current.BlobBytes);
-    AFL_VERIFY(current.RawBytes == 0)("real", current.RawBytes);
+    YDB_LOG_VERIFY(current.BlobBytes == 0,
+        {"real", current.BlobBytes});
+    YDB_LOG_VERIFY(current.RawBytes == 0,
+        {"real", current.RawBytes});
     return maxRawBytes;
 }
 

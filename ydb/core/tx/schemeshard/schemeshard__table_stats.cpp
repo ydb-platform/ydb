@@ -388,6 +388,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         table = Self->Tables.at(pathId);
         table->UpdateShardStatsForFollower(followerId, shardIdx, newStats);
 
+        if (Self->IsDatabaseFreezeBlocking(pathId)) {
+            return true;
+        }
+
         // NOTE: For split-by-size and merge-by-load cases it is sufficient
         //       to use EvPeriodicTableStats messages only from the leader
         //       as the trigger point. Using EvPeriodicTableStats messages from
@@ -600,6 +604,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
             Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
         }
+    }
+
+    // Keep statistics and quota accounting current while automatic partitioning is paused.
+    if (Self->IsDatabaseFreezeBlocking(pathId)) {
+        return true;
     }
 
     const TTableIndexInfo* index = Self->Indexes.Value(pathElement->ParentPathId, nullptr).Get();
@@ -1329,6 +1338,12 @@ public:
             TTableInfo::TPtr table = *tablePtr;
             if (table->GetTableSplitMergeState().DeferredShards.empty()) {
                 table->MutableTableSplitMergeState().QueuedForRevisit = false;
+                continue;
+            }
+
+            if (Self->IsDatabaseFreezeBlocking(pathId)) {
+                // Preserve the candidate for thaw without blocking other databases.
+                Self->SplitMergeRevisitQueue.push_back(pathId);
                 continue;
             }
 

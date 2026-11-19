@@ -21,8 +21,8 @@ public:
         , Session(session)
         , Adapter(adapter)
     {
-        AFL_VERIFY(!!Session);
-        AFL_VERIFY(!!Adapter);
+        YDB_LOG_VERIFY(!!Session);
+        YDB_LOG_VERIFY(!!Adapter);
     }
 
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;

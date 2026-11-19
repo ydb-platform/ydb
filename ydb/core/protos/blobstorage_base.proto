@@ -89,6 +89,15 @@ enum EEntityStatus {
     RESTART = 4; // entity has changed config or changed environment and should be restarted by warden
 }
 
+// Physical datacenter states by name. Unlisted datacenters are INCLUDED.
+message TDataCenterStates {
+    message TDataCenter {
+        optional string Name = 1;
+        optional TDataCenterState.EState State = 2;
+    }
+    repeated TDataCenter DataCenter = 1;
+}
+
 message TFailRealmStates {
     repeated TDataCenterState.EState State = 1;
     optional TGroupState.EState GroupState = 2;

@@ -68,13 +68,13 @@ private:
         TIntervalInFlightInfo() = default;
 
         void SetJob(const std::shared_ptr<TJobStatus>& job) {
-            AFL_VERIFY(!Job);
-            AFL_VERIFY(job);
+            YDB_LOG_VERIFY(!Job);
+            YDB_LOG_VERIFY(job);
             Job = job;
         }
 
         void AddSubscriber(ui64 portionId, TIntervalFilterCallback&& callback) {
-            AFL_VERIFY(SubscribersByPortion.emplace(portionId, std::vector<TIntervalFilterCallback>({std::move(callback)})).second);
+            YDB_LOG_VERIFY(SubscribersByPortion.emplace(portionId, std::vector<TIntervalFilterCallback>({std::move(callback)})).second);
         }
 
         bool OnFilterReady(const ui64 portionId, const NArrow::TColumnFilter& filter) {
@@ -103,8 +103,8 @@ private:
 
         void ValidateProgress() const {
             if (!SubscribersByPortion.empty()) {
-                AFL_VERIFY(Job);
-                AFL_VERIFY(!Job->IsDone());
+                YDB_LOG_VERIFY(Job);
+                YDB_LOG_VERIFY(!Job->IsDone());
             }
         }
     };
@@ -141,7 +141,7 @@ private:
         THashMap<ui64, TPortionInfo::TConstPtr> portions;
         intervals.EachRange(
             [&portions](const TPortionIntervalTree::TOwnedRange& /*range*/, const std::shared_ptr<TPortionInfo>& portion) mutable {
-                AFL_VERIFY(portions.emplace(portion->GetPortionId(), portion).second);
+                YDB_LOG_VERIFY(portions.emplace(portion->GetPortionId(), portion).second);
                 return true;
             });
         return std::make_shared<TPortionStore>(std::move(portions));
@@ -163,7 +163,8 @@ private:
             hFunc(NPrivate::TEvFilterConstructionResult, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             default:
-                AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
+                YDB_LOG_VERIFY(false,
+                    {"unexpectedEvent", ev->GetTypeName()});
         }
     }
 

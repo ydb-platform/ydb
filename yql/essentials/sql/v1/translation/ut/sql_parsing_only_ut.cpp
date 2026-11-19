@@ -436,9 +436,11 @@ Y_UNIT_TEST(NoStatements) {
                 input, "", issues, /*maxErrors=*/8, settings);
             UNIT_ASSERT_C(message, issues.ToString());
 
-            NSQLTranslation::TSQLHints hints;
+            NSQLTranslation::TParsedTokenList tokens;
+            auto lexer = translator->MakeLexer(settings);
+            UNIT_ASSERT(NSQLTranslation::Tokenize(*lexer, input, "", tokens, issues, /*maxErrors=*/8));
             NYql::TAstParseResult result = translator->TextAndMessageToAst(
-                input, *message, hints, settings);
+                input, *message, tokens, settings);
 
             return std::move(result);
         },
@@ -787,7 +789,7 @@ Y_UNIT_TEST(CreateAlterUserWithLoginNoLogin) {
     )");
 
     UNIT_ASSERT(!reqLoginNoLogin.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(reqLoginNoLogin.Issues.ToString(), "Error: Conflicting or redundant options");
+    UNIT_ASSERT_STRING_CONTAINS(reqLoginNoLogin.Issues.ToString(), "3:33: Error: Conflicting or redundant options");
 
     auto reqAlterLoginNoLogin = SqlToYql(R"(
         USE plato;
@@ -841,7 +843,7 @@ Y_UNIT_TEST(CreateUserWithHash) {
             )");
 
     UNIT_ASSERT(!reqCreateUserWithPassword.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(reqCreateUserWithPassword.Issues.ToString(), "Error: Conflicting or redundant options");
+    UNIT_ASSERT_STRING_CONTAINS(reqCreateUserWithPassword.Issues.ToString(), "8:17: Error: Conflicting or redundant options");
 
     auto reqAlterUser = SqlToYql(R"(
                 USE plato;
@@ -1473,7 +1475,7 @@ Y_UNIT_TEST(KillSessionUnsupportedProvider) {
     for (const auto provider : {NYql::YtProviderName, NYql::YdbProviderName}) {
         const auto res = SqlToYql("USE plato; KILL SESSION `session-id`;", /*maxErrors=*/10, TString(provider));
         UNIT_ASSERT_C(!res.IsOk(), provider);
-        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "KILL SESSION is supported only for YDB");
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "<main>:1:12: Error: KILL SESSION is supported only for YDB");
     }
 }
 
@@ -2028,7 +2030,7 @@ Y_UNIT_TEST(CreateTableDefaultAndNotNullInOrderWithComma) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write!") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                       line.find(R"__(('columnConstrains '('('not_null) '('default (Bool '"false")))) '()))))__"));
+                                       line.find(R"__(('columnConstrains '('('not_null) '('default (Bool '"false")) '('defaultSource '('"USE ydb;\n" '"false")))) '()))))__"));
         }
     };
 
@@ -2052,7 +2054,7 @@ Y_UNIT_TEST(CreateTableDefaultAndNotNullReversed) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write!") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                                       line.find(R"__('('columnConstrains '('('not_null) '('default (Int32 '"0")))) '()))))__"));
+                                       line.find(R"__('('columnConstrains '('('not_null) '('default (Int32 '"0")) '('defaultSource '('"USE ydb;\n" '"0")))) '()))))__"));
         }
     };
 
@@ -4620,7 +4622,7 @@ Y_UNIT_TEST(AlterTableAddIndexWithIsSupported) {
 
 Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
     ExpectFailWithError("USE ydb;   ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
-                        "<main>:1:40: Error: local index must specify subtype with USING\n");
+                        "<main>:1:44: Error: local index must specify subtype with USING\n");
 }
 
 Y_UNIT_TEST(AlterTableAddIndexLocalBloomFilter) {
@@ -4894,7 +4896,7 @@ Y_UNIT_TEST(AlterTableAddIndexGlobalMinMaxIsNotSupported) {
 
 Y_UNIT_TEST(AlterTableAddIndexLocalMinMaxCoverIsNotSupported) {
     ExpectFailWithError("USE ydb; ALTER TABLE table ADD INDEX idx LOCAL USING min_max ON (col) COVER (payload)",
-                        "<main>:1:66: Error: COVER is not supported for local MIN_MAX index\n");
+                        "<main>:1:71: Error: COVER is not supported for local MIN_MAX index\n");
 }
 
 Y_UNIT_TEST(MinMaxIndexAddDrop) {
@@ -5062,7 +5064,7 @@ Y_UNIT_TEST(AlterTableAddIndexDuplicatedSetting) {
                 ON (col) COVER (col)
                 WITH (distance=cosine, distance=42)
                 )sql",
-                        "<main>:5:49: Error: Duplicated distance\n");
+                        "<main>:5:40: Error: Duplicated distance\n");
 }
 
 Y_UNIT_TEST(AlterTableAddIndexUnknownSubtype) {
@@ -5110,7 +5112,7 @@ Y_UNIT_TEST(AlterTableRebuildIndexDuplicatedSettingFails) {
         R"sql(USE ydb;
             ALTER TABLE table REBUILD INDEX idx WITH (levels = 2, levels = 3)
         )sql",
-        "<main>:2:76: Error: Duplicated levels\n");
+        "<main>:2:67: Error: Duplicated levels\n");
 }
 
 Y_UNIT_TEST(AlterTableRebuildIndexWithColumnsIsNotSupported) {
@@ -5162,6 +5164,31 @@ Y_UNIT_TEST(AlterTableAlterIndexSetLocalBloomFppIsCorrect) {
         ALTER TABLE table ALTER INDEX idx SET (false_positive_probability = 0.06);
     )sql");
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationBootstrapIsCorrect) {
+    const auto result = SqlToYql(R"(
+        USE ydb;
+        CREATE ASYNC REPLICATION r FOR `src` AS `dst`
+        WITH (CONNECTION_STRING = "grpc://localhost:2135/?database=/local", BOOTSTRAP = "SWITCHOVER");
+    )");
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    UNIT_ASSERT_C(result.Root->ToString().Contains("bootstrap"), result.Root->ToString());
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationBootstrapRequiresString) {
+    ExpectFailWithError(R"(
+        USE ydb;
+        CREATE ASYNC REPLICATION r FOR `src` AS `dst`
+        WITH (CONNECTION_STRING = "grpc://localhost:2135/?database=/local", BOOTSTRAP = TRUE);
+    )", "<main>:4:89: Error: Literal of String type is expected for BOOTSTRAP\n");
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationBootstrapIsNotSupported) {
+    ExpectFailWithError(R"(
+        USE ydb;
+        ALTER ASYNC REPLICATION r SET (BOOTSTRAP = "SWITCHOVER");
+    )", "<main>:3:52: Error: BOOTSTRAP is not supported in ALTER\n");
 }
 
 Y_UNIT_TEST(AlterTableAlterIndexResetReadReplicasSettingsIsNotSupported) {
@@ -6801,7 +6828,7 @@ Y_UNIT_TEST(CreateSecretIncorrect) {
             CREATE SECRET @tmp WITH (VALUE = "abc");
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:28: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:27: Error: '@' is not allowed prefix for secret name\n");
     }
     { // empty secret name
         NYql::TAstParseResult res = SqlToYql(R"sql(
@@ -6933,7 +6960,7 @@ Y_UNIT_TEST(AlterSecretIncorrect) {
             ALTER SECRET @tmp WITH (VALUE = "abc");
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:27: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:26: Error: '@' is not allowed prefix for secret name\n");
     }
 }
 
@@ -6995,7 +7022,7 @@ Y_UNIT_TEST(DropSecretIncorrect) {
             DROP SECRET @tmp;
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:26: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:25: Error: '@' is not allowed prefix for secret name\n");
     }
 }
 
@@ -7245,7 +7272,7 @@ Y_UNIT_TEST(CreateSecretIfNotExistsIncorrect) {
             CREATE SECRET IF NOT EXISTS @tmp WITH (VALUE = "abc");
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:42: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:41: Error: '@' is not allowed prefix for secret name\n");
     }
     { // empty secret name
         NYql::TAstParseResult res = SqlToYql(R"sql(
@@ -7280,7 +7307,7 @@ Y_UNIT_TEST(CreateSecretOrReplaceIncorrect) {
             CREATE OR REPLACE SECRET @tmp WITH (VALUE = "abc");
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:39: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:38: Error: '@' is not allowed prefix for secret name\n");
     }
 }
 
@@ -7311,7 +7338,7 @@ Y_UNIT_TEST(AlterSecretIfExistsIncorrect) {
             ALTER SECRET IF EXISTS @tmp WITH (VALUE = "abc");
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:37: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:36: Error: '@' is not allowed prefix for secret name\n");
     }
 }
 
@@ -7322,7 +7349,7 @@ Y_UNIT_TEST(DropSecretIfExistsIncorrect) {
             DROP SECRET IF EXISTS @tmp;
         )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:36: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:35: Error: '@' is not allowed prefix for secret name\n");
     }
     { // WITH is not allowed for drop
         NYql::TAstParseResult res = SqlToYql(R"sql(

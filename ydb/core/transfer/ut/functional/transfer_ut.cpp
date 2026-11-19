@@ -97,7 +97,11 @@ Y_UNIT_TEST_SUITE(Transfer)
                 )
             )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
 
-        testCase.CheckTransferStateError("DNS resolution failed for grp§c://localhost:2135");
+        const auto transfer = testCase.CheckTransferState(TTransferDescription::EState::Error);
+        const auto issues = transfer.GetErrorState().GetIssues().ToOneLineString();
+        // DNS resolver implementations use different error messages.
+        UNIT_ASSERT_STRING_CONTAINS(issues, "TRANSPORT_UNAVAILABLE");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "grp§c://localhost:2135");
 
         testCase.DropTransfer();
         testCase.DropTable();
@@ -737,7 +741,7 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         auto d = testCase.DescribeTransfer();
         UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetState(), TTransferDescription::EState::Error);
-        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetSrcPath(), TStringBuilder() << "local/" << testCase.TopicName);
+        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetSrcPath(), TStringBuilder() << "/local/" << testCase.TopicName);
         UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetDstPath(), TStringBuilder() << "/local/" << testCase.TableName);
 
         testCase.DropTransfer();

@@ -192,8 +192,10 @@ namespace NKikimr::NGRpcService {
                     if (Query.HasStoragePool() && Query.GetStoragePool().empty()) {
                         return Fail(Ydb::StatusIds::BAD_REQUEST, "Storage pool name must not be empty");
                     }
-                    if (Query.HasStoragePoolId() && !Query.GetStoragePoolId().pool_id()) {
-                        return Fail(Ydb::StatusIds::BAD_REQUEST, "storage_pool_id.pool_id must not be zero");
+                    for (const auto& pool : Query.GetStoragePoolIds()) {
+                        if (!pool.pool_id()) {
+                            return Fail(Ydb::StatusIds::BAD_REQUEST, "storage_pool_id.pool_id must not be zero");
+                        }
                     }
                     for (const auto status : Query.GetStatuses()) {
                         if (status < NKikimrBridge::SYNCED || status > NKikimrBridge::UNKNOWN) {
@@ -426,7 +428,7 @@ namespace NKikimr::NGRpcService {
         if (proto->has_storage_pool_name()) {
             query.SetStoragePool(proto->storage_pool_name());
         } else if (proto->has_storage_pool_id()) {
-            auto* id = query.MutableStoragePoolId();
+            auto* id = query.AddStoragePoolIds();
             id->set_box_id(proto->storage_pool_id().box_id());
             id->set_pool_id(proto->storage_pool_id().pool_id());
         }

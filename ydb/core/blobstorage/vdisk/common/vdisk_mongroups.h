@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_disk_color.pb.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/protos/whiteboard_disk_states.pb.h>
 
@@ -52,6 +53,19 @@ public:                                                                         
 #define COUNTER_INIT_IF_EXTENDED(name, derivative)                                          \
     name##_ = GroupCounters->GetCounter(#name, derivative,                                  \
         GetVDiskCounterVisibility())
+
+// COUNTER_DEF with COUNTER_INIT_IF_EXTENDED visibility that registers the counter on its first access, so a VDisk that
+// never writes it exports nothing. The accessor is not thread-safe: use it for counters of a single actor.
+#define COUNTER_DEF_LAZY_IF_EXTENDED(name, derivative)                                      \
+protected:                                                                                  \
+    ::NMonitoring::TDynamicCounters::TCounterPtr name##_;                                     \
+public:                                                                                     \
+    NMonitoring::TDeprecatedCounter &name() {                                               \
+        if (!name##_) {                                                                     \
+            name##_ = GroupCounters->GetCounter(#name, derivative, GetVDiskCounterVisibility()); \
+        }                                                                                   \
+        return *name##_;                                                                    \
+    }
 
 #define GROUP_CONSTRUCTOR(name)                                                             \
     name(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,                    \
@@ -160,21 +174,7 @@ public:                                                                         
 
                 COUNTER_INIT(ThrottlingCurrentSpeedLimit, false);
                 COUNTER_INIT(ThrottlingIsActive, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingDryRun, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingLevel0SstCount, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMinLevel0SstCount, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxLevel0SstCount, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingInplacedSize, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMinInplacedSizeHDD, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxInplacedSizeHDD, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMinInplacedSizeSSD, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxInplacedSizeSSD, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingOccupancyPerMille, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMinOccupancyPerMille, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxOccupancyPerMille, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingLogChunkCount, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMinLogChunkCount, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxLogChunkCount, false);
+                // The other Throttling* register on the first UpdateState, which runs only with EnableVDiskThrottling.
             }
 
             COUNTER_DEF(EmergencyMovedPatchQueueItems);
@@ -192,21 +192,21 @@ public:                                                                         
 
             COUNTER_DEF(ThrottlingCurrentSpeedLimit);
             COUNTER_DEF(ThrottlingIsActive);
-            COUNTER_DEF(ThrottlingDryRun);
-            COUNTER_DEF(ThrottlingLevel0SstCount);
-            COUNTER_DEF(ThrottlingMinLevel0SstCount);
-            COUNTER_DEF(ThrottlingMaxLevel0SstCount);
-            COUNTER_DEF(ThrottlingInplacedSize);
-            COUNTER_DEF(ThrottlingMinInplacedSizeHDD);
-            COUNTER_DEF(ThrottlingMaxInplacedSizeHDD);
-            COUNTER_DEF(ThrottlingMinInplacedSizeSSD);
-            COUNTER_DEF(ThrottlingMaxInplacedSizeSSD);
-            COUNTER_DEF(ThrottlingOccupancyPerMille);
-            COUNTER_DEF(ThrottlingMinOccupancyPerMille);
-            COUNTER_DEF(ThrottlingMaxOccupancyPerMille);
-            COUNTER_DEF(ThrottlingLogChunkCount);
-            COUNTER_DEF(ThrottlingMinLogChunkCount);
-            COUNTER_DEF(ThrottlingMaxLogChunkCount);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingDryRun, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingLevel0SstCount, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMinLevel0SstCount, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMaxLevel0SstCount, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingInplacedSize, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMinInplacedSizeHDD, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMaxInplacedSizeHDD, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMinInplacedSizeSSD, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMaxInplacedSizeSSD, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingOccupancyPerMille, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMinOccupancyPerMille, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMaxOccupancyPerMille, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingLogChunkCount, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMinLogChunkCount, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMaxLogChunkCount, false);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -226,15 +226,6 @@ public:                                                                         
                 COUNTER_INIT(NormalizedOccupancyPerMille, false);
                 COUNTER_INIT(VDiskSlotUsagePerMille, false);
                 COUNTER_INIT(VDiskRawUsagePerMille, false);
-                COUNTER_INIT(CapacityAlertGreen, false);
-                COUNTER_INIT(CapacityAlertCyan, false);
-                COUNTER_INIT(CapacityAlertLightYellow, false);
-                COUNTER_INIT(CapacityAlertYellow, false);
-                COUNTER_INIT(CapacityAlertLightOrange, false);
-                COUNTER_INIT(CapacityAlertPreOrange, false);
-                COUNTER_INIT(CapacityAlertOrange, false);
-                COUNTER_INIT(CapacityAlertRed, false);
-                COUNTER_INIT(CapacityAlertBlack, false);
             }
 
             COUNTER_DEF(DskOutOfSpace);
@@ -248,15 +239,31 @@ public:                                                                         
             COUNTER_DEF(NormalizedOccupancyPerMille);
             COUNTER_DEF(VDiskSlotUsagePerMille);
             COUNTER_DEF(VDiskRawUsagePerMille);
-            COUNTER_DEF(CapacityAlertGreen);
-            COUNTER_DEF(CapacityAlertCyan);
-            COUNTER_DEF(CapacityAlertLightYellow);
-            COUNTER_DEF(CapacityAlertYellow);
-            COUNTER_DEF(CapacityAlertLightOrange);
-            COUNTER_DEF(CapacityAlertPreOrange);
-            COUNTER_DEF(CapacityAlertOrange);
-            COUNTER_DEF(CapacityAlertRed);
-            COUNTER_DEF(CapacityAlertBlack);
+
+            // One-hot CapacityAlert<Color>: the entered color registers on first entry, the other existing colors drop to 0.
+            // A donor and its acceptor on one PDisk may share these counters, so the state lives in the counters.
+            void CapacityAlert(NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+                for (const auto& [c, name] : CapacityAlertColors) {
+                    if (c == color) {
+                        *GroupCounters->GetCounter(name, false) = 1;
+                    } else if (const auto gauge = GroupCounters->FindCounter(name)) {
+                        *gauge = 0;
+                    }
+                }
+            }
+
+        private:
+            static constexpr std::pair<NKikimrBlobStorage::TPDiskSpaceColor::E, const char*> CapacityAlertColors[] = {
+                {NKikimrBlobStorage::TPDiskSpaceColor::GREEN, "CapacityAlertGreen"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::CYAN, "CapacityAlertCyan"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW, "CapacityAlertLightYellow"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::YELLOW, "CapacityAlertYellow"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE, "CapacityAlertLightOrange"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::PRE_ORANGE, "CapacityAlertPreOrange"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::ORANGE, "CapacityAlertOrange"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::RED, "CapacityAlertRed"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::BLACK, "CapacityAlertBlack"},
+            };
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -368,7 +375,6 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(LocalRecovBytesDispatched, true);
                 COUNTER_INIT_IF_EXTENDED(LocalRecovRecsApplied, true);
                 COUNTER_INIT_IF_EXTENDED(LocalRecovBytesApplied, true);
-                COUNTER_INIT_IF_EXTENDED(BulkLogoBlobs, true);
             }
 
             COUNTER_DEF(LogoBlobsDbEmpty);
@@ -378,7 +384,6 @@ public:                                                                         
             COUNTER_DEF(LocalRecovBytesDispatched);
             COUNTER_DEF(LocalRecovRecsApplied);
             COUNTER_DEF(LocalRecovBytesApplied);
-            COUNTER_DEF(BulkLogoBlobs);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -456,29 +461,30 @@ public:                                                                         
         // TVDiskStateGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TVDiskStateGroup: public TBase {
-            std::array<::NMonitoring::TDynamicCounters::TCounterPtr, NKikimrWhiteboard::EVDiskState_MAX + 1> VDiskStates;
             ::NMonitoring::TDynamicCounters::TCounterPtr CurrentState;
 
         public:
             GROUP_CONSTRUCTOR(TVDiskStateGroup)
             {
                 // depracated, only for compatibility
-                TString name = "VDiskState";
-                CurrentState = GroupCounters->GetCounter(name, false, GetVDiskCounterVisibility());
+                CurrentState = GroupCounters->GetCounter("VDiskState", false, GetVDiskCounterVisibility());
                 *CurrentState = NKikimrWhiteboard::Initial;
-
-                for (size_t i = NKikimrWhiteboard::EVDiskState_MIN; i <= NKikimrWhiteboard::EVDiskState_MAX; ++i) {
-                    VDiskStates[i] = GroupCounters->GetCounter(name + "_" + NKikimrWhiteboard::EVDiskState_Name(i), false);
-                }
                 COUNTER_INIT_IF_EXTENDED(VDiskLocalRecoveryState, false);
                 COUNTER_INIT(HeapAllocatorSizeClass, false);
                 COUNTER_INIT(HeapAllocatorStripe, false);
             }
 
+            // One-hot VDiskState_<State>: the entered state registers on first entry. SkeletonFront, Skeleton and
+            // LocalRecovery keep separate groups on the same counters, so the previous state comes from CurrentState.
             void VDiskState(NKikimrWhiteboard::EVDiskState s) {
-                *VDiskStates[*CurrentState] = 0;
+                const auto prev = VDiskState();
+                if (prev != s) {
+                    if (const auto gauge = GroupCounters->FindCounter("VDiskState_" + NKikimrWhiteboard::EVDiskState_Name(prev))) {
+                        *gauge = 0;
+                    }
+                }
                 *CurrentState = s;
-                *VDiskStates[s] = 1;
+                *GroupCounters->GetCounter("VDiskState_" + NKikimrWhiteboard::EVDiskState_Name(s), false) = 1;
             }
 
             NKikimrWhiteboard::EVDiskState VDiskState() const {
@@ -605,7 +611,6 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(BlockAndGetMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(GCMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(GetBarrierMsgs, true);
-                COUNTER_INIT_IF_EXTENDED(SyncMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(SyncFullMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(RecoveredHugeBlobMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(StatusMsgs, true);
@@ -662,7 +667,6 @@ public:                                                                         
             COUNTER_DEF(BlockAndGetMsgs);
             COUNTER_DEF(GCMsgs);
             COUNTER_DEF(GetBarrierMsgs);
-            COUNTER_DEF(SyncMsgs);
             COUNTER_DEF(SyncFullMsgs);
             COUNTER_DEF(RecoveredHugeBlobMsgs);
             COUNTER_DEF(StatusMsgs);
@@ -952,7 +956,6 @@ public:                                                                         
                     COUNTER_INIT(UserDiskCost, true);
                     COUNTER_INIT(CompactionDiskCost, true);
                     COUNTER_INIT(ScrubDiskCost, true);
-                    COUNTER_INIT(DefragDiskCost, true);
                     COUNTER_INIT(InternalDiskCost, true);
                 }
 
@@ -961,6 +964,11 @@ public:                                                                         
                 COUNTER_DEF(ScrubDiskCost);
                 COUNTER_DEF(DefragDiskCost);
                 COUNTER_DEF(InternalDiskCost);
+
+                // Only the read group calls this: CountDefragRequest takes read operations only.
+                void InitDefragDiskCost() {
+                    COUNTER_INIT(DefragDiskCost, true);
+                }
             };
 
             TCostTrackerGroup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
@@ -983,6 +991,7 @@ public:                                                                         
             void InitCounters() {
                 COUNTER_INIT(DiskTimeAvailableCtr, false);
                 COUNTER_INIT(DiskTimeFairShareNs, false);
+                ReadDiskCost.InitDefragDiskCost();
             }
 
             TDiskCostGroup ReadDiskCost;

@@ -28,12 +28,14 @@ private:
         ui32 chunkIdx = 0;
         for (auto&& i : chunks) {
             if (entityId != i.GetEntityId()) {
-                AFL_VERIFY(entityId < i.GetEntityId());
-                AFL_VERIFY(i.GetChunkIdx() == 0);
+                YDB_LOG_VERIFY(entityId < i.GetEntityId());
+                YDB_LOG_VERIFY(i.GetChunkIdx() == 0);
                 entityId = i.GetEntityId();
                 chunkIdx = 0;
             } else {
-                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunk", i.GetChunkIdx())("idx", chunkIdx);
+                YDB_LOG_VERIFY(i.GetChunkIdx() == chunkIdx + 1,
+                    {"chunk", i.GetChunkIdx()},
+                    {"idx", chunkIdx});
                 chunkIdx = i.GetChunkIdx();
             }
         }
@@ -111,8 +113,10 @@ public:
                 if (itRecord->GetEntityId() < *itColumn) {
                     ++itRecord;
                 } else if (*itColumn < itRecord->GetEntityId()) {
-                    AFL_VERIFY(!validation || recordsInEntityCount)("problem", "validation")("reason", "no_chunks_for_column")(
-                        "column_id", *itColumn);
+                    YDB_LOG_VERIFY(!validation || recordsInEntityCount,
+                        {"problem", "validation"},
+                        {"reason", "no_chunks_for_column"},
+                        {"column_id", *itColumn});
                     ++itColumn;
                     recordsInEntityCount = 0;
                 } else {
@@ -187,8 +191,10 @@ public:
     ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
 
     ui32 GetSliceOffsetRows(const ui32 sliceBorderIdx) const {
-        AFL_VERIFY(SliceBorderOffsets);
-        AFL_VERIFY(sliceBorderIdx < SliceBorderOffsets->size())("idx", sliceBorderIdx)("size", SliceBorderOffsets->size());
+        YDB_LOG_VERIFY(SliceBorderOffsets);
+        YDB_LOG_VERIFY(sliceBorderIdx < SliceBorderOffsets->size(),
+            {"idx", sliceBorderIdx},
+            {"size", SliceBorderOffsets->size()});
         return (*SliceBorderOffsets)[sliceBorderIdx];
     }
 };

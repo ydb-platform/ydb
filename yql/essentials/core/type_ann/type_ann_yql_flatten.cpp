@@ -54,6 +54,29 @@ TExprNode::TPtr LowerYqlLambdaColumnRef(
     const TExprNode::TPtr& node, const TExprNode::TPtr& argument,
     const TYqlLambdaColumns& columns, TExprContext& expr)
 {
+    if (node->IsCallable("YqlColumnOrAccess")) {
+        if (!EnsureMinArgsCount(*node, 4, expr) || !EnsureMaxArgsCount(*node, 5, expr)) {
+            return nullptr;
+        }
+
+        if (!node->Head().IsCallable("Void")) {
+            return node;
+        }
+
+        auto reference = BuildYqlColumnOrAccessRef(node, columns.Aliases, expr);
+        if (!reference) {
+            return nullptr;
+        }
+
+        auto column = BuildSqlColumnRefMember(reference, argument, columns.Inputs, columns.Aliases, expr);
+
+        if (reference->ChildrenSize() == 2) {
+            return column;
+        }
+
+        return expr.ChangeChild(*node, 0, std::move(column));
+    }
+
     if (!node->IsCallable({"YqlColumnRef", "YqlColumnRefOrType"})) {
         return node;
     }
@@ -102,6 +125,7 @@ IGraphTransformer::TStatus ResolveYqlLambdaColumns(
     }
     isUniversal = columns.IsUniversal;
     if (isUniversal) {
+        output->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
         return IGraphTransformer::TStatus::Ok;
     }
     if (columns.RebuildSublinks) {

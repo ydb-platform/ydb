@@ -327,14 +327,17 @@ message TTableServiceConfig {
 
     reserved 51; // optional bool EnableColumnsWithDefault = 51 [default = true];
 
-    optional bool EnableAstCache = 52 [default = false, (InvalidateCompileCache) = true];
-    optional bool EnablePgConstsToParams = 53 [default = false, (InvalidateCompileCache) = true];
+    reserved 52; // EnableAstCache
+    reserved "EnableAstCache";
+    reserved 53; // EnablePgConstsToParams
+    reserved "EnablePgConstsToParams";
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000, (InvalidateCompileCache) = true];
 
     optional bool EnableOlapSink = 55 [default = true, (InvalidateCompileCache) = true];
 
-    optional bool EnablePerStatementQueryExecution = 56 [default = false, (InvalidateCompileCache) = true];
+    reserved 56; // EnablePerStatementQueryExecution
+    reserved "EnablePerStatementQueryExecution";
     optional bool EnableCreateTableAs = 57 [default = true, (InvalidateCompileCache) = true];
 
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3, (InvalidateCompileCache) = true];
@@ -639,4 +642,9 @@ message TTableServiceConfig {
     optional bool EnableLookupJoinPointPrefixes = 154 [default = true, (InvalidateCompileCache) = true];
 
     optional bool UseScalarHashJoin = 155 [default = false, (InvalidateCompileCache) = true];
+
+    // Share of compilations that use the new RBO, in [0, 1]. Used only when EnableNewRBO is true.
+    // Each compilation draws p from [0, 1) and uses the new RBO if p < NewRBORolloutRatio, otherwise the YQL optimizer.
+    // 1 (default) always uses the new RBO; 0 never does.
+    optional double NewRBORolloutRatio = 156 [default = 1.0, (InvalidateCompileCache) = true];
 };

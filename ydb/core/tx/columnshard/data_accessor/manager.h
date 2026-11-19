@@ -39,8 +39,8 @@ public:
     }
 
     void AskData(const std::shared_ptr<TDataAccessorsRequest>& request) {
-        AFL_VERIFY(request);
-        AFL_VERIFY(request->HasSubscriber());
+        YDB_LOG_VERIFY(request);
+        YDB_LOG_VERIFY(request->HasSubscriber());
         return DoAskData(request);
     }
 };
@@ -75,8 +75,9 @@ private:
                 THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> objects;
                 for (auto&& [address, chunks] : objectAddresses) {
                     const auto portion = Portions.FindPtr(address.GetPortionId());
-                    AFL_VERIFY(portion)("portion_id", address.GetPortionId());
-                    AFL_VERIFY((*portion)->GetAddress() == address.GetInternalPortionAddress());
+                    YDB_LOG_VERIFY(portion,
+                        {"portion_id", address.GetPortionId()});
+                    YDB_LOG_VERIFY((*portion)->GetAddress() == address.GetInternalPortionAddress());
                     objects.emplace(address.GetPortionId(), std::make_shared<TPortionDataAccessor>(*portion, std::move(chunks)));
                 }
                 TDataAccessorsResult result;
@@ -108,7 +109,7 @@ private:
         THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<const TPortionChunks>> add;
         THashSet<NGeneralCache::TGlobalPortionAddress> remove;
         auto chunks = accessor->GetChunksPtr();
-        AFL_VERIFY(chunks);
+        YDB_LOG_VERIFY(chunks);
         const auto portionAddress = accessor->GetPortionInfo().GetAddress();
         if (chunks->GetAddress() != portionAddress) {
             auto retargeted = std::make_shared<TPortionChunks>(*chunks);
@@ -133,7 +134,7 @@ public:
     TActorAccessorsManager(const NActors::TActorId& tabletActorId)
         : TBase(tabletActorId)
     {
-        AFL_VERIFY(!!tabletActorId);
+        YDB_LOG_VERIFY(!!tabletActorId);
     }
 };
 

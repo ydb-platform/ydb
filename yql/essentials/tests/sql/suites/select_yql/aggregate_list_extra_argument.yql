@@ -1,0 +1,10 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    Aggregate_List(value, 1, 2)
+FROM (
+    VALUES
+        (1)
+) AS source (
+    value
+);

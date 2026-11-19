@@ -7,12 +7,15 @@
 #include <util/stream/str.h>
 #include <util/system/file.h>
 
+#include <utility>
+
 class TRegExMatch;
 
 namespace NYdb {
 
 inline namespace Dev {
 class TDriver;
+class TParams;
 class TResultSetParser;
 class TValue;
 
@@ -55,6 +58,14 @@ TMaybe<TValue> ProcessResultSet(
     TResultSetParser& resultSetParser,
     TFile* dataFile = nullptr,
     const NTable::TTableDescription* desc = nullptr);
+
+// For unit-tests only
+// The query that reads a column table in primary key order. With lastWrittenPK set, the query returns only the rows
+// strictly after that key; a saved key with NULL cells is handled too (NULL sorts first, as in ORDER BY).
+std::pair<TString, TParams> BuildSelectQueryAndParams(
+    const NTable::TTableDescription& desc,
+    const TString& fullTablePath,
+    TMaybe<TValue> lastWrittenPK);
 
 } // NBackup
 } // NYdb

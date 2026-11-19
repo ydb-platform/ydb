@@ -119,7 +119,8 @@ TMaybe<TColumnOrder> InferOrderForUnionAll(
 
 IGraphTransformer::TStatus OrderForSqlSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit) {
+    if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit ||
+        node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList) {
         return IGraphTransformer::TStatus::Ok;
     }
 

@@ -1232,6 +1232,15 @@ namespace {
             } else if (name == "initial_scan") {
                 YQL_ENSURE(setting.Value().Maybe<TCoBool>());
                 dstSettings.InitialScan = FromString<bool>(setting.Value().Cast<TCoBool>().Literal().Value());
+            } else if (name == "bootstrap") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                const auto mode = to_lower(value);
+                if (mode != "scan" && mode != "import" && mode != "switchover") {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown bootstrap mode: " << value));
+                    return false;
+                }
+                dstSettings.Bootstrap = mode;
             }
         }
 
@@ -3516,7 +3525,7 @@ public:
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
 
             if (isTableStore) {
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
                 if (!isColumn) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
                         TStringBuilder() << "TABLESTORE with not COLUMN store"));

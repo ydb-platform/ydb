@@ -3,7 +3,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp_expr_helpers.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/host/kqp_transform.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>

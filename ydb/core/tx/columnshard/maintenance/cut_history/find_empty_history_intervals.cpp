@@ -108,7 +108,7 @@ class TFindEmptyHistoryIntervalsActor: public TActorBootstrapped<TFindEmptyHisto
         while (Position < end && (BatchPortions.empty() || memory < Max<ui64>(1, Config.GetScanMemoryLimitBytes()))) {
             auto& portion = Portions[Position++];
             memory += portion.AccessorMemory;
-            AFL_VERIFY(BatchPortions.emplace(TAddress(Owner, NOlap::TPortionAddress(portion.PathId, portion.PortionId)),
+            YDB_LOG_VERIFY(BatchPortions.emplace(TAddress(Owner, NOlap::TPortionAddress(portion.PathId, portion.PortionId)),
                 TBatchPortion{std::move(portion.Schema), std::move(portion.Info)}).second);
         }
         THashSet<TAddress> addresses;
@@ -126,7 +126,7 @@ class TFindEmptyHistoryIntervalsActor: public TActorBootstrapped<TFindEmptyHisto
         }
         for (const auto& [address, chunks] : ev->Get()->Accessors) {
             const auto* batch = BatchPortions.FindPtr(address);
-            AFL_VERIFY(batch);
+            YDB_LOG_VERIFY(batch);
             NFindEmptyHistoryIntervals::ExcludePortionBlobs(*batch->Info, *chunks, batch->Schema->GetIndexInfo(), [this](const auto& blob) {
                 HistoryIntervals.Exclude(blob.GetLogoBlobId(), blob.GetDsGroup(), [this] {
                     Counters.OnCutHistoryBlobGroupMismatch();
@@ -190,7 +190,9 @@ bool ExcludePersistedBlobs(
         const auto serialized = rows.template GetValue<typename TTable::BlobId>();
         TString error;
         const auto blob = NOlap::TUnifiedBlobId::ParseFromString(serialized, &selector, error);
-        AFL_VERIFY(blob.IsValid())("error", error)("blob", serialized);
+        YDB_LOG_VERIFY(blob.IsValid(),
+            {"error", error},
+            {"blob", serialized});
         historyIntervals.Exclude(blob.GetLogoBlobId());
         if (historyIntervals.Empty()) {
             return true;
@@ -283,7 +285,8 @@ TFindEmptyHistoryIntervalsContext BuildFindEmptyHistoryIntervalsContext(const TT
     for (ui32 channel = FirstDataChannel; channel < storageInfo.Channels.size(); ++channel) {
         const auto& history = storageInfo.Channels[channel].History;
         for (size_t i = 0; i + 1 < history.size(); ++i) {
-            AFL_VERIFY(history[i].FromGeneration < history[i + 1].FromGeneration)("channel", channel);
+            YDB_LOG_VERIFY(history[i].FromGeneration < history[i + 1].FromGeneration,
+                {"channel", channel});
             const ui32 to = history[i + 1].FromGeneration;
             if (to >= generation || to > requiredBarrierGeneration) {
                 break;
@@ -331,7 +334,7 @@ TActorId TFindEmptyHistoryIntervals::Start(ui32 completedBarrierGeneration, cons
 
 std::optional<TEmptyHistoryIntervalsScanResult> TFindEmptyHistoryIntervals::HandleFinish(
     TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, bool canCutHistory, const TCSCounters& counters) {
-    AFL_VERIFY(ScanActor && ev->Sender == ScanActor);
+    YDB_LOG_VERIFY(ScanActor && ev->Sender == ScanActor);
     auto& result = ev->Get()->Result;
     if (result.Aborted || !canCutHistory) {
         counters.OnCutHistoryScanAborted();

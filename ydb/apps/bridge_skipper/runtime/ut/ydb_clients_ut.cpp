@@ -1,4 +1,5 @@
 #include <ydb/apps/bridge_skipper/runtime/ydb_clients.h>
+#include <ydb/apps/bridge_skipper/http/http.h>
 
 #include <ydb/public/api/grpc/draft/ydb_bridge_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
@@ -81,8 +82,11 @@ public:
     // Answers the next call with this operation status, then SUCCESS again.
     Ydb::StatusIds::StatusCode NextStatus = Ydb::StatusIds::SUCCESS;
     std::atomic<bool> HangSelfCheck{false};
+    std::atomic<bool> SelfCheckEntered{false};
+    bool EchoSelfCheckToken = false;
     std::atomic<bool> HangDiscovery{false};
     bool DedicatedStorage = false;
+    bool IncludeHotStandby = false;
     std::optional<ui16> IpEndpointPort;
 
     grpc::Status FetchConfig(grpc::ServerContext* context, const Ydb::Config::FetchConfigRequest* request,
@@ -168,6 +172,11 @@ public:
         auto* b = result.add_pile_states();
         b->set_pile_name("b");
         b->set_state(Ydb::Bridge::PileState::SYNCHRONIZED);
+        if (IncludeHotStandby) {
+            auto* standby = result.add_pile_states();
+            standby->set_pile_name("standby");
+            standby->set_state(Ydb::Bridge::PileState::HOT_STANDBY);
+        }
         if (request->include_pile_connectivity()) {
             auto* report = result.mutable_pile_connectivity();
             report->set_generation(42);
@@ -187,12 +196,17 @@ public:
         Ydb::Monitoring::SelfCheckResponse* response) override
     {
         Ydb::StatusIds::StatusCode status;
+        TString echoedToken;
         {
             std::lock_guard lock(Mutex);
             Capture.SelfCheck = *request;
             CaptureContext(*context);
+            if (EchoSelfCheckToken) {
+                echoedToken = Capture.AuthTicket;
+            }
             status = std::exchange(NextStatus, Ydb::StatusIds::SUCCESS);
         }
+        SelfCheckEntered = true;
         while (HangSelfCheck && !context->IsCancelled()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
@@ -206,6 +220,9 @@ public:
         auto* operation = response->mutable_operation();
         operation->set_ready(true);
         operation->set_status(status);
+        if (!echoedToken.empty()) {
+            operation->add_issues()->set_message("rejected credential " + std::string(echoedToken.data(), echoedToken.size()));
+        }
         operation->mutable_result()->PackFrom(result);
         return grpc::Status::OK;
     }
@@ -616,6 +633,28 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
         UNIT_ASSERT(!result.Connectivity);
     }
 
+    Y_UNIT_TEST(WireStateWithHotStandbyPreservesClusterView) {
+        TWireService service;
+        service.IncludeHotStandby = true;
+        TString endpoint;
+        auto server = StartWireServer(service, endpoint);
+        const auto config = ParseConfig("cluster_id: test\nendpoints: {a: ['" + endpoint + "']}\n");
+        auto clients = CreateYdbClients(config, TLoadedCredentials{});
+        const auto result = Await<TStateResult>([&](auto completed) {
+            clients->GetState({endpoint, "a", 1}, EYdbMethod::PlainState, std::move(completed));
+        });
+        clients->Stop();
+        UNIT_ASSERT_C(result.Rpc.Success, result.Rpc.Status);
+        UNIT_ASSERT_C(result.View, result.Error);
+        UNIT_ASSERT(result.Error.empty());
+        UNIT_ASSERT_VALUES_EQUAL(result.View->Generation, 42);
+        UNIT_ASSERT_VALUES_EQUAL(result.View->Piles.size(), 3);
+        UNIT_ASSERT(result.View->Piles.at("a") == EPileState::Primary);
+        UNIT_ASSERT(result.View->Piles.at("b") == EPileState::Synchronized);
+        UNIT_ASSERT(result.View->Piles.at("standby")
+            == static_cast<EPileState>(Ydb::Bridge::PileState::HOT_STANDBY));
+    }
+
     Y_UNIT_TEST(DecodeRejectsDuplicatesUnknownEnumsAndInvalidViewsBeforeMaps) {
         for (const auto& piles : std::vector<std::vector<NYdb::NBridge::TPileStateUpdate>>{
                 {{"a", NYdb::NBridge::EPileState::PRIMARY}, {"a", NYdb::NBridge::EPileState::PRIMARY}},
@@ -870,6 +909,86 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
         UNIT_ASSERT(next.Reply);
         clients->Stop();
         clients.reset();
+    }
+
+    Y_UNIT_TEST(DelayedReplyRedactsItsTokenAfterTwoRotationsInDiagnosticsAndLogs) {
+        TWireService service;
+        TString endpoint;
+        auto server = StartWireServer(service, endpoint);
+        UNIT_ASSERT(server);
+        TTempFileHandle token;
+        TFileOutput(token.Name()).Write("startup-secret-token\n");
+        const auto config = ParseConfig("cluster_id: test\nendpoints: {a: ['" + endpoint + "']}\n"
+            "auth: {token_file: '" + token.Name() + "'}\n"
+            "timing: {selfcheck_operation_timeout_seconds: 3}\n");
+        auto clients = CreateYdbClients(config, LoadCredentials(config));
+        const TPlan plan{42, {{"a", EPileState::Primary}, {"b", EPileState::Disconnected}}, endpoint};
+        const auto rotate = [&](TStringBuf value) {
+            TFileOutput(token.Name()).Write(value);
+            const auto result = Await<TUpdateResult>([&](auto completed) {
+                clients->Update({endpoint, "a", 1}, plan, {TMonotonic::Max()}, std::move(completed));
+            });
+            UNIT_ASSERT(result.Rpc.Success);
+        };
+        rotate("intermediate-secret-token\n");
+        service.EchoSelfCheckToken = true;
+        service.NextStatus = Ydb::StatusIds::BAD_REQUEST;
+        service.HangSelfCheck = true;
+        auto promise = NThreading::NewPromise<TSelfCheckResult>();
+        auto future = promise.GetFuture();
+        clients->SelfCheck({endpoint, "a", 2}, [promise](auto result) mutable {
+            promise.SetValue(std::move(result));
+        });
+        for (unsigned n = 0; n < 100 && !service.SelfCheckEntered; ++n) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        UNIT_ASSERT(service.SelfCheckEntered);
+        UNIT_ASSERT_VALUES_EQUAL(service.ReadCapture().AuthTicket, "intermediate-secret-token");
+        rotate("final-secret-token\n");
+        UNIT_ASSERT_VALUES_EQUAL(service.ReadCapture().AuthTicket, "final-secret-token");
+        service.HangSelfCheck = false;
+        UNIT_ASSERT(future.Wait(TDuration::Seconds(5)));
+        const auto delayed = future.GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(delayed.Rpc.Status, "BAD_REQUEST");
+        UNIT_ASSERT(!delayed.Rpc.Issues.Contains("intermediate-secret-token"));
+        UNIT_ASSERT(delayed.Rpc.Issues.Contains("[REDACTED]"));
+
+        // The endpoint error and rpc_result log expose the decoded issue text.
+        // Exercise the same public HTTP renderers used by the running process.
+        TSkipperSnapshot snapshot;
+        TEndpointSnapshot failed;
+        failed.Uri = endpoint;
+        failed.Pile = "a";
+        failed.LastError = delayed.Rpc.Status + ": " + delayed.Rpc.Issues;
+        snapshot.Endpoints.push_back(std::move(failed));
+        snapshot.Diagnostics = std::make_shared<TDiagnosticStore>("rotation", "debug");
+        snapshot.Diagnostics->Log("debug", delayed.Rpc.Issues, TInstant::Now());
+        for (const TStringBuf path : {"/api/state", "/api/logs"}) {
+            const auto response = RouteHttpRequest("GET", path, snapshot, TMonotonic::Now(), TInstant::Now());
+            UNIT_ASSERT_VALUES_EQUAL(response.Status, 200);
+            UNIT_ASSERT(!response.Body.Contains("intermediate-secret-token"));
+            UNIT_ASSERT(response.Body.Contains("[REDACTED]"));
+        }
+        clients->Stop();
+    }
+
+    Y_UNIT_TEST(RequestRedactionCoversLateSdkReadsAndReleasesOldCredentials) {
+        TString loaded = "credential-A";
+        auto source = std::make_shared<TTokenSource>(TString("unused"), loaded,
+            [&](const auto&) { return TMaybe<TString>(loaded); });
+        const TRedactor logging(source);
+        std::optional<TRedactor> request(logging.ForRequest());
+        loaded = "credential-A-longer-B";
+        source->Reload();
+        UNIT_ASSERT_VALUES_EQUAL(source->GetAuthInfo(), std::string(loaded.data(), loaded.size()));
+        loaded = "credential-C";
+        source->Reload();
+        const TString text = "credential-A credential-A-longer-B credential-C";
+        UNIT_ASSERT_VALUES_EQUAL(request->Redact(text), "[REDACTED] [REDACTED] [REDACTED]");
+        UNIT_ASSERT_VALUES_EQUAL(logging.Redact(text), "[REDACTED] [REDACTED] [REDACTED]");
+        request.reset();
+        // No completed-request token history is retained by the shared logger.
+        UNIT_ASSERT_VALUES_EQUAL(logging.Redact(text), "credential-A credential-A-longer-B [REDACTED]");
     }
 
     Y_UNIT_TEST(TokenFileIsReReadBeforeUpdateAndAfterUnauthorized) {

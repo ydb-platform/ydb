@@ -164,6 +164,12 @@ class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveShar
 public:
     using IActorOps::Register;
 
+    struct TNodePing {
+        TActorId Local;
+        bool SendSettings = false;
+        bool SendCapabilities = false;
+    };
+
 protected:
     friend class THiveBalancer;
     friend class THiveDrain;
@@ -181,6 +187,7 @@ protected:
     friend struct TNodeInfo;
     friend struct TTabletInfo;
     friend struct TLeaderTabletInfo;
+    friend struct TTabletInfo;
     friend class TReassignTabletsActor;
     friend class TMoveDataActor;
 
@@ -277,6 +284,9 @@ protected:
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartPileDrain(TBridgePileInfo& pile);
     bool HasTabletsToDrain(TBridgePileId pileId) const;
+    // marks for drain the piles that have tablets their placement does not allow there (anymore)
+    void MarkPilesWithMisplacedTablets(NIceDb::TNiceDb& db);
+    void OnBridgeTabletPlacementChanged(NKikimrConfig::THiveConfig::EBridgeTabletPlacement previous);
     void ProcessPileDrains();
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     bool StartHiveStorageBalancer(TStorageBalancerSettings settings);
@@ -386,6 +396,8 @@ protected:
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
     std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetrics;
     std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetricsDefaults; // built from CurrentConfig
+    TNamedResourceRegistry NamedResourceRegistry; // configured from CurrentConfig
+    size_t NextNamedResourceToCheck = 0; // round robin over named resources in balancer triggers
     std::unordered_map<TString, TStoragePoolInfo> StoragePools;
     std::unordered_map<TSubDomainKey, TDomainInfo> Domains;
     std::unordered_set<TOwnerId> BlockedOwners;
@@ -453,6 +465,37 @@ protected:
     // last "balancer not started" line written at INFO, repeats of it go to DEBUG
     std::optional<std::pair<TString, EBalancerSuppressReason>> LastBalancerSuppression;
     std::array<TBalancerStats, EBalancerTypeSize> BalancerStats;
+    // group of the per-node counters (service tablets, type=HIVE, subgroup peer_node_id per node), see TNodeInfo::TCounters; present while CountersExportMode is at least HIVE_PER_NODE_COUNTERS.
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> PerNodeCountersGroup;
+    // Balancing counters (service tablets, type=HIVE), present while CountersExportMode is at least PER_RESOURCE_COUNTERS.
+    // Dynamic rather than tablet counters, which are exported in every mode; expiring, so releasing this struct removes them.
+    struct TBalanceCounters {
+        using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+
+        // Per NMetrics::EResource, from the stats the scatter balancer is triggered on, in percent.
+        // Usages count only what tablets report (no TotalResourceUsage from Local); Cpu/Mem/Net usages below
+        // MinNodeUsageToBalance are raised to it. UsageMin/UsageMax of Counter are the number of tablets: every node's
+        // Counter maximum is MaxResourceCounter (1e8 by default), so the percent would round to 0.
+        // Scatter = (UsageMax - UsageMin) / UsageMax; a Counter scatter of one tablet is set to 0.
+        struct TResourceCounters {
+            TCounterPtr Scatter;
+            TCounterPtr UsageMin;
+            TCounterPtr UsageMax;
+        };
+        std::array<TResourceCounters, NMetrics::EResource::Counter + 1> ByResource;
+        // Alive nodes at least MaxNodeUsageToKick (TNodeInfo::IsOverloaded), what gates the emergency balancer.
+        TCounterPtr NodesOverloaded;
+
+        // Derivative, per EBalancerType; null for Storage, which TStorageBalancer runs with its own counters.
+        // TabletsMoved also counts drain and fill moves, counted by DrainExecuted and FillExecuted:
+        // TabletsMoved = sum of TabletsMoved<Type> + DrainExecuted + FillExecuted.
+        std::array<TCounterPtr, EBalancerTypeSize> BalancerExecuted;
+        std::array<TCounterPtr, EBalancerTypeSize> BalancerFailed;
+        std::array<TCounterPtr, EBalancerTypeSize> TabletsMoved;
+
+        explicit TBalanceCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group);
+    };
+    std::unique_ptr<TBalanceCounters> BalanceCounters;
     NKikimrHive::EMigrationState MigrationState = NKikimrHive::EMigrationState::MIGRATION_UNKNOWN;
     i32 MigrationProgress = 0;
     NKikimrHive::TEvSeizeTablets MigrationFilter;
@@ -487,7 +530,7 @@ protected:
     TEventPriorityQueue<THive> EventQueue{*this};
     ui64 OperationsLogIndex = 0;
     std::vector<TActorId> ActorsWaitingToMoveTablets;
-    std::queue<TActorId> NodePingQueue;
+    std::queue<TNodePing> NodePingQueue;
     std::unordered_set<TNodeId> NodePingsInProgress;
     TFollowerUpdates PendingFollowerUpdates;
     std::queue<TTabletId> StopTenantTabletsQueue;
@@ -790,7 +833,7 @@ public:
     void OnShrinkMoveDataRetried();
     void OnShrinkMoveDataFinished();
     // details are appended to the "from=X to=Y" of the Moved event
-    void RecordTabletMove(const TTabletMoveInfo& info, EHiveEventReason reason, TString details = {});
+    void RecordTabletMove(TInstant timestamp, const TTabletInfo& tablet, const TNodeInfo& from, const TNodeInfo& to, EHiveEventReason reason, TString details = {});
     // details is the variable part of the description, reason covers the constant part
     void RecordNodeEvent(TNodeInfo& node, EHiveEventType type, EHiveEventReason reason, TString details = {});
     // skipIfRepeated drops the event when the tablet's last event has the same type, reason and details
@@ -822,8 +865,17 @@ public:
     ui32 GetDataCenters();
     void AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
-    void QueuePing(const TActorId& local);
-    void SendPing(const TActorId& local, TNodeId id);
+    void QueuePing(TNodePing ping);
+    void SendPing(const TNodePing& nodePing);
+    void FillLocalSettings(NKikimrLocal::THiveSettings* settings) const;
+    bool ExportPerResourceCounters() const {
+        return CurrentConfig.GetCountersExportMode() >= NKikimrConfig::THiveConfig::COUNTERS_EXPORT_MODE_PER_RESOURCE_COUNTERS;
+    }
+    bool ExportHivePerNodeCounters() const {
+        return CurrentConfig.GetCountersExportMode() >= NKikimrConfig::THiveConfig::COUNTERS_EXPORT_MODE_HIVE_PER_NODE_COUNTERS;
+    }
+    // Call when the HiveConfig settings relevant to Local change.
+    void UpdateLocalSettings();
     void RemoveFromPingInProgress(TNodeId node);
     void ProcessNodePingQueue();
     void SendReconnect(const TActorId& local);
@@ -1105,6 +1157,10 @@ public:
         return CurrentConfig.GetBootStrategy();
     }
 
+    NKikimrConfig::THiveConfig::EBridgeTabletPlacement GetBridgeTabletPlacement() const {
+        return CurrentConfig.GetBridgeTabletPlacement();
+    }
+
     NKikimrConfig::THiveConfig::EHiveChannelBalanceStrategy GetChannelBalanceStrategy() const {
         return CurrentConfig.GetChannelBalanceStrategy();
     }
@@ -1184,10 +1240,44 @@ protected:
     struct TMoveExpediency {
         bool Expedient = false;
         EHiveEventReason Reason = EHiveEventReason::ResourceStDevImproved; // meaningful only when Expedient
-        double StDevBefore = 0; // set only when the decision was made by resource stdev
+        // max stdev of the built-in resources, set whenever the move was evaluated by resources
+        // (i.e. not decided by one of the early checks)
+        double StDevBefore = 0;
         double StDevAfter = 0;
+        // the named resource which the move worsens (the first one), or if none, the first one it improves,
+        // with its imbalance before and after the move, see CheckNamedResourcesMoveEffect
+        TString NamedResource;
+        double NamedBefore = 0;
+        double NamedAfter = 0;
     };
+    // The move has to improve at least one of the built-in resources (as a whole) and the balanced
+    // named resources of the tablet, and must not worsen any of them. The built-in resources may worsen
+    // by up to BUILTIN_STDEV_WORSENING_TOLERANCE, any worsening of a named resource vetoes the move.
     TMoveExpediency CheckTabletMoveExpediency(const TTabletInfo& tablet, const TNodeInfo& node) const;
+    struct TNamedResourcesMoveEffect {
+        bool Improved = false;
+        bool Worsened = false;
+        TString Resource;
+        double Before = 0;
+        double After = 0;
+    };
+    // How moving the tablet to the node changes the imbalance of each balanced named resource of the tablet:
+    // the total amount over capacity for SATURATION, the usage stdev for SCATTER
+    TNamedResourcesMoveEffect CheckNamedResourcesMoveEffect(const TTabletInfo& tablet, const TNodeInfo& node) const;
+    // growth of the built-in resources stdev that a move is allowed to cause when it improves something else
+    static constexpr double BUILTIN_STDEV_WORSENING_TOLERANCE = 0.01;
+    void ScheduleNamedResourceEstimatesCheck(TFullTabletId tabletId, TInstant deadline);
+    void Handle(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev);
+    void HandleInit(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev);
+    void RegisterNamedResource(const TString& name) {
+        NamedResourceRegistry.Register(name);
+    }
+    const TNamedResourceSettings& GetNamedResourceSettings(const TString& name) const {
+        return NamedResourceRegistry.GetSettings(name);
+    }
+    // Returns settings of the balancer for a named resource which needs balancing among the nodes, if any
+    template<std::forward_iterator TIter>
+    std::optional<TBalancerSettings> CheckNamedResources(TIter begin, TIter end);
     bool IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const {
         return CheckTabletMoveExpediency(tablet, node).Expedient;
     }
@@ -1218,9 +1308,16 @@ protected:
         TNodeId MaxUsageNodeId;
         double Scatter;
         TResourceNormalizedValues ScatterByResource;
+        // per-resource min and max over the nodes, both raised to MinNodeUsageToBalance, as used for ScatterByResource
         TResourceNormalizedValues MinResourceNormValues;
+        TResourceNormalizedValues MaxResourceNormValues;
         std::vector<TNodeStat> Values;
     };
+
+    // per-node counters export, see TNodeInfo::TCounters: UpdateNodeCounters is called when a node's values change,
+    // UpdateCountersExportMode applies the setting (drops all node counters when it is switched off)
+    void UpdateNodeCounters(TNodeInfo& node);
+    void UpdateCountersExportMode();
 
     THiveStats GetStats() const;
     template<std::forward_iterator TIter>

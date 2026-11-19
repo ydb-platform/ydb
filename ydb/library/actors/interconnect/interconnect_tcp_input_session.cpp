@@ -111,7 +111,7 @@ namespace NActors {
         }
 
         if (pendingEvent.RdmaBuffers.empty()) {
-            throw TExDestroySession{TDisconnectReason::FormatError()};
+            return TRdmaReadReqFormatError{};
         }
 
         auto curMemReg = pendingEvent.RdmaBuffers.front();
@@ -122,7 +122,7 @@ namespace NActors {
             NActorsInterconnect::TRdmaCred credCopy = cred;
             do {
                 if (pendingEvent.RdmaBuffers.empty() || mrOffset >= curMemReg.GetSize()) {
-                    throw TExDestroySession{TDisconnectReason::FormatError()};
+                    return TRdmaReadReqFormatError{};
                 }
 
                 credCopy.SetAddress(cred.GetAddress() + credOffset);
@@ -1041,7 +1041,12 @@ namespace NActors {
 
                     ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
-                    if (std::holds_alternative<ICq::TBusy>(err)) {
+                    if (std::holds_alternative<TReceiveContext::TPerChannelContext::TRdmaReadReqFormatError>(err)) {
+                        YDB_LOG_CRIT("RDMA_READ error: invalid receive buffer state",
+                            {"logPrefix", LogPrefix},
+                            {"marker", "ICIS22"});
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    } else if (std::holds_alternative<ICq::TBusy>(err)) {
                         YDB_LOG_CRIT("RDMA_READ error: can not allocate cq work request: busy",
                             {"logPrefix", LogPrefix},
                             {"marker", "ICIS20"});

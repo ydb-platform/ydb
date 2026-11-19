@@ -181,7 +181,8 @@ namespace NActors {
             void DropFront(TRope *from, size_t numBytes);
 
             struct TRdmaReadReqOk {};
-            using ScheduleRdmaReadRequestsResult = std::variant<TRdmaReadReqOk, NInterconnect::NRdma::ICq::TBusy, NInterconnect::NRdma::ICq::TErr>;
+            struct TRdmaReadReqFormatError {};
+            using ScheduleRdmaReadRequestsResult = std::variant<TRdmaReadReqOk, TRdmaReadReqFormatError, NInterconnect::NRdma::ICq::TBusy, NInterconnect::NRdma::ICq::TErr>;
             ScheduleRdmaReadRequestsResult ScheduleRdmaReadRequests(const NActorsInterconnect::TRdmaCreds& creds,
                 NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel);
         };

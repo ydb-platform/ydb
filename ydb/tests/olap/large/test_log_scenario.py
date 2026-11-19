@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 
 
 class YdbWorkloadLog:
+    # The CLI defaults (1s client timeout, 800ms operation timeout and cancel-after) are far too tight for
+    # sanitizer builds: on a 2-CPU ASan runner a 500-row INSERT/UPSERT takes about a minute while the
+    # aggregation threads run, and the SDK does not retry a client deadline, so every write of the
+    # concurrent phase used to fail silently and the row count did not change.
+    REQUEST_TIMEOUT_SECONDS: int = 180
+
     class PKMode(Enum):
         TIMESTAMP_DEVIATION = (1,)
         UNIFORM = 2
@@ -84,12 +90,19 @@ class YdbWorkloadLog:
             str(threads),
             "--rows",
             str(rows),
+            "--client-timeout",
+            f"{self.REQUEST_TIMEOUT_SECONDS}s",
+            "--operation-timeout",
+            f"{self.REQUEST_TIMEOUT_SECONDS}s",
+            "--cancel-after",
+            f"{self.REQUEST_TIMEOUT_SECONDS}s",
         ]
         if self.pk_mode == YdbWorkloadLog.PKMode.TIMESTAMP_DEVIATION:
             command = command + ["--timestamp_deviation", str(self.timestamp_deviation)]
         else:
             command = command + ["--date-from", str(self.date_from), "--date-to", str(self.date_to)]
-        self._call(command=command, wait=wait, timeout=max(2 * seconds, 60))
+        # A request issued right before the workload deadline may still run for REQUEST_TIMEOUT_SECONDS.
+        self._call(command=command, wait=wait, timeout=max(2 * seconds, 60) + self.REQUEST_TIMEOUT_SECONDS)
 
     # seconds - Seconds to run workload
     # threads - Number of parallel threads in workload

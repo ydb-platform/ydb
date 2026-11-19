@@ -39,7 +39,7 @@ The following functionality is not enabled by default.
 
 ### Version 26.2.1.16 {#26-2-1-16}
 
-Release date: **TBD: publication date**.
+Release date: November 20, 2026.
 
 #### Bug Fixes
 

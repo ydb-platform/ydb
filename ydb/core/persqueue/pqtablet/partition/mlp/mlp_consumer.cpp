@@ -1047,7 +1047,8 @@ size_t TConsumerActor::FifoUnlockedGroupDeficit() const {
 }
 
 bool TConsumerActor::FetchMessagesIfNeeded() {
-    if (AppData()->FeatureFlags.GetEnableMLPConsumerInFlightMutateDisabled()) {
+    const auto& flags = AppData()->FeatureFlags;
+    if (flags.GetEnableMLPConsumerInFlightMutateDisabled() || !flags.GetEnableClientModifications()) {
         LOG_D("Fetch messages is disabled");
         return false;
     }

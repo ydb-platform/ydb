@@ -786,38 +786,26 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
         }
 
-        Y_UNIT_TEST(ClientDataWritesDisabled) {
-            Ctx->Runtime->GetAppData().FeatureFlags.SetEnableClientModifications(false);
-            ui32 writes = 0;
-            Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
-                if (event->GetTypeRewrite() == TEvPartitionWriter::TEvWriteRequest::EventType) {
-                    ++writes;
-                }
-                return TTestActorRuntime::EEventAction::PROCESS;
-            });
+        Y_UNIT_TEST(ClientDataWrites) {
+            ui64 producerId = 1;
 
             for (size_t size : {size_t(16), size_t(600 * 1024)}) {
                 for (size_t recordsCount : {size_t(1), size_t(2)}) {
                     for (const auto& transactionalId : {TMaybe<TString>{}, TMaybe<TString>{"transaction"}}) {
                         ValueToProduce = TString(size, 'x');
-                        SendProduceToPartitions({0, 1}, transactionalId, 0, 0, 0, 0, 0,
+                        SendProduceToPartitions({0}, transactionalId, producerId++, 0, 0, 0, 0,
                             ECompressionType::NONE, recordsCount);
 
                         auto event = GrabProduceResponse();
                         auto response = std::dynamic_pointer_cast<TProduceResponseData>(event->Response);
                         UNIT_ASSERT(response);
                         UNIT_ASSERT_VALUES_EQUAL(response->Responses.size(), 1);
-                        UNIT_ASSERT_VALUES_EQUAL(response->Responses[0].PartitionResponses.size(), 2);
-
-                        for (const auto& partition : response->Responses[0].PartitionResponses) {
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, EKafkaErrors::POLICY_VIOLATION);
-                            UNIT_ASSERT_STRING_CONTAINS(TString(*partition.ErrorMessage), "Client data writes are disabled");
-                        }
+                        UNIT_ASSERT_VALUES_EQUAL(response->Responses[0].PartitionResponses.size(), 1);
+                        UNIT_ASSERT_VALUES_EQUAL(response->Responses[0].PartitionResponses[0].ErrorCode,
+                            EKafkaErrors::NONE_ERROR);
                     }
                 }
             }
-
-            UNIT_ASSERT_VALUES_EQUAL(writes, 0);
         }
 
     }

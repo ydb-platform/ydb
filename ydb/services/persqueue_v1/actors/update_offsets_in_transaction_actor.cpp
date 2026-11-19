@@ -1,5 +1,4 @@
 #include "update_offsets_in_transaction_actor.h"
-#include <ydb/core/base/feature_flags.h>
 
 
 namespace NKikimr::NGRpcService {
@@ -12,10 +11,6 @@ TUpdateOffsetsInTransactionActor::TUpdateOffsetsInTransactionActor(IRequestOpCtx
 void TUpdateOffsetsInTransactionActor::Bootstrap(const NActors::TActorContext& ctx)
 {
     TBase::Bootstrap(ctx);
-    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
-        return Reply(Ydb::StatusIds::PRECONDITION_FAILED,
-            "Consumer offset commits are disabled", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-    }
     Become(&TUpdateOffsetsInTransactionActor::StateWork);
     Proceed(ctx);
 }

@@ -224,22 +224,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_F(ClientModificationsTransactionalOffsets, TUpdateOffsetsInTransactionFixture) {
-    const TVector<TTopic> topics = {
-        TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
-            TPartition{.Id=1, .Offsets={TOffsetRange{.Begin=0, .End=1}}}
-        }}
-    };
 
-    server->CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(false);
-    auto response = Call_UpdateOffsetsInTransaction(topics);
-    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::PRECONDITION_FAILED);
-    UNIT_ASSERT_STRING_CONTAINS(response.ShortDebugString(), "Consumer offset commits are disabled");
-
-    server->CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(true);
-    response = Call_UpdateOffsetsInTransaction(topics);
-    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-}
 
 Y_UNIT_TEST_F(OneConsumer_TheRangesDoNotOverlap, TUpdateOffsetsInTransactionFixture) {
     Ydb::Topic::UpdateOffsetsInTransactionResponse response = Call_UpdateOffsetsInTransaction({

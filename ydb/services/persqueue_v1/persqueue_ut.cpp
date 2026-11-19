@@ -2171,7 +2171,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         return server;
     }
 
-    Y_UNIT_TEST_QUAD(ClientDataWrites, enableClientModifications, topicProtocol) {
+    Y_UNIT_TEST_TWIN(ClientDataWrites, topicProtocol) {
         auto settings = PQSettings();
         settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
         settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(false);
@@ -2180,8 +2180,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         const TString topic = "/Root/PQ/client-data-writes";
         server.AnnoyingClient->CreateTopicNoLegacy(topic, 1);
 
-        // The test server populates its cluster configuration tables through SQL during initialization.
-        server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(enableClientModifications);
         auto channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
 
         for (size_t size : {size_t(16), size_t(600 * 1024)}) {
@@ -2245,19 +2243,13 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             UNIT_ASSERT(stream->Write(request));
             UNIT_ASSERT(stream->Read(&response));
-            UNIT_ASSERT_VALUES_EQUAL_C(response.status(),
-                enableClientModifications ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::PRECONDITION_FAILED,
-                response.ShortDebugString());
-
-            if (!enableClientModifications) {
-                UNIT_ASSERT_STRING_CONTAINS(response.ShortDebugString(), "Client data writes are disabled");
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SUCCESS, response.ShortDebugString());
 
             context.TryCancel();
         }
     }
 
-    Y_UNIT_TEST_QUAD(ClientModificationsStreamOffsets, enableClientModifications, topicProtocol) {
+    Y_UNIT_TEST_TWIN(StreamOffsets, topicProtocol) {
         for (bool initialCommit : {false, true}) {
             auto server = SetupLbFederationServerWithTopic("topic1", 1, {"user"});
             const TString topic = "account/topic1";
@@ -2269,7 +2261,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(writer->Write(TString(initialCommit ? 600 * 1024 : 16, 'x'), 1));
             UNIT_ASSERT(writer->Close(TDuration::Seconds(10)));
 
-            server->CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(enableClientModifications);
             auto channel = grpc::CreateChannel("localhost:" + ToString(server->GrpcPort), grpc::InsecureChannelCredentials());
 
             grpc::ClientContext context;
@@ -2355,15 +2346,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 UNIT_ASSERT(stream->Write(request));
             }
 
-            if (!enableClientModifications || !initialCommit) {
+            if (!initialCommit) {
                 UNIT_ASSERT(stream->Read(&response));
-
-                if (enableClientModifications) {
-                    UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SUCCESS, response.ShortDebugString());
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::PRECONDITION_FAILED, response.ShortDebugString());
-                    UNIT_ASSERT_STRING_CONTAINS(response.ShortDebugString(), "Consumer offset commits are disabled");
-                }
+                UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SUCCESS, response.ShortDebugString());
             }
 
             context.TryCancel();
@@ -2394,6 +2379,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             bool res = writer->Close(TDuration::Seconds(10));
             UNIT_ASSERT(res);
         }
+
 
         auto TopicStubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
 

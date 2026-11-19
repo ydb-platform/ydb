@@ -4,6 +4,7 @@
 #include <ydb/core/persqueue/public/mlp/ut/common/common.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/library/actors/core/mon.h>
+#include <ydb/library/testlib/helpers.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -963,12 +964,14 @@ Y_UNIT_TEST(DelayedMessageNotReadableUntilDeadline) {
     }
 }
 
-Y_UNIT_TEST(DisabledInflightMutationStopsFetchingButAllowsDraining) {
+Y_UNIT_TEST_TWIN(DisabledInflightMutationStopsFetchingButAllowsDraining, useClientModificationsFlag) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
     auto setDisabled = [&](bool disabled) {
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
-            runtime.GetAppData(node).FeatureFlags.SetEnableMLPConsumerInFlightMutateDisabled(disabled);
+            auto& flags = runtime.GetAppData(node).FeatureFlags;
+            flags.SetEnableMLPConsumerInFlightMutateDisabled(disabled && !useClientModificationsFlag);
+            flags.SetEnableClientModifications(!(disabled && useClientModificationsFlag));
         }
     };
     setDisabled(false);

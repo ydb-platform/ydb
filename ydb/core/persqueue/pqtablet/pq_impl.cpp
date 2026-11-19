@@ -353,7 +353,8 @@ struct TPersQueue::TReplyToActor {
 };
 
 bool TPersQueue::IsTopicMutateDisabled(const TActorContext& ctx) const {
-    return AppData(ctx)->FeatureFlags.GetEnableSourceTopicMutateRestricted();
+    const auto& flags = AppData(ctx)->FeatureFlags;
+    return flags.GetEnableSourceTopicMutateRestricted() || !flags.GetEnableClientModifications();
 }
 
 void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error)

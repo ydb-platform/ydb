@@ -809,7 +809,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
     }
 
-    Y_UNIT_TEST(ShouldNotPartitionTopicByHashWhenKeyRangeHeartbeats) {
+    Y_UNIT_TEST(ShouldPartitionTopicByKeyWhenKeyRangeHeartbeats) {
         // given
         const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
         const auto stream = ReplicationStream(true, true);
@@ -819,7 +819,10 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         // then
         UNIT_ASSERT(!params.ReplicationAutoPartitioning);
+        UNIT_ASSERT(params.KeyRangeAutoPartitioning);
         UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 50'000);
+        UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 50'000);
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, Max<ui64>(50'000, maxShardsInPath));
     }
 
     Y_UNIT_TEST(DocApi) {
@@ -1929,7 +1932,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldNotPartitionTopicByHashWhenReplicationAlsoSupportsTopicAutopartitioning) {
+    Y_UNIT_TEST(ShouldPartitionTopicByKeyWhenReplicationAlsoSupportsTopicAutopartitioning) {
         // given
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
@@ -1947,9 +1950,167 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange),
         });
         const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
-        UNIT_ASSERT_VALUES_EQUAL(
-            topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType(),
-            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+        const auto& config = topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+        UNIT_ASSERT_VALUES_EQUAL(config.PartitionKeySchemaSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionStrategy().GetPartitionStrategyType(),
+            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+    }
+
+    void AlterStreamTopic(TTestBasicRuntime& runtime, ui64& txId,
+            const std::function<void(NKikimrSchemeOp::TPersQueueGroupDescription&)>& fill,
+            NKikimrScheme::EStatus expectedStatus)
+    {
+        auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(++txId, TTestTxConfig::SchemeShard);
+        auto& transaction = *request->Record.AddTransaction();
+        transaction.SetWorkingDir("/MyRoot/Table/Stream");
+        transaction.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
+        transaction.SetInternal(true);
+        auto& alter = *transaction.MutableAlterPersQueueGroup();
+        alter.SetName("streamImpl");
+        fill(alter);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request.release(), 0);
+        TestModificationResult(runtime, txId, expectedStatus);
+    }
+
+    void SplitStreamTopicPartition(TTestBasicRuntime& runtime, ui64& txId, ui32 partition, const TString& boundary,
+            NKikimrScheme::EStatus expectedStatus)
+    {
+        AlterStreamTopic(runtime, txId, [&](auto& alter) {
+            auto* split = alter.AddSplit();
+            split->SetPartition(partition);
+            split->SetSplitBoundary(boundary);
+        }, expectedStatus);
+    }
+
+    TString SerializeUint64Key(ui64 value) {
+        const TVector<TCell> cells = {TCell::Make<ui64>(value)};
+        return TSerializedCellVec::Serialize(cells);
+    }
+
+    void CreateKeyRangeStream(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, ui32 tablePartitions) {
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: %u
+        )", tablePartitions));
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(false, true).DebugString());
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(ShouldSplitKeyRangeTopicPartitionWhenBoundaryIsTypedKey) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        CreateKeyRangeStream(runtime, env, txId, 1);
+
+        // when
+        SplitStreamTopicPartition(runtime, txId, 0, SerializeUint64Key(1000), NKikimrScheme::StatusAccepted);
+        env.TestWaitNotification(runtime, txId);
+
+        // then
+        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        const auto& partitions = topic.GetPathDescription().GetPersQueueGroup().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(CountIf(partitions, [](const auto& partition) {
+            return partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
+        }), 2);
+
+        const auto navigate = Navigate(runtime, "/MyRoot/Table/Stream/streamImpl", NSchemeCache::TSchemeCacheNavigate::EOp::OpTopic);
+        const auto& entry = navigate->ResultSet.at(0);
+        UNIT_ASSERT(entry.PQGroupInfo);
+        const auto& partitioning = entry.PQGroupInfo->Partitioning;
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.size(), 2);
+        UNIT_ASSERT_VALUES_UNEQUAL(partitioning.at(0).ShardId, 0);
+        UNIT_ASSERT_VALUES_UNEQUAL(partitioning.at(1).ShardId, 0);
+        UNIT_ASSERT(partitioning.at(0).Range);
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.at(0).Range->EndKeyPrefix.GetBuffer(), SerializeUint64Key(1000));
+        UNIT_ASSERT(partitioning.at(1).Range);
+        UNIT_ASSERT(!partitioning.at(1).Range->EndKeyPrefix);
+    }
+
+    Y_UNIT_TEST(ShouldRejectSplitBoundaryWhenItIsNotTypedKey) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        CreateKeyRangeStream(runtime, env, txId, 1);
+
+        // when
+        SplitStreamTopicPartition(runtime, txId, 0, "\x7f", NKikimrScheme::StatusInvalidParameter);
+
+        // then
+        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 1);
+    }
+
+    Y_UNIT_TEST(ShouldRejectSplitBoundaryWhenItIsOutsidePartitionRange) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        CreateKeyRangeStream(runtime, env, txId, 2);
+
+        // when
+        SplitStreamTopicPartition(runtime, txId, 0, SerializeUint64Key(Max<ui64>() - 5), NKikimrScheme::StatusInvalidParameter);
+
+        // then
+        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 2);
+    }
+
+    Y_UNIT_TEST(ShouldRejectRootPartitionBoundsWhenTopicHasKeySchema) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        CreateKeyRangeStream(runtime, env, txId, 1);
+
+        // when
+        AlterStreamTopic(runtime, txId, [](auto& alter) {
+            alter.AddRootPartitionBoundaries()->SetPartition(0);
+        }, NKikimrScheme::StatusInvalidParameter);
+
+        // then
+        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 1);
+    }
+
+    Y_UNIT_TEST(ShouldRejectMinPartitionCountIncreaseWhenTopicHasKeySchema) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        CreateKeyRangeStream(runtime, env, txId, 1);
+
+        // when
+        AlterStreamTopic(runtime, txId, [](auto& alter) {
+            auto& config = *alter.MutablePQTabletConfig();
+            config.MutablePartitionConfig();
+            auto& strategy = *config.MutablePartitionStrategy();
+            strategy.SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+            strategy.SetMinPartitionCount(2);
+            strategy.SetMaxPartitionCount(100);
+        }, NKikimrScheme::StatusInvalidParameter);
+
+        // then
+        const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 1);
     }
 
     Y_UNIT_TEST(ShouldKeepKeyRangeHeartbeatsWhenSchemeShardReboots) {

@@ -7860,7 +7860,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(topic.GetPQTabletConfig().PartitionKeySchemaSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(
             topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType(),
-            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
     }
 
     Y_UNIT_TEST_FLAG(ChangefeedTopicWithUnknownFields, EnableDataShardDirectPartImport) {

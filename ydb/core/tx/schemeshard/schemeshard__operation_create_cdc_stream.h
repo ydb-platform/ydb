@@ -80,6 +80,7 @@ struct TCdcPqPartParams {
     ui32 TotalGroupCount = 0;
     ui32 PartitionPerTablet = 2;
     bool ReplicationAutoPartitioning = false;
+    bool KeyRangeAutoPartitioning = false;
     ui32 MinPartitionCount = 0;
     ui32 MaxPartitionCount = 0;
 };

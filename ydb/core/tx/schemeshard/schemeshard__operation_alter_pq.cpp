@@ -25,6 +25,43 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
+bool CheckTypedSplitBoundary(
+        const TTopicTabletInfo::TKeySchema& keySchema,
+        const TMaybe<TTopicTabletInfo::TKeyRange>& keyRange,
+        const TString& splitBoundary,
+        TString& error)
+{
+    TSerializedCellVec boundary;
+    if (!TSerializedCellVec::TryParse(splitBoundary, boundary) || boundary.GetCells().size() != keySchema.size()) {
+        error = "Split boundary is not a full key of the topic key schema";
+        return false;
+    }
+
+    if (!keyRange) {
+        return true;
+    }
+
+    TSerializedCellVec bound;
+    if (keyRange->FromBound) {
+        if (!TSerializedCellVec::TryParse(*keyRange->FromBound, bound) || bound.GetCells().size() != keySchema.size()
+            || CompareTypedCellVectors(boundary.GetCells().data(), bound.GetCells().data(), keySchema.data(), keySchema.size()) <= 0)
+        {
+            error = "Split boundary is not greater than FromBound of partition";
+            return false;
+        }
+    }
+    if (keyRange->ToBound) {
+        if (!TSerializedCellVec::TryParse(*keyRange->ToBound, bound) || bound.GetCells().size() != keySchema.size()
+            || CompareTypedCellVectors(boundary.GetCells().data(), bound.GetCells().data(), keySchema.data(), keySchema.size()) >= 0)
+        {
+            error = "Split boundary is not less than ToBound of partition";
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool ShouldCreateSiblingAtRootLevel(const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit& split, const TTopicInfo::TPtr& topic) {
     // return if we should create one child at the root level in the case when another child already exists
     if (!split.GetCreateRootLevelSibling() || split.ChildPartitionIdsSize() == 0) {
@@ -162,6 +199,11 @@ public:
 
         if (!splitMergeEnabled && (alter.MergeSize() || alter.SplitSize() || alter.RootPartitionBoundariesSize())) {
             errStr = "Split and merge operations disabled";
+            return nullptr;
+        }
+
+        if (hasKeySchema && alter.RootPartitionBoundariesSize()) {
+            errStr = "Changing root partition bounds is not supported for topics with a key schema";
             return nullptr;
         }
 
@@ -847,7 +889,12 @@ public:
                     return result;
                 }
                 const auto keyRange = splittedPartition->KeyRange;
-                if (keyRange) {
+                if (!topic->KeySchema.empty()) {
+                    if (!CheckTypedSplitBoundary(topic->KeySchema, keyRange, splitBoundary, errStr)) {
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                        return result;
+                    }
+                } else if (keyRange) {
                     if (keyRange->FromBound && splitBoundary <= *keyRange->FromBound) {
                         errStr = TStringBuilder()
                                  << "Split boundary less or equals FromBound of partition: '" << Hex(splitBoundary)
@@ -992,6 +1039,12 @@ public:
                 size_t activePartitionCount = CountTopicActivePartitions(topic);
                 auto requestedMinPartitionCount = alter.GetPQTabletConfig().GetPartitionStrategy().GetMinPartitionCount();
                 if (requestedMinPartitionCount > activePartitionCount) {
+                    if (!topic->KeySchema.empty()) {
+                        errStr = "Increasing the minimum partition count is not supported for topics with a key schema";
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                        return result;
+                    }
+
                     // select exisisting active partitions for split
                     auto numPartitionsToSplit = requestedMinPartitionCount - activePartitionCount;
                     struct TPartitionsComparer {

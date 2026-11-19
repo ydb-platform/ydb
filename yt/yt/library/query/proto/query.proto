@@ -1,0 +1,373 @@
+package NYT.NQueryClient.NProto;
+
+import "yt_proto/yt/core/misc/proto/guid.proto";
+import "yt_proto/yt/client/misc/proto/workload.proto";
+import "yt_proto/yt/client/table_chunk_format/proto/chunk_meta.proto";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TColumnDescriptor
+{
+    required string name = 1;
+    required uint32 index = 2;
+}
+
+message TExpression
+{
+    required int32 kind = 1;
+    optional uint32 type = 2;
+    optional NTableClient.NProto.TLogicalType logical_type = 5;
+
+    // required int32 location_begin = 3; (deprecated)
+    // required int32 location_end = 4; (deprecated)
+
+    extensions 100 to max;
+}
+
+message TLiteralExpression
+{
+    extend TExpression
+    {
+        optional TLiteralExpression literal_expression = 103;
+    }
+
+    optional int64 int64_value = 1;
+    optional uint64 uint64_value = 2;
+    optional double double_value = 3;
+    optional bytes string_value = 4;
+    optional bool boolean_value = 5;
+    optional bytes any_value = 6;
+}
+
+message TReferenceExpression
+{
+    extend TExpression
+    {
+        optional TReferenceExpression reference_expression = 104;
+    }
+    required string column_name = 1;
+}
+
+message TFunctionExpression
+{
+    extend TExpression
+    {
+        optional TFunctionExpression function_expression = 105;
+    }
+    required string function_name = 1;
+    repeated TExpression arguments = 2;
+
+}
+
+message TUnaryOpExpression
+{
+    extend TExpression
+    {
+        optional TUnaryOpExpression unary_op_expression = 106;
+    }
+    required int32 opcode = 1; // EUnaryOp
+    required TExpression operand = 2;
+}
+
+message TBinaryOpExpression
+{
+    extend TExpression
+    {
+        optional TBinaryOpExpression binary_op_expression = 107;
+    }
+    required int32 opcode = 1; // EBinaryOp
+    required TExpression lhs = 2;
+    required TExpression rhs = 3;
+}
+
+message TInExpression
+{
+    extend TExpression
+    {
+        optional TInExpression in_expression = 108;
+    }
+    repeated TExpression arguments = 1;
+    required bytes values = 2;
+}
+
+message TTransformExpression
+{
+    extend TExpression
+    {
+        optional TTransformExpression transform_expression = 109;
+    }
+    repeated TExpression arguments = 1;
+    required bytes values = 2;
+    optional TExpression default_expression = 3;
+}
+
+message TBetweenExpression
+{
+    extend TExpression
+    {
+        optional TBetweenExpression between_expression = 110;
+    }
+    repeated TExpression arguments = 1;
+    required bytes ranges = 2;
+}
+
+message TCaseExpression
+{
+    extend TExpression
+    {
+        optional TCaseExpression case_expression = 111;
+    }
+
+    optional TExpression optional_operand = 1;
+    repeated TWhenThenExpression when_then_expressions = 2;
+    optional TExpression default_expression = 3;
+}
+
+message TLikeExpression
+{
+    extend TExpression
+    {
+        optional TLikeExpression like_expression = 112;
+    }
+
+    required TExpression text = 1;
+    required int32 opcode = 2; // EStringMatchOp
+    required TExpression pattern = 3;
+    optional TExpression escape_character = 4;
+}
+
+message TCompositeMemberAccessor
+{
+    extend TExpression
+    {
+        optional TCompositeMemberAccessor composite_member_accessor_expression = 113;
+    }
+
+    required TExpression composite = 1;
+    required TCompositeMemberAccessorPath nested_struct_or_tuple_item_accessor = 2;
+    optional TExpression dict_or_list_item_accessor = 3;
+}
+
+message TSubqueryExpression
+{
+    extend TExpression
+    {
+        optional TSubqueryExpression subquery_expression = 114;
+    }
+
+    repeated TNamedItem from_expressions = 1;
+
+    optional TExpression where_clause = 2;
+    optional TGroupClause group_clause = 3;
+    optional TProjectClause project_clause = 6;
+
+    repeated TJoinClause join_clauses = 7;
+    optional TOrderClause order_clause = 8;
+    optional int64 offset = 10;
+    optional int64 limit = 9;
+}
+
+message TNamedItem
+{
+    required TExpression expression = 1;
+    required string name = 2;
+}
+
+message TAggregateItem
+{
+    required TExpression expression = 1;
+    required string name = 2;
+    required string aggregate_function_name = 3;
+    optional uint32 state_type = 4;
+    optional uint32 result_type = 5;
+    // COMPAT(sabdenovch): Legacy clients may omit this field.
+    repeated TExpression arguments = 6;
+
+    optional NTableClient.NProto.TLogicalType state_logical_type = 7;
+    optional NTableClient.NProto.TLogicalType result_logical_type = 8;
+}
+
+message TSelfEquation
+{
+    required TExpression expression = 1;
+    reserved 2; // deprecated
+}
+
+message TJoinClause
+{
+    repeated TExpression foreign_equations = 1;
+    repeated TSelfEquation self_equations = 2;
+    required bool can_use_source_ranges = 3;
+
+    required NYT.NTableClient.NProto.TTableSchemaExt original_schema = 5;
+    repeated TColumnDescriptor schema_mapping = 6;
+    repeated string self_joined_columns = 7;
+    repeated string foreign_joined_columns = 8;
+
+    required NYT.NProto.TGuid foreign_object_id = 9;
+    // COMPAT(babenko): legacy clients may omit this field.
+    optional NYT.NProto.TGuid foreign_cell_id = 15;
+
+    optional int32 prefetched_first_block = 19;
+    optional int32 prefetched_last_block = 20;
+
+    required bool is_left = 10;
+
+    optional uint64 common_key_prefix = 11 [default = 0];
+
+    optional TExpression predicate = 12;
+    optional uint64 foreign_key_prefix = 13 [default = 0];
+    optional uint64 common_key_prefix_new = 14 [default = 0];
+
+    repeated TExpression array_expressions = 16;
+
+    optional TGroupClause group_clause = 17;
+
+    optional bool require_sync_replica = 18 [default = true];
+}
+
+message THierarchicalJoinClause
+{
+    required NYT.NTableClient.NProto.TTableSchemaExt foreign_table_original_schema = 1;
+    repeated TColumnDescriptor foreign_table_schema_mapping = 2;
+
+    repeated TExpression foreign_equations = 3;
+    repeated TSelfEquation self_equations = 4;
+
+    required NYT.NProto.TGuid foreign_object_id = 5;
+    optional NYT.NProto.TGuid foreign_cell_id = 6;
+
+    required bool is_left = 7;
+
+    optional TExpression self_side_join_keys = 8;
+    optional TExpression joining_subquery = 9;
+    required string result_column_name = 10;
+    repeated string foreign_joined_columns = 11;
+}
+
+message TGroupClause
+{
+    repeated TNamedItem group_items = 1;
+    repeated TAggregateItem aggregate_items = 2;
+    required uint32 totals_mode = 6;
+    optional uint32 common_prefix_with_primary_key = 7 [default = 0];
+}
+
+message TOrderItem
+{
+    required TExpression expression = 1;
+    required bool descending = 2;
+}
+
+message TOrderClause
+{
+    repeated TOrderItem order_items = 1;
+}
+
+message TProjectClause
+{
+    repeated TNamedItem projections = 1;
+}
+
+message TWhenThenExpression
+{
+    required TExpression condition = 1;
+    required TExpression result = 2;
+}
+
+message TCompositeMemberAccessorPath
+{
+    repeated int32 nested_types = 1; // ELogicalMetatype
+    repeated string named_struct_members = 2;
+    repeated int32 positional_struct_members = 3;
+    repeated int32 tuple_item_indices = 4;
+}
+
+message TQuery
+{
+    required NYT.NProto.TGuid id = 1;
+    required int64 input_row_limit = 2;
+    required int64 output_row_limit = 3;
+
+    optional int64 offset = 16 [default = 0];
+    optional int64 limit = 4;
+
+    required NYT.NTableClient.NProto.TTableSchemaExt original_schema = 5;
+    repeated TColumnDescriptor schema_mapping = 6;
+
+    repeated TJoinClause join_clauses = 7;
+    repeated THierarchicalJoinClause hierarchical_joins_in_where_clause = 19;
+    repeated THierarchicalJoinClause hierarchical_joins_before_group_by = 17;
+    repeated THierarchicalJoinClause hierarchical_joins_after_group_by = 18;
+    optional TExpression where_clause = 8;
+    optional TGroupClause group_clause = 9;
+    optional TExpression having_clause = 12;
+    optional TOrderClause order_clause = 11;
+    optional TProjectClause project_clause = 10;
+
+    optional bool use_disjoint_group_by = 13 [default = false];
+    optional bool infer_ranges = 14 [default = true];
+    required bool is_final = 15;
+
+    // EScanOrder; COMPAT(sabdenovch): absent means that scan order is derived from other clauses.
+    optional uint32 scan_order = 20;
+}
+
+message TQueryOptions
+{
+    required uint64 timestamp = 1;
+    optional uint64 retention_timestamp = 14 [default = 0];
+    required bool verbose_logging = 2;
+    required int64 max_subqueries = 3;
+    required bool enable_code_cache = 4;
+    optional NYT.NProto.TWorkloadDescriptor workload_descriptor = 5;
+    reserved 6; // deprecated
+    optional bool allow_full_scan = 7 [default = true];
+    optional NYT.NProto.TGuid read_session_id = 8;
+    optional uint64 deadline = 9;
+    optional uint64 memory_limit_per_node = 10;
+    optional string execution_pool = 11;
+    optional bool suppress_access_tracking = 12;
+    optional uint64 range_expansion_limit = 13;
+    optional bool new_range_inference = 15;
+    optional bool use_canonical_null_relations = 16;
+    optional bool merge_versioned_rows = 17 [default = true];
+    optional int32 execution_backend = 18; // EExecutionBackend
+    optional bool use_lookup_cache = 19;
+    optional int64 min_row_count_per_subquery = 20;
+    optional bool allow_unordered_group_by_with_limit = 21; // COMPAT(sabdenovch)
+    optional bool adaptive_ordered_schemaful_reader = 22; // COMPAT(dtorilov)
+    optional int64 rowset_processing_batch_size = 23;
+    optional int64 write_rowset_size = 24;
+    optional int64 max_join_batch_size = 25;
+    optional bool use_order_by_in_join_subqueries = 26; // COMPAT(sabdenovch)
+    optional int32 statistics_aggregation = 27; // EStatisticsAggregation
+    optional int32 read_from = 28; // NHydra::EPeerKind
+    optional int32 optimization_level = 29; // EOptimizationLevel
+    optional int64 join_cache_size = 30;
+    optional bool enable_parallelize_unordered_group_by = 31;
+    optional bool allow_udf_object_code_cache = 32;
+    optional int32 max_jit_stack_frame_size = 33;
+}
+
+message TFeatureFlags
+{
+    optional bool with_totals_finalizes_aggregated_on_coordinator = 1;
+    optional bool group_by_with_limit_is_unordered = 2;
+}
+
+message TDataSource
+{
+    required NYT.NProto.TGuid object_id = 1;
+    // COMPAT(babenko): legacy clients may omit this field.
+    optional NYT.NProto.TGuid cell_id = 7;
+
+    required uint64 mount_revision = 2;
+    required bytes ranges = 3;
+    reserved 4; // deprecated
+
+    optional bytes keys = 5;
+    reserved 6; // deprecated
+}
+
+////////////////////////////////////////////////////////////////////////////////

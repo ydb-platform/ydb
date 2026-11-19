@@ -1,4 +1,5 @@
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/ymq/actor/action.h>
@@ -8,6 +9,8 @@
 #include <ydb/core/ymq/base/action.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/algorithm.h>
 
 namespace NKikimr::NSQS {
 namespace {
@@ -114,6 +117,7 @@ TVector<TRequestCase> MakeRequestsWithLegacySourceAddress(const TString& sourceA
 class TSourceAddressProbeRuntime {
 public:
     TSourceAddressProbeRuntime() {
+        Runtime_.AuditLogBackends = Tests::CreateTestAuditLogBackends(AuditLines_);
         Runtime_.Initialize(NKikimr::TAppPrepare().Unwrap());
         Runtime_.SetLogPriority(NKikimrServices::SQS, NLog::PRI_TRACE);
         Runtime_.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
@@ -132,7 +136,7 @@ public:
         RequestId_ = request.GetRequestId();
         GotAuthorizeTicket_ = false;
 
-        Runtime_.Register(new TSourceAddressProbeActor(request, expectedSourceAddress));
+        ActionActor_ = Runtime_.Register(new TSourceAddressProbeActor(request, expectedSourceAddress));
 
         NActors::TDispatchOptions options;
         options.CustomFinalCondition = [this] {
@@ -142,6 +146,18 @@ public:
 
         UNIT_ASSERT_C(GotAuthorizeTicket_, "TEvAuthorizeTicket was not sent for " << request.GetRequestId());
         return PeerName_;
+    }
+
+    std::string RejectAndGetAuditLine(const NKikimrClient::TSqsRequest& request, const TString& expectedSourceAddress) {
+        Run(request, expectedSourceAddress);
+        Runtime_.GetAppData().EnforceUserTokenCheckRequirement = true;
+        Runtime_.Send(new IEventHandle(ActionActor_, EdgeActor_, new TEvTicketParser::TEvAuthorizeTicketResult(
+            Ticket, TEvTicketParser::TError{.Message = "Invalid token", .Retryable = false})));
+
+        Runtime_.WaitFor("YMQ audit record", [&] {
+            return AnyOf(AuditLines_, [](const auto& line) { return line.find("component=ymq") != std::string::npos; });
+        }, TDuration::Seconds(10));
+        return Tests::FindAuditLine(AuditLines_, "component=ymq");
     }
 
 private:
@@ -176,8 +192,10 @@ private:
     }
 
 private:
+    std::vector<std::string> AuditLines_;
     NActors::TTestBasicRuntime Runtime_;
     TActorId EdgeActor_;
+    TActorId ActionActor_;
     TString PeerName_;
     TString RequestId_;
     bool GotAuthorizeTicket_ = false;
@@ -186,6 +204,43 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(SourceAddress) {
+    Y_UNIT_TEST(AuthSourceAddressIsWrittenToAuditLog) {
+        for (const TString sourceAddress : {"192.0.2.1", "2001:db8::1"}) {
+            NKikimrClient::TSqsRequest request;
+            request.SetRequestId("audit-source-address");
+            auto& actionRequest = *request.MutableCreateQueue();
+            FillCommonAuth(actionRequest, sourceAddress);
+            actionRequest.SetSourceAddress("192.0.2.2");
+
+            TSourceAddressProbeRuntime probe;
+            const auto line = probe.RejectAndGetAuditLine(request, sourceAddress);
+            UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "remote_address=" << sourceAddress);
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        }
+    }
+
+    Y_UNIT_TEST(LegacySourceAddressIsWrittenToAuditLog) {
+        NKikimrClient::TSqsRequest request;
+        request.SetRequestId("audit-legacy-source-address");
+        auto& actionRequest = *request.MutableCreateQueue();
+        FillCommonAuthWithoutSourceAddress(actionRequest);
+        actionRequest.SetSourceAddress("192.0.2.3");
+
+        TSourceAddressProbeRuntime probe;
+        const auto line = probe.RejectAndGetAuditLine(request, "192.0.2.3");
+        UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=192.0.2.3");
+    }
+
+    Y_UNIT_TEST(MissingSourceAddressIsWrittenAsNoneToAuditLog) {
+        NKikimrClient::TSqsRequest request;
+        request.SetRequestId("audit-missing-source-address");
+        FillCommonAuthWithoutSourceAddress(*request.MutableCreateQueue());
+
+        TSourceAddressProbeRuntime probe;
+        const auto line = probe.RejectAndGetAuditLine(request, {});
+        UNIT_ASSERT_STRING_CONTAINS(line, "remote_address={none}");
+    }
+
     Y_UNIT_TEST(AuthSourceAddressIsSentAsTicketParserPeerNameForEveryRequest) {
         const TString sourceAddress = "192.168.0.101";
 

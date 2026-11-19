@@ -1250,6 +1250,12 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
         {"bytesToRead", bytesToRead},
         {"pieceSizeLimit", pieceSizeLimit});
 
+    if (read->RawSectors || read->ChunkEncrypted) {
+        const ui64 footerTotalSize = sectorsToRead * sizeof(TDataSectorFooter);
+        *Mon.BandwidthPChunkReadPayload += bytesToRead - footerTotalSize;
+        *Mon.BandwidthPChunkReadSectorFooter += footerTotalSize;
+    }
+
     if (read->RawSectors) {
         // Whole sectors straight into the result buffer, unchecked; a piece at a time, as encrypted chunks are read,
         // so that a long read does not hold the device for the other owners.
@@ -1313,10 +1319,6 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
     if (isTheLastPart) {
         Y_VERIFY_S(read->RemainingSize == 0, PCtx->PDiskLogPrefix << read->RemainingSize << " " <<  payloadBytesToRead << " " <<  sectorsToRead);
     }
-
-    ui64 footerTotalSize = sectorsToRead * sizeof(TDataSectorFooter);
-    *Mon.BandwidthPChunkReadPayload += bytesToRead - footerTotalSize;
-    *Mon.BandwidthPChunkReadSectorFooter += footerTotalSize;
 
     ui64 readOffset = Format.Offset(read->ChunkIdx, read->FirstSector, currentSectorOffset);
     // TODO: Get this from the drive

@@ -2,6 +2,8 @@
 
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 
+#include <util/system/unaligned_mem.h>
+
 namespace NKikimr::NPDisk {
 
 TFormatContext::TFormatContext(const TDiskFormat& format, bool encryptData)
@@ -101,8 +103,12 @@ bool TFormatContext::TOpener::Open(ui8 *dst, ui8 *sector, ui32 sectorIdx, ui32 f
     TPDiskStreamCypher& cypher = footer.IsEncrypted() ? EncryptedCypher : PlainCypher;
     cypher.StartMessage(footer.Nonce);
     cypher.InplaceEncrypt(sector, Ctx->SectorPayloadSize + CanarySize);
-    if (CanarySize && memcmp(sector + Ctx->SectorPayloadSize, &Canary, CanarySize) != 0) {
-        return false;
+    if (CanarySize) {
+        const ui64 readCanary = ReadUnaligned<ui64>(sector + Ctx->SectorPayloadSize);
+        if (readCanary != Canary) {
+            Y_FAIL_S("Failed log canary at chunkIdx# " << ChunkIdx << " sectorIdx# " << sectorIdx
+                << " sectorOffset# " << sectorOffset << " read canary# " << readCanary << " expected canary# " << Canary);
+        }
     }
     memcpy(dst, sector + from, size);
     return true;

@@ -66,7 +66,7 @@ public:
 
         // Checks the nonce, the hash and the canary of `sector` and writes `size` payload bytes starting
         // at payload offset `from` to `dst`. Decrypts in place, so `sector` is clobbered. Returns false
-        // for a sector that does not check out; `dst` is then left untouched.
+        // on a nonce or hash mismatch, leaving `dst` untouched. A bad canary after verification is fatal.
         bool Open(ui8 *dst, ui8 *sector, ui32 sectorIdx, ui32 from, ui32 size);
 
     private:

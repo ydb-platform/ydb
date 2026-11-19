@@ -1577,14 +1577,23 @@ public:
                 TStringBuilder() << "Can't lock " << msg->Count << " chunks: " << error));
             return;
         }
-        TVector<TChunkIdx> locked;
-        if (msg->Count) {
-            while (locked.size() < msg->Count && Impl.GetNumFreeChunks()) {
-                locked.push_back(Impl.LockFreeChunk(*lockOwner));
+        const ui32 free = Impl.GetNumFreeChunks();
+        ui32 count = msg->Count;
+        if (!count && Impl.ChunkSharedQuota) {
+            Impl.UpdateStatusFlags();
+            const ui32 limit = Impl.ChunkSharedQuota->ColorFlagLimit(msg->Color);
+            const i64 used = Impl.ChunkSharedQuota->GetUsed();
+            if (limit > used) {
+                count = limit - used;
             }
-        } else if (Impl.SpaceColorPolicy == TPDiskMockState::ESpaceColorPolicy::SharedQuota) {
-            // until the disk is of the given colour; without a quota model there are no colours to reach
-            while (Impl.GetNumFreeChunks() && EstimateAllocationColor(0) < msg->Color) {
+        }
+
+        // ChunkLock replies OK with an empty list when LockChunksForOwner refuses the whole request.
+        TVector<TChunkIdx> locked;
+        if (count && free > 1 && count < free - 1
+                && EstimateAllocationColor(count) != NKikimrBlobStorage::TPDiskSpaceColor::BLACK) {
+            locked.reserve(count);
+            for (ui32 i = 0; i < count; ++i) {
                 locked.push_back(Impl.LockFreeChunk(*lockOwner));
             }
         }

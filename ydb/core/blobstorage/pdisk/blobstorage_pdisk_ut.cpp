@@ -860,7 +860,21 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         const TString sealedBytes(sealed.data(), sealed.size());
         testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
             preformattedWrite(sealedChunk, offset, sealedNonce + firstSector, sealed), NKikimrProto::OK);
+        auto readTraffic = [&] {
+            return testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* p) {
+                return std::pair{p->Mon.BandwidthPChunkReadPayload->Val(), p->Mon.BandwidthPChunkReadSectorFooter->Val()};
+            });
+        };
+        auto checkReadTraffic = [&](auto before) {
+            const auto after = readTraffic();
+            const ui64 footerBytes = sectors * sizeof(NPDisk::TDataSectorFooter);
+            UNIT_ASSERT_VALUES_EQUAL(after.first - before.first, sectors * sectorSize - footerBytes);
+            UNIT_ASSERT_VALUES_EQUAL(after.second - before.second, footerBytes);
+        };
+        const auto beforeRaw = readTraffic();
         UNIT_ASSERT(rawRead(sealedChunk, sealedNonce) == sealedBytes);
+        checkReadTraffic(beforeRaw);
+        const auto beforeOrdinary = readTraffic();
         {
             const THolder<NPDisk::TEvChunkReadResult> res = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
                 new NPDisk::TEvChunkRead(owner, ownerRound, sealedChunk, offset + 123, payload.size() - 173, 0,
@@ -870,6 +884,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             const TRcBuf data = res->Data.ToString();
             UNIT_ASSERT(TString(data.data(), data.size()) == payload.substr(123, payload.size() - 173));
         }
+
+        checkReadTraffic(beforeOrdinary);
 
         // written by PDisk: byte for byte what the owner would have sealed, and it opens to the payload
         testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
@@ -1025,22 +1041,112 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         w6.Pieces[0]->Abort(actorSystem);
         w6.Pieces[1]->Abort(actorSystem);
 
-        // All writes succeed, but an earlier device operation fails at the fence.
-        TWrite w7 = makeWrite(7, true, 2);
-        w7.Write->PreformattedPiecesInFlight.fetch_add(1);
-        pieceSent(w7)->Exec(actorSystem);
-        pieceSent(w7)->Exec(actorSystem);
-        UNIT_ASSERT(w7.Write->Completion);
-        pieceSent(w7)->Release(actorSystem);
-
         const std::pair<ui64, NKikimrProto::EReplyStatus> expected[] = {
             {1, NKikimrProto::CORRUPTED}, {3, NKikimrProto::CORRUPTED}, {4, NKikimrProto::CORRUPTED},
-            {5, NKikimrProto::OK}, {6, NKikimrProto::CORRUPTED}, {7, NKikimrProto::CORRUPTED}};
+            {5, NKikimrProto::OK}, {6, NKikimrProto::CORRUPTED}};
         for (const auto& [cookie, status] : expected) {
             const THolder<NPDisk::TEvChunkWriteResult> res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
             UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<ui64>(res->Cookie), cookie);
             UNIT_ASSERT_VALUES_EQUAL_C(res->Status, status, cookie);
         }
+        UNIT_ASSERT_C(NoMoreWriteAnswers(testCtx), "an extra write answer");
+    }
+
+    Y_UNIT_TEST(ChunkLockIsAllOrNothing) {
+        for (bool useMock : {false, true}) {
+            TActorTestContext testCtx({.UsePDiskMock = useMock});
+            TVDiskMock vdisk(&testCtx);
+            vdisk.InitFull();
+            const auto owner = vdisk.PDiskParams->Owner;
+            auto lock = [&](ui32 count) {
+                return testCtx.TestResponse<NPDisk::TEvChunkLockResult>(
+                    new NPDisk::TEvChunkLock(NPDisk::TEvChunkLock::PERSONAL_QUOTA, owner, count,
+                        NKikimrBlobStorage::TPDiskSpaceColor::GREEN), NKikimrProto::OK);
+            };
+            const auto first = lock(1);
+            UNIT_ASSERT_VALUES_EQUAL(first->LockedChunks.size(), 1);
+            const ui32 free = first->AvailableChunksCount;
+            UNIT_ASSERT_GT(free, 2);
+            for (ui32 count : {free - 1, free, free + 1}) {
+                const auto res = lock(count);
+                UNIT_ASSERT(res->LockedChunks.empty());
+                UNIT_ASSERT_VALUES_EQUAL(res->AvailableChunksCount, free);
+            }
+            const auto unlocked = testCtx.TestResponse<NPDisk::TEvChunkUnlockResult>(
+                new NPDisk::TEvChunkUnlock(NPDisk::TEvChunkLock::PERSONAL_QUOTA, owner), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(unlocked->UnlockedChunks, 1);
+        }
+    }
+
+    Y_UNIT_TEST(PreformattedWriteReportsEarlierDeviceError) {
+        using namespace NPDisk;
+        TManualEvent readFailed;
+        TManualEvent resume;
+        TRcBuf readBuffer;
+        TActorTestContext testCtx({});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        const auto format = vdisk.FormatContext;
+        const auto chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
+        const ui64 nonce = vdisk.ChunkNonces.at(chunk);
+        const ui32 sectorSize = format->GetSectorSize();
+        readBuffer = TRcBuf::UninitializedPageAligned(sectorSize);
+        const TString payload = PrepareData(format->GetSectorPayloadSize());
+        TRcBuf sealed = TRcBuf::UninitializedPageAligned(sectorSize);
+        TFormatContext::TSealer(format, chunk, nonce, {}).Seal(
+            reinterpret_cast<ui8*>(sealed.GetDataMut()), payload.data(), payload.size(), 0);
+
+        // A failed read on the completion thread would normally stop the device immediately.
+        // Hold that thread so the write can succeed and only the ordered completion sees the earlier error.
+        struct TFailedRead : TCompletionAction {
+            TManualEvent& Failed;
+            TManualEvent& Resume;
+
+            TFailedRead(TManualEvent& failed, TManualEvent& resume)
+                : Failed(failed)
+                , Resume(resume)
+            {}
+
+            void Exec(TActorSystem*) override {
+                delete this;
+            }
+
+            void Release(TActorSystem*) override {
+                Failed.Signal();
+                Resume.WaitI();
+                delete this;
+            }
+        };
+
+        const auto map = testCtx.TestCtx.SectorMap;
+        Y_SCOPE_EXIT(&) {
+            map->ReadIoErrorEveryNthRequests = 0;
+            resume.Signal();
+        };
+        const ui64 offset = testCtx.SafeRunOnPDisk([&](TPDisk* p) {
+            const ui64 offset = p->Format.Offset(chunk, 0);
+            map->ReadIoErrorEveryNthRequests = 1;
+            p->BlockDevice->PreadAsync(readBuffer.GetDataMut(), readBuffer.size(), offset + sectorSize,
+                new TFailedRead(readFailed, resume), TReqId(TReqId::Test0, 1), nullptr);
+            return offset;
+        });
+        UNIT_ASSERT_C(readFailed.WaitT(TDuration::Seconds(10)), "the earlier read did not fail");
+        map->ReadIoErrorEveryNthRequests = 0;
+
+        auto* ev = new TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, chunk, 0,
+            new TEvChunkWrite::TRopeAlignedParts(TRope(sealed), sectorSize), nullptr, false, 0);
+        ev->PreformattedSectors = true;
+        ev->FirstSectorNonce = nonce;
+        testCtx.Send(ev);
+        auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<TEvChunkWriteResult>(testCtx.Sender, TDuration::Seconds(10));
+        UNIT_ASSERT_C(reply, "the write did not answer");
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::CORRUPTED);
+        UNIT_ASSERT_STRING_CONTAINS(reply->Get()->ErrorReason, "an earlier device operation failed");
+        UNIT_ASSERT_STRING_CONTAINS(reply->Get()->ErrorReason, TStringBuilder() << "offset# " << offset + sectorSize);
+        UNIT_ASSERT(map->Read(reinterpret_cast<ui8*>(readBuffer.GetDataMut()), sectorSize, offset));
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(readBuffer.data(), sectorSize), TStringBuf(sealed.data(), sectorSize));
+        resume.Signal();
         UNIT_ASSERT_C(NoMoreWriteAnswers(testCtx), "an extra write answer");
     }
 

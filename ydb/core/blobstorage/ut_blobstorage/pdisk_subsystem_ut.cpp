@@ -996,6 +996,26 @@ Y_UNIT_TEST_SUITE(PDiskMockInterfaces) {
         UNIT_ASSERT_VALUES_EQUAL(mock.GetFreeChunks(), freeChunks);
     }
 
+    Y_UNIT_TEST(ChunkLockByColor) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        TMockOwner mock(false, TPDiskMockState::ESpaceColorPolicy::SharedQuota);
+        auto lock = [&](TColor::E color) {
+            mock.Send(new NPDisk::TEvChunkLock(NPDisk::TEvChunkLock::LOG, 0, color));
+            auto res = mock.Wait<NPDisk::TEvChunkLockResult>();
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->AvailableChunksCount, mock.GetFreeChunks());
+            return res->Get()->LockedChunks.size();
+        };
+        const ui32 free = mock.GetFreeChunks();
+        UNIT_ASSERT_VALUES_EQUAL(lock(TColor::BLACK), 0);
+        UNIT_ASSERT_VALUES_EQUAL(mock.GetFreeChunks(), free);
+        const auto count = lock(TColor::CYAN);
+        UNIT_ASSERT_GT(count, 0);
+        UNIT_ASSERT_VALUES_EQUAL(mock.GetFreeChunks(), free - count);
+        UNIT_ASSERT_VALUES_EQUAL(lock(TColor::CYAN), 0);
+        UNIT_ASSERT_VALUES_EQUAL(mock.GetFreeChunks(), free - count);
+    }
+
     Y_UNIT_TEST(AskForCutLog) {
         TMockOwner mock(false);
         mock.Send(new NPDisk::TEvLog(mock.Owner, mock.OwnerRound, 0, TRcBuf(TString("x")), TLsnSeg(5, 5), nullptr));

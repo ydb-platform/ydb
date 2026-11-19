@@ -24,6 +24,12 @@
 #include <util/system/tempfile.h>
 #include <cstring>
 
+#ifdef _unix_
+#include <csignal>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
 namespace NKikimr { namespace NPDisk {
 
 class TDriveEstimatorTestPeer {
@@ -588,6 +594,41 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
             UNIT_ASSERT(memcmp(out.data(), payload.data() + 10, 90) == 0);
         }
     }
+
+#ifdef _unix_
+    Y_UNIT_TEST(FormatContextVerifiedBadCanaryIsFatal) {
+        for (bool encrypt : {false, true}) {
+            TDiskFormat format = {};
+            format.Clear(encrypt);
+            const auto ctx = std::make_shared<const TFormatContext>(format, encrypt);
+            const TChunkIdx chunk = 5;
+            const ui32 sectorIdx = 3;
+            const ui64 nonce = 1000;
+            TSectorsWithData sectors(format.SectorSize, 1);
+            ui8* sector = sectors[0].Begin();
+            TFormatContext::TSealer(ctx, chunk, nonce, {}).Seal(sector, "x", 1, sectorIdx);
+            sector[ctx->GetSectorPayloadSize()] ^= 1;
+            ui8 out = 0;
+            TFormatContext::TOpener opener(ctx, chunk, nonce, {});
+            UNIT_ASSERT(!opener.Open(&out, sector, sectorIdx, 0, 1)); // stale hash is a recoverable read error
+            UNIT_ASSERT_VALUES_EQUAL(out, 0);
+            sectors[0].GetDataFooter()->Hash = TPDiskHashCalculator().HashSector(
+                format.Offset(chunk, sectorIdx), format.MagicDataChunk, sector, format.SectorSize, {});
+
+            const pid_t pid = fork();
+            UNIT_ASSERT_C(pid >= 0, "fork failed");
+            if (!pid) {
+                signal(SIGABRT, SIG_DFL);
+                opener.Open(&out, sector, sectorIdx, 0, 1);
+                _exit(0);
+            }
+            int status = 0;
+            UNIT_ASSERT_VALUES_EQUAL(waitpid(pid, &status, 0), pid);
+            UNIT_ASSERT_C(WIFSIGNALED(status), status);
+            UNIT_ASSERT_VALUES_EQUAL(WTERMSIG(status), SIGABRT);
+        }
+    }
+#endif
 
     Y_UNIT_TEST(SectorPrint) {
         TSectorsWithData sectors(97, 1);

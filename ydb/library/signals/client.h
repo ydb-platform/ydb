@@ -14,10 +14,15 @@ class TValueAggregationAgent;
 class TValueAggregationClient: TNonCopyable {
 private:
     std::atomic<i64> Value;
+    std::atomic<bool> Written = false;
     std::optional<TInstant> DeadlineActuality;
 public:
     TValueAggregationClient() {
         Value = 0;
+    }
+
+    bool IsWritten() const {
+        return Written.load(std::memory_order_relaxed);
     }
 
     std::optional<i64> GetValue(const TInstant reqInstant) const {
@@ -34,6 +39,7 @@ public:
 
     void SetValue(const i64 value, const std::optional<TInstant> d = {}) {
         Value = value;
+        Written.store(true, std::memory_order_relaxed);
         if (d) {
             DeadlineActuality = d;
         }
@@ -41,9 +47,11 @@ public:
 
     void Add(const i64 v) {
         Value += v;
+        Written.store(true, std::memory_order_relaxed);
     }
     void Remove(const i64 v) {
         Value -= v;
+        Written.store(true, std::memory_order_relaxed);
     }
 };
 

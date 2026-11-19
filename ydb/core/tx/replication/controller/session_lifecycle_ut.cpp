@@ -877,21 +877,17 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         // given
         TSetup s(1);
         const auto child = EndWorkerWithChild(s);
-        ui32 parentStops = 0;
-        auto observer = s.Env.GetRuntime().AddObserver<TEvService::TEvStopWorker>([&](TEvService::TEvStopWorker::TPtr& ev) {
-            if (TWorkerId::Parse(ev->Get()->Record.GetWorker()) == s.Worker) {
-                ++parentStops;
-            }
-        });
 
         // when
         SendHeartbeat(s, child, TRowVersion(10, 1));
 
         // then
-        for (ui32 attempt = 0; attempt < 10 && !parentStops; ++attempt) {
-            s.ProcessQueues();
-        }
-        UNIT_ASSERT_VALUES_EQUAL(parentStops, 1);
+        s.ProcessQueues();
+        s.ExpectStop(0);
+        s.Env.GetRuntime().Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+        s.Sync();
+        UNIT_ASSERT(!s.HasWorkerRow());
     }
 
     Y_UNIT_TEST(ShouldKeepEndedWorkerWhenChildHasNoHeartbeat) {
@@ -906,10 +902,9 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         EndWorkerWithChild(s);
 
         // then
-        for (ui32 attempt = 0; attempt < 10; ++attempt) {
-            s.ProcessQueues();
-        }
+        s.ProcessQueues(true);
         UNIT_ASSERT_VALUES_EQUAL(stops, 0);
+        UNIT_ASSERT(s.HasWorkerRow());
     }
 
     Y_UNIT_TEST(RecoveredWorkerAuthenticatesAndConsumesAfterDelayedSecret) {

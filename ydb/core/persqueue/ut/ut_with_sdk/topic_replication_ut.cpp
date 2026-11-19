@@ -19,12 +19,22 @@ public:
     NYdb::NTopic::TTopicClient Client;
     std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> Stub;
 
+<<<<<<< HEAD
     explicit TTopicReplicationEnv(const Tests::TServerSettings& settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings())
         : Setup("TopicReplication", settings, false)
+=======
+    explicit TTopicReplicationEnv(
+        bool useTopicApi = false,
+        const Tests::TServerSettings& settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings(),
+        std::shared_ptr<NPQ::TPersQueueMirrorReaderFactory> factory = std::make_shared<NPQ::TPersQueueMirrorReaderFactory>())
+        : Factory(std::move(factory))
+        , Setup("TopicReplication", settings, false)
+>>>>>>> 7b5fba6ece7 (add possibility to create replication consumer by topic api (#60000))
         , Driver(Setup.MakeDriverConfig())
         , Client(Driver)
         , Stub(Ydb::PersQueue::V1::PersQueueService::NewStub(grpc::CreateChannel(
             Setup.GetEndpoint(), grpc::InsecureChannelCredentials())))
+        , UseTopicApi(useTopicApi)
     {
         auto& runtime = Setup.GetRuntime();
         Factory = std::make_shared<NPQ::TPersQueueMirrorReaderFactory>();
@@ -35,6 +45,24 @@ public:
     }
 
     void Create(const TString& path, bool replicationConsumer) {
+        if (UseTopicApi) {
+            NYdb::NTopic::TCreateTopicSettings settings;
+            settings.PartitioningSettings(1, 1)
+                .RetentionPeriod(TDuration::Days(1))
+                .SetSupportedCodecs({NYdb::NTopic::ECodec::RAW});
+            for (const auto* name : {"reader", "replicator"}) {
+                settings.BeginAddConsumer(name)
+                    .SetSupportedCodecs({NYdb::NTopic::ECodec::RAW})
+                    .EndAddConsumer();
+            }
+            if (replicationConsumer) {
+                settings.AddAttribute("_ydb_replication_consumer", "replicator");
+            }
+            const auto result = Client.CreateTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return;
+        }
+
         Ydb::PersQueue::V1::CreateTopicRequest request;
         request.set_path(path);
         auto* settings = request.mutable_settings();
@@ -58,6 +86,24 @@ public:
         AssertSuccess(response.operation());
     }
 
+    void AssertReplicationConsumer(const TString& path) {
+        if (UseTopicApi) {
+            const auto result = Client.DescribeTopic(path).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& attributes = result.GetTopicDescription().GetAttributes();
+            const auto it = attributes.find("_ydb_replication_consumer");
+            UNIT_ASSERT_C(it != attributes.end(), "Missing replication consumer attribute for " << path);
+            UNIT_ASSERT_VALUES_EQUAL(it->second, "replicator");
+        } else {
+            const auto settings = Describe(path);
+            const auto it = settings.attributes().find("_ydb_replication_consumer");
+            UNIT_ASSERT_C(it != settings.attributes().end(), "Missing replication consumer attribute for " << path);
+            UNIT_ASSERT_VALUES_EQUAL(it->second, "replicator");
+        }
+    }
+
+    // Remote mirror rules are configured through PQv1 in both variants: Topic API
+    // does not expose remote_mirror_rule.
     Ydb::PersQueue::V1::TopicSettings Describe(const TString& path) {
         Ydb::PersQueue::V1::DescribeTopicRequest request;
         request.set_path(path);
@@ -209,6 +255,18 @@ public:
     }
 
     void AddMLPConsumer(const TString& path) {
+        if (UseTopicApi) {
+            NYdb::NTopic::TAlterTopicSettings settings;
+            settings.BeginAddSharedConsumer("mlp-consumer")
+                .SetSupportedCodecs({NYdb::NTopic::ECodec::RAW})
+                .KeepMessagesOrder(false)
+                .EndAddConsumer();
+            // Do not resend the attribute: an unrelated alter must retain the type.
+            const auto result = Client.AlterTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return;
+        }
+
         // Use PQv1 so the existing _ydb_replication_consumer attribute is
         // reapplied when rebuilding the consumer list.
         auto settings = Describe(path);
@@ -337,11 +395,86 @@ private:
         UNIT_ASSERT_C(operation.ready(), operation.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), Ydb::StatusIds::SUCCESS, operation.ShortDebugString());
     }
+
+private:
+    const bool UseTopicApi;
 };
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TTopicReplication) {
+<<<<<<< HEAD
+=======
+    Y_UNIT_TEST(WriteAfterDisablingActiveReplicationWithConsumerOffsets) {
+        auto settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
+        settings.FeatureFlags.SetEnableDstTopicReplicationDisabled(false);
+        auto factory = std::make_shared<TObservedMirrorReaderFactory>();
+        TTopicReplicationEnv env(false, settings, factory);
+        const TString source = "/Root/active_replication_source";
+        const TString destination = "/Root/active_replication_destination";
+        env.Create(source, true);
+        env.Create(destination, false);
+        env.EnableMirroring(source, destination);
+
+        env.Write(source, 0, 3);
+        env.Commit(source, 1);
+        env.WaitForOffsets(destination, 1, 3);
+
+        env.Write(source, 3, 2);
+        env.Commit(source, 2);
+        env.WaitForOffsets(destination, 2, 5);
+
+        auto sessionReleased = factory->GetSessionReleasedFuture();
+        UNIT_ASSERT(!sessionReleased.HasValue());
+        auto& runtime = env.Setup.GetRuntime();
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableDstTopicReplicationDisabled(true);
+        }
+
+        env.Write(source, 5, 3, "-source-only");
+        // A disabled destination stops its mirrorer. Wait for the real read
+        // session to be released before checking that no new data was mirrored.
+        UNIT_ASSERT_C(sessionReleased.Wait(TDuration::Seconds(30)), "Mirrorer did not release its read session");
+        env.WaitForOffsets(destination, 2, 5);
+
+        // Keep the mirror rule and continue writing after the replicated data.
+        env.Write(destination, 5, 2);
+        env.Read(destination, 2, 5, 7);
+        env.WaitForOffsets(destination, 7, 7);
+        const auto destinationSettings = env.Describe(destination);
+        UNIT_ASSERT(destinationSettings.has_remote_mirror_rule());
+        UNIT_ASSERT_VALUES_EQUAL(destinationSettings.attributes().at("_ydb_mirror_consumer_offsets"), "true");
+    }
+
+    Y_UNIT_TEST(WriteWithDisabledReplicationAndRetainedMirrorRule) {
+        TTopicReplicationEnv env;
+        auto& runtime = env.Setup.GetRuntime();
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableDstTopicReplicationDisabled(true);
+        }
+
+        const TString source = "/Root/disabled_replication_source";
+        const TString destination = "/Root/disabled_replication_destination";
+        env.Create(source, true);
+        env.Create(destination, false);
+        env.Write(source, 0, 3);
+        env.Commit(source, 2);
+        env.EnableMirroring(source, destination);
+
+        env.Write(destination, 0, 1);
+        env.Read(destination, 0, 1, 1);
+        const auto settings = env.Describe(destination);
+        UNIT_ASSERT(settings.has_remote_mirror_rule());
+        UNIT_ASSERT_VALUES_EQUAL(settings.attributes().at("_ydb_mirror_consumer_offsets"), "true");
+
+        env.Setup.GetServer().KillTopicPqTablets(destination);
+        // Replaying the producer sequence after restart must still be deduplicated.
+        env.Write(destination, 0, 2);
+        env.Read(destination, 1, 1, 2);
+        env.WaitForOffsets(destination, 2, 2);
+    }
+
+>>>>>>> 7b5fba6ece7 (add possibility to create replication consumer by topic api (#60000))
     Y_UNIT_TEST(RejectInvalidReplicationAttributes) {
         TTopicReplicationEnv env;
         const TString path = "/Root/replication_attributes";
@@ -357,15 +490,23 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         }
     }
 
-    Y_UNIT_TEST(ReplicateInitialAndUpdatedConsumerOffsets) {
-        TTopicReplicationEnv env;
+    void TestReplicateInitialAndUpdatedConsumerOffsets(bool useTopicApi, bool assignViaAlter = false) {
+        TTopicReplicationEnv env(useTopicApi);
         const TString source = "/Root/replication_source";
         const TString destination = "/Root/replication_destination";
-        env.Create(source, true);
+        env.Create(source, !assignViaAlter);
         env.Create(destination, false);
-        UNIT_ASSERT_VALUES_EQUAL(env.Describe(source).attributes().at("_ydb_replication_consumer"), "replicator");
+        if (assignViaAlter) {
+            NYdb::NTopic::TAlterTopicSettings settings;
+            settings.BeginAlterAttributes()
+                .Add("_ydb_replication_consumer", "replicator")
+                .EndAlterAttributes();
+            const auto result = env.Client.AlterTopic(source, settings).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
         env.Write(source, 0, 1000);
         env.Read(source, 0, 500, 1000);
+        env.AssertReplicationConsumer(source);
 
         env.EnableMirroring(source, destination);
         UNIT_ASSERT_VALUES_EQUAL(env.Describe(destination).attributes().at("_ydb_mirror_consumer_offsets"), "true");
@@ -384,6 +525,18 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         env.Read(destination, 600, 500, 1100);
     }
 
+    Y_UNIT_TEST(ReplicateInitialAndUpdatedConsumerOffsets) {
+        TestReplicateInitialAndUpdatedConsumerOffsets(false);
+    }
+
+    Y_UNIT_TEST(ReplicateInitialAndUpdatedConsumerOffsetsViaTopicApi) {
+        TestReplicateInitialAndUpdatedConsumerOffsets(true);
+    }
+
+    Y_UNIT_TEST(ReplicateInitialAndUpdatedConsumerOffsetsViaTopicApiAlter) {
+        TestReplicateInitialAndUpdatedConsumerOffsets(true, true);
+    }
+
     Y_UNIT_TEST(ReplicateOffsetsWithoutMessages) {
         constexpr ui64 sourceStartOffset = 300000000000;
         constexpr ui64 sourceEndOffset = sourceStartOffset + 3;
@@ -394,7 +547,7 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         NKikimrConfig::TFeatureFlags flags;
         flags.SetEnableSkipMessagesWithObsoleteTimestamp(true);
         settings.SetFeatureFlags(flags);
-        TTopicReplicationEnv env(settings);
+        TTopicReplicationEnv env(false, settings);
         const TString source = "/Root/old_replication_source";
         const TString destination = "/Root/empty_replication_destination";
         env.Create(source, true);
@@ -427,8 +580,8 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         env.AssertEmpty(destination, sourceEndOffset, sourceEndOffset);
     }
 
-    void TestReplicateInitialAndUpdatedMLPConsumerOffsets(bool largeMessages) {
-        TTopicReplicationEnv env;
+    void TestReplicateInitialAndUpdatedMLPConsumerOffsets(bool largeMessages, bool useTopicApi = false) {
+        TTopicReplicationEnv env(useTopicApi);
         const TString source = "/Root/mlp_replication_source";
         const TString destination = "/Root/mlp_replication_destination";
         const TString payloadSuffix = largeMessages ? TString(600 * 1024, 'x') : TString{};
@@ -436,11 +589,7 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         env.Create(destination, false);
         env.AddMLPConsumer(source);
         env.AddMLPConsumer(destination);
-        const auto sourceSettings = env.Describe(source);
-        const auto replicationConsumer = sourceSettings.attributes().find("_ydb_replication_consumer");
-        UNIT_ASSERT_C(replicationConsumer != sourceSettings.attributes().end(),
-            "Adding an MLP consumer must preserve the replication consumer type");
-        UNIT_ASSERT_VALUES_EQUAL(replicationConsumer->second, "replicator");
+        env.AssertReplicationConsumer(source);
         env.Write(source, 0, 10, payloadSuffix);
 
         // An acknowledgement beyond a gap must not advance the committed prefix.
@@ -477,6 +626,14 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
 
     Y_UNIT_TEST(ReplicateInitialAndUpdatedMLPConsumerOffsetsWithLargeMessages) {
         TestReplicateInitialAndUpdatedMLPConsumerOffsets(true);
+    }
+
+    Y_UNIT_TEST(ReplicateInitialAndUpdatedMLPConsumerOffsetsViaTopicApi) {
+        TestReplicateInitialAndUpdatedMLPConsumerOffsets(false, true);
+    }
+
+    Y_UNIT_TEST(ReplicateInitialAndUpdatedMLPConsumerOffsetsWithLargeMessagesViaTopicApi) {
+        TestReplicateInitialAndUpdatedMLPConsumerOffsets(true, true);
     }
 
     Y_UNIT_TEST(ConsumerOffsetsSurviveSourceTabletRestart) {

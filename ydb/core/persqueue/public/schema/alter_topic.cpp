@@ -232,7 +232,7 @@ TResult ApplyChangesInt(
         if (attributes.size() != 1 || marker == attributes.end() || marker->second.empty()
             || request.add_consumers_size() != 1 || request.add_consumers(0).name() != marker->second)
         {
-            return {Ydb::StatusIds::BAD_REQUEST, "Full alter of cdc stream is forbidden"};
+            CHECK_CDC;
         }
 
         const auto name = NPersQueue::ConvertNewConsumerName(marker->second, pqConfig);

@@ -199,6 +199,10 @@ public:
         return *InsertWriteId;
     }
 
+    bool HasCommitSnapshot() const {
+        return CommitSnapshot.has_value();
+    }
+
     void SetCommitSnapshot(const TSnapshot& snap) {
         YDB_LOG_VERIFY(!!InsertWriteId);
         YDB_LOG_VERIFY(!CommitSnapshot);

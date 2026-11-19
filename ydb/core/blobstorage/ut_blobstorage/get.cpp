@@ -50,6 +50,67 @@ Y_UNIT_TEST_SUITE(Get) {
         UNIT_ASSERT_EQUAL(putResult->Status, status);
     }
 
+    void TestUnrecoverableGet(TBlobStorageGroupType type) {
+        for (bool mustRestoreFirst : {false, true}) {
+            TEnvironmentSetup env({
+                .NodeCount = type.BlobSubgroupSize(),
+                .VDiskReplPausedAtStart = true,
+                .Erasure = type,
+            });
+            const TTestInfo test = InitTest(env);
+            const TString data(4097, 'x');
+            const TLogoBlobID id(1, 1, 1, 0, data.size(), 0);
+            SendPut(test, id, data, NKikimrProto::OK);
+            SendGet(test, id, data, NKikimrProto::OK);
+
+            TBlobStorageGroupInfo::TVDiskIds subgroup;
+            test.Info->PickSubgroup(id.Hash(), &subgroup, nullptr);
+            THashSet<TVDiskID> unavailable;
+            // Leave K-1 readable data parts: the last data part and both parity parts are unavailable.
+            for (ui32 disk = type.DataParts() - 1; disk < type.TotalPartCount(); ++disk) {
+                unavailable.insert(subgroup[disk]);
+            }
+            env.Runtime->FilterFunction = [&, unavailable](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvVGet) {
+                    const TVDiskID disk = VDiskIDFromVDiskID(ev->Get<TEvBlobStorage::TEvVGet>()->Record.GetVDiskID());
+                    if (unavailable.contains(disk)) {
+                        auto result = std::make_unique<TEvBlobStorage::TEvVGetResult>();
+                        result->MakeError(NKikimrProto::ERROR, "part is unavailable",
+                            ev->Get<TEvBlobStorage::TEvVGet>()->Record);
+                        env.Runtime->Send(new IEventHandle(ev->Sender, ev->Recipient, result.release(), 0, ev->Cookie),
+                            ev->Sender.NodeId());
+                        return false;
+                    }
+                }
+                return true;
+            };
+
+            const TInstant deadline = env.Now() + TDuration::Seconds(10);
+            env.Runtime->WrapInActorContext(test.Edge, [&] {
+                SendToBSProxy(test.Edge, test.Info->GroupID, new TEvBlobStorage::TEvGet(
+                    id, 0, 0, deadline, NKikimrBlobStorage::FastRead, mustRestoreFirst));
+            });
+            auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(
+                test.Edge, false, deadline + TDuration::Seconds(10));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->ResponseSz, 1, result->Get()->ToString());
+            const auto& response = result->Get()->Responses[0];
+            UNIT_ASSERT_VALUES_EQUAL(response.Id, id);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.Status, NKikimrProto::ERROR, result->Get()->ToString());
+            UNIT_ASSERT(response.Buffer.empty());
+            UNIT_ASSERT(env.Now() < deadline);
+            env.Runtime->FilterFunction = {};
+        }
+    }
+
+    Y_UNIT_TEST(UnrecoverableGetBlock42) {
+        TestUnrecoverableGet(TBlobStorageGroupType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(UnrecoverableGetBlock82) {
+        TestUnrecoverableGet(TBlobStorageGroupType::Erasure8Plus2Block);
+    }
+
     Y_UNIT_TEST(TestBlockedEvGetRequest) {
         TEnvironmentSetup env(true);
         TTestInfo test = InitTest(env);

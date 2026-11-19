@@ -96,6 +96,7 @@ bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             return true;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
@@ -118,6 +119,7 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
     auto takeKeyColumns = index.KeyColumns.size();
     if (!isSecondaryIndex) { // vector and fulltext indexes have special embedding and text key columns
         Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
@@ -292,6 +294,7 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     } else {
         // Vector and fulltext indexes allow to add all columns both to index & data
         Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
@@ -338,6 +341,7 @@ std::span<const std::string_view> GetImplTables(
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             return GlobalSecondaryImplTables;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
             if (indexKeys.size() == 1) {
                 return GlobalKMeansTreeImplTables;
             } else {

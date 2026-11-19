@@ -257,6 +257,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
     TOperation::TPtr operation = new TOperation(txId);
 
     for (const auto& transaction : record.GetTransaction()) {
+        if (IsDatabaseFreezeBlocking(transaction)) {
+            return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+                NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId), "Database is frozen for schema changes");
+        }
         auto quotaResult = operation->ConsumeQuota(transaction, context);
         if (quotaResult.Status != NKikimrScheme::StatusSuccess) {
             response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(quotaResult.Status, ui64(txId), ui64(selfId)));

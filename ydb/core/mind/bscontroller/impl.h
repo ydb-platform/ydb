@@ -1722,6 +1722,9 @@ private:
     TTabletResponsivenessPinger* ResponsivenessPinger;
     using TDataCenterStates = std::unordered_map<TString, NKikimrBlobStorage::TDataCenterState::EState>;
     TDataCenterStates DataCenterStates;
+    void ReconcileDataCenterStates();
+    void RetryDataCenterStates();
+    bool DataCenterRetryScheduled = false;
     TMap<THostConfigId, THostConfigInfo> HostConfigs;
     TMap<TBoxId, TBoxInfo> Boxes;
     TMap<TBoxStoragePoolId, TStoragePoolInfo> StoragePools;
@@ -1820,6 +1823,7 @@ private:
             EvRetryBridgeGroupModes,
             EvCheckBridgeGroupModes,
             EvRetrySyncers,
+            EvReconcileDataCenterStates,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -2837,6 +2841,7 @@ public:
         LoadedAt = TActivationContext::Monotonic();
         UpdatePileOverrides();
         ApplyStorageConfig();
+        ReconcileDataCenterStates();
 
         // configs handled while loading (the first one at least) didn't make BSC check parts of its groups in unsynced
         // piles: the ones not reset for the current sync of the pile yet are reset now, and if everything is synced

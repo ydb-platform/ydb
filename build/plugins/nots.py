@@ -194,7 +194,7 @@ def _create_pm(unit: ymake.Unit) -> 'PackageManager':
 def _use_hermetic_node_modules(unit: ymake.Unit) -> bool:
     # Only supported TS module and check macros set the capability flag.
     # Deprecated builders keep their legacy node_modules installation flow.
-    local_cli = unit.get("TS_LOCAL_CLI") == "yes"
+    local_cli = unit.get_subst("TS_LOCAL_CLI") == "yes"
     module_supports_hermetic_node_modules = unit.get("_SUPPORTS_HERMETIC_NODE_MODULES") == "yes"
     hermetic_node_modules_enabled = unit.get_subst("TS_HERMETIC_NODE_MODULES") == "yes"
 
@@ -607,7 +607,7 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
     from lib.nots.package_manager.utils import b_rooted, build_ws_config_path, s_rooted
 
     has_deps = pj.has_dependencies()
-    local_cli = unit.get("TS_LOCAL_CLI") == "yes"
+    local_cli = unit.get_subst("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
     effective_config = _configure_pnpm_settings(unit, pm, pj)
     _, _, settings = effective_config
@@ -666,7 +666,7 @@ def _TS_PROTO_AUTO_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
     unit.onpeerdir([deps_path])
 
     pm = _create_pm(unit)
-    local_cli = unit.get("TS_LOCAL_CLI") == "yes"
+    local_cli = unit.get_subst("TS_LOCAL_CLI") == "yes"
     _, outs, resources = pm.calc_prepare_deps_inouts_and_resources(store_path="", has_deps=False, local_cli=local_cli)
     outs = [out for out in outs if os.path.basename(out) not in ("package.json", "pnpm-workspace.yaml")]
     if _use_hermetic_node_modules(unit):
@@ -883,10 +883,8 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
     test_env_value = None
 
     if unit.get("_LD_LIBRARY_PATH_ARGS"):
-        tev_raw = unit.get("TEST_ENV_VALUE")
-        unit.set(["TEST_ENV_VALUE", '"LD_LIBRARY_PATH=$LIBATOMIC_1_2_0_RESOURCE_GLOBAL"'])
-        test_env_value = df.TestEnv.value(unit, [], {})
-        unit.set(["TEST_ENV_VALUE", tev_raw])
+        declared_env = unit.get_subst("TEST_ENV_VALUE")
+        test_env_value = df.prepare_env(f'{declared_env} "LD_LIBRARY_PATH=$LIBATOMIC_1_2_0_RESOURCE_GLOBAL"')
 
     pj_scripts = pm.load_package_json_from_dir(pm.sources_path).data.get("scripts", {})
 

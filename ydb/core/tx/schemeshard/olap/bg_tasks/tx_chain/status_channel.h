@@ -19,9 +19,9 @@ public:
         , TaskIdentifier(taskId)
         , SSTabletId(ssTabletId)
     {
-        AFL_VERIFY(!!TaskClassName);
-        AFL_VERIFY(!!TaskIdentifier);
-        AFL_VERIFY(SSTabletId);
+        YDB_LOG_VERIFY(!!TaskClassName);
+        YDB_LOG_VERIFY(!!TaskIdentifier);
+        YDB_LOG_VERIFY(SSTabletId);
     }
     virtual void DoOnFail(const TString& /*errorMessage*/) const override {
 

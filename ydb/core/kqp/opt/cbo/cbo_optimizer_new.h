@@ -364,6 +364,8 @@ struct TJoinOptimizerNode: public IBaseOptimizerNode {
     std::shared_ptr<IBaseOptimizerNode> RightArg;
     TVector<TJoinColumn> LeftJoinKeys;
     TVector<TJoinColumn> RightJoinKeys;
+    // Predicates evaluated on the join's output, after any null extension.
+    TVector<std::pair<TJoinColumn, TJoinColumn>> PostJoinConditions;
     EJoinKind JoinType;
     EJoinAlgoType JoinAlgo;
     /////////////////// 'ANY' flag means leaving only one row from the join side.

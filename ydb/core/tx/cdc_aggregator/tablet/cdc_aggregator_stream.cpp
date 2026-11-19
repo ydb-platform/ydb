@@ -32,7 +32,7 @@ TCdcAggregatorStream::TCdcAggregatorStream(
 TCdcAggregatorStreamHeartbeatsDiff TCdcAggregatorStream::WriteHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatsBySourceDataShardId) {
     return {
         .LastHeartbeatsBySourceDataShardId = RegisterHeartbeats(heartbeatsBySourceDataShardId),
-        .CurrentHeartbeat = UpdateCurrentHeartbeatIfNeeded(),
+        .UpdatedCurrentHeartbeat = UpdateCurrentHeartbeatIfNeeded(),
     };
 }
 

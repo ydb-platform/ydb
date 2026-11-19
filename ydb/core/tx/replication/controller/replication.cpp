@@ -195,6 +195,9 @@ public:
                 case ETargetKind::Transfer:
                     TargetTablePaths.push_back(target->GetDstPath());
                     break;
+                case ETargetKind::Topic:
+                    // Topic mirrors do not participate in table CommitWrites.
+                    break;
                 }
             }
         }

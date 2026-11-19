@@ -581,7 +581,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
         }
     }
 
-    if (topic.has_partitioning_settings() && !NCdc::ShouldUseKeyRangeHeartbeats(cdcStreamDescription)) {
+    if (topic.has_partitioning_settings() && !NCdc::IsKeyRangeHeartbeatsRequested(cdcStreamDescription)) {
         if (isPartitioningAvailable) {
             i64 minActivePartitions =
                 topic.partitioning_settings().min_active_partitions();

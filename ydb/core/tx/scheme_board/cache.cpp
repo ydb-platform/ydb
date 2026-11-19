@@ -1061,6 +1061,37 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return std::make_shared<TPartitioning>(std::move(partitions), version);
         }
 
+        static bool HasTypedPartitionRanges(const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc) {
+            const auto& pqConfig = pqDesc.GetPQTabletConfig();
+            if (pqConfig.GetPartitionKeySchema().empty()) {
+                return false;
+            }
+
+            auto isFullKey = [&](const TString& bound) {
+                TSerializedCellVec cells;
+                return TSerializedCellVec::TryParse(bound, cells) && cells.GetCells().size() == pqConfig.PartitionKeySchemaSize();
+            };
+
+            size_t unboundedCount = 0;
+            for (const auto& partition : pqDesc.GetPartitions()) {
+                if (NKikimrPQ::ETopicPartitionStatus::Active != partition.GetStatus()) {
+                    continue;
+                }
+
+                const auto& keyRange = partition.GetKeyRange();
+                if ((keyRange.HasFromBound() && !isFullKey(keyRange.GetFromBound()))
+                    || (keyRange.HasToBound() && !isFullKey(keyRange.GetToBound())))
+                {
+                    return false;
+                }
+                if (!keyRange.HasToBound()) {
+                    ++unboundedCount;
+                }
+            }
+
+            return unboundedCount <= 1;
+        }
+
         static void FillTopicPartitioning(
                 const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc,
                 TVector<NScheme::TTypeInfo>& schema,
@@ -1069,7 +1100,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             const auto& pqConfig = pqDesc.GetPQTabletConfig();
             const bool splitEnabled = ::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType();
 
-            if (splitEnabled && pqConfig.GetPartitionKeySchema().empty()) {
+            if (splitEnabled && !HasTypedPartitionRanges(pqDesc)) {
                 partitioning.reserve(pqDesc.GetPartitions().size());
                 for (const auto& partition : pqDesc.GetPartitions()) {
                     if (NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus()) {

@@ -2198,7 +2198,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(ClientModificationsOffsetCommit, enableClientModifications) {
+    Y_UNIT_TEST(OffsetCommitMultipleTopics) {
         TInsecureTestServer testServer("2", false, true, false, false);
         NYdb::NTopic::TTopicClient topics(*testServer.Driver);
 
@@ -2227,7 +2227,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(before->Groups.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(before->Groups[0].Topics.size(), 2);
 
-        testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(enableClientModifications);
         auto fetch = client.Fetch(std::vector<std::pair<TString, std::vector<i32>>>(partitions.begin(), partitions.end()));
         UNIT_ASSERT_VALUES_EQUAL(fetch->ErrorCode, EKafkaErrors::NONE_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(fetch->Responses.size(), 2);
@@ -2251,7 +2250,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), 2);
 
             for (const auto& partition : topic.Partitions) {
-                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, enableClientModifications ? EKafkaErrors::NONE_ERROR : EKafkaErrors::POLICY_VIOLATION);
+                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, EKafkaErrors::NONE_ERROR);
             }
         }
 
@@ -2265,8 +2264,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             for (size_t p = 0; p < topic.Partitions.size(); ++p) {
                 UNIT_ASSERT_VALUES_EQUAL(topic.Partitions[p].ErrorCode, EKafkaErrors::NONE_ERROR);
-                UNIT_ASSERT_VALUES_EQUAL(topic.Partitions[p].CommittedOffset,
-                    enableClientModifications ? 1 : before->Groups[0].Topics[t].Partitions[p].CommittedOffset);
+                UNIT_ASSERT_VALUES_EQUAL(topic.Partitions[p].CommittedOffset, 1);
             }
         }
     }

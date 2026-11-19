@@ -1385,33 +1385,23 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         };
 
 
-        Y_UNIT_TEST_F(ClientModificationsSendMessage, TFixture) {
+        Y_UNIT_TEST_F(SendMessagesSmallAndLarge, TFixture) {
             auto driver = MakeDriver(*this);
             const TSqsTopicPaths path;
 
             UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
 
-            for (bool enableClientModifications : {false, true}) {
-                KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(enableClientModifications);
-                auto single = SendMessage({{"QueueUrl", path.QueueUrl}, {"MessageBody", "single"}}, enableClientModifications ? 200 : 400);
-                auto batch = SendMessageBatch({
-                    {"QueueUrl", path.QueueUrl},
-                    {"Entries", NJson::TJsonArray{
-                        NJson::TJsonMap{{"Id", "small"}, {"MessageBody", "batch"}},
-                        NJson::TJsonMap{{"Id", "large"}, {"MessageBody", TString(NKikimr::NSQS::TLimits::MaxMessageSize - 1, 'x')}}
-                    }}
-                }, enableClientModifications ? 200 : 400);
+            auto single = SendMessage({{"QueueUrl", path.QueueUrl}, {"MessageBody", "single"}}, 200);
+            auto batch = SendMessageBatch({
+                {"QueueUrl", path.QueueUrl},
+                {"Entries", NJson::TJsonArray{
+                    NJson::TJsonMap{{"Id", "small"}, {"MessageBody", "batch"}},
+                    NJson::TJsonMap{{"Id", "large"}, {"MessageBody", TString(NKikimr::NSQS::TLimits::MaxMessageSize - 1, 'x')}}
+                }}
+            }, 200);
 
-                if (enableClientModifications) {
-                    UNIT_ASSERT(!GetByPath<TString>(single, "MessageId").empty());
-                    UNIT_ASSERT_VALUES_EQUAL(batch["Successful"].GetArray().size(), 2);
-                } else {
-                    for (const auto* result : {&single, &batch}) {
-                        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(*result, "__type"), "AccessDeniedException");
-                        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(*result, "message"), "Client data writes are disabled");
-                    }
-                }
-            }
+            UNIT_ASSERT(!GetByPath<TString>(single, "MessageId").empty());
+            UNIT_ASSERT_VALUES_EQUAL(batch["Successful"].GetArray().size(), 2);
         }
 
         Y_UNIT_TEST_F(TestSendMessage, TFixture) {

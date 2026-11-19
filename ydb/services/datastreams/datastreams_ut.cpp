@@ -40,14 +40,13 @@ static constexpr const char DEFAULT_FOLDER_ID[] = "somefolder";
 template<class TKikimr, bool secure>
 class TDatastreamsTestServer {
 public:
-    TDatastreamsTestServer(bool enableClientModifications = true) {
+    TDatastreamsTestServer() {
         NKikimrConfig::TAppConfig appConfig;
 
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
         appConfig.MutablePQConfig()->SetEnabled(true);
         appConfig.MutableFeatureFlags()->SetEnableTopicMessagesBatching(true);
         appConfig.MutableFeatureFlags()->SetEnableTopicWriteOffsetDeltaInKeys(true);
-        appConfig.MutableFeatureFlags()->SetEnableClientModifications(enableClientModifications);
         // NOTE(shmel1k@): KIKIMR-14221
         appConfig.MutablePQConfig()->SetCheckACL(false);
         appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(false);
@@ -3341,8 +3340,8 @@ waitForNavCache:
         }
     }
 
-    Y_UNIT_TEST_TWIN(ClientDataWrites, enableClientModifications) {
-        TInsecureDatastreamsTestServer server(enableClientModifications);
+    Y_UNIT_TEST(ClientDataWrites) {
+        TInsecureDatastreamsTestServer server;
 
         const TString stream = "client-data-writes";
         auto& client = *server.DataStreamsClient;
@@ -3354,14 +3353,8 @@ waitForNavCache:
             auto single = client.PutRecord(stream, {data, "key", ""}).ExtractValueSync();
             auto batch = client.PutRecords(stream, {{data, "key", ""}, {"second", "key", ""}}).ExtractValueSync();
 
-            const auto expected = enableClientModifications ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED;
-            UNIT_ASSERT_VALUES_EQUAL_C(single.GetStatus(), expected, single.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL_C(batch.GetStatus(), expected, batch.GetIssues().ToString());
-
-            if (!enableClientModifications) {
-                UNIT_ASSERT_STRING_CONTAINS(single.GetIssues().ToString(), "Client data writes are disabled");
-                UNIT_ASSERT_STRING_CONTAINS(batch.GetIssues().ToString(), "Client data writes are disabled");
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(single.GetStatus(), EStatus::SUCCESS, single.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(batch.GetStatus(), EStatus::SUCCESS, batch.GetIssues().ToString());
         }
     }
 

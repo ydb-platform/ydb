@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/testlib/helpers.h>
 
 namespace NKikimr::NPersQueueTests {
 namespace {
@@ -20,10 +21,11 @@ public:
     NYdb::TDriver Driver;
     TTopicClient Client;
 
-    explicit TSourceTopicMutateEnv(bool replicationConsumer = false)
+    explicit TSourceTopicMutateEnv(bool replicationConsumer = false, bool clientModifications = false)
         : Setup("SourceTopicMutate", MakeSettings(), false)
         , Driver(Setup.MakeDriverConfig())
         , Client(Driver)
+        , ClientModifications(clientModifications)
     {
         if (replicationConsumer) {
             NYdb::NPersQueue::TPersQueueClient pqClient(Driver);
@@ -50,7 +52,12 @@ public:
     void SetRestricted(bool restricted) {
         auto& runtime = Setup.GetRuntime();
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
-            runtime.GetAppData(node).FeatureFlags.SetEnableSourceTopicMutateRestricted(restricted);
+            auto& flags = runtime.GetAppData(node).FeatureFlags;
+            if (ClientModifications) {
+                flags.SetEnableClientModifications(!restricted);
+            } else {
+                flags.SetEnableSourceTopicMutateRestricted(restricted);
+            }
         }
     }
 
@@ -94,9 +101,12 @@ public:
     }
 
 private:
+    const bool ClientModifications;
+
     static Tests::TServerSettings MakeSettings() {
         auto settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
         settings.FeatureFlags.SetEnableSourceTopicMutateRestricted(false);
+        settings.FeatureFlags.SetEnableClientModifications(true);
         return settings;
     }
 };
@@ -123,10 +133,11 @@ TContinuationToken WaitReady(const std::shared_ptr<IWriteSession>& writer) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSourceTopicMutateRestricted) {
-    Y_UNIT_TEST(RejectOrdinaryWriteAfterEnablingFlag) {
-        TSourceTopicMutateEnv env;
+    Y_UNIT_TEST_QUAD(RejectOrdinaryWriteAfterEnablingFlag, clientModifications, largeMessage) {
+        TSourceTopicMutateEnv env(false, clientModifications);
+        const TString data(largeMessage ? 600 * 1024 : 16, 'x');
         auto writer = env.Client.CreateWriteSession(env.WriteSettings());
-        writer->Write(WaitReady(writer), "before-restriction", 1);
+        writer->Write(WaitReady(writer), data, 1);
         auto flushed = writer->Flush();
         UNIT_ASSERT(flushed.Wait(TDuration::Seconds(30)));
         UNIT_ASSERT(flushed.GetValue());
@@ -134,7 +145,7 @@ Y_UNIT_TEST_SUITE(TSourceTopicMutateRestricted) {
 
         auto token = WaitReady(writer);
         env.SetRestricted(true);
-        writer->Write(std::move(token), "must-not-be-written", 2);
+        writer->Write(std::move(token), data, 2);
 
         bool closed = false;
         while (!closed) {
@@ -153,8 +164,32 @@ Y_UNIT_TEST_SUITE(TSourceTopicMutateRestricted) {
         env.AssertOffsets(0, 1);
     }
 
-    Y_UNIT_TEST(RejectOffsetCommitAfterEnablingFlag) {
+    Y_UNIT_TEST(EitherFlagDisablesMutations) {
         TSourceTopicMutateEnv env;
+        env.Write(1);
+        for (bool sourceRestricted : {false, true}) {
+            for (bool clientModifications : {false, true}) {
+                auto& runtime = env.Setup.GetRuntime();
+                for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                    auto& flags = runtime.GetAppData(node).FeatureFlags;
+                    flags.SetEnableSourceTopicMutateRestricted(sourceRestricted);
+                    flags.SetEnableClientModifications(clientModifications);
+                }
+                const auto result = env.Client.CommitOffset(TOPIC, 0, CONSUMER, 1,
+                    TCommitOffsetSettings().ClientTimeout(TDuration::Seconds(10))).GetValueSync();
+                const bool restricted = sourceRestricted || !clientModifications;
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
+                    restricted ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::SUCCESS,
+                    result.GetIssues().ToString());
+                if (restricted) {
+                    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), RESTRICTION_REASON);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(RejectOffsetCommitAfterEnablingFlag, clientModifications) {
+        TSourceTopicMutateEnv env(false, clientModifications);
         env.Write(1);
         env.Write(2);
         const auto initial = env.Client.CommitOffset(TOPIC, 0, CONSUMER, 1).GetValueSync();
@@ -169,8 +204,8 @@ Y_UNIT_TEST_SUITE(TSourceTopicMutateRestricted) {
         env.AssertOffsets(1, 2);
     }
 
-    Y_UNIT_TEST(AllowOnlyReplicationOffsetCommitAfterEnablingFlag) {
-        TSourceTopicMutateEnv env(true);
+    Y_UNIT_TEST_TWIN(AllowOnlyReplicationOffsetCommitAfterEnablingFlag, clientModifications) {
+        TSourceTopicMutateEnv env(true, clientModifications);
         env.Write(1);
         env.Write(2);
         const auto commitSettings = TCommitOffsetSettings().ClientTimeout(TDuration::Seconds(10));
@@ -196,8 +231,8 @@ Y_UNIT_TEST_SUITE(TSourceTopicMutateRestricted) {
         env.AssertOffsets(2, 2, CONSUMER);
     }
 
-    Y_UNIT_TEST(AbortTransactionAfterEnablingFlag) {
-        TSourceTopicMutateEnv env;
+    Y_UNIT_TEST_TWIN(AbortTransactionAfterEnablingFlag, clientModifications) {
+        TSourceTopicMutateEnv env(false, clientModifications);
         NYdb::NQuery::TQueryClient queryClient(env.Driver);
         const auto sessionResult = queryClient.GetSession().GetValueSync();
         UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());

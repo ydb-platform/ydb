@@ -4,6 +4,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/fwd.h>
+#include <util/generic/scope.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 
 namespace {
@@ -302,20 +303,26 @@ namespace {
             auto saved = SaveTxnProducer("my-tx-id", 1, 0);
             UNIT_ASSERT_EQUAL(saved->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
 
-            SendTxnOffsetCommitRequest(123, "my-tx-id", 1, 0, {{"topic1", {0, 1}}, {"topic2", {0}}});
-            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-            UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, 123);
-
-            const auto& message = static_cast<const NKafka::TTxnOffsetCommitResponseData&>(*response->Response);
-            UNIT_ASSERT_VALUES_EQUAL(message.Topics.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(message.Topics[0].Partitions.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(message.Topics[1].Partitions.size(), 1);
-
-            for (const auto& topic : message.Topics) {
-                for (const auto& partition : topic.Partitions) {
-                    UNIT_ASSERT_EQUAL(partition.ErrorCode, NKafka::EKafkaErrors::POLICY_VIOLATION);
+            bool forwarded = false;
+            auto prevObserver = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+                if (auto* request = event->CastAsLocal<NKafka::TEvKafka::TEvTxnOffsetCommitRequest>();
+                    request && event->Recipient != ActorId) {
+                    UNIT_ASSERT_VALUES_EQUAL(request->CorrelationId, 123);
+                    UNIT_ASSERT_VALUES_EQUAL(request->Request->Topics.size(), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(request->Request->Topics[0].Partitions.size(), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(request->Request->Topics[1].Partitions.size(), 1);
+                    forwarded = true;
+                    return TTestActorRuntimeBase::EEventAction::DROP;
                 }
-            }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            });
+            Y_DEFER { Ctx->Runtime->SetObserverFunc(prevObserver); };
+
+            SendTxnOffsetCommitRequest(123, "my-tx-id", 1, 0, {{"topic1", {0, 1}}, {"topic2", {0}}});
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&] { return forwarded; };
+            Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5));
+            UNIT_ASSERT_C(forwarded, "TxnOffsetCommit was not forwarded to the transaction actor");
         }
 
         Y_UNIT_TEST(OnTxnOffsetCommit_ShouldSendBack_PRODUCER_FENCED_ErrorIfProducerIsNotInitialized) {

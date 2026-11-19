@@ -20,6 +20,7 @@
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/json/json_reader.h>
 
 #include <util/generic/hash.h>
@@ -2557,10 +2558,11 @@ Y_UNIT_TEST_F(Cancel_Tx, TPQTabletFixture)
     WaitForPQWriteTxs();
 }
 
-Y_UNIT_TEST_F(ProposeTx_MutateDisabled_AbortsNewTransactions, TPQTabletFixture)
+Y_UNIT_TEST_TWIN_F(ProposeTx_MutateDisabled_AbortsNewTransactions, clientModifications, TPQTabletFixture)
 {
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
-    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableSourceTopicMutateRestricted(true);
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableSourceTopicMutateRestricted(!clientModifications);
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableClientModifications(!clientModifications);
 
     ui64 txId = 2;
     for (bool immediate : {false, true}) {
@@ -2576,7 +2578,7 @@ Y_UNIT_TEST_F(ProposeTx_MutateDisabled_AbortsNewTransactions, TPQTabletFixture)
     }
 }
 
-Y_UNIT_TEST_F(ProposeTx_MutateDisabled_PreservesPreparedTransaction, TPQTabletFixture)
+Y_UNIT_TEST_TWIN_F(ProposeTx_MutateDisabled_PreservesPreparedTransaction, clientModifications, TPQTabletFixture)
 {
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
 
@@ -2590,7 +2592,8 @@ Y_UNIT_TEST_F(ProposeTx_MutateDisabled_PreservesPreparedTransaction, TPQTabletFi
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
 
-    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableSourceTopicMutateRestricted(true);
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableSourceTopicMutateRestricted(!clientModifications);
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableClientModifications(!clientModifications);
     SendProposeTransactionRequest(params);
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});

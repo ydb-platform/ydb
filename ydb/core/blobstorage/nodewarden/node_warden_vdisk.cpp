@@ -255,6 +255,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->DDiskConfig->HasDevNullMode()) {
                     ddiskConfig.DevNullMode = Cfg->DDiskConfig->GetDevNullMode();
                 }
+                if (const auto periodMs = Cfg->DDiskConfig->GetHealthReportPeriodMilliseconds()) {
+                    ddiskConfig.HealthReportPeriod = TDuration::MilliSeconds(periodMs);
+                }
             }
             if (Cfg->PBufferConfig) {
                 if (Cfg->PBufferConfig->HasInitChunks()) {

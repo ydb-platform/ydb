@@ -253,8 +253,6 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         BatchedPutDuringConversion(3);
     }
 
-    // static node not reporting its bridge capability (being disconnected) may still run without BridgeConfig, so it
-    // must block conversion
     // put started by DS proxy before conversion races with VDisks having new group generation and gets restarted
     // through node warden to the service of the group, which is the bridge proxy by then
     Y_UNIT_TEST(PutRestartedAfterConversion) {
@@ -311,38 +309,90 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         checker.CheckAll();
     }
 
-    Y_UNIT_TEST(AbsentStaticNodeBlocksConversion) {
+    Y_UNIT_TEST(AbsentStaticNodeReturnsAfterConversion) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
         const ui32 groupId = CreatePoolAndGetGroup(env);
 
         TDataChecker checker(env);
         checker.Write(groupId);
 
-        // all nodes but the last one are prepared; the last one goes away while still running old settings
+        // the last node misses the rollout entirely, being down, but keeps its disk metadata
         const auto nodes = env.Runtime->GetNodes();
         std::vector<ui32> nodeIds(nodes.begin(), nodes.end());
         const ui32 absentNodeId = nodeIds.back();
         nodeIds.pop_back();
-        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId, nodeIds);
         env.StopNode(absentNodeId);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId, nodeIds);
         env.Sim(TDuration::Seconds(30));
 
-        auto res = ConvertToBridge(env);
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
-            res.GetErrorReason());
-        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "did not report");
-        UNIT_ASSERT(!QueryStorageConfig(env).HasClusterState());
-        checker.Write(groupId);
-
-        // the node returns with new settings, so the cluster may be converted now
-        env.StartNode(absentNodeId);
-        env.Sim(TDuration::Seconds(30));
-        res = ConvertToBridge(env);
+        const auto res = ConvertToBridge(env);
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
         env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT(QueryStorageConfig(env).HasClusterState());
         UNIT_ASSERT(!QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+        checker.Write(groupId);
+
+        // the node returns with bridge config and catches up with the converted configuration
+        env.StartNode(absentNodeId);
+        env.Sim(TDuration::Seconds(30));
         checker.Write(groupId, absentNodeId);
         checker.CheckAll(absentNodeId);
+        checker.CheckAll();
+    }
+
+    // a prepared node partitioned away during the conversion catches up as soon as it is reachable again
+    Y_UNIT_TEST(PartitionedStaticNodeCatchesUpAfterConversion) {
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+
+        const auto runtimeNodes = env.Runtime->GetNodes();
+        const std::vector<ui32> nodes(runtimeNodes.begin(), runtimeNodes.end());
+        const ui32 partitionedNodeId = *std::ranges::max_element(nodes);
+        // shut down all the sessions of the node; the interconnect mock doesn't reestablish them by itself
+        const auto edge = env.Runtime->AllocateEdgeActor(partitionedNodeId, __FILE__, __LINE__);
+        UNIT_ASSERT(env.Runtime->WrapInActorContext(edge, [&](IActor*) {
+            for (const ui32 peer : nodes) {
+                if (peer != partitionedNodeId) {
+                    TActivationContext::Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0,
+                        TActivationContext::InterconnectProxy(peer), {}, nullptr, 0));
+                }
+            }
+        }));
+        env.Sim(TDuration::Seconds(30));
+
+        const auto res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Minutes(1));
+        const auto converted = QueryStorageConfig(env);
+        UNIT_ASSERT(converted.HasClusterState());
+        UNIT_ASSERT(!converted.GetClusterStateDetails().GetBscConversionPending());
+        checker.Write(groupId);
+
+        // the partition heals; the node learns the converted configuration from its peers without being restarted
+        for (const ui32 peer : nodes) {
+            if (peer != partitionedNodeId) {
+                env.Runtime->ReconnectNodes(partitionedNodeId, peer);
+            }
+        }
+        // the node's own configuration is checked, as distconf queries are answered by the root
+        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(partitionedNodeId), edge,
+            new TEvNodeWardenQueryStorageConfig(true)), partitionedNodeId);
+        const auto deadline = env.Runtime->GetClock() + TDuration::Minutes(1);
+        for (;;) {
+            const auto local = env.WaitForEdgeActorEvent<TEvNodeWardenStorageConfig>(edge, false, deadline);
+            UNIT_ASSERT_C(local, "partitioned node did not catch up");
+            const auto& config = local->Get()->Config;
+            if (config && config->HasClusterState() && config->GetGeneration() >= converted.GetGeneration()) {
+                break;
+            }
+        }
+        env.Runtime->Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
+            MakeBlobStorageNodeWardenID(partitionedNodeId), edge, nullptr, 0), partitionedNodeId);
+        checker.Write(groupId, partitionedNodeId);
+        checker.CheckAll(partitionedNodeId);
         checker.CheckAll();
     }
 

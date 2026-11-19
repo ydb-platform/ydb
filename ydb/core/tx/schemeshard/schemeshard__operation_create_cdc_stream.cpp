@@ -739,7 +739,7 @@ bool IsSupportedByReplication(const NKikimrSchemeOp::TCdcStreamDescription& stre
 
 } // anonymous
 
-TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount, ui64 maxShardsInPath) {
+TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount, ui64 maxShardsInPath, bool keyRangeHeartbeats) {
     // Autopartitioned replication topics are hash-partitioned. Cap that split
     // range by the path shard limit so a large table still gets a creatable topic.
     const ui64 maxPartitionCountLimit = std::min<ui64>(maxShardsInPath, Max<ui32>());
@@ -749,7 +749,7 @@ TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op
     params.TotalGroupCount = static_cast<ui32>(op.HasTopicPartitions() ? op.GetTopicPartitions() : tablePartitionCount);
     params.PartitionPerTablet = 2;
 
-    if (!IsSupportedByReplication(op.GetStreamDescription(), "supports_topic_autopartitioning")) {
+    if (keyRangeHeartbeats || !IsSupportedByReplication(op.GetStreamDescription(), "supports_topic_autopartitioning")) {
         return params;
     }
 
@@ -790,7 +790,8 @@ void DoCreatePqPart(
     outTx.SetFailOnExist(!acceptExisted);
 
     const ui64 maxShardsInPath = streamPath.DomainInfo()->GetSchemeLimits().MaxShardsInPath;
-    const auto pqParams = MakeCdcPqPartParams(op, table->GetPartitions().size(), maxShardsInPath);
+    const auto pqParams = MakeCdcPqPartParams(op, table->GetPartitions().size(), maxShardsInPath,
+        ShouldUseKeyRangeHeartbeats(op.GetStreamDescription()));
 
     auto& desc = *outTx.MutableCreatePersQueueGroup();
     desc.SetName("streamImpl");
@@ -1017,7 +1018,7 @@ bool CheckCdcKeyRangeHeartbeatsCanBeUsed(
 {
     if (op.HasTopicPartitions() || op.GetTopicAutoPartitioning()) {
         result->SetError(NKikimrScheme::StatusInvalidParameter,
-            "Topic partitioning settings are not supported when CDC heartbeats are routed by key range");
+            "TopicPartitions and TopicAutoPartitioning are not supported for CDC streams with key range heartbeats");
         return false;
     }
 

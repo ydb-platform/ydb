@@ -24,6 +24,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
+#include <util/generic/scope.h>
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
@@ -3858,14 +3859,18 @@ Y_UNIT_TEST_F(ReplicationDataIgnoresReplicationConsumerWithoutRetryingPersist, T
     WaitPartitionConfigChanged();
 
     ui64 writes = 0;
-    auto prevObserver = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+    // Observers may see the same event repeatedly while it stays in an edge mailbox.
+    // Count sends instead so each KV request contributes exactly once.
+    TTestActorRuntimeBase::TEventFilter prevFilter;
+    prevFilter = Ctx->Runtime->SetEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
         if (event->Sender == ActorId
             && event->GetTypeRewrite() == TEvKeyValue::TEvRequest::EventType
             && event->Get<TEvKeyValue::TEvRequest>()->Record.CmdWriteSize() > 0) {
             ++writes;
         }
-        return TTestActorRuntimeBase::EEventAction::PROCESS;
+        return prevFilter(runtime, event);
     });
+    Y_DEFER { Ctx->Runtime->SetEventFilter(prevFilter); };
 
     // The upstream replication consumer is ahead of the local downstream reader.
     // Both a replication-only payload and a mixed payload must finish after one write.
@@ -3891,7 +3896,6 @@ Y_UNIT_TEST_F(ReplicationDataIgnoresReplicationConsumerWithoutRetryingPersist, T
         UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "reader")->Offset,
             includeReader ? 4 : 0);
     }
-    Ctx->Runtime->SetObserverFunc(prevObserver);
 }
 
 Y_UNIT_TEST_F(ReplicationDataDoesNotRewindConsumerOffsets, TPartitionFixture)

@@ -21,6 +21,7 @@ class TIndexMetaContainer;
 }
 
 struct TIndexInfo;
+class IPortionDataChunk;
 class TSaverContext;
 class TWritePortionInfoWithBlobsResult;
 
@@ -63,6 +64,8 @@ public:
         const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount);
     static std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildAbsentColumnArray(
         const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount);
+    static TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> BuildAbsentColumnPortionChunks(
+        const TIndexInfo& indexInfo, const ui32 columnId, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount);
 
     TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(
         const NArrow::TSchemaLiteView& schema, const ui32 rowsCount, const bool force) const;

@@ -4,7 +4,6 @@
 
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
-#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
@@ -126,20 +125,11 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
             const auto fromFill = ISnapshotSchema::GetAbsentColumnFill(*from, *to, i);
             const auto toFill = ISnapshotSchema::GetAbsentColumnFill(*to, *to, i);
             if (!NArrow::ScalarEqualsNullable(fromFill, toFill)) {
-                const auto& features = to->GetIndexInfo().GetColumnFeaturesVerified(i);
-                auto loader = to->GetColumnLoaderVerified(i);
-                const ui32 rows = source.PortionInfo.GetPortionInfo().GetRecordsCount();
-                ui16 chunkIdx = 0;
-                for (auto&& chunk : ISnapshotSchema::BuildAbsentColumnChunks(features.GetArrowField()->type(), fromFill, rows)) {
-                    const auto loadContext = loader->BuildAccessorContext(chunk->GetRecordsCount());
-                    auto constructed = loader->GetAccessorConstructor()->Construct(chunk, loadContext);
-                    YDB_LOG_VERIFY(constructed.IsSuccess(),
-                        {"reason", constructed.GetErrorMessage()});
-                    auto blobAndMeta = loader->GetAccessorConstructor()->SerializeToBlobAndMeta(*constructed, loadContext);
-                    newChunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
-                        std::move(blobAndMeta.Blob), *constructed, TChunkAddress(i, chunkIdx++), features, std::move(blobAndMeta.Meta)));
-                }
-                YDB_LOG_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
+                auto constructed = ISnapshotSchema::BuildAbsentColumnPortionChunks(
+                    to->GetIndexInfo(), i, fromFill, source.PortionInfo.GetPortionInfo().GetRecordsCount());
+                YDB_LOG_VERIFY(constructed.IsSuccess(),
+                    {"reason", constructed.GetErrorMessage()});
+                YDB_LOG_VERIFY(entityChunksNew.emplace(i, constructed.DetachResult()).second);
             }
         }
     }

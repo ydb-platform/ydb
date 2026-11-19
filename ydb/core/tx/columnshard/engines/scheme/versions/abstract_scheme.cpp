@@ -323,6 +323,31 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> ISnapshotSchema::BuildAbsentCo
     return std::make_shared<NArrow::NAccessor::TCompositeChunkedArray>(std::move(chunks), recordsCount, type);
 }
 
+TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> ISnapshotSchema::BuildAbsentColumnPortionChunks(
+    const TIndexInfo& indexInfo, const ui32 columnId, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount) {
+    const auto loader = indexInfo.GetColumnLoaderVerified(columnId);
+    const auto& features = indexInfo.GetColumnFeaturesVerified(columnId);
+    THashMap<ui32, std::pair<std::shared_ptr<NArrow::NAccessor::IChunkedArray>, NArrow::NAccessor::TBlobWithAdditionalAccessorData>>
+        serializedBySize;
+    std::vector<std::shared_ptr<IPortionDataChunk>> result;
+    ui16 chunkIdx = 0;
+    for (auto&& chunk : BuildAbsentColumnChunks(features.GetArrowField()->type(), fill, recordsCount)) {
+        auto it = serializedBySize.find(chunk->GetRecordsCount());
+        if (it == serializedBySize.end()) {
+            const auto loadContext = loader->BuildAccessorContext(chunk->GetRecordsCount());
+            auto constructed = loader->GetAccessorConstructor()->Construct(chunk, loadContext);
+            if (constructed.IsFail()) {
+                return TConclusionStatus::Fail(constructed.GetErrorMessage());
+            }
+            auto blobAndMeta = loader->GetAccessorConstructor()->SerializeToBlobAndMeta(*constructed, loadContext);
+            it = serializedBySize.emplace(chunk->GetRecordsCount(), std::make_pair(*constructed, std::move(blobAndMeta))).first;
+        }
+        result.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
+            it->second.second.Blob, it->second.first, TChunkAddress(columnId, chunkIdx++), features, it->second.second.Meta));
+    }
+    return result;
+}
+
 bool ISnapshotSchema::IsSpecialColumnId(const ui32 columnId) const {
     return GetIndexInfo().IsSpecialColumn(columnId);
 }

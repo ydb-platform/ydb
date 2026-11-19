@@ -3,7 +3,6 @@
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
-#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
@@ -25,27 +24,11 @@ TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> TIndexByC
                 {"indexId", GetIndexId()});
             const auto fill = indexInfo.GetColumnExternalDefaultValueVerified(i);
             if (fill) {
-                const auto loader = indexInfo.GetColumnLoaderVerified(i);
-                const auto& features = indexInfo.GetColumnFeaturesVerified(i);
-                THashMap<ui32, std::pair<std::shared_ptr<NArrow::NAccessor::IChunkedArray>, NArrow::NAccessor::TBlobWithAdditionalAccessorData>>
-                    serializedBySize;
-                std::vector<std::shared_ptr<IPortionDataChunk>> constChunks;
-                ui16 chunkIdx = 0;
-                for (auto&& chunk : ISnapshotSchema::BuildAbsentColumnChunks(features.GetArrowField()->type(), fill, recordsCount)) {
-                    auto it = serializedBySize.find(chunk->GetRecordsCount());
-                    if (it == serializedBySize.end()) {
-                        const auto loadContext = loader->BuildAccessorContext(chunk->GetRecordsCount());
-                        auto constructed = loader->GetAccessorConstructor()->Construct(chunk, loadContext);
-                        if (constructed.IsFail()) {
-                            return TConclusionStatus::Fail(constructed.GetErrorMessage());
-                        }
-                        auto blobAndMeta = loader->GetAccessorConstructor()->SerializeToBlobAndMeta(*constructed, loadContext);
-                        it = serializedBySize.emplace(chunk->GetRecordsCount(), std::make_pair(*constructed, std::move(blobAndMeta))).first;
-                    }
-                    constChunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
-                        it->second.second.Blob, it->second.first, TChunkAddress(i, chunkIdx++), features, it->second.second.Meta));
+                auto constChunks = ISnapshotSchema::BuildAbsentColumnPortionChunks(indexInfo, i, fill, recordsCount);
+                if (constChunks.IsFail()) {
+                    return TConclusionStatus::Fail(constChunks.GetErrorMessage());
                 }
-                columnReaders.emplace_back(constChunks, loader);
+                columnReaders.emplace_back(constChunks.DetachResult(), indexInfo.GetColumnLoaderVerified(i));
                 continue;
             }
             TString indexData(1, '\0');

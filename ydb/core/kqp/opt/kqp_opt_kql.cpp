@@ -67,8 +67,6 @@ TVector<TString> GetMissingInputColumnsForReturning(
     return result;
 }
 
-TExprBase BuildYqlLiteralFromTypedValue(const Ydb::TypedValue& proto, TPositionHandle pos, TExprContext& ctx);
-
 // Replace absent input columns to NULL to perform REPLACE via UPSERT
 std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKiWriteTable& write, const TExprBase& input,
     const TCoAtomList& inputColumns, const TKikimrTableDescription& tableDesc,
@@ -119,18 +117,6 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKi
                 .Struct(rowArg)
                 .Name().Build(name)
                 .Done();
-        } else if (const auto* column = tableDesc.Metadata->Columns.FindPtr(name);
-            tableDesc.Metadata->Kind == EKikimrTableKind::Olap && column && column->IsDefaultFromLiteral()) {
-            TExprBase literalExpr = BuildYqlLiteralFromTypedValue(column->DefaultFromLiteral, pos, ctx);
-            const auto* colType = tableDesc.GetColumnType(name);
-            YQL_ENSURE(colType);
-            if (colType->IsOptionalOrNull() && !column->DefaultFromLiteral.type().has_optional_type()) {
-                memberValue = Build<TCoJust>(ctx, pos)
-                    .Input(literalExpr)
-                    .Done();
-            } else {
-                memberValue = literalExpr;
-            }
         } else {
             auto type = tableDesc.GetColumnType(name);
             YQL_ENSURE(type);

@@ -88,6 +88,17 @@ std::shared_ptr<arrow::RecordBatch> MakeTestBatch() {
     return arrow::RecordBatch::Make(schema, 3, { pkBuilder.Finish().ValueOrDie(), valueBuilder.Finish().ValueOrDie() });
 }
 
+std::shared_ptr<arrow::RecordBatch> MakeTestBatch(const ui32 rowsCount) {
+    arrow::UInt64Builder pkBuilder;
+    arrow::Int32Builder valueBuilder;
+    for (ui32 i = 0; i < rowsCount; ++i) {
+        UNIT_ASSERT(pkBuilder.Append(i + 1).ok());
+        UNIT_ASSERT(valueBuilder.Append(static_cast<i32>(i)).ok());
+    }
+    auto schema = arrow::schema({ arrow::field("pk", arrow::uint64()), arrow::field("value", arrow::int32()) });
+    return arrow::RecordBatch::Make(schema, rowsCount, { pkBuilder.Finish().ValueOrDie(), valueBuilder.Finish().ValueOrDie() });
+}
+
 std::shared_ptr<NChunks::TChunkPreparation> BuildColumnChunkFromArray(
     const ISnapshotSchema& schema, const ui32 columnId, const std::shared_ptr<arrow::Array>& column) {
     auto loader = schema.GetIndexInfo().GetColumnLoaderVerified(columnId);
@@ -473,6 +484,29 @@ Y_UNIT_TEST_SUITE(TDefaultPortionActualization) {
             total += chunk->GetRecordsCount();
         }
         UNIT_ASSERT_VALUES_EQUAL(total, recordsCount);
+    }
+
+    Y_UNIT_TEST(MultiChunkFillIsMaterialized) {
+        const ui32 recordsCount = 300000;
+        const auto from = MakeSchemaWithExtraColumn(1, 5, 5);
+        const auto to = MakeSchemaWithExtraColumn(2, 9, 5);
+        auto portion = BuildTestPortion(from, MakeTestBatch(recordsCount), {}, MakeSplitterCounters());
+        FinalizeWritePortion(portion);
+        auto synced = SyncChecked(portion, from, to);
+        ui32 chunksCount = 0;
+        for (const auto& record : synced.GetPortionResult().GetRecordsVerified()) {
+            if (record.GetColumnId() == 3) {
+                ++chunksCount;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(chunksCount, 3u);
+        const auto stored = ReadStoredUint64Column(synced, to, 3);
+        UNIT_ASSERT(stored);
+        UNIT_ASSERT_VALUES_EQUAL(stored->size(), recordsCount);
+        for (const auto& value : *stored) {
+            UNIT_ASSERT(value);
+            UNIT_ASSERT_VALUES_EQUAL(*value, 5u);
+        }
     }
 
     Y_UNIT_TEST(SameFillStaysAbsent) {

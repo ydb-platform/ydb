@@ -694,6 +694,46 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {{NKikimrScheme::StatusSchemeError, "Invalid Date default"}});
     }
 
+    Y_UNIT_TEST(TtlOnDefaultColumnRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableCsDefaultValues(true));
+        ui64 txId = 100;
+
+        const TString ttl = R"(TtlSettings { Enabled { ColumnName: "ts" ExpireAfterSeconds: 300 ColumnUnit: UNIT_SECONDS } })";
+        const auto schema = [](const TString& name, const TString& tsDefault) {
+            return TStringBuilder() << R"(
+                Name: ")" << name << R"("
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                    Columns { Id: 2 Name: "ts" Type: "Uint64" )" << tsDefault << R"( }
+                    KeyColumnNames: "id"
+                    Indexes {
+                        Id: 3 Name: "ttl_max" ClassName: "MIN_MAX"
+                        StorageId: "__LOCAL_METADATA" InheritPortionStorage: false
+                        MinMaxIndex { ColumnId: 2 }
+                    }
+                }
+            )";
+        };
+        const TString withDefault = "DefaultValue { Scalar { Uint64: 5 } }";
+        const TExpectedResult rejected(NKikimrScheme::StatusSchemeError, "Default value is not supported for the TTL column");
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema("CreateTtl", withDefault) + ttl, {rejected});
+        TestLs(runtime, "/MyRoot/CreateTtl", false, NLs::PathNotExist);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema("AlterTtl", withDefault));
+        env.TestWaitNotification(runtime, txId);
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(Name: "AlterTtl" Alter)" + ttl, {rejected});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema("SetDefault", "") + ttl);
+        env.TestWaitNotification(runtime, txId);
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "SetDefault"
+            AlterSchema { AlterColumns { Name: "ts" DefaultScalar { Scalar { Uint64: 5 } } } }
+        )", {rejected});
+    }
+
     Y_UNIT_TEST_FLAG(PgTypesRejected, EnableTablePgTypes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(EnableTablePgTypes));

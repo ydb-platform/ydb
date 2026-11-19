@@ -154,6 +154,16 @@ public:
         return *this;
     }
 
+    TSchemaHistory& SetEmptyDefault(const ui32 columnId) {
+        MutableColumn(columnId).MutableDefaultValue();
+        return *this;
+    }
+
+    TSchemaHistory& ClearDefault(const ui32 columnId) {
+        MutableColumn(columnId).ClearDefaultValue();
+        return *this;
+    }
+
     TSchemaHistory& SetCreatedDefault(const ui32 columnId, const ui64 value) {
         MutableColumn(columnId).MutableCreatedDefaultValue()->MutableScalar()->SetUint64(value);
         return *this;
@@ -387,6 +397,20 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         TSchemaDiffView matchView;
         matchView.DeserializeFromProto(matchDiff).Validate();
         UNIT_ASSERT(matchView.IsCorrectToIgnorePreviouse(BuildFromSchema(matched.GetVersions()[0])));
+    }
+
+    Y_UNIT_TEST(LegacyEmptyDefaultRewrittenOnUpgrade) {
+        TSchemaHistory history;
+        history.SetEmptyDefault(KeyColumnId).SetEmptyDefault(2).SetEmptyDefault(3);
+        history.NextVersion().ClearDefault(KeyColumnId).ClearDefault(2).ClearDefault(3).AddColumn(4, "added", NScheme::NTypeIds::Uint64);
+        CheckDiffsBuildSchemas(history);
+
+        const auto& versions = history.GetVersions();
+        const auto diff = TSchemaDiffView::MakeSchemasDiff(versions[0], versions[1]);
+        UNIT_ASSERT_VALUES_EQUAL(diff.UpsertColumnsSize(), 4u);
+        TSchemaDiffView view;
+        view.DeserializeFromProto(diff).Validate();
+        UNIT_ASSERT(!view.IsCorrectToIgnorePreviouse(BuildFromSchema(versions[0])));
     }
 
     Y_UNIT_TEST(ChangeColumnToSparsed) {

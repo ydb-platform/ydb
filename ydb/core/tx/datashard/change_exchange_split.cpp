@@ -6,6 +6,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/lib/base/msgbus_status.h>
@@ -42,6 +43,10 @@ TPartitionKeyRange ParseKeyRange(const TString& fromBound, const TString& toBoun
         keyRange.ToBound = std::move(cells);
     }
     return keyRange;
+}
+
+TPartitionKeyRange ParseKeyRange(const NKikimrPQ::TPartitionKeyRange& keyRange) {
+    return ParseKeyRange(keyRange.GetFromBound(), keyRange.GetToBound());
 }
 
 } // anonymous
@@ -400,15 +405,17 @@ class TCdcWorker
                 continue;
             }
 
-            TVector<TSplitDst> dsts = Dsts;
+            TVector<TSplitDst> dsts;
             if (withKeyRanges) {
-                const auto partitionKeyRange = ParseKeyRange(partition.GetKeyRange().GetFromBound(), partition.GetKeyRange().GetToBound());
+                const auto partitionKeyRange = ParseKeyRange(partition.GetKeyRange());
                 if (!Intersects(partitionKeyRange, SrcKeyRange, keyTypes)) {
                     continue;
                 }
-                EraseIf(dsts, [&](const auto& dst) {
-                    return !Intersects(partitionKeyRange, dst.KeyRange, keyTypes);
+                CopyIf(Dsts.begin(), Dsts.end(), std::back_inserter(dsts), [&](const auto& dst) {
+                    return Intersects(partitionKeyRange, dst.KeyRange, keyTypes);
                 });
+            } else {
+                dsts = Dsts;
             }
 
             auto it = Workers.find(partitionId);

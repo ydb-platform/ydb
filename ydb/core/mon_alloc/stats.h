@@ -29,6 +29,11 @@ namespace NKikimr {
              * @brief Number of bytes that are held in caches
              */
             ui64 AllocatorCachesMemory;
+
+            /**
+             * @brief Number of cached bytes the allocator can return to the OS on request
+             */
+            ui64 ReclaimableMemory;
         };
 
         virtual ~IAllocState() = default;

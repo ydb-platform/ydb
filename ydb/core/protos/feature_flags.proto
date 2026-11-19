@@ -365,4 +365,8 @@ message TFeatureFlags {
     optional bool EnableSourceTopicMutateRestricted = 376 [default = false];
     optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
     optional bool EnableMLPConsumerInFlightMutateDisabled = 378 [default = false];
+    // (LOGBROKER-10680). Default false is
+    // the legacy zeroing behaviour that undercounted the consumed
+    // write quota.
+    optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
 }

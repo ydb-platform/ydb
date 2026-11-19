@@ -3178,6 +3178,16 @@ IGraphTransformer::TStatus SqlResultItemWrapper(const TExprNode::TPtr& input, TE
         return IGraphTransformer::TStatus::Repeat;
     }
 
+    if (input->IsCallable("YqlResultItem") && input->Head().IsAtom() && !lambda->Tail().IsPersistable()) {
+        // Use the same representation as the legacy projection's PersistableRepr.
+        auto [body, type] = MakeRepr(lambda->TailPtr(), lambda->GetTypeAnn(), ctx.Expr);
+        if (body && type != lambda->GetTypeAnn()) {
+            auto resultLambda = ctx.Expr.ChangeChild(*lambda, 1, std::move(body));
+            output = ctx.Expr.ChangeChild(*input, input->ChildrenSize() - 1, std::move(resultLambda));
+            return IGraphTransformer::TStatus::Repeat;
+        }
+    }
+
     input->SetTypeAnn(lambda->GetTypeAnn());
     return IGraphTransformer::TStatus::Ok;
 }
@@ -3846,7 +3856,14 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                     }
                                     auto rightName = localOrder.Find(name);
 
-                                    auto itemRef = ctx.Expr.MakeType<TItemExprType>(rightName, item->GetItemType());
+                                    auto itemType = item->GetItemType();
+                                    if (isYql && !itemType->IsPersistable()) {
+                                        auto value = ctx.Expr.NewArgument(column->Pos(), "value");
+                                        if (const auto* reprType = MakeRepr(value, itemType, ctx.Expr).second) {
+                                            itemType = reprType;
+                                        }
+                                    }
+                                    auto itemRef = ctx.Expr.MakeType<TItemExprType>(rightName, itemType);
 
                                     if (hasEmitPgStar) {
                                         if (!outputItemIndex.contains(rightName)) {

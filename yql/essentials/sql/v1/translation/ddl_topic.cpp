@@ -87,6 +87,7 @@ TNullable<TNodePtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescri
 
     auto settings = node.Y();
     settings = setValue(settings, desc.Settings.Important, "important");
+    settings = setValue(settings, desc.Settings.ReplicateOffsets, "replicate_offsets");
     settings = setValueWithReset(settings, desc.Settings.AvailabilityPeriod, "setAvailabilityPeriod", "resetAvailabilityPeriod");
     settings = setValueWithReset(settings, desc.Settings.ReadFromTs, "setReadFromTs", "resetReadFromTs");
     settings = setValueWithReset(settings, desc.Settings.SupportedCodecs, "setSupportedCodecs", "resetSupportedCodecs");

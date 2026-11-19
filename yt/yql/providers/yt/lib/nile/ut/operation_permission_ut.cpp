@@ -28,19 +28,19 @@ namespace NYql {
 
     Y_UNIT_TEST_SUITE(TNileOperationPermissionsTest) {
         Y_UNIT_TEST(MissingGatewaysConfigurationDisablesPolicy) {
-            const auto permissions = BuildNileOperationPermissions(nullptr, "testuser", TString("{nile_job_uuid=job}"));
+            const auto permissions = BuildNileOperationPermissions(nullptr, "testuser", TString("{yql_nile_job_uuid=job}"));
             UNIT_ASSERT(!permissions);
         }
 
         Y_UNIT_TEST(MissingNileConfigurationDisablesPolicy) {
             const TGatewaysConfig config;
-            const auto permissions = BuildNileOperationPermissions(&config, "testuser", TString("{nile_job_uuid=job}"));
+            const auto permissions = BuildNileOperationPermissions(&config, "testuser", TString("{yql_nile_job_uuid=job}"));
             UNIT_ASSERT(!permissions);
         }
 
         Y_UNIT_TEST(EmptyPolicyInitializesEmptyPermissions) {
             const auto config = ::ParseTextFormatFromString<TGatewaysConfig>("Nile {}");
-            const auto permissions = BuildNileOperationPermissions(&config, "testuser", TString("{nile_job_uuid=job}"));
+            const auto permissions = BuildNileOperationPermissions(&config, "testuser", TString("{yql_nile_job_uuid=job}"));
             UNIT_ASSERT(permissions);
             UNIT_ASSERT(permissions->empty());
         }
@@ -54,7 +54,7 @@ namespace NYql {
             )");
             UNIT_ASSERT(config.HasNile());
             UNIT_ASSERT(!config.HasYt());
-            const auto permissions = BuildNileOperationPermissions(&config, "testuser", TString("{nile_job_uuid=job}"));
+            const auto permissions = BuildNileOperationPermissions(&config, "testuser", TString("{yql_nile_job_uuid=job}"));
             UNIT_ASSERT(permissions);
             UNIT_ASSERT_VALUES_EQUAL(permissions->size(), 2);
             UNIT_ASSERT(permissions->contains("plato"));
@@ -68,15 +68,15 @@ namespace NYql {
 
         Y_UNIT_TEST(NonNileAttributesDisableValidation) {
             const auto config = MakeConfig();
-            for (const auto attributes : {"", "{}", "{unrelated=job}", "{yql_nile_job_uuid=job}", "{nested={nile_job_uuid=job}}"}) {
+            for (const auto attributes : {"", "{}", "{unrelated=job}", "{nile_job_uuid=job}", "{nested={yql_nile_job_uuid=job}}"}) {
                 UNIT_ASSERT_C(!BuildNileOperationPermissions(&config, "testuser", TString(attributes)), attributes);
             }
         }
 
         Y_UNIT_TEST(NileDetectionUsesAttributePresence) {
             const auto config = MakeConfig();
-            for (const auto attributes : {"{nile_job_uuid=\"\"}", "{nile_job_uuid=#}", "{nile_job_uuid=%false}",
-                                          "{nile_job_uuid=0}", "{nile_job_uuid={}}", "{nile_job_uuid=[]}"}) {
+            for (const auto attributes : {"{yql_nile_job_uuid=\"\"}", "{yql_nile_job_uuid=#}", "{yql_nile_job_uuid=%false}",
+                                          "{yql_nile_job_uuid=0}", "{yql_nile_job_uuid={}}", "{yql_nile_job_uuid=[]}"}) {
                 UNIT_ASSERT_C(BuildNileOperationPermissions(&config, "testuser", TString(attributes)), attributes);
             }
         }
@@ -84,7 +84,7 @@ namespace NYql {
         Y_UNIT_TEST(BinaryYsonAttributesAreSupported) {
             const auto config = MakeConfig();
             auto attributes = NYT::TNode::CreateMap();
-            attributes["nile_job_uuid"] = "job";
+            attributes["yql_nile_job_uuid"] = "job";
             const auto permissions = BuildNileOperationPermissions(&config, "testuser",
                                                                    NYT::NodeToYsonString(attributes, NYson::EYsonFormat::Binary));
             UNIT_ASSERT(permissions);
@@ -93,7 +93,7 @@ namespace NYql {
         Y_UNIT_TEST(OnlyExecutionUserPermissionsAreSelected) {
             const auto config = MakeConfig({{"plato", "testuser"}, {"plato", "testuser"}, {"other", "another-user"},
                                             {"case-sensitive", "Testuser"}});
-            const auto permissions = BuildNileOperationPermissions(&config, "testuser", TString("{nile_job_uuid=job}"));
+            const auto permissions = BuildNileOperationPermissions(&config, "testuser", TString("{yql_nile_job_uuid=job}"));
             UNIT_ASSERT(permissions);
             UNIT_ASSERT_VALUES_EQUAL(permissions->size(), 1);
             UNIT_ASSERT(permissions->contains("plato"));
@@ -101,7 +101,7 @@ namespace NYql {
 
         Y_UNIT_TEST(NoMatchingUserInitializesEmptyPermissions) {
             const auto config = MakeConfig({{"plato", "testuser"}});
-            const auto permissions = BuildNileOperationPermissions(&config, "another-user", TString("{nile_job_uuid=job}"));
+            const auto permissions = BuildNileOperationPermissions(&config, "another-user", TString("{yql_nile_job_uuid=job}"));
             UNIT_ASSERT(permissions);
             UNIT_ASSERT(permissions->empty());
         }
@@ -110,7 +110,7 @@ namespace NYql {
             const auto config = MakeConfig({{"kolmogorov", "*"}, {"vanga", "*"}, {"watt", "*"},
                                             {"plato", "testuser"},
                                             {"other", "another-user"}});
-            const auto permissions = BuildNileOperationPermissions(&config, "testuser", TString("{nile_job_uuid=job}"));
+            const auto permissions = BuildNileOperationPermissions(&config, "testuser", TString("{yql_nile_job_uuid=job}"));
             UNIT_ASSERT(permissions);
             UNIT_ASSERT_VALUES_EQUAL(permissions->size(), 4);
             for (const auto cluster : {"kolmogorov", "vanga", "watt", "plato"}) {
@@ -120,7 +120,7 @@ namespace NYql {
 
         Y_UNIT_TEST(EmptyUserReceivesOnlyMatchingPermissions) {
             const auto config = MakeConfig({{"shared", "*"}, {"explicit-empty", ""}, {"other", "testuser"}});
-            const auto permissions = BuildNileOperationPermissions(&config, "", TString("{nile_job_uuid=job}"));
+            const auto permissions = BuildNileOperationPermissions(&config, "", TString("{yql_nile_job_uuid=job}"));
             UNIT_ASSERT(permissions);
             UNIT_ASSERT_VALUES_EQUAL(permissions->size(), 2);
             UNIT_ASSERT(permissions->contains("shared"));
@@ -130,7 +130,7 @@ namespace NYql {
         Y_UNIT_TEST(PermissionsOwnClusters) {
             auto config = MakeConfig({{"plato", "testuser"}});
             TString userName = "testuser";
-            TMaybe<TString> attributes = TString("{nile_job_uuid=job}");
+            TMaybe<TString> attributes = TString("{yql_nile_job_uuid=job}");
             const auto permissions = BuildNileOperationPermissions(&config, userName, attributes);
             config.ClearNile();
             userName.clear();

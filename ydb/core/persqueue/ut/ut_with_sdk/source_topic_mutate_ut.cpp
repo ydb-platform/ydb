@@ -229,12 +229,12 @@ Y_UNIT_TEST_SUITE(TSourceTopicMutateRestricted) {
             UNIT_ASSERT_C(reader->WaitEvent().Wait(deadline - TInstant::Now()), "Commit was not acknowledged");
             auto event = reader->GetEvent(false);
             UNIT_ASSERT(event);
-            if (auto* start = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+            if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
                 UNIT_ASSERT_VALUES_EQUAL(start->GetCommittedOffset(), 1);
                 start->Confirm();
-            } else if (auto* received = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+            } else if (auto* received = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
                 received->Commit();
-            } else if (auto* ack = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
+            } else if (auto* ack = std::get_if<NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
                 UNIT_ASSERT_VALUES_EQUAL(ack->GetCommittedOffset(), 2);
                 acknowledged = true;
             } else if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {

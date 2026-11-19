@@ -463,6 +463,18 @@ Y_UNIT_TEST_SUITE(TSyncPortionIndexReuseTests) {
 }
 
 Y_UNIT_TEST_SUITE(TDefaultPortionActualization) {
+    Y_UNIT_TEST(AbsentFillChunksFitChunkIndex) {
+        const ui32 recordsCount = 200000;
+        const auto fill = std::make_shared<arrow::StringScalar>(std::string(1 << 20, 'x'));
+        const auto chunks = ISnapshotSchema::BuildAbsentColumnChunks(arrow::utf8(), fill, recordsCount);
+        UNIT_ASSERT_LE(chunks.size(), (ui64)std::numeric_limits<ui16>::max() + 1);
+        ui64 total = 0;
+        for (auto&& chunk : chunks) {
+            total += chunk->GetRecordsCount();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(total, recordsCount);
+    }
+
     Y_UNIT_TEST(SameFillStaysAbsent) {
         const auto from = MakeSchemaWithExtraColumn(1, 5, 5);
         const auto to = MakeSchemaWithExtraColumn(2, 5, 5);

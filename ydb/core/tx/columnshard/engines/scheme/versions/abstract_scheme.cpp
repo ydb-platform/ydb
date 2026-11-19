@@ -298,7 +298,10 @@ std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> ISnapshotSchema::
             valueBytes = std::max<ui64>(1, fixed->bit_width() / 8);
         }
     }
-    const ui32 chunkRecords = std::max<ui64>(1, std::min<ui64>(recordsCount, MaxChunkBytes / std::max<ui64>(1, valueBytes)));
+    static constexpr ui64 MaxChunksCount = (ui64)std::numeric_limits<ui16>::max() + 1;
+    const ui64 minChunkRecords = (recordsCount + MaxChunksCount - 1) / MaxChunksCount;
+    const ui32 chunkRecords =
+        std::max<ui64>({ 1, minChunkRecords, std::min<ui64>(recordsCount, MaxChunkBytes / std::max<ui64>(1, valueBytes)) });
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> result;
     if (!recordsCount) {
         return result;

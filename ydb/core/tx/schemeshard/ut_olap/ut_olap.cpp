@@ -663,7 +663,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {{NKikimrScheme::StatusSchemeError, "Cannot set and drop default value of column 'data' in one request"}});
     }
 
-    Y_UNIT_TEST(InvalidJsonDocumentDefaultRejected) {
+    Y_UNIT_TEST(InvalidEncodedDefaultsRejected) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableCsDefaultValues(true));
         ui64 txId = 100;
@@ -684,6 +684,14 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Name: "ColumnTable"
             AlterSchema { AlterColumns { Name: "doc" DefaultScalar { Scalar { Bytes: "" } } } }
         )", {rejected});
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "text" Type: "Utf8" DefaultValue { Scalar { String: "\xff" } } } }
+        )", {{NKikimrScheme::StatusSchemeError, "Invalid Utf8 default"}});
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "day" Type: "Date" DefaultValue { Scalar { Uint16: 65000 } } } }
+        )", {{NKikimrScheme::StatusSchemeError, "Invalid Date default"}});
     }
 
     Y_UNIT_TEST_FLAG(PgTypesRejected, EnableTablePgTypes) {

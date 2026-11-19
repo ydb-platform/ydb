@@ -9,7 +9,7 @@ namespace NKikimr::NColumnShard {
 
 bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite::TOperation& proto, const NEvWrite::IPayloadReader& payload) {
     if (proto.GetDefaultFilledColumnCount() != 0) {
-        YDB_LOG_DEBUG("",
+        YDB_LOG_WARN("",
             {"event", "default_filled_column_count"},
             {"error", "DefaultFilledColumnCount is not supported by column tables"});
         return false;

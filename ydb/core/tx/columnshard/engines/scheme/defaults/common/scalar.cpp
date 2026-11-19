@@ -571,6 +571,15 @@ TConclusion<Ydb::TypedValue> TColumnDefaultScalarValue::SerializeToTypedValue(co
     return result;
 }
 
+TConclusionStatus TColumnDefaultScalarValue::ValidateForType(const NScheme::TTypeInfo& type) const {
+    const auto typed = SerializeToTypedValue(type);
+    if (typed.IsFail()) {
+        return TConclusionStatus::Fail(typed.GetErrorMessage());
+    }
+    TColumnDefaultScalarValue parsed;
+    return parsed.ParseFromTypedValue(*typed, type);
+}
+
 TString TColumnDefaultScalarValue::DebugString() const {
     if (!Value) {
         return "NO_DATA";

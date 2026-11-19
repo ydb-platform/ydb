@@ -200,6 +200,12 @@ public:
         CreateGraphTransformer(typesCtx, sessionCtx, funcRegistry);
     }
 
+    TIntrusivePtr<TAsyncQueryResult> PrepareNewRbo(const TExprNode::TPtr& query, TExprContext& ctx) override {
+        Y_ENSURE(NewRBOTransformer, "NewRBO composite graph transformer was not initialized.");
+        NewRBOTransformer->Rewind();
+        return MakeIntrusive<TPrepareQueryAsyncResult>(query, *NewRBOTransformer, ctx, *TransformCtx);
+    }
+
     TIntrusivePtr<TAsyncQueryResult> PrepareDataQuery(const TString& cluster, const TExprNode::TPtr& query,
         TExprContext& ctx, const IKikimrQueryExecutor::TExecuteSettings& settings) override
     {
@@ -332,6 +338,10 @@ private:
         }
 
         TExprNode::TPtr query = kqlQueryBlocks->Ptr();
+        if (const auto* trace = queryCtx->CompileTrace.Get(); trace && trace->CaptureKqlQuery) {
+            trace->CaptureKqlQuery(*query, ctx);
+            return MakeKikimrResultHolder(IKqpHost::TQueryResult{});
+        }
         YQL_CLOG(DEBUG, ProviderKqp) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx);
         YQL_CLOG(DEBUG, CoreDq) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx);
 
@@ -344,9 +354,7 @@ private:
 
         if (Config->GetEnableNewRBO()) {
             YQL_CLOG(INFO, CoreDq) << "Taking the new RBO branch";
-            Y_ENSURE(NewRBOTransformer, "NewRBO composite graph transformer was not initialized.");
-            NewRBOTransformer->Rewind();
-            return MakeIntrusive<TPrepareQueryAsyncResult>(query, *NewRBOTransformer, ctx, *TransformCtx);
+            return PrepareNewRbo(query, ctx);
         } else {
             YQL_CLOG(INFO, CoreDq) << "Taking the old RBO branch";
             return MakeIntrusive<TPrepareQueryAsyncResult>(query, *Transformer, ctx, *TransformCtx);

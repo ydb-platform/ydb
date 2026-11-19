@@ -1,0 +1,31 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Query.Benchmark;
+
+import "ydb/public/api/protos/ydb_formats.proto";
+import "ydb/public/api/protos/ydb_query.proto";
+import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/tests/tools/parsed_query_bench/proto/parsed_query.proto";
+
+// Experimental wire schema for the offline benchmark. Keep the text request
+// decodable by the existing Query Service on exactly the same bytes.
+message ExecuteQueryRequest {
+    string session_id = 1;
+    ExecMode exec_mode = 2;
+    TransactionControl tx_control = 3;
+    oneof query {
+        QueryContent query_content = 4;
+        ParsedQuery parsed_query = 5;
+    }
+    map<string, Ydb.TypedValue> parameters = 6;
+    StatsMode stats_mode = 7;
+    bool concurrent_result_sets = 8;
+    int64 response_part_limit_bytes = 9;
+    string pool_id = 10;
+    int64 stats_period_ms = 11;
+    SchemaInclusionMode schema_inclusion_mode = 12;
+    Ydb.ResultSet.Format result_set_format = 13;
+    Ydb.Formats.ArrowFormatSettings arrow_format_settings = 14;
+    bool collect_affected_rows = 15;
+}

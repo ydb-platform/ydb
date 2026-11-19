@@ -350,6 +350,10 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         Y_ENSURE(returningResults.empty(), "RETURNING must reference an effect in the same query block");
         ++physicalTxGroup;
     }
+    if (const auto* trace = KqpCtx.GetCompileTrace(); trace && trace->CaptureRboRoots) {
+        trace->CaptureRboRoots(Roots, *input, ctx);
+        return TStatus::Error;
+    }
     if (Roots.size() > 1) {
         Y_ENSURE(!KqpCtx.Config->GetEnableFallbackOnMultipleStatements(),
             "Fallback due to multiple statements flag");

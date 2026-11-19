@@ -8,6 +8,7 @@ RECURSE(
     local_cluster
     mdb_mock
     nemesis
+    parsed_query_bench
     s3_bench
     s3_recipe
     token_accessor_mock

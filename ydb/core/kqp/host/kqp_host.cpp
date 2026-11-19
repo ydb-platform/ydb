@@ -1351,6 +1351,13 @@ public:
             });
     }
 
+    IAsyncQueryResultPtr InspectKqlQuery(const TPrepareSettings& settings, const TKqlImporter& import) override {
+        Y_ENSURE(Config->GetEnableNewRBO() && settings.CompileTrace && settings.CompileTrace->CaptureRboRoots);
+        SetupSession(EKikimrQueryType::Query, settings.CompileTrace);
+        SetupQueryParameters(settings, EKikimrQueryType::Query);
+        return KqpRunner->PrepareNewRbo(import(*ExprCtx, *SessionCtx), *ExprCtx);
+    }
+
     IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings, NYql::TExprNode::TPtr expr = nullptr) override {
         return CheckedProcessQuery(*ExprCtx,
             [this, &query, settings, expr] (TExprContext& ctx) mutable {
@@ -1439,13 +1446,16 @@ private:
         TKqpTranslationSettingsBuilder& settingsBuilder) const
     {
         TCompileExprResult result;
-        NYql::TAstParseResult queryAst;
-        {
-            settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
-                .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
-                .SetQueryParameters(query.ParameterTypes)
-                .SetApplicationName(ApplicationName)
-                .SetFromConfig(SessionCtx->Config());
+        NYql::TAstParseResult parsed;
+        const auto& queryAst = query.TranslatedAst ? *query.TranslatedAst : parsed;
+        settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
+            .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
+            .SetQueryParameters(query.ParameterTypes)
+            .SetApplicationName(ApplicationName)
+            .SetFromConfig(SessionCtx->Config());
+        if (query.TranslatedAst) {
+            SessionCtx->Query().TranslationSettings = settingsBuilder.Build(ctx);
+        } else {
             TCompileTraceScope traceScope(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Phase,
                 "Parse query");
             NSQLTranslation::TTranslationSettings effectiveSettings;
@@ -1488,7 +1498,10 @@ private:
             }
             traceScope.SetSuccess(astRes.IsOk() && astRes.Root);
             SessionCtx->Query().TranslationSettings = std::move(effectiveSettings);
-            queryAst = std::move(astRes);
+            parsed = std::move(astRes);
+            if (const auto* trace = SessionCtx->Query().CompileTrace.Get(); trace && trace->OnSqlTranslated) {
+                trace->OnSqlTranslated();
+            }
         }
 
         ctx.IssueManager.AddIssues(queryAst.Issues);

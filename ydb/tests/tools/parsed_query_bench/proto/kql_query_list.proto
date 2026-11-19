@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package Ydb.Query.Benchmark;
+
+// A postorder expression DAG at the output of BuildKqlQuery. The last node is
+// the root. A one-based child ID references an earlier node in the same graph.
+message KqlQueryList {
+    uint32 format_version = 1;
+    repeated Node nodes = 2;
+
+    message Node {
+        enum Kind {
+            UNSPECIFIED = 0;
+            ATOM = 1;
+            LIST = 2;
+            CALLABLE = 3;
+            LAMBDA = 4;
+            ARGUMENT = 5;
+            ARGUMENTS = 6;
+            WORLD = 7;
+        }
+        Kind kind = 1;
+        bytes content = 2;
+        uint32 atom_flags = 3;
+        repeated uint32 children = 4;
+        uint32 row = 5;
+        uint32 column = 6;
+        string file = 7;
+    }
+}

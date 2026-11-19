@@ -766,6 +766,23 @@ public:
     {
         return GetKeysInfo().ReadsCount + GetKeysInfo().WritesCount;
     }
+    /**
+     * Returns true if operation accesses keys of user tables, i.e. its CPU
+     * usage depends on the key range of the shard. Keys of system tables
+     * (e.g. locks of a commit or rollback without user operations) don't count.
+     */
+    bool HasUserTableKeys() const
+    {
+        if (!HasKeysInfo()) {
+            return false;
+        }
+        for (const auto& key : GetKeysInfo().Keys) {
+            if (!TSysTables::IsSystemTable(key.Key->TableId)) {
+                return true;
+            }
+        }
+        return false;
+    }
     virtual ui64 LockTxId() const { return 0; }
     virtual ui32 LockNodeId() const { return 0; }
     virtual bool HasLockedWrites() const { return false; }

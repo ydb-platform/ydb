@@ -408,6 +408,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         } else {
             InFlightData.Reset();
             TerminateWriter.Reset();
+            ForwardPendingDataEnd();
             if (Reader) {
                 PollSource();
             }
@@ -765,6 +766,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
         if (records.empty()) {
             InFlightData.Reset();
+            ForwardPendingDataEnd();
             PollSource();
         } else {
             Send(Writer, new TEvWorker::TEvData(InFlightData->PartitionId, InFlightData->Source, InFlightData->Records));

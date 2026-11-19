@@ -393,6 +393,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
             NJson::TJsonValue replication;
             UNIT_ASSERT(NJson::ReadJsonTree(attributes.Get(0).GetValue(), &replication));
+            UNIT_ASSERT(replication.Has("supports_key_range_autopartitioning"));
             UNIT_ASSERT_VALUES_EQUAL(replication["supports_key_range_autopartitioning"].GetBoolean(), supportsKeyRangeAutopartitioning);
         }
 

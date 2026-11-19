@@ -108,7 +108,8 @@ public:
         }
 
         Self->RemoveQueue.erase(Id);
-        if (Self->ExitingWorkers.erase(Id)) {
+        const bool exited = Self->ExitingWorkers.erase(Id);
+        if (exited) {
             Self->ExitedWorkers.insert(Id);
         } else {
             Self->CompleteWorkerSets.erase(std::make_pair(Id.ReplicationId(), Id.TargetId()));
@@ -141,6 +142,10 @@ public:
         Self->TabletCounters->Simple()[COUNTER_WORKERS] = Self->Workers.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = Self->PendingHeartbeats.size();
+
+        if (exited) {
+            Self->RemoveEndedWorkers(ctx);
+        }
 
         const auto replication = Self->Find(Id.ReplicationId());
         if (!replication) {

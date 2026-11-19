@@ -808,8 +808,13 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
             return;
         }
         for (auto partitionId : record.GetChildPartitionsIds()) {
+            const TWorkerId child(id.ReplicationId(), id.TargetId(), partitionId);
+            if (ExitedWorkers.contains(child)) {
+                continue;
+            }
+
             auto ev = MakeHolder<TEvService::TEvRunWorker>();
-            TWorkerId(id.ReplicationId(), id.TargetId(), partitionId).Serialize(*ev->Record.MutableWorker());
+            child.Serialize(*ev->Record.MutableWorker());
             Send(SelfId(), std::move(ev));
         }
     }
@@ -820,7 +825,9 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
 void TController::RemoveEndedWorkers(const TActorContext& ctx) {
     for (const auto& [id, worker] : Workers) {
         const auto& children = worker.GetChildPartitionIds();
-        if (!worker.IsDataEnded() || children.empty() || ExitingWorkers.contains(id) || RemoveQueue.contains(id)) {
+        if (!worker.IsDataEnded() || children.empty() || ExitingWorkers.contains(id) || RemoveQueue.contains(id)
+            || ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId()))
+        {
             continue;
         }
 

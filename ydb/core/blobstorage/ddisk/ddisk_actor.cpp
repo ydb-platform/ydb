@@ -387,12 +387,12 @@ namespace {
 
         Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
             new NNodeWhiteboard::TEvWhiteboard::TEvDDiskHealthUpdate(BaseInfo.PDiskId, BaseInfo.VDiskSlotId,
-                BaseInfo.InitOwnerRound, IsPersistentBufferActor, status, std::move(reason), HealthReportPeriod * 3));
+                BaseInfo.InitOwnerRound, IsPersistentBufferActor, status, std::move(reason), Config.HealthReportPeriod * 3));
     }
 
     void TDDiskActor::PublishHealthAndSchedule() {
         PublishHealth();
-        Schedule(HealthReportPeriod, new TEvPrivate::TEvPublishHealth());
+        Schedule(Config.HealthReportPeriod, new TEvPrivate::TEvPublishHealth());
     }
 
     bool TDDiskActor::IsBroken() const {

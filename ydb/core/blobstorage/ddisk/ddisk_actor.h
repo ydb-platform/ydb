@@ -436,7 +436,6 @@ namespace NKikimr::NDDisk {
         TString BrokenReason;
         TString HealthStoppingReason;
 
-        static constexpr TDuration HealthReportPeriod = TDuration::Seconds(5);
         void PublishHealth();
         void PublishHealthAndSchedule();
 

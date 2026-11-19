@@ -24,6 +24,8 @@ namespace {
 using namespace NTestHelpers;
 
 class TTopicMirroringFixture {
+    static constexpr const char* Consumer = "application";
+
     static TFeatureFlags Flags() {
         TFeatureFlags flags;
         flags.FeatureFlags.SetEnableTopicReplication(true);
@@ -34,7 +36,9 @@ class TTopicMirroringFixture {
     struct TSourceEnv: TEnv<> {
         TSourceEnv(): TEnv<>(Flags()) {
             UNIT_ASSERT_VALUES_EQUAL(MkDir("/Root", "src"), NMsgBusProxy::MSTATUS_OK);
-            UNIT_ASSERT_VALUES_EQUAL(CreateTopic("/Root/src", *MakeTopicDescription({.Name = "topic"})), NMsgBusProxy::MSTATUS_OK);
+            auto topic = MakeTopicDescription({.Name = "topic"});
+            topic->MutablePQTabletConfig()->AddConsumers()->SetName(Consumer);
+            UNIT_ASSERT_VALUES_EQUAL(CreateTopic("/Root/src", *topic), NMsgBusProxy::MSTATUS_OK);
         }
     };
 
@@ -158,6 +162,22 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(Destination.GetDescription("/Root/replication").GetSchemeStatus(),
             NKikimrScheme::StatusPathDoesNotExist);
         UNIT_ASSERT(!Config().GetPartitionConfig().HasMirrorFrom());
+    }
+
+    void CommitAndWaitForConsumerOffset(ui64 offset) {
+        NYdb::NTopic::TTopicClient source(Source.GetDriver()), destination(Destination.GetDriver());
+        const auto commit = source.CommitOffset("/Root/src/topic", 0, Consumer, offset).GetValueSync();
+        UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
+
+        Wait([&] {
+            const auto result = destination.DescribeConsumer("/Root/topic", Consumer,
+                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& partitions = result.GetConsumerDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            const auto& stats = partitions.front().GetPartitionConsumerStats();
+            return stats && stats->GetCommittedOffset() == offset;
+        });
     }
 
     void WriteAndWait(const TString& payload, ui64 endOffset) {
@@ -297,6 +317,7 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
         test.Exec("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'STANDBY');");
         test.WaitMirror(true);
         test.WriteAndWait("second", 2);
+        test.CommitAndWaitForConsumerOffset(1);
         test.Exec("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');");
         test.WaitMirror(false);
         test.Exec("DROP ASYNC REPLICATION `/Root/replication`;");

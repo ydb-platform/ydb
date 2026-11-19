@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package Ydb.Query;
+option cc_enable_arenas = true;
+
+import "ydb/tests/tools/parsed_query_bench/proto/yql_parser_metadata.proto";
+
+message AntlrCst {
+  uint32 format_version = 1; // Required: 1.
+  YqlParserMetadata metadata = 2;
+  repeated YqlParserToken tokens = 3; // Full stream, including hidden tokens + EOF.
+  repeated Node nodes = 4;
+  uint32 root_node_id = 5; // Must refer to the sql_query rule of this grammar.
+
+  message Node {
+    uint32 id = 1; // Nonzero, unique within this message.
+    oneof node {
+      Rule rule = 2;
+      uint32 token_index = 3; // Zero-based tokens index; terminal node.
+    }
+  }
+  message Rule {
+    uint32 rule_index = 1; // Exact generated getRuleIndex(); zero is valid.
+    repeated uint32 children = 2; // Node IDs, in concrete source order.
+    uint32 start_token_index = 3;
+    optional uint32 stop_token_index = 4; // Absent if ANTLR stop == nullptr.
+  }
+}

@@ -2,7 +2,7 @@
 
 #include "measurement.h"
 
-#include <ydb/tests/tools/parsed_query_bench/proto/kql_query_list.pb.h>
+#include <ydb/tests/tools/parsed_query_bench/proto/main_stages.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <yql/essentials/ast/yql_ast.h>
 
@@ -44,8 +44,8 @@ public:
     void WithSession(std::function<void()> run) const;
     TLogicalResult LowerText(const TString& text, const TParameterMap& parameters, bool verify, TMeasurementTime* imported = nullptr) const;
     TLogicalResult Lower(NYql::TAstParseResult ast, const TParameterMap& parameters, bool verify) const;
-    void ExportKql(const TString& text, const TParameterMap& parameters, Ydb::Query::Benchmark::KqlQueryList& out) const;
-    TLogicalResult LowerKql(const Ydb::Query::Benchmark::KqlQueryList& wire, const TParameterMap& parameters, bool verify,
+    void ExportKql(const TString& text, const TParameterMap& parameters, Ydb::Query::KqlQueryList& out) const;
+    TLogicalResult LowerKql(const Ydb::Query::KqlQueryList& wire, const TParameterMap& parameters, bool verify,
         TMeasurementTime* imported) const;
 
     TString Cluster = "benchmark";

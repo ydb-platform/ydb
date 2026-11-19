@@ -10,10 +10,10 @@ using TRequest = Ydb::Query::Benchmark::ExecuteQueryRequest;
 
 NYql::TAstParseResult TranslateText(const TString& sql, const TRequest& envelope, const TEngine& engine);
 void ExportGrammar(const TString& sql, const TRequest& envelope, const TEngine& engine,
-    Ydb::Query::Benchmark::SqlV1ParserAst& output);
-NYql::TAstParseResult TranslateGrammar(const Ydb::Query::Benchmark::SqlV1ParserAst& input,
+    Ydb::Query::MainSqlV1ParserAst& output);
+NYql::TAstParseResult TranslateGrammar(const Ydb::Query::MainSqlV1ParserAst& input,
     const TRequest& envelope, const TEngine& engine);
-void ExportAst(const NYql::TAstNode& root, Ydb::Query::Benchmark::YqlAst& output);
-NYql::TAstParseResult ImportAst(const Ydb::Query::Benchmark::YqlAst& input);
+void ExportAst(const NYql::TAstNode& root, Ydb::Query::YqlAst& output);
+NYql::TAstParseResult ImportAst(const Ydb::Query::YqlAst& input);
 
 } // namespace NKikimr::NKqp::NParsedQueryBench

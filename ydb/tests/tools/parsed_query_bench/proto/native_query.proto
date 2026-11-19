@@ -1,0 +1,494 @@
+syntax = "proto3";
+
+package Ydb.Query;
+
+option cc_enable_arenas = true;
+
+message NativeQuery {
+  uint32 format_version = 1; // Required; exactly 1 for this draft.
+  string semantics_version = 2; // Versioned YQL callable/type/IR semantics.
+  repeated string required_features = 3; // All must be supported by receiver.
+  CompilationContext context = 4;
+  repeated Type types = 5;
+  repeated Function functions = 6;
+  repeated Table tables = 7;
+  repeated Parameter parameters = 8;
+  repeated Root roots = 9; // TNativeQuery::Roots, in execution-block order.
+  repeated Result results = 10; // TNativeQuery::Results, in public result order.
+  Execution execution = 11;
+  Diagnostics diagnostics = 12; // Optional; never executable or a cache key.
+
+  message CompilationContext {
+    string database = 1; // Absolute database path; must match RPC context.
+    string cluster = 2; // Must resolve to an allowed provider in this database.
+    repeated Setting settings = 3; // Ordered, structured provider directives.
+    bool ordered_columns = 4;
+
+    repeated Setting required_effective_settings = 5;
+  }
+
+  message Setting {
+    string provider = 1;
+    string name = 2;
+    oneof action {
+      Strings set_values = 3; // Empty list differs from a list containing "".
+      Empty reset_to_default = 4;
+    }
+  }
+
+  message Parameter {
+    string name = 1; // Canonical YQL name, including '$'. Unique in query.
+    uint32 type_id = 2;
+  }
+
+  message Type {
+    uint32 id = 1;
+    oneof kind {
+      DataType data = 10;
+      uint32 optional_item = 11;
+      uint32 list_item = 12;
+      Types tuple = 13;
+      Members struct_type = 14;
+      DictType dict = 15;
+      uint32 variant_underlying = 16; // Tuple or Struct type.
+      TaggedType tagged = 17;
+      CallableType callable = 18;
+      string resource_tag = 19;
+      uint32 stream_item = 20;
+      uint32 flow_item = 21;
+      Types multi = 22;
+      uint32 block_item = 23;
+      uint32 scalar_item = 24;
+      uint32 type_of = 25;
+      PgType pg = 26;
+      Empty void_type = 27;
+      Empty null_type = 28;
+      Empty empty_list = 29;
+      Empty empty_dict = 30;
+      Empty world = 31;
+      Empty unit = 32;
+      uint32 linear_item = 33;
+      uint32 dynamic_linear_item = 34;
+    }
+  }
+
+  message DataType {
+    string slot = 1; // Stable semantic name, e.g. Int64, Utf8, Decimal.
+    repeated string parameters = 2; // Decimal: precision, scale; registry checks.
+  }
+  message Types { repeated uint32 type_ids = 1; }
+  message Members { repeated Member items = 1; }
+  message Member {
+    string name = 1;
+    uint32 type_id = 2;
+  }
+  message DictType {
+    uint32 key_type_id = 1;
+    uint32 payload_type_id = 2;
+  }
+  message TaggedType {
+    string tag = 1;
+    uint32 item_type_id = 2;
+  }
+  message CallableType {
+    uint32 return_type_id = 1;
+    repeated CallableArgument arguments = 2;
+    uint32 optional_arguments_count = 3;
+    bytes payload = 4; // Callable type metadata, not executable code.
+  }
+  message CallableArgument {
+    uint32 type_id = 1;
+    string name = 2;
+    uint64 flags = 3; // Versioned callable-argument flags; unknown bits rejected.
+  }
+  message PgType {
+    uint32 oid = 1;
+    string catalog_version = 2;
+  }
+
+  message Function {
+    uint32 id = 1;
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      YQL_CALLABLE = 1;
+      UDF = 2;
+      AGGREGATE = 3;
+      WINDOW = 4;
+    }
+    Kind kind = 2;
+    string name = 3; // Bound canonical symbol; no SQL overload resolution.
+    string module = 4; // Existing server module only; no library upload/load.
+    string implementation_version = 5;
+    optional uint32 signature_type_id = 6;
+  }
+
+  message Table {
+    uint32 id = 1;
+    string cluster = 2;
+    string path = 3; // Canonical absolute path, after TablePathPrefix resolution.
+    uint64 owner_id = 4;
+    uint64 local_path_id = 5;
+    uint64 schema_version = 6;
+    repeated Column columns = 7; // Columns the binding/type contract depends on.
+  }
+  message Column {
+    uint32 id = 1; // Catalog column ID, not an information-unit ID.
+    string name = 2;
+    uint32 type_id = 3; // Stored-column type, before outer-join null extension.
+  }
+
+  message Root {
+    uint32 id = 1;
+    uint32 statement_index = 2; // Zero-based source statement ordinal.
+    Plan plan = 3;
+    repeated OutputColumn columns = 4; // TOpRoot::Columns, in projection order.
+    repeated string query_columns = 5; // TOpRoot::QueryColumns.
+
+    uint64 transaction_group = 6; // TPlanProps::PhysicalTxGroup.
+    uint64 effect_priority = 7;
+    oneof destination {
+      uint32 result_id = 8;
+      string materialized_parameter = 9; // Evaluate once, bind for later roots.
+      Empty effect_only = 10;
+    }
+    bool unordered_result = 11;
+    bool pg_expression_semantics = 12; // TPlanProps::PgSyntax, not SQL dialect.
+    optional uint32 returning_rows_limit_expr_id = 13;
+    SourceLocation location = 14;
+  }
+
+  message OutputColumn {
+    uint32 iu_id = 1;
+    string name = 2; // Output label, independent of IU identity/display name.
+  }
+  message Result {
+    uint32 id = 1;
+    repeated string column_hints = 2;
+    uint64 rows_limit = 3; // 0 means no producer limit; server limits still apply.
+    bool discard = 4; // Execution.DiscardResults, in this list's order.
+  }
+  message Execution {
+    repeated TableOperation table_operations = 1;
+    bool has_uncommitted_changes_read = 2;
+  }
+  message TableOperation {
+    uint32 table_id = 1;
+    Operation operation = 2;
+  }
+  enum Operation {
+    OPERATION_UNSPECIFIED = 0;
+    SELECT = 1;
+    INSERT_ABORT = 2;
+    INSERT_REVERT = 3;
+    UPSERT = 4;
+    REPLACE = 5;
+    UPDATE = 6;
+    UPDATE_ON = 7;
+    DELETE = 8;
+    DELETE_ON = 9;
+  }
+
+  message Plan {
+    uint32 input_operator_id = 1; // Root wraps this operator.
+    repeated InformationUnit information_units = 2;
+    repeated Expression expressions = 3;
+    repeated Operator operators = 4;
+    repeated Subplan subplans = 5;
+    repeated ReplicateHub replicate_hubs = 6;
+  }
+  message InformationUnit {
+    uint32 id = 1;
+    string alias = 2;
+    string column_name = 3;
+    optional string generated_name_prefix = 4;
+  }
+
+  message Expression {
+    uint32 id = 1;
+    optional uint32 type_id = 2;
+    SourceLocation location = 3;
+    oneof node {
+      Atom atom = 10;
+      ExpressionList list = 11;
+      Call call = 12;
+      Argument argument = 13;
+      Arguments arguments = 14;
+      Lambda lambda = 15;
+      Empty world = 16;
+      uint32 type_literal = 17; // ExpandType(type), not a type-source parser.
+      string parameter = 18; // External or earlier materialized parameter name.
+      BoundColumn column = 19;
+    }
+  }
+  message Atom {
+    bytes content = 1; // Preserves binary strings and embedded NULs.
+    uint32 flags = 2; // Versioned semantic atom flags; unknown bits rejected.
+  }
+  message ExpressionList { repeated uint32 items = 1; }
+  message Call {
+    uint32 function_id = 1;
+    repeated uint32 arguments = 2; // Expression IDs; preserves argument order.
+  }
+  message Argument {
+    string debug_name = 1; // Identity is Expression.id, never this name.
+  }
+  message Arguments { repeated uint32 arguments = 1; } // Argument-node IDs.
+  message Lambda {
+    uint32 arguments_expr_id = 1; // An Arguments node; owns these bindings.
+    repeated uint32 body = 2;
+  }
+  message BoundColumn {
+    uint32 row_argument_expr_id = 1;
+    uint32 iu_id = 2;
+  }
+
+  message Operator {
+    uint32 id = 1;
+    SourceLocation location = 2;
+    oneof node {
+      EmptySource empty_source = 10;
+      Read read = 11;
+      Map map = 12;
+      Filter filter = 13;
+      Join join = 14;
+      Aggregate aggregate = 15;
+      GroupingSets grouping_sets = 16;
+      Window window = 17;
+      Sort sort = 18;
+      Limit limit = 19;
+      UnionAll union_all = 20;
+      Capture capture = 21;
+      ReplicatePort replicate_port = 22;
+      TableEffect table_effect = 23;
+    }
+  }
+  message EmptySource {
+    optional uint32 rows_expr_id = 1; // Absent => one empty row (SELECT w/o FROM).
+    repeated OutputColumn columns = 2; // IU -> field in the list-of-struct rows.
+  }
+  message Read {
+    uint32 table_id = 1;
+    string alias = 2;
+    repeated ReadColumn columns = 3;
+  }
+  message ReadColumn {
+    uint32 column_id = 1; // Table's catalog column ID.
+    uint32 output_iu_id = 2;
+  }
+  message Map {
+    uint32 input = 1;
+    repeated Definition definitions = 2;
+  }
+  message Definition {
+    uint32 output_iu_id = 1;
+    uint32 lambda_expr_id = 2; // TExpression's complete row lambda.
+  }
+  message Filter {
+    uint32 input = 1;
+    uint32 predicate_lambda_expr_id = 2;
+  }
+  message Join {
+    uint32 left = 1;
+    uint32 right = 2;
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      INNER = 1;
+      LEFT = 2;
+      RIGHT = 3;
+      FULL = 4;
+      CROSS = 5;
+      LEFT_SEMI = 6;
+      RIGHT_SEMI = 7;
+      LEFT_ONLY = 8;
+      RIGHT_ONLY = 9;
+      EXCLUSION = 10;
+    }
+    Kind kind = 3;
+    repeated JoinKey keys = 4;
+    repeated uint32 filter_lambda_expr_ids = 5;
+  }
+  message JoinKey {
+    uint32 left_iu_id = 1;
+    uint32 right_iu_id = 2;
+    bool equal_nulls = 3;
+  }
+  message Aggregate {
+    uint32 input = 1;
+    repeated uint32 key_iu_ids = 2;
+    repeated Aggregation aggregations = 3;
+    bool distinct_all = 4;
+  }
+  message Aggregation {
+    uint32 output_iu_id = 1;
+    uint32 input_iu_id = 2;
+    uint32 function_id = 3;
+    bool distinct = 4;
+    bool unwrap = 5;
+  }
+  message GroupingSets {
+    uint32 input = 1;
+    repeated InformationUnits sets = 2;
+    repeated Rebinding columns = 3;
+    repeated Rebinding indicators = 4;
+  }
+  message InformationUnits { repeated uint32 iu_ids = 1; }
+  message Rebinding {
+    uint32 output_iu_id = 1;
+    uint32 input_iu_id = 2;
+  }
+  message Window {
+    uint32 input = 1;
+    repeated uint32 partition_iu_ids = 2;
+    repeated SortKey sort_keys = 3;
+    WindowFrame frame = 4;
+    repeated WindowFunction functions = 5;
+  }
+  message WindowFunction {
+    uint32 output_iu_id = 1;
+    uint32 function_id = 2;
+    repeated uint32 argument_iu_ids = 3;
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      AGGREGATE = 1;
+      NATIVE = 2; // Function identity (RowNumber, Rank, etc.) is in function_id.
+    }
+    Kind kind = 4;
+  }
+  message WindowFrame {
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      ROWS = 1;
+      RANGE = 2;
+      GROUPS = 3;
+    }
+    Kind kind = 1;
+    FrameBound begin = 2;
+    FrameBound end = 3;
+  }
+  message FrameBound {
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      UNBOUNDED_PRECEDING = 1;
+      PRECEDING = 2;
+      CURRENT_ROW = 3;
+      FOLLOWING = 4;
+      UNBOUNDED_FOLLOWING = 5;
+    }
+    Kind kind = 1;
+    uint64 offset = 2; // Present semantically only for PRECEDING/FOLLOWING.
+  }
+  message SortKey {
+    uint32 iu_id = 1;
+    enum Direction {
+      DIRECTION_UNSPECIFIED = 0;
+      ASCENDING = 1;
+      DESCENDING = 2;
+    }
+    Direction direction = 2;
+    enum NullOrder {
+      NULL_ORDER_UNSPECIFIED = 0;
+      NULLS_FIRST = 1;
+      NULLS_LAST = 2;
+    }
+    NullOrder null_order = 3; // TSortOrder::NullsFirst; never infer from direction.
+  }
+  message Sort {
+    uint32 input = 1;
+    repeated SortKey keys = 2;
+    optional uint32 limit_lambda_expr_id = 3;
+  }
+  message Limit {
+    uint32 input = 1;
+    uint32 count_lambda_expr_id = 2;
+    optional uint32 offset_lambda_expr_id = 3;
+    bool ordered_input = 4;
+  }
+  message UnionAll {
+    repeated uint32 inputs = 1;
+    repeated UnionColumn columns = 2;
+    bool ordered = 3;
+  }
+  message UnionColumn {
+    uint32 output_iu_id = 1;
+    repeated uint32 input_iu_ids = 2; // Exactly one per input, in input order.
+  }
+
+  message Capture {
+    uint32 input = 1; // TOpAddDependencies.
+    repeated CapturedColumn columns = 2;
+  }
+  message CapturedColumn {
+    uint32 local_iu_id = 1;
+    uint32 outer_iu_id = 2;
+    uint32 type_id = 3; // Outer scope's use-site type, including nullability.
+  }
+  message Subplan {
+    uint32 binding_iu_id = 1;
+    uint32 input_operator_id = 2;
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      SCALAR = 1;
+      IN = 2;
+      EXISTS = 3;
+    }
+    Kind kind = 3;
+    repeated uint32 tuple_iu_ids = 4; // Caller inputs for IN, in tuple order.
+    optional uint32 result_iu_id = 5; // Producer output; absent for EXISTS.
+    bool optional_result = 6; // Preserve SQL IN's nullable result semantics.
+  }
+  message ReplicateHub {
+    uint32 id = 1;
+    uint32 input_operator_id = 2;
+    SourceLocation location = 3;
+  }
+  message ReplicatePort {
+    uint32 hub_id = 1;
+    uint32 port_index = 2; // Zero-based, unique within hub.
+    repeated Rebinding columns = 3;
+  }
+
+  message TableEffect {
+    uint32 input = 1;
+    uint32 table_id = 2;
+    Operation operation = 3; // SQL-level operation, for execution metadata.
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      INSERT_ROWS = 1;
+      INSERT_ROWS_INDEX = 2;
+      UPDATE_ROWS = 3;
+      UPDATE_ROWS_INDEX = 4;
+      UPSERT_ROWS = 5;
+      UPSERT_ROWS_INDEX = 6;
+      DELETE_ROWS = 7;
+      DELETE_ROWS_INDEX = 8;
+    }
+    Kind kind = 4; // TOpTableEffect::EffectType; checked against schema/settings.
+    repeated WriteColumn columns = 5;
+    repeated WriteColumn returning = 6;
+    repeated uint32 default_iu_ids = 7;
+    optional string on_conflict = 8;
+    optional bool is_batch = 9;
+    repeated uint32 setting_expr_ids = 10; // TEffectOptions::Settings lists.
+  }
+  message WriteColumn {
+    uint32 iu_id = 1; // Input use for write; new definition for RETURNING.
+    uint32 column_id = 2; // Catalog destination column ID, not a mutable alias.
+  }
+
+  message SourceLocation {
+    uint32 source_id = 1;
+    uint32 line = 2; // 1-based; zero means unavailable.
+    uint32 column = 3; // 1-based; zero means unavailable.
+  }
+  message Diagnostics {
+    repeated Source sources = 1;
+    string producer = 2;
+  }
+  message Source {
+    uint32 id = 1;
+    string name = 2;
+    string text = 3; // Optional diagnostic source, never parsed/executed.
+  }
+  message Strings { repeated string values = 1; }
+  message Empty {}
+}

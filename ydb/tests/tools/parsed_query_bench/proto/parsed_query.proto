@@ -1,49 +1,26 @@
 syntax = "proto3";
 
-package Ydb.Query.Benchmark;
+package Ydb.Query;
+option cc_enable_arenas = true;
 
-import "ydb/tests/tools/parsed_query_bench/proto/kql_query_list.proto";
-import "yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.proto";
+import "ydb/tests/tools/parsed_query_bench/proto/antlr_ast.proto";
+import "ydb/tests/tools/parsed_query_bench/proto/antlr_cst.proto";
+import "ydb/tests/tools/parsed_query_bench/proto/syntax_script.proto";
+import "ydb/tests/tools/parsed_query_bench/proto/native_query.proto";
+import "ydb/tests/tools/parsed_query_bench/proto/main_stages.proto";
 
 message ParsedQuery {
-    oneof stage {
-        SqlV1ParserAst antlr_ast = 1;
-        YqlAst yql_ast = 5;
-        KqlQueryList kql_query_list = 6;
-    }
-}
+  string sql_for_fallback = 1;
 
-message SqlV1ParserAst {
-    bytes grammar_fingerprint = 1;
-    .NSQLv1Generated.TSQLv1ParserAST ast = 2;
-    repeated Token tokens = 3;
-
-    message Token {
-        string name = 1;
-        bytes content = 2;
-        uint32 line = 3;
-        uint32 column = 4;
-    }
-}
-
-message YqlAst {
-    uint32 format_version = 1;
-    Node root = 2;
-
-    message Node {
-        uint32 row = 1;
-        uint32 column = 2;
-        string file = 3;
-        oneof kind {
-            Atom atom = 4;
-            List list = 5;
-        }
-    }
-    message Atom {
-        bytes content = 1;
-        uint32 flags = 2;
-    }
-    message List {
-        repeated Node children = 1;
-    }
+  oneof stage {
+    // NewParser
+    SqlV1ParserAst antlr_ast = 2;
+    AntlrCst antlr_cst = 3;
+    SyntaxScript script = 4;
+    NativeQuery native_query = 5;
+    // main
+    YqlAst yql_ast = 6;
+    KqlQueryList kql_query_list = 7;
+    MainSqlV1ParserAst main_antlr_ast = 8;
+  }
 }

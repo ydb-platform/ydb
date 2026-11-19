@@ -1,4 +1,5 @@
 #include "syntax.h"
+#include "stage_error.h"
 #include "engine.h"
 
 #include <ydb/core/kqp/host/kqp_translate.h>
@@ -8,6 +9,8 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
+#include <yql/essentials/sql/v1/proto_parser/reflection.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/sql/v1/translation/sql.h>
@@ -19,7 +22,7 @@
 namespace NKikimr::NKqp::NParsedQueryBench {
 namespace {
 
-using namespace Ydb::Query::Benchmark;
+using namespace Ydb::Query;
 
 TKqpTranslationSettingsBuilder SettingsBuilder(const TString& sql, const TRequest& envelope, const TEngine& engine) {
     const auto& config = engine.TranslationConfig();
@@ -61,8 +64,8 @@ struct TGrammarContext {
     }
 };
 
-TString RecoverSource(const SqlV1ParserAst& input) {
-    Y_ENSURE(!input.tokens().empty(), "Missing grammar token stream");
+TString RecoverSource(const MainSqlV1ParserAst& input) {
+    Y_ENSURE_EX(!input.tokens().empty(), TStageError() << "Missing grammar token stream");
     TString sql;
     for (int i = 0; i + 1 < input.tokens_size(); ++i) {
         sql += input.tokens(i).content();
@@ -91,10 +94,10 @@ void ExportNode(const NYql::TAstNode& node, YqlAst::Node& output) {
 NYql::TAstNode* ImportNode(const YqlAst::Node& input, TMemoryPool& pool) {
     NYql::TPosition position(input.column(), input.row(), input.file());
     if (input.has_atom()) {
-        Y_ENSURE(!(input.atom().flags() & ~NYql::TAstNodeFlags::FlagsMask), "Unknown YQL atom flags");
+        Y_ENSURE_EX(!(input.atom().flags() & ~NYql::TAstNodeFlags::FlagsMask), TStageError() << "Unknown YQL atom flags");
         return NYql::TAstNode::NewAtom(position, input.atom().content(), pool, input.atom().flags());
     }
-    Y_ENSURE(input.has_list(), "Missing YQL node kind");
+    Y_ENSURE_EX(input.has_list(), TStageError() << "Missing YQL node kind");
     TVector<NYql::TAstNode*> children;
     children.reserve(input.list().children_size());
     for (const auto& child : input.list().children()) {
@@ -117,7 +120,7 @@ NYql::TAstParseResult TranslateText(const TString& sql, const TRequest& envelope
     return result;
 }
 
-void ExportGrammar(const TString& sql, const TRequest& envelope, const TEngine& engine, SqlV1ParserAst& output) {
+void ExportGrammar(const TString& sql, const TRequest& envelope, const TEngine& engine, MainSqlV1ParserAst& output) {
     TGrammarContext grammar(sql, envelope, engine);
     const auto& settings = grammar.Settings;
     const auto* ast = NSQLTranslationV1::SqlAST(grammar.Parsers, sql, settings.File, grammar.Issues,
@@ -137,9 +140,18 @@ void ExportGrammar(const TString& sql, const TRequest& envelope, const TEngine& 
     Y_ENSURE(RecoverSource(output) == sql, "Token stream cannot reproduce the original SQL");
 }
 
-NYql::TAstParseResult TranslateGrammar(const SqlV1ParserAst& input, const TRequest& envelope, const TEngine& engine) {
-    Y_ENSURE(input.has_ast() && input.grammar_fingerprint() == TStringBuf(GrammarFingerprint, sizeof(GrammarFingerprint) - 1),
-        "Grammar schema fingerprint mismatch or missing AST");
+NYql::TAstParseResult TranslateGrammar(const MainSqlV1ParserAst& input, const TRequest& envelope, const TEngine& engine) {
+    Y_ENSURE_EX(input.has_ast() && input.grammar_fingerprint() == TStringBuf(GrammarFingerprint, sizeof(GrammarFingerprint) - 1), TStageError() << "Grammar schema fingerprint mismatch or missing AST");
+    using namespace NSQLv1Generated;
+    const auto& query = input.ast().GetRule_sql_query();
+    Y_ENSURE_EX(query.GetAltCase() != TRule_sql_query::ALT_NOT_SET, TStageError() << "Missing SQL query alternative");
+    for (const auto* statement : NSQLTranslationV1::Statements(query)) {
+        Y_ENSURE_EX(statement->GetAltCase() != TRule_sql_stmt_core::ALT_NOT_SET, TStageError() << "Missing SQL statement alternative");
+        const auto description = NSQLTranslationV1::AltDescription(*statement);
+        Y_ENSURE_EX(description.Contains('_') &&
+            (statement->GetAltCase() != TRule_sql_stmt_core::kAltSqlStmtCore2 || description == "select_stmt"),
+            TStageError() << "Invalid SQL statement description");
+    }
     const auto sql = RecoverSource(input);
     TGrammarContext grammar(sql, envelope, engine);
     NSQLTranslation::TParsedTokenList tokens;
@@ -158,7 +170,7 @@ void ExportAst(const NYql::TAstNode& root, YqlAst& output) {
 }
 
 NYql::TAstParseResult ImportAst(const YqlAst& input) {
-    Y_ENSURE(input.format_version() == 1 && input.has_root(), "Unsupported or empty YQL AST");
+    Y_ENSURE_EX(input.format_version() == 1 && input.has_root(), TStageError() << "Unsupported or empty YQL AST");
     NYql::TAstParseResult result;
     result.Pool = std::make_unique<TMemoryPool>(4096);
     result.Root = ImportNode(input.root(), *result.Pool);

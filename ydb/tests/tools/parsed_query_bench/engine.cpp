@@ -303,7 +303,7 @@ TLogicalResult TEngine::Lower(TAstParseResult ast, const TParameterMap& paramete
     return result;
 }
 
-void TEngine::ExportKql(const TString& text, const TParameterMap& parameters, Ydb::Query::Benchmark::KqlQueryList& out) const {
+void TEngine::ExportKql(const TString& text, const TParameterMap& parameters, Ydb::Query::KqlQueryList& out) const {
     bool captured = false;
     IKqpHost::TPrepareSettings settings;
     settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
@@ -315,7 +315,7 @@ void TEngine::ExportKql(const TString& text, const TParameterMap& parameters, Yd
     RunUntil(Compile(*Impl->Host, text, nullptr, parameters, settings), [&] { return captured; }, "BuildKqlQuery");
 }
 
-TLogicalResult TEngine::LowerKql(const Ydb::Query::Benchmark::KqlQueryList& wire, const TParameterMap& parameters,
+TLogicalResult TEngine::LowerKql(const Ydb::Query::KqlQueryList& wire, const TParameterMap& parameters,
     bool verify, TMeasurementTime* imported) const
 {
     TLogicalResult result;

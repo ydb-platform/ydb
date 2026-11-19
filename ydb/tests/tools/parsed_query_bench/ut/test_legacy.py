@@ -9,7 +9,7 @@ from ydb.public.api.protos import ydb_query_pb2, ydb_value_pb2
 
 
 TOOL = "ydb/tests/tools/parsed_query_bench/parsed_query_legacy_bench"
-STAGES = ("text", "antlr_ast", "yql_ast")
+STAGES = ("text", "main_antlr_ast", "yql_ast")
 
 
 def test_table_and_parameters(tmp_path):
@@ -45,6 +45,7 @@ def test_table_and_parameters(tmp_path):
     cmd = [tool, "--catalog", catalog]
     subprocess.run([*cmd, "--template", template, "--export", sql, *inputs], check=True)
     assert ydb_query_pb2.ExecuteQueryRequest.FromString(inputs[0].read_bytes()) == request
+    subprocess.run([*cmd, "--verify-import", inputs[0], *reversed(inputs[1:])], check=True)
     output = subprocess.check_output([*cmd, "--bench", "0", "2", *reversed(inputs)], text=True)
     rows = list(csv.DictReader(io.StringIO(output)))
     assert len(rows) == 2 * len(stages)
@@ -71,7 +72,7 @@ def test_table_and_parameters(tmp_path):
     node = bytes([8, 2]) + message(4, bytes([1]))
     kql = bytes([8, 1]) + message(2, node)
     malformed = tmp_path / "forward.pb"
-    malformed.write_bytes(envelope.SerializeToString() + message(5, message(6, kql)))
+    malformed.write_bytes(envelope.SerializeToString() + message(5, message(7, kql)))
     failure = subprocess.run([*cmd, "--bench", "0", "1", *inputs[:3], malformed], text=True, capture_output=True)
     assert failure.returncode == 1
     assert "forward KQL child reference" in failure.stderr
@@ -108,3 +109,67 @@ def test_mismatched_script(tmp_path, stage):
     assert failure.returncode == 1
     assert "differ" in failure.stderr
     assert not failure.stdout
+    failure = subprocess.run([tool, "--verify-import", files[0], files[stage]], text=True, capture_output=True)
+    assert failure.returncode == 1
+    assert "Imported logical roots, typed plan, or ordered results differ" in failure.stderr
+    assert not failure.stdout
+
+
+def test_sql_fallback(tmp_path):
+    tool = yatest.common.binary_path(TOOL)
+    sql = tmp_path / "query.sql"
+    sql.write_text("SELECT 1 AS id;")
+    inputs = [tmp_path / (stage + ".pb") for stage in STAGES]
+    subprocess.run([tool, "--export", sql, *inputs], check=True)
+    control = ydb_query_pb2.ExecuteQueryRequest.FromString(inputs[0].read_bytes())
+    control.ClearField("query_content")
+    fixture = tmp_path / "parsed.pb"
+
+    def field(tag, payload):
+        assert len(payload) < 128
+        return bytes([tag * 8 + 2, len(payload)]) + payload
+
+    def check(route):
+        proc = subprocess.run([tool, "--check-request", fixture], text=True, capture_output=True)
+        if route:
+            assert proc.returncode == 0, proc.stderr
+            assert "BENCH_ROUTE=" + route in proc.stdout.splitlines()
+        else:
+            assert proc.returncode != 0
+            assert not proc.stdout
+
+    for index, stage in enumerate(STAGES):
+        fixture.write_bytes(inputs[index].read_bytes())
+        check(stage)
+    grammar = inputs[1].read_bytes()
+    assert b"select_stmt" in grammar
+    fixture.write_bytes(grammar.replace(b"select_stmt", b"broken_stmt"))
+    check("sql_fallback")
+    embedded = field(1, sql.read_bytes())
+    for payload in [b"", field(2, b""), field(11, b""), field(6, b"\x08\x02"),
+                    field(6, b"\x08\x01" + field(2, b"")), field(7, b""), field(8, b"")]:
+        fixture.write_bytes(control.SerializeToString() + field(5, payload))
+        check(None)
+        fixture.write_bytes(control.SerializeToString() + field(5, embedded + payload))
+        check("sql_fallback")
+
+    rows = list(csv.DictReader(subprocess.check_output(
+        [tool, "--bench-fallback", "0", "1", inputs[0], fixture], text=True).splitlines()))
+    assert {r["stage"] for r in rows} == {"sql_fallback", "text"}
+    assert int(next(r for r in rows if r["stage"] == "sql_fallback")["bytes"]) == fixture.stat().st_size
+
+    control.exec_mode = ydb_query_pb2.EXEC_MODE_EXPLAIN
+    fixture.write_bytes(control.SerializeToString() + field(5, embedded))
+    check(None)
+    fixture.write_bytes(b"\xff" + fixture.read_bytes())
+    check(None)
+
+    sizes = [p.stat().st_size for p in inputs]
+    subprocess.run([tool, "--without-sql-fallback", "--export", sql, *inputs], check=True)
+    assert sizes[0] == inputs[0].stat().st_size
+    assert all(p.stat().st_size < prior for p, prior in zip(inputs[1:], sizes[1:]))
+    for index, stage in enumerate(STAGES):
+        fixture.write_bytes(inputs[index].read_bytes())
+        check(stage)
+    fixture.write_bytes(inputs[1].read_bytes().replace(b"select_stmt", b"broken_stmt"))
+    check(None)

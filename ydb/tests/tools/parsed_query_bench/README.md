@@ -5,7 +5,7 @@ This offline tool measures the upstream KQP SQL frontend with YqlSelect forced f
 | Input | Client constructs | Server consumes |
 | --- | --- | --- |
 | `text` | Public YQL v1 QueryContent | PrepareGenericQuery receives the original SQL and runs the host SQL translator |
-| `antlr_ast` | Generated TSQLv1ParserAST and complete TParsedTokenList | SqlASTToYql translates the grammar tree with its original tokens |
+| `main_antlr_ast` | Generated TSQLv1ParserAST and complete TParsedTokenList | SqlASTToYql translates the grammar tree with its original tokens |
 | `yql_ast` | Translated TAstNode tree | Import restores atom bytes, flags, source positions and ordered children in a memory pool |
 
 The optional fourth stage, `kql_query_list`, carries the expression DAG produced by BuildKqlQuery. The receiver reconstructs shared children and lambda arguments, checks table and parameter bindings, and enters the runner with the restored query list. Add `kql.pb` after the three filenames on export and include it in server measurements. Add `kql_query_list` to the stage names for client timing.
@@ -13,7 +13,7 @@ The optional fourth stage, `kql_query_list`, carries the expression DAG produced
 ```text
 Decode ExecuteQueryRequest
   text           → PrepareGenericQuery(SQL) → SQL translator ──┐
-  antlr_ast      → SqlASTToYql(grammar tree, tokens) ──────────┤
+  main_antlr_ast → SqlASTToYql(grammar tree, tokens) ──────────┤
   yql_ast        → restore translated TAstNode ─────────────────┴→ CompileExpr → host preparation → BuildKqlQuery ─┐
   kql_query_list → restore the expression DAG and bind its tables and parameters ────────────────────────────────┴→ TKqlQueryList
 TKqlQueryList → new RBO pipeline → PlanConverter::ConvertRoot → ComputeParents → stop before if (Roots.size() > 1)
@@ -34,11 +34,17 @@ set -- "$dir/text.pb" "$dir/grammar.pb" "$dir/yql.pb" "$dir/kql.pb"
 "$bench" --export "$dir/query.sql" "$@"
 "$bench" --verify "$@"
 "$bench" --bench 30 300 "$@" > "$dir/server.csv"
-"$bench" --client 30 300 "$dir/query.sql" text antlr_ast yql_ast kql_query_list > "$dir/client.csv"
+"$bench" --client 30 300 "$dir/query.sql" text main_antlr_ast yql_ast kql_query_list > "$dir/client.csv"
 ```
 
 Omit `--catalog` for table-free queries. For table reads, use the NewParser benchmark's offline JSON catalog to provide the same table names, column types, primary keys, nullability and path prefix to both frontends. A template is a binary public ExecuteQueryRequest. Export retains its session, execution options, transaction control and typed parameters and replaces query content. Without a template, export creates an execute-mode request.
 
 `--export`, `--verify`, `--bench` and `--client` run equivalence checks before accepting a comparison. Verification regenerates each supplied protobuf from text, including source positions and query-list column hints. It also compares the lowered roots, ordered output column names and types. It also compares all request fields outside the query. Files can be passed in any order to `--verify` and `--bench`. All formats are local benchmark fixtures. The public Query Service accepts the text variant.
+
+`--verify-import TEXT.pb PARSED.pb [PARSED.pb ...]` checks independently constructed requests. It decodes each stage, invokes its real importer and compares its typed logical roots, result ordering, column names and types with the text control. Envelope fields must match. This mode accepts different source positions and alternative encodings when the resulting root signatures agree.
+
+A structured export includes the original SQL in `ParsedQuery.sql_for_fallback`. Pass `--without-sql-fallback` before `--export` or `--client` to omit it. `--check-request REQUEST.pb` prints the route that actually reached RBO. An absent or unsupported stage, incompatible grammar or wire version, or a structural codec error can take the `sql_fallback` route when SQL is present. Envelope, binding and compilation errors propagate. The equivalence and structured timing commands require the supplied stages to succeed directly.
+
+`--bench-fallback WARMUP REPEATS TEXT.pb PARSED.pb` verifies the fallback result against a matching text control and times both routes. `--client-ready WARMUP REPEATS REQUEST.pb...` measures envelope construction and serialization with a prepared query payload.
 
 Server CSV records request bytes, wall time and calling-thread CPU time in nanoseconds. Decode covers the entire protobuf request. The text input follows the normal host SQL entry point, with its intermediate timestamp taken after translation. Grammar and YQL AST inputs use the translated-AST entry point. Parse or import ends with a translated YQL AST for syntax inputs or a restored query list for the fourth stage. Frontend covers the remainder through RBO root construction. Total is the sum of the three phases. Client time includes preparing the input and encoding the full envelope. Both modes rotate stage order across rounds and exclude warmup, equivalence checks, file I/O and CSV printing from samples. Server timing starts inside a fresh host session after actor dispatch. Client timing for query-list export also starts after host construction.

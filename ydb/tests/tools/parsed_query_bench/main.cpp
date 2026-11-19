@@ -1,6 +1,8 @@
 #include "engine.h"
+#include "stage_error.h"
 #include "syntax.h"
 #include "measurement.h"
+#include "ready_client.h"
 
 #include <google/protobuf/util/message_differencer.h>
 #include <library/cpp/json/json_writer.h>
@@ -18,7 +20,7 @@ namespace NKikimr::NKqp::NParsedQueryBench {
 namespace {
 
 enum class EStage { Text, AntlrAst, YqlAst, KqlQueryList };
-constexpr std::array<TStringBuf, 4> StageNames = {"text", "antlr_ast", "yql_ast", "kql_query_list"};
+constexpr std::array<TStringBuf, 4> StageNames = {"text", "main_antlr_ast", "yql_ast", "kql_query_list"};
 
 EStage GetStage(const TRequest& request) {
     Y_ENSURE(request.exec_mode() == Ydb::Query::EXEC_MODE_EXECUTE, "Expected execute mode");
@@ -26,11 +28,12 @@ EStage GetStage(const TRequest& request) {
         Y_ENSURE(request.query_content().syntax() == Ydb::Query::SYNTAX_YQL_V1, "Expected YQL v1");
         return EStage::Text;
     }
+    Y_ENSURE(request.has_parsed_query(), "Missing request query");
     switch (request.parsed_query().stage_case()) {
-        case Ydb::Query::Benchmark::ParsedQuery::kAntlrAst: return EStage::AntlrAst;
-        case Ydb::Query::Benchmark::ParsedQuery::kYqlAst: return EStage::YqlAst;
-        case Ydb::Query::Benchmark::ParsedQuery::kKqlQueryList: return EStage::KqlQueryList;
-        default: ythrow yexception() << "Missing or unsupported query stage";
+        case Ydb::Query::ParsedQuery::kMainAntlrAst: return EStage::AntlrAst;
+        case Ydb::Query::ParsedQuery::kYqlAst: return EStage::YqlAst;
+        case Ydb::Query::ParsedQuery::kKqlQueryList: return EStage::KqlQueryList;
+        default: ythrow TStageError() << "Missing or unsupported query stage";
     }
 }
 
@@ -64,9 +67,10 @@ struct TSample {
     TMeasurementTime Decoded;
     TMeasurementTime Imported;
     TMeasurementTime Done;
+    TStringBuf Route;
 };
 
-TString Prepare(EStage stage, const TString& text, const TRequest& envelope, const TEngine& engine) {
+TString Prepare(EStage stage, const TString& text, const TRequest& envelope, const TEngine& engine, bool includeFallback) {
     TRequest request(envelope);
     switch (stage) {
         case EStage::Text:
@@ -74,7 +78,7 @@ TString Prepare(EStage stage, const TString& text, const TRequest& envelope, con
             request.mutable_query_content()->set_text(text);
             break;
         case EStage::AntlrAst:
-            ExportGrammar(text, envelope, engine, *request.mutable_parsed_query()->mutable_antlr_ast());
+            ExportGrammar(text, envelope, engine, *request.mutable_parsed_query()->mutable_main_antlr_ast());
             break;
         case EStage::YqlAst: {
             const auto ast = TranslateText(text, envelope, engine);
@@ -86,12 +90,15 @@ TString Prepare(EStage stage, const TString& text, const TRequest& envelope, con
                 *request.mutable_parsed_query()->mutable_kql_query_list());
             break;
     }
+    if (includeFallback && request.has_parsed_query()) {
+        request.mutable_parsed_query()->set_sql_for_fallback(text);
+    }
     return Encode(request);
 }
 
 NYql::TAstParseResult ToAst(const TRequest& request, EStage stage, const TEngine& engine) {
     switch (stage) {
-        case EStage::AntlrAst: return TranslateGrammar(request.parsed_query().antlr_ast(), request, engine);
+        case EStage::AntlrAst: return TranslateGrammar(request.parsed_query().main_antlr_ast(), request, engine);
         case EStage::YqlAst: return ImportAst(request.parsed_query().yql_ast());
         default: ythrow yexception() << "Expected a syntax input";
     }
@@ -127,13 +134,13 @@ TLogicalResult Verify(const TVector<TInput>& inputs, const TEngine& engine) {
         Y_ENSURE(!ordered[index], "Duplicate benchmark stage: " << StageNames[index]);
         ordered[index] = &input;
     }
-    Y_ENSURE(ordered[0] && ordered[1] && ordered[2], "Provide text, antlr_ast and yql_ast requests");
+    Y_ENSURE(ordered[0] && ordered[1] && ordered[2], "Provide text, main_antlr_ast and yql_ast requests");
     TRequest envelope;
     DecodeRequest(ordered[0]->Bytes, envelope);
     const TString sql = envelope.query_content().text();
     envelope.clear_query();
     const auto baselineAst = TranslateText(sql, envelope, engine);
-    Ydb::Query::Benchmark::YqlAst referenceAst;
+    Ydb::Query::YqlAst referenceAst;
     ExportAst(*baselineAst.Root, referenceAst);
     std::optional<TLogicalResult> baseline;
     for (const auto* input : ordered) {
@@ -147,10 +154,12 @@ TLogicalResult Verify(const TVector<TInput>& inputs, const TEngine& engine) {
         TRequest actualEnvelope(request);
         actualEnvelope.clear_query();
         Y_ENSURE(equals(envelope, actualEnvelope), "Request envelope differs for " << name);
+        Y_ENSURE(request.parsed_query().sql_for_fallback().empty() || request.parsed_query().sql_for_fallback() == sql,
+            "Fallback SQL differs for " << name);
         if (stage == EStage::AntlrAst) {
-            Ydb::Query::Benchmark::SqlV1ParserAst expectedGrammar;
+            Ydb::Query::MainSqlV1ParserAst expectedGrammar;
             ExportGrammar(sql, envelope, engine, expectedGrammar);
-            Y_ENSURE(equals(expectedGrammar, request.parsed_query().antlr_ast()), "Grammar AST or tokens differ for " << name);
+            Y_ENSURE(equals(expectedGrammar, request.parsed_query().main_antlr_ast()), "Grammar AST or tokens differ for " << name);
         } else if (stage == EStage::YqlAst) {
             Y_ENSURE(equals(referenceAst, request.parsed_query().yql_ast()), "Translated YQL AST differs for " << name);
         }
@@ -164,14 +173,14 @@ TLogicalResult Verify(const TVector<TInput>& inputs, const TEngine& engine) {
             engine.WithSession([&] {
                 result = engine.LowerKql(request.parsed_query().kql_query_list(), request.parameters(), true, nullptr);
             });
-            Ydb::Query::Benchmark::KqlQueryList expectedKql;
+            Ydb::Query::KqlQueryList expectedKql;
             engine.WithSession([&] {
                 engine.ExportKql(sql, envelope.parameters(), expectedKql);
             });
             Y_ENSURE(equals(expectedKql, request.parsed_query().kql_query_list()), "KQL expression graph differs for " << name);
         } else {
             auto ast = ToAst(request, stage, engine);
-            Ydb::Query::Benchmark::YqlAst actualAst;
+            Ydb::Query::YqlAst actualAst;
             ExportAst(*ast.Root, actualAst);
             Y_ENSURE(equals(actualAst, referenceAst), "Translated YQL AST differs for " << name);
             engine.WithSession([&] { result = engine.Lower(std::move(ast), request.parameters(), true); });
@@ -183,6 +192,64 @@ TLogicalResult Verify(const TVector<TInput>& inputs, const TEngine& engine) {
         }
     }
     return std::move(*baseline);
+}
+
+TLogicalResult Dispatch(const TRequest& request, const TEngine& engine, bool verify, bool allowFallback,
+    TStringBuf& route, TMeasurementTime* imported)
+{
+    try {
+        const auto stage = GetStage(request);
+        route = StageNames[static_cast<size_t>(stage)];
+        if (stage == EStage::Text) {
+            return engine.LowerText(request.query_content().text(), request.parameters(), verify, imported);
+        }
+        if (stage == EStage::KqlQueryList) {
+            return engine.LowerKql(request.parsed_query().kql_query_list(), request.parameters(), verify, imported);
+        }
+        auto ast = ToAst(request, stage, engine);
+        if (imported) {
+            *imported = TMeasurementTime::Now();
+        }
+        return engine.Lower(std::move(ast), request.parameters(), verify);
+    } catch (const TStageError&) {
+        if (!allowFallback || request.parsed_query().sql_for_fallback().empty()) {
+            throw;
+        }
+    }
+    route = "sql_fallback";
+    return engine.LowerText(request.parsed_query().sql_for_fallback(), request.parameters(), verify, imported);
+}
+
+TLogicalResult VerifyImported(const TVector<TInput>& inputs, const TEngine& engine) {
+    Y_ENSURE(inputs.size() >= 2 && inputs[0].Stage == EStage::Text, "Provide the ordinary text request first");
+    TRequest reference;
+    DecodeRequest(inputs[0].Bytes, reference);
+    TLogicalResult baseline;
+    engine.WithSession([&] {
+        baseline = engine.LowerText(reference.query_content().text(), reference.parameters(), true);
+    });
+    reference.clear_query();
+    std::array<bool, StageNames.size()> seen{true};
+    for (size_t i = 1; i < inputs.size(); ++i) {
+        const auto& [stage, bytes] = inputs[i];
+        const auto index = static_cast<size_t>(stage);
+        Y_ENSURE(!seen[index], "Duplicate benchmark stage: " << StageNames[index]);
+        seen[index] = true;
+        TRequest request;
+        DecodeRequest(bytes, request);
+        TRequest envelope(request);
+        envelope.clear_query();
+        Y_ENSURE(google::protobuf::util::MessageDifferencer::Equals(reference, envelope),
+            "Request envelope differs for " << StageNames[index]);
+        TLogicalResult imported;
+        engine.WithSession([&] {
+            TStringBuf route;
+            imported = Dispatch(request, engine, true, false, route, nullptr);
+        });
+        Y_ENSURE(imported.RootCount == baseline.RootCount && imported.Roots == baseline.Roots,
+            "Imported logical roots, typed plan, or ordered results differ for " << StageNames[index]);
+    }
+    return baseline;
 }
 
 TString ResultColumns(const TLogicalResult& result) {
@@ -201,24 +268,14 @@ TString ResultColumns(const TLogicalResult& result) {
     return NJson::WriteJson(schema, false);
 }
 
-TSample Measure(const TInput& input, const TEngine& engine) {
+TSample Measure(const TString& bytes, const TEngine& engine, bool allowFallback) {
     TSample sample;
     engine.WithSession([&] {
         sample.Start = TMeasurementTime::Now();
         TRequest request;
-        DecodeRequest(input.Bytes, request);
+        DecodeRequest(bytes, request);
         sample.Decoded = TMeasurementTime::Now();
-        const auto stage = GetStage(request);
-        TLogicalResult logical;
-        if (stage == EStage::Text) {
-            logical = engine.LowerText(request.query_content().text(), request.parameters(), false, &sample.Imported);
-        } else if (stage == EStage::KqlQueryList) {
-            logical = engine.LowerKql(request.parsed_query().kql_query_list(), request.parameters(), false, &sample.Imported);
-        } else {
-            auto ast = ToAst(request, stage, engine);
-            sample.Imported = TMeasurementTime::Now();
-            logical = engine.Lower(std::move(ast), request.parameters(), false);
-        }
+        const auto logical = Dispatch(request, engine, false, allowFallback, sample.Route, &sample.Imported);
         sample.Done = logical.Done;
         Y_ENSURE(logical.RootCount, "No logical roots");
     });
@@ -248,15 +305,14 @@ void RunRounds(const TCases& cases, size_t warmup, size_t repeats, TMeasure&& me
     }
 }
 
-void Bench(const TVector<TInput>& inputs, const TEngine& engine, size_t warmup, size_t repeats) {
-    Verify(inputs, engine);
+void Bench(const TVector<TString>& requests, const TEngine& engine, size_t warmup, size_t repeats, bool allowFallback) {
     std::cout << "stage,iteration,bytes,decode_wall_ns,decode_cpu_ns,parse_or_import_wall_ns,parse_or_import_cpu_ns,"
         "frontend_wall_ns,frontend_cpu_ns,total_wall_ns,total_cpu_ns\n";
-    RunRounds(inputs, warmup, repeats, [&](const TInput& input) {
-        return Measure(input, engine);
-    }, [](const TInput& input, size_t round, const TSample& sample) {
-        const auto& [start, decoded, imported, done] = sample;
-        std::cout << StageNames[static_cast<size_t>(input.Stage)] << ',' << round << ',' << input.Bytes.size()
+    RunRounds(requests, warmup, repeats, [&](const TString& bytes) {
+        return Measure(bytes, engine, allowFallback);
+    }, [](const TString& bytes, size_t round, const TSample& sample) {
+        const auto& [start, decoded, imported, done, route] = sample;
+        std::cout << route << ',' << round << ',' << bytes.size()
             << ',' << decoded.Wall - start.Wall << ',' << decoded.Cpu - start.Cpu
             << ',' << imported.Wall - decoded.Wall << ',' << imported.Cpu - decoded.Cpu
             << ',' << done.Wall - imported.Wall << ',' << done.Cpu - imported.Cpu
@@ -270,30 +326,30 @@ struct TClientSample {
     TMeasurementTime Done;
 };
 
-TVector<TInput> MakeInputs(const TString& sql, const TRequest& envelope, const TEngine& engine, size_t count) {
+TVector<TInput> MakeInputs(const TString& sql, const TRequest& envelope, const TEngine& engine, size_t count, bool includeFallback) {
     TVector<TInput> inputs;
     for (size_t i = 0; i < count; ++i) {
         const auto stage = static_cast<EStage>(i);
         if (stage == EStage::KqlQueryList) {
-            engine.WithSession([&] { inputs.push_back({stage, Prepare(stage, sql, envelope, engine)}); });
+            engine.WithSession([&] { inputs.push_back({stage, Prepare(stage, sql, envelope, engine, includeFallback)}); });
         } else {
-            inputs.push_back({stage, Prepare(stage, sql, envelope, engine)});
+            inputs.push_back({stage, Prepare(stage, sql, envelope, engine, includeFallback)});
         }
     }
     return inputs;
 }
 
 void Client(const TString& sql, const TRequest& envelope, const TEngine& engine, const TVector<EStage>& stages,
-    size_t warmup, size_t repeats)
+    size_t warmup, size_t repeats, bool includeFallback)
 {
     const bool hasKql = std::find(stages.begin(), stages.end(), EStage::KqlQueryList) != stages.end();
-    Verify(MakeInputs(sql, envelope, engine, hasKql ? StageNames.size() : StageNames.size() - 1), engine);
+    Verify(MakeInputs(sql, envelope, engine, hasKql ? StageNames.size() : StageNames.size() - 1, includeFallback), engine);
     std::cout << "stage,iteration,bytes,client_wall_ns,client_cpu_ns\n";
     RunRounds(stages, warmup, repeats, [&](EStage stage) {
         TClientSample sample;
         const auto measure = [&] {
             sample.Start = TMeasurementTime::Now();
-            const auto bytes = Prepare(stage, sql, envelope, engine);
+            const auto bytes = Prepare(stage, sql, envelope, engine, includeFallback);
             sample.Done = TMeasurementTime::Now();
             sample.Bytes = bytes.size();
         };
@@ -309,8 +365,8 @@ void Client(const TString& sql, const TRequest& envelope, const TEngine& engine,
     });
 }
 
-void Export(const TString& sql, const char** paths, size_t stages, const TRequest& envelope, const TEngine& engine) {
-    const auto inputs = MakeInputs(sql, envelope, engine, stages);
+void Export(const TString& sql, const char** paths, size_t stages, const TRequest& envelope, const TEngine& engine, bool includeFallback) {
+    const auto inputs = MakeInputs(sql, envelope, engine, stages, includeFallback);
     Verify(inputs, engine);
     for (size_t i = 0; i < inputs.size(); ++i) {
         WriteFile(paths[i], inputs[i].Bytes);
@@ -350,9 +406,15 @@ TVector<EStage> ReadStages(int count, const char** names) {
 int Run(int argc, const char** argv) {
     std::optional<TString> templatePath;
     TString catalogPath;
+    bool includeFallback = true;
     int first = 1;
     while (first + 1 < argc) {
         const TStringBuf option = argv[first];
+        if (option == "--without-sql-fallback") {
+            includeFallback = false;
+            ++first;
+            continue;
+        }
         if (option == "--catalog") {
             Y_ENSURE(catalogPath.empty(), "Specify one offline catalog");
             catalogPath = argv[first + 1];
@@ -367,9 +429,61 @@ int Run(int argc, const char** argv) {
     const TStringBuf mode = first < argc ? argv[first] : "";
     const int args = argc - first - 1;
     Y_ENSURE(!templatePath || mode == "--export" || mode == "--client", "Template requires --export or --client");
+    Y_ENSURE(includeFallback || mode == "--export" || mode == "--client", "--without-sql-fallback requires --export or --client");
+    if (mode == "--client-ready" && args >= 3) {
+        const auto [warmup, repeats] = Iterations(argv[first + 1], argv[first + 2]);
+        return RunReadyClient(warmup, repeats, ReadInputs(args - 2, argv + first + 3), StageNames);
+    }
     TEngine engine(catalogPath);
     if (mode == "--export" && (args == 4 || args == 5)) {
-        Export(ReadFile(argv[first + 1]), argv + first + 2, args - 1, ReadEnvelope(templatePath), engine);
+        Export(ReadFile(argv[first + 1]), argv + first + 2, args - 1, ReadEnvelope(templatePath), engine, includeFallback);
+        return 0;
+    }
+    if (mode == "--check-request" && args == 1) {
+        TRequest request;
+        DecodeRequest(ReadFile(argv[first + 1]), request);
+        engine.WithSession([&] {
+            TStringBuf route;
+            const auto result = Dispatch(request, engine, true, true, route, nullptr);
+            std::cout << "BENCH_ROUTE=" << route << '\n';
+            std::cout << "BENCH_RESULT_COLUMNS=" << ResultColumns(result).c_str() << '\n';
+        });
+        return 0;
+    }
+    if (mode == "--bench-fallback" && args == 4) {
+        const auto [warmup, repeats] = Iterations(argv[first + 1], argv[first + 2]);
+        TVector<TString> requests;
+        TRequest reference;
+        TString referenceSql;
+        TLogicalResult baseline;
+        for (int i = 0; i < 2; ++i) {
+            auto bytes = ReadFile(argv[first + 3 + i]);
+            TRequest request;
+            DecodeRequest(bytes, request);
+            if (i == 0) {
+                Y_ENSURE(request.has_query_content(), "Expected a text control");
+                referenceSql = request.query_content().text();
+                reference = request;
+                reference.clear_query();
+            } else {
+                Y_ENSURE(request.parsed_query().sql_for_fallback() == referenceSql, "Fallback SQL differs from the text control");
+                TRequest envelope(request);
+                envelope.clear_query();
+                Y_ENSURE(google::protobuf::util::MessageDifferencer::Equals(reference, envelope), "Request envelope differs");
+            }
+            engine.WithSession([&] {
+                TStringBuf route;
+                auto result = Dispatch(request, engine, true, true, route, nullptr);
+                if (i == 0) {
+                    baseline = std::move(result);
+                } else {
+                    Y_ENSURE(route == "sql_fallback", "Expected an unusable stage with SQL fallback");
+                    Y_ENSURE(result.RootCount == baseline.RootCount && result.Roots == baseline.Roots, "Fallback logical roots differ");
+                }
+            });
+            requests.push_back(std::move(bytes));
+        }
+        Bench(requests, engine, warmup, repeats, true);
         return 0;
     }
     if (mode == "--verify" && args == 1) {
@@ -388,22 +502,38 @@ int Run(int argc, const char** argv) {
         std::cout << args << "-stage logical equivalence verified\n";
         return 0;
     }
+    if (mode == "--verify-import" && args >= 2 && args <= 4) {
+        const auto result = VerifyImported(ReadInputs(args, argv + first + 1), engine);
+        std::cout << "BENCH_RESULT_COLUMNS=" << ResultColumns(result).c_str() << '\n';
+        std::cout << args - 1 << " independent input(s) matched the text logical roots\n";
+        return 0;
+    }
     if (mode == "--bench" && (args == 5 || args == 6)) {
         const auto [warmup, repeats] = Iterations(argv[first + 1], argv[first + 2]);
-        Bench(ReadInputs(args - 2, argv + first + 3), engine, warmup, repeats);
+        auto inputs = ReadInputs(args - 2, argv + first + 3);
+        Verify(inputs, engine);
+        TVector<TString> requests;
+        for (auto& input : inputs) {
+            requests.push_back(std::move(input.Bytes));
+        }
+        Bench(requests, engine, warmup, repeats, false);
         return 0;
     }
     if (mode == "--client" && args >= 4) {
         const auto [warmup, repeats] = Iterations(argv[first + 1], argv[first + 2]);
         Client(ReadFile(argv[first + 3]), ReadEnvelope(templatePath), engine,
-            ReadStages(args - 3, argv + first + 4), warmup, repeats);
+            ReadStages(args - 3, argv + first + 4), warmup, repeats, includeFallback);
         return 0;
     }
-    std::cerr << "Usage: parsed_query_legacy_bench [--catalog FILE] [--template FILE] MODE ARGS\n"
+    std::cerr << "Usage: parsed_query_legacy_bench [--catalog FILE] [--template FILE] [--without-sql-fallback] MODE ARGS\n"
+        << "  --check-request REQUEST.pb\n"
+        << "  --bench-fallback WARMUP REPEATS TEXT.pb PARSED.pb\n"
         << "  --verify TEXT.pb\n"
         << "  --export QUERY.sql TEXT.pb ANTLR_AST.pb YQL_AST.pb [KQL.pb]\n"
         << "  --verify TEXT.pb ANTLR_AST.pb YQL_AST.pb [KQL.pb]\n"
+        << "  --verify-import TEXT.pb PARSED.pb [PARSED.pb ...]\n"
         << "  --bench WARMUP REPEATS TEXT.pb ANTLR_AST.pb YQL_AST.pb [KQL.pb]\n"
+        << "  --client-ready WARMUP REPEATS REQUEST.pb...\n"
         << "  --client WARMUP REPEATS QUERY.sql STAGE...\n";
     return 2;
 }

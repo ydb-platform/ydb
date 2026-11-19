@@ -7,9 +7,14 @@ PEERDIR(
 )
 
 SRCS(
+    antlr_ast.proto
+    antlr_cst.proto
     execute_query.proto
-    kql_query_list.proto
+    main_stages.proto
+    native_query.proto
     parsed_query.proto
+    syntax_script.proto
+    yql_parser_metadata.proto
 )
 
 END()

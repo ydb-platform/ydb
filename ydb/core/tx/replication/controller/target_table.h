@@ -8,11 +8,6 @@ class TTargetTableBase: public TTargetWithStream {
 public:
     explicit TTargetTableBase(TReplication* replication, ETargetKind finalKind,
         ui64 id, const IConfig::TPtr& config);
-
-    TString GetStreamPath() const override;
-
-protected:
-    virtual TString BuildStreamPath() const = 0;
 };
 
 class TTargetTable: public TTargetTableBase {

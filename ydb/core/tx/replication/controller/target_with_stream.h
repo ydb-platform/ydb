@@ -96,6 +96,7 @@ public:
     void SetLocation();
 
 protected:
+    virtual TString BuildStreamPath() const = 0;
     THolder<NKikimrReplication::TReplicationLocationConfig> Location;
     virtual TTargetWithStreamStats* GetStatsImpl();
     virtual TTargetWithStreamCounters* GetCountersImpl();

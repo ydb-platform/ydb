@@ -6,6 +6,8 @@
 #include <ydb/core/tx/columnshard/backup/iscan/iscan.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/datashard/backup_restore_traits.h>
+#include <ydb/core/tx/datashard/export_iface.h>
+#include <ydb/core/tx/datashard/export_scan.h>
 
 #include <ydb/apps/ydbd/export/export.h>
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
@@ -17,6 +19,8 @@
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/builder.h>
+
+#include <algorithm>
 
 namespace NKikimr {
 
@@ -260,6 +264,122 @@ public:
     }
 };
 
+enum class EBufferFailurePoint {
+    Collect,   // the second row is rejected
+    PrepareLastEvent,   // the last part cannot be flushed
+};
+
+// Delegates to the real export buffer and fails at the requested point until Clear().
+class TFailingBuffer: public NDataShard::NExportScan::IBuffer {
+public:
+    TFailingBuffer(THolder<IBuffer> inner, EBufferFailurePoint failurePoint, TString error)
+        : Inner(std::move(inner))
+        , FailurePoint(failurePoint)
+        , Error(std::move(error))
+    {
+    }
+
+    void ColumnsOrder(const TVector<ui32>& tags) override {
+        Inner->ColumnsOrder(tags);
+    }
+
+    bool Collect(const NTable::IScan::TRow& row) override {
+        if (FailurePoint == EBufferFailurePoint::Collect && (Failed || ++Collected == 2)) {
+            Failed = true;
+            return false;
+        }
+        return Inner->Collect(row);
+    }
+
+    IEventBase* PrepareEvent(bool last, TStats& stats) override {
+        if (FailurePoint == EBufferFailurePoint::PrepareLastEvent && last) {
+            Failed = true;
+            return nullptr;
+        }
+        return Inner->PrepareEvent(last, stats);
+    }
+
+    void Clear() override {
+        Failed = false;
+        Collected = 0;
+        Inner->Clear();
+    }
+
+    bool IsFilled() const override {
+        return Inner->IsFilled();
+    }
+
+    ui64 GetMemoryBytes() const override {
+        return Inner->GetMemoryBytes();
+    }
+
+    TString GetError() const override {
+        return Failed ? Error : Inner->GetError();
+    }
+
+private:
+    THolder<IBuffer> Inner;
+    const EBufferFailurePoint FailurePoint;
+    const TString Error;
+    ui32 Collected = 0;
+    bool Failed = false;
+};
+
+class TFailingExport: public NDataShard::IExport {
+public:
+    TFailingExport(IExport* inner, EBufferFailurePoint failurePoint, TString error)
+        : Inner(inner)
+        , FailurePoint(failurePoint)
+        , Error(std::move(error))
+    {
+    }
+
+    IActor* CreateUploader(const TActorId& dataShard, ui64 txId) const override {
+        return Inner->CreateUploader(dataShard, txId);
+    }
+
+    IBuffer* CreateBuffer() const override {
+        return new TFailingBuffer(THolder<IBuffer>(Inner->CreateBuffer()), FailurePoint, Error);
+    }
+
+    void Shutdown() const override {
+        Inner->Shutdown();
+    }
+
+private:
+    THolder<IExport> Inner;
+    const EBufferFailurePoint FailurePoint;
+    const TString Error;
+};
+
+class TFailingExportFactory: public NDataShard::IExportFactory {
+public:
+    TFailingExportFactory(EBufferFailurePoint failurePoint, TString error)
+        : FailurePoint(failurePoint)
+        , Error(std::move(error))
+    {
+    }
+
+    NDataShard::IExport* CreateExportToYt(
+        const NDataShard::IExport::TTask& task, const NDataShard::IExport::TTableColumns& columns) const override {
+        return Inner.CreateExportToYt(task, columns);
+    }
+
+    NDataShard::IExport* CreateExportToS3(
+        const NDataShard::IExport::TTask& task, const NDataShard::IExport::TTableColumns& columns) const override {
+        return new TFailingExport(Inner.CreateExportToS3(task, columns), FailurePoint, Error);
+    }
+
+    void Shutdown() override {
+        Inner.Shutdown();
+    }
+
+private:
+    TDataShardExportFactory Inner;
+    const EBufferFailurePoint FailurePoint;
+    const TString Error;
+};
+
 }   // namespace
 
 using namespace NColumnShard;
@@ -406,6 +526,50 @@ Y_UNIT_TEST_SUITE(IScan) {
 
         UNIT_ASSERT(!result);
         UNIT_ASSERT_STRING_CONTAINS(result.GetErrorMessage(), "Encryption is not supported for parquet files");
+    }
+
+    // The export scan returns EScan::Final synchronously from Feed() (a rejected row) or from Exhausted()
+    // (the last part cannot be flushed). The uploader actor has to report exactly one export error and stop.
+    void TestUploaderReportsBufferFailure(EBufferFailurePoint failurePoint, const TString& bucketName) {
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket(bucketName, s3Client);
+
+        TRuntimePtr runtime(new TTestBasicRuntime());
+        runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+        SetupTabletServices(*runtime);
+        // The uploader talks to the real S3 recipe: do not spin the simulated timers while waiting for it.
+        runtime->SetFastSimulatedTime(false);
+
+        const TString injectedError = "injected export buffer failure";
+        const auto edge = runtime->AllocateEdgeActor(0);
+        auto exportFactory = std::make_shared<TFailingExportFactory>(failurePoint, injectedError);
+        auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(
+            edge, MakeBackupTask(bucketName), exportFactory.get(), MakeYdbColumns(), 0);
+        auto exporter = runtime->Register(actor.release());
+
+        // The batch is queued until the S3 uploader accepts data, so the last part is flushed from Exhausted() itself.
+        runtime->Send(new IEventHandle(exporter, edge, new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(TestRecordBatch(), true)));
+
+        TAutoPtr<IEventHandle> handle;
+        const auto* error = runtime->GrabEdgeEvent<NColumnShard::TEvPrivate::TEvBackupExportError>(handle);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(error->ErrorMessage, injectedError);
+
+        UNIT_ASSERT(!runtime->GrabEdgeEvent<NColumnShard::TEvPrivate::TEvBackupExportError>(handle, TDuration::Seconds(1)));
+        UNIT_ASSERT(!runtime->GrabEdgeEvent<NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult>(handle, TDuration::Seconds(1)));
+        UNIT_ASSERT(!runtime->FindActor(exporter));
+
+        const TString dataKey = NDataShard::NBackupRestoreTraits::DataKeySuffix(0, EDataFormat::YdbDump, ECompressionCodec::None, false);
+        const std::vector<TString> keys = NTestUtils::GetObjectKeys(bucketName, s3Client);
+        UNIT_ASSERT_C(std::find(keys.begin(), keys.end(), dataKey) == keys.end(), JoinSeq(",", keys));
+    }
+
+    Y_UNIT_TEST(UploaderReportsCollectFailure) {
+        TestUploaderReportsBufferFailure(EBufferFailurePoint::Collect, "iscan-uploader-collect-failure");
+    }
+
+    Y_UNIT_TEST(UploaderReportsLastFlushFailure) {
+        TestUploaderReportsBufferFailure(EBufferFailurePoint::PrepareLastEvent, "iscan-uploader-last-flush-failure");
     }
 }
 

@@ -10,6 +10,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexOnColumn
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
+ydb/core/mind/hive/ut THiveTest.TestLocalMetricsIopsTrafficGroup32
 ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/statistics/aggregator/ut AnalyzeSampling.CollectAndPersistStatistics+ColumnShard-SmallHistogramBudget
 ydb/core/sys_view/ut_large SystemViewLarge.AuthOwners_DropSubtreeDuringScan
@@ -27,6 +28,7 @@ ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDist
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReassignNodeAfterReconfiguration.test_state_storage
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReplicasSpecificVolume.test_state_storage
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupCounters.test_warmup_counters_attribution[table]
+ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk

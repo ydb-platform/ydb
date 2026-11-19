@@ -16,6 +16,7 @@
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/resolver.h>
@@ -1067,9 +1068,24 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return false;
             }
 
+            TVector<NScheme::TTypeInfo> keyTypes;
+            keyTypes.reserve(pqConfig.PartitionKeySchemaSize());
+            for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
+                keyTypes.push_back(NScheme::TypeInfoModFromProtoColumnType(keySchema.GetTypeId(),
+                    keySchema.HasTypeInfo() ? &keySchema.GetTypeInfo() : nullptr).TypeInfo);
+            }
+
             auto isFullKey = [&](const TString& bound) {
                 TSerializedCellVec cells;
-                return TSerializedCellVec::TryParse(bound, cells) && cells.GetCells().size() == pqConfig.PartitionKeySchemaSize();
+                if (!TSerializedCellVec::TryParse(bound, cells) || cells.GetCells().size() != keyTypes.size()) {
+                    return false;
+                }
+                for (size_t i = 0; i < keyTypes.size(); ++i) {
+                    if (NScheme::HasUnexpectedValueSize(cells.GetCells()[i], keyTypes[i])) {
+                        return false;
+                    }
+                }
+                return true;
             };
 
             size_t unboundedCount = 0;

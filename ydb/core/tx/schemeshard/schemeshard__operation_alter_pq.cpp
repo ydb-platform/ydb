@@ -233,10 +233,11 @@ public:
             return nullptr;
         }
 
-        if (hasKeySchema && !NPQ::SplitMergeEnabled(*tabletConfig) && alter.HasPQTabletConfig()
-            && alter.GetPQTabletConfig().HasPartitionStrategy() && NPQ::SplitMergeEnabled(alter.GetPQTabletConfig()))
+        if (hasKeySchema && alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()
+            && alter.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType()
+                != tabletConfig->GetPartitionStrategy().GetPartitionStrategyType())
         {
-            errStr = "Enabling autopartitioning is not supported for topics with a key schema";
+            errStr = "Changing the autopartitioning strategy is not supported for topics with a key schema";
             return nullptr;
         }
 

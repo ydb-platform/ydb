@@ -2105,15 +2105,16 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             .EnableCdcKeyRangeHeartbeats(true));
         ui64 txId = 100;
         CreateKeyRangeStream(runtime, env, txId, 1);
+        const auto before = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl")
+            .GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy();
 
         // when
-        AlterStreamTopic(runtime, txId, [](auto& alter) {
+        AlterStreamTopic(runtime, txId, [&](auto& alter) {
             auto& config = *alter.MutablePQTabletConfig();
             config.MutablePartitionConfig();
             auto& strategy = *config.MutablePartitionStrategy();
-            strategy.SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_PAUSED);
+            strategy = before;
             strategy.SetMinPartitionCount(2);
-            strategy.SetMaxPartitionCount(100);
         }, {{NKikimrScheme::StatusInvalidParameter, "Increasing the minimum partition count is not supported"}});
 
         // then
@@ -2143,6 +2144,35 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(topic.GetPathDescription().GetPersQueueGroup().PartitionsSize(), 1);
     }
 
+    Y_UNIT_TEST(ShouldRejectStrategyChangeWhenKeyRangeTopicIsCreated) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcKeyRangeHeartbeats(true));
+        ui64 txId = 100;
+        CreateKeyRangeStream(runtime, env, txId, 1);
+        const auto before = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl")
+            .GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy();
+
+        // when
+        AlterStreamTopic(runtime, txId, [&](auto& alter) {
+            auto& config = *alter.MutablePQTabletConfig();
+            config.MutablePartitionConfig();
+            auto& strategy = *config.MutablePartitionStrategy();
+            strategy = before;
+            strategy.SetPartitionStrategyType(
+                before.GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
+                    ? ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_PAUSED
+                    : ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+        }, {{NKikimrScheme::StatusInvalidParameter, "Changing the autopartitioning strategy is not supported"}});
+
+        // then
+        const auto after = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl")
+            .GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy();
+        UNIT_ASSERT_VALUES_EQUAL(after.GetPartitionStrategyType(), before.GetPartitionStrategyType());
+    }
+
     Y_UNIT_TEST(ShouldRejectEnablingAutopartitioningWhenTopicHasKeySchema) {
         // given
         TTestBasicRuntime runtime;
@@ -2158,7 +2188,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             strategy.SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
             strategy.SetMinPartitionCount(2);
             strategy.SetMaxPartitionCount(100);
-        }, {{NKikimrScheme::StatusInvalidParameter, "Enabling autopartitioning is not supported"}});
+        }, {{NKikimrScheme::StatusInvalidParameter, "Changing the autopartitioning strategy is not supported"}});
 
         // then
         const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");

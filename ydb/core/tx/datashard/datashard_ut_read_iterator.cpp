@@ -4325,7 +4325,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
         InitRoot(server, sender);
 
         // Create the pool before registering it so the workload manager can resolve the subscription.
-        auto createPool = MakeSQLRequest(Q_(CREATE RESOURCE POOL read_pool WITH (TOTAL_CPU_LIMIT_PERCENT_PER_NODE = "10");), false);
+        auto createPool = MakeSQLRequest(R"(CREATE RESOURCE POOL read_pool WITH (TOTAL_CPU_LIMIT_PERCENT_PER_NODE = "10");)", false);
         createPool->Record.MutableRequest()->SetDatabase("/Root");
         runtime.Send(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, createPool.Release());
         const auto createPoolResult = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);

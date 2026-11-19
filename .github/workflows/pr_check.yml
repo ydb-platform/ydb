@@ -556,11 +556,13 @@ jobs:
           vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
   update_integrated_status:
     runs-on: [self-hosted, tiny-worker]
-    needs: build_and_test
-    if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.state == 'open' }}
+    needs: [check-running-allowed, build_and_test]
+    if: ${{ !cancelled() && github.event_name == 'pull_request_target' && github.event.pull_request.state == 'open' && needs.check-running-allowed.outputs.result == 'true' }}
     steps:
       - name: Gather required checks results
         shell: bash
+        env:
+          BUILD_AND_TEST_RESULT: ${{ needs.build_and_test.result }}
         run: |
           integrated_status=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X GET -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/commits/${{github.event.pull_request.head.sha}}/status | \
@@ -574,6 +576,9 @@ jobs:
                 )))
               | if length == 2 and all(.state == "success") then "success" else "failure" end
             ')
+          if [ "$BUILD_AND_TEST_RESULT" != "success" ]; then
+            integrated_status=failure
+          fi
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"'$integrated_status'","description":"All checks completed","context":"checks_integrated","target_url":"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'

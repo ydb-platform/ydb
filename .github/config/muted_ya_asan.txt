@@ -42,10 +42,7 @@ ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapBe
 ydb/core/tx/schemeshard/ut_generated_columns unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_truncate_table_simple unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10
-ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
-ydb/library/nmslib/test/run_test_integr exectest.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
 ydb/tests/datashard/set_column_constraint/functional py3test.[test_set_not_null.py */*] chunk
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_drop_not_null
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Decimal(35,10)]

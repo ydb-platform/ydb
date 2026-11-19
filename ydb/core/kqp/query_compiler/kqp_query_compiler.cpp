@@ -1,5 +1,6 @@
 #include "kqp_query_compiler.h"
 
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_expr_helpers.h>
 #include <ydb/core/kqp/common/simple/user_request_context.h>
@@ -89,7 +90,7 @@ template <typename TColumnsRange>
 void FillVectorTopKSettings(
     NKqpProto::TKqpPhyVectorTopK& vectorTopK,
     const TKqpReadTableSettings& settings,
-    const TColumnsRange& columns, ui32 hnswEfSearch)
+    const TColumnsRange& columns, TMaybe<ui32> hnswEfSearch)
 {
     // Find column index
     ui32 columnIdx = 0;
@@ -103,7 +104,11 @@ void FillVectorTopKSettings(
     }
     YQL_ENSURE(columnFound, "VectorTopK column " << settings.VectorTopKColumn << " not found in read columns");
     vectorTopK.SetColumn(columnIdx);
-    vectorTopK.SetHnswEfSearch(hnswEfSearch);
+    // Direct posting-table SQL has no logical index node. Forward an explicit
+    // override; DataShard applies it only after matching local HNSW metadata.
+    if (hnswEfSearch) {
+        vectorTopK.SetHnswEfSearch(*hnswEfSearch);
+    }
 
     // Set the metric settings
     auto* indexSettings = vectorTopK.MutableSettings();
@@ -491,7 +496,7 @@ void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& ta
 }
 
 template <typename TReader, typename TProto>
-void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta*/, TProto& readProto, ui32 hnswEfSearch) {
+void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta*/, TProto& readProto, TMaybe<ui32> hnswEfSearch) {
     auto ranges = read.Ranges().template Maybe<TCoParameter>();
 
     if (ranges.IsValid()) {
@@ -1041,7 +1046,7 @@ private:
                 FillTablesMap(readTableRanges.Table(), readTableRanges.Columns(), tablesMap);
                 FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
-                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadRanges(), Config->HNSWEfSearch.Get().GetOrElse(15));
+                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadRanges(), Config->HNSWEfSearch.Get());
             } else if (auto maybeReadWideTableRanges = node.Maybe<TKqpWideReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadWideTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1051,7 +1056,7 @@ private:
                 FillTablesMap(readTableRanges.Table(), readTableRanges.Columns(), tablesMap);
                 FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
-                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange(), Config->HNSWEfSearch.Get().GetOrElse(15));
+                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange(), Config->HNSWEfSearch.Get());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
                 {
                     TCompileTraceScope traceScope(OptimizeCtx.GetCompileTrace(), TCompileTraceLevels::Step, "Compile OLAP program");
@@ -1067,7 +1072,7 @@ private:
                 FillTablesMap(readTableRanges.Table(), readTableRanges.Columns(), tablesMap);
                 FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
-                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange(), Config->HNSWEfSearch.Get().GetOrElse(15));
+                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange(), Config->HNSWEfSearch.Get());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
                 {
                     TCompileTraceScope traceScope(OptimizeCtx.GetCompileTrace(), TCompileTraceLevels::Step, "Compile OLAP program");
@@ -1415,7 +1420,7 @@ private:
 
             // Handle VectorTopK settings for brute force vector search
             if (readSettings.VectorTopKColumn) {
-                FillVectorTopKSettings(*readProto.MutableVectorTopK(), readSettings, settings.Columns().Cast(), Config->HNSWEfSearch.Get().GetOrElse(15));
+                FillVectorTopKSettings(*readProto.MutableVectorTopK(), readSettings, settings.Columns().Cast(), Config->HNSWEfSearch.Get());
             }
 
         } else if (auto settings = source.Settings().Maybe<TKqpReadTableFullTextIndexSourceSettings>()) {
@@ -2672,7 +2677,6 @@ private:
     void FillStreamLookupVectorTop(NKqpProto::TKqpPhyCnStreamLookup& streamLookupProto,
         const TKqpCnStreamLookup& streamLookup, const TKqpStreamLookupSettings& settings) {
         NKqpProto::TKqpPhyVectorTopK& vectorTopK = *streamLookupProto.MutableVectorTopK();
-        vectorTopK.SetHnswEfSearch(Config->HNSWEfSearch.Get().GetOrElse(15));
         const auto implTablePath = streamLookup.Table().Path();
         const auto mainTableFromImpl = TablesData->GetMainTableIfTableIsImplTableOfIndex(Cluster, implTablePath);
         const auto mainTable = mainTableFromImpl ? mainTableFromImpl : &TablesData->ExistingTable(Cluster, implTablePath);
@@ -2685,6 +2689,9 @@ private:
             }
         }
         YQL_ENSURE(indexDesc);
+        if (indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw) {
+            vectorTopK.SetHnswEfSearch(Config->HNSWEfSearch.Get().GetOrElse(NKikimr::NKMeans::DefaultHnswEfSearch));
+        }
         // Old schemas omit the index owner; use the same fallback as the
         // metadata loader when resolving the index implementation tables.
         vectorTopK.MutableHnswIndexId()->SetOwnerId(
@@ -3200,7 +3207,9 @@ private:
 
             const bool withOverlap = kmeansDesc.GetSettings().overlap_clusters() > 1;
             proto.SetLevelTop(Config->KMeansTreeSearchTopSize.Get().GetOrElse(withOverlap ? 4 : 10));
-            proto.SetHnswEfSearch(Config->HNSWEfSearch.Get().GetOrElse(15));
+            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw) {
+                proto.SetHnswEfSearch(Config->HNSWEfSearch.Get().GetOrElse(NKikimr::NKMeans::DefaultHnswEfSearch));
+            }
 
             // Main table
             FillTablesMap(vectorSearch.Table(), tablesMap);

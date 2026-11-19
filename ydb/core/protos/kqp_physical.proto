@@ -319,6 +319,7 @@ message TKqpPhyVectorTopK {
     TKqpPhyValue Limit = 4;
     repeated uint32 DistinctColumns = 5;
     NKikimrProto.TPathID HnswIndexId = 6;
+    // Absent means NKMeans::DefaultHnswEfSearch; proto3 cannot declare a nonzero default.
     optional uint32 HnswEfSearch = 7;
 }
 
@@ -375,6 +376,7 @@ message TKqpPhyCnVectorSearch {
     NKikimrProto.TPathID HnswIndexId = 14;
     // Unprefixed hnsw searches every partition-local graph.
     bool FullRangeHnsw = 15;
+    // Absent means NKMeans::DefaultHnswEfSearch; proto3 cannot declare a nonzero default.
     optional uint32 HnswEfSearch = 16;
 }
 

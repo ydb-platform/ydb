@@ -1458,20 +1458,23 @@ namespace NKikimr::NKqp {
         }
 
         Y_UNIT_TEST(HnswIdentityIsForwardedOnlyToPostingRead) {
-            auto settings = TSettingsBuilder().PostingEmbedding().Build();
+            auto settings = TSettingsBuilder().PostingEmbedding().EfSearch(75).Build();
             settings.MutableHnswIndexId()->SetOwnerId(42);
             settings.MutableHnswIndexId()->SetLocalId(99);
             TSearchEnv env(std::move(settings));
             RunSingleLevel(env);
             UNIT_ASSERT(!env.ObservedRead(EReadKind::Level)->Settings.GetVectorTopK().HasHnswIndexId());
+            UNIT_ASSERT(!env.ObservedRead(EReadKind::Level)->Settings.GetVectorTopK().HasHnswEfSearch());
             const auto& postingTop = env.ObservedRead(EReadKind::Posting)->Settings.GetVectorTopK();
             UNIT_ASSERT(postingTop.HasHnswIndexId());
             UNIT_ASSERT_VALUES_EQUAL(postingTop.GetHnswIndexId().GetOwnerId(), 42u);
             UNIT_ASSERT_VALUES_EQUAL(postingTop.GetHnswIndexId().GetLocalId(), 99u);
+            UNIT_ASSERT_VALUES_EQUAL(postingTop.GetHnswEfSearch(), 75u);
             auto& posting = env.Read(EReadKind::Posting);
             posting.Push({{ui64(7), NearVec}}, true);
             env.Wake(posting);
             UNIT_ASSERT(!env.ObservedRead(EReadKind::Main)->Settings.GetVectorTopK().HasHnswIndexId());
+            UNIT_ASSERT(!env.ObservedRead(EReadKind::Main)->Settings.GetVectorTopK().HasHnswEfSearch());
             auto& main = env.Read(EReadKind::Main);
             main.Push({{ui64(7), NearVec}}, true);
             env.Wake(main);

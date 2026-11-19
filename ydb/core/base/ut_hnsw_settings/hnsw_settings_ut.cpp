@@ -2,6 +2,8 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -276,6 +278,54 @@ namespace NKikimr::NKMeans {
             UNIT_ASSERT(!FillHnswSetting(settings, "ef_construction", "0", error));
             UNIT_ASSERT(!FillHnswSetting(settings, "m", ToString(MaxHnswM + 1), error));
             UNIT_ASSERT(!FillHnswSetting(settings, "ef_construction", ToString(MaxHnswEfConstruction + 1), error));
+        }
+
+        Y_UNIT_TEST(HnswDefaultMatchesReadProtocolDefaults) {
+            NKikimrKqp::TReadVectorTopK top;
+            NKikimrTxDataShard::TKqpVectorSearchSettings search;
+            UNIT_ASSERT_VALUES_EQUAL(top.GetHnswEfSearch(), DefaultHnswEfSearch);
+            UNIT_ASSERT_VALUES_EQUAL(search.GetHnswEfSearch(), DefaultHnswEfSearch);
+        }
+
+        Y_UNIT_TEST(DistanceSettingsPreserveGraphSettingsAndUnknownFields) {
+            auto routing = MakeSettings();
+            auto& settings = *routing.mutable_settings();
+            settings.set_m(24);
+            settings.set_ef_construction(64);
+            settings.set_min_rows(1);
+            settings.set_delta_rows(100);
+            const auto original = settings.SerializeAsString();
+            const auto distance = MakeDistanceSettings(settings);
+            UNIT_ASSERT_VALUES_EQUAL(settings.SerializeAsString(), original);
+            UNIT_ASSERT(!distance.has_m());
+            UNIT_ASSERT(!distance.has_ef_construction());
+            UNIT_ASSERT(!distance.has_min_rows());
+            UNIT_ASSERT(!distance.has_delta_rows());
+            UNIT_ASSERT_VALUES_EQUAL(distance.metric(), settings.metric());
+            UNIT_ASSERT_VALUES_EQUAL(distance.vector_type(), settings.vector_type());
+            UNIT_ASSERT_VALUES_EQUAL(distance.vector_dimension(), settings.vector_dimension());
+            TString error;
+            UNIT_ASSERT_C(ValidateSettings(distance, error), error);
+            settings.GetReflection()->MutableUnknownFields(&settings)->AddVarint(10000, 1);
+            UNIT_ASSERT(!ValidateSettings(MakeDistanceSettings(settings), error));
+        }
+
+        Y_UNIT_TEST(FailedHnswParsesPreserveSettings) {
+            auto settings = MakeSettings();
+            settings.mutable_settings()->set_m(24);
+            settings.mutable_settings()->set_ef_construction(64);
+            settings.mutable_settings()->set_min_rows(1);
+            settings.mutable_settings()->set_delta_rows(100);
+            const auto original = settings.SerializeAsString();
+            for (const TString name : {"clusters", "m", "ef_construction", "min_rows", "delta_rows"}) {
+                TString error = "previous error";
+                UNIT_ASSERT(!FillHnswSetting(settings, name, "bad", error));
+                UNIT_ASSERT(!error.empty());
+                UNIT_ASSERT_VALUES_EQUAL(settings.SerializeAsString(), original);
+            }
+            TString error = "previous error";
+            UNIT_ASSERT(FillHnswSetting(settings, "clusters", "1", error));
+            UNIT_ASSERT(error.empty());
         }
 
         Y_UNIT_TEST(KMeansDoesNotAcceptHnswConstructionSettings) {

@@ -263,11 +263,7 @@ namespace NKikimr {
                 TString error;
                 // Ranking needs vector geometry, while the posting read still
                 // needs the original HNSW construction settings.
-                auto distanceSettings = Settings.GetIndexSettings();
-                distanceSettings.clear_m();
-                distanceSettings.clear_ef_construction();
-                distanceSettings.clear_min_rows();
-                distanceSettings.clear_delta_rows();
+                auto distanceSettings = NKMeans::MakeDistanceSettings(Settings.GetIndexSettings());
                 RankClusters = NKikimr::NKMeans::CreateClustersAutoDetect(distanceSettings, TargetVector, 0, error);
                 if (!RankClusters) {
                     RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -672,7 +668,10 @@ namespace NKikimr {
                         && src->GetTable().GetTableId().SerializeAsString() == Settings.GetPostingTable().GetTableId().SerializeAsString()) {
                     *topK->MutableHnswIndexId() = Settings.GetHnswIndexId();
                 }
-                topK->SetHnswEfSearch(Settings.GetHnswEfSearch());
+                if (Settings.HasHnswEfSearch()
+                        && src->GetTable().GetTableId().SerializeAsString() == Settings.GetPostingTable().GetTableId().SerializeAsString()) {
+                    topK->SetHnswEfSearch(Settings.GetHnswEfSearch());
+                }
                 return topK;
             }
 

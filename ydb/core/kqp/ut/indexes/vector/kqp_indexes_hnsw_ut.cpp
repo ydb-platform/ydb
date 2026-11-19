@@ -309,11 +309,12 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         const TString posting = "/Root/HnswView/vidx/indexImplPostingTable";
         ui32 expectedEfSearch = 15;
         ui64 vectorReads = 0;
+        TVector<std::pair<ui32, ui32>> observedEfSearch;
         auto observer = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
                 const auto& read = ev->Get<TEvDataShard::TEvRead>()->Record;
                 if (read.HasVectorTopK()) {
-                    UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().GetHnswEfSearch(), expectedEfSearch);
+                    observedEfSearch.emplace_back(read.GetVectorTopK().GetHnswEfSearch(), expectedEfSearch);
                     ++vectorReads;
                 }
             }
@@ -371,6 +372,9 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         UNIT_ASSERT_C(direct.IsSuccess(), direct.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(direct.GetResultSet(0)), "[[96u]]");
         UNIT_ASSERT_GT(vectorReads, readsBefore);
+        for (const auto& [actual, expected] : observedEfSearch) {
+            UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+        }
     }
 
     Y_UNIT_TEST_TWIN(HnswAutomaticRoutingSettings, Prefixed) {

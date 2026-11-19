@@ -402,6 +402,8 @@ public:
                 break;
             case EType::GlobalSyncVectorKMeansTree:
             case EType::GlobalSyncHnsw:
+                // Internal KQP metadata shares the routing/settings wrapper.
+                // Type distinguishes HNSW; native SchemeShard metadata uses THnswIndexDescription.
                 *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
                 break;
             case EType::GlobalFulltextPlain:

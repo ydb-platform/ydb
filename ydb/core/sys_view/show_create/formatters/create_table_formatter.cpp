@@ -690,6 +690,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
 
         switch (kMeansTreeSettings->settings().metric()) {
             case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
+                // Use the SQL parser's spelling for both HNSW and existing KMeans indexes.
                 Stream << "similarity=inner_product";
                 break;
             case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:

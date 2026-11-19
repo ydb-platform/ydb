@@ -7,6 +7,7 @@
 
 #include <ydb/core/tx/datashard/hnsw_index/hnsw_index_build_unit.h>
 
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_tli.h>
@@ -8496,7 +8497,20 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         request->Record.MutableVectorTopK()->SetHnswEfSearch(Zero ? 0 : 1001);
         const auto result = fixture.Helper.SendRead("hnsw-lifecycle", request.release());
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_STRING_CONTAINS(result->Record.DebugString(), "HNSWEfSearch must be in 1..1000");
+        UNIT_ASSERT_STRING_CONTAINS(result->Record.DebugString(), TStringBuilder() << "HNSWEfSearch must be in 1.." << NKMeans::MaxHnswEfSearch);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswEfSearchDoesNotRejectOrdinaryVectorScan, Zero) {
+        THnswLifecycleFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableHnswIndex(false);
+        }
+        auto request = fixture.Request();
+        request->Record.MutableVectorTopK()->SetHnswEfSearch(Zero ? 0 : NKMeans::MaxHnswEfSearch + 1);
+        const auto result = fixture.Helper.SendRead("hnsw-lifecycle", request.release());
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1u);
     }
 
     Y_UNIT_TEST_QUAD(HnswSchemaFinalizationRequestsBackgroundBuild, BelowMinRows, Reboot) {

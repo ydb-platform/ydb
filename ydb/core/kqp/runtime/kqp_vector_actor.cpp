@@ -187,12 +187,19 @@ private:
                 // posting table together; updates and deletes resolve to the same leaf.
                 PrevClusters.clear();
                 PrevClusters.resize(PendingRows.size());
+                size_t invalidEmbeddings = 0;
                 for (size_t i = 0; i < PendingRows.size(); ++i) {
                     const auto embedding = PendingRows[i].GetElement(Settings.GetVectorColumnIndex());
                     if ((embedding.IsString() || embedding.IsEmbedded())
                             && RootClusters->IsExpectedFormat(embedding.AsStringRef())) {
                         PrevClusters[i].emplace_back(NTableIndex::NKMeans::SetPostingParentFlag(1), 0.0);
+                    } else if (embedding.IsString() || embedding.IsEmbedded()) {
+                        ++invalidEmbeddings;
                     }
+                }
+                if (invalidEmbeddings) {
+                    YDB_LOG_WARN("Skipping invalid embeddings while maintaining HNSW index",
+                        {"logPrefix", LogPrefix}, {"count", invalidEmbeddings});
                 }
             }
             LevelsFinished = true;
@@ -428,11 +435,7 @@ private:
         TString error;
         // Routing uses only vector geometry. Preserve the full index settings
         // separately for HNSW graph selection and construction.
-        auto distanceSettings = Settings.GetIndexSettings();
-        distanceSettings.clear_m();
-        distanceSettings.clear_ef_construction();
-        distanceSettings.clear_min_rows();
-        distanceSettings.clear_delta_rows();
+        auto distanceSettings = NKMeans::MakeDistanceSettings(Settings.GetIndexSettings());
         auto clusters = NKikimr::NKMeans::CreateClusters(distanceSettings, 0, error);
         if (!clusters) {
             // Index settings are invalid for some reason

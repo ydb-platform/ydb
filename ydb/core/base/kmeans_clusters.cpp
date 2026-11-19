@@ -685,6 +685,14 @@ private:
     }
 };
 
+Ydb::Table::VectorIndexSettings MakeDistanceSettings(Ydb::Table::VectorIndexSettings settings) {
+    settings.clear_m();
+    settings.clear_ef_construction();
+    settings.clear_min_rows();
+    settings.clear_delta_rows();
+    return settings;
+}
+
 std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error, EClustersMode mode) {
     if (!ValidateSettings(settings, error)) {
         return nullptr;
@@ -1037,20 +1045,32 @@ bool AutoSelectHnswSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 dataS
 
 bool FillHnswSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLower,
         const TString& value, TString& error) {
-    if (nameLower == "clusters") {
-        error = "";
-        settings.set_clusters(ParseUInt32(nameLower, value, 1, MaxClusters, error));
-        return error.empty();
-    }
     error.clear();
-    if (nameLower == "min_rows") {
-        settings.mutable_settings()->set_min_rows(ParseUInt64(nameLower, value, 0, Max<ui64>(), error));
+    if (nameLower == "clusters") {
+        const auto parsed = ParseUInt32(nameLower, value, 1, MaxClusters, error);
+        if (error.empty()) {
+            settings.set_clusters(parsed);
+        }
+    } else if (nameLower == "min_rows") {
+        const auto parsed = ParseUInt64(nameLower, value, 0, Max<ui64>(), error);
+        if (error.empty()) {
+            settings.mutable_settings()->set_min_rows(parsed);
+        }
     } else if (nameLower == "m") {
-        settings.mutable_settings()->set_m(ParseUInt32(nameLower, value, MinHnswM, MaxHnswM, error));
+        const auto parsed = ParseUInt32(nameLower, value, MinHnswM, MaxHnswM, error);
+        if (error.empty()) {
+            settings.mutable_settings()->set_m(parsed);
+        }
     } else if (nameLower == "ef_construction") {
-        settings.mutable_settings()->set_ef_construction(ParseUInt32(nameLower, value, 1, MaxHnswEfConstruction, error));
+        const auto parsed = ParseUInt32(nameLower, value, 1, MaxHnswEfConstruction, error);
+        if (error.empty()) {
+            settings.mutable_settings()->set_ef_construction(parsed);
+        }
     } else if (nameLower == "delta_rows") {
-        settings.mutable_settings()->set_delta_rows(ParseUInt64(nameLower, value, 0, Max<ui64>(), error));
+        const auto parsed = ParseUInt64(nameLower, value, 0, Max<ui64>(), error);
+        if (error.empty()) {
+            settings.mutable_settings()->set_delta_rows(parsed);
+        }
     } else {
         return FillSetting(settings, nameLower, value, error);
     }

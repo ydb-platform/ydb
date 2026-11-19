@@ -138,6 +138,12 @@ bool CheckIndexMaterializationCompatible(
                 << "' has a scheme incompatible with this database";
             return false;
         }
+        expected.erase(expectedIt);
+    }
+    if (!expected.empty()) {
+        error = TStringBuilder() << "materialized index '" << indexDesc.GetName()
+            << "' is missing impl table '" << expected.begin()->first << "'";
+        return false;
     }
 
     return true;

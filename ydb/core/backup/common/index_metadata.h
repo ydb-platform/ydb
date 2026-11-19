@@ -6,6 +6,8 @@
 
 #include <util/generic/vector.h>
 
+#include <span>
+
 namespace NKikimr::NBackup {
 
 // Index impl tables of a table as listed in its metadata.json.
@@ -16,7 +18,9 @@ namespace NKikimr::NBackup {
 TVector<TIndexMetadata> MakeIndexesMetadata(
     const google::protobuf::RepeatedPtrField<Ydb::Table::TableIndex>& indexes,
     ui32 firstExportPrefixNumber,
-    bool encrypted,
-    bool enableFulltextCompact);
+    bool encrypted);
+
+TString FindMissingIndexImplTable(const google::protobuf::RepeatedPtrField<Ydb::Table::TableIndex>& indexes,
+    std::span<const TIndexMetadata> materialized);
 
 } // namespace NKikimr::NBackup

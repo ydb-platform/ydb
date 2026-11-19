@@ -14,6 +14,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
+#include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -118,8 +119,7 @@ static TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetada
 
     const auto& featureFlags = AppData()->FeatureFlags;
     const ui32 changefeedsCount = featureFlags.GetEnableChangefeedsExport() ? table.CdcStreamsSize() : 0;
-    return NBackup::MakeIndexesMetadata(scheme.indexes(), changefeedsCount + 1, encrypted,
-        featureFlags.GetEnableCompactFulltextIndex());
+    return NBackup::MakeIndexesMetadata(scheme.indexes(), changefeedsCount + 1, encrypted);
 }
 
 static void FillChangefeedTopics(TSchemeShard* ss, const NKikimrSchemeOp::TTableDescription& table,
@@ -258,28 +258,27 @@ void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription
     }
 }
 
-void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc, const TPathId& exportItemPathId) {
-    auto copiedPath = GetDescription(ss, exportItemPathId);
-    const auto& copiedTable = copiedPath.GetTable();
-
-    *desc.MutableSplitBoundary() = copiedTable.GetSplitBoundary();
-    *desc.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
-}
-
-void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, const TPath& sourcePath, const TPath& exportItemPath) {
+NKikimrSchemeOp::TPathDescription FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task,
+    const TPath& sourcePath, const TPath& exportItemPath)
+{
     if (!sourcePath.IsResolved() || (!sourcePath->IsColumnTable() && !exportItemPath.IsResolved())) {
-        return;
+        return {};
     }
 
+    NKikimrSchemeOp::TPathDescription copiedPath;
     auto sourceDescription = GetDescription(ss, sourcePath.Base()->PathId);
     if (sourceDescription.HasTable()) {
         FillSetValForSequences(
             ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
-        FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+        copiedPath = GetDescription(ss, exportItemPath.Base()->PathId);
+        auto& table = *sourceDescription.MutableTable();
+        *table.MutableSplitBoundary() = copiedPath.GetTable().GetSplitBoundary();
+        *table.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedPath.GetTable().GetPartitionConfig().GetPartitioningPolicy();
         FillChangefeedTopics(ss, sourceDescription.GetTable(), task);
     }
 
     task.MutableTable()->CopyFrom(sourceDescription);
+    return copiedPath;
 }
 
 TString GetExportItemIV(const TExportInfo& exportInfo, ui32 itemIdx) {
@@ -317,7 +316,8 @@ void FillEncryptionSettings(
     NKikimrSchemeOp::TBackupTask& task,
     const TSettings& exportSettings,
     const TExportInfo& exportInfo,
-    ui32 itemIdx)
+    ui32 itemIdx,
+    const NKikimrSchemeOp::TTableDescription& copiedTable)
 {
     if (exportSettings.has_encryption_settings()) {
         auto& encryptionSettings = *task.MutableEncryptionSettings();
@@ -356,6 +356,19 @@ void FillEncryptionSettings(
                         *saved.MutableVectorIndexKmeansTreeDescription() = *it->second;
                     }
                 }
+                // Async indexes do not reserve export prefixes. Restore their definitions
+                // from the same copy as the base table data.
+                EraseIf(indexes, [](const auto& index) {
+                    return index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync;
+                });
+                for (const auto& index : copiedTable.GetTableIndexes()) {
+                    if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                        *indexes.Add() = index;
+                    }
+                }
+                table.MutableColumns()->CopyFrom(copiedTable.GetColumns());
+                table.MutableKeyColumnNames()->CopyFrom(copiedTable.GetKeyColumnNames());
+                table.MutableKeyColumnIds()->CopyFrom(copiedTable.GetKeyColumnIds());
                 table.MutableTableIndexes()->Swap(&indexes);
                 table.MutableCdcStreams()->CopyFrom(snapshot.GetTable().GetTable().GetCdcStreams());
                 task.MutableChangefeedUnderlyingTopics()->CopyFrom(snapshot.GetChangefeedUnderlyingTopics());
@@ -383,12 +396,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
     const TPath exportPath = TPath::Init(exportInfo.ExportPathId, ss);
     auto& task = *modifyScheme.MutableBackup();
+    NKikimrSchemeOp::TPathDescription copiedParent;
 
     if (item.ParentIdx == Max<ui32>()) {
         modifyScheme.SetWorkingDir(exportPath.PathString());
         task.SetTableName(ToString(itemIdx));
 
-        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
+        copiedParent = FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
     } else {
         auto parentPath = exportPath.Child(ToString(item.ParentIdx));
 
@@ -497,7 +511,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             task.SetEnableChecksums(exportInfo.EnableChecksums);
             task.SetEnablePermissions(exportInfo.EnablePermissions);
 
-            FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx);
+            FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx, copiedParent.GetTable());
         }
         break;
     case TExportInfo::EKind::FS:
@@ -524,7 +538,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             task.SetEnableChecksums(exportInfo.EnableChecksums);
             task.SetEnablePermissions(exportInfo.EnablePermissions);
 
-            FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx);
+            FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx, copiedParent.GetTable());
         }
         break;
     }

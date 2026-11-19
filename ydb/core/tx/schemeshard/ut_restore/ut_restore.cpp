@@ -40,6 +40,8 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/types/uuid/uuid.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/hook/hook.h>
@@ -13794,7 +13796,8 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
     }
 }
 
-void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool prefixed = false) {
+void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool prefixed = false,
+        bool toggleCompactForExport = false) {
     TBackupStorage storage(isFs);
     TTestBasicRuntime runtime;
     const bool isVector = type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
@@ -13845,6 +13848,9 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool 
     const auto build = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
     UNIT_ASSERT_VALUES_EQUAL(build.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
+    if (toggleCompactForExport) {
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(!compact);
+    }
     const TString encryptionSettings = R"(
         encryption_settings {
             encryption_algorithm: "AES-128-GCM"
@@ -13866,6 +13872,24 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool 
     env.TestWaitNotification(runtime, txId);
     TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
+    if (toggleCompactForExport) {
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(compact);
+    }
+    using TSettings = Ydb::Import::ImportFromS3Settings;
+    const auto restore = [&](const TString& restoredPath, TSettings::IndexPopulationMode mode) {
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            %s {
+                %s
+                %s
+                %s
+                index_population_mode: %s
+                items { %s: "backup" destination_path: "%s" }
+            }
+        )", isFs ? "ImportFromFsSettings" : "ImportFromS3Settings", storage.Settings().c_str(),
+            isFs ? "" : "source_prefix: \"export\"", encryptionSettings.c_str(),
+            TSettings::IndexPopulationMode_Name(mode).c_str(), isFs ? "source_path" : "source_prefix", restoredPath.c_str()));
+        env.TestWaitNotification(runtime, txId);
+    };
     const auto implTables = NTableIndex::GetImplTables(type, indexColumns);
     for (const bool directImport : {false, true}) {
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directImport);
@@ -13873,18 +13897,7 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool 
         ui32 indexBuilds = 0;
         auto observer = runtime.AddObserver<TEvIndexBuilder::TEvCreateRequest>(
             [&](auto&) { ++indexBuilds; });
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            %s {
-                %s
-                %s
-                %s
-                index_population_mode: INDEX_POPULATION_MODE_IMPORT
-                items { %s: "backup" destination_path: "%s" }
-            }
-        )", isFs ? "ImportFromFsSettings" : "ImportFromS3Settings", storage.Settings().c_str(),
-            isFs ? "" : "source_prefix: \"export\"", encryptionSettings.c_str(),
-            isFs ? "source_path" : "source_prefix", restoredPath.c_str()));
-        env.TestWaitNotification(runtime, txId);
+        restore(restoredPath, TSettings::INDEX_POPULATION_MODE_IMPORT);
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(indexBuilds, 0);
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, restoredPath), rowCount);
@@ -13903,6 +13916,37 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool 
             UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table" + suffix),
                 ReadShards(runtime, TTestTxConfig::SchemeShard, restoredPath + suffix));
         }
+    }
+
+    if (toggleCompactForExport && !compact) {
+        // A legacy DataShard lists three consecutive prefixes, with no dictionary.
+        const TString path = (isFs ? TString("backup/") : TString("export/backup/")) + "metadata.json.enc";
+        const TString content = storage.Read(path);
+        const NBackup::TEncryptionKey key("0123456789012345");
+        auto [plain, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(key, TBuffer(content.data(), content.size()));
+        NJson::TJsonValue metadata;
+        UNIT_ASSERT(NJson::ReadJsonTree(TString(plain.Data(), plain.Size()), &metadata));
+        auto& indexes = metadata["indexes"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(indexes.at(0)["impl_table_prefix"].GetString(), "index1/indexImplDictTable");
+        indexes.erase(indexes.begin());
+        for (size_t i = 0; i < indexes.size(); ++i) {
+            indexes[i]["export_prefix"] = Sprintf("%03zu", i + 1);
+        }
+        const TString legacy = NJson::WriteJson(metadata, false);
+        const auto encrypted = NBackup::TEncryptedFileSerializer::EncryptFullFile("AES-128-GCM", key, iv, legacy);
+        storage.Write(path, TString(encrypted.Data(), encrypted.Size()));
+        storage.Write(NBackup::ChecksumKey(path), NBackup::ComputeChecksum(legacy));
+
+        restore("/MyRoot/Incomplete", TSettings::INDEX_POPULATION_MODE_IMPORT);
+        const auto result = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(result.GetResponse().GetEntry().GetIssues()),
+            "index1/indexImplDictTable");
+
+        restore("/MyRoot/Rebuilt", TSettings::INDEX_POPULATION_MODE_AUTO);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        const TString suffix = "/index1/indexImplDictTable";
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table" + suffix),
+            ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Rebuilt" + suffix));
     }
 }
 
@@ -14251,6 +14295,91 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         UNIT_ASSERT_VALUES_EQUAL(indexBuilds, 0);
         TestDescribeResult(describeIndex("/MyRoot/Restored"), {NLs::IndexState(EIndexStateReady), readySettings});
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Restored/vector_idx/indexImplPostingTable"), 200);
+    }
+
+    Y_UNIT_TEST(DropAsyncIndexAndColumnBeforeEncryptedTableCopy) {
+        TBackupStorage storage(true);
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "id" Type: "Uint32" }
+                Columns { Name: "region" Type: "Utf8" }
+                Columns { Name: "stable" Type: "Utf8" }
+                Columns { Name: "old_value" Type: "Utf8" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription { Name: "by_region" Type: EIndexTypeGlobal KeyColumnNames: ["region"] }
+            IndexDescription { Name: "by_stable" Type: EIndexTypeGlobalAsync KeyColumnNames: ["stable"] }
+            IndexDescription { Name: "by_old" Type: EIndexTypeGlobalAsync KeyColumnNames: ["old_value"] }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const TString encryptionSettings = R"(
+            encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key { key: "0123456789012345" }
+            }
+        )";
+        using TMetadataUploaded = NSchemeShard::TEvPrivate::TEvExportUploadMetadataResult;
+        const ui64 exportId = ++txId;
+        TBlockEvents<TMetadataUploaded> uploaded(runtime, [&](const auto& ev) {
+            const auto* result = dynamic_cast<TMetadataUploaded*>(ev->GetBase());
+            return result && result->ExportId == exportId;
+        });
+        TestExport(runtime, exportId, "/MyRoot", Sprintf(R"(
+            ExportToFsSettings {
+                %s
+                %s
+                include_index_data: true
+                items { source_path: "/MyRoot/Table" destination_path: "backup" }
+            }
+        )", storage.Settings().c_str(), encryptionSettings.c_str()));
+        runtime.WaitFor("index descriptions persisted before copy", [&] { return !uploaded.empty(); });
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(TableName: "Table" IndexName: "by_old")");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(Name: "Table" DropColumns { Name: "old_value" })");
+        env.TestWaitNotification(runtime, txId);
+        uploaded.Stop().Unblock();
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const TString file = storage.Read("backup/scheme.pb.enc");
+        const auto [plain, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+            NBackup::TEncryptionKey("0123456789012345"), TBuffer(file.data(), file.size()));
+        Ydb::Table::CreateTableRequest table;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(TString(plain.Data(), plain.Size()), &table));
+        UNIT_ASSERT_VALUES_EQUAL(table.indexes_size(), 2);
+        UNIT_ASSERT(AnyOf(table.indexes(), [](const auto& index) {
+            return index.name() == "by_stable" && index.has_global_async_index();
+        }));
+        UNIT_ASSERT(AnyOf(table.indexes(), [](const auto& index) {
+            return index.name() == "by_region" && index.has_global_index();
+        }));
+        UNIT_ASSERT(!AnyOf(table.columns(), [](const auto& column) { return column.name() == "old_value"; }));
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromFsSettings {
+                %s
+                %s
+                index_population_mode: INDEX_POPULATION_MODE_AUTO
+                items { source_path: "backup" destination_path: "/MyRoot/Restored" }
+            }
+        )", storage.Settings().c_str(), encryptionSettings.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Restored/by_stable"),
+            {NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync), NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+    }
+
+    Y_UNIT_TEST_FLAG(FulltextRelevanceLayoutChangedBeforeExport, Compact) {
+        const auto type = Compact ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+            : NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+        ExportImportComplexIndex(false, type, false, true);
     }
 
     Y_UNIT_TEST_QUAD(FulltextIndex, Compact, Relevance) {

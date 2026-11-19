@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(IndexMetadataTest) {
             index.mutable_global_vector_kmeans_tree_index();
         }
 
-        const auto encrypted = NBackup::MakeIndexesMetadata(indexes, 3, true, false);
+        const auto encrypted = NBackup::MakeIndexesMetadata(indexes, 3, true);
         UNIT_ASSERT_VALUES_EQUAL(encrypted.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(encrypted[0].ImplTablePrefix, "global/indexImplTable");
         UNIT_ASSERT_VALUES_EQUAL(encrypted[0].ExportPrefix, "003");
@@ -109,11 +109,29 @@ Y_UNIT_TEST_SUITE(IndexMetadataTest) {
         UNIT_ASSERT_VALUES_EQUAL(encrypted[2].ImplTablePrefix, "vector/indexImplPostingTable");
         UNIT_ASSERT_VALUES_EQUAL(encrypted[2].ExportPrefix, "005");
 
-        const auto plain = NBackup::MakeIndexesMetadata(indexes, 3, false, false);
+        const auto plain = NBackup::MakeIndexesMetadata(indexes, 3, false);
         UNIT_ASSERT_VALUES_EQUAL(plain.size(), 3);
         for (const auto& index : plain) {
             UNIT_ASSERT_VALUES_EQUAL(index.ExportPrefix, index.ImplTablePrefix);
         }
+    }
+
+    Y_UNIT_TEST(MissingFulltextDictionary) {
+        google::protobuf::RepeatedPtrField<Ydb::Table::TableIndex> indexes;
+        auto& index = *indexes.Add();
+        index.set_name("text");
+        auto* relevance = index.mutable_global_fulltext_relevance_index();
+
+        // A legacy DataShard can list the compact layout for an existing non-compact index.
+        auto compact = NBackup::MakeIndexesMetadata(indexes, 1, true);
+        UNIT_ASSERT_VALUES_EQUAL(compact.size(), 3);
+        UNIT_ASSERT(!NBackup::FindMissingIndexImplTable(indexes, compact));
+
+        relevance->mutable_dict_table_settings();
+        UNIT_ASSERT_VALUES_EQUAL(NBackup::FindMissingIndexImplTable(indexes, compact), "text/indexImplDictTable");
+        const auto full = NBackup::MakeIndexesMetadata(indexes, 1, true);
+        UNIT_ASSERT_VALUES_EQUAL(full.size(), 4);
+        UNIT_ASSERT(!NBackup::FindMissingIndexImplTable(indexes, full));
     }
 }
 

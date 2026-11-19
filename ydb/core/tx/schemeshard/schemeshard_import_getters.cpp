@@ -7,6 +7,7 @@
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
+#include <ydb/core/backup/common/index_metadata.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/backup/regexp/regexp.h>
@@ -1175,6 +1176,16 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         if (const auto& indexes = item.Metadata.GetIndexes()) {
+            if (item.Table) {
+                if (const auto missing = NBackup::FindMissingIndexImplTable(item.Table->indexes(), *indexes)) {
+                    if (IndexPopulationMode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT) {
+                        return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << MetadataKey
+                            << ": materialized index data is missing from the backup: " << missing);
+                    }
+                    // Older DataShards may also have numbered the remaining tables differently.
+                    return StartDownloadingChangefeeds();
+                }
+            }
             IndexImplTablePrefixes.reserve(indexes->size());
             for (const auto& index : *indexes) {
                 auto& indexMetadata = IndexImplTablePrefixes.emplace_back(index);

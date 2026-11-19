@@ -1160,8 +1160,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         } else {
             // SchemeShard computes the same list (see ComputeIndexItemSuffix)
             const ui32 changefeedsCount = enableChangefeedsExport ? Task.GetTable().GetTable().CdcStreamsSize() : 0;
-            indexes = MakeIndexesMetadata(scheme->indexes(), changefeedsCount + 1, encrypted,
-                AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
+            indexes = MakeIndexesMetadata(scheme->indexes(), changefeedsCount + 1, encrypted);
         }
     }
 

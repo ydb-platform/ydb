@@ -1448,7 +1448,10 @@ namespace Tests {
             Runtime->RegisterService(NWorkloadManager::MakeServiceId(Runtime->GetNodeId(nodeIdx)), workloadManagerId, nodeIdx);
         }
 
-        {
+        // Stopping a dynamic tenant leaves its KQP proxy alive. Reuse it on restart:
+        // a second proxy would start another scheduler actor on the same node's scheduler state.
+        const auto kqpProxyId = NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx));
+        if (!Runtime->GetLocalServiceId(kqpProxyId, nodeIdx)) {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
             const auto& rmConfig = Settings->AppConfig->GetTableServiceConfig().GetResourceManager();
@@ -1563,7 +1566,7 @@ namespace Tests {
                                                                   std::move(kqpProxySharedResources),
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx, userPoolId);
-            Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
+            Runtime->RegisterService(kqpProxyId, kqpProxyServiceId, nodeIdx);
         }
 
         {

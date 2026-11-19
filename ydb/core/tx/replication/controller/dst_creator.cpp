@@ -1,9 +1,11 @@
 #include "dst_creator.h"
+#include "index_replication.h"
 #include "logging.h"
 #include "private_events.h"
 #include "util.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -20,6 +22,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+
+#include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -274,6 +278,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
+                ReportStatus(TStringBuilder() << "Cannot describe source table " << SrcPath
+                    << ": " << result.GetStatus() << ", " << result.GetIssues().ToOneLineString());
                 return Retry();
             }
 
@@ -282,14 +288,24 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 << ", issue: " << result.GetIssues().ToOneLineString());
         }
 
-        Ydb::Table::CreateTableRequest scheme;
         const auto description = result.GetTableDescription();
+        const auto& sourceTable = NYdb::TProtoAccessor::GetProto(description);
+        if (Kind == TReplication::ETargetKind::Table && AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
+            const auto pendingIndexes = GetBuildingFulltextIndexes(sourceTable);
+            if (!pendingIndexes.empty()) {
+                ReportStatus(TStringBuilder() << "Waiting for source fulltext/JSON index builds on "
+                    << SrcPath << ": " << JoinSeq(", ", pendingIndexes));
+                return Retry();
+            }
+        }
+        ReportStatus({});
+
+        Ydb::Table::CreateTableRequest scheme;
         description.SerializeTo(scheme);
 
         // SDK table descriptions do not retain literal defaults when serialized.
-        const auto& source = NYdb::TProtoAccessor::GetProto(description);
         THashMap<TStringBuf, const Ydb::TypedValue*> literalDefaults;
-        for (const auto& column : source.columns()) {
+        for (const auto& column : sourceTable.columns()) {
             if (column.has_from_literal()) {
                 literalDefaults.emplace(column.name(), &column.from_literal());
             }
@@ -300,25 +316,17 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
         }
 
-        // filter out unsupported index types
+        // async indexes are unsupported if the EnableAsyncIndexReplication feature flag is unset,
+        // others are always supported
         auto& indexes = *scheme.mutable_indexes();
         for (auto it = indexes.begin(); it != indexes.end();) {
-            switch (it->type_case()) {
-            case Ydb::Table::TableIndex::kGlobalIndex:
-            case Ydb::Table::TableIndex::kGlobalUniqueIndex:
-                ++it;
-                continue;
-            case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-                if (AppData()->FeatureFlags.GetEnableAsyncIndexReplication()) {
-                    ++it;
-                } else {
-                    it = indexes.erase(it);
-                }
-                continue;
-            default:
+            if (it->type_case() == Ydb::Table::TableIndex::kGlobalAsyncIndex &&
+                !AppData()->FeatureFlags.GetEnableAsyncIndexReplication())
+            {
                 it = indexes.erase(it);
-                break;
+                continue;
             }
+            ++it;
         }
 
         Ydb::StatusIds::StatusCode status;
@@ -355,6 +363,38 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             if (!FillIndexDescription(*TxBody.MutableCreateIndexedTable(), scheme, AppData()->FeatureFlags.GetEnableCompactFulltextIndex(), status, error)) {
                 return Error(NKikimrScheme::StatusSchemeError, error);
             }
+            if (InitialScan && AppData()->FeatureFlags.GetEnableFulltextIndexReplication() && UsesFulltextRowId(sourceTable)) {
+                for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
+                    if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique && index.KeyColumnNamesSize() == 1
+                        && index.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn)
+                    {
+                        index.SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
+                    }
+                }
+            }
+            for (const auto& source : sourceTable.indexes()) {
+                if (!IsFulltextIndex(source)) {
+                    continue;
+                }
+                for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
+                    if (index.GetName() == source.name()) {
+                        if (HasSupportedFulltextLayout(source)) {
+                            index.SetType(GetFulltextIndexType(source));
+                            index.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(source.use_row_id_as_doc_id());
+                        }
+                        if (source.has_global_fulltext_plain_index()) {
+                            *index.MutableFulltextIndexDescription()->MutableSettings()
+                                = source.global_fulltext_plain_index().fulltext_settings();
+                        } else if (source.has_global_fulltext_relevance_index()) {
+                            *index.MutableFulltextIndexDescription()->MutableSettings()
+                                = source.global_fulltext_relevance_index().fulltext_settings();
+                        }
+                        if (InitialScan && AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
+                            index.SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
+                        }
+                    }
+                }
+            }
         } else {
             TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
             desc = TxBody.MutableCreateTable();
@@ -363,13 +403,24 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         Y_ABORT_UNLESS(desc);
         desc->SetName(pathPair.second);
 
+        // Column conversion already copies the row-id default and its sequence.
+        for (const auto& column : desc->GetColumns()) {
+            if (column.GetName() == NTableIndex::NFulltext::RowIdColumn) {
+                desc->SetSystemColumnNamesAllowed(true);
+                break;
+            }
+        }
+
         FillReplicationConfig(*desc->MutableReplicationConfig());
         if (scheme.indexes_size()) {
             for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
+                // Local indexes live inside the table and have no impl tables to replicate.
                 // Async indexes are maintained by the destination's own change exchange.
-                // Only synchronous index tables have independent replication targets.
-                if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalAsync) {
-                    FillReplicationConfig(*index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig());
+                // Other index tables have independent replication targets.
+                if (NTableIndex::HasReplicatedImplTables(index.GetType())) {
+                    for (auto& implTable : *index.MutableIndexImplTableDescriptions()) {
+                        FillReplicationConfig(*implTable.MutableReplicationConfig());
+                    }
                 }
             }
         }
@@ -409,8 +460,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
-        if (DropIndexTx.HasDropIndex()) {
-            ExecuteSchemeTx(DropIndexTx);
+        if (HasIndexTx()) {
+            ExecuteSchemeTx(IndexTx);
         } else if (SwitchoverTx.HasAlterTable()) {
             ExecuteSchemeTx(SwitchoverTx);
         } else if (InitialScan || CreatePlaceholder) {
@@ -424,29 +475,16 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         ExecuteSchemeTx(TxBody);
     }
 
-    bool ShouldDropVectorIndex(const NKikimrSchemeOp::TIndexDescription& index) const {
-        return !InitialScan && !CreatePlaceholder
-            && Kind == TReplication::ETargetKind::Table
-            && index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+    bool HasIndexTx() const {
+        return IndexTx.HasAlterTableIndex();
     }
 
-    void PrepareDropIndex(const NKikimrSchemeOp::TIndexDescription& index,
-            const NKikimrScheme::TEvDescribeSchemeResult& desc)
-    {
-        const auto parts = SplitPath(desc.GetPath());
-        Y_ABORT_UNLESS(!parts.empty());
-        DropIndexTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropIndex);
-        DropIndexTx.SetInternal(true);
-        DropIndexTx.SetWorkingDir(TString(ExtractParent(desc.GetPath())));
-        DropIndexTx.MutableDropIndex()->SetTableName(parts.back());
-        DropIndexTx.MutableDropIndex()->SetIndexName(index.GetName());
-
-        // DROP INDEX is addressed by name. Bind it to the table and index we
-        // validated so a concurrent schema change cannot redirect the removal.
-        auto* tableCondition = DropIndexTx.AddApplyIf();
-        tableCondition->SetPathId(DstPathId.LocalPathId);
-        tableCondition->SetPathVersion(desc.GetPathDescription().GetSelf().GetPathVersion());
-        DropIndexTx.AddApplyIf()->SetPathId(index.GetLocalPathId());
+    void PrepareIndexWriteOnly(const TString& name, const TString& path) {
+        IndexTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTableIndex);
+        IndexTx.SetInternal(true);
+        IndexTx.SetWorkingDir(path);
+        IndexTx.MutableAlterTableIndex()->SetName(name);
+        IndexTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
         NeedToCheck = true;
         AllocateTxId();
     }
@@ -518,8 +556,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             if (record.HasPathCreateTxId()) {
                 NeedToCheck = true;
                 return SubscribeTx(record.GetPathCreateTxId());
-            } else if (DropIndexTx.HasDropIndex()) {
-                DropIndexTx.Clear();
+            } else if (HasIndexTx()) {
+                IndexTx.Clear();
                 Become(&TThis::StateDescribeDstPath);
                 return Retry();
             } else if (SwitchoverTx.HasAlterTable()) {
@@ -534,7 +572,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return DescribeDstPath();
         case NKikimrScheme::StatusPreconditionFailed:
         case NKikimrScheme::StatusPathDoesNotExist:
-            if (DropIndexTx.HasDropIndex()) {
+            if (HasIndexTx()) {
                 return DescribeDstPath();
             }
             if (SwitchoverTx.HasAlterTable()) {
@@ -580,7 +618,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void DescribeDstPath() {
-        DropIndexTx.Clear();
+        IndexTx.Clear();
         Send(PipeCache, new TEvPipeCache::TEvForward(
             new TEvSchemeShard::TEvDescribeScheme(DstPath), SchemeShardId));
         Become(&TThis::StateDescribeDstPath);
@@ -616,9 +654,18 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return Error(NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
                     << "`" << DstPath << "` is owned by another replication");
             }
-            for (const auto& index : desc.GetTable().GetTableIndexes()) {
-                if (ShouldDropVectorIndex(index)) {
-                    return PrepareDropIndex(index, record);
+            if (InitialScan && Kind == TReplication::ETargetKind::Table
+                && AppData()->FeatureFlags.GetEnableFulltextIndexReplication())
+            {
+                for (const auto& expected : TxBody.GetCreateIndexedTable().GetIndexDescription()) {
+                    if (expected.GetState() != NKikimrSchemeOp::EIndexStateWriteOnly) {
+                        continue;
+                    }
+                    for (const auto& index : desc.GetTable().GetTableIndexes()) {
+                        if (index.GetName() == expected.GetName() && index.GetState() == NKikimrSchemeOp::EIndexStateReady) {
+                            return PrepareIndexWriteOnly(index.GetName(), record.GetPath());
+                        }
+                    }
                 }
             }
             if (NeedsSwitchover(desc.GetTable())) {
@@ -687,6 +734,24 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             if (!InitialScan && IsStandby() && !IsImported(got)) {
+                // Fulltext and vector indexes are replicated as their impl tables, so the index table
+                // target refers to an impl table directly (unlike a secondary index one).
+                const auto srcParts = SplitPath(SrcPath);
+                const auto dstParts = SplitPath(DstPath);
+                const bool isIndexImplTable = !srcParts.empty() && !dstParts.empty()
+                    && srcParts.back() == dstParts.back();
+
+                if (Kind == TReplication::ETargetKind::IndexTable && isIndexImplTable) {
+                    // Its impl table is still importing, i.e. the index was built from the restored data
+                    // instead of being imported: its content (segment compaction, clustering) may differ
+                    // from the source one, so it cannot be attached to the replication.
+                    error = TStringBuilder() << "Cannot attach destination index table '" << DstPath
+                        << "': it was built during the import instead of being restored, so its content"
+                        << " may differ from the source one. Restore the index together with its data"
+                        << " (--include-index-data, --index-population-mode Import) before switching to STANDBY";
+                    return false;
+                }
+
                 error = "Destination table import is not complete (expected IMPORTED)";
                 return false;
             }
@@ -810,9 +875,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         // check indexes
         THashMap<TStringBuf, const NKikimrSchemeOp::TIndexDescription*> indexes;
         for (const auto& index : got.GetTableIndexes()) {
-            if (ShouldDropVectorIndex(index)) {
-                continue;
-            }
             indexes.emplace(index.GetName(), &index);
         }
 
@@ -847,6 +909,16 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                     << ": name: " << index.GetName()
                     << ", expected: " << NKikimrSchemeOp::EIndexType_Name(index.GetType())
                     << ", got: " << NKikimrSchemeOp::EIndexType_Name(it->second->GetType());
+                return false;
+            }
+
+            if (NTableIndex::IsFulltextOrJsonIndex(index.GetType())
+                && (!EqualFulltextSettings(index.GetFulltextIndexDescription().GetSettings(),
+                        it->second->GetFulltextIndexDescription().GetSettings())
+                    || index.GetFulltextIndexDescription().GetUseRowIdAsDocId()
+                        != it->second->GetFulltextIndexDescription().GetUseRowIdAsDocId()))
+            {
+                error = TStringBuilder() << "Fulltext/JSON settings mismatch: " << index.GetName();
                 return false;
             }
 
@@ -958,6 +1030,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         Retry();
+    }
+
+    void ReportStatus(const TString& issue) {
+        if (LastStatus != issue) {
+            LastStatus = issue;
+            Send(Parent, new TEvPrivate::TEvSourceStatus(ReplicationId, TargetId, issue));
+        }
     }
 
     void Success() {
@@ -1127,7 +1206,7 @@ private:
     ui64 TxId = 0;
     ui64 WaitingTxId = 0;
     NKikimrSchemeOp::TModifyScheme TxBody;
-    NKikimrSchemeOp::TModifyScheme DropIndexTx;
+    NKikimrSchemeOp::TModifyScheme IndexTx;
     NKikimrSchemeOp::TModifyScheme SwitchoverTx;
     ui64 SwitchoverPathVersion = 0;
     struct TRefusal {
@@ -1142,6 +1221,7 @@ private:
     ui64 RetryGeneration = 0;
     TPathId DstPathId;
     TActorId Subscriber;
+    TString LastStatus;
 
 }; // TDstCreator
 
@@ -1208,11 +1288,16 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
+    // Online specialized indexes initialize from their own CDC scan even when
+    // the base table was bootstrapped without one. Their new backing tables
+    // must not be treated as destinations awaiting an external import.
+    const bool scanSpecializedIndex = target->IsIndexBuild()
+        && (target->GetConfig()->IsFulltextOrJsonIndex() || target->GetConfig()->IsRowIdIndex());
     return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
         replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
         EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
-        replication->GetConfig().GetInitialScan(), replication->GetDesiredState(),
+        replication->GetConfig().GetInitialScan() || scanSpecializedIndex, replication->GetDesiredState(),
         IsSwitchover(replication->GetConfig()));
 }
 

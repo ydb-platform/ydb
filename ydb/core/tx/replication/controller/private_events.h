@@ -48,6 +48,7 @@ struct TEvPrivate {
         EvCancelCreateStream,
         EvCancelDropStream,
         EvExpireWorkerLag,
+        EvSourceStatus,
 
         EvEnd,
     };
@@ -157,6 +158,19 @@ struct TEvPrivate {
         }
     };
 
+    struct TEvSourceStatus: public TEventLocal<TEvSourceStatus, EvSourceStatus> {
+        const ui64 ReplicationId;
+        // Discovery reports replication-wide status before target IDs exist.
+        const std::optional<ui64> TargetId;
+        const TString Issue;
+
+        TEvSourceStatus(ui64 rid, std::optional<ui64> tid, const TString& issue)
+            : ReplicationId(rid)
+            , TargetId(tid)
+            , Issue(issue)
+        {}
+    };
+
     struct TEvCreateDstResult: public TGenericSchemeResult<TEvCreateDstResult, EvCreateDstResult> {
         const TPathId DstPathId;
         const bool WaitingImport = false;
@@ -263,6 +277,7 @@ struct TEvPrivate {
         const ui64 ReplicationId;
         const ui64 TargetId;
         const ui64 TxId;
+        ui64 PreviousTxId = 0; // Completed row-id sequence preparation, if any.
 
         TEvSchemaChangeDstAlterTxId(ui64 rid, ui64 tid, ui64 txId);
         TString ToString() const override;

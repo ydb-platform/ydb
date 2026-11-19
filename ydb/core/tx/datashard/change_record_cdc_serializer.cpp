@@ -1,6 +1,7 @@
 #include "change_record_cdc_serializer.h"
 #include "change_record.h"
 #include "type_serialization.h"
+#include <ydb/core/base/table_index.h>
 
 #include <ydb/core/change_exchange/visitor.h>
 #include <ydb/core/io_formats/json/json.h>
@@ -540,6 +541,11 @@ protected:
                 "Unknown index type: " << type);
             value["type"] = type == NKikimrSchemeOp::EIndexTypeGlobal
                 ? "GlobalSync" : TString(typeSuffix);
+            if (NTableIndex::IsFulltextOrJsonIndex(type)) {
+                const auto& fulltext = index.GetFulltextIndexDescription();
+                value["fulltextSettings"] = Base64Encode(fulltext.GetSettings().SerializeAsString());
+                value["useRowIdAsDocId"] = fulltext.GetUseRowIdAsDocId();
+            }
             auto& indexColumns = value["indexColumns"];
             indexColumns.SetType(NJson::JSON_ARRAY);
             for (const auto& column : index.GetKeyColumnNames()) {

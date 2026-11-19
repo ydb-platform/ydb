@@ -7,6 +7,7 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/table_index.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -32,6 +33,14 @@ bool CheckFreezeStateAlreadySet(const TTableInfo::TPtr table, const NKikimrSchem
     }
 
     return false;
+}
+
+// An alter that only changes the replication config of a table does not touch its layout.
+bool IsReplicationConfigOnlyAlter(const NKikimrSchemeOp::TTableDescription& alter) {
+    auto rest = alter;
+    rest.ClearPathId();
+    rest.ClearReplicationConfig();
+    return rest.ByteSizeLong() == 0;
 }
 
 template <typename TMessage>
@@ -717,7 +726,12 @@ public:
             const bool isInternalShadowDataRepair = Transaction.GetInternal()
                 && Transaction.GetOperationType() == NKikimrSchemeOp::ESchemeOpRepairIndexShadowData
                 && AllowShadowData;
-            if (!context.IsAllowedPrivateTables && !isInternalShadowDataRepair) {
+            // A replication config change keeps the impl table layout intact, so an internal
+            // operation may apply it to an index impl table directly (a consistent operation uses
+            // one index version for all its impl tables, see CreateConsistentAlterTable).
+            if (!context.IsAllowedPrivateTables && !isInternalShadowDataRepair &&
+                !(Transaction.GetInternal() && IsReplicationConfigOnlyAlter(alter)))
+            {
                 checks.IsCommonSensePath(); //forbid alter impl index tables outside consistent operation
             }
 
@@ -907,6 +921,18 @@ public:
             for (const auto& column : alter.GetColumns()) {
                 const bool altersExistingColumn = table->GetColumnIdByNameSlow(column.GetName())
                     != TTableInfo::InvalidColumnId;
+                const bool fulltextRowIdProvision = Transaction.GetInternal()
+                    && AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
+                    && Transaction.GetLockGuard().GetOwnerTxId()
+                    && !altersExistingColumn && column.GetIsBuildInProgress()
+                    && column.GetName() == NTableIndex::NFulltext::RowIdColumn
+                    && column.GetType() == "Uint64" && column.GetNotNull()
+                    && column.GetDefaultFromSequence() == NTableIndex::NFulltext::RowIdSequenceName;
+                if (fulltextRowIdProvision) {
+                    // The specialized replica schema handler provisions this
+                    // reserved column and sequence before replaying its backfill.
+                    continue;
+                }
                 if (column.HasDefaultFromLiteral() || column.HasDefaultFromSequence()
                     || column.HasDefaultFromExpression() || column.HasEmptyDefault()
                     || (column.HasSetNotNullInProgress() && column.GetSetNotNullInProgress())
@@ -1459,18 +1485,32 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 
     // Reject overlapping impl-table ALTERs before proposing the index part:
     // it creates the next index version before the table part checks its path.
+    // An internal operation may alter all impl tables of one index at once (e.g. the replication
+    // import marks them as imported in one transaction): the first alter creates the new index
+    // version and the others share it, so the index is legitimately under operation here.
+    const bool indexAlteredByThisOperation = tx.GetInternal()
+        && parent.Base()->LastTxId == id.GetTxId();
     for (const auto& alterPath : {parent, path}) {
-        const auto checks = alterPath.Check();
+        auto checks = alterPath.Check();
         checks.NotUnderDomainUpgrade().IsAtLocalSchemeShard().IsResolved()
-            .NotDeleted().NotUnderDeleting().NotUnderOperation();
+            .NotDeleted().NotUnderDeleting();
+        if (!(indexAlteredByThisOperation && alterPath.Base()->PathId == parent.Base()->PathId)) {
+            checks.NotUnderOperation();
+        }
         if (!checks) {
             return {CreateReject(id, checks.GetStatus(), checks.GetError())};
         }
     }
-    if (context.SS->Indexes.at(parent.Base()->PathId)->AlterData
+    if ((!indexAlteredByThisOperation && context.SS->Indexes.at(parent.Base()->PathId)->AlterData)
         || context.SS->Tables.at(path.Base()->PathId)->AlterData)
     {
         return {CreateReject(id, NKikimrScheme::StatusMultipleModifications, "There's another index table Alter in flight")};
+    }
+
+    // The new index version was already created by the first impl table alter of this operation,
+    // so this one only changes its own table.
+    if (indexAlteredByThisOperation) {
+        return {CreateAlterTable(id, tx)};
     }
 
     TVector<ISubOperation::TPtr> result;
@@ -1480,7 +1520,12 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         tableIndexAltering.SetInternal(tx.GetInternal());
         auto alterIndex = tableIndexAltering.MutableAlterTableIndex();
         alterIndex->SetName(parent.LeafName());
-        alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+        const auto& index = *context.SS->Indexes.at(parent.Base()->PathId);
+        const bool replicatedFulltext = path.IsAsyncReplicaTable()
+            && (NTableIndex::IsFulltextOrJsonIndex(index.Type)
+                || (index.Type == NKikimrSchemeOp::EIndexTypeGlobalUnique && index.IndexKeys.size() == 1
+                    && index.IndexKeys.front() == NTableIndex::NFulltext::RowIdColumn));
+        alterIndex->SetState(replicatedFulltext ? index.State : NKikimrSchemeOp::EIndexStateReady);
 
         result.push_back(CreateAlterTableIndex(NextPartId(id, result), tableIndexAltering));
     }

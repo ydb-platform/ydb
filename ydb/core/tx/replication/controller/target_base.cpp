@@ -42,6 +42,10 @@ const TString& TTargetBase::TConfigBase::GetDstPath() const {
     return DstPath;
 }
 
+bool TTargetBase::TConfigBase::GetSrcIsImpl() const {
+    return false;
+}
+
 TTargetBase::TTargetBase(
         TReplication* replication,
         ETargetKind kind,
@@ -263,6 +267,17 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         } else if (needsCreator && canAttach) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
         } else if (!DstCreator && !DstAlterer) {
+            if (Kind == ETargetKind::Table && Replication->GetDesiredState() == TReplication::EState::Done) {
+                for (const auto* peer : Replication->GetTargets()) {
+                    if ((peer->GetConfig()->IsFulltextOrJsonIndex() || peer->GetConfig()->IsRowIdIndex())
+                        && Replication->FindBaseTableTarget(*peer) == this
+                        && peer->GetDstState() != EDstState::Done && peer->GetDstState() != EDstState::Removing)
+                    {
+                        // Release the base table after its backing tables can accept writes.
+                        return;
+                    }
+                }
+            }
             DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
         }
         break;
@@ -312,6 +327,10 @@ void TTargetBase::Reset(TActorId& id) {
 }
 
 void TTargetBase::UpdateConfig(const NKikimrReplication::TReplicationConfig&) {
+}
+
+TString TTargetBase::GetSrcIndexPath() const {
+    Y_ABORT("Unreachable");
 }
 
 }

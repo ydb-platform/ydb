@@ -1,4 +1,5 @@
 #include "dst_creator.h"
+#include "index_replication.h"
 #include "private_events.h"
 
 
@@ -9,6 +10,7 @@
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -18,6 +20,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
 
 #include <atomic>
 
@@ -25,6 +28,85 @@ namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(DstCreator) {
     using namespace NTestHelpers;
+
+    Y_UNIT_TEST_TWIN(PreservesExistingFulltextRowIdSequence, Compact) {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
+        flags.FeatureFlags.SetEnableCompactFulltextIndex(Compact);
+        TEnv env(flags, true, ERuntimeMode::Simulated);
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        auto sessionResult = env.RunCall([&] { return client.GetSession().GetValueSync(); });
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto create = env.RunCall([&] {
+            return session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/Source` (key Utf8 NOT NULL, value Utf8, PRIMARY KEY(key),
+                    INDEX idx GLOBAL USING fulltext_plain ON (value) WITH (tokenizer=standard));
+            )").GetValueSync();
+        });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        const auto source = env.GetDescription("/Root/Source").GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(source.SequencesSize(), 1);
+        env.GetRuntime().Register(CreateDstCreator(env.GetSender(), env.GetSchemeshardId("/Root/Source"),
+            env.GetYdbProxy(), "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Replica"));
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+        const auto replica = env.GetDescription("/Root/Replica").GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(replica.SequencesSize(), 1);
+        const auto& sequence = replica.GetSequences(0);
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetName(), NTableIndex::NFulltext::RowIdSequenceName);
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetDataType(), source.GetSequences(0).GetDataType());
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetMinValue(), source.GetSequences(0).GetMinValue());
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetMaxValue(), source.GetSequences(0).GetMaxValue());
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetIncrement(), source.GetSequences(0).GetIncrement());
+        const auto* rowId = FindIfPtr(replica.GetColumns(), [](const auto& column) {
+            return column.GetName() == NTableIndex::NFulltext::RowIdColumn;
+        });
+        UNIT_ASSERT(rowId);
+        UNIT_ASSERT_VALUES_EQUAL(rowId->GetType(), "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(rowId->GetDefaultFromSequence(), sequence.GetName());
+    }
+
+    Y_UNIT_TEST(ReportsPendingSourceIndexAndClearsStatus) {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
+        TEnv env(flags, true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        auto sessionResult = env.RunCall([&] { return client.GetSession().GetValueSync(); });
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto create = env.RunCall([&] {
+            return session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/Source` (key Uint64 NOT NULL, value Utf8, PRIMARY KEY(key),
+                    INDEX idx GLOBAL USING fulltext_plain ON (value) WITH (tokenizer=standard));
+            )").GetValueSync();
+        });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        const auto description = env.RunCall([&] { return session.DescribeTable("/Root/Source").GetValueSync(); });
+        UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+        auto table = NYdb::TProtoAccessor::GetProto(description.GetTableDescription());
+        table.mutable_indexes(0)->set_status(Ydb::Table::TableIndexDescription::STATUS_BUILDING);
+        const auto proxy = runtime.AllocateEdgeActor();
+        const auto creator = runtime.Register(CreateDstCreator(env.GetSender(), env.GetSchemeshardId("/Root/Source"),
+            proxy, "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Replica"));
+        const auto request = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTableRequest>(proxy);
+        runtime.Send(new IEventHandle(creator, proxy, new TEvYdbProxy::TEvDescribeTableResponse(
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(table), NYdb::NTable::TDescribeTableSettings()),
+            0, request->Cookie));
+        const auto waiting = runtime.GrabEdgeEvent<TEvPrivate::TEvSourceStatus>(env.GetSender());
+        UNIT_ASSERT_STRING_CONTAINS(waiting->Get()->Issue, "Waiting for source fulltext/JSON index builds");
+        UNIT_ASSERT_STRING_CONTAINS(waiting->Get()->Issue, "/Root/Source: idx");
+        runtime.Send(creator, env.GetSender(), new TEvents::TEvWakeup());
+        const auto retry = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTableRequest>(proxy);
+        runtime.Send(retry->Forward(env.GetYdbProxy()));
+        const auto cleared = runtime.GrabEdgeEvent<TEvPrivate::TEvSourceStatus>(env.GetSender());
+        UNIT_ASSERT(cleared->Get()->Issue.empty());
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+    }
 
     void SetImportState(TEnv<>& env, const TString& path,
             NKikimrSchemeOp::TTableReplicationConfig::EImportState state,
@@ -648,7 +730,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
     void AttachTableWithVectorIndex(bool withSyncIndex) {
         TEnv env;
-        // A backup restores the source schema, including its vector indexes.
+        // A backup restores the source schema, including its vector indexes: the restored impl
+        // tables are attached and replicated instead of the indexes being dropped.
         CreateTableWithVectorIndexes(env, "/Root/Source", withSyncIndex);
         CreateTableWithVectorIndexes(env, "/Root/Dst", withSyncIndex);
         const auto pathId = env.GetPathId("/Root/Dst");
@@ -659,11 +742,14 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         const auto dst = env.GetDescription("/Root/Dst");
         const auto& indexes = dst.GetPathDescription().GetTable().GetTableIndexes();
-        UNIT_ASSERT_VALUES_EQUAL(indexes.size(), withSyncIndex ? 1 : 0);
-        if (withSyncIndex) {
-            UNIT_ASSERT_VALUES_EQUAL(indexes.Get(0).GetName(), "by_embedding");
-            UNIT_ASSERT_VALUES_EQUAL(indexes.Get(0).GetType(), NKikimrSchemeOp::EIndexTypeGlobal);
+        UNIT_ASSERT_VALUES_EQUAL(indexes.size(), withSyncIndex ? 3 : 2);
+        THashSet<TString> names;
+        for (const auto& index : indexes) {
+            names.insert(index.GetName());
         }
+        UNIT_ASSERT(names.contains("vector_idx"));
+        UNIT_ASSERT(names.contains("other_vector_idx"));
+        UNIT_ASSERT_VALUES_EQUAL(names.contains("by_embedding"), withSyncIndex);
         const auto src = env.GetDescription("/Root/Source");
         UNIT_ASSERT_VALUES_EQUAL(src.GetPathDescription().GetTable().TableIndexesSize(), withSyncIndex ? 3 : 2);
         UNIT_ASSERT_VALUES_EQUAL(src.GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
@@ -696,34 +782,34 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 2);
     }
 
-    Y_UNIT_TEST(RecoverAttachmentAfterVectorIndexDrop) {
-        TEnv env(true, ERuntimeMode::Simulated);
+    Y_UNIT_TEST(RecoverAttachmentWithVectorIndexes) {
+        TEnv env;
         CreateTableWithVectorIndexes(env, "/Root/Source");
         CreateTableWithVectorIndexes(env, "/Root/Dst");
         const auto pathId = env.GetPathId("/Root/Dst");
         SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
-        const auto creator = StartVectorIndexAttachment(env);
-
-        bool dropCompleted = false;
-        auto observer = env.GetRuntime().AddObserver<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(
-            [&](NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-                if (ev->Recipient == creator) {
-                    dropCompleted = true;
-                    ev.Reset();
-                }
-            });
-        env.GetRuntime().WaitFor("first vector index removal", [&] { return dropCompleted; }, TDuration::Seconds(60));
-        env.SendAsync(creator, new TEvents::TEvPoison());
-        observer.Remove();
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 1);
 
         StartVectorIndexAttachment(env);
         AssertVectorIndexAttachment(env, pathId);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 0);
+
+        // Retry as if the controller restarted before persisting the result.
+        StartVectorIndexAttachment(env);
+        AssertVectorIndexAttachment(env, pathId);
+
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Source").GetPathDescription().GetTable().TableIndexesSize(), 2);
     }
 
-    Y_UNIT_TEST(StandbyDropsRestoredVectorIndexes) {
+    void SetVectorIndexImplTablesImported(TEnv<>& env) {
+        for (const auto* index : {"vector_idx", "other_vector_idx"}) {
+            for (const auto* implTable : {"indexImplLevelTable", "indexImplPostingTable"}) {
+                SetImportState(env, TString(TStringBuilder() << "/Root/Dst/" << index << '/' << implTable),
+                    NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StandbyKeepsRestoredVectorIndexes) {
         TEnv env(true, ERuntimeMode::Simulated);
         CreateTableWithVectorIndexes(env, "/Root/Source");
         env.GetRuntime().RegisterService(MakeReplicationServiceId(env.GetRuntime().GetNodeId(0)),
@@ -784,6 +870,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(200600));
         CreateTableWithVectorIndexes(env, "/Root/Dst");
         SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
+        SetVectorIndexImplTablesImported(env);
         const auto pathId = env.GetPathId("/Root/Dst");
 
         const auto resumed = env.RunCall([&] {
@@ -796,7 +883,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         const auto dst = env.GetDescription("/Root/Dst");
         UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/Dst"), pathId);
-        UNIT_ASSERT_VALUES_EQUAL(dst.GetPathDescription().GetTable().TableIndexesSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(dst.GetPathDescription().GetTable().TableIndexesSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(dst.GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
             NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Source").GetPathDescription().GetTable().TableIndexesSize(), 2);
@@ -995,6 +1082,47 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                 UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, pathId);
             }
         }
+    }
+
+    // An index built from the restored data (its impl table has no import state) may differ from the
+    // source one (clustering, fulltext segment compaction), so it must not be attached.
+    Y_UNIT_TEST(AttachBuiltIndexTable) {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        TEnv env(flags);
+        auto table = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Uint32"},
+            },
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTableWithIndex("/Root", *MakeTableDescription(table),
+            "by_value", TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal);
+        table.Name = "Dst";
+        env.CreateTableWithIndex("/Root", *MakeTableDescription(table),
+            "by_value", TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal);
+
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+        // An index built from the restored data is never marked as imported.
+        SetImportState(env, "/Root/Dst/by_value/indexImplTable", NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+        UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender())->Get()->IsSuccess());
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 2, TReplication::ETargetKind::IndexTable,
+            "/Root/Source/by_value/indexImplTable", "/Root/Dst/by_value/indexImplTable",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSchemeError);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "was built during the import");
     }
 
     Y_UNIT_TEST(AttachmentAlterRejectsDroppedIndexAfterRestart) {
@@ -1603,6 +1731,40 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                 {.Name = "value", .Type = "Utf8"},
             },
         });
+    }
+
+    Y_UNIT_TEST_TWIN(FulltextAttachment, Compact) {
+        for (bool mismatch : {false, true}) {
+            TFeatureFlags flags;
+            flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
+            flags.FeatureFlags.SetEnableCompactFulltextIndex(Compact);
+            TEnv env(flags);
+            NYdb::NTable::TTableClient client(env.GetDriver());
+            auto session = client.GetSession().GetValueSync().GetSession();
+            for (const TString name : {"Source", "Replica"}) {
+                const auto result = session.ExecuteSchemeQuery(TStringBuilder()
+                    << "CREATE TABLE `/Root/" << name << "` (key Uint64 NOT NULL, value Utf8, PRIMARY KEY(key), "
+                    << "INDEX idx GLOBAL USING fulltext_relevance ON (value) "
+                    << "WITH (tokenizer=standard, use_filter_lowercase="
+                    << (mismatch && name == "Replica" ? "false" : "true") << "));").GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+            SetImportState(env, "/Root/Replica", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+            env.GetRuntime().Register(CreateDstCreator(env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                "/Root/Source", "/Root/Replica", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+            const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status,
+                mismatch ? NKikimrScheme::StatusSchemeError : NKikimrScheme::StatusSuccess);
+            if (mismatch) {
+                UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "Fulltext/JSON settings mismatch: idx");
+            } else {
+                const auto table = env.GetDescription("/Root/Replica").GetPathDescription().GetTable();
+                UNIT_ASSERT_VALUES_EQUAL(table.GetTableIndexes(0).GetState(), NKikimrSchemeOp::EIndexStateReady);
+                UNIT_ASSERT_VALUES_EQUAL(table.GetReplicationConfig().GetMode(),
+                    NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+            }
+        }
     }
 
     Y_UNIT_TEST(ColumnTypeMismatch) {

@@ -1,4 +1,5 @@
 #include "schemeshard_cdc_stream_common.h"
+#include <ydb/core/base/table_index.h>
 
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
@@ -8,10 +9,13 @@
 namespace NKikimr::NSchemeShard::NCdcStreamAtTable {
 
 bool IsIndexTypeSupportedForCdc(NKikimrSchemeOp::EIndexType type) {
+    // Every index whose impl tables are maintained incrementally (and thus can be replicated
+    // through the changefeeds of those impl tables).
     return type == NKikimrSchemeOp::EIndexTypeGlobal
         || type == NKikimrSchemeOp::EIndexTypeGlobalUnique
         || type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
-        || type == NKikimrSchemeOp::EIndexTypeGlobalHnsw;
+        || type == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+        || NTableIndex::IsFulltextOrJsonIndex(type);
 }
 
 void MaybeGuardIndexWithBaseCdcScanLock(

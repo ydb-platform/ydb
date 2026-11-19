@@ -47,6 +47,9 @@ class TestKvInflightLimitCompatibility(MixedClusterFixture):
     )
     def setup(self, request):
         self.limit_enabled = request.param
+        if self.limit_enabled and current_binary_version < (26, 3):
+            pytest.skip("KV request in-flight limit requires a target of 26.3 or newer")
+
         self.volume_path = "/Root/kv_inflight_limit_compatibility"
         yield from self.setup_cluster(separate_node_configs=True)
 

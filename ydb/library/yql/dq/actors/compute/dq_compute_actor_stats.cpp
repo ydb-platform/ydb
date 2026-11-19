@@ -17,6 +17,9 @@ void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats) {
         proto.SetFilteredRows(stats.FilteredRows);
         proto.SetQueuedBytes(stats.QueuedBytes);
         proto.SetQueuedRows(stats.QueuedRows);
+        if (stats.MaxReadLagMs) {
+            proto.SetMaxReadLagMs(*stats.MaxReadLagMs);
+        }
         if (stats.CollectFull()) {
             proto.SetFirstMessageMs(stats.FirstMessageTs.MilliSeconds());
             proto.SetPauseMessageMs(stats.PauseMessageTs.MilliSeconds());

@@ -12,6 +12,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/sliding_window
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/metrics
     ydb/core/fq/libs/row_dispatcher/common

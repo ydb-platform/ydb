@@ -2674,6 +2674,7 @@ public:
             ui64 queuedBytes = 0;
             ui64 queuedRows = 0;
             ui64 ingressDecompressedBytes = 0;
+            std::optional<ui64> maxReadLagMs;
             auto startTimeMs = protoTask->GetStartTimeMs();
 
             if (RuntimeSettings.CollectFull()) {
@@ -2688,6 +2689,9 @@ public:
                         protoSource.SetIngressName(sourceInfo.Type);
                         const auto& ingressStats = sourceInfo.AsyncInput->GetIngressStats();
                         FillAsyncStats(*protoSource.MutableIngress(), ingressStats);
+                        if (ingressStats.MaxReadLagMs) {
+                            maxReadLagMs = Max(maxReadLagMs.value_or(0), *ingressStats.MaxReadLagMs);
+                        }
                         ingressBytes += ingressStats.Bytes;
                         // ingress rows are usually not reported, so we count rows in task runner input
                         ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
@@ -2711,6 +2715,9 @@ public:
                         continue;
 
                     const auto& ingressStats = sourceInfo.AsyncInput->GetIngressStats();
+                    if (ingressStats.MaxReadLagMs) {
+                        maxReadLagMs = Max(maxReadLagMs.value_or(0), *ingressStats.MaxReadLagMs);
+                    }
                     ingressBytes += ingressStats.Bytes;
                     // ingress rows are usually not reported, so we count rows in task runner input
                     ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
@@ -2726,6 +2733,9 @@ public:
                 startTimeMs = taskStats->StartTs.MilliSeconds();
             }
             protoTask->SetStartTimeMs(startTimeMs);
+            if (maxReadLagMs) {
+                protoTask->SetMaxReadLagMs(*maxReadLagMs);
+            }
             protoTask->SetIngressBytes(ingressBytes);
             protoTask->SetIngressRows(ingressRows);
             protoTask->SetIngressDecompressedBytes(ingressDecompressedBytes);

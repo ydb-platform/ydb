@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
+#include <ydb/core/kqp/executer_actor/kqp_streaming_helper.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -29,6 +30,82 @@ TStageExecutionStats PreparedStage(ui32 taskCount) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpExecuterStats) {
+
+    Y_UNIT_TEST(ReadLagUsesLatestTaskSnapshots) {
+        NYql::NDqProto::TDqExecutionStats result;
+        TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC, nullptr, &result, 0);
+        stats.TaskCount = 2;
+        stats.ComputeCpuTimeUs.Resize(2);
+        const auto report = [&](ui64 taskId, std::optional<ui64> lagMs,
+                                NYql::NDqProto::EComputeState state = NYql::NDqProto::COMPUTE_STATE_EXECUTING) {
+            NYql::NDqProto::TDqComputeActorStats computeStats;
+            auto* taskStats = computeStats.AddTasks();
+            taskStats->SetTaskId(taskId);
+            if (lagMs) {
+                taskStats->SetMaxReadLagMs(*lagMs);
+            }
+            stats.UpdateTaskStats(1, taskId, computeStats, nullptr, state, TDuration::Zero());
+        };
+        TAggExecStat aggregate;
+        stats.ExportAggExecStats(&aggregate);
+        UNIT_ASSERT(!aggregate.MaxReadLagMs);
+
+        report(1, 80);
+        report(2, 50);
+        stats.ExportAggExecStats(&aggregate);
+        UNIT_ASSERT(aggregate.MaxReadLagMs);
+        UNIT_ASSERT_VALUES_EQUAL(*aggregate.MaxReadLagMs, 80);
+
+        report(1, 20);
+        stats.ExportAggExecStats(&aggregate);
+        UNIT_ASSERT_VALUES_EQUAL(*aggregate.MaxReadLagMs, 50);
+
+        report(2, 0);
+        stats.ExportAggExecStats(&aggregate);
+        UNIT_ASSERT_VALUES_EQUAL(*aggregate.MaxReadLagMs, 20);
+
+        report(1, 0);
+        stats.ExportAggExecStats(&aggregate);
+        UNIT_ASSERT(aggregate.MaxReadLagMs);
+        UNIT_ASSERT_VALUES_EQUAL(*aggregate.MaxReadLagMs, 0);
+
+        report(1, std::nullopt);
+        report(2, 500, NYql::NDqProto::COMPUTE_STATE_FINISHED);
+        stats.ExportAggExecStats(&aggregate);
+        UNIT_ASSERT(!aggregate.MaxReadLagMs);
+    }
+
+    Y_UNIT_TEST(ReadLagSensorIsCreatedOnlyForReportedStatistics) {
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto queryCounters = MakeStreamingQueryCounters(counters, "/Root/query");
+        TAggExecStat stats;
+        queryCounters->Update(stats);
+        auto group = counters->FindSubgroup("subsystem", "streaming_queries")
+                         ->FindSubgroup("host", "")
+                         ->FindSubgroup("path", "/Root/query");
+        UNIT_ASSERT(group);
+        UNIT_ASSERT(!group->FindCounter("max_read_lag"));
+        queryCounters->Update(stats);
+        UNIT_ASSERT(!group->FindCounter("max_read_lag"));
+
+        // A measured zero is a valid lag and must create the sensor.
+        stats.MaxReadLagMs = 0;
+        queryCounters->Update(stats);
+        auto lag = group->FindCounter("max_read_lag");
+        UNIT_ASSERT(lag);
+        UNIT_ASSERT_VALUES_EQUAL(lag->Val(), 0);
+
+        stats.MaxReadLagMs = 100;
+        queryCounters->Update(stats);
+        UNIT_ASSERT_VALUES_EQUAL(lag->Val(), 100);
+        stats.MaxReadLagMs = 10;
+        queryCounters->Update(stats);
+        UNIT_ASSERT_VALUES_EQUAL(lag->Val(), 10);
+
+        stats.MaxReadLagMs.reset();
+        queryCounters->Update(stats);
+        UNIT_ASSERT(!group->FindCounter("max_read_lag"));
+    }
 
     Y_UNIT_TEST(StageNodeCountedOnFirstReport) {
         auto stage = PreparedStage(3);

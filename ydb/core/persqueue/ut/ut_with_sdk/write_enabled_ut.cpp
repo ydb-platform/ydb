@@ -1,3 +1,4 @@
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
@@ -82,7 +83,7 @@ public:
     TWriteSessionSettings WriteSettings() const {
         return TWriteSessionSettings().Path(TOPIC).PartitionId(0)
             .ProducerId("producer").MessageGroupId("producer").Codec(ECodec::RAW)
-            .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
+            .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
     }
 
     void Write(ui64 seqNo) {
@@ -125,7 +126,7 @@ public:
                 auto writer = PqClient.CreateWriteSession(NYdb::NPersQueue::TWriteSessionSettings()
                     .Path(TOPIC).MessageGroupId("producer").Codec(ECodec::RAW)
                     .ClusterDiscoveryMode(NYdb::NPersQueue::EClusterDiscoveryMode::Off)
-                    .RetryPolicy(IRetryPolicy::GetNoRetryPolicy()));
+                    .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy()));
                 AssertRejected<NYdb::NPersQueue::TWriteSessionEvent>(writer, data);
             } else {
                 auto writer = Client.CreateWriteSession(WriteSettings());
@@ -136,13 +137,13 @@ public:
 
     void AssertOffsets(ui64 committed, ui64 end) {
         auto reader = Client.CreateReadSession(TReadSessionSettings().ConsumerName(CONSUMER)
-            .AppendTopics(TTopicReadSettings(TOPIC)).RetryPolicy(IRetryPolicy::GetNoRetryPolicy()));
+            .AppendTopics(TTopicReadSettings(TOPIC)).RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy()));
         const auto deadline = TInstant::Now() + TDuration::Seconds(30);
         while (TInstant::Now() < deadline) {
             UNIT_ASSERT(reader->WaitEvent().Wait(deadline - TInstant::Now()));
             auto event = reader->GetEvent(false);
             UNIT_ASSERT(event);
-            if (auto* start = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+            if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
                 UNIT_ASSERT_VALUES_EQUAL(start->GetCommittedOffset(), committed);
                 UNIT_ASSERT_VALUES_EQUAL(start->GetEndOffset(), end);
                 start->Confirm();

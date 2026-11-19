@@ -7,6 +7,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 #include <util/string/cast.h>
+#include <util/system/env.h>
 
 #include <array>
 #include <deque>
@@ -125,6 +126,15 @@ bool TTaskSchedulingHandle::MakeReadyLocked() {
     if (Metrics) {
         ++*Metrics->Enqueued;
     }
+    return true;
+}
+
+bool TTaskSchedulingHandle::ArmInitialChannelWakeup() {
+    std::lock_guard lock(Mutex);
+    if (Generation || State != EState::Blocked) {
+        return false;
+    }
+    Wait = TTaskWaitCondition::Any({{AnyDependency, Versions[AnyDependency]}});
     return true;
 }
 
@@ -789,7 +799,8 @@ public:
         Y_ENSURE(Settings.WorkerSliceCpuUs && Settings.WorkerActivationUs);
         if (!Settings.ObserveOnly && Settings.UseWorkerPool) {
             WorkPool = std::make_shared<TTaskWorkPool>(Settings.MaxInFlightPerShard,
-                [actorSystem](auto worker) { WakeDqComputeWorker(actorSystem, worker); }, counters);
+                [actorSystem](auto wakeup) { WakeDqComputeWorker(actorSystem, wakeup); }, counters,
+                GetEnv("YDB_DQ_TASK_PREFER_CONSUMERS") == "1", GetEnv("YDB_DQ_TASK_PREFER_READY_QUERIES") == "1");
             StartDqComputeWorkers(actorSystem, poolId, WorkPool, Settings);
         }
         for (ui32 i = 0; !Settings.ObserveOnly && !Settings.UseWorkerPool && i < Settings.Shards; ++i) {

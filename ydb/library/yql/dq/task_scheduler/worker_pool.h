@@ -24,12 +24,46 @@ struct TTaskSliceResult {
     bool CompleteInline = false;
 };
 
+// A queue scanning a ready task arms a notification if its lease is busy.
+// The same atomic records availability and interest, so a release either
+// sees the interest or the scan sees the newly available lease.
+class TTaskExecutionLease {
+public:
+    bool IsAvailable() const noexcept {
+        return State.load(std::memory_order_acquire) == EState::Available;
+    }
+
+    bool IsAvailableOrSubscribe() const noexcept {
+        auto expected = State.load(std::memory_order_acquire);
+        if (expected == EState::Busy
+            && State.compare_exchange_strong(expected, EState::BusyWithWaiter, std::memory_order_acq_rel))
+        {
+            return false;
+        }
+        return expected == EState::Available;
+    }
+
+    bool TryAcquire() noexcept {
+        auto expected = EState::Available;
+        return State.compare_exchange_strong(expected, EState::Busy, std::memory_order_acquire);
+    }
+
+    // Returns whether to notify the queue.
+    bool Release() noexcept {
+        return State.exchange(EState::Available, std::memory_order_release) == EState::BusyWithWaiter;
+    }
+
+private:
+    enum class EState : ui8 { Available, Busy, BusyWithWaiter };
+    mutable std::atomic<EState> State = EState::Available;
+};
+
 // Implementations own task state. No methods of a task's endpoint actor are
 // invoked by a worker. RunSlice and endpoint state access share this lease.
 class IDqTaskExecution {
 public:
     virtual ~IDqTaskExecution() = default;
-    virtual std::shared_ptr<const std::atomic<bool>> GetAvailability() const = 0;
+    virtual std::shared_ptr<const TTaskExecutionLease> GetAvailability() const = 0;
     virtual bool IsAvailable() const = 0;
     virtual bool TryAcquire() = 0;
     virtual void Release() = 0;
@@ -71,9 +105,14 @@ public:
         std::shared_ptr<IDqTaskExecution> Execution;
         ui64 ReservedCpuUs = 0;
     };
-    using TWakeup = std::function<void(NActors::TActorId)>;
+    struct TWorkerWakeup {
+        NActors::TActorId Actor;
+        bool KnownReady;
+    };
+    using TWakeup = std::function<void(TWorkerWakeup)>;
 
-    TTaskWorkPool(ui32 maxQueryConcurrency, TWakeup wakeup, NMonitoring::TDynamicCounterPtr counters = {});
+    TTaskWorkPool(ui32 maxQueryConcurrency, TWakeup wakeup,
+        NMonitoring::TDynamicCounterPtr counters = {}, bool preferConsumers = false, bool preferReadyQueries = false);
     void RegisterGraph(NActors::TActorId query, ui64 registration,
         std::shared_ptr<const TQueryTaskGraph> graph, const TVector<ui64>& localTasks);
     void ForgetGraph(NActors::TActorId query, ui64 registration);
@@ -100,7 +139,7 @@ private:
     struct TTask {
         std::weak_ptr<TTaskSchedulingHandle> Handle;
         std::weak_ptr<IDqTaskExecution> Execution;
-        std::shared_ptr<const std::atomic<bool>> Available;
+        std::shared_ptr<const TTaskExecutionLease> Available;
         std::shared_ptr<TTaskSchedulingHandle> Ready;
         TTaskSchedulingSnapshot State;
         ui64 Sequence = 0;
@@ -118,12 +157,14 @@ private:
         ui64 ReservedCpuUs = 0;
         TMonotonic NotBefore;
     };
-    ui32 CountWorkLocked(ui32 limit) const;
-    TVector<NActors::TActorId> WakeLocked(NActors::TActorId preferred = {});
-    void Wake(TVector<NActors::TActorId> workers);
+    ui32 CountWorkLocked(ui32 limit, ui32& knownReady) const;
+    TVector<TWorkerWakeup> WakeLocked(NActors::TActorId preferred = {});
+    void Wake(TVector<TWorkerWakeup> workers);
 
     const ui32 MaxQueryConcurrency;
     const TWakeup Wakeup;
+    const bool PreferConsumers;
+    const bool PreferReadyQueries;
     mutable std::mutex Mutex;
     THashMap<NActors::TActorId, TQuery> Queries;
     THashSet<NActors::TActorId> ReadyQueries;
@@ -132,7 +173,7 @@ private:
     ui64 Sequence = 0;
     ui64 Selections = 0;
     double ServiceFloor = 0;
-    NMonitoring::TDynamicCounters::TCounterPtr WorkerSlices, WorkerRuns, WorkerCpuUs, QuotaRejected, LeaseRetries, InlineCompletions, Wakeups, EmptyTakes;
+    NMonitoring::TDynamicCounters::TCounterPtr WorkerSlices, WorkerRuns, WorkerCpuUs, QuotaRejected, LeaseRetries, InlineCompletions, Wakeups, KnownReadyWakeups, EmptyTakes;
     NMonitoring::TDynamicCounters::TCounterPtr WorkerActivations, EmptyActivations;
 public:
     void RecordInlineCompletion() { if (InlineCompletions) { ++*InlineCompletions; } }
@@ -140,11 +181,12 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SelectionsCount, SelectionCpuUs, SelectionLockWaitUs;
     NMonitoring::TDynamicCounters::TCounterPtr RunnableSelections, RecheckSelections, BufferedOutputSelections;
     NMonitoring::TDynamicCounters::TCounterPtr LocalConsumerHints, LocalConsumerSelections, LocalConsumerPrioritySwitches;
+    NMonitoring::TDynamicCounters::TCounterPtr ConsumerPrioritySwitches, ReadinessPriorityOverrides;
 };
 
 void StartDqComputeWorkers(NActors::TActorSystem* actorSystem, ui32 poolId,
     const std::shared_ptr<TTaskWorkPool>& pool, const TTaskSchedulerSettings& settings);
-void WakeDqComputeWorker(NActors::TActorSystem* actorSystem, NActors::TActorId worker);
+void WakeDqComputeWorker(NActors::TActorSystem* actorSystem, TTaskWorkPool::TWorkerWakeup wakeup);
 
 struct TEvTaskSliceFinished : NActors::TEventLocal<TEvTaskSliceFinished, TDqComputeEvents::EvTaskSliceFinished> {
     TEvTaskSliceFinished(std::shared_ptr<IDqTaskExecution> execution, TTaskSliceResult result)

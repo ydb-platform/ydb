@@ -190,6 +190,8 @@ public:
                           std::shared_ptr<const TQueryGraphRegistration> graphRegistration = {},
                           std::shared_ptr<TQueryTaskTrace> trace = {});
 
+    // The caller checks buffered data, EOF and early output finish after arming.
+    bool ArmInitialChannelWakeup();
     void RequestExecution();
     // freshLocalData is only for a data chunk just pushed into an in-memory local channel.
     void Signal(TTaskDependencyId dependency, ETaskPriority priority = ETaskPriority::Normal, bool freshLocalData = false);

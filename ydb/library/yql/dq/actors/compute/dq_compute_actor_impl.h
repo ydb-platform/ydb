@@ -417,6 +417,7 @@ protected:
     }
 
     virtual void InitializeWorkerExecution() {}
+    virtual bool TryWaitForFirstChannelInput() { return false; }
     // Worker execution: the slice result must go through the endpoint (e.g. to ack scan fetchers).
     virtual bool WorkerSliceNeedsEndpoint() const { return false; }
     // Worker execution: new input arrives as an endpoint event that itself requests execution,
@@ -487,6 +488,9 @@ protected:
     }
 
     void LeaveWorkerEndpoint(const std::shared_ptr<TDqTaskExecution>& execution) {
+        if (!Terminated && execution->RefreshInlinePermissionEnabled()) {
+            MaybeAllowInlineCompletion();
+        }
         if (!Terminated && !DeferredWorkerEvents.empty()) {
             this->Send(this->SelfId(), new TEvTaskExecutionAvailable());
         }
@@ -506,7 +510,9 @@ protected:
     void DoExecute() {
         Y_ASSERT(!Terminated);
         if (TaskScheduling && !TaskScheduling->ObserveOnly && !ExecutingScheduledTask) {
-            TaskScheduling->RequestExecution();
+            if (!TryWaitForFirstChannelInput()) {
+                TaskScheduling->RequestExecution();
+            }
             return;
         }
         const bool observing = TaskScheduling && TaskScheduling->ObserveOnly;
@@ -994,7 +1000,7 @@ protected:
 
     void ContinueExecute(EResumeSource source = EResumeSource::Default) {
         if (TaskScheduling && !TaskScheduling->ObserveOnly) {
-            if (Running || Checkpoints) {
+            if ((Running || Checkpoints) && !TryWaitForFirstChannelInput()) {
                 TaskScheduling->RequestExecution();
             }
             return;

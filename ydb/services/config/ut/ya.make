@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/logger
+    library/cpp/threading/future
     ydb/core/protos
     ydb/core/testlib/default
     ydb/services/config

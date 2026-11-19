@@ -9,6 +9,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
@@ -23,6 +24,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/logger/backend.h>
+#include <library/cpp/threading/future/async.h>
 
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
@@ -38,6 +40,12 @@
             << " got# " << Ydb::StatusIds::StatusCode_Name(got.status()) << " issues# "  << got.issues()) \
 
 namespace NKikimr::NGRpcService {
+
+static void Dispatched(NActors::TTestActorRuntime& runtime, std::function<void()> call) {
+    TThreadPool pool;
+    pool.Start(1);
+    runtime.WaitFuture(NThreading::Async(std::move(call), pool));
+}
 
 struct TKikimrTestSettings {
     static constexpr bool SSL = false;
@@ -58,7 +66,8 @@ class TBasicKikimrWithGrpcAndRootSchema {
 public:
     TBasicKikimrWithGrpcAndRootSchema(
             NKikimrConfig::TAppConfig appConfig = {},
-            TAutoPtr<TLogBackend> logBackend = {})
+            TAutoPtr<TLogBackend> logBackend = {},
+            bool useRealThreads = true)
     {
         ui16 port = PortManager.GetPort(2134);
         ui16 grpc = PortManager.GetPort(2135);
@@ -66,6 +75,7 @@ public:
         ServerSettings->SetGrpcPort(grpc);
         ServerSettings->SetLogBackend(logBackend);
         ServerSettings->SetDomainName("Root");
+        ServerSettings->SetUseRealThreads(useRealThreads);
         ServerSettings->SetDynamicNodeCount(1);
         if (TestSettings::PrecreatePools) {
             ServerSettings->AddStoragePool("ssd");
@@ -117,7 +127,11 @@ public:
         if (ServerSettings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
             annoyingClient.SetSecurityToken("root@builtin");
         }
-        annoyingClient.InitRootScheme("Root");
+        if (useRealThreads) {
+            annoyingClient.InitRootScheme("Root");
+        } else {
+            Dispatched(*Server_->GetRuntime(), [&] { annoyingClient.InitRootScheme("Root"); });
+        }
         GRpcPort_ = grpc;
 
         Channel_ = grpc::CreateChannel(TStringBuilder() << "localhost:" << GetPort(), grpc::InsecureChannelCredentials());
@@ -181,7 +195,8 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
             std::optional<bool> switchDedicatedStorageSection,
             bool dedicatedConfigMode,
             bool dryRun,
-            const std::function<void(const Ydb::Config::ReplaceConfigResponse&)>& checker) {
+            const std::function<void(const Ydb::Config::ReplaceConfigResponse&)>& checker,
+            bool bypassChecks = false) {
 
         std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub;
         stub = Ydb::Config::V1::ConfigService::NewStub(channel);
@@ -216,6 +231,7 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
             Y_ABORT("invariant violation");
         }
         request.set_dry_run(dryRun);
+        request.set_bypass_checks(bypassChecks);
 
         Ydb::Config::ReplaceConfigResponse response;
 
@@ -342,6 +358,71 @@ config:
         UNIT_ASSERT(yamlConfigFetched);
         UNIT_ASSERT(!storageYamlConfigFetched);
         UNIT_ASSERT_VALUES_EQUAL(yamlConfig, *yamlConfigFetched);
+    }
+
+    Y_UNIT_TEST(ReplaceConfigRoutesYamlAliasToDistconf) {
+        TKikimrWithGrpcAndRootSchema server({}, {}, false);
+        auto& runtime = *server.GetRuntime();
+        const TString yaml = R"(
+metadata: {kind: MainConfig, cluster: "", version: 1}
+config:
+  static_erasure: none
+  feature_flags: {switch_to_config_v2: &enabled true}
+  self_management_config: {enabled: *enabled}
+  host_configs:
+  - host_config_id: 1
+    drive: [{path: "SectorMap:1:64", type: ROT}]
+  hosts: [{host: "::1", port: 12001, host_config_id: 1}]
+)";
+        std::optional<TString> forwardedYaml;
+        auto observer = runtime.AddObserver<NStorage::TEvNodeConfigInvokeOnRoot>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.HasReplaceStorageConfig()) {
+                forwardedYaml = record.GetReplaceStorageConfig().GetYAML();
+                auto reply = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+                reply->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, reply.release(), 0, ev->Cookie));
+                ev.Reset();
+            }
+        });
+        Dispatched(runtime, [&] {
+            ReplaceConfig(server.GetChannel(), yaml, std::nullopt, std::nullopt, false, false,
+                [](const auto& resp) { UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS); });
+        });
+        UNIT_ASSERT(forwardedYaml);
+        UNIT_ASSERT_VALUES_EQUAL(*forwardedYaml, yaml);
+    }
+
+    Y_UNIT_TEST(ReplaceConfigRejectsInvalidConfigSection) {
+        TKikimrWithGrpcAndRootSchema server;
+        for (const auto* yaml : {"config: []", "metadata: {kind: MainConfig}\nconfig: []"}) {
+            ReplaceConfig(server.GetChannel(), yaml, std::nullopt, std::nullopt, false, true,
+                [](const auto& resp) {
+                    UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::BAD_REQUEST);
+                    UNIT_ASSERT_VALUES_EQUAL(resp.operation().issues_size(), 1);
+                    UNIT_ASSERT_STRING_CONTAINS(resp.operation().issues(0).message(), "'config' must be an object");
+                });
+        }
+    }
+
+    Y_UNIT_TEST(ForceReplaceOnV1WithoutClusterAndVersion) {
+        TKikimrWithGrpcAndRootSchema server;
+        const TString yaml = R"(
+metadata: {kind: MainConfig}
+config: {log_config: {default_level: 5}}
+)";
+        ReplaceConfig(server.GetChannel(), yaml, std::nullopt, std::nullopt, false, false,
+            [](const auto& resp) { UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::UNSUPPORTED); },
+            /*bypassChecks=*/true);
+
+        auto legacy = Ydb::DynamicConfig::V1::DynamicConfigService::NewStub(server.GetChannel());
+        Ydb::DynamicConfig::SetConfigRequest request;
+        request.set_config(yaml);
+        Ydb::DynamicConfig::SetConfigResponse response;
+        grpc::ClientContext ctx;
+        AdjustCtxForDB(ctx);
+        UNIT_ASSERT(legacy->SetConfig(&ctx, request, &response).ok());
+        UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
     }
 
     Y_UNIT_TEST(ReplaceConfigWithInvalidHostConfig) {

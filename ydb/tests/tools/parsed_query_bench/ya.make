@@ -26,6 +26,7 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/json
     ydb/core/kqp/common/simple
+    ydb/core/kqp/executer_actor
     ydb/core/kqp/gateway
     ydb/core/kqp/host
     ydb/core/kqp/opt
@@ -33,12 +34,14 @@ PEERDIR(
     ydb/core/kqp/tracing
     ydb/core/scheme
     ydb/core/testlib/basics/core
+    ydb/library/yql/providers/s3/provider
     ydb/public/api/protos
     ydb/tests/tools/parsed_query_bench/proto
     yql/essentials/ast
     yql/essentials/core
     yql/essentials/core/services/mounts
     yql/essentials/parser/lexer_common
+    yql/essentials/providers/common/arrow_resolve
     yql/essentials/sql/pg_dummy
     yql/essentials/sql/settings
     yql/essentials/sql/v1/lexer
@@ -48,6 +51,7 @@ PEERDIR(
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
     yql/essentials/sql/v1/translation
+    yt/yql/providers/yt/comp_nodes/llvm16
 )
 
 RESOURCE(

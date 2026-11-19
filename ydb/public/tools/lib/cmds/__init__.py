@@ -538,6 +538,8 @@ def deploy(arguments, actor_system_config=None):
 
     enforce_user_token_requirement = os.getenv('YDB_ENFORCE_USER_TOKEN_REQUIREMENT') == 'true'
     default_clusteradmin = os.getenv('YDB_DEFAULT_CLUSTERADMIN')
+    pq_check_acl = os.getenv('YDB_PQ_CHECK_ACL')
+    pq_check_acl = None if pq_check_acl is None else (pq_check_acl == 'true')
 
     configuration = KikimrConfigGenerator(
         erasure=parse_erasure(arguments),
@@ -563,6 +565,7 @@ def deploy(arguments, actor_system_config=None):
         verbose_memory_limit_exception=True,
         enforce_user_token_requirement=enforce_user_token_requirement,
         default_clusteradmin=default_clusteradmin,
+        pq_check_acl=pq_check_acl,
         overrided_actor_system_config=actor_system_config,
         **optionals
     )

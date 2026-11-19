@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/datashard
+    ydb/core/tx/long_tx_service
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_allocator
     ydb/core/tx/tx_proxy
@@ -31,6 +32,7 @@ PEERDIR(
 )
 
 SRCS(
+    backup_test_fixture.h
     export_reboots_common.cpp
     failing_mtpq.cpp
     helpers.cpp
@@ -45,6 +47,7 @@ SRCS(
     schemeshard_counters.cpp
     schemeshard_counters.h
     shred_helpers.cpp
+    table_checksum_helpers.h
     test_env.cpp
     test_env.h
     test_incremental_restore.h

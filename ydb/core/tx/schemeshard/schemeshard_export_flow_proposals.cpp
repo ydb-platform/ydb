@@ -6,6 +6,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
+#include <ydb/core/backup/query/table_checksum.h>
 #include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -247,6 +248,13 @@ void FillEncryptionSettings(
     }
 }
 
+void FillTableChecksumRequest(NKikimrSchemeOp::TBackupTask& task, const TString& database, const TString& tablePath) {
+    auto& checksum = *task.MutableTableChecksum();
+    checksum.SetDatabase(database);
+    checksum.SetTablePath(tablePath);
+    checksum.SetSourceSchemaHash(NBackup::GetTableChecksumSchemaHash(task.GetTable().GetTable()));
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
@@ -293,6 +301,19 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     task.SetNeedToBill(!exportInfo.UserSID || !ss->SystemBackupSIDs.contains(*exportInfo.UserSID));
     task.SetSnapshotStep(exportInfo.SnapshotStep);
     task.SetSnapshotTxId(exportInfo.SnapshotTxId);
+    if (exportInfo.EnableBackupTableChecksum && exportInfo.Kind != TExportInfo::EKind::YT &&
+        item.SourcePathType == NKikimrSchemeOp::EPathTypeTable && item.ParentIdx == Max<ui32>()) {
+        const auto frozen = GetDescription(ss, exportPath.Child(ToString(itemIdx)).Base()->PathId);
+        // Column identities and definitions must come from the frozen copy, even if the source was altered
+        if (!task.GetTable().HasTable()) {
+            task.MutableTable()->CopyFrom(frozen);
+        }
+        task.MutableTable()->MutableSelf()->SetSchemeshardId(item.SourcePathId.OwnerId);
+        task.MutableTable()->MutableSelf()->SetPathId(item.SourcePathId.LocalPathId);
+        task.MutableTable()->MutableSelf()->SetName(SplitPath(item.SourcePathName).back());
+        *task.MutableTable()->MutableTable()->MutableColumns() = frozen.GetTable().GetColumns();
+        FillTableChecksumRequest(task, TPath::Init(exportInfo.DomainPathId, ss).PathString(), item.SourcePathName);
+    }
 
     switch (exportInfo.Kind) {
     case TExportInfo::EKind::YT:

@@ -3,6 +3,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_billing_helpers.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_import_helpers.h"
 #include "schemeshard_types.h"
 
 #include <ydb/core/base/subdomain.h>
@@ -468,6 +469,18 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
 
         NIceDb::TNiceDb db(context.GetDB());
+        if (TxType == TTxState::TxRestore) {
+            txState->PlanStep = step;
+            context.SS->PersistTxPlanStep(db, OperationId, step);
+            const auto it = context.SS->TxIdToImport.find(OperationId.GetTxId());
+            if (it != context.SS->TxIdToImport.end()) {
+                auto& info = *context.SS->Imports.at(it->second.first);
+                if (auto prepare = MakeImportChecksumPrepareRequest(
+                        context.SS, info, it->second.second, TRowVersion(ui64(step), ui64(OperationId.GetTxId())))) {
+                    context.OnComplete.Send(context.SS->SelfId(), std::move(prepare));
+                }
+            }
+        }
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
 
         return true;

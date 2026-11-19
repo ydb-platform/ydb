@@ -27,10 +27,12 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/mon_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/backup_test_fixture.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/ut_backup_restore_common.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/library/aws_init/aws.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -39,6 +41,8 @@
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
+
+#include <yql/essentials/ast/yql_ast_escaping.h>
 
 #include <arrow/api.h>
 
@@ -307,17 +311,7 @@ namespace {
         fieldChecker(proto);
     }
 
-    NJson::TJsonValue ParseCompletionMarker(const TString& content) {
-        NJson::TJsonValue marker;
-        UNIT_ASSERT_C(NJson::ReadJsonTree(content, &marker), content);
-        UNIT_ASSERT_C(marker.IsMap(), content);
-        UNIT_ASSERT_C(marker["version"].IsInteger(), content);
-        UNIT_ASSERT_VALUES_EQUAL(marker["version"].GetInteger(), 1);
-        UNIT_ASSERT_C(marker["export_id"].IsString(), content);
-        return marker;
-    }
-
-    class TExportFixture : public NUnitTest::TBaseFixture {
+    class TExportFixture : public TBackupTestFixture {
     public:
         void RunS3(const TVector<TString>& tables, const TString& requestTpl, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS, bool checkS3FilesExistence = true) {
             auto requestStr = Sprintf(requestTpl.c_str(), S3Port());
@@ -358,11 +352,6 @@ namespace {
             }
         }
 
-        bool HasS3File(const TString& path) {
-            auto it = S3Mock().GetData().find(path);
-            return it != S3Mock().GetData().end();
-        }
-
         template <class T>
         void CheckHasAllS3Files(std::initializer_list<T> paths) {
             for (const T& path : paths) {
@@ -384,36 +373,6 @@ namespace {
                     UNIT_ASSERT_C(!fileName.StartsWith(prefix), "S3 path \"" << fileName << "\" has prefix \"" << prefix << "\", which is not expected prefix");
                 }
             }
-        }
-
-        TString GetS3FileContent(const TString& path) {
-            auto it = S3Mock().GetData().find(path);
-            if (it != S3Mock().GetData().end()) {
-                return it->second;
-            }
-            return {};
-        }
-
-        ui64 StartCompletionMarkerExport(bool autoDropping = true) {
-            Env();
-            Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(autoDropping);
-            TestCreateTable(Runtime(), 100, "/MyRoot", R"(
-                Name: "Table"
-                Columns { Name: "key" Type: "Uint32" }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-                UniformPartitionsCount: 2
-            )");
-            Env().TestWaitNotification(Runtime(), 100);
-            TestExport(Runtime(), 101, "/MyRoot", Sprintf(R"(
-                ExportToS3Settings {
-                    endpoint: "localhost:%d"
-                    scheme: HTTP
-                    number_of_retries: 2
-                    items { source_path: "/MyRoot/Table" destination_prefix: "backup/table" }
-                }
-            )", S3Port()));
-            return 101;
         }
 
         NKikimrExport::TListExportsResponse ListExports(ui64 pageSize = 10, const TString& pageToken = {}) {
@@ -503,13 +462,6 @@ namespace {
             for (ui64 exportId : exportIds) {
                 Env().TestWaitNotification(Runtime(), exportId);
                 TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-            }
-        }
-
-        void CheckCompletionMarkerContents(ui64 exportId) {
-            for (const auto* path : {"/backup/table/data_complete.json", "/backup/table/export_complete.json"}) {
-                const auto marker = ParseCompletionMarker(GetS3FileContent(path));
-                UNIT_ASSERT_VALUES_EQUAL_C(marker["export_id"].GetString(), ToString(exportId), path);
             }
         }
 
@@ -686,13 +638,6 @@ namespace {
             TestGetExport(Runtime(), exportId, "/MyRoot");
 
             return txId;
-        }
-
-        void TearDown(NUnitTest::TTestContext&) override {
-            if (S3ServerMock) {
-                S3ServerMock = Nothing();
-                S3ServerPort = 0;
-            }
         }
 
         using TDelayFunc = std::function<bool(TAutoPtr<IEventHandle>&)>;
@@ -1933,48 +1878,6 @@ namespace {
         }
 
     protected:
-        TS3Mock::TSettings& S3Settings() {
-            if (!S3ServerSettings) {
-                S3ServerPort = PortManager.GetPort();
-                S3ServerSettings.ConstructInPlace(S3ServerPort);
-            }
-            return *S3ServerSettings;
-        }
-
-        TS3Mock& S3Mock() {
-            if (!S3ServerMock) {
-                S3ServerMock.ConstructInPlace(S3Settings());
-                UNIT_ASSERT(S3ServerMock->Start());
-            }
-            return *S3ServerMock;
-        }
-
-        ui16 S3Port() {
-            S3Mock();
-            return S3ServerPort;
-        }
-
-        TTestBasicRuntime& Runtime() {
-            if (!TestRuntime) {
-                TestRuntime.ConstructInPlace();
-            }
-            return *TestRuntime;
-        }
-
-        TTestEnvOptions& EnvOptions() {
-            if (!TestEnvOptions) {
-                TestEnvOptions.ConstructInPlace();
-            }
-            return *TestEnvOptions;
-        }
-
-        TTestEnv& Env() {
-            if (!TestEnv) {
-                TestEnv.ConstructInPlace(Runtime(), EnvOptions());
-            }
-            return *TestEnv;
-        }
-
         void ExportImportStandaloneColumnTableWithLocalBloomIndexes(bool enableLocalIndexAsSchemeObject) {
             Env();
             Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
@@ -2261,14 +2164,6 @@ namespace {
             FinalizeColumnTableSlowS3Export(ctx);
         }
 
-    private:
-        TPortManager PortManager;
-        ui16 S3ServerPort = 0;
-        TMaybe<TTestBasicRuntime> TestRuntime;
-        TMaybe<TS3Mock::TSettings> S3ServerSettings;
-        TMaybe<TS3Mock> S3ServerMock;
-        TMaybe<TTestEnvOptions> TestEnvOptions;
-        TMaybe<TTestEnv> TestEnv;
     };
 
 } // anonymous

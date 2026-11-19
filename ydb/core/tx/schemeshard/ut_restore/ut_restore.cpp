@@ -22,7 +22,9 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/backup_test_fixture.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -32,6 +34,7 @@
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
+#include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -12006,90 +12009,6 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
-    struct TImportItem {
-        TString SourcePrefix;
-        TString DestinationPath;
-    };
-
-    static const TVector<TImportItem>& DefaultImportItems() {
-        static const TVector<TImportItem> items = {{"", "/MyRoot/Table"}};
-        return items;
-    }
-
-    TString MakeS3ImportRequestTpl(const TVector<TImportItem>& items, const TString& extraSettings = "") {
-        TStringBuilder sb;
-        sb << "ImportFromS3Settings { endpoint: \"localhost:%d\" scheme: HTTP ";
-        if (extraSettings) sb << extraSettings << " ";
-        for (const auto& item : items) {
-            sb << "items { source_prefix: \"" << item.SourcePrefix
-               << "\" destination_path: \"" << item.DestinationPath << "\" } ";
-        }
-        sb << "}";
-        return sb;
-    }
-
-    TString MakeFsImportRequest(
-        const TString& basePath,
-        const TVector<TImportItem>& items,
-        const TString& extraSettings = "")
-    {
-        TStringBuilder sb;
-        sb << "ImportFromFsSettings { base_path: \"" << basePath << "\" ";
-        if (extraSettings) sb << extraSettings << " ";
-        for (const auto& item : items) {
-            sb << "items { source_path: \"" << item.SourcePrefix
-               << "\" destination_path: \"" << item.DestinationPath << "\" } ";
-        }
-        sb << "}";
-        return sb;
-    }
-
-    void WriteFilesToFs(const TString& basePath, const THashMap<TString, TString>& data) {
-        for (const auto& [key, value] : data) {
-            TStringBuf relKey(key);
-            while (relKey.StartsWith('/')) {
-                relKey.Skip(1);
-            }
-            TFsPath filePath = TFsPath(basePath) / TString(relKey);
-            filePath.Parent().MkDirs();
-            TFileOutput out(filePath.GetPath());
-            out.Write(value);
-            out.Finish();
-        }
-    }
-
-    template <bool IsFs>
-    struct TImportEnv {
-        TMaybe<TPortManager> PortManager;
-        TMaybe<TS3Mock> S3MockInstance;
-        TMaybe<TTempDir> TempDir;
-        TString Request;
-
-        TImportEnv(
-            const THashMap<TString, TString>& data,
-            const TVector<TImportItem>& items,
-            const TString& extraSettings = "")
-        {
-            if constexpr (IsFs) {
-                TempDir.ConstructInPlace();
-                WriteFilesToFs(TempDir->Path(), data);
-                Request = MakeFsImportRequest(TempDir->Path(), items, extraSettings);
-            } else {
-                PortManager.ConstructInPlace();
-                ui16 port = PortManager->GetPort();
-                S3MockInstance.ConstructInPlace(data, TS3Mock::TSettings(port));
-                UNIT_ASSERT(S3MockInstance->Start());
-                Request = Sprintf(MakeS3ImportRequestTpl(items, extraSettings).c_str(), port);
-            }
-        }
-
-        void SetupRuntime(TTestActorRuntime& runtime) {
-            if constexpr (IsFs) {
-                runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
-            }
-        }
-    };
-
     template <bool IsFs>
     void ShouldSucceed(
         TTestWithReboots& t,

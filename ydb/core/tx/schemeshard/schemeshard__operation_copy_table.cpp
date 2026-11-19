@@ -74,6 +74,17 @@ public:
                  "CopyTable partition counts don't match");
         const ui64 dstSchemaVersion = NEW_TABLE_ALTER_VERSION;
 
+        ui64 checksumExportId = 0;
+        const auto exportIt = context.SS->TxIdToExport.find(OperationId.GetTxId());
+        if (exportIt != context.SS->TxIdToExport.end()) {
+            const auto& info = *context.SS->Exports.at(exportIt->second.first);
+            if (info.EnableBackupTableChecksum && info.Kind != TExportInfo::EKind::YT && info.IsInProgress()) {
+                checksumExportId = info.Id;
+            }
+        }
+        const bool releaseChecksumSnapshot =
+            checksumExportId && TPath::Init(txState->TargetPathId, context.SS).Parent().IsTableIndex();
+
         for (ui32 i = 0; i < dstTableInfo->GetPartitions().size(); ++i) {
             TShardIdx srcShardIdx = srcTableInfo->GetPartitions()[i]->ShardIdx;
             TTabletId srcDatashardId = context.SS->ShardInfos[srcShardIdx].TabletID;
@@ -99,6 +110,9 @@ public:
             newShardTx.MutableReceiveSnapshot()->MutableTableId()->SetOwnerId(txState->TargetPathId.OwnerId);
             newShardTx.MutableReceiveSnapshot()->MutableTableId()->SetTableId(txState->TargetPathId.LocalPathId);
             newShardTx.MutableReceiveSnapshot()->AddReceiveFrom()->SetShard(ui64(srcDatashardId));
+            if (checksumExportId) {
+                newShardTx.MutableReceiveSnapshot()->SetTableChecksumExportId(checksumExportId);
+            }
 
             auto dstEvent = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, newShardTx.SerializeAsString(), context.Ctx);
             if (const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId) {
@@ -158,6 +172,16 @@ public:
             } else {
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *oldShardTx.MutableSendSnapshot());
                 oldShardTx.SetReadOnly(true);
+            }
+
+            if (checksumExportId) {
+                auto& snapshot = oldShardTx.HasSendSnapshot()
+                                     ? *oldShardTx.MutableSendSnapshot()
+                                     : *oldShardTx.MutableCreateIncrementalBackupSrc()->MutableSendSnapshot();
+                snapshot.SetTableChecksumExportId(checksumExportId);
+                if (releaseChecksumSnapshot) {
+                    snapshot.SetReleaseTableChecksumSnapshotOnCompletion(true);
+                }
             }
 
             auto srcEvent = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, oldShardTx.SerializeAsString(), context.Ctx);

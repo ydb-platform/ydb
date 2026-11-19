@@ -1,5 +1,6 @@
 #include "schemeshard__operation_backup_restore_common.h"
 #include "schemeshard_billing_helpers.h"
+#include "schemeshard_export_flow_proposals.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -74,6 +75,33 @@ struct TBackup {
         backup.SetSnapshotStep(snapshotTime.Step);
         backup.SetSnapshotTxId(snapshotTime.TxId);
 
+        ui64 checksumExportId = 0;
+        const auto it = context.SS->TxIdToExport.find(opId.GetTxId());
+        if (it != context.SS->TxIdToExport.end()) {
+            const auto& info = *context.SS->Exports.at(it->second.first);
+            if (info.Kind != TExportInfo::EKind::YT) {
+                checksumExportId = info.Id;
+                const auto& item = info.Items.at(it->second.second);
+                if (!backup.HasTableChecksum() && info.EnableBackupTableChecksum &&
+                    item.SourcePathType == NKikimrSchemeOp::EPathTypeTable && item.ParentIdx == Max<ui32>()) {
+                    // A task created while checksums were disabled may describe a newer source schema
+                    NKikimrSchemeOp::TTableDescription frozen;
+                    context.SS->DescribeTable(*table, AppData(context.Ctx)->TypeRegistry, true, &frozen);
+                    if (!backup.GetTable().HasTable()) {
+                        *backup.MutableTable()->MutableTable() = frozen;
+                    }
+                    *backup.MutableTable()->MutableTable()->MutableColumns() = frozen.GetColumns();
+                    backup.MutableTable()->MutableSelf()->SetSchemeshardId(item.SourcePathId.OwnerId);
+                    backup.MutableTable()->MutableSelf()->SetPathId(item.SourcePathId.LocalPathId);
+                    backup.MutableTable()->MutableSelf()->SetName(SplitPath(item.SourcePathName).back());
+                    backup.MutableTable()->MutableDomainDescription()->MutableProcessingParams()->SetSchemeShard(
+                        context.SS->TabletID());
+                    FillTableChecksumRequest(
+                        backup, TPath::Init(info.DomainPathId, context.SS).PathString(), item.SourcePathName);
+                }
+            }
+        }
+
         const auto seqNo = context.SS->StartRound(txState);
         for (ui32 i = 0; i < txState.Shards.size(); ++i) {
             auto idx = txState.Shards[i].Idx;
@@ -85,7 +113,7 @@ struct TBackup {
                 {"schemeshard", context.SS->SelfTabletId()},
             );
 
-            const auto txBody = context.SS->FillBackupTxBody(pathId, backup, i, seqNo);
+            const auto txBody = context.SS->FillBackupTxBody(pathId, backup, i, seqNo, checksumExportId);
             auto event = context.SS->MakeDataShardProposal(pathId, opId, txBody, context.Ctx);
             context.OnComplete.BindMsgToPipe(opId, datashardId, idx, event.Release());
 

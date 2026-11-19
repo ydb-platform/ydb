@@ -415,6 +415,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
 
     auto& task = *modifyScheme.MutableRestore();
     task.SetTableName(dstPath.LeafName());
+    if (importInfo.ShouldValidateTableChecksum() && item.Metadata.GetTableChecksum().has_value()) {
+        task.SetTableChecksumImportId(importInfo.Id);
+    }
     *task.MutableTableDescription() = RebuildTableDescription(GetTableDescription(ss, item.DstPathId), *item.Table);
 
     switch (importInfo.Kind) {

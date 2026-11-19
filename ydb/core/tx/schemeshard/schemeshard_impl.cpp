@@ -5889,6 +5889,9 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     if (IndexShadowDataRepairerId) {
         ctx.Send(IndexShadowDataRepairerId, new TEvents::TEvPoisonPill());
     }
+    for (TActorId query : RunningTableChecksumQueries) {
+        ctx.Send(query, new TEvents::TEvPoisonPill());
+    }
     for (TActorId schemeUploader : RunningExportSchemeUploaders) {
         ctx.Send(schemeUploader, new TEvents::TEvPoisonPill());
     }
@@ -6240,6 +6243,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvExportSchemeUploadResult, Handle);
         HFuncTraced(TEvPrivate::TEvExportUploadMetadataResult, Handle);
         HFuncTraced(TEvPrivate::TEvExportCompletionUploadResult, Handle);
+        HFuncTraced(NBackup::TEvTableChecksum::TEvResult, Handle);
+        HFuncTraced(NBackup::TEvTableChecksum::TEvPrepareChecksum, Handle);
 
         // namespace NImport {
         HFuncTraced(TEvImport::TEvCreateImportRequest, Handle);
@@ -6854,14 +6859,17 @@ void TSchemeShard::DropPaths(const THashSet<TPathId> &paths, TStepId step, TTxId
     }
 }
 
-TString TSchemeShard::FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, ui32 shardNum, TMessageSeqNo seqNo) const
-{
+TString TSchemeShard::FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, ui32 shardNum,
+    TMessageSeqNo seqNo, ui64 checksumExportId) const {
     NKikimrTxDataShard::TFlatSchemeTransaction tx;
     FillSeqNo(tx, seqNo);
     auto backup = tx.MutableBackup();
     backup->CopyFrom(task);
     backup->SetTableId(pathId.LocalPathId);
     backup->SetShardNum(shardNum);
+    if (checksumExportId) {
+        tx.SetTableChecksumExportId(checksumExportId);
+    }
 
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);

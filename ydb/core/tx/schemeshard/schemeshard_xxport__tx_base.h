@@ -2,6 +2,7 @@
 
 #include "schemeshard_impl.h"
 
+#include <ydb/core/backup/query/table_checksum_snapshot.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/ptr.h>
@@ -14,6 +15,8 @@ namespace NSchemeShard {
 
 class TSchemeShard::TXxport::TTxBase: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TVector<THolder<IEventHandle>> SendOnComplete;
+    TVector<TActorId> ChecksumActorsToFinish;
+    TVector<THolder<NActors::IActor>> ChecksumCleanupActors;
 
 protected:
     explicit TTxBase(TSelf* self)
@@ -30,6 +33,23 @@ protected:
     template <typename TEvent>
     void Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0) {
         return Send(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie);
+    }
+
+    void FinishTableChecksum(TImportInfo& info, ui32 itemIdx) {
+        auto& item = info.Items.at(itemIdx);
+        auto snapshot = std::exchange(item.ChecksumSnapshot, TRowVersion::Min());
+        if (auto actor = std::exchange(item.ChecksumActor, {})) {
+            ChecksumActorsToFinish.push_back(actor);
+            return;
+        }
+        // Recovery may skip validation, leaving no checksum actor to receive completion
+        if (!snapshot.TxId && item.State == TImportInfo::EState::Transferring) {
+            snapshot = TRowVersion(0, ui64(item.WaitTxId));
+        }
+        if (snapshot.TxId && item.DstPathId) {
+            ChecksumCleanupActors.emplace_back(
+                NBackup::CreateTableChecksumSnapshotReleaser(TTableId(item.DstPathId), Self->TabletID(), snapshot));
+        }
     }
 
     TPathId DomainPathId(const TString& dbName) const {
@@ -83,6 +103,15 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         DoComplete(ctx);
+
+        // Keep actors tracked until commit so tablet death also releases their handles
+        for (const auto& actor : ChecksumActorsToFinish) {
+            Self->RunningTableChecksumQueries.erase(actor);
+            ctx.Send(actor, new NBackup::TEvTableChecksum::TEvFinish());
+        }
+        for (auto& actor : ChecksumCleanupActors) {
+            ctx.Register(actor.Release());
+        }
 
         for (auto& ev : SendOnComplete) {
             ctx.Send(std::move(ev));

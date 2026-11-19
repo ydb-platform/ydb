@@ -212,9 +212,11 @@ void TPhantomFlagStorageItem::AlignWriteBlock(TString* buffer, ui32 appendBlockS
 
 void TPhantomFlagStorageData::Deserialize(const TPhantomFlagStorageDataProto& proto) {
     ChunkSize = proto.GetChunkSize();
+    LastChunkGeneration = proto.GetGeneration();
     for (const auto& chunk : proto.GetChunks()) {
         Chunks[chunk.GetChunkIdx()] = TChunk{
             .DataSize = chunk.GetDataSize(),
+            .Generation = chunk.GetGeneration(),
         };
     }
 }
@@ -224,8 +226,10 @@ void TPhantomFlagStorageData::Serialize(TPhantomFlagStorageDataProto* proto) con
         auto* chunkProto = proto->AddChunks();
         chunkProto->SetChunkIdx(chunkIdx);
         chunkProto->SetDataSize(chunk.DataSize);
+        chunkProto->SetGeneration(chunk.Generation);
     }
     proto->SetChunkSize(ChunkSize);
+    proto->SetGeneration(LastChunkGeneration);
 }
 
 }

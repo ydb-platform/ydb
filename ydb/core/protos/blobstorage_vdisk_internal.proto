@@ -212,10 +212,13 @@ message TPhantomFlagStorageData {
     message TPhantomFlagStorageChunk {
         optional uint32 ChunkIdx = 1;
         optional uint32 DataSize = 2;
+        optional uint64 Generation = 3;
     };
 
     repeated TPhantomFlagStorageChunk Chunks = 1;
     optional uint32 ChunkSize = 2;
+    // Allocation counter, retained when the chunk manifest is rebuilt or cleared.
+    optional uint64 Generation = 3;
 };
 
 message TSyncLogChunkPendingExtraction {

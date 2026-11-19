@@ -135,15 +135,14 @@ private:
             {"marker", "BSPFP02"},
             {"event", ev->Get()->ToString()});
         RequestInFlight = false;
+        bool manifestFiltered = false;
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
             std::unordered_map<ui32, TPhantomFlagStorageData::TChunk> chunks;
             for (const auto& [chunkIdx, chunk] : ev->Get()->Chunks) {
                 const auto it = Data.Chunks.find(chunkIdx);
-                if (it != Data.Chunks.end() && (it->second.DataSize || !Ctx.EnableReplication)) {
+                if (it != Data.Chunks.end() && it->second.DataSize) {
                     chunks.emplace(chunkIdx, it->second);
-                } else if (!Ctx.EnableReplication) {
-                    chunks.emplace(chunkIdx, TPhantomFlagStorageData::TChunk{.DataSize = 0});
                 } else if (!Ctx.SyncLogCtx->IsReadOnlyVDisk) {
                     // Interrupted drops and unpublished allocations can leave ChunkKeeper ownership behind.
                     // Older recovery can also carry these chunks forward as empty manifest entries.
@@ -151,11 +150,10 @@ private:
                 }
             }
 
-            if (!Ctx.EnableReplication) {
-                for (const auto& [chunkIdx, chunk] : Data.Chunks) {
-                    if (!chunks.contains(chunkIdx)) {
-                        EnqueueChunkDeletion(chunkIdx);
-                    }
+            for (const auto& [chunkIdx, chunk] : Data.Chunks) {
+                if (!chunks.contains(chunkIdx)) {
+                    manifestFiltered = true;
+                    break;
                 }
             }
             Data.Chunks = std::move(chunks);
@@ -169,6 +167,10 @@ private:
 
         Initialized = true;
         Become(&TThis::StateWork);
+        if (manifestFiltered && !Ctx.SyncLogCtx->IsReadOnlyVDisk) {
+            // A new allocation must not reuse an index still referenced by the durable manifest.
+            CommitState(true);
+        }
         ProcessQueues();
     }
 
@@ -206,8 +208,10 @@ private:
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
             const ui32 chunkIdx = *ev->Get()->ChunkIdx;
+            Y_ABORT_UNLESS(Data.LastChunkGeneration != Max<ui64>(), "PhantomFlagStorage chunk generation exhausted");
             Data.Chunks[chunkIdx] = TPhantomFlagStorageData::TChunk{
                 .DataSize = 0,
+                .Generation = ++Data.LastChunkGeneration,
             };
             TailChunkIdx = chunkIdx;
             TailAvailableSize = Data.ChunkSize;
@@ -230,10 +234,6 @@ private:
             {"marker", "BSPFP05"},
             {"event", ev->Get()->ToString()});
         RequestInFlight = false;
-        if (!Ctx.EnableReplication) {
-            Data.Chunks.erase(ev->Get()->ChunkIdx);
-            CommitState();
-        }
         ProcessQueues();
     }
 
@@ -296,7 +296,7 @@ private:
     }
 
     void Handle(const TEvPhantomFlagStorageDrop::TPtr&) {
-        if (Ctx.EnableReplication && (RequestInFlight || CommitInFlight)) {
+        if (RequestInFlight || CommitInFlight) {
             DropPending = true;
             return;
         }
@@ -316,11 +316,9 @@ private:
         for (const auto& [chunkIdx, chunk] : Data.Chunks) {
             EnqueueChunkDeletion(chunkIdx);
         }
-        if (Ctx.EnableReplication) {
-            // Persist the empty manifest before any retired chunk can be reused.
-            Data.Chunks.clear();
-        }
-        CommitState();
+        // Keep this ordering when replication is disabled, so re-enabling it cannot revive an old generation.
+        Data.Chunks.clear();
+        CommitState(true);
         ProcessQueues();
     }
 
@@ -350,7 +348,9 @@ private:
         if (status == NKikimrProto::OK) {
             for (const auto& [chunkIdx, chunk] : Data.Chunks) {
                 if (chunk.DataSize) {
-                    result->Record.AddChunkIndexes(chunkIdx);
+                    auto* descriptor = result->Record.AddChunks();
+                    descriptor->SetChunkIndex(chunkIdx);
+                    descriptor->SetGeneration(chunk.Generation);
                 }
             }
         }
@@ -386,6 +386,10 @@ private:
         const auto it = Data.Chunks.find(chunkIdx);
         if (it == Data.Chunks.end() || it->second.DataSize == 0) {
             ReplyToFlagChunkRead(request, NKikimrProto::NOT_FOUND);
+            return;
+        }
+        if (record.GetGeneration() != it->second.Generation) {
+            ReplyToFlagChunkRead(request, NKikimrProto::RACE);
             return;
         }
         request.ChunkDataSize = it->second.DataSize;
@@ -568,11 +572,7 @@ private:
     }
 
     void DeleteChunk(ui32 chunkIdx) {
-        if (Ctx.EnableReplication || Data.Chunks.contains(chunkIdx)) {
-            Send(Ctx.ChunkKeeperId, new TEvChunkKeeperFree(chunkIdx, SubsystemId));
-        } else {
-            RequestInFlight = false;
-        }
+        Send(Ctx.ChunkKeeperId, new TEvChunkKeeperFree(chunkIdx, SubsystemId));
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -683,9 +683,9 @@ private:
         Send(Ctx.ChunkKeeperId, new TEvChunkKeeperAllocate(SubsystemId));
     }
 
-    void CommitState() {
+    void CommitState(bool acknowledgeCommit = false) {
         Y_DEBUG_ABORT_UNLESS(!CommitInFlight);
-        CommitInFlight = Ctx.EnableReplication;
+        CommitInFlight = Ctx.EnableReplication || acknowledgeCommit;
         Send(Ctx.SyncLogKeeperId, new TEvPhantomFlagStorageCommitData(
                 Data, std::exchange(PendingRetiredChunks, {}), CommitInFlight));
     }

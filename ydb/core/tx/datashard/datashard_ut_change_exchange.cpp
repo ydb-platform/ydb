@@ -6545,6 +6545,71 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }
 
+    TCdcStream WithKeyRangeHeartbeats(TCdcStream streamDesc) {
+        streamDesc.UserAttributes["__async_replication"] =
+            R"({"id":"1","path":"/Root/replica","supports_key_range_autopartitioning":true})";
+        return streamDesc;
+    }
+
+    bool HasResolvedAfterUpdate(const TVector<std::pair<TString, TString>>& records) {
+        bool update = false;
+        for (const auto& [_, data] : records) {
+            if (data.Contains("\"update\"")) {
+                update = true;
+            } else if (update && data.Contains("\"resolved\"")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool HasKey(const TVector<std::pair<TString, TString>>& records, const TString& key) {
+        return AnyOf(records, [&](const auto& record) {
+            return record.second.Contains("\"key\":[" + key + "]");
+        });
+    }
+
+    Y_UNIT_TEST(ShouldDeliverChangesAndResolvedOnlyToOwnPartitionWhenKeyRangeHeartbeats) {
+        // given
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableCdcKeyRangeHeartbeats(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions().Shards(2));
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithKeyRangeHeartbeats(WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson)))));
+
+        // when
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (3000000000, 20);
+        )");
+
+        // then
+        TVector<TVector<std::pair<TString, TString>>> records(2);
+        while (!AllOf(records, [&](const auto& x) { return HasResolvedAfterUpdate(x); })) {
+            SimulateSleep(server, TDuration::Seconds(1));
+            for (ui32 i = 0; i < records.size(); ++i) {
+                records[i] = GetRecords(runtime, edgeActor, "/Root/Table/Stream", i);
+            }
+        }
+
+        UNIT_ASSERT(HasKey(records[0], "1"));
+        UNIT_ASSERT(!HasKey(records[0], "3000000000"));
+        UNIT_ASSERT(HasKey(records[1], "3000000000"));
+        UNIT_ASSERT(!HasKey(records[1], "1"));
+    }
+
     Y_UNIT_TEST(InitialScanAndResolvedTimestamps) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

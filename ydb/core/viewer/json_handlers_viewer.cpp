@@ -258,7 +258,11 @@ void InitViewerHiveStatsJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerTenantInfoJsonHandler(TJsonHandlers &handlers) {
+<<<<<<< HEAD
     handlers.AddHandler("/viewer/tenantinfo", new THttpHandler<TJsonTenantInfo>(TJsonTenantInfo::GetSwagger()), 5);
+=======
+    handlers.AddHandler("/viewer/tenantinfo", new THttpHandler<TJsonTenantInfo>(TJsonTenantInfo::GetSwagger()), 8);
+>>>>>>> 19ac1ef528d (Expose effective disk space quotas in SchemeShard description and /viewer/tenantinfo (#58359))
 }
 
 void InitViewerWhoAmIJsonHandler(TJsonHandlers& handlers) {

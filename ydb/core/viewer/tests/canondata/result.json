@@ -5316,6 +5316,7 @@
                     }
                 ],
                 "DomainDescription": {
+                    "DiskSpaceQuotaUsage": "not-empty-object",
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
                         "PathId": "not-zero-number-text",
@@ -5537,6 +5538,7 @@
                     }
                 ],
                 "DomainDescription": {
+                    "DiskSpaceQuotaUsage": "not-empty-object",
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
                         "PathId": "not-zero-number-text",
@@ -5661,6 +5663,7 @@
                     }
                 ],
                 "DomainDescription": {
+                    "DiskSpaceQuotaUsage": "not-empty-object",
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
                         "PathId": "not-zero-number-text",
@@ -5797,6 +5800,7 @@
                     }
                 ],
                 "DomainDescription": {
+                    "DiskSpaceQuotaUsage": "not-empty-object",
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
                         "PathId": "not-zero-number-text",

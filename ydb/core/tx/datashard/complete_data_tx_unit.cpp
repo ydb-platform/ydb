@@ -5,6 +5,7 @@
 #include "execution_unit_ctors.h"
 #include "probes.h"
 
+#include <ydb/core/backup/common/table_checksum_snapshot.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
@@ -53,6 +54,46 @@ EExecutionStatus TCompleteOperationUnit::Execute(TOperation::TPtr op,
                                                  TTransactionContext &txc,
                                                  const TActorContext &ctx)
 {
+    if (op->IsSchemeTx()) {
+        auto* tx = dynamic_cast<TActiveTransaction*>(op.Get());
+        Y_ENSURE(tx, "Scheme operation must be an active transaction");
+        const auto& schemeTx = tx->GetSchemeTx();
+        const auto& receive = schemeTx.GetReceiveSnapshot();
+        if (const ui64 exportId = receive.GetTableChecksumExportId()) {
+            const auto& tableId = receive.GetTableId();
+            const TSnapshotKey key(tableId.GetOwnerId(), tableId.GetTableId(), op->GetStep(), op->GetTxId());
+            const NBackup::TTableChecksumSnapshotOwner owner{ DataShard.GetCurrentSchemeShardId(), exportId, false };
+            // Store the pin and remove the scheme transaction in the same commit, safe for old binaries
+            DataShard.GetSnapshotManager().AddTableChecksumSnapshot(txc.DB, key, owner.ToString(), ctx);
+        }
+
+        const auto& send = schemeTx.HasSendSnapshot() ? schemeTx.GetSendSnapshot()
+                                                      : schemeTx.GetCreateIncrementalBackupSrc().GetSendSnapshot();
+        if (send.GetTableChecksumExportId() && send.GetReleaseTableChecksumSnapshotOnCompletion()) {
+            // The durable copy readset no longer needs the source index pin
+            const auto& tableId = send.GetTableId();
+            const TSnapshotKey key(tableId.GetOwnerId(), tableId.GetTableId(), op->GetStep(), op->GetTxId());
+            DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
+        }
+
+        if (schemeTx.HasBackup() && schemeTx.GetTableChecksumExportId()) {
+            const auto& backup = schemeTx.GetBackup();
+            const TPathId tableId(DataShard.GetPathOwnerId(), backup.GetTableId());
+            const auto table = DataShard.FindUserTable(tableId);
+            const TSnapshotKey key(
+                tableId.OwnerId, tableId.LocalPathId, backup.GetSnapshotStep(), backup.GetSnapshotTxId());
+            const auto* snapshot = DataShard.GetSnapshotManager().FindAvailable(key);
+            const NBackup::TTableChecksumSnapshotOwner owner{ DataShard.GetCurrentSchemeShardId(),
+                schemeTx.GetTableChecksumExportId(), false };
+            if (table && table->IsBackup && snapshot &&
+                snapshot->HasFlags(TSnapshot::FlagScheme | TSnapshot::FlagTimeout) &&
+                snapshot->Name == owner.ToString()) {
+                // Retire the copy pin in the same commit as its backup transaction
+                DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
+            }
+        }
+    }
+
     Pipeline.DeactivateOp(op, txc, ctx);
 
     TOutputOpData::TResultPtr &result = op->Result();

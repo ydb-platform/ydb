@@ -3,6 +3,8 @@
 #include "import_common.h"
 #include "import_s3.h"
 
+#include <ydb/core/backup/common/table_checksum_snapshot.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -35,6 +37,13 @@ protected:
         Y_ENSURE(DataShard.GetUserTables().contains(tableId));
 
         const TTableInfo tableInfo = TTableInfo(tableId, DataShard.GetUserTables().at(tableId));
+
+        if (restore.GetTableChecksumImportId()) {
+            const TSnapshotKey key(DataShard.GetPathOwnerId(), tableId, op->GetStep(), op->GetTxId());
+            const NBackup::TTableChecksumSnapshotOwner owner{ DataShard.GetCurrentSchemeShardId(),
+                restore.GetTableChecksumImportId(), true };
+            DataShard.GetSnapshotManager().AddTableChecksumSnapshot(txc.DB, key, owner.ToString(), ctx);
+        }
 
         const auto settingsKind = restore.GetSettingsCase();
         switch (settingsKind) {

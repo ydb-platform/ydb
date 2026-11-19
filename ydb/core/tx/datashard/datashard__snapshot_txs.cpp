@@ -5,6 +5,15 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
+namespace {
+
+    bool CanDiscardSnapshot(ui32 state) {
+        return state == TShardState::Ready || state == TShardState::SplitSrcWaitForNoTxInFlight ||
+               state == TShardState::SplitSrcMakeSnapshot;
+    }
+
+} // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TDataShard::TTxRefreshVolatileSnapshot::TTxRefreshVolatileSnapshot(
@@ -27,10 +36,18 @@ bool TDataShard::TTxRefreshVolatileSnapshot::Execute(TTransactionContext&, const
 
     Reply.Reset(new TEvDataShard::TEvRefreshVolatileSnapshotResponse);
     Reply->Record.SetOrigin(Self->TabletID());
+    Reply->Record.SetSupportsTableChecksumSnapshots(true);
     Reply->Record.SetOwnerId(key.OwnerId);
     Reply->Record.SetPathId(key.PathId);
     Reply->Record.SetStep(key.Step);
     Reply->Record.SetTxId(key.TxId);
+    if (const auto table = Self->FindUserTable(TPathId(key.OwnerId, key.PathId)); table && table->IsBackup) {
+        NKikimrSchemeOp::TTableDescription schema;
+        table->GetSchema(schema);
+        if (schema.HasTableChecksumSnapshot()) {
+            *Reply->Record.MutableTableChecksumSnapshot() = schema.GetTableChecksumSnapshot();
+        }
+    }
 
     if (Self->State == TShardState::WaitScheme ||
         Self->State == TShardState::SplitDstReceivingSnapshot)
@@ -108,10 +125,7 @@ bool TDataShard::TTxDiscardVolatileSnapshot::Execute(TTransactionContext& txc, c
         return true;
     }
 
-    const bool discardAllowed = (
-        Self->State == TShardState::Ready ||
-        Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
-        Self->State == TShardState::SplitSrcMakeSnapshot);
+    const bool discardAllowed = CanDiscardSnapshot(Self->State);
 
     if (Self->SrcSplitDescription && !discardAllowed) {
         Reply->Record.SetStatus(TResponse::SNAPSHOT_TRANSFERRED);
@@ -143,6 +157,18 @@ void TDataShard::TTxDiscardVolatileSnapshot::Complete(const TActorContext& ctx) 
     Y_ENSURE(Reply);
 
     ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
+}
+
+TDataShard::TTxReleaseChecksumSnapshots::TTxReleaseChecksumSnapshots(TDataShard* ds, ui64 operationId)
+    : TBase(ds)
+    , OperationId(operationId)
+{}
+
+bool TDataShard::TTxReleaseChecksumSnapshots::Execute(TTransactionContext& txc, const TActorContext&) {
+    if (CanDiscardSnapshot(Self->State)) {
+        Self->GetSnapshotManager().ReleaseChecksumSnapshots(txc.DB, OperationId);
+    }
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

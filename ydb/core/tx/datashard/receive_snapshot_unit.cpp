@@ -62,8 +62,15 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
     auto userTable = DataShard.FindUserTable(tableId);
     Y_ENSURE(userTable);
 
+    const bool checksumCopy = schemeTx.GetReceiveSnapshot().GetTableChecksumExportId() != 0;
+    const TRowVersion copyVersion(op->GetStep(), op->GetTxId());
+    if (checksumCopy) {
+        Y_ENSURE(userTable->IsBackup, "Only private backup copies retain an export snapshot");
+    }
+
     bool hasOpenTxs = false;
     bool loanedTables = false;
+    bool checksumCapture = checksumCopy && !op->InReadSets().empty();
     NTable::TRowVersionRanges removedRowVersions;
 
     for (auto &pr : op->InReadSets()) {
@@ -77,11 +84,16 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                     rsdata.Body.data() + SnapshotTransferReadSetMagic.size(),
                     rsdata.Body.size() - SnapshotTransferReadSetMagic.size());
                 Y_ENSURE(ok, "Failed to parse snapshot transfer readset");
+                checksumCapture = checksumCapture && rs.GetSupportsTableChecksumSnapshots();
 
                 TString compressedBody = rs.GetBorrowedSnapshot();
                 snapBody = NBlockCodecs::Codec("lz4fast")->Decode(compressedBody);
 
                 TRowVersion minVersion(rs.GetMinWriteVersionStep(), rs.GetMinWriteVersionTxId());
+                if (checksumCopy) {
+                    // Reserve C for the pin stored atomically with copy completion
+                    minVersion = Min(minVersion, copyVersion);
+                }
                 if (DataShard.GetSnapshotManager().GetMinWriteVersion() < minVersion)
                     DataShard.GetSnapshotManager().SetMinWriteVersion(db, minVersion);
 
@@ -95,8 +107,10 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                 if (DataShard.GetSnapshotManager().GetImmediateWriteEdge() < immediateWriteEdge)
                     DataShard.GetSnapshotManager().SetImmediateWriteEdge(db, immediateWriteEdge);
                 TRowVersion lowWatermark(rs.GetMvccLowWatermarkStep(), rs.GetMvccLowWatermarkTxId());
-                if (DataShard.GetSnapshotManager().GetLowWatermark() < lowWatermark)
-                    DataShard.GetSnapshotManager().SetLowWatermark(db, lowWatermark);
+                const auto copyWatermark = checksumCopy ? Min(lowWatermark, copyVersion) : lowWatermark;
+                if (DataShard.GetSnapshotManager().GetLowWatermark() < copyWatermark) {
+                    DataShard.GetSnapshotManager().SetLowWatermark(db, copyWatermark);
+                }
 
                 if (rs.HasRemovedRowVersions()) {
                     for (const auto& range : rs.GetRemovedRowVersions().GetRanges()) {
@@ -112,6 +126,8 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                 if (rs.GetWithOpenTxs()) {
                     hasOpenTxs = true;
                 }
+            } else {
+                checksumCapture = false;
             }
 
             if (userTable->LocalTid != DataShard.GetLastLoanTableTid()) {
@@ -124,6 +140,20 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
     if (loanedTables) {
         // We want to make sure we won't try to loan table again on restart
         DataShard.PersistLastLoanTableTid(db, userTable->LocalTid);
+    }
+
+    if (checksumCapture) {
+        NKikimrSchemeOp::TTableDescription schema;
+        userTable->GetSchema(schema);
+        if (schema.HasTableChecksumSnapshot()) {
+            Y_ENSURE(TRowVersion::FromProto(schema.GetTableChecksumSnapshot()) == copyVersion);
+        } else {
+            copyVersion.ToProto(*schema.MutableTableChecksumSnapshot());
+            TUserTable::TPtr updated = new TUserTable(*userTable);
+            updated->SetSchema(schema);
+            DataShard.PersistUserTable(db, tableId.LocalPathId, *updated);
+            DataShard.SetUserTable(tableId, updated);
+        }
     }
 
     Y_ENSURE(DataShard.GetSnapshotManager().GetSnapshots().empty(),

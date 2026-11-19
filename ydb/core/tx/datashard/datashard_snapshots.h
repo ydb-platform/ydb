@@ -198,11 +198,15 @@ public:
     bool ReleaseReference(const TSnapshotKey& key, NTable::TDatabase& db, TInstant now);
 
     bool AddSnapshot(NTable::TDatabase& db, const TSnapshotKey& key, const TString& name, ui64 flags, TDuration timeout);
+    void AddTableChecksumSnapshot(
+        NTable::TDatabase& db, const TSnapshotKey& key, const TString& name, const TActorContext& ctx);
     bool RemoveSnapshot(NTable::TDatabase& db, const TSnapshotKey& key);
     bool CleanupRemovedSnapshots(NTable::TDatabase& db);
 
     void InitSnapshotExpireTime(const TSnapshotKey& key, TInstant now);
     bool RefreshSnapshotExpireTime(const TSnapshotKey& key, TInstant now);
+    void ConfirmChecksumSnapshotOwner(ui64 operationId, TInstant now);
+    void ReleaseChecksumSnapshots(NTable::TDatabase& db, ui64 operationId);
 
     TDuration CleanupTimeout() const;
     bool RemoveExpiredSnapshots(TInstant now, TTransactionContext& txc);

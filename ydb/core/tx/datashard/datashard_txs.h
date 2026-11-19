@@ -213,6 +213,21 @@ private:
     THolder<TEvDataShard::TEvDiscardVolatileSnapshotResponse> Reply;
 };
 
+class TDataShard::TTxReleaseChecksumSnapshots : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxReleaseChecksumSnapshots(TDataShard* ds, ui64 operationId);
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+
+    void Complete(const TActorContext&) override {}
+
+    TTxType GetTxType() const override {
+        return TXTYPE_RELEASE_OPERATION_SNAPSHOTS;
+    }
+
+private:
+    const ui64 OperationId;
+};
+
 class TDataShard::TTxCleanupRemovedSnapshots : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxCleanupRemovedSnapshots(TDataShard* ds);
@@ -241,6 +256,21 @@ public:
 private:
     TEvDataShard::TEvGetS3Upload::TPtr Ev;
     THolder<TEvDataShard::TEvS3Upload> Reply;
+};
+
+class TDataShard::TTxStoreBackupChecksum : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxStoreBackupChecksum(TDataShard* ds, TEvDataShard::TEvStoreBackupChecksumRequest::TPtr ev);
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+
+    TTxType GetTxType() const override {
+        return TXTYPE_STORE_BACKUP_CHECKSUM;
+    }
+
+private:
+    TEvDataShard::TEvStoreBackupChecksumRequest::TPtr Ev;
+    THolder<TEvDataShard::TEvStoreBackupChecksumResponse> Reply;
 };
 
 class TDataShard::TTxStoreS3UploadId: public NTabletFlatExecutor::TTransactionBase<TDataShard> {

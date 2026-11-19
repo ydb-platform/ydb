@@ -215,10 +215,12 @@ class TDataShard
     class TTxStoreScanState;
     class TTxRefreshVolatileSnapshot;
     class TTxDiscardVolatileSnapshot;
+    class TTxReleaseChecksumSnapshots;
     class TTxCleanupRemovedSnapshots;
     class TTxMigrateSchemeShard;
     class TTxGetS3Upload;
     class TTxStoreS3UploadId;
+    class TTxStoreBackupChecksum;
     class TTxChangeS3UploadStatus;
     class TTxGetS3DownloadInfo;
     class TTxStoreS3DownloadInfo;
@@ -291,6 +293,7 @@ class TDataShard
     friend class TDataShardEngineHost;
     friend class TExecuteKqpScanTxUnit;
     friend class TAlterTableUnit;
+    friend class TReceiveSnapshotUnit;
     friend class TTableScan;
     friend class TKqpScan;
 
@@ -1489,9 +1492,12 @@ class TDataShard
     void Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev);
     void Handle(TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev, const TActorContext& ctx);
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetS3Upload::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStoreS3UploadId::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvStoreBackupChecksumRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
@@ -3871,6 +3877,7 @@ protected:
             HFuncTraced(TEvDataShard::TEvCancelRestore, Handle);
             HFuncTraced(TEvDataShard::TEvGetS3Upload, Handle);
             HFuncTraced(TEvDataShard::TEvStoreS3UploadId, Handle);
+            HFuncTraced(TEvDataShard::TEvStoreBackupChecksumRequest, Handle);
             HFuncTraced(TEvDataShard::TEvChangeS3UploadStatus, Handle);
             HFuncTraced(TEvDataShard::TEvGetS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvStoreS3DownloadInfo, Handle);
@@ -3951,6 +3958,8 @@ protected:
             hFunc(TEvDataShard::TEvGetSlowOpProfilesRequest, Handle);
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
             HFunc(TEvDataShard::TEvBuildIndexProgressResponse, Handle);
             HFuncTraced(TEvDataShard::TEvIncrementalRestoreSrcCreateRequest, Handle);

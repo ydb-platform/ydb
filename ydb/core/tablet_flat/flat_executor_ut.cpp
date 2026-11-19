@@ -4723,10 +4723,12 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
 
     struct TTxCheckRows : public ITransaction {
         TString& Data;
+        const TRowVersion Snapshot;
 
-        TTxCheckRows(TString& data)
+        TTxCheckRows(TString& data, TRowVersion snapshot = TRowVersion::Max())
             : Data(data)
-        { }
+            , Snapshot(snapshot)
+        {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             TStringBuilder builder;
@@ -4737,7 +4739,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             tags.push_back(Value2ColumnId);
 
             NTable::EReady ready;
-            auto it = txc.DB.IterateRange(TableId, { }, tags);
+            auto it = txc.DB.IterateRange(TableId, {}, tags, Snapshot);
 
             while ((ready = it->Next(NTable::ENext::All)) != NTable::EReady::Gone) {
                 if (ready == NTable::EReady::Page) {
@@ -5348,6 +5350,54 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
                 "Key 2 = Upsert value = Empty NULL value2 = Set ghi\n"
                 "Key 3 = Upsert value = Set abc value2 = Empty NULL\n");
         }
+    }
+
+    Y_UNIT_TEST(LongTxBorrowPreservesSnapshotVersion) {
+        TMyEnvBase env;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "foo") });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(2, "bar") });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "early", 123) });
+
+        // Keep the transaction open across the snapshot's epoch boundary
+        TBlockEvents<NResourceBroker::TEvResourceBroker::TEvResourceAllocated> allocations(env.Env);
+        env.SendSync(new NFake::TEvExecute{ new TTxMakeSnapshot });
+        env->WaitFor("snapshot compaction allocation", [&] {
+            return !allocations.empty();
+        });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(2, "late", 123) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123, TRowVersion(100, 1)) });
+        allocations.Stop().Unblock();
+
+        auto snapshot = env.GrabEdgeEvent<TEvTestFlatTablet::TEvSnapshotComplete>();
+        TString snapBody;
+        env.SendSync(
+            new NFake::TEvExecute{ new TTxBorrowSnapshot(snapBody, snapshot->Get()->SnapContext, env.Tablet + 1) });
+
+        TString data;
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+        UNIT_ASSERT_VALUES_EQUAL(data, "Key 1 = Upsert value = Set early value2 = Empty NULL\n"
+                                       "Key 2 = Upsert value = Set bar value2 = Set late\n");
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        ++env.Tablet;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxLoanSnapshot(snapBody) });
+
+        // Export scans use the retained version, even if compaction materializes later commits
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data, TRowVersion(99, 1)) });
+        UNIT_ASSERT_VALUES_EQUAL(data, "Key 1 = Upsert value = Set foo value2 = Empty NULL\n"
+                                       "Key 2 = Upsert value = Set bar value2 = Empty NULL\n");
     }
 
     Y_UNIT_TEST(MemTableLongTxRead) {

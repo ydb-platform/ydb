@@ -3,15 +3,30 @@
 #include "datashard_impl.h"
 #include "snapshot_retention/snapshot_retention.h"
 
+#include <ydb/core/backup/common/table_checksum_snapshot.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 
+#include <util/generic/hash_set.h>
 #include <util/stream/output.h>
 
 #include <algorithm>
 
 namespace NKikimr {
 namespace NDataShard {
+
+    namespace {
+
+        bool MatchesChecksumSnapshotOwner(const TSnapshot& snapshot, ui64 operationId) {
+            if (!snapshot.HasFlags(TSnapshot::FlagScheme | TSnapshot::FlagTimeout) ||
+                snapshot.HasFlags(TSnapshot::FlagRemoved)) {
+                return false;
+            }
+            const auto owner = NBackup::TTableChecksumSnapshotOwner::Parse(snapshot.Name);
+            return owner && owner->OperationId == operationId;
+        }
+
+    } // namespace
 
 void TSnapshotManager::Reset() {
     MinWriteVersion = TRowVersion::Min();
@@ -637,7 +652,9 @@ bool TSnapshotManager::ReleaseReference(const TSnapshotKey& key, NTable::TDataba
         if (it->second.HasFlags(TSnapshot::FlagTimeout) &&
             !ExpireQueue.Has(&it->second))
         {
-            it->second.ExpireTime = now + it->second.Timeout;
+            const auto expiry = now + it->second.Timeout;
+            it->second.ExpireTime =
+                it->second.ExpireTime == TInstant::Max() ? expiry : Max(it->second.ExpireTime, expiry);
             ExpireQueue.Add(&it->second);
         }
         return false;
@@ -678,6 +695,19 @@ bool TSnapshotManager::AddSnapshot(NTable::TDatabase& db, const TSnapshotKey& ke
     SetMinWriteVersion(nicedb, newVersion.Next());
 
     return true;
+}
+
+void TSnapshotManager::AddTableChecksumSnapshot(
+    NTable::TDatabase& db, const TSnapshotKey& key, const TString& name, const TActorContext& ctx) {
+    if (!FindAvailable(key) && MinWriteVersion > TRowVersion(key.Step, key.TxId)) {
+        // An older binary may have expired the pin; never recreate an old checkpoint
+        return;
+    }
+    if (AddSnapshot(
+            db, key, name, TSnapshot::FlagScheme | TSnapshot::FlagTimeout, NBackup::TableChecksumSnapshotTimeout)) {
+        InitSnapshotExpireTime(key, ctx.Now());
+        Self->PlanCleanup(ctx);
+    }
 }
 
 bool TSnapshotManager::RemoveSnapshot(NTable::TDatabase& db, const TSnapshotKey& key) {
@@ -764,11 +794,37 @@ bool TSnapshotManager::RefreshSnapshotExpireTime(const TSnapshotKey& key, TInsta
     if (it != Snapshots.end() &&
         ExpireQueue.Has(&it->second))
     {
-        it->second.ExpireTime = now + it->second.Timeout;
+        it->second.ExpireTime = Max(it->second.ExpireTime, now + it->second.Timeout);
         return ExpireQueue.Update(&it->second);
     }
 
     return false;
+}
+
+void TSnapshotManager::ConfirmChecksumSnapshotOwner(ui64 operationId, TInstant now) {
+    // Reconcile after a lost completion reply or a SchemeShard restart
+    constexpr auto recheckInterval = TDuration::Hours(1);
+    const auto stagger = TDuration::Seconds(Self->TabletID() % NBackup::TableChecksumSnapshotTimeout.Seconds());
+    for (auto& [key, snapshot] : Snapshots) {
+        if (MatchesChecksumSnapshotOwner(snapshot, operationId)) {
+            snapshot.ExpireTime = now + recheckInterval + stagger;
+            if (snapshot.InExpireQueue()) {
+                ExpireQueue.Update(&snapshot);
+            }
+        }
+    }
+}
+
+void TSnapshotManager::ReleaseChecksumSnapshots(NTable::TDatabase& db, ui64 operationId) {
+    TVector<TSnapshotKey> keys;
+    for (const auto& [key, snapshot] : Snapshots) {
+        if (MatchesChecksumSnapshotOwner(snapshot, operationId)) {
+            keys.push_back(key);
+        }
+    }
+    for (const auto& key : keys) {
+        RemoveSnapshot(db, key);
+    }
 }
 
 TDuration TSnapshotManager::CleanupTimeout() const {
@@ -800,9 +856,22 @@ TDuration TSnapshotManager::CleanupTimeout() const {
 
 bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext& txc) {
     bool removed = false;
+    THashSet<ui64> notifiedOwners;
     while (auto* snapshot = ExpireQueue.Top()) {
         if (now < snapshot->ExpireTime) {
             break;
+        }
+
+        if (auto owner = NBackup::TTableChecksumSnapshotOwner::Parse(snapshot->Name);
+            owner && snapshot->HasFlags(TSnapshot::FlagScheme | TSnapshot::FlagTimeout)) {
+            // A restart or delayed timer must not expire an active owner's checkpoint
+            RefreshSnapshotExpireTime(snapshot->Key, now);
+            if (notifiedOwners.insert(owner->OperationId).second) {
+                auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(owner->OperationId);
+                Self->Send(MakePipePerNodeCacheID(false),
+                    new TEvPipeCache::TEvForward(request.Release(), owner->SchemeShardId, false));
+            }
+            continue;
         }
 
         const TSnapshotKey key = snapshot->Key;

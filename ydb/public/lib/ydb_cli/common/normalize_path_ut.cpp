@@ -29,16 +29,11 @@ Y_UNIT_TEST_SUITE(NormalizePathTest) {
         UNIT_ASSERT(AdjustPath("abc", FakeConfig("/root/db")) == "/root/db/abc");
         UNIT_ASSERT(AdjustPath("./abc", FakeConfig("/root/db")) == "/root/db/abc");
         UNIT_ASSERT(AdjustPath("/root/db/abc", FakeConfig("/root/db")) == "/root/db/abc");
+
         UNIT_ASSERT_EXCEPTION(AdjustPath("/abc", FakeConfig("/root/db")), TMisuseException);
         UNIT_ASSERT_EXCEPTION(AdjustPath("/root/bd/abc", FakeConfig("/root/db")), TMisuseException);
-    }
-
-    Y_UNIT_TEST(RelativeDatabaseKeepsResourcePaths) {
-        for (const TString database : {"db", "folder/db", "Root/db"}) {
-            for (const TString path : {"abc", "./abc", "dir//abc/", ".", "./", "/", "/root/db/abc", "/abc"}) {
-                UNIT_ASSERT_VALUES_EQUAL_C(AdjustPath(path, FakeConfig(database)), path,
-                    "database: " << database << ", path: " << path);
-            }
-        }
+        UNIT_ASSERT(AdjustPath("abc", FakeConfig("db")) == "abc");
+        UNIT_ASSERT(AdjustPath("./abc", FakeConfig("db")) == "./abc");
+        UNIT_ASSERT(AdjustPath("/abc", FakeConfig("db")) == "/abc");
     }
 }

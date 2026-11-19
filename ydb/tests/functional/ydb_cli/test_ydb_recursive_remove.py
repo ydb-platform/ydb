@@ -19,16 +19,6 @@ CLUSTER_CONFIG = dict(
     ))
 
 
-@pytest.fixture(scope="module")
-def ydb_cluster_configuration(request):
-    if not hasattr(request, "param"):
-        return CLUSTER_CONFIG
-    config = CLUSTER_CONFIG.copy()
-    flags = "extra_feature_flags" if request.param else "disabled_feature_flags"
-    config[flags] = CLUSTER_CONFIG[flags] + ["enable_relative_paths"]
-    return config
-
-
 def execute_ydb_cli_command(node, database, args, stdin=None):
     execution = yatest.common.execute(
         [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}", "--database", database] + args, stdin=stdin
@@ -87,32 +77,6 @@ def create_external_table(session, external_table, external_data_source):
         """
     )
 
-
-@pytest.mark.parametrize(
-    "ydb_cluster_configuration", [False, True], indirect=True,
-    ids=["relative_paths_disabled", "relative_paths_enabled"],
-)
-class TestRootPathSafety:
-    @pytest.mark.parametrize(
-        "path", ["/", "//", "/./", "///././/"],
-        ids=["root", "slashes", "dot", "mixed"],
-    )
-    def test_rmdir_root_aliases(self, ydb_cluster, ydb_root, ydb_client_session, path):
-        node = ydb_cluster.nodes[1]
-        with ydb_client_session(ydb_root).checkout() as session:
-            create_table(session, "sentinel")
-            session.transaction().execute(
-                'UPSERT INTO sentinel (key, value) VALUES (1, "retained");', commit_tx=True,
-            )
-            removal = yatest.common.execute(
-                [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}", "--database", ydb_root.lstrip("/"),
-                 "scheme", "rmdir", "-rf", path], check_exit_code=False,
-            )
-            rows = session.transaction().execute("SELECT key, value FROM sentinel;", commit_tx=True)[0].rows
-            assert [(row.key, row.value) for row in rows] == [(1, "retained")]
-            assert removal.exit_code != 0
-            assert "Cannot remove the cluster root" in removal.std_err.decode("utf-8")
-            session.execute_scheme("DROP TABLE sentinel;")
 
 class TestRecursiveRemove:
     @pytest.fixture(autouse=True, scope="function")

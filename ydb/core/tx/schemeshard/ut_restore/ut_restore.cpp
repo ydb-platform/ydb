@@ -7857,6 +7857,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
         const auto topic = DescribePrivatePath(runtime, "/MyRoot/Table/updates_feed1/streamImpl").GetPathDescription().GetPersQueueGroup();
         UNIT_ASSERT_VALUES_EQUAL(topic.GetTotalGroupCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPQTabletConfig().PartitionKeySchemaSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(
             topic.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType(),
             ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);

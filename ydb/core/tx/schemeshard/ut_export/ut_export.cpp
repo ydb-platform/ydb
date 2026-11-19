@@ -2724,8 +2724,9 @@ partitioning_settings {
     Y_UNIT_TEST(ShouldRejectExportOfTableWithDefaultExpression) {
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableDefaultFromExpression(true);
+        ui64 txId = 100;
 
-        const TVector<TString> tables = { R"pb(
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"pb(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
             Columns {
@@ -2737,9 +2738,10 @@ partitioning_settings {
               }
             }
             KeyColumnNames: ["key"]
-        )pb" };
+        )pb");
+        Env().TestWaitNotification(Runtime(), txId);
 
-        Run(Runtime(), Env(), tables,
+        TestExport(Runtime(), ++txId, "/MyRoot",
             Sprintf(R"pb(
             ExportToS3Settings {
               endpoint: "localhost:%d"
@@ -2750,8 +2752,18 @@ partitioning_settings {
               }
             }
         )pb",
-                S3Port()),
-            Ydb::StatusIds::CANCELLED);
+                S3Port()));
+        const ui64 exportId = txId;
+        Env().TestWaitNotification(Runtime(), exportId);
+        const auto response = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = response.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(),
+            "Cannot backup table with DEFAULT expression column 'ts'");
+
+        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
 
     Y_UNIT_TEST(ShouldPreserveIncrBackupFlag) {

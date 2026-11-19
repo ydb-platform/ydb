@@ -57,22 +57,35 @@ constexpr const char* TableWithDefaultExpr = R"pb(
       KeyColumnNames: ["key"]
 )pb";
 
-void CheckMalformedDefaultExpression(bool alter, bool stored, bool hasDependency, const TString& error) {
+enum class ESchemaOperation {
+    Create,
+    AlterColumn,
+    AddColumn,
+};
+
+void CheckMalformedDefaultExpression(ESchemaOperation operation, bool stored, bool hasDependency, const TString& error) {
     TTestBasicRuntime runtime;
     TTestEnv env(runtime);
     EnableDefaultFromExpression(runtime);
     runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
     runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
     ui64 txId = 100;
+    const bool alter = operation != ESchemaOperation::Create;
 
     if (alter) {
         TestCreateTable(runtime, ++txId, "/MyRoot", R"pb(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
-            Columns { Name: "value" Type: "Uint64" }
             KeyColumnNames: ["key"]
         )pb");
         env.TestWaitNotification(runtime, txId);
+        if (operation == ESchemaOperation::AlterColumn) {
+            TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
+                Name: "Table"
+                Columns { Name: "value" Type: "Uint64" }
+            )pb");
+            env.TestWaitNotification(runtime, txId);
+        }
     }
 
     NKikimrSchemeOp::TTableDescription schema;
@@ -85,7 +98,7 @@ void CheckMalformedDefaultExpression(bool alter, bool stored, bool hasDependency
     }
     auto* column = schema.AddColumns();
     column->SetName("value");
-    if (!alter) {
+    if (operation != ESchemaOperation::AlterColumn) {
         column->SetType("Uint64");
     }
     auto* expression = column->MutableDefaultFromExpression();
@@ -109,19 +122,27 @@ void CheckMalformedDefaultExpression(bool alter, bool stored, bool hasDependency
 
 Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
     Y_UNIT_TEST(CreateRejectsWritableVirtualColumn) {
-        CheckMalformedDefaultExpression(false, false, false, "Writable expression column 'value' must be stored");
+        CheckMalformedDefaultExpression(ESchemaOperation::Create, false, false, "Writable expression column 'value' must be stored");
     }
 
     Y_UNIT_TEST(AlterRejectsWritableVirtualColumn) {
-        CheckMalformedDefaultExpression(true, false, false, "Writable expression column 'value' must be stored");
+        CheckMalformedDefaultExpression(ESchemaOperation::AlterColumn, false, false, "Writable expression column 'value' must be stored");
+    }
+
+    Y_UNIT_TEST(AlterAddRejectsWritableVirtualColumn) {
+        CheckMalformedDefaultExpression(ESchemaOperation::AddColumn, false, false, "Writable expression column 'value' must be stored");
     }
 
     Y_UNIT_TEST(CreateRejectsDefaultExpressionDependencies) {
-        CheckMalformedDefaultExpression(false, true, true, "DEFAULT expression column 'value' cannot have dependencies");
+        CheckMalformedDefaultExpression(ESchemaOperation::Create, true, true, "DEFAULT expression column 'value' cannot have dependencies");
     }
 
     Y_UNIT_TEST(AlterRejectsDefaultExpressionDependencies) {
-        CheckMalformedDefaultExpression(true, true, true, "DEFAULT expression column 'value' cannot have dependencies");
+        CheckMalformedDefaultExpression(ESchemaOperation::AlterColumn, true, true, "DEFAULT expression column 'value' cannot have dependencies");
+    }
+
+    Y_UNIT_TEST(AlterAddRejectsDefaultExpressionDependencies) {
+        CheckMalformedDefaultExpression(ESchemaOperation::AddColumn, true, true, "DEFAULT expression column 'value' cannot have dependencies");
     }
 
     Y_UNIT_TEST(CreateTableWithDefaultExpression) {
@@ -270,7 +291,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "expires", "CurrentUtcTimestamp()");
     }
 
-    Y_UNIT_TEST(SetNotNullOnDefaultExpressionColumn) {
+    Y_UNIT_TEST(DropNotNullOnDefaultExpressionColumn) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         EnableDefaultFromExpression(runtime);
@@ -302,6 +323,56 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         auto describe = DescribePath(runtime, "/MyRoot/Table");
         const auto* column = FindColumn(describe, "ts");
         UNIT_ASSERT(column && !column->GetNotNull());
+        CheckDefaultExpression(describe, "ts", "CurrentUtcTimestamp()");
+    }
+
+    Y_UNIT_TEST_FLAG(SetNotNullValidatesStoredRowsWithDefaultExpression, HasNull) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableDefaultFromExpression(runtime);
+        ui64 txId = 100;
+        const TString tablePath = "/MyRoot/Table";
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"pb(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns {
+                Name: "value" Type: "Uint64"
+                DefaultFromExpression {
+                    ExprText: "RandomNumber(1)"
+                    Stored: true Writable: true
+                }
+            }
+            KeyColumnNames: ["key"]
+        )pb");
+        env.TestWaitNotification(runtime, txId);
+
+        TVector<TCell> cells = {TCell::Make(ui32(1)), HasNull ? TCell() : TCell::Make(ui64(42))};
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
+            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1, 2}, TSerializedCellMatrix(cells, 1, 2), true);
+
+        // A DEFAULT expression does not fill NULLs already stored in the table.
+        const auto response = TestSetColumnConstraint(runtime, ++txId, TTestTxConfig::SchemeShard,
+            "/MyRoot", tablePath, {"value"});
+        UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), Ydb::StatusIds::SUCCESS, response.ShortDebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", !HasNull}});
+        CheckDefaultExpression(DescribePath(runtime, tablePath), "value", "RandomNumber(1)");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tablePath), 1u);
+
+        TVector<TCell> nullCells = {TCell::Make(ui32(2)), TCell()};
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
+            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1, 2}, TSerializedCellMatrix(nullCells, 1, 2), HasNull);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tablePath), HasNull ? 2u : 1u);
+
+        TVector<TCell> nonNullCells = {TCell::Make(ui32(3)), TCell::Make(ui64(43))};
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
+            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1, 2}, TSerializedCellMatrix(nonNullCells, 1, 2), true);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tablePath), HasNull ? 3u : 2u);
     }
 
     Y_UNIT_TEST(DropColumnWithDefaultExpressionAllowed) {
@@ -324,7 +395,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         UNIT_ASSERT(!FindColumn(describe, "ts"));
     }
 
-    Y_UNIT_TEST(AlterSetDefaultExpression) {
+    Y_UNIT_TEST_FLAG(AlterDefaultExpressionSurvivesAlterAndRestart, AddColumn) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         EnableDefaultFromExpression(runtime);
@@ -334,23 +405,42 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         TestCreateTable(runtime, ++txId, "/MyRoot", R"pb(
               Name: "Table"
               Columns { Name: "key" Type: "Uint32"    }
-              Columns { Name: "ts"  Type: "Timestamp" }
               KeyColumnNames: ["key"]
         )pb");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
-              Name: "Table"
-              Columns {
-                  Name: "ts"
-                  DefaultFromExpression {
-                      ExprText: "CurrentUtcTimestamp()"
-                      Stored: true Writable: true
-                  }
-              }
-        )pb");
+        if (!AddColumn) {
+            TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
+                Name: "Table"
+                Columns { Name: "ts" Type: "Timestamp" }
+            )pb");
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        NKikimrSchemeOp::TTableDescription schema;
+        schema.SetName("Table");
+        auto* column = schema.AddColumns();
+        column->SetName("ts");
+        if (AddColumn) {
+            column->SetType("Timestamp");
+        }
+        auto* expression = column->MutableDefaultFromExpression();
+        expression->SetExprText("CurrentUtcTimestamp()");
+        expression->SetStored(true);
+        expression->SetWritable(true);
+        TestAlterTable(runtime, ++txId, "/MyRoot", schema.DebugString());
         env.TestWaitNotification(runtime, txId);
 
+        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "ts", "CurrentUtcTimestamp()");
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
+            Name: "Table"
+            Columns { Name: "other" Type: "Uint64" }
+        )pb");
+        env.TestWaitNotification(runtime, txId);
+        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "ts", "CurrentUtcTimestamp()");
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "ts", "CurrentUtcTimestamp()");
     }
 
@@ -510,6 +600,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         env.TestWaitNotification(runtime, txId);
 
         CheckDefaultExpression(DescribePath(runtime, "/MyRoot/TableCopy"), "ts", "CurrentUtcTimestamp()");
+    }
+
+    Y_UNIT_TEST(CopyTableWithDefaultExpressionRejectedWhenFeatureDisabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableDefaultFromExpression(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", TableWithDefaultExpr);
+        env.TestWaitNotification(runtime, txId);
+
+        DisableDefaultFromExpression(runtime);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        // Copy revalidates the schema against the current feature flags.
+        TestCopyTable(runtime, ++txId, "/MyRoot", "TableCopy", "/MyRoot/Table", NKikimrScheme::StatusSchemeError);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableCopy"), {NLs::PathNotExist});
+        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "ts", "CurrentUtcTimestamp()");
     }
 
     Y_UNIT_TEST(RenameTablePreservesDefaultExpression) {

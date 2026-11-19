@@ -365,5 +365,6 @@ message TFeatureFlags {
     // Allows persisting Waiting for column-table imports with unresolved dependencies.
     // Enable only after the rollback version supports resuming these imports.
     optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
+    optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
 }

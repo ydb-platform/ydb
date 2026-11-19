@@ -18,6 +18,9 @@ TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::A
     if (alter.has_set_important()) {
         consumer.set_important(alter.set_important());
     }
+    if (alter.has_set_replicate_offsets()) {
+        consumer.set_replicate_offsets(alter.set_replicate_offsets());
+    }
     if (alter.has_set_read_from()) {
         consumer.mutable_read_from()->CopyFrom(alter.set_read_from());
     }
@@ -289,6 +292,9 @@ TResult ApplyChangesInt(
         Ydb::StatusIds_StatusCode status;
         TString error;
         FillConsumer(consumer, c, status, error, false);
+        if (!c.HasReplicateOffsets()) {
+            consumer.clear_replicate_offsets();
+        }
     }
 
 

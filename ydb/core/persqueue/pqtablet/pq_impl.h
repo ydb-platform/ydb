@@ -43,6 +43,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void CreatedHook(const TActorContext& ctx) override;
     bool HandleHook(STFUNC_SIG) override;
 
+    bool IsConsumerOffsetCommitDisabled(const TString& consumerName, const TActorContext& ctx) const;
+
     void ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
 
     void HandleWakeup(const TActorContext&);

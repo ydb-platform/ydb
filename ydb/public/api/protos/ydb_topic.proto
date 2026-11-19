@@ -943,6 +943,9 @@ message Consumer {
         StreamingConsumerType streaming_consumer_type = 9;
         SharedConsumerType shared_consumer_type = 10;
     }
+
+    // Whether offsets for this consumer are replicated from the source topic. Defaults to true when omitted.
+    optional bool replicate_offsets = 13;
 }
 
 // Consumer alter description.
@@ -976,6 +979,9 @@ message AlterConsumer {
         AlterStreamingConsumerType alter_streaming_consumer_type = 9;
         AlterSharedConsumerType alter_shared_consumer_type = 10;
     }
+
+    // Set whether offsets for this consumer are replicated from the source topic.
+    optional bool set_replicate_offsets = 13;
 }
 
 enum AutoPartitioningStrategy {

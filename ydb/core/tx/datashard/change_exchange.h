@@ -64,6 +64,7 @@ struct TEvChangeExchange {
 
     struct TCdcStreamSender {
         TUserTable::TCdcStream Stream;
+        TSerializedTableRange ShardKeyRange;
     };
 
     using TSenderParams = std::variant<TAsyncIndexSender, TCdcStreamSender>;

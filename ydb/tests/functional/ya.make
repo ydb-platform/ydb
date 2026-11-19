@@ -19,6 +19,7 @@ RECURSE(
     kafka
     kqp
     large_serializable
+    lbr
     limits
     minidumps
     mirror3dc

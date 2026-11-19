@@ -1,0 +1,201 @@
+import json
+import os
+from pathlib import Path
+import signal
+import time
+import threading
+
+import pytest
+
+from ydb.tests.functional.lbr.lib.lbr import LbrCollector
+
+
+@pytest.fixture
+def fake_perf(tmp_path):
+    executable = tmp_path / "perf"
+    executable.write_text('''#!/bin/sh
+output=
+while [ "$#" -gt 0 ]; do
+    if [ "$1" = -o ]; then shift; output=$1; fi
+    if [ "$1" = -- ]; then shift; break; fi
+    shift
+done
+printf 'fake perf data' > "$output"
+echo "$$" > "$output.pid"
+exec "$@"
+''')
+    executable.chmod(0o755)
+    return str(executable)
+
+
+def manifest(directory):
+    return json.loads((directory / "manifest.json").read_text())
+
+
+class TestLbrCollector:
+    def test_workload_snapshots_are_after_warmup(self, tmp_path, fake_perf, monkeypatch):
+        output = tmp_path / "workload"
+        collector = LbrCollector(
+            [os.getpid()], output, 0.8, 0.03, 3, fake_perf, start_delay_seconds=0.1, phase="workload"
+        )
+        ready = threading.Event()
+        original_record = collector._record
+
+        def record(index, offset):
+            original_record(index, offset)
+            if index == 3:
+                ready.set()
+
+        monkeypatch.setattr(collector, "_record", record)
+        with collector:
+            assert ready.wait(5)
+        data = manifest(output)
+        assert data["schedule_seconds"] == pytest.approx([0.3, 0.5, 0.7])
+        assert len(data["records"]) == 3
+        assert all(record["complete"] and not record["stopped_on_phase_end"] for record in data["records"])
+        command = data["records"][0]["command"]
+        assert command[command.index("-p") + 1] == str(os.getpid())
+        assert command[command.index("-e") + 1] == "cycles:u"
+        assert "-b" in command and "-a" not in command
+
+    def test_short_preparation_phase_flushes_partial_snapshot(self, tmp_path, fake_perf):
+        output = tmp_path / "compaction"
+        with LbrCollector([os.getpid()], output, None, 5, perf=fake_perf, interval_seconds=6, phase="compaction"):
+            time.sleep(0.1)
+        data = manifest(output)
+        assert data["phase"] == "compaction" and data["periodic"]
+        assert not data["workload_failed"] and data["error"] is None
+        assert len(data["records"]) == 1
+        record = data["records"][0]
+        assert record["complete"] and record["stopped_on_phase_end"]
+        assert record["actual_seconds"] < record["requested_seconds"]
+        pid = int((output / "snap1.perf.data.pid").read_text())
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+
+    def test_perf_sigterm_after_phase_end_is_valid(self, tmp_path, fake_perf):
+        executable = Path(fake_perf)
+        executable.write_text(
+            executable.read_text().replace(
+                'exec "$@"',
+                'trap \'kill -TERM "$child"; wait "$child"; kill -TERM $$\' INT\n"$@" &\nchild=$!\nwait "$child"',
+            )
+        )
+        output = tmp_path / "compaction"
+        with LbrCollector([os.getpid()], output, None, 5, perf=fake_perf, interval_seconds=6):
+            time.sleep(0.1)
+        record = manifest(output)["records"][0]
+        assert record["return_code"] == -signal.SIGTERM
+        assert record["complete"] and record["stopped_on_phase_end"]
+
+    def test_import_is_sampled_repeatedly(self, tmp_path, fake_perf):
+        output = tmp_path / "import"
+        with LbrCollector([os.getpid()], output, None, 0.03, perf=fake_perf, interval_seconds=0.2):
+            time.sleep(0.5)
+        records = manifest(output)["records"]
+        assert len(records) == 3
+        assert all(record["complete"] for record in records)
+        assert all(a["finished_at"] <= b["started_at"] for a, b in zip(records, records[1:]))
+
+    def test_phases_write_separate_records(self, tmp_path, fake_perf):
+        for phase in ("import", "compaction"):
+            with LbrCollector(
+                [os.getpid()], tmp_path / phase, None, 5, perf=fake_perf, interval_seconds=6, phase=phase
+            ):
+                time.sleep(0.1)
+        for phase in ("import", "compaction"):
+            data = manifest(tmp_path / phase)
+            assert data["phase"] == phase
+            assert (tmp_path / phase / "snap1.perf.data").is_file()
+            assert len(data["records"]) == 1
+
+    def test_incomplete_workload_is_rejected(self, tmp_path, fake_perf):
+        output = tmp_path / "workload"
+        with pytest.raises(RuntimeError, match="before all"):
+            with LbrCollector([os.getpid()], output, 10, 1, 1, fake_perf):
+                pass
+        assert not manifest(output)["records"]
+
+    def test_phase_failure_is_preserved(self, tmp_path, fake_perf):
+        output = tmp_path / "import"
+        with pytest.raises(ValueError, match="import failed"):
+            with LbrCollector([os.getpid()], output, None, 5, perf=fake_perf, interval_seconds=6):
+                time.sleep(0.1)
+                raise ValueError("import failed")
+        data = manifest(output)
+        assert data["workload_failed"] and not data["records"][0]["complete"]
+
+    def test_perf_failure_fails_successful_phase(self, tmp_path, fake_perf):
+        Path(fake_perf).write_text("#!/bin/sh\nexit 7\n")
+        with pytest.raises(RuntimeError, match="collection failed"):
+            with LbrCollector([os.getpid()], tmp_path / "import", None, 0.1, perf=fake_perf, interval_seconds=0.2):
+                time.sleep(0.1)
+
+    def test_missing_perf_is_reported_on_entry(self, tmp_path):
+        output = tmp_path / "import"
+        with pytest.raises(FileNotFoundError):
+            with LbrCollector([os.getpid()], output, None, 0.1, perf=str(tmp_path / "missing"), interval_seconds=0.2):
+                pytest.fail("Phase must not start without perf")
+        assert manifest(output)["error"]
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"window_seconds": 30, "record_seconds": 30, "snapshots": 3},
+            {"window_seconds": None, "record_seconds": 30, "interval_seconds": 10},
+            {"window_seconds": 30, "start_delay_seconds": -1},
+        ],
+    )
+    def test_invalid_schedule(self, tmp_path, kwargs):
+        with pytest.raises(ValueError):
+            LbrCollector([os.getpid()], tmp_path / "out", **kwargs)
+
+
+def test_closed_snapshot_is_queued_before_phase_ends(tmp_path, fake_perf):
+    ready = threading.Event()
+    calls = []
+
+    class Conversion:
+        def submit(self, phase, index, data):
+            assert data.read_bytes() == b"fake perf data"
+            pid = int(Path(str(data) + ".pid").read_text())
+            with pytest.raises(ProcessLookupError):
+                os.kill(pid, 0)
+            calls.append((phase, index))
+            ready.set()
+
+        def finish_phase(self, phase, valid):
+            calls.append((phase, valid))
+
+    with LbrCollector(
+        [os.getpid()],
+        tmp_path / "import",
+        None,
+        0.03,
+        perf=fake_perf,
+        interval_seconds=10,
+        phase="import",
+        conversion=Conversion(),
+    ):
+        assert ready.wait(5)
+        assert calls == [("import", 1)]
+    assert calls == [("import", 1), ("import", True)]
+
+
+def test_incomplete_workload_is_not_valid_for_conversion(tmp_path, fake_perf):
+    calls = []
+
+    class Conversion:
+        def submit(self, phase, index, data):
+            pytest.fail("Unfinished snapshot must not be submitted")
+
+        def finish_phase(self, phase, valid):
+            calls.append((phase, valid))
+
+    with pytest.raises(RuntimeError, match="before all"):
+        with LbrCollector(
+            [os.getpid()], tmp_path / "workload", 10, 1, 1, fake_perf, phase="workload", conversion=Conversion()
+        ):
+            pass
+    assert calls == [("workload", False)]
+    assert not manifest(tmp_path / "workload")["valid"]

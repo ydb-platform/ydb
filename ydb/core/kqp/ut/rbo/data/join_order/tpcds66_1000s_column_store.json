@@ -32,13 +32,13 @@
                                           },
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"date_dim"
+                                            "table":"time_dim"
                                           }
                                         ]
                                     },
                                     {
                                       "op_name":"TableFullScan",
-                                      "table":"time_dim"
+                                      "table":"date_dim"
                                     }
                                   ]
                               },
@@ -82,13 +82,13 @@
                                           },
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"date_dim"
+                                            "table":"time_dim"
                                           }
                                         ]
                                     },
                                     {
                                       "op_name":"TableFullScan",
-                                      "table":"time_dim"
+                                      "table":"date_dim"
                                     }
                                   ]
                               },

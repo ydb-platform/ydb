@@ -20,13 +20,13 @@
                         },
                         {
                           "op_name":"TableFullScan",
-                          "table":"item"
+                          "table":"date_dim"
                         }
                       ]
                   },
                   {
                     "op_name":"TableFullScan",
-                    "table":"date_dim"
+                    "table":"item"
                   }
                 ]
             }

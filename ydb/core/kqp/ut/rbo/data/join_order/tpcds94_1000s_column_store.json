@@ -40,13 +40,13 @@
                                                       },
                                                       {
                                                         "op_name":"TableFullScan",
-                                                        "table":"web_site"
+                                                        "table":"date_dim"
                                                       }
                                                     ]
                                                 },
                                                 {
                                                   "op_name":"TableFullScan",
-                                                  "table":"date_dim"
+                                                  "table":"web_site"
                                                 }
                                               ]
                                           }
@@ -124,13 +124,13 @@
                                                       },
                                                       {
                                                         "op_name":"TableFullScan",
-                                                        "table":"web_site"
+                                                        "table":"date_dim"
                                                       }
                                                     ]
                                                 },
                                                 {
                                                   "op_name":"TableFullScan",
-                                                  "table":"date_dim"
+                                                  "table":"web_site"
                                                 }
                                               ]
                                           }

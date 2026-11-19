@@ -20,13 +20,13 @@
                         },
                         {
                           "op_name":"TableFullScan",
-                          "table":"household_demographics"
+                          "table":"time_dim"
                         }
                       ]
                   },
                   {
                     "op_name":"TableFullScan",
-                    "table":"time_dim"
+                    "table":"household_demographics"
                   }
                 ]
             },
@@ -54,13 +54,13 @@
                         },
                         {
                           "op_name":"TableFullScan",
-                          "table":"household_demographics"
+                          "table":"time_dim"
                         }
                       ]
                   },
                   {
                     "op_name":"TableFullScan",
-                    "table":"time_dim"
+                    "table":"household_demographics"
                   }
                 ]
             },

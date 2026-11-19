@@ -75,14 +75,8 @@
                                                                                                         "args":
                                                                                                           [
                                                                                                             {
-                                                                                                              "op_name":"HashShuffle",
-                                                                                                              "args":
-                                                                                                                [
-                                                                                                                  {
-                                                                                                                    "op_name":"TableFullScan",
-                                                                                                                    "table":"store_returns"
-                                                                                                                  }
-                                                                                                                ]
+                                                                                                              "op_name":"TableFullScan",
+                                                                                                              "table":"store_returns"
                                                                                                             },
                                                                                                             {
                                                                                                               "op_name":"TableFullScan",
@@ -313,14 +307,8 @@
                                                                                                         "args":
                                                                                                           [
                                                                                                             {
-                                                                                                              "op_name":"HashShuffle",
-                                                                                                              "args":
-                                                                                                                [
-                                                                                                                  {
-                                                                                                                    "op_name":"TableFullScan",
-                                                                                                                    "table":"store_returns"
-                                                                                                                  }
-                                                                                                                ]
+                                                                                                              "op_name":"TableFullScan",
+                                                                                                              "table":"store_returns"
                                                                                                             },
                                                                                                             {
                                                                                                               "op_name":"TableFullScan",

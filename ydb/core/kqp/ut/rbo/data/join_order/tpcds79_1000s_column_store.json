@@ -34,13 +34,13 @@
                               },
                               {
                                 "op_name":"TableFullScan",
-                                "table":"household_demographics"
+                                "table":"store"
                               }
                             ]
                         },
                         {
                           "op_name":"TableFullScan",
-                          "table":"store"
+                          "table":"household_demographics"
                         }
                       ]
                   }

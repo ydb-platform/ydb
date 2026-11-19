@@ -44,13 +44,13 @@
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"promotion"
+                                                              "table":"date_dim"
                                                             }
                                                           ]
                                                       },
                                                       {
                                                         "op_name":"TableFullScan",
-                                                        "table":"date_dim"
+                                                        "table":"promotion"
                                                       }
                                                     ]
                                                 },
@@ -116,13 +116,13 @@
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"promotion"
+                                                              "table":"date_dim"
                                                             }
                                                           ]
                                                       },
                                                       {
                                                         "op_name":"TableFullScan",
-                                                        "table":"date_dim"
+                                                        "table":"promotion"
                                                       }
                                                     ]
                                                 },
@@ -155,7 +155,85 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (BlockHash)",
+                    "op_name":"LeftJoin (BlockHash)",
+                    "args":
+                      [
+                        {
+                          "op_name":"HashShuffle",
+                          "args":
+                            [
+                              {
+                                "op_name":"InnerJoin (BlockHash)",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"HashShuffle",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"InnerJoin (BlockHash)",
+                                            "args":
+                                              [
+                                                {
+                                                  "op_name":"InnerJoin (BlockHash)",
+                                                  "args":
+                                                    [
+                                                      {
+                                                        "op_name":"InnerJoin (BlockHash)",
+                                                        "args":
+                                                          [
+                                                            {
+                                                              "op_name":"TableFullScan",
+                                                              "table":"web_sales"
+                                                            },
+                                                            {
+                                                              "op_name":"TableFullScan",
+                                                              "table":"date_dim"
+                                                            }
+                                                          ]
+                                                      },
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"promotion"
+                                                      }
+                                                    ]
+                                                },
+                                                {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"web_site"
+                                                }
+                                              ]
+                                          }
+                                        ]
+                                    },
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"item"
+                                    }
+                                  ]
+                              }
+                            ]
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"web_returns"
+                        }
+                      ]
+                  }
+                ]
+            }
+          ]
+      },
+      {
+        "op_name":"HashShuffle",
+        "args":
+          [
+            {
+              "op_name":"UnionAll",
+              "args":
+                [
+                  {
+                    "op_name":"HashShuffle",
                     "args":
                       [
                         {
@@ -183,8 +261,18 @@
                                                         "args":
                                                           [
                                                             {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"web_sales"
+                                                              "op_name":"InnerJoin (BlockHash)",
+                                                              "args":
+                                                                [
+                                                                  {
+                                                                    "op_name":"TableFullScan",
+                                                                    "table":"store_sales"
+                                                                  },
+                                                                  {
+                                                                    "op_name":"TableFullScan",
+                                                                    "table":"date_dim"
+                                                                  }
+                                                                ]
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
@@ -194,7 +282,151 @@
                                                       },
                                                       {
                                                         "op_name":"TableFullScan",
-                                                        "table":"date_dim"
+                                                        "table":"store"
+                                                      }
+                                                    ]
+                                                }
+                                              ]
+                                          },
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"item"
+                                          }
+                                        ]
+                                    }
+                                  ]
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"store_returns"
+                              }
+                            ]
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"HashShuffle",
+                    "args":
+                      [
+                        {
+                          "op_name":"LeftJoin (BlockHash)",
+                          "args":
+                            [
+                              {
+                                "op_name":"HashShuffle",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"InnerJoin (BlockHash)",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"HashShuffle",
+                                            "args":
+                                              [
+                                                {
+                                                  "op_name":"InnerJoin (BlockHash)",
+                                                  "args":
+                                                    [
+                                                      {
+                                                        "op_name":"InnerJoin (BlockHash)",
+                                                        "args":
+                                                          [
+                                                            {
+                                                              "op_name":"InnerJoin (BlockHash)",
+                                                              "args":
+                                                                [
+                                                                  {
+                                                                    "op_name":"TableFullScan",
+                                                                    "table":"catalog_sales"
+                                                                  },
+                                                                  {
+                                                                    "op_name":"TableFullScan",
+                                                                    "table":"date_dim"
+                                                                  }
+                                                                ]
+                                                            },
+                                                            {
+                                                              "op_name":"TableFullScan",
+                                                              "table":"promotion"
+                                                            }
+                                                          ]
+                                                      },
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"catalog_page"
+                                                      }
+                                                    ]
+                                                }
+                                              ]
+                                          },
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"item"
+                                          }
+                                        ]
+                                    }
+                                  ]
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"catalog_returns"
+                              }
+                            ]
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"HashShuffle",
+                    "args":
+                      [
+                        {
+                          "op_name":"LeftJoin (BlockHash)",
+                          "args":
+                            [
+                              {
+                                "op_name":"HashShuffle",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"InnerJoin (BlockHash)",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"HashShuffle",
+                                            "args":
+                                              [
+                                                {
+                                                  "op_name":"InnerJoin (BlockHash)",
+                                                  "args":
+                                                    [
+                                                      {
+                                                        "op_name":"InnerJoin (BlockHash)",
+                                                        "args":
+                                                          [
+                                                            {
+                                                              "op_name":"InnerJoin (BlockHash)",
+                                                              "args":
+                                                                [
+                                                                  {
+                                                                    "op_name":"TableFullScan",
+                                                                    "table":"web_sales"
+                                                                  },
+                                                                  {
+                                                                    "op_name":"TableFullScan",
+                                                                    "table":"date_dim"
+                                                                  }
+                                                                ]
+                                                            },
+                                                            {
+                                                              "op_name":"TableFullScan",
+                                                              "table":"promotion"
+                                                            }
+                                                          ]
+                                                      },
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"web_site"
                                                       }
                                                     ]
                                                 }
@@ -213,10 +445,6 @@
                                 "table":"web_returns"
                               }
                             ]
-                        },
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"web_site"
                         }
                       ]
                   }
@@ -270,13 +498,13 @@
                                                                   },
                                                                   {
                                                                     "op_name":"TableFullScan",
-                                                                    "table":"promotion"
+                                                                    "table":"date_dim"
                                                                   }
                                                                 ]
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"date_dim"
+                                                              "table":"promotion"
                                                             }
                                                           ]
                                                       },
@@ -342,13 +570,13 @@
                                                                   },
                                                                   {
                                                                     "op_name":"TableFullScan",
-                                                                    "table":"promotion"
+                                                                    "table":"date_dim"
                                                                   }
                                                                 ]
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"date_dim"
+                                                              "table":"promotion"
                                                             }
                                                           ]
                                                       },
@@ -371,162 +599,6 @@
                               {
                                 "op_name":"TableFullScan",
                                 "table":"catalog_returns"
-                              }
-                            ]
-                        }
-                      ]
-                  },
-                  {
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
-                          "op_name":"InnerJoin (BlockHash)",
-                          "args":
-                            [
-                              {
-                                "op_name":"LeftJoin (BlockHash)",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"InnerJoin (BlockHash)",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"HashShuffle",
-                                                  "args":
-                                                    [
-                                                      {
-                                                        "op_name":"InnerJoin (BlockHash)",
-                                                        "args":
-                                                          [
-                                                            {
-                                                              "op_name":"InnerJoin (BlockHash)",
-                                                              "args":
-                                                                [
-                                                                  {
-                                                                    "op_name":"TableFullScan",
-                                                                    "table":"web_sales"
-                                                                  },
-                                                                  {
-                                                                    "op_name":"TableFullScan",
-                                                                    "table":"promotion"
-                                                                  }
-                                                                ]
-                                                            },
-                                                            {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"date_dim"
-                                                            }
-                                                          ]
-                                                      }
-                                                    ]
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"item"
-                                                }
-                                              ]
-                                          }
-                                        ]
-                                    },
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"web_returns"
-                                    }
-                                  ]
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"web_site"
-                              }
-                            ]
-                        }
-                      ]
-                  }
-                ]
-            }
-          ]
-      },
-      {
-        "op_name":"HashShuffle",
-        "args":
-          [
-            {
-              "op_name":"UnionAll",
-              "args":
-                [
-                  {
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
-                          "op_name":"LeftJoin (BlockHash)",
-                          "args":
-                            [
-                              {
-                                "op_name":"HashShuffle",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"InnerJoin (BlockHash)",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"HashShuffle",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"InnerJoin (BlockHash)",
-                                                  "args":
-                                                    [
-                                                      {
-                                                        "op_name":"InnerJoin (BlockHash)",
-                                                        "args":
-                                                          [
-                                                            {
-                                                              "op_name":"InnerJoin (BlockHash)",
-                                                              "args":
-                                                                [
-                                                                  {
-                                                                    "op_name":"TableFullScan",
-                                                                    "table":"store_sales"
-                                                                  },
-                                                                  {
-                                                                    "op_name":"TableFullScan",
-                                                                    "table":"promotion"
-                                                                  }
-                                                                ]
-                                                            },
-                                                            {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"date_dim"
-                                                            }
-                                                          ]
-                                                      },
-                                                      {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"store"
-                                                      }
-                                                    ]
-                                                }
-                                              ]
-                                          },
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"item"
-                                          }
-                                        ]
-                                    }
-                                  ]
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"store_returns"
                               }
                             ]
                         }
@@ -566,23 +638,23 @@
                                                                 [
                                                                   {
                                                                     "op_name":"TableFullScan",
-                                                                    "table":"catalog_sales"
+                                                                    "table":"web_sales"
                                                                   },
                                                                   {
                                                                     "op_name":"TableFullScan",
-                                                                    "table":"promotion"
+                                                                    "table":"date_dim"
                                                                   }
                                                                 ]
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"date_dim"
+                                                              "table":"promotion"
                                                             }
                                                           ]
                                                       },
                                                       {
                                                         "op_name":"TableFullScan",
-                                                        "table":"catalog_page"
+                                                        "table":"web_site"
                                                       }
                                                     ]
                                                 }
@@ -598,79 +670,7 @@
                               },
                               {
                                 "op_name":"TableFullScan",
-                                "table":"catalog_returns"
-                              }
-                            ]
-                        }
-                      ]
-                  },
-                  {
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
-                          "op_name":"InnerJoin (BlockHash)",
-                          "args":
-                            [
-                              {
-                                "op_name":"LeftJoin (BlockHash)",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"InnerJoin (BlockHash)",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"HashShuffle",
-                                                  "args":
-                                                    [
-                                                      {
-                                                        "op_name":"InnerJoin (BlockHash)",
-                                                        "args":
-                                                          [
-                                                            {
-                                                              "op_name":"InnerJoin (BlockHash)",
-                                                              "args":
-                                                                [
-                                                                  {
-                                                                    "op_name":"TableFullScan",
-                                                                    "table":"web_sales"
-                                                                  },
-                                                                  {
-                                                                    "op_name":"TableFullScan",
-                                                                    "table":"promotion"
-                                                                  }
-                                                                ]
-                                                            },
-                                                            {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"date_dim"
-                                                            }
-                                                          ]
-                                                      }
-                                                    ]
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"item"
-                                                }
-                                              ]
-                                          }
-                                        ]
-                                    },
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"web_returns"
-                                    }
-                                  ]
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"web_site"
+                                "table":"web_returns"
                               }
                             ]
                         }

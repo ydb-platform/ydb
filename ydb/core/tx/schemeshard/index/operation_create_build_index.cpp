@@ -271,11 +271,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         *outTx.MutableCreateTable() = std::move(implTableDesc);
         outTx.SetInternal(tx.GetInternal());
 
-        // Synchronous index tables are independent replication targets, including
-        // indexes populated by the builder during bootstrap import.
+        // Index tables with independent replication targets get the replica config even when they
+        // are populated by the builder during bootstrap import.
         if (forReplication || (tableInfo->IsImportingReplica()
-            && (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobal
-                || GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalUnique)))
+            && NTableIndex::HasReplicatedImplTables(GetIndexType(indexDesc))))
         {
             *outTx.MutableCreateTable()->MutableReplicationConfig() = tableInfo->ReplicationConfig();
         }

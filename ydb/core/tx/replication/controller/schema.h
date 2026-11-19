@@ -100,6 +100,7 @@ struct TControllerSchema: NIceDb::Schema {
             static constexpr Type Default = InvalidLocalPathId;
         };
         struct IndexBuild: Column<20, NScheme::NTypeIds::String> {};
+        struct SrcIsImpl: Column<21, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
@@ -122,7 +123,8 @@ struct TControllerSchema: NIceDb::Schema {
             SchemaBarrierFlushTxIds,
             PendingDstPathOwnerId,
             PendingDstPathLocalId,
-            IndexBuild
+            IndexBuild,
+            SrcIsImpl
         >;
     };
 

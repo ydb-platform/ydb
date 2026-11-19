@@ -24,6 +24,7 @@ public:
         USE_TLS = 1 << 1,
         RDMA_POLLING_CQ = 1 << 2,
         DISABLE_RDMA = 1 << 3,
+        TRACK_ADMISSION = 1 << 4,
     };
 
     using TCheckerFactory = std::function<IActor*(ui32)>;
@@ -92,7 +93,7 @@ public:
                 !(flags & DISABLE_RDMA),
                 settingsCustomizer,
                 LogBackendFactory,
-                interconnectSessionPoolIds));
+                interconnectSessionPoolIds, flags & TRACK_ADMISSION));
         }
     }
 

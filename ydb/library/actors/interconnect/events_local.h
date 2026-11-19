@@ -100,6 +100,8 @@ namespace NActors {
         NActorsInterconnect::THandshakeRequest Record;
     };
 
+    struct TEvConnectionQuiesced : TEventLocal<TEvConnectionQuiesced, ui32(ENetwork::EvConnectionQuiesced)> {};
+
     struct TEvHandshakeReplyOK
        : public TEventLocal<TEvHandshakeReplyOK,
                              ui32(ENetwork::HandshakeReplyOK)> {

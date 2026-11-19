@@ -388,6 +388,7 @@ namespace NActors {
             }
         } Rdma;
         bool RunDelayedRdmaHandshake = false;
+        TVector<TActorId> ReplyCheckers;
 
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
@@ -575,6 +576,29 @@ namespace NActors {
             Rdma.Clear();
             MainChannel.Reset();
             ExternalDataChannel.Reset();
+        }
+
+        void CheckOutgoingParams(const THashMap<TString, TString>& params) {
+            Params.AdmissionLevel = 0;
+            for (const auto& checker : ReplyCheckers) {
+                Send(checker, new TEvInterconnect::TEvCheckOutgoingConnection(PeerNodeId, params));
+            }
+            for (size_t i = 0; i < ReplyCheckers.size(); ++i) {
+                auto result = WaitForSpecificEvent<TEvInterconnect::TEvCheckOutgoingConnectionResult>(
+                    "EvCheckOutgoingConnectionResult");
+                auto& verdict = *result->Get();
+                if (verdict.ErrorReason) {
+                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, *verdict.ErrorReason);
+                }
+                Params.AdmissionLevel = Max(Params.AdmissionLevel, verdict.AdmissionLevel);
+            }
+            CheckAdmission();
+        }
+
+        void CheckAdmission() {
+            if (!Common->AllowsConnection(Params.AdmissionLevel)) {
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Peer is incompatible with current connection admission");
+            }
         }
 
         void EstablishSecureConnection(TConnection& connection) {
@@ -1098,6 +1122,9 @@ namespace NActors {
                 while (pending--) {
                     auto ev = WaitForSpecificEvent<TEvInterconnect::TEvPrepareOutgoingConnectionResult>(
                         "EvPrepareOutgoingConnectionResult");
+                    if (ev->Get()->CheckReply) {
+                        ReplyCheckers.push_back(ev->Sender);
+                    }
                     std::visit(TOverloaded{
                         [&](TString& errorReason) {
                             Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, TStringBuilder() << "connection checker "
@@ -1168,6 +1195,12 @@ namespace NActors {
                 const auto& success = reply.GetSuccess();
                 ValidateClusterUUID(success, generateError);
                 ValidateCompatibilityInfo(success, generateError);
+
+                THashMap<TString, TString> params;
+                for (const auto& item : success.GetParams()) {
+                    params.emplace(item.GetKey(), item.GetValue());
+                }
+                CheckOutgoingParams(params);
 
                 const auto& s = success.GetSenderActorId();
                 PeerVirtualId.Parse(s.data(), s.size());
@@ -1575,6 +1608,7 @@ namespace NActors {
                     while (pending--) {
                         auto ev = WaitForSpecificEvent<TEvInterconnect::TEvCheckIncomingConnectionResult>(
                             "EvCheckIncomingConnectionResult");
+                        Params.AdmissionLevel = Max(Params.AdmissionLevel, ev->Get()->AdmissionLevel);
 
                         if (const auto& errorReason = ev->Get()->ErrorReason) {
                             generateError(TStringBuilder() << "connection checker refused to proceed with "
@@ -1586,6 +1620,9 @@ namespace NActors {
                                 p->SetValue(std::move(value));
                             }
                         }
+                    }
+                    if (!Common->AllowsConnection(Params.AdmissionLevel)) {
+                        generateError("Peer is incompatible with current connection admission");
                     }
 
                     SendExBlock(MainChannel, record, "ExReply");

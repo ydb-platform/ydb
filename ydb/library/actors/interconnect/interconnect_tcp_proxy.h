@@ -137,6 +137,8 @@ namespace NActors {
                 SESSION_EVENTS(SESSION_HANDLER)                                                 \
                 INCOMING_HANDSHAKE_EVENTS(INCOMING_HANDSHAKE_HANDLER)                           \
                 HANDSHAKE_STATUS_EVENTS(HANDSHAKE_STATUS_HANDLER)                               \
+                hFunc(TEvInterconnect::TEvRecheckConnectionAdmission, Handle)                    \
+                hFunc(TEvConnectionQuiesced, Handle)                                            \
                 cFunc(TEvInterconnect::EvDisconnect, DISCONNECT_HANDLER)                        \
                 hFunc(TEvents::TEvWakeup, WAKEUP_HANDLER)                                       \
                 hFunc(TEvGetSecureSocket, Handle)                                               \
@@ -252,7 +254,10 @@ namespace NActors {
         void HandlePassAwayIfNeeded() {
             Y_ABORT_UNLESS(PassAwayScheduled);
             const TMonotonic now = TActivationContext::Monotonic();
-            if (now >= PassAwayTimestamp) {
+            if (now >= PassAwayTimestamp && !QuiescingConnections.empty()) {
+                TActivationContext::Schedule(now + TDuration::Seconds(1), new IEventHandle(EvPassAwayIfNeeded, 0,
+                    SelfId(), {}, nullptr, 0));
+            } else if (now >= PassAwayTimestamp) {
                 PassAway();
             } else if (PassAwayTimestamp != TMonotonic::Max()) {
                 TActivationContext::Schedule(PassAwayTimestamp, new IEventHandle(EvPassAwayIfNeeded, 0, SelfId(),
@@ -399,6 +404,19 @@ namespace NActors {
 
         void HandleHandshakeStatus(TEvHandshakeDone::TPtr& ev);
         void HandleHandshakeStatus(TEvHandshakeFail::TPtr& ev);
+        void Handle(TEvInterconnect::TEvRecheckConnectionAdmission::TPtr& ev);
+        void Handle(TEvConnectionQuiesced::TPtr& ev);
+        ui64 TrackQuiescingConnection(ui32 admissionLevel);
+        void ProcessAdmissionWaiters();
+
+        struct TAdmissionWaiter {
+            TActorId Sender;
+            ui64 Cookie;
+            ui32 RequiredLevel;
+        };
+        ui64 NextQuiescingConnectionCookie = 0;
+        THashMap<ui64, ui32> QuiescingConnections;
+        TVector<TAdmissionWaiter> AdmissionWaiters;
 
         void TransitToErrorState(TString explanation, bool updateErrorLog = true, const TEvHandshakeFail* handshakeFail = nullptr);
         TString FormatRemoteNodeForLog(const TEvHandshakeFail& handshakeFail) const;

@@ -165,6 +165,10 @@ namespace NActors {
             EvCheckIncomingConnection,
             EvCheckIncomingConnectionResult,
             EvNotifyOutgoingConnectionEstablished,
+            EvCheckOutgoingConnection,
+            EvCheckOutgoingConnectionResult,
+            EvRecheckConnectionAdmission,
+            EvRecheckConnectionAdmissionResult,
             EvEnd
         };
 
@@ -335,9 +339,12 @@ namespace NActors {
 
         struct TEvPrepareOutgoingConnectionResult : TEventLocal<TEvPrepareOutgoingConnectionResult, EvPrepareOutgoingConnectionResult> {
             std::variant<TString, THashMap<TString, TString>> Conclusion;
+            const bool CheckReply;
 
-            TEvPrepareOutgoingConnectionResult(std::variant<TString, THashMap<TString, TString>>&& conclusion)
+            TEvPrepareOutgoingConnectionResult(std::variant<TString, THashMap<TString, TString>>&& conclusion,
+                    bool checkReply = false)
                 : Conclusion(std::move(conclusion))
+                , CheckReply(checkReply)
             {}
         };
 
@@ -354,12 +361,41 @@ namespace NActors {
         struct TEvCheckIncomingConnectionResult : TEventLocal<TEvCheckIncomingConnectionResult, EvCheckIncomingConnectionResult> {
             std::optional<TString> ErrorReason;
             THashMap<TString, TString> ParamsToSend;
+            const ui32 AdmissionLevel;
 
-            TEvCheckIncomingConnectionResult(std::optional<TString>&& errorReason, THashMap<TString, TString>&& paramsToSend)
+            TEvCheckIncomingConnectionResult(std::optional<TString>&& errorReason, THashMap<TString, TString>&& paramsToSend,
+                    ui32 admissionLevel = 0)
                 : ErrorReason(std::move(errorReason))
                 , ParamsToSend(std::move(paramsToSend))
-             {}
+                , AdmissionLevel(admissionLevel)
+            {}
         };
+
+        struct TEvCheckOutgoingConnection : TEventLocal<TEvCheckOutgoingConnection, EvCheckOutgoingConnection> {
+            const ui32 PeerNodeId;
+            THashMap<TString, TString> Params;
+
+            TEvCheckOutgoingConnection(ui32 peerNodeId, THashMap<TString, TString> params)
+                : PeerNodeId(peerNodeId)
+                , Params(std::move(params))
+            {}
+        };
+
+        struct TEvCheckOutgoingConnectionResult : TEventLocal<TEvCheckOutgoingConnectionResult, EvCheckOutgoingConnectionResult> {
+            std::optional<TString> ErrorReason;
+            const ui32 AdmissionLevel;
+
+            TEvCheckOutgoingConnectionResult(std::optional<TString> errorReason = {}, ui32 admissionLevel = 0)
+                : ErrorReason(std::move(errorReason))
+                , AdmissionLevel(admissionLevel)
+            {}
+        };
+
+        struct TEvRecheckConnectionAdmission : TEventLocal<TEvRecheckConnectionAdmission, EvRecheckConnectionAdmission> {};
+
+        struct TEvRecheckConnectionAdmissionResult
+            : TEventLocal<TEvRecheckConnectionAdmissionResult, EvRecheckConnectionAdmissionResult>
+        {};
 
         struct TEvNotifyOutgoingConnectionEstablished : TEventLocal<TEvNotifyOutgoingConnectionEstablished, EvNotifyOutgoingConnectionEstablished> {
             const ui32 PeerNodeId;

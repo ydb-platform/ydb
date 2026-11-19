@@ -45,6 +45,29 @@ namespace NKikimr::NStorage {
                      new TEvPrivate::TEvScatterTaskTimeout(cookie, true));
             Schedule(TDuration::MicroSeconds(timeoutUs), new TEvPrivate::TEvScatterTaskTimeout(cookie, false));
         }
+
+        if (task.Request.HasProposeStorageConfig()) {
+            const ui32 level = GetRequiredBridgeFeatureLevel(task.Request.GetProposeStorageConfig().GetConfig());
+            if (level >= BridgeFeatureLevelSessionAdmission) {
+                if (!Cfg->BridgeConfig) {
+                    CheckCompleteScatterTask(it);
+                    return;
+                }
+                task.BridgeFeatureRequirement = level;
+                if (!IsBridgeFeatureRequirementApplied(level)) {
+                    task.WaitingForBridgeFeatureRequirement = true;
+                    task.TargetedNodes.assign(targetedNodes.begin(), targetedNodes.end());
+                    RefreshBridgeFeatureRequirement();
+                    return;
+                }
+            }
+        }
+        StartScatterTask(it, targetedNodes);
+    }
+
+    void TDistributedConfigKeeper::StartScatterTask(TScatterTasks::iterator it, std::span<const TNodeIdentifier> targetedNodes) {
+        const ui64 cookie = it->first;
+        TScatterTask& task = it->second;
         PrepareScatterTask(cookie, task);
         if (!std::holds_alternative<TScatterTaskOriginTargeted>(task.Origin)) { // issue scatter task downward unless this one is targeted
             for (auto& [nodeId, info] : DirectBoundNodes) {
@@ -88,10 +111,13 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::CheckCompleteScatterTask(TScatterTasks::iterator it) {
         TScatterTask& task = it->second;
-        if (task.PendingNodes.empty() && !task.AsyncOperationsPending) {
+        if (task.PendingNodes.empty() && !task.AsyncOperationsPending && !task.WaitingForBridgeFeatureRequirement) {
             TScatterTask temp = std::move(task);
             ScatterTasks.erase(it);
             CompleteScatterTask(temp);
+            if (temp.BridgeFeatureRequirement) {
+                RefreshBridgeFeatureRequirement();
+            }
         }
     }
 
@@ -107,6 +133,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::ExpireScatterTaskLocalContribution(TScatterTask& task) {
         task.LocalContributionExpired = true;
+        task.WaitingForBridgeFeatureRequirement = false;
         task.AsyncOperationsPending = 0;
         if (const ui64 cookie = std::exchange(task.PersistCookie, 0)) {
             CancelPersistConfig(cookie);
@@ -143,8 +170,9 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& task) {
-        if (!info.ReportedSubtreeHeight && !info.ExpiredScatterTasks.empty()
-            && IsTimedScatterRequest(task.Request)) {
+        if (task.WaitingForBridgeFeatureRequirement ||
+                info.BridgeFeatureLevel < task.BridgeFeatureRequirement ||
+                (!info.ReportedSubtreeHeight && !info.ExpiredScatterTasks.empty() && IsTimedScatterRequest(task.Request))) {
             return;
         }
         auto ev = std::make_unique<TEvNodeConfigScatter>();
@@ -257,6 +285,7 @@ namespace NKikimr::NStorage {
         }
 
         Y_ABORT_UNLESS(AddedNodesScatterTasks.empty());
+        RefreshBridgeFeatureRequirement();
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigScatter::TPtr ev) {

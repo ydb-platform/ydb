@@ -106,6 +106,7 @@ namespace NKikimr::NStorage {
                EvRetryConfigPropagation,
                EvScatterTaskTimeout,
                EvUpdateBridgeFeatureRequirement,
+               EvBridgeFeatureRequirementApplied,
                EvHalt,
             };
 
@@ -117,6 +118,9 @@ namespace NKikimr::NStorage {
                     : RequiredLevel(requiredLevel)
                 {}
             };
+
+            struct TEvBridgeFeatureRequirementApplied
+                : TEventLocal<TEvBridgeFeatureRequirementApplied, EvBridgeFeatureRequirementApplied> {};
 
             struct TEvScatterTaskTimeout : TEventLocal<TEvScatterTaskTimeout, EvScatterTaskTimeout> {
                 const ui64 Cookie;
@@ -163,19 +167,14 @@ namespace NKikimr::NStorage {
             ui64 Cookie; // binding cookie within the session
             TActorId SessionId; // interconnect session actor
             bool SupportsDirectRootQueries = false; // advertised by the direct parent
+            ui32 BridgeFeatureLevel = 0;
 
             TBinding(ui32 nodeId, ui64 cookie)
                 : NodeId(nodeId)
                 , Cookie(cookie)
             {}
 
-            TBinding(const TBinding& origin)
-                : NodeId(origin.NodeId)
-                , RootNodeId(origin.RootNodeId)
-                , Cookie(origin.Cookie)
-                , SessionId(origin.SessionId)
-                , SupportsDirectRootQueries(origin.SupportsDirectRootQueries)
-            {}
+            TBinding(const TBinding&) = default;
 
             bool Expected(IEventHandle& ev) const {
                 return NodeId == ev.Sender.NodeId()
@@ -206,6 +205,7 @@ namespace NKikimr::NStorage {
             ui32 LastReportedRootNodeId;
             std::optional<ui32> ReportedSubtreeHeight;
             bool SupportsMetadataOnlyCollect = false;
+            ui32 BridgeFeatureLevel = 0;
 
             TBoundNode(ui64 cookie, TActorId sessionId, ui32 lastReportedRootNodeId)
                 : Cookie(cookie)
@@ -264,6 +264,9 @@ namespace NKikimr::NStorage {
             TActorId ConfigReaderActor;
             ui64 PersistCookie = 0;
             bool LocalContributionExpired = false;
+            ui32 BridgeFeatureRequirement = 0;
+            bool WaitingForBridgeFeatureRequirement = false;
+            std::vector<TNodeIdentifier> TargetedNodes;
 
             TScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, ui64 scepterCounter, TMonotonic startTimestamp)
                 : Origin(std::move(origin))
@@ -391,6 +394,15 @@ namespace NKikimr::NStorage {
         TScatterTasks ScatterTasks;
         std::set<std::tuple<ui32, ui64>> AddedNodesScatterTasks;
 
+        struct TPendingBridgeConfig {
+            NKikimrBlobStorage::TStorageConfig Config;
+            bool Committed;
+        };
+        std::deque<TPendingBridgeConfig> PendingBridgeConfigs;
+        ui32 RequestedBridgeFeatureRequirement = 0;
+        ui32 AppliedBridgeFeatureRequirement = 0;
+        ui64 BridgeFeatureRequirementCookie = 0;
+
         std::optional<TActorId> StateStorageSelfHealActor;
         class TStateStorageSelfHealRefreshActor;
         std::optional<TActorId> StateStorageSelfHealRefreshActor;
@@ -491,6 +503,12 @@ namespace NKikimr::NStorage {
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void ApplyCommittedStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev);
+        bool IsBridgeFeatureRequirementApplied(ui32 level) const;
+        static bool CanSendConfigToPeer(ui32 peerFeatureLevel, const NKikimrBlobStorage::TStorageConfig& config);
+        bool DeferBridgeConfig(const NKikimrBlobStorage::TStorageConfig& config, bool committed);
+        void RefreshBridgeFeatureRequirement();
+        void Handle(TEvPrivate::TEvBridgeFeatureRequirementApplied::TPtr ev);
+        void RequestCommittedBridgeConfig();
         void HandleConfigConfirm(STATEFN_SIG);
         void ReportStorageConfigToNodeWarden();
 
@@ -729,6 +747,7 @@ namespace NKikimr::NStorage {
         // Scatter/gather logic
 
         void IssueScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, std::span<const TNodeIdentifier> targetedNodes = {});
+        void StartScatterTask(TScatterTasks::iterator it, std::span<const TNodeIdentifier> targetedNodes);
         void PrepareScatterTaskRequest(ui64 cookie, const TScatterTask& task, ui32 subtreeHeight, TEvScatter& request);
         void IssueAddedNodeScatterTask(ui32 nodeId, ui64 cookie, TScatterTask& task);
         void CheckCompleteScatterTask(TScatterTasks::iterator it);
@@ -1001,10 +1020,50 @@ namespace NKikimr::NStorage {
         // away
         BridgeFeatureLevelRollback = 5,
         BridgeFeatureLevelHotStandby = 6,
+        BridgeFeatureLevelSessionAdmission = 7,
     };
 
     // bridge feature level of this version; every node has to support it to change the list of piles, add and remove them
-    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelHotStandby;
+    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelSessionAdmission;
+
+    // Handshakes for one peer may overlap. Until the proxy acknowledges retirement, any observed level can be live.
+    class TBridgePeerAdmissionLevels {
+        const ui32 SupportedLevel;
+        THashMap<ui32, ui32> LowestLevel;
+    public:
+        explicit TBridgePeerAdmissionLevels(ui32 supportedLevel)
+            : SupportedLevel(supportedLevel)
+        {}
+
+        void Track(ui32 peerId, ui32 level) {
+            if (level < SupportedLevel) {
+                auto [it, inserted] = LowestLevel.try_emplace(peerId, level);
+                if (!inserted) {
+                    it->second = Min(it->second, level);
+                }
+            }
+        }
+
+        std::vector<ui32> PeersBelow(ui32 required) const {
+            std::vector<ui32> peers;
+            for (const auto& [peerId, level] : LowestLevel) {
+                if (level < required) {
+                    peers.push_back(peerId);
+                }
+            }
+            return peers;
+        }
+
+        void ConfirmRetirement(ui32 required) {
+            if (required >= SupportedLevel) {
+                LowestLevel.clear();
+            } else {
+                for (auto& [_, level] : LowestLevel) {
+                    level = Max(level, required);
+                }
+            }
+        }
+    };
 
     inline ui32 GetRequiredBridgeFeatureLevel(const NKikimrBlobStorage::TStorageConfig& config) {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();

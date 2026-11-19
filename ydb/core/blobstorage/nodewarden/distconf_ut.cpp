@@ -1011,6 +1011,37 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT(NStorage::ValidateConfig(proposed));
     }
 
+    Y_UNIT_TEST(BridgeSessionAdmissionRetiresSuccessiveFeatureLevels) {
+        NStorage::TBridgePeerAdmissionLevels levels(8);
+        levels.Track(1, 0);
+        levels.Track(1, 8); // a later handshake cannot retire an overlapping session
+        levels.Track(2, 7);
+        UNIT_ASSERT_VALUES_EQUAL(levels.PeersBelow(7), std::vector<ui32>{1});
+        levels.Track(3, 7); // admitted while the first proxy is still retiring its session
+        levels.ConfirmRetirement(7);
+        UNIT_ASSERT(levels.PeersBelow(7).empty());
+        auto peers = levels.PeersBelow(8);
+        std::ranges::sort(peers);
+        UNIT_ASSERT_VALUES_EQUAL(peers, (std::vector<ui32>{1, 2, 3}));
+        levels.ConfirmRetirement(8);
+        UNIT_ASSERT(levels.PeersBelow(8).empty());
+    }
+
+    Y_UNIT_TEST(BridgeSessionAdmissionFeatureLevelCannotBeLowered) {
+        auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        config.MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(
+            NStorage::BridgeFeatureLevelSessionAdmission);
+        auto proposed = config;
+        proposed.SetGeneration(config.GetGeneration() + 1);
+        UNIT_ASSERT(!NStorage::ValidateConfigUpdate(config, proposed));
+
+        proposed.MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(
+            NStorage::BridgeFeatureLevelHotStandby);
+        const auto error = NStorage::ValidateConfigUpdate(config, proposed);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(*error, "bridge session admission feature level cannot be lowered");
+    }
+
     // the list of piles can't be changed, piles can't be added or removed unless every node supports these bridge
     // features, dynamic nodes too, as nodes of older versions would be disconnected afterwards
     Y_UNIT_TEST(PileOperationsRequireFeatureLevel) {

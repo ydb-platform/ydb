@@ -107,6 +107,109 @@ namespace NKikimr::NStorage {
         }
     }
 
+    bool TDistributedConfigKeeper::CanSendConfigToPeer(ui32 peerFeatureLevel,
+            const NKikimrBlobStorage::TStorageConfig& config) {
+        const ui32 level = GetRequiredBridgeFeatureLevel(config);
+        return level < BridgeFeatureLevelSessionAdmission || peerFeatureLevel >= level;
+    }
+
+    bool TDistributedConfigKeeper::IsBridgeFeatureRequirementApplied(ui32 level) const {
+        return level < BridgeFeatureLevelSessionAdmission || !Cfg->UseBridgeSessionAdmission ||
+            level <= AppliedBridgeFeatureRequirement;
+    }
+
+    void TDistributedConfigKeeper::RefreshBridgeFeatureRequirement() {
+        if (!Cfg->UseBridgeSessionAdmission) {
+            return;
+        }
+
+        ui32 required = 0;
+        const auto include = [&](const NKikimrBlobStorage::TStorageConfig& config) {
+            required = Max(required, GetRequiredBridgeFeatureLevel(config));
+        };
+        if (StorageConfig) {
+            include(*StorageConfig);
+        }
+        if (CommittedStorageConfig) {
+            include(*CommittedStorageConfig);
+        }
+        if (CurrentProposition) {
+            include(CurrentProposition->StorageConfig);
+        }
+        for (const auto& [_, task] : ScatterTasks) {
+            required = Max(required, task.BridgeFeatureRequirement);
+        }
+        for (const auto& pending : PendingBridgeConfigs) {
+            include(pending.Config);
+        }
+        if (required < BridgeFeatureLevelSessionAdmission) {
+            required = 0;
+        }
+        if (required == RequestedBridgeFeatureRequirement) {
+            return;
+        }
+
+        RequestedBridgeFeatureRequirement = required;
+        AppliedBridgeFeatureRequirement = Min(AppliedBridgeFeatureRequirement, required);
+        ++BridgeFeatureRequirementCookie;
+        Send(MakeDistconfBridgeConnectionCheckerActorId(), new TEvPrivate::TEvUpdateBridgeFeatureRequirement(
+            required ? std::make_optional(required) : std::nullopt), 0, BridgeFeatureRequirementCookie);
+    }
+
+    bool TDistributedConfigKeeper::DeferBridgeConfig(const NKikimrBlobStorage::TStorageConfig& config, bool committed) {
+        if (IsSelfStatic && !StorageConfig) {
+            // On static startup, the connection checker waits for this first configuration before allowing a session.
+            return false;
+        }
+        const bool updatesStorage = !StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration();
+        const bool updatesCommit = committed && (!CommittedStorageConfig ||
+            CommittedStorageConfig->GetGeneration() < config.GetGeneration());
+        if ((!updatesStorage && !updatesCommit) || IsBridgeFeatureRequirementApplied(GetRequiredBridgeFeatureLevel(config))) {
+            return false;
+        }
+        const TStorageConfigMeta meta(config);
+        if (std::ranges::none_of(PendingBridgeConfigs, [&](const auto& pending) {
+                return pending.Committed == committed && TStorageConfigMeta(pending.Config) == meta;
+            })) {
+            PendingBridgeConfigs.push_back({config, committed});
+            RefreshBridgeFeatureRequirement();
+        }
+        return true;
+    }
+
+    void TDistributedConfigKeeper::Handle(TEvPrivate::TEvBridgeFeatureRequirementApplied::TPtr ev) {
+        if (ev->Cookie != BridgeFeatureRequirementCookie) {
+            return;
+        }
+        AppliedBridgeFeatureRequirement = RequestedBridgeFeatureRequirement;
+
+        while (!PendingBridgeConfigs.empty() && IsBridgeFeatureRequirementApplied(
+                GetRequiredBridgeFeatureLevel(PendingBridgeConfigs.front().Config))) {
+            auto pending = std::move(PendingBridgeConfigs.front());
+            PendingBridgeConfigs.pop_front();
+            if (pending.Committed) {
+                ApplyCommittedStorageConfig(pending.Config);
+            } else if (ApplyStorageConfig(pending.Config)) {
+                RequestCommittedBridgeConfig();
+            }
+        }
+
+        std::vector<ui64> ready;
+        for (const auto& [cookie, task] : ScatterTasks) {
+            if (task.WaitingForBridgeFeatureRequirement && IsBridgeFeatureRequirementApplied(task.BridgeFeatureRequirement)) {
+                ready.push_back(cookie);
+            }
+        }
+        for (const ui64 cookie : ready) {
+            if (const auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()) {
+                it->second.WaitingForBridgeFeatureRequirement = false;
+                const auto targetedNodes = std::move(it->second.TargetedNodes);
+                StartScatterTask(it, targetedNodes);
+            }
+        }
+        RefreshBridgeFeatureRequirement();
+    }
+
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
         if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
                 (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
@@ -124,6 +227,9 @@ namespace NKikimr::NStorage {
                         {"generation", config.GetGeneration()});
                     return false;
                 }
+            }
+            if (DeferBridgeConfig(config, false)) {
+                return false;
             }
 
             // extract the main config from newly applied section
@@ -164,6 +270,7 @@ namespace NKikimr::NStorage {
             }
 
             StorageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
+            RefreshBridgeFeatureRequirement();
 
             if (IsSelfStatic) {
                 ApplyConfigUpdateToDynamicNodes(false);
@@ -210,6 +317,9 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::ApplyCommittedStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (DeferBridgeConfig(config, true)) {
+            return;
+        }
         FanOutReversePush(&config); // send this configuration to all direct bound nodes (before they get possibly unbound)
         ApplyStorageConfig(config);
 
@@ -255,6 +365,7 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(CommittedStorageConfig->GetFingerprint() == config.GetFingerprint());
             Y_ABORT_UNLESS(CommittedStorageConfig == LocalCommittedStorageConfig);
         }
+        RefreshBridgeFeatureRequirement();
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev) {
@@ -270,7 +381,10 @@ namespace NKikimr::NStorage {
 
         // apply volatile config locally
         ApplyStorageConfig(msg.Config);
+        RequestCommittedBridgeConfig();
+    }
 
+    void TDistributedConfigKeeper::RequestCommittedBridgeConfig() {
         if (IsBridged() && IsSelfStatic && Binding && Binding->SessionId && StorageConfig->GetGeneration()
             && (!LocalCommittedStorageConfig
                 || LocalCommittedStorageConfig->GetGeneration() < StorageConfig->GetGeneration())) {
@@ -568,6 +682,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvPrivate::TEvStorageConfigLoaded, Handle);
             hFunc(TEvPrivate::TEvStorageConfigStored, Handle);
             hFunc(TEvPrivate::TEvScatterTaskTimeout, Handle);
+            hFunc(TEvPrivate::TEvBridgeFeatureRequirementApplied, Handle);
             fFunc(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, HandleConfigConfirm);
             hFunc(TEvNodeWardenDynamicConfigSubscribe, Handle);
             hFunc(TEvNodeWardenDynamicConfigPush, Handle);

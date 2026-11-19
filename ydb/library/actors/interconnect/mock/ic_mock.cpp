@@ -357,6 +357,10 @@ namespace NActors {
                 }
             }
 
+            void Handle(TEvInterconnect::TEvRecheckConnectionAdmission::TPtr ev) {
+                Send(ev->Sender, new TEvInterconnect::TEvRecheckConnectionAdmissionResult, 0, ev->Cookie);
+            }
+
             void CheckSession() {
                 if (Session && Session->SessionId != State.GetValidSessionId()) {
                     Session->Terminate();
@@ -376,6 +380,7 @@ namespace NActors {
                 fFunc(TEvents::TSystem::Subscribe, HandleSessionEvent)
                 fFunc(TEvents::TSystem::Unsubscribe, HandleSessionEvent)
                 cFunc(TEvInterconnect::EvDisconnect, Disconnect)
+                hFunc(TEvInterconnect::TEvRecheckConnectionAdmission, Handle)
                 IgnoreFunc(TEvInterconnect::TEvClosePeerSocket)
                 IgnoreFunc(TEvInterconnect::TEvCloseInputSession)
                 cFunc(TEvInterconnect::EvPoisonSession, Disconnect)

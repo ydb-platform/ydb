@@ -248,8 +248,11 @@ namespace NKikimr::NStorage {
             if (Cfg->BridgeConfig) {
                 Send(MakeDistconfBridgeConnectionCheckerActorId(), new TEvNodeWardenStorageConfig(
                     StorageConfig, SelfManagementEnabled, BridgeInfo, CommittedStorageConfig));
-                Send(MakeDistconfBridgeConnectionCheckerActorId(),
-                    new TEvPrivate::TEvUpdateBridgeFeatureRequirement(std::nullopt));
+                if (!Cfg->UseBridgeSessionAdmission ||
+                        GetRequiredBridgeFeatureLevel(proposition.StorageConfig) < BridgeFeatureLevelSessionAdmission) {
+                    Send(MakeDistconfBridgeConnectionCheckerActorId(),
+                        new TEvPrivate::TEvUpdateBridgeFeatureRequirement(std::nullopt));
+                }
             }
             for (const auto& node : proposition.AddedOrChangedNodeIdentifiers) {
                 UnsubscribeQueue.insert(node.NodeId());
@@ -1188,6 +1191,10 @@ namespace NKikimr::NStorage {
         SelfNode.Serialize(self->AddNodeIds());
 
         const bool metadataOnly = request.GetMetadataOnly();
+        const auto *parent = std::get_if<TBinding>(&task.Origin);
+        const auto maySendConfig = [&](const NKikimrBlobStorage::TStorageConfig& config) {
+            return metadataOnly || !parent || CanSendConfigToPeer(parent->BridgeFeatureLevel, config);
+        };
         response->SetMetadataOnly(metadataOnly);
         auto copyConfig = [metadataOnly](auto *target, const auto& config) {
             if (metadataOnly) {
@@ -1204,6 +1211,9 @@ namespace NKikimr::NStorage {
         THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> proposedConfigs;
         auto addBaseConfig = [&](const TEvGather::TCollectConfigs::TNode& item, auto *nodesToIgnore) {
             const auto& config = item.GetBaseConfig();
+            if (!maySendConfig(config)) {
+                return;
+            }
             auto& ptr = baseConfigs[config];
             for (const auto& nodeId : item.GetNodeIds()) {
                 TNodeIdentifier n(nodeId);
@@ -1222,7 +1232,7 @@ namespace NKikimr::NStorage {
         auto addPerDiskConfig = [&](const TEvGather::TCollectConfigs::TPersistentConfig& item, auto addFunc, auto& set,
                 const auto& nodesToIgnore, bool configValidated) {
             const auto& config = item.GetConfig();
-            if (metadataOnly && !configValidated && !CheckFingerprint(config)) {
+            if (!maySendConfig(config) || (metadataOnly && !configValidated && !CheckFingerprint(config))) {
                 for (const auto& disk : item.GetDisks()) {
                     if (!nodesToIgnore.contains(TNodeIdentifier(disk.GetNodeId()))) {
                         response->AddErrors()->CopyFrom(disk);
@@ -1413,12 +1423,11 @@ namespace NKikimr::NStorage {
         }
         bool configSent = false;
         for (auto& [nodeId, info] : DirectBoundNodes) {
-            if (committedStorageConfig || info.LastReportedRootNodeId != rootNodeId) {
-                if (onlyOutdated && committedStorageConfig && !NeedsConfigUpdate(nodeId, info, *committedStorageConfig)) {
-                    continue;
-                }
+            const bool sendConfig = committedStorageConfig && CanSendConfigToPeer(info.BridgeFeatureLevel, *committedStorageConfig) &&
+                (!onlyOutdated || NeedsConfigUpdate(nodeId, info, *committedStorageConfig));
+            if (sendConfig || info.LastReportedRootNodeId != rootNodeId) {
                 auto ev = std::make_unique<TEvNodeConfigReversePush>(rootNodeId);
-                if (committedStorageConfig) {
+                if (sendConfig) {
                     ev->Record.MutableCommittedStorageConfig()->CopyFrom(*committedStorageConfig);
                     configSent = true;
                 }
@@ -1541,9 +1550,10 @@ namespace NKikimr::NStorage {
                 std::make_shared<NKikimrBlobStorage::TStorageConfig>(CurrentProposition->StorageConfig),
                 SelfManagementEnabled,
                 Cfg->BridgeConfig ? GenerateBridgeInfo(CurrentProposition->StorageConfig) : nullptr));
-            if (Cfg->BridgeConfig) {
+            const ui32 requiredLevel = GetRequiredBridgeFeatureLevel(CurrentProposition->StorageConfig);
+            if (Cfg->BridgeConfig && (!Cfg->UseBridgeSessionAdmission || requiredLevel < BridgeFeatureLevelSessionAdmission)) {
                 Send(MakeDistconfBridgeConnectionCheckerActorId(), new TEvPrivate::TEvUpdateBridgeFeatureRequirement(
-                    GetRequiredBridgeFeatureLevel(CurrentProposition->StorageConfig)));
+                    requiredLevel));
             }
         }
 

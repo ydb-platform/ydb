@@ -72,6 +72,8 @@ message TEvNodeConfigPush {
     optional uint32 SubtreeHeight = 6;
     optional uint64 RequestedCommittedConfigGeneration = 7;
     optional bool SupportsMetadataOnlyCollect = 8;
+    // Capability of the process opening this binding. Omitted when it runs without BridgeConfig.
+    uint32 BridgeFeatureLevel = 9;
 }
 
 // Used to reverse-propagate configuration and to confirm/reject initial TEvNodePushBinding query.
@@ -83,6 +85,7 @@ message TEvNodeConfigReversePush {
     TCacheUpdate CacheUpdate = 5;
     reserved 6;
     optional bool SupportsDirectRootQueries = 7; // QueryWorkingRoot bypasses the root operation queue
+    optional uint32 BridgeFeatureLevel = 8; // effective feature level of the parent accepting the binding
 }
 
 // Remove node from bound list.

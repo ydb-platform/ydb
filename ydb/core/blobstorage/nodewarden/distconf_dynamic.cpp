@@ -106,6 +106,14 @@ namespace NKikimr::NStorage {
         const auto& subscription = ev->Get()->Record;
         const ui32 bridgeFeatureLevel = GetReportedBridgeFeatureLevel(subscription.GetBridgeFeatureLevel(),
             subscription.GetPileListChangeCapable());
+        const ui32 peerNodeId = ev->Sender.NodeId();
+        if (partOfNodeQuorum) {
+            if (subscription.GetBridgeCapable()) { // older nodes do not report anything, they are not bridge-capable
+                BridgeCapableDynamicNodes.insert(peerNodeId);
+            } else {
+                BridgeCapableDynamicNodes.erase(peerNodeId);
+            }
+        }
         if (!partOfNodeQuorum || StorageConfig) {
             PushConfigToDynamicNode(ev->Sender, sessionId, true, bridgeFeatureLevel);
         }
@@ -113,14 +121,8 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        const ui32 peerNodeId = ev->Sender.NodeId();
         SubscribeToPeerNode(peerNodeId, sessionId);
         ConnectedDynamicNodes.insert(peerNodeId);
-        if (ev->Get()->Record.GetBridgeCapable()) { // older nodes do not report anything, they are not bridge-capable
-            BridgeCapableDynamicNodes.insert(peerNodeId);
-        } else {
-            BridgeCapableDynamicNodes.erase(peerNodeId);
-        }
         if (bridgeFeatureLevel) {
             DynamicNodeFeatureLevels[peerNodeId] = bridgeFeatureLevel;
         } else {
@@ -139,9 +141,10 @@ namespace NKikimr::NStorage {
             ev->Record.SetNoQuorum(true);
         } else if (!StorageConfig) {
             // no storage configuration -- no nothing
-        } else if (const ui32 required = GetRequiredBridgeFeatureLevel(*config); bridgeFeatureLevel < required) {
-            // the node can't work with this configuration, it has to be upgraded
-            YDB_LOG_WARN("Dynamic node runs version not supporting bridge features of the config, config is not pushed",
+        } else if (const ui32 required = GetRequiredBridgeFeatureLevel(*config);
+                (config->HasClusterState() && !BridgeCapableDynamicNodes.contains(actorId.NodeId())) ||
+                bridgeFeatureLevel < required) {
+            YDB_LOG_WARN("Dynamic node cannot apply the bridged configuration, config is not pushed",
                 {"marker", "NWDC88"},
                 {"nodeId", actorId.NodeId()},
                 {"bridgeFeatureLevel", bridgeFeatureLevel},

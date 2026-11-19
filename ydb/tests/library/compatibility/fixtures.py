@@ -177,10 +177,14 @@ class CompatibilityReadinessMixin:
             raise AssertionError("readiness data probe returned no rows for %s" % table_name)
 
     def _wait_for_readiness(self, *, probe_data=False):
+        # Process start != gRPC ready (YDBBUGS-867). When the driver must be
+        # (re)created, do it inside the retry loop with a bounded wait so a
+        # single slow ASAN/relwithdebinfo cold start does not fail the test.
+        reconnect = getattr(self, "recreate_driver", False) or getattr(self, "driver", None) is None
         if getattr(self, "recreate_driver", False):
-            self.driver = self.create_driver()
+            self.stop_driver()
 
-        timeout = 120
+        timeout = 180 if reconnect else 120
         interval = 2
         request_timeout = 30
         settings = (
@@ -208,6 +212,14 @@ class CompatibilityReadinessMixin:
                     PRIMARY KEY (id)
                 ) """ % table_name
                 try:
+                    if self.driver is None:
+                        driver_timeout = max(1.0, min(30.0, remaining))
+                        logger.info(
+                            "Creating driver (timeout=%.0fs) for readiness attempt %d",
+                            driver_timeout,
+                            attempt,
+                        )
+                        self.driver = self.create_driver(timeout=driver_timeout)
                     logger.info("Readiness check attempt %d on %s", attempt, table_name)
                     try:
                         self._execute_scheme_query(query, settings)
@@ -227,6 +239,10 @@ class CompatibilityReadinessMixin:
                         time.time() - start_time,
                         e,
                     )
+                    if reconnect:
+                        # Drop a half-open / stale driver so the next attempt
+                        # re-resolves endpoints after gRPC starts listening.
+                        self.stop_driver()
                     if self._is_path_creating(e):
                         abandoned.append(table_name)
                         table_name = self._new_readiness_table_name()
@@ -250,14 +266,18 @@ class RestartToAnotherVersionFixture(CompatibilityReadinessMixin):
             self.driver.stop()
             self.driver = None
 
-    def create_driver(self):
+    def create_driver(self, timeout=60):
         driver = ydb.Driver(
             ydb.DriverConfig(
                 database=self.database_path,
                 endpoint=self.endpoint,
             )
         )
-        driver.wait(timeout=60)
+        try:
+            driver.wait(timeout=timeout)
+        except Exception:
+            driver.stop()
+            raise
         return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
@@ -298,8 +318,9 @@ class RestartToAnotherVersionFixture(CompatibilityReadinessMixin):
 
         self.stop_driver()
         self.cluster.update_configurator_and_restart(self.config)
-        self.driver = self.create_driver()
 
+        # create_driver is retried inside readiness: node.start() only waits for
+        # the process, while discovery needs the gRPC port to accept connections.
         logger.info("Waiting for cluster initialization")
         self._wait_for_readiness(probe_data=True)
 
@@ -399,14 +420,18 @@ class RollingUpgradeAndDowngradeFixture(CompatibilityReadinessMixin):
             self.driver.stop()
             self.driver = None
 
-    def create_driver(self):
+    def create_driver(self, timeout=60):
         driver = ydb.Driver(
             ydb.DriverConfig(
                 database=self.database_path,
                 endpoint=self.endpoints[0]
             )
         )
-        driver.wait(timeout=60)
+        try:
+            driver.wait(timeout=timeout)
+        except Exception:
+            driver.stop()
+            raise
         return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):

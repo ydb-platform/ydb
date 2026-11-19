@@ -13,7 +13,7 @@ private:
 
     YDB_ACCESSOR_DEF(std::shared_ptr<IKernelLogic>, KernelLogic);
 
-    std::shared_ptr<IStepFunction> Function;
+    YDB_READONLY_DEF(std::shared_ptr<IStepFunction>, Function);
 
     virtual NJson::TJsonValue DoDebugJson() const override;
 

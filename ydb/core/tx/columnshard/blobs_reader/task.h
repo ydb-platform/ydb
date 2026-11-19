@@ -163,6 +163,27 @@ public:
     TCompositeReadBlobs& operator=(const TCompositeReadBlobs&) = delete;
 };
 
+class IReadObserver {
+public:
+    virtual ~IReadObserver() = default;
+    virtual void OnStart(const TString& storageId, ui64 ranges) = 0;
+    virtual void OnData(const TString& storageId, ui64 bytes, bool fromCache) = 0;
+    virtual void OnError(const TString& storageId) = 0;
+
+    virtual void OnStarted() {
+    }
+
+    virtual void OnRequested(const TString& storageId, ui64 bytes) noexcept {
+        Y_UNUSED(storageId);
+        Y_UNUSED(bytes);
+    }
+
+    virtual void OnPreprovided(const TString& storageId, ui64 bytes) {
+        Y_UNUSED(storageId);
+        Y_UNUSED(bytes);
+    }
+};
+
 class ITask: public NColumnShard::TMonitoringObjectsCounter<ITask> {
 private:
     THashMap<TString, std::shared_ptr<IBlobsReadingAction>> AgentsWaiting;

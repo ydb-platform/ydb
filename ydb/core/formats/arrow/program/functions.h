@@ -115,6 +115,10 @@ private:
     }
 
 public:
+    std::vector<std::string> GetFunctionNames() const {
+        return GetRegistryFunctionNames();
+    }
+
     TInternalFunction(const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions, const bool needConcatenation = false)
         : TBase(needConcatenation)
         , FunctionOptions(functionOptions) {
@@ -379,6 +383,10 @@ public:
         : TBase(functionOptions, needConcatenation)
         , OperationId(operationId) {
     }
+
+    std::vector<std::string> GetFunctionNames() const {
+        return GetRegistryFunctionNames();
+    }
 };
 
 class TKernelFunction: public IStepFunction {
@@ -522,6 +530,11 @@ public:
             return TConclusionStatus::Fail("input size == 0!!!");
         }
         return TConclusionStatus::Success();
+    }
+
+    TString GetFunctionName() const {
+        const auto& name = Function->name();
+        return TString(name.data(), name.size());
     }
 };
 }   // namespace NKikimr::NArrow::NSSA

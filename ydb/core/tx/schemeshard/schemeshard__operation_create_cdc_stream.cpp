@@ -343,6 +343,11 @@ public:
             return result;
         }
 
+        const bool keyRangeHeartbeats = ShouldUseKeyRangeHeartbeats(streamDesc);
+        if (keyRangeHeartbeats && !CheckCdcKeyRangeHeartbeatsCanBeUsed(op, result)) {
+            return result;
+        }
+
         TMaybe<TChannelsBindings> aggregatorChannels;
         if (ShouldAggregateHeartbeats(streamDesc)) {
             aggregatorChannels = CheckCdcAggregatorCanBeCreated(op, streamPath, context, result);
@@ -387,6 +392,10 @@ public:
         streamPath.Base()->UserAttrs->AlterData = userAttrs;
 
         context.SS->CdcStreams.Set(pathId, stream);
+
+        if (keyRangeHeartbeats) {
+            stream->AlterData->HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
+        }
 
         if (aggregatorChannels) {
             PlanCdcAggregatorCreation(OperationId, streamPath, *aggregatorChannels, context);
@@ -708,9 +717,8 @@ void DoCreateLock(
     result.push_back(CreateLock(NextPartId(opId, result), outTx));
 }
 
-bool IsReplicationSupportTopicAutopartitioning(const NKikimrSchemeOp::TCreateCdcStream& op) {
-    auto& descr = op.GetStreamDescription();
-    for (auto& attribute : descr.GetUserAttributes()) {
+bool IsSupportedByReplication(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc, const TString& capability) {
+    for (auto& attribute : streamDesc.GetUserAttributes()) {
         if (attribute.GetKey() == ATTR_ASYNC_REPLICATION) {
             if (!attribute.HasValue()) {
                 break;
@@ -722,7 +730,7 @@ bool IsReplicationSupportTopicAutopartitioning(const NKikimrSchemeOp::TCreateCdc
             }
 
             auto map = result.GetMap();
-            return map["supports_topic_autopartitioning"].GetBoolean();
+            return map[capability].GetBoolean();
         }
     }
 
@@ -741,7 +749,7 @@ TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op
     params.TotalGroupCount = static_cast<ui32>(op.HasTopicPartitions() ? op.GetTopicPartitions() : tablePartitionCount);
     params.PartitionPerTablet = 2;
 
-    if (!IsReplicationSupportTopicAutopartitioning(op)) {
+    if (!IsSupportedByReplication(op.GetStreamDescription(), "supports_topic_autopartitioning")) {
         return params;
     }
 
@@ -997,10 +1005,30 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
 
 } // anonymous
 
+bool ShouldUseKeyRangeHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
+    return AppData()->FeatureFlags.GetEnableCdcKeyRangeHeartbeats()
+        && streamDesc.GetResolvedTimestampsIntervalMs() > 0
+        && IsSupportedByReplication(streamDesc, "supports_key_range_autopartitioning");
+}
+
+bool CheckCdcKeyRangeHeartbeatsCanBeUsed(
+        const NKikimrSchemeOp::TCreateCdcStream& op,
+        const THolder<TProposeResponse>& result)
+{
+    if (op.HasTopicPartitions() || op.GetTopicAutoPartitioning()) {
+        result->SetError(NKikimrScheme::StatusInvalidParameter,
+            "Topic partitioning settings are not supported when CDC heartbeats are routed by key range");
+        return false;
+    }
+
+    return true;
+}
+
 bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
     return AppData()->FeatureFlags.GetEnableCdcAggregator()
         // DataShards emit heartbeats only with a resolved timestamps interval, otherwise there is nothing to aggregate
-        && streamDesc.GetResolvedTimestampsIntervalMs() > 0;
+        && streamDesc.GetResolvedTimestampsIntervalMs() > 0
+        && !ShouldUseKeyRangeHeartbeats(streamDesc);
 }
 
 TMaybe<TChannelsBindings> CheckCdcAggregatorCanBeCreated(

@@ -42,6 +42,12 @@ void DoCreateStream(
     const bool initialScan,
     const bool internal = false);
 
+bool ShouldUseKeyRangeHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
+
+bool CheckCdcKeyRangeHeartbeatsCanBeUsed(
+    const NKikimrSchemeOp::TCreateCdcStream& op,
+    const THolder<TProposeResponse>& result);
+
 bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
 
 TMaybe<TChannelsBindings> CheckCdcAggregatorCanBeCreated(

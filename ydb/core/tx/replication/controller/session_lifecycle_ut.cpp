@@ -849,6 +849,69 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         UNIT_ASSERT_VALUES_EQUAL(runs, 1);
     }
 
+    TWorkerId EndWorkerWithChild(TSetup& s) {
+        auto& runtime = s.Env.GetRuntime();
+        const TWorkerId child(s.Worker.ReplicationId(), s.Worker.TargetId(), s.Worker.WorkerId() + 1);
+
+        auto dataEnd = MakeHolder<TEvService::TEvWorkerDataEnd>();
+        s.Worker.Serialize(*dataEnd->Record.MutableWorker());
+        dataEnd->Record.AddChildPartitionsIds(child.WorkerId());
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0], dataEnd.Release()));
+        s.Sync();
+        s.ProcessQueues();
+
+        const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0]);
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(run->Get()->Record.GetWorker()), child);
+        return child;
+    }
+
+    void SendHeartbeat(TSetup& s, const TWorkerId& worker, const TRowVersion& version) {
+        auto heartbeat = MakeHolder<TEvService::TEvHeartbeat>();
+        worker.Serialize(*heartbeat->Record.MutableWorker());
+        version.ToProto(heartbeat->Record.MutableVersion());
+        s.Env.GetRuntime().Send(new IEventHandle(s.Controller, s.Edges[0], heartbeat.Release()));
+        s.Sync();
+    }
+
+    Y_UNIT_TEST(ShouldStopEndedWorkerWhenChildReportsHeartbeat) {
+        // given
+        TSetup s(1);
+        const auto child = EndWorkerWithChild(s);
+        ui32 parentStops = 0;
+        auto observer = s.Env.GetRuntime().AddObserver<TEvService::TEvStopWorker>([&](TEvService::TEvStopWorker::TPtr& ev) {
+            if (TWorkerId::Parse(ev->Get()->Record.GetWorker()) == s.Worker) {
+                ++parentStops;
+            }
+        });
+
+        // when
+        SendHeartbeat(s, child, TRowVersion(10, 1));
+
+        // then
+        for (ui32 attempt = 0; attempt < 10 && !parentStops; ++attempt) {
+            s.ProcessQueues();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(parentStops, 1);
+    }
+
+    Y_UNIT_TEST(ShouldKeepEndedWorkerWhenChildHasNoHeartbeat) {
+        // given
+        TSetup s(1);
+        ui32 stops = 0;
+        auto observer = s.Env.GetRuntime().AddObserver<TEvService::TEvStopWorker>([&](TEvService::TEvStopWorker::TPtr&) {
+            ++stops;
+        });
+
+        // when
+        EndWorkerWithChild(s);
+
+        // then
+        for (ui32 attempt = 0; attempt < 10; ++attempt) {
+            s.ProcessQueues();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(stops, 0);
+    }
+
     Y_UNIT_TEST(RecoveredWorkerAuthenticatesAndConsumesAfterDelayedSecret) {
         RecoverWithSecret(true, false, false, true);
     }

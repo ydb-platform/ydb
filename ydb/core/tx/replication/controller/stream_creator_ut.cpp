@@ -11,6 +11,7 @@
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/library/testlib/helpers.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/size_literals.h>
@@ -322,7 +323,9 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         SessionAcquisitionFailure(Ydb::StatusIds::UNAUTHORIZED);
     }
 
-    void Basic(const std::optional<TDuration>& resolvedTimestamps = {}, bool enableOmitBackupAttribute = false) {
+    void Basic(const std::optional<TDuration>& resolvedTimestamps = {}, bool enableOmitBackupAttribute = false,
+            bool supportsKeyRangeAutopartitioning = false)
+    {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
@@ -352,7 +355,8 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             env.GetSender(), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
             "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), resolvedTimestamps,
-            false, true, false, true, false, TDuration::Seconds(1), TDuration::Days(1), false, enableOmitBackupAttribute
+            false, true, false, true, false, TDuration::Seconds(1), TDuration::Days(1), false, enableOmitBackupAttribute,
+            supportsKeyRangeAutopartitioning
         ));
         {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
@@ -386,6 +390,10 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
                 UNIT_ASSERT_VALUES_EQUAL(attributes.Get(1).GetKey(), "__omit_backup");
                 UNIT_ASSERT_VALUES_EQUAL(attributes.Get(1).GetValue(), "true");
             }
+
+            NJson::TJsonValue replication;
+            UNIT_ASSERT(NJson::ReadJsonTree(attributes.Get(0).GetValue(), &replication));
+            UNIT_ASSERT_VALUES_EQUAL(replication["supports_key_range_autopartitioning"].GetBoolean(), supportsKeyRangeAutopartitioning);
         }
 
         const auto topic = env.GetDescription("/Root/Table/Stream/streamImpl");
@@ -406,6 +414,10 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
     Y_UNIT_TEST(WithResolvedTimestamps) {
         Basic(TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST(ShouldAllowKeyRangeAutopartitioningWhenReceiverSupportsIt) {
+        Basic(TDuration::Seconds(10), false, true);
     }
 
     void SourceWithoutOmitBackupSupport(bool retryAfterTransientFailure) {

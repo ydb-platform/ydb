@@ -226,6 +226,10 @@ public:
             }
         }
 
+        if (HadHeartbeats) {
+            Self->RemoveEndedWorkers(ctx);
+        }
+
         if (Self->PendingHeartbeats) {
             Self->Execute(new TTxHeartbeat(Self), ctx);
         } else {

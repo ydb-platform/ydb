@@ -1,6 +1,7 @@
 #include "partition_key_range.h"
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/scheme/scheme_borders.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -147,6 +148,24 @@ void TPartitionKeyRange::ParseBound(const TString& data, TMaybe<TSerializedCellV
     TSerializedCellVec cells;
     AFL_ENSURE(TSerializedCellVec::TryParse(data, cells));
     bound.ConstructInPlace(std::move(cells));
+}
+
+namespace {
+
+bool IsBefore(const TMaybe<TSerializedCellVec>& fromBound, const TMaybe<TSerializedCellVec>& toBound, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    if (!fromBound || !toBound) {
+        return true;
+    }
+
+    return ComparePrefixBorders(keyTypes,
+        fromBound->GetCells(), PrefixModeLeftBorderInclusive,
+        toBound->GetCells(), PrefixModeRightBorderNonInclusive) < 0;
+}
+
+} // anonymous
+
+bool Intersects(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    return IsBefore(lhs.FromBound, rhs.ToBound, keyTypes) && IsBefore(rhs.FromBound, lhs.ToBound, keyTypes);
 }
 
 } // namespace NKikimr::NPQ

@@ -92,8 +92,8 @@ class TestIamAuth(StreamingTestBase):
 
         # 4. Write a message to the input topic and read the result from the output topic.
         self.write_stream(['{"time": "iam lunch time"}'], endpoint=endpoint)
-        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
-        assert json.loads(result) == {"time": "iam lunch time"}
+        result = [*map(json.loads, self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint))]
+        assert result == [{"time": "iam lunch time"}]
 
         self.wait_completed_checkpoints(kikimr, query_name)
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
@@ -101,7 +101,7 @@ class TestIamAuth(StreamingTestBase):
         self.wait_completed_checkpoints(kikimr, query_name)
 
         self.write_stream(['{"time": "new iam lunch time"}'], endpoint=endpoint)
-        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
-        assert json.loads(result) == {"time": "new iam lunch time"}
+        result = [*map(json.loads, self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint))]
+        assert result == [{"time": "new iam lunch time"}]
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

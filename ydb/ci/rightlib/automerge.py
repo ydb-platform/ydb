@@ -124,8 +124,8 @@ class PrAutomerger:
 
     def refresh_base_and_merge(self, pr: PullRequest, commit_msg: str) -> bool:
         base_ref = pr.base.ref
-        self.git_run("fetch", "origin", base_ref, proxy=True)
-        self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR", proxy=True)
+        self.git_transfer("fetch", "origin", base_ref)
+        self.git_transfer("fetch", "origin", f"pull/{pr.number}/head:PR")
         self.git_run("reset", "--hard", f"origin/{base_ref}")
         try:
             self.git_run("merge", "PR", "-m", commit_msg)
@@ -137,7 +137,7 @@ class PrAutomerger:
         shutil.rmtree("merge-repo", ignore_errors=True)
         original_dir = os.getcwd()
         try:
-            self.git_run(
+            self.git_transfer(
                 "clone",
                 "--filter=blob:none",
                 "--single-branch",
@@ -145,7 +145,6 @@ class PrAutomerger:
                 pr.base.ref,
                 f"https://github.com/{self.repo_name}.git",
                 "merge-repo",
-                proxy=True,
             )
             os.chdir("merge-repo")
 
@@ -158,8 +157,11 @@ class PrAutomerger:
 
             try:
                 basic = base64.b64encode(f"x-access-token:{self.token}".encode()).decode()
-                self.git_run("config", "http.https://github.com/.extraheader", f"AUTHORIZATION: basic {basic}")
-                self.git_run("push")
+                self.git_run("push", extra_env={
+                    "GIT_CONFIG_COUNT": "1",
+                    "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
+                    "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {basic}",
+                })
                 return True
             except subprocess.CalledProcessError:
                 pr_labels = [l.name for l in pr.labels]
@@ -211,18 +213,20 @@ class PrAutomerger:
             text += f" Sync workflow logs can be found [here]({self.workflow_url})."
         pr.create_issue_comment(f"{failed_comment_mark}\n{text}")
 
-    def git_run(self, *args, proxy=False):
+    def git_run(self, *args, proxy=False, extra_env=None):
         cmd = ["git"]
         if proxy:
             cmd.extend(fetch_proxy_args())
         cmd.extend(args)
 
         self.logger.info("run: %r", cmd)
+        env = {**os.environ, **extra_env} if extra_env else None
         try:
             completed = subprocess.run(
                 cmd,
                 capture_output=True,
                 check=True,
+                env=env,
             )
         except subprocess.CalledProcessError as e:
             stdout = (e.stdout or b"").decode()
@@ -240,6 +244,16 @@ class PrAutomerger:
         if stderr:
             self.logger.info("stderr:\n%s", stderr)
         return stdout
+
+    def git_transfer(self, *args):
+        if fetch_proxy_args():
+            try:
+                return self.git_run(*args, proxy=True)
+            except subprocess.CalledProcessError:
+                self.logger.warning("proxied git failed, retrying on github.com: %s", " ".join(args))
+                if args[:1] == ("clone",):
+                    shutil.rmtree("merge-repo", ignore_errors=True)
+        return self.git_run(*args)
 
     def git_revparse_head(self):
         return self.git_run("rev-parse", "HEAD").strip()
